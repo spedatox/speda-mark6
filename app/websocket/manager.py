@@ -19,7 +19,6 @@ class WebSocketManager:
         self._connections: dict[str, WebSocket] = {}
 
     async def connect(self, agent_id: str, websocket: WebSocket) -> None:
-        await websocket.accept()
         self._connections[agent_id] = websocket
         logger.info("ws_connect", extra={"agent_id": agent_id})
 

@@ -43,6 +43,7 @@ class AgentOrchestrator:
                     "%A, %d %B %Y %H:%M UTC"
                 ),
                 "timezone": context.timezone,
+                "model": context.model,
             }
         )
 

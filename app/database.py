@@ -25,12 +25,26 @@ class Base(DeclarativeBase):
 
 
 async def init_db() -> None:
-    """Create all tables. Called in the lifespan handler before anything else."""
+    """Create all tables and seed the default user. Called in lifespan before anything else."""
     # Import all models so their tables are registered on Base.metadata
     import app.models  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    await _seed_default_user()
+
+
+async def _seed_default_user() -> None:
+    """Ensure user ID 1 exists. Single-user system — idempotent."""
+    from sqlalchemy import select
+    from app.models.user import User
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(User).where(User.id == 1))
+        if result.scalar_one_or_none() is None:
+            session.add(User(id=1, name="SPEDA", timezone="UTC"))
+            await session.commit()
 
 
 async def close_db() -> None:

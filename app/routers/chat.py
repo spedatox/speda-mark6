@@ -40,7 +40,8 @@ async def chat(
     )
 
     history = await session_manager.load_history(db, session.id)
-    # Append the new user message
+    # Persist and append the user message
+    await session_manager.save_message(db, session.id, "user", body.message)
     history.append({"role": "user", "content": body.message})
 
     context = AgentContext(
