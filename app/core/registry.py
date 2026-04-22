@@ -60,13 +60,13 @@ class CapabilityRegistry:
     def register_task_tool(self) -> None:
         """Register the SDK built-in Task tool. Must be called FIRST."""
         self._task_tool_registered = True
-        logger.info("registry_register", extra={"tier": 0, "name": "Task"})
+        logger.info("registry_register", extra={"tier": 0, "capability": "Task"})
 
     # ── Tier 1 ────────────────────────────────────────────────────────────────
 
     async def register_skill(self, skill: "Skill") -> None:
         self._skills[skill.name] = skill
-        logger.info("registry_register", extra={"tier": 1, "name": skill.name})
+        logger.info("registry_register", extra={"tier": 1, "capability": skill.name})
 
     # ── Tier 2 ────────────────────────────────────────────────────────────────
 
@@ -78,14 +78,14 @@ class CapabilityRegistry:
             self._mcp_tool_map[tool["name"]] = client.server_name
         logger.info(
             "registry_register",
-            extra={"tier": 2, "name": client.server_name, "tools": len(tools)},
+            extra={"tier": 2, "capability": client.server_name, "tools": len(tools)},
         )
 
     # ── Tier 3 ────────────────────────────────────────────────────────────────
 
     async def register_adapter(self, adapter: "OSSAdapter") -> None:
         self._adapters[adapter.name] = adapter
-        logger.info("registry_register", extra={"tier": 3, "name": adapter.name})
+        logger.info("registry_register", extra={"tier": 3, "capability": adapter.name})
 
     # ── Unified interface ──────────────────────────────────────────────────────
 

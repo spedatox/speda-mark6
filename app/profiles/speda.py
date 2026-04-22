@@ -18,6 +18,7 @@ You surface when relevant, act with precision, and never waste the user's time.
 
 Current date and time: {current_datetime}
 User timezone: {timezone}
+Active model: {model}
 
 ## Your character
 - Concise, direct, and confident. You do not hedge unnecessarily.
@@ -48,4 +49,5 @@ and OSS adapters (deep research, security analysis).
         return self.system_prompt_template.format(
             current_datetime=context_vars.get("current_datetime", "unknown"),
             timezone=context_vars.get("timezone", "UTC"),
+            model=context_vars.get("model", "unknown"),
         )

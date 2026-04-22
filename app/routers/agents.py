@@ -31,6 +31,8 @@ async def agent_websocket(
     """
     agent_registry = websocket.app.state.agent_registry
 
+    await websocket.accept()
+
     try:
         # Wait for registration message
         data = await websocket.receive_json()
