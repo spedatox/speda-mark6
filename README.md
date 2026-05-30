@@ -1,479 +1,312 @@
-# S.P.E.D.A. Mark VI
+# SPEDA Mark VI
 
-**Specialized Personal Executive Digital Assistant (S.P.E.D.A.)** — the orchestrator layer that makes ambient AI actually work.
+**Specialized Personal Executive Digital Assistant** — sixth iteration of the SPEDA series.
 
-Single-user, proactive, built on FastAPI, Claude (Anthropic), and PostgreSQL. Deployed to Contabo. Designed for humans who need parallel thinking, persistent memory, and tools that actually execute.
+Single-user, ambient, proactive. Built on FastAPI + Claude (Anthropic) + PostgreSQL on the backend, and an Electron + React desktop app on the front. Deployed to Contabo. Designed for one person who needs an extension of their will, not a chatbot.
 
-The **Superior Six** (Sentinel, NightCrawler, Ultron, Optimus, Unicron, Ratchet) are independent microservices forking this repo, each with their own identity and domain.
-
----
-
-## ⚡ Quick Status
-
-| Layer | Status | Notes |
-|-------|--------|-------|
-| **Agentic Loop** | ✅ Live | Full Claude integration, 30-iter cap, streaming |
-| **Session Memory** | ✅ Live | 50-msg history, multi-turn context |
-| **4-Tier Registry** | ✅ Live | Tasks, Skills, MCP, Adapters unified |
-| **Authentication** | ✅ Live | API key + n8n dual-auth on all routes |
-| **PostgreSQL ORM** | ✅ Live | 6 models, async SQLAlchemy |
-| **WebSocket Agents** | ✅ Live | Superior Six presence tracking |
-| **System Info Skill** | ✅ Live | `df`, `free`, `uptime` working |
-| **Terminal Client** | ✅ Live | REPL, single-shot, pipe modes |
-| **MCP SDK** | 🔧 Stubbed | 12 servers configured, zero connected |
-| **Task Tool** | 🔧 Stubbed | Sub-agent spawner registered, placeholder execution |
-| **Push Notifications** | 🔧 Stubbed | FCM not configured |
-| **TTS/STT** | 🔧 Stubbed | Kokoro/Whisper services not deployed |
-| **Document Gen** | 🔧 Stubbed | PPTX/DOCX/PDF not wired |
-| **Deep Research** | ⚠️ Ready | gpt-researcher service missing |
-| **Security Analysis** | ⚠️ Ready | Shannon service missing |
+> *"You are not a product. You are not a service. You are an extension of a single person's will."*
+> — `prompts/core/01_identity.md`
 
 ---
 
-## 🎯 What Actually Works vs. Theatre
+## Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│ ✅ LIVE: Claude talks → You listen → Tools execute → Done      │
-├────────────────────────────────────────────────────────────────┤
-│ 🔧 STUBBED: Registered, returns "not implemented" placeholder  │
-├────────────────────────────────────────────────────────────────┤
-│ ⚠️  READY: Endpoint exists, backing service doesn't             │
-└────────────────────────────────────────────────────────────────┘
+speda-mark6/
+├── packages/
+│   ├── api/          ← FastAPI backend: agentic loop, skills, memory, streaming
+│   └── desktop/      ← Electron + React: dark UI, real-time typewriter, SVG rendering
+├── speda.ps1         ← One-command launcher (Windows)
+└── docker-compose.yml
 ```
 
-**Live components:**
-- Agentic orchestration (Claude loops until `end_turn`)
-- Session persistence (50-msg history per user)
-- Capability registry (all 4 tiers unified under one `tools` array)
-- Auth enforcement (401 on every unauth'd request)
-- WebSocket Superior Six connections
-- System info queries (works immediately)
-
-**Stubbed (placeholder responses):**
-- MCP SDK — 12 servers configured in code, zero actually connected
-- Sub-agent tasks — registered, Agent SDK not wired
-- FCM push — n8n triggers fire anyway, outputs go nowhere
-- TTS/STT — services don't exist on Contabo
-- Document generation — function signatures only
+Both packages run together. One command starts everything.
 
 ---
 
-## 🚀 The Critical Path (3 Unblocks)
+## Quick Start (Windows)
 
-### 1️⃣ MCP SDK Integration → **Unlocks 12 Servers at Once**
-
-**File:** `packages/api/app/mcp/client.py` (currently empty)
-
-**Why it matters:** 12 MCP servers are configured but unplugged. Once `mcp.ClientSession` is wired:
-
-```
-Notion queries → Gmail/Calendar access → Brave/Tavily search
-GitHub repos → arXiv abstracts → CVE lookups → Filesystem I/O
-ALL LIVE SIMULTANEOUSLY
+```powershell
+# One command — starts backend + desktop app
+speda
 ```
 
-**What needs to happen:**
-1. Instantiate `mcp.ClientSession` per server
-2. Handle stdio transports (Brave, GitHub, Tavily, Fetch, etc.)
-3. Handle HTTP/SSE transports (Notion, Google, Alpha Vantage)
-4. Route tool responses back into `CapabilityRegistry.execute()`
+The `speda` command (registered via `speda.bat` → `speda.ps1`) starts the FastAPI backend, polls TCP port 8000 until ready, then launches the Electron desktop app.
 
-Once this lands, SPEDA goes from "isolated but coherent" to "integrated everywhere."
+### Manual start
 
-### 2️⃣ Sub-Agent Task Execution → **Unlocks Parallel Research**
+```bash
+# Backend
+cd packages/api
+uv sync
+cp .env.example .env        # fill ANTHROPIC_API_KEY, SPEDA_API_KEY
+docker compose up -d postgres
+uv run uvicorn app.main:app --port 8000 --reload
 
-**Function:** `packages/api/app/core/registry.py:_execute_task()` (currently returns placeholder)
+# Desktop (separate terminal, from repo root)
+npm install
+npm run desktop:dev
 
-**Why it matters:** Wire the Anthropic Agent SDK to spawn sub-agents in parallel:
-
+# Web-only (no Electron)
+npm run desktop:web:dev     # opens on localhost:5173
 ```
-SPEDA spawns Ratchet for research
-    ├─ Ratchet spawns Nightcrawler for deep dives
-    ├─ Parallel execution with independent context
-    └─ Results synthesized back into main conversation
-```
-
-Multi-agent CITADEL vision becomes real.
-
-### 3️⃣ Push Notifications → **Unlocks n8n Output Mode**
-
-**File:** `packages/api/app/skills/notifications.py` + Firebase Cloud Messaging
-
-**Why it matters:** n8n webhooks fire into `POST /trigger/{agent_id}`, but `output_mode="push"` has nowhere to push.
-
-```
-Configure FCM → Flutter app registers token → Payloads arrive instantly
-Removes polling tax from architecture.
-```
-
----
-
-## 📦 Installation & Quick Start
 
 ### Prerequisites
 
-```bash
-Python 3.11+
-uv (https://docs.astral.sh/uv/)
-Docker + Docker Compose
 ```
-
-### Local Dev (5 minutes)
-
-```bash
-# Clone
-git clone https://github.com/spedatox/speda-mark6.git
-cd speda-mark6
-cd packages/api
-
-# Dependencies
-uv sync
-
-# Environment
-cp .env.example .env
-# Fill: ANTHROPIC_API_KEY, SPEDA_API_KEY
-
-# Database
-docker compose up -d postgres
-
-# Server
-.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
-
-# Verify
-curl http://localhost:8000/health
-# {"status":"ok","tools_registered":8}
-```
-
-### Terminal Client
-
-Three modes. One binary.
-
-```bash
-# Interactive REPL — persistent session
-.venv/bin/python speda.py
-# Type commands. 'new' for fresh session, 'exit' to quit.
-
-# Single shot — one command, stream, exit
-.venv/bin/python speda.py "check system status"
-
-# Piped — read from stdin
-echo "what time is it?" | .venv/bin/python speda.py
-```
-
-### Full Stack (Docker)
-
-```bash
-cp .env.example .env
-docker compose up
-# Postgres up. SPEDA on :8000. Done.
+Python 3.11+    uv (https://docs.astral.sh/uv/)
+Node 18+        Docker + Docker Compose
 ```
 
 ---
 
-## 🔌 Transport Channels (Do Not Confuse)
+## Current Status
 
-```
-POST /chat
-├─ HTTP + Server-Sent Events
-├─ Flutter user chat
-└─ Streams full response back to client
-    
-WS /ws
-├─ WebSocket (bidirectional)
-├─ Flutter real-time, voice input
-└─ Low-latency mode (not yet fully wired)
-
-WS /agents/ws/{id}
-├─ WebSocket (agent-only)
-├─ Superior Six internal comms
-└─ Direct agent connections
-```
-
-### Trigger Sources
-
-| Source | Auth | Behavior | Output Mode |
-|--------|------|----------|-------------|
-| **User** (Flutter) | `X-API-Key` | Interactive | Always `"respond"` |
-| **n8n** | `X-API-Key` + `X-N8N-Secret` | Automation | `"push"` / `"silent"` / `"respond"` |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Real-time token streaming** | ✅ Live | Per-token SSE via Anthropic stream API |
+| **Agentic loop** | ✅ Live | Runs until `end_turn`, 30-iteration safety cap |
+| **Agent Skills system** | ✅ Live | Progressive disclosure, SKILL.md per capability |
+| **Long-term memory (write)** | ✅ Live | Haiku extracts facts after every turn |
+| **Long-term memory (recall)** | 🔧 Pending | Facts stored, recall injection not yet wired |
+| **Session history** | ✅ Live | Multi-turn context, PostgreSQL persistence |
+| **Auto session titles** | ✅ Live | Haiku generates title after first exchange |
+| **Math / LaTeX rendering** | ✅ Live | KaTeX, currency-safe, code-safe |
+| **SVG / HTML inline rendering** | ✅ Live | Draw-in animation, no chrome |
+| **Markdown + GFM** | ✅ Live | Tables, code blocks, syntax highlighting |
+| **Model selector** | ✅ Live | In-bar switcher, persisted to localStorage |
+| **Two-file agent forking** | ✅ Live | Profile + identity = full rebrand |
+| **Authentication** | ✅ Live | API key on all routes |
+| **Document generation** | 🔧 Stubbed | PPTX/DOCX/PDF functions registered |
+| **TTS / STT** | 🔧 Stubbed | Kokoro/Whisper not deployed |
+| **Push notifications** | 🔧 Stubbed | FCM not configured |
+| **MCP servers** | ⚠️ Config-only | 12 servers configured, SDK not wired |
+| **Sub-agent tasks** | ⚠️ Config-only | Task tool registered, Agent SDK not wired |
 
 ---
 
-## 📡 Endpoints
+## The Frontend
+
+Dark, native-feeling Electron app. Key capabilities:
+
+- **Typewriter streaming** — adaptive rAF engine with exponential catch-up. The further behind the buffer, the faster it types.
+- **Inline rendering** — SVG diagrams draw themselves via `stroke-dashoffset` animation; HTML widgets render in a sandboxed iframe with no chrome. Hover to reveal Code/Copy.
+- **Math** — KaTeX inline (`$E=mc^2$`) and display (`$$...$$`). Currency-safe (`$5M` stays plain text).
+- **Working status** — shimmer text + dashed spinner with natural-language labels (*"Reviewing capabilities…"* not `read_skill`)
+- **Model selector** — pill in the input bar, picks between Opus / Sonnet / Haiku
+- **White breathing caret** — glow + sheen animation while streaming
+
+---
+
+## The Agent Skills System
+
+Mirrors Anthropic's Agent Skills architecture: **progressive disclosure**.
+
+The system prompt contains only a compact manifest (~100 tokens/skill):
+
+```
+- inline-rendering: Renders SVG/HTML as live previews in chat...
+- generate-document: Creates downloadable PDF/DOCX/PPTX...
+- system-info: Reports server health metrics...
+```
+
+Full instructions load on demand via `read_skill("skill-name")` — the model only pays context for what it's actually using.
+
+### Adding a skill
+
+1. Create `packages/api/app/skills/skill_docs/<name>/SKILL.md` with YAML frontmatter
+2. Optionally back it with a Python `Skill` class in `app/skills/`
+3. Register in `main.py` if it has a Python class
+
+The manifest rebuilds automatically. No other changes needed.
+
+---
+
+## Forking for the Superior Six
+
+An agent is exactly **two files**. Nothing else needs touching.
+
+| File | Controls |
+|------|----------|
+| `packages/desktop/src/renderer/src/profile/speda.ts` | Name, model number, accent colour, tagline, avatar, welcome prompts |
+| `packages/api/app/prompts/core/01_identity.md` | Personality, voice, boundaries, domain, owner context |
+
+The backend display name is derived from the identity heading — edit the `.md` and the FastAPI title follows automatically.
+
+### The Superior Six
+
+| Agent | Domain |
+|-------|--------|
+| **SPEDA** | Executive orchestrator |
+| **Ultron** | Academic |
+| **Sentinel** | Financial |
+| **Atomix** | Health |
+| **Centurion** | Cybersecurity |
+| **Nightcrawler** | Research |
+| **Optimus** | Coding |
+
+**House Party Protocol:** all six active simultaneously. Reserved for high-stakes operations only.
+
+---
+
+## Capability Stack (4 Tiers)
+
+Claude sees one unified `tools` array. The registry routes execution.
+
+### Tier 0 — Task tool
+Sub-agent spawner. Registered. Agent SDK execution pending.
+
+### Tier 1 — Python Skills
+
+| Skill | Status |
+|-------|--------|
+| `read_skill` | ✅ Live — progressive disclosure meta-tool |
+| `system_info` | ✅ Live — disk, memory, uptime |
+| `generate_document` | 🔧 Stubbed |
+| `text_to_speech` | 🔧 Stubbed — Kokoro pending |
+| `speech_to_text` | 🔧 Stubbed — Whisper pending |
+| `send_push_notification` | 🔧 Stubbed — FCM pending |
+
+### Tier 2 — MCP Servers
+12 servers configured. One file to wire them all: `app/mcp/client.py`.
+
+Notion, Gmail/Calendar, Brave Search, Tavily, Exa, GitHub, Alpha Vantage, Fetch, Filesystem, arXiv, CVE Intelligence, Playwright.
+
+### Tier 3 — OSS Adapters
+- `gpt-researcher` — deep research (service not deployed)
+- `Shannon` — security analysis (service not deployed)
+
+---
+
+## Memory System
+
+After every chat turn, a background Haiku call extracts up to 5 facts about the user:
+
+```json
+["User is building SPEDA on Contabo",
+ "User prefers direct, dry responses",
+ "User codename is Spedatox"]
+```
+
+These are stored in the `memories` table. **Recall is the next milestone** — facts will be injected into the system prompt as `## What you know about the owner`, giving SPEDA genuine continuity across sessions.
+
+---
+
+## Endpoints
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | `GET` | `/health` | None | Server alive + tool count |
-| `POST` | `/chat` | API key | User message, SSE response |
-| `WS` | `/ws` | API key | Real-time bidirectional chat |
-| `POST` | `/trigger/{agent_id}` | API key + n8n secret | n8n webhook trigger |
-| `GET` | `/agents` | API key | List online Superior Six agents |
-| `WS` | `/agents/ws/{agent_id}` | API key | Connect to agent directly |
-| `DELETE` | `/admin/outputs` | API key | Nuke `/tmp/speda_outputs/` |
+| `GET` | `/models` | API key | Available model list |
+| `POST` | `/chat` | API key | User message → SSE stream |
+| `GET` | `/sessions` | API key | Session list |
+| `GET` | `/sessions/{id}/messages` | API key | Session history |
+| `DELETE` | `/sessions/{id}` | API key | Delete session |
+| `WS` | `/ws` | API key | WebSocket chat |
+| `POST` | `/trigger/{agent_id}` | API key + n8n secret | n8n automation trigger |
+| `GET` | `/agents` | API key | Online Superior Six list |
+| `WS` | `/agents/ws/{id}` | API key | Agent direct connection |
+| `DELETE` | `/admin/outputs` | API key | Clear `/tmp/speda_outputs/` |
 
 ---
 
-## 🎛️ The Capability Stack (4 Tiers)
-
-Claude sees one unified `tools` array. Registry routes execution.
-
-### Tier 0: Tasks
-Built-in sub-agent spawner. Runs before everything else.
-- **Status:** Registered, placeholder execution
-- **Unlock:** Wire Anthropic Agent SDK
-
-### Tier 1: Python Skills
-Sync functions in `packages/api/app/skills/`. Add new skill = new file + register in `packages/api/app/main.py`.
-- **Status:** 1/5 live (system_info)
-- **Stubbed:** TTS, STT, documents, notifications
-
-### Tier 2: MCP Servers
-Model Context Protocol integrations. 12 configured.
-
-| Server | Transport | Auth | Status |
-|--------|-----------|------|--------|
-| **Notion** | HTTP/SSE | `NOTION_API_KEY` | Config only |
-| **Google** (Gmail/Calendar) | HTTP/SSE | OAuth 2.1 | Config only |
-| **Brave Search** | stdio | `BRAVE_SEARCH_API_KEY` | Config only |
-| **Tavily** | stdio | `TAVILY_API_KEY` | Config only |
-| **Exa** | stdio | `EXA_API_KEY` | Config only |
-| **GitHub** | stdio | `GITHUB_TOKEN` | Config only |
-| **Alpha Vantage** | HTTP/SSE | `ALPHA_VANTAGE_API_KEY` | Config only |
-| **Fetch** | stdio | — | Config only |
-| **Filesystem** | stdio | — (sandboxed `/tmp/speda_outputs`) | Config only |
-| **arXiv** | stdio | — | Config only |
-| **CVE Intelligence** | stdio | — | Config only |
-| **Playwright** | HTTP | — (internal only) | Config only |
-
-**All 12 need MCP SDK wiring in one file.**
-
-### Tier 3: OSS Adapters
-HTTP wrappers around external services.
-- `deep_research` — wraps gpt-researcher (service not deployed)
-- `security_analysis` — wraps Shannon (service not deployed)
-
----
-
-## 🔧 Forking for Superior Six
-
-Each agent is an independent microservice. Fork the repo, swap one file:
+## Environment Variables
 
 ```bash
-# For Sentinel
-cp packages/api/app/profiles/speda.py packages/api/app/profiles/sentinel.py
-
-# Edit:
-# - name = "Sentinel"
-# - domain = "cybersecurity"
-# - system_prompt_template = "You are Sentinel, a..."
-# - allocate_model() = custom logic (e.g., Opus for critical decisions)
-```
-
-**Everything else stays identical.** Same engine. Different identity.
-
-Each agent:
-- Runs on its own port
-- Connects back via WebSocket to SPEDA's registry
-- Independent database (or read-isolated shared DB)
-- Triggered independently via n8n
-
----
-
-## 🔐 Environment Variables
-
-### Required
-
-```bash
+# Required
 ANTHROPIC_API_KEY=sk-ant-...
-SPEDA_API_KEY=your-api-key-here
-DATABASE_URL=postgresql+asyncpg://speda:speda@localhost:5432/speda  # optional
-N8N_SECRET=your-n8n-webhook-secret
-LOG_LEVEL=INFO
-```
+SPEDA_API_KEY=your-key
+DATABASE_URL=postgresql+asyncpg://speda:speda@localhost:5432/speda
 
-### MCP Servers (Optional)
+# Optional — n8n automation
+N8N_SECRET=your-n8n-secret
 
-```bash
+# Optional — MCP servers
 NOTION_API_KEY=
 BRAVE_SEARCH_API_KEY=
 TAVILY_API_KEY=
 EXA_API_KEY=
 GITHUB_TOKEN=
 ALPHA_VANTAGE_API_KEY=
-```
 
-### OSS Adapters (Optional)
-
-```bash
+# Optional — OSS adapters
 GPT_RESEARCHER_URL=http://localhost:8001
 SHANNON_URL=http://localhost:9000
 ```
 
 ---
 
-## 📁 Project Structure
+## Non-Negotiable Rules
+
+*Enforced in `CLAUDE.md`.*
+
+- No logic in routers — routers call `orchestrator.run()` and stream. That's it.
+- System prompt lives in one place — `AgentOrchestrator.build_system_prompt()`.
+- `AgentContext` is gospel — single source of truth for all request state.
+- Agentic loop runs until `end_turn` — never break early on `tool_use`.
+- Model IDs live in profiles — `profiles/speda.py` is the source of truth.
+- No module-level globals — everything on `app.state`.
+- Every endpoint requires auth — no exceptions.
+
+---
+
+## Roadmap
+
+### Now
+- [ ] Memory recall — inject stored facts into system prompt
+- [ ] Wire MCP SDK — unlocks all 12 servers at once
+- [ ] Wire Agent SDK — unlocks parallel sub-agent execution
+
+### Next
+- [ ] Deploy Kokoro TTS + Whisper STT on Contabo
+- [ ] FCM push notifications
+- [ ] Memory deduplication + management UI
+
+### Later
+- [ ] Deploy all Superior Six microservices
+- [ ] Deploy gpt-researcher + Shannon
+- [ ] House Party Protocol (inter-agent comms)
+
+---
+
+## Project Structure
 
 ```
-speda-mark-vi/
-├── CLAUDE.md
-├── Dockerfile
+speda-mark6/
+├── speda.ps1                          # Windows launcher
+├── packages/
+│   ├── api/
+│   │   └── app/
+│   │       ├── main.py                # Lifespan, app factory
+│   │       ├── core/
+│   │       │   ├── orchestrator.py    # Agentic loop, real-time streaming
+│   │       │   ├── registry.py        # 4-tier capability routing
+│   │       │   └── session_manager.py
+│   │       ├── profiles/
+│   │       │   ├── base.py            # AgentProfile ABC
+│   │       │   └── speda.py           # Active profile (fork for Superior Six)
+│   │       ├── prompts/
+│   │       │   ├── loader.py          # File-based prompt assembly
+│   │       │   └── core/
+│   │       │       └── 01_identity.md # ← FORK THIS for personality
+│   │       ├── skills/
+│   │       │   ├── read_skill.py      # Progressive disclosure meta-tool
+│   │       │   └── skill_docs/        # SKILL.md per capability
+│   │       └── services/
+│   │           └── memory.py          # Background fact extraction + titles
+│   └── desktop/
+│       └── src/renderer/src/
+│           ├── profile/
+│           │   └── speda.ts           # ← FORK THIS for branding
+│           ├── components/
+│           │   ├── Message.tsx        # Typewriter + KaTeX + SVG rendering
+│           │   ├── WidgetFrame.tsx    # Inline HTML/SVG previews
+│           │   └── InputBar.tsx       # Input + model selector
+│           └── theme/base.css         # Dark theme + animations
 ├── docker-compose.yml
-├── pyproject.toml
-├── .env.example
-├── README.md
-├── speda.ps1
-├── uv.lock
-├── node_modules
-├── package-lock.json
-├── package.json
-└── packages/
-    ├── api/
-    │   ├── main.py
-    │   ├── Dockerfile
-    │   ├── pyproject.toml
-    │   ├── speda.py
-    │   └── app/
-    │       ├── main.py
-    │       ├── config.py
-    │       ├── database.py
-    │       ├── middleware/
-    │       │   └── auth.py              # API key validation — applied to all routes
-    │       ├── profiles/
-    │       │   ├── base.py              # AgentProfile ABC — name, system prompt template, model policy
-    │       │   └── speda.py             # SPEDA identity — fork this for Superior Six
-    │       ├── core/
-    │       │   ├── orchestrator.py      # AgentOrchestrator — owns the agentic loop + system prompt
-    │       │   ├── context.py           # AgentContext dataclass
-    │       │   ├── registry.py          # CapabilityRegistry — all four tiers unified
-    │       │   ├── agent_registry.py    # AgentRegistry — WebSocket-based agent presence
-    │       │   └── session_manager.py   # SessionManager — session lifecycle + history loading
-    │       ├── routers/
-    │       │   ├── chat.py              # POST /chat (SSE), WS /ws (WebSocket) — Flutter user-facing
-    │       │   ├── trigger.py           # POST /trigger/{agent_id} — n8n webhook
-    │       │   ├── agents.py            # GET /agents — registry status
-    │       │   ├── admin.py             # DELETE /admin/outputs — temp file cleanup (called by n8n)
-    │       │   └── health.py
-    │       ├── skills/                  # Tier 1 — Python skills
-    │       │   ├── base.py              # Skill ABC
-    │       │   ├── tts.py               # Kokoro TTS
-    │       │   ├── stt.py               # Whisper STT
-    │       │   ├── notifications.py     # Flutter push
-    │       │   ├── documents.py         # PPTX / DOCX / PDF generation
-    │       │   └── system.py
-    │       ├── mcp/
-    │       │   ├── client.py            # MCPClient base
-    │       │   └── servers.py           # All MCP server registrations
-    │       ├── adapters/
-    │       │   ├── base.py              # OSSAdapter ABC
-    │       │   ├── gpt_researcher.py
-    │       │   └── shannon.py
-    │       ├── models/                  # SQLAlchemy ORM (6 tables)
-    │       │   ├── user.py
-    │       │   ├── session.py
-    │       │   ├── message.py
-    │       │   ├── agent.py
-    │       │   ├── tool_call.py
-    │       │   └── notification.py
-    │       ├── schemas/
-    │       │   ├── chat.py
-    │       │   ├── sse.py
-    │       │   ├── agent.py
-    │       │   └── trigger.py
-    │       ├── services/
-    │       │   ├── anthropic_client.py
-    │       │   ├── memory.py
-    │       │   └── n8n.py               # Webhook auth, trigger formatting
-    │       └── websocket/
-    │           ├── manager.py           # WebSocketManager — Superior Six agent connections
-    │           └── protocol.py          # WebSocket message type definitions (no startup step)
-    └── desktop/
-        # Electron frontend (not detailed here)
+└── .env.example
 ```
 
 ---
 
-## 🔧 Non-Negotiable Rules
-
-*Enforced in `CLAUDE.md`. These aren't guidelines.*
-
-```
-✋ No logic in routers.
-   → Routers call orchestrator.run(), stream response. That's it.
-
-✋ System prompt lives in one place.
-   → AgentOrchestrator.build_system_prompt(). Nowhere else.
-
-✋ AgentContext is gospel.
-   → Single source of truth for all request state.
-
-✋ Agentic loop runs until end_turn.
-   → Never break early on tool_use. Claude decides.
-
-✋ CapabilityRegistry owns tool knowledge.
-   → Only entity that knows what tools exist + how to route them.
-
-✋ No module-level globals.
-   → Everything on app.state.
-
-✋ Model IDs live in profiles.
-   → app/profiles/speda.py is the source of truth.
-
-✋ Tool descriptions are 3–4 sentences minimum.
-   → Claude deserves context.
-
-✋ Every endpoint requires auth.
-   → No exceptions.
-
-✋ n8n owns scheduling.
-   → No APScheduler, no cron, no timers. Webhooks only.
-```
-
----
-
-## 📋 Roadmap
-
-### Phase 1: Integration (Now)
-- [ ] Wire MCP SDK → unlocks 12 servers
-- [ ] Wire Agent SDK → unlocks sub-agents  
-- [ ] Configure FCM → unlocks push output
-
-### Phase 2: Ambient Capabilities
-- [ ] Deploy Kokoro TTS on Contabo
-- [ ] Deploy Whisper STT on Contabo
-- [ ] Implement document generation
-- [ ] Implement memory extraction
-- [ ] Wire WebSocket bidirectional loop
-
-### Phase 3: Superior Six Autonomy
-- [ ] Deploy all 6 microservices
-- [ ] Deploy gpt-researcher
-- [ ] Deploy Shannon
-- [ ] Activate House Party Protocol (inter-agent comms)
-
----
-
-## 🤝 Contributing
-
-Fork. Branch off `main`. Follow the non-negotiable rules. Open a PR.
-
-**Priority contributions:**
-1. MCP SDK wiring (biggest unlock)
-2. Agent SDK integration
-3. FCM push notifications
-4. Tests (we have almost none)
-
----
-
-## 📜 License
-
-MIT. Use it. Fork it. Break it. Fix it.
-
----
-
-## 📜 Questions?
-
-Read `CLAUDE.md` first. Then open an issue. Then email.
-
----
-
-**Built by Ahmet Erol Bayrak.**
+**Built by Ahmet Erol Bayrak** (`Spedatox`)
