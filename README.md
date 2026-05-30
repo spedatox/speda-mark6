@@ -63,7 +63,7 @@ The **Superior Six** (Sentinel, NightCrawler, Ultron, Optimus, Unicron, Ratchet)
 
 ### 1️⃣ MCP SDK Integration → **Unlocks 12 Servers at Once**
 
-**File:** `app/mcp/client.py` (currently empty)
+**File:** `packages/api/app/mcp/client.py` (currently empty)
 
 **Why it matters:** 12 MCP servers are configured but unplugged. Once `mcp.ClientSession` is wired:
 
@@ -83,7 +83,7 @@ Once this lands, SPEDA goes from "isolated but coherent" to "integrated everywhe
 
 ### 2️⃣ Sub-Agent Task Execution → **Unlocks Parallel Research**
 
-**Function:** `app/core/registry.py:_execute_task()` (currently returns placeholder)
+**Function:** `packages/api/app/core/registry.py:_execute_task()` (currently returns placeholder)
 
 **Why it matters:** Wire the Anthropic Agent SDK to spawn sub-agents in parallel:
 
@@ -92,13 +92,13 @@ SPEDA spawns Ratchet for research
     ├─ Ratchet spawns Nightcrawler for deep dives
     ├─ Parallel execution with independent context
     └─ Results synthesized back into main conversation
+```
 
 Multi-agent CITADEL vision becomes real.
-```
 
 ### 3️⃣ Push Notifications → **Unlocks n8n Output Mode**
 
-**File:** `app/skills/notifications.py` + Firebase Cloud Messaging
+**File:** `packages/api/app/skills/notifications.py` + Firebase Cloud Messaging
 
 **Why it matters:** n8n webhooks fire into `POST /trigger/{agent_id}`, but `output_mode="push"` has nowhere to push.
 
@@ -125,6 +125,7 @@ Docker + Docker Compose
 # Clone
 git clone https://github.com/spedatox/speda-mark6.git
 cd speda-mark6
+cd packages/api
 
 # Dependencies
 uv sync
@@ -222,7 +223,7 @@ Built-in sub-agent spawner. Runs before everything else.
 - **Unlock:** Wire Anthropic Agent SDK
 
 ### Tier 1: Python Skills
-Sync functions in `app/skills/`. Add new skill = new file + register in `main.py`.
+Sync functions in `packages/api/app/skills/`. Add new skill = new file + register in `packages/api/app/main.py`.
 - **Status:** 1/5 live (system_info)
 - **Stubbed:** TTS, STT, documents, notifications
 
@@ -259,7 +260,7 @@ Each agent is an independent microservice. Fork the repo, swap one file:
 
 ```bash
 # For Sentinel
-cp app/profiles/speda.py app/profiles/sentinel.py
+cp packages/api/app/profiles/speda.py packages/api/app/profiles/sentinel.py
 
 # Edit:
 # - name = "Sentinel"
@@ -314,43 +315,84 @@ SHANNON_URL=http://localhost:9000
 
 ```
 speda-mark-vi/
-├── speda.py                     # Terminal client (REPL + single-shot)
-├── app/
-│   ├── main.py                  # Lifespan handler, app factory
-│   ├── config.py                # Settings, structured logging
-│   ├── database.py              # Async SQLAlchemy, migrations
-│   ├── middleware/auth.py       # API key validation (all routes)
-│   ├── profiles/
-│   │   ├── base.py              # AgentProfile ABC
-│   │   └── speda.py             # SPEDA identity — fork this for Superior Six
-│   ├── core/
-│   │   ├── orchestrator.py      # Agentic loop, system prompt, 30-iter cap
-│   │   ├── context.py           # AgentContext (single source of truth)
-│   │   ├── registry.py          # CapabilityRegistry (Tiers 0–3 routing)
-│   │   ├── agent_registry.py    # Superior Six tracking
-│   │   └── session_manager.py   # Session lifecycle, history
-│   ├── routers/
-│   │   ├── chat.py              # POST /chat, WS /ws
-│   │   ├── trigger.py           # POST /trigger/{agent_id}
-│   │   ├── agents.py            # GET /agents, WS /agents/ws/{id}
-│   │   ├── admin.py             # DELETE /admin/outputs
-│   │   └── health.py            # GET /health
-│   ├── skills/                  # Tier 1 — Python skills
-│   ├── mcp/                     # Tier 2 — MCP client + config
-│   ├── adapters/                # Tier 3 — OSS wrappers
-│   ├── models/                  # SQLAlchemy ORM (6 tables)
-│   ├── schemas/                 # Pydantic request/response
-│   ├── services/                # Anthropic client, memory, n8n
-│   └── websocket/               # WebSocket manager
-├── docker-compose.yml
+├── CLAUDE.md
 ├── Dockerfile
+├── docker-compose.yml
 ├── pyproject.toml
-└── .env.example
+├── .env.example
+├── README.md
+├── speda.ps1
+├── uv.lock
+├── node_modules
+├── package-lock.json
+├── package.json
+└── packages/
+    ├── api/
+    │   ├── main.py
+    │   ├── Dockerfile
+    │   ├── pyproject.toml
+    │   ├── speda.py
+    │   └── app/
+    │       ├── main.py
+    │       ├── config.py
+    │       ├── database.py
+    │       ├── middleware/
+    │       │   └── auth.py              # API key validation — applied to all routes
+    │       ├── profiles/
+    │       │   ├── base.py              # AgentProfile ABC — name, system prompt template, model policy
+    │       │   └── speda.py             # SPEDA identity — fork this for Superior Six
+    │       ├── core/
+    │       │   ├── orchestrator.py      # AgentOrchestrator — owns the agentic loop + system prompt
+    │       │   ├── context.py           # AgentContext dataclass
+    │       │   ├── registry.py          # CapabilityRegistry — all four tiers unified
+    │       │   ├── agent_registry.py    # AgentRegistry — WebSocket-based agent presence
+    │       │   └── session_manager.py   # SessionManager — session lifecycle + history loading
+    │       ├── routers/
+    │       │   ├── chat.py              # POST /chat (SSE), WS /ws (WebSocket) — Flutter user-facing
+    │       │   ├── trigger.py           # POST /trigger/{agent_id} — n8n webhook
+    │       │   ├── agents.py            # GET /agents — registry status
+    │       │   ├── admin.py             # DELETE /admin/outputs — temp file cleanup (called by n8n)
+    │       │   └── health.py
+    │       ├── skills/                  # Tier 1 — Python skills
+    │       │   ├── base.py              # Skill ABC
+    │       │   ├── tts.py               # Kokoro TTS
+    │       │   ├── stt.py               # Whisper STT
+    │       │   ├── notifications.py     # Flutter push
+    │       │   ├── documents.py         # PPTX / DOCX / PDF generation
+    │       │   └── system.py
+    │       ├── mcp/
+    │       │   ├── client.py            # MCPClient base
+    │       │   └── servers.py           # All MCP server registrations
+    │       ├── adapters/
+    │       │   ├── base.py              # OSSAdapter ABC
+    │       │   ├── gpt_researcher.py
+    │       │   └── shannon.py
+    │       ├── models/                  # SQLAlchemy ORM (6 tables)
+    │       │   ├── user.py
+    │       │   ├── session.py
+    │       │   ├── message.py
+    │       │   ├── agent.py
+    │       │   ├── tool_call.py
+    │       │   └── notification.py
+    │       ├── schemas/
+    │       │   ├── chat.py
+    │       │   ├── sse.py
+    │       │   ├── agent.py
+    │       │   └── trigger.py
+    │       ├── services/
+    │       │   ├── anthropic_client.py
+    │       │   ├── memory.py
+    │       │   └── n8n.py               # Webhook auth, trigger formatting
+    │       └── websocket/
+    │           ├── manager.py           # WebSocketManager — Superior Six agent connections
+    │           └── protocol.py          # WebSocket message type definitions (no startup step)
+    └── desktop/
+        # Electron frontend (not detailed here)
 ```
 
 ---
 
-## ⚙️ Non-Negotiable Rules
+## 🔧 Non-Negotiable Rules
 
 *Enforced in `CLAUDE.md`. These aren't guidelines.*
 
@@ -428,10 +470,10 @@ MIT. Use it. Fork it. Break it. Fix it.
 
 ---
 
-## ❓ Questions?
+## 📜 Questions?
 
 Read `CLAUDE.md` first. Then open an issue. Then email.
 
 ---
 
-**Built by Ahmet Erol Bayrak.** 
+**Built by Ahmet Erol Bayrak.**
