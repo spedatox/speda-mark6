@@ -50,14 +50,11 @@ function AppInner() {
       <div style={{
         height: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem',
         alignItems: 'center', justifyContent: 'center',
-        background: 'var(--bg-primary)', color: 'var(--hb-cyan)',
-        fontFamily: "'Share Tech Mono', monospace", letterSpacing: '0.25em',
-        fontSize: '0.75rem', textTransform: 'uppercase',
+        background: 'var(--bg-primary)',
+        fontFamily: "'Share Tech Mono', monospace", letterSpacing: '0.12em',
+        fontSize: '0.72rem',
       }}>
-        <span style={{ animation: 'hbBlink 1.2s step-end infinite' }}>◢ INITIALISING ◣</span>
-        <span style={{ color: 'var(--hb-text-faint)', letterSpacing: '0.15em' }}>
-          establishing link · heartbreaker mk·vi
-        </span>
+        <span style={{ color: 'var(--hb-cyan)' }}>Loading configuration…</span>
       </div>
     )
   }

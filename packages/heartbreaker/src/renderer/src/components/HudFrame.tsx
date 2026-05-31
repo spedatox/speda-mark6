@@ -1,92 +1,125 @@
 import { useEffect, useState } from 'react'
+import { useChatContext } from '../store/chat'
+import { useSettings } from '../store/settings'
+import { useHealth } from '../lib/useHealth'
 
 /**
  * Project Heartbreaker — HUD viewport frame.
- * A fixed, non-interactive overlay that frames the whole app like a Stark
- * instrument: corner brackets, a dense technical top strip, a live readout,
- * and a slow scanline. pointer-events: none so it never blocks the UI.
+ * Fixed, non-interactive overlay. Corner brackets + a top strip showing REAL
+ * telemetry: backend host, live link state, round-trip latency, registered tool
+ * count, active model, session count, clock. No fake mission-control theatre.
  */
+
+function shortModel(id?: string): string {
+  if (!id) return '—'
+  const map: Record<string, string> = {
+    'claude-opus-4-7': 'OPUS 4.7',
+    'claude-sonnet-4-6': 'SONNET 4.6',
+    'claude-haiku-4-5-20251001': 'HAIKU 4.5',
+  }
+  return map[id] ?? id.replace(/^claude-/, '').toUpperCase()
+}
+
+function hostOf(apiBase?: string | null): string {
+  if (!apiBase) return '—'
+  try { return new URL(apiBase).host } catch { return apiBase }
+}
 
 function Bracket({ corner }: { corner: 'tl' | 'tr' | 'bl' | 'br' }) {
   const size = 18
   const v = corner[0] === 't' ? { top: 8 } : { bottom: 8 }
   const h = corner[1] === 'l' ? { left: 8 } : { right: 8 }
-  const border: React.CSSProperties = {
-    borderColor: 'var(--hb-cyan)',
-    borderStyle: 'solid',
-    borderWidth: `${corner[0] === 't' ? 1 : 0}px ${corner[1] === 'r' ? 1 : 0}px ${corner[0] === 'b' ? 1 : 0}px ${corner[1] === 'l' ? 1 : 0}px`,
-  }
   return (
     <div style={{
-      position: 'fixed', width: size, height: size, ...v, ...h, ...border,
+      position: 'fixed', width: size, height: size, ...v, ...h,
+      borderColor: 'var(--hb-cyan)', borderStyle: 'solid',
+      borderWidth: `${corner[0] === 't' ? 1 : 0}px ${corner[1] === 'r' ? 1 : 0}px ${corner[0] === 'b' ? 1 : 0}px ${corner[1] === 'l' ? 1 : 0}px`,
       opacity: 0.8, zIndex: 9999, pointerEvents: 'none',
     }} />
   )
 }
 
-function Seg({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
+/** label: value readout cell */
+function Stat({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
   return (
-    <span style={{
-      padding: '1px 6px',
-      border: '1px solid var(--hb-line)',
-      borderTop: accent ? '1px solid var(--hb-cyan)' : '1px solid var(--hb-line)',
-      color: accent ? 'var(--hb-cyan-bright)' : 'var(--hb-text-faint)',
-      background: accent ? 'rgba(54,171,202,0.08)' : 'transparent',
-      whiteSpace: 'nowrap',
-    }}>
-      {children}
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap' }}>
+      <span style={{ color: 'var(--hb-text-faint)', letterSpacing: '0.12em' }}>{label}</span>
+      <span style={{ color: color || 'var(--hb-text-dim)' }}>{value}</span>
     </span>
   )
 }
 
+function Divider() {
+  return <span style={{ width: 1, height: 10, background: 'rgba(95,165,188,0.2)' }} />
+}
+
 export default function HudFrame() {
+  const { state } = useChatContext()
+  const { settings } = useSettings()
+  const apiBase = state.config?.apiBase
+  const apiKey = state.config?.apiKey
+  const health = useHealth(apiBase, apiKey)
+
   const [now, setNow] = useState(new Date())
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
-
   const time = now.toLocaleTimeString('en-GB', { hour12: false })
-  const date = now.toLocaleDateString('en-GB').replace(/\//g, '.')
+
+  const online = health.online
+  const linkColor = online ? 'var(--hb-green)' : 'var(--hb-red)'
 
   return (
     <>
-      {/* Corner brackets */}
       <Bracket corner="tl" /><Bracket corner="tr" />
       <Bracket corner="bl" /><Bracket corner="br" />
 
-      {/* Top status strip */}
+      {/* Top strip — real telemetry */}
       <div style={{
         position: 'fixed', top: 0, left: 0, right: 0, height: 22,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 26px', gap: 8, zIndex: 9998, pointerEvents: 'none',
+        padding: '0 26px', gap: 10, zIndex: 9998, pointerEvents: 'none',
         fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
-        letterSpacing: '0.1em',
-        background: 'linear-gradient(180deg, rgba(6,14,18,0.92), rgba(6,14,18,0))',
+        letterSpacing: '0.06em',
+        background: 'linear-gradient(180deg, rgba(6,14,18,0.94), rgba(6,14,18,0))',
         borderBottom: '1px solid rgba(95,165,188,0.12)',
       }}>
-        {/* Left cluster — system tags */}
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <Seg accent>HEARTBREAKER</Seg>
-          <Seg>MK·VI</Seg>
-          <Seg>SYS·01</Seg>
-          <Seg>OBJ·04.A</Seg>
-          <span style={{ color: 'var(--hb-text-faint)' }}>MODE / 3Dx.78A</span>
+        {/* Left — identity + connection */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{
+            padding: '1px 6px', border: '1px solid var(--hb-cyan)',
+            borderTop: '1px solid var(--hb-cyan)', color: 'var(--hb-cyan-bright)',
+            background: 'rgba(54,171,202,0.08)', letterSpacing: '0.14em', fontWeight: 600,
+          }}>HEARTBREAKER</span>
+          <Divider />
+          <Stat label="HOST" value={hostOf(apiBase)} />
+          <Divider />
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: linkColor }}>
+            <span style={{
+              width: 6, height: 6, background: linkColor, display: 'inline-block',
+              animation: online ? 'none' : 'hbBlink 1s step-end infinite',
+            }} />
+            {online ? 'ONLINE' : 'OFFLINE'}
+          </span>
         </div>
 
-        {/* Right cluster — live readout */}
+        {/* Right — operating parameters */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ color: 'var(--hb-text-faint)' }}>LON 41.0082 · LAT 28.9784</span>
-          <Seg>{date}</Seg>
+          <Stat label="MODEL" value={shortModel(settings.model)} color="var(--hb-cyan-bright)" />
+          <Divider />
+          <Stat label="TOOLS" value={health.tools ?? '--'} />
+          <Divider />
+          <Stat label="RTT" value={health.latencyMs != null ? `${health.latencyMs}ms` : '--'}
+                color={health.latencyMs != null && health.latencyMs < 400 ? 'var(--hb-green)' : 'var(--hb-amber)'} />
+          <Divider />
+          <Stat label="SESS" value={String(state.sessions.length).padStart(2, '0')} />
+          <Divider />
           <span style={{ color: 'var(--hb-cyan-bright)' }}>{time}</span>
-          <span style={{
-            width: 6, height: 6, background: 'var(--hb-green)',
-            display: 'inline-block', animation: 'hbBlink 2s step-end infinite',
-          }} />
         </div>
       </div>
 
-      {/* Bottom hairline + tick ruler */}
+      {/* Bottom hairline ruler (decorative) */}
       <div style={{
         position: 'fixed', bottom: 0, left: 26, right: 26, height: 4, zIndex: 9998,
         pointerEvents: 'none',
@@ -94,7 +127,7 @@ export default function HudFrame() {
         opacity: 0.4,
       }} />
 
-      {/* Slow scanline sweep */}
+      {/* Slow scanline (decorative) */}
       <div style={{
         position: 'fixed', top: 0, left: 0, right: 0, height: 60, zIndex: 9997,
         pointerEvents: 'none',
