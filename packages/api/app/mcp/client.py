@@ -118,7 +118,19 @@ class MCPClient:
         return "\n".join(parts) if parts else "(no output)"
 
     async def disconnect(self) -> None:
-        await self._exit_stack.aclose()
-        self._connected = False
-        self._session = None
+        try:
+            await self._exit_stack.aclose()
+        except Exception as e:
+            # MCP stdio servers are entered in the lifespan startup task and torn
+            # down in shutdown; anyio raises a "cancel scope in a different task"
+            # RuntimeError when the task group is closed across that boundary
+            # (very visible under --reload). The subprocess is killed regardless,
+            # so swallow the cleanup noise instead of failing app shutdown.
+            logger.debug(
+                "mcp_disconnect_cleanup_ignored",
+                extra={"server": self.server_name, "error": str(e)},
+            )
+        finally:
+            self._connected = False
+            self._session = None
         logger.info("mcp_disconnected", extra={"server": self.server_name})
