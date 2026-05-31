@@ -48,3 +48,7 @@ node_modules/
 packages/*/out/
 packages/*/.vite/
 packages/*/*.tsbuildinfo
+
+# Proprietary fonts — kept local, not redistributed in this public repo
+Samsung*.ttf
+references/

@@ -11,14 +11,37 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
-/* Pretendard — clean modern readable sans (Samsung One / Apple SF lineage) for body copy */
-@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@latest/dist/web/static/pretendard.min.css');
+
+/* SamsungOne — the real Samsung UI font, for readable body copy */
+@font-face {
+  font-family: 'SamsungOne';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/SamsungOne-400.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'SamsungOne';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/SamsungOne-700.ttf') format('truetype');
+}
+/* SamsungSharpSans — Samsung's display face, available for headings */
+@font-face {
+  font-family: 'SamsungSharpSans';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/SamsungSharpSans-Bold.ttf') format('truetype');
+}
 
 :root {
   /* ── Fonts ────────────────────────────────────────────────────────────── */
-  --font-ui:   'Rajdhani', 'Saira', -apple-system, 'Segoe UI', sans-serif;   /* HUD chrome */
-  --font-read: 'Pretendard', 'Inter', -apple-system, 'Segoe UI', sans-serif; /* chat reading */
-  --font-mono: 'Share Tech Mono', monospace;                                  /* numerics */
+  --font-ui:      'Rajdhani', 'Saira', -apple-system, 'Segoe UI', sans-serif;     /* HUD chrome */
+  --font-read:    'SamsungOne', 'Inter', -apple-system, 'Segoe UI', sans-serif;   /* chat reading */
+  --font-display: 'SamsungSharpSans', 'SamsungOne', sans-serif;                   /* optional headings */
+  --font-mono:    'Share Tech Mono', monospace;                                    /* numerics */
 
   /* ── Core palette ─────────────────────────────────────────────────────── */
   --hb-void:        #04080a;   /* deepest background */
