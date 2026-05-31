@@ -45,11 +45,38 @@ INITIAL_FILES = {
 - Prefers concise, actionable responses
 - JARVIS register, not Siri
 """,
+    "/memories/current.md": """\
+# Current — what's active right now
+
+_Last updated: (never)_
+
+(SPEDA refreshes this once per day: a short snapshot of what is genuinely
+current in the owner's life. Finished or stale items are moved OUT, not kept.
+Trust this for recency — never present something absent here as new.)
+""",
+    "/memories/dossier.md": """\
+# Dossier — behavioural analysis
+
+_SPEDA's private working model of the owner, inferred from how he reacts —
+not facts he stated. Used to tailor behaviour silently. Updated over time._
+
+## Appreciates
+(inferred from positive reactions)
+
+## Friction / dislikes
+(inferred from corrections, pushback, frustration)
+
+## Working style
+(how he likes to operate)
+
+## Open questions
+(things SPEDA is still unsure about)
+""",
     "/memories/projects.md": """\
 # Active Projects
 
 ## SPEDA Mark VI
-Status: Active development
+Status: Active development (as of 2026-05)
 Stack: FastAPI + Anthropic + PostgreSQL + Electron + React
 Server: Contabo VPS
 Description: Personal AI assistant — sixth iteration of the SPEDA series
@@ -57,14 +84,19 @@ Description: Personal AI assistant — sixth iteration of the SPEDA series
     "/memories/preferences.md": """\
 # Explicit Instructions & Preferences
 
-(SPEDA updates this file when the owner gives explicit instructions or preferences)
+(SPEDA updates this file when the owner gives explicit instructions or preferences.
+Date-stamp anything time-sensitive.)
 """,
     "/memories/log.md": """\
 # Session Log
 
-(Rolling summary of recent sessions — most recent first)
+(Rolling dated summary of recent sessions — most recent first)
 """,
 }
+
+# Files preloaded into the system prompt every turn — the "always relevant" trio:
+# who the owner is, what's current, and how to treat him.
+PRELOAD_FILES = ["/memories/owner.md", "/memories/current.md", "/memories/dossier.md"]
 
 
 # ── Path validation ───────────────────────────────────────────────────────────
@@ -99,28 +131,26 @@ def _format_directory(files: list[MemoryFile], path: str) -> str:
 
 # ── Seed helpers ──────────────────────────────────────────────────────────────
 
-async def seed_initial_files(user_id: int, db) -> None:
-    """Create the default memory files for a user who has none yet."""
-    for path, content in INITIAL_FILES.items():
-        existing = await db.execute(
-            select(MemoryFile).where(
-                MemoryFile.user_id == user_id,
-                MemoryFile.path == path,
-            )
-        )
-        if existing.scalar_one_or_none() is None:
-            db.add(MemoryFile(user_id=user_id, path=path, content=content))
-    await db.commit()
-    logger.info("memory_files_seeded", extra={"user_id": user_id})
-
-
 async def ensure_seeded(user_id: int, db) -> None:
-    """Seed initial files if the user has no memory files yet."""
+    """
+    Idempotent backfill: create any default memory files the user is missing.
+    Safe to call every turn — does nothing (one SELECT) once all defaults exist.
+    Also backfills new default files added in later versions for existing users.
+    """
     result = await db.execute(
-        select(MemoryFile).where(MemoryFile.user_id == user_id).limit(1)
+        select(MemoryFile.path).where(MemoryFile.user_id == user_id)
     )
-    if result.scalar_one_or_none() is None:
-        await seed_initial_files(user_id, db)
+    existing = {row[0] for row in result.all()}
+    missing = [(p, c) for p, c in INITIAL_FILES.items() if p not in existing]
+    if not missing:
+        return
+    for path, content in missing:
+        db.add(MemoryFile(user_id=user_id, path=path, content=content))
+    await db.commit()
+    logger.info(
+        "memory_files_seeded",
+        extra={"user_id": user_id, "added": len(missing)},
+    )
 
 
 # ── Recall for context injection (used by orchestrator) ──────────────────────
@@ -128,35 +158,34 @@ async def ensure_seeded(user_id: int, db) -> None:
 async def recall_for_context(user_id: int, db) -> str:
     """
     Load the memory context to prepend to the system prompt.
-    Returns: directory listing (so SPEDA knows what exists) + owner.md contents.
-    SPEDA reads additional files JIT during the conversation via the memory tool.
+    Returns: directory listing (so SPEDA knows what exists) + the preloaded trio
+    (owner.md, current.md, dossier.md). SPEDA reads the remaining files JIT during
+    the conversation via the memory tool.
     """
     await ensure_seeded(user_id, db)
 
-    # Directory listing
     result = await db.execute(
         select(MemoryFile).where(MemoryFile.user_id == user_id)
     )
-    all_files = result.scalars().all()
-    listing = _format_directory(list(all_files), MEMORY_ROOT)
+    all_files = list(result.scalars().all())
+    by_path = {f.path: f for f in all_files}
 
-    # Always preload owner.md — it's always relevant
-    owner_result = await db.execute(
-        select(MemoryFile).where(
-            MemoryFile.user_id == user_id,
-            MemoryFile.path == "/memories/owner.md",
-        )
-    )
-    owner_file = owner_result.scalar_one_or_none()
-    owner_content = owner_file.content if owner_file else ""
+    listing = _format_directory(all_files, MEMORY_ROOT)
 
-    block = (
+    sections = [f"### Directory\n\n{listing}"]
+    for path in PRELOAD_FILES:
+        f = by_path.get(path)
+        if f:
+            sections.append(f"### {path}\n\n{f.content.strip()}")
+
+    body = "\n\n".join(sections)
+    return (
         "## Memory\n\n"
-        f"### Directory\n\n{listing}\n\n"
-        f"### {MEMORY_ROOT}/owner.md\n\n{owner_content}\n\n"
-        "Use the `memory` tool to read other files or update memory during this session."
+        f"{body}\n\n"
+        "Use the `memory` tool to read other files (e.g. projects.md, preferences.md, "
+        "log.md) or to update memory during this session. dossier.md shapes how you "
+        "respond — act on it, never cite it aloud."
     )
-    return block
 
 
 # ── The skill ─────────────────────────────────────────────────────────────────
