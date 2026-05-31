@@ -161,9 +161,23 @@ async def chat(
         session_id=body.session_id,
     )
 
+    # Build the user turn — plain text, or a content-block array when images are attached.
+    if body.attachments:
+        user_content: list | str = [
+            {
+                "type": "image",
+                "source": {"type": "base64", "media_type": att.media_type, "data": att.data},
+            }
+            for att in body.attachments
+        ]
+        if body.message:
+            user_content.append({"type": "text", "text": body.message})
+    else:
+        user_content = body.message
+
     history = await session_manager.load_history(db, session.id)
-    await session_manager.save_message(db, session.id, "user", body.message)
-    history.append({"role": "user", "content": body.message})
+    await session_manager.save_message(db, session.id, "user", user_content)
+    history.append({"role": "user", "content": user_content})
 
     context = AgentContext(
         user_id=user_id,

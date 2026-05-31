@@ -2,8 +2,8 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
-import { fetchModels } from '../lib/api'
-import type { AppConfig, ModelInfo } from '../lib/types'
+import { fetchModels, fileToImageBlock } from '../lib/api'
+import type { AppConfig, ModelInfo, ImageBlock } from '../lib/types'
 
 interface AttachedFile {
   id: string
@@ -15,7 +15,7 @@ interface AttachedFile {
 }
 
 interface Props {
-  onSend: (message: string) => void
+  onSend: (message: string, images?: ImageBlock[]) => void
   onStop?: () => void
   config: AppConfig
 }
@@ -130,13 +130,18 @@ export default function InputBar({ onSend, onStop, config }: Props) {
     addFiles(Array.from(e.dataTransfer.files))
   }
 
-  const submit = () => {
+  const submit = async () => {
     const msg = value.trim()
-    if (!msg || state.isStreaming) return
+    if ((!msg && attachments.length === 0) || state.isStreaming) return
+    const imageFiles = attachments.filter(a => a.isImage).map(a => a.file)
     setValue('')
     clearAttachments()
     setTimeout(resize, 0)
-    onSend(msg)
+    let blocks: ImageBlock[] = []
+    if (imageFiles.length) {
+      try { blocks = await Promise.all(imageFiles.map(fileToImageBlock)) } catch { blocks = [] }
+    }
+    onSend(msg, blocks.length ? blocks : undefined)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -160,7 +165,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
     setListening(true)
   }
 
-  const canSend = value.trim().length > 0 && !state.isStreaming
+  const canSend = (value.trim().length > 0 || attachments.length > 0) && !state.isStreaming
 
   return (
     <div style={{ padding: '0.5rem 1rem 1rem', flexShrink: 0 }}>

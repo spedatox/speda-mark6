@@ -5,6 +5,11 @@ export interface ToolBadge {
   name: string
 }
 
+export interface ImageBlock {
+  media_type: string
+  data: string   // base64, no data: prefix
+}
+
 export interface ChatMessage {
   id: string
   role: Role
@@ -12,6 +17,7 @@ export interface ChatMessage {
   tools: ToolBadge[]
   isStreaming: boolean
   isError: boolean
+  images?: string[]   // data: URLs for display in the user bubble
 }
 
 export interface Session {
