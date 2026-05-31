@@ -7,7 +7,7 @@ from app.core.registry import CapabilityRegistry
 from app.profiles.base import AgentProfile
 from app.schemas.sse import SSEEvent, SSEEventType
 from app.services.anthropic_client import AnthropicClient
-from app.services.memory import recall_memories, build_memory_block
+from app.skills.memory import recall_for_context
 
 logger = logging.getLogger(__name__)
 
@@ -61,21 +61,19 @@ class AgentOrchestrator:
         log = logger.getChild("run")
 
         # Build system prompt and inject into context.
-        # Recall long-term memories and append them so SPEDA knows who it's
-        # talking to without being told every session.
+        # Anthropic memory pattern: prepend the memory directory listing + the
+        # always-relevant owner profile. SPEDA reads the rest of its memory files
+        # on demand via the `memory` tool (JIT retrieval), and writes back when it
+        # learns something durable.
         base_prompt = self.build_system_prompt(context)
         if context.db is not None:
             try:
-                facts = await recall_memories(context.db, context.user_id)
-                memory_block = build_memory_block(facts)
+                memory_block = await recall_for_context(context.user_id, context.db)
                 if memory_block:
                     base_prompt = f"{base_prompt}\n\n{memory_block}"
                     logger.info(
-                        "memory_recalled",
-                        extra={
-                            "request_id": context.request_id,
-                            "facts_count": len(facts),
-                        },
+                        "memory_context_injected",
+                        extra={"request_id": context.request_id},
                     )
             except Exception as exc:
                 # Memory recall must never break a chat request

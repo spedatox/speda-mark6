@@ -37,6 +37,7 @@ PROMPT_SECTIONS = [
     "core/05_output_policy.md",
     "core/06_visual_output.md",   # always-loaded — no tool backs this, must be in core
     "core/07_formatting.md",      # math/LaTeX + currency formatting guidance
+    "core/08_memory.md",          # persistent memory protocol (Anthropic memory pattern)
 ]
 
 

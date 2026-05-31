@@ -3,6 +3,7 @@ from app.models.user import User
 from app.models.session import Session
 from app.models.message import Message
 from app.models.memory import Memory
+from app.models.memory_file import MemoryFile
 from app.models.agent import AgentRecord
 from app.models.tool_call import ToolCall
 from app.models.notification import Notification
