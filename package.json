@@ -1,12 +1,17 @@
 {
   "name": "speda-mark6",
   "private": true,
-  "workspaces": ["packages/desktop"],
+  "workspaces": ["packages/desktop", "packages/heartbreaker"],
   "scripts": {
     "desktop:dev": "npm run dev --workspace=packages/desktop",
     "desktop:build": "npm run build --workspace=packages/desktop",
     "desktop:typecheck": "npm run typecheck --workspace=packages/desktop",
     "desktop:web:dev": "npm run web:dev --workspace=packages/desktop",
-    "desktop:web:build": "npm run web:build --workspace=packages/desktop"
+    "desktop:web:build": "npm run web:build --workspace=packages/desktop",
+    "heartbreaker:dev": "npm run dev --workspace=packages/heartbreaker",
+    "heartbreaker:build": "npm run build --workspace=packages/heartbreaker",
+    "heartbreaker:typecheck": "npm run typecheck --workspace=packages/heartbreaker",
+    "heartbreaker:web:dev": "npm run web:dev --workspace=packages/heartbreaker",
+    "heartbreaker:web:build": "npm run web:build --workspace=packages/heartbreaker"
   }
 }
