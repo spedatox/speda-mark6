@@ -45,5 +45,6 @@ Thumbs.db
 
 # Node / Electron
 node_modules/
-packages/desktop/out/
-packages/desktop/.vite/
+packages/*/out/
+packages/*/.vite/
+packages/*/*.tsbuildinfo
