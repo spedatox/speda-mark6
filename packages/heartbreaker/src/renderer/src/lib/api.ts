@@ -107,3 +107,22 @@ export async function renameSession(
     })
   } catch { /* non-fatal */ }
 }
+
+export async function importChats(
+  config: AppConfig,
+  file: File
+): Promise<{ accepted: boolean; message: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  // NOTE: do not set Content-Type — the browser adds the multipart boundary.
+  const res = await fetch(`${config.apiBase}/admin/import-chats`, {
+    method: 'POST',
+    headers: { 'X-API-Key': config.apiKey },
+    body: form,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => `HTTP ${res.status}`)
+    throw new Error(text)
+  }
+  return res.json()
+}

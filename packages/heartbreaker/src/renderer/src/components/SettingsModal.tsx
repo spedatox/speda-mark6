@@ -1,20 +1,56 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
+import { useChatContext } from '../store/chat'
+import { importChats, fetchSessions } from '../lib/api'
+import type { AppConfig } from '../lib/types'
 
 interface Props {
+  config: AppConfig
   onClose: () => void
 }
 
-type Tab = 'general' | 'interface' | 'account'
+type Tab = 'general' | 'interface' | 'data' | 'account'
 
-export default function SettingsModal({ onClose }: Props) {
+export default function SettingsModal({ config, onClose }: Props) {
   const { settings, update } = useSettings()
+  const { dispatch } = useChatContext()
   const profile = useProfile()
   const [tab, setTab] = useState<Tab>('general')
   const [localPrompt, setLocalPrompt] = useState(settings.systemPrompt)
   const [localTemp, setLocalTemp] = useState(settings.temperature)
   const [localUserName, setLocalUserName] = useState(settings.userName || profile?.userName || '')
+
+  // ── Chat import ──────────────────────────────────────────────────────────
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importStatus, setImportStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle')
+  const [importMsg, setImportMsg] = useState('')
+
+  const handleImport = async () => {
+    if (!importFile || importStatus === 'uploading') return
+    setImportStatus('uploading')
+    setImportMsg('Uploading & starting import…')
+    try {
+      const res = await importChats(config, importFile)
+      setImportStatus('done')
+      setImportMsg(res.message || 'Import started in the background.')
+      // The import runs server-side; poll a few times so sessions populate live.
+      const refresh = async () => {
+        try {
+          const s = await fetchSessions(config)
+          dispatch({ type: 'SET_SESSIONS', payload: s })
+        } catch { /* non-fatal */ }
+      }
+      refresh()
+      setTimeout(refresh, 5000)
+      setTimeout(refresh, 15000)
+      setTimeout(refresh, 40000)
+    } catch (e) {
+      setImportStatus('error')
+      setImportMsg(e instanceof Error ? e.message : 'Import failed')
+    }
+  }
 
   // Debounced save for system prompt
   useEffect(() => {
@@ -33,6 +69,7 @@ export default function SettingsModal({ onClose }: Props) {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'general', label: 'General' },
     { id: 'interface', label: 'Interface' },
+    { id: 'data', label: 'Data' },
     { id: 'account', label: 'Account' },
   ]
 
@@ -213,6 +250,87 @@ export default function SettingsModal({ onClose }: Props) {
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                     Drag the sidebar edge to resize.
                   </p>
+                </div>
+              </div>
+            )}
+
+            {/* Data tab — import Claude chat export */}
+            {tab === 'data' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
+                    Import Claude conversations
+                  </label>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.875rem', lineHeight: 1.55 }}>
+                    Upload the <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>.zip</code> from
+                    your Claude data export. Each conversation becomes a session; messages are imported with their
+                    original dates. Runs in the background — sessions appear as they process.
+                  </p>
+
+                  {/* Hidden native input + custom trigger */}
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".zip"
+                    style={{ display: 'none' }}
+                    onChange={e => {
+                      const f = e.target.files?.[0] ?? null
+                      setImportFile(f)
+                      setImportStatus('idle')
+                      setImportMsg('')
+                    }}
+                  />
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => fileRef.current?.click()}
+                      style={{
+                        padding: '0.5rem 0.875rem',
+                        border: '1px solid var(--border)', background: 'transparent',
+                        color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.84rem',
+                      }}
+                    >
+                      Choose .zip…
+                    </button>
+
+                    <span style={{
+                      fontSize: '0.82rem', color: importFile ? 'var(--text-primary)' : 'var(--text-muted)',
+                      fontFamily: importFile ? 'var(--font-mono)' : 'inherit',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280,
+                    }}>
+                      {importFile ? importFile.name : 'No file selected'}
+                    </span>
+
+                    <div style={{ flex: 1 }} />
+
+                    <button
+                      onClick={handleImport}
+                      disabled={!importFile || importStatus === 'uploading'}
+                      style={{
+                        padding: '0.5rem 1.1rem',
+                        border: '1px solid var(--accent)',
+                        background: (!importFile || importStatus === 'uploading') ? 'transparent' : 'rgba(54,171,202,0.12)',
+                        color: (!importFile || importStatus === 'uploading') ? 'var(--text-muted)' : 'var(--accent)',
+                        cursor: (!importFile || importStatus === 'uploading') ? 'not-allowed' : 'pointer',
+                        fontSize: '0.84rem', fontWeight: 600, letterSpacing: '0.04em',
+                        opacity: (!importFile || importStatus === 'uploading') ? 0.5 : 1,
+                      }}
+                    >
+                      {importStatus === 'uploading' ? 'Importing…' : 'Import'}
+                    </button>
+                  </div>
+
+                  {/* Status line */}
+                  {importMsg && (
+                    <p style={{
+                      marginTop: '0.875rem', fontSize: '0.8rem', fontFamily: 'var(--font-mono)',
+                      color: importStatus === 'error' ? 'var(--hb-red)'
+                           : importStatus === 'done' ? 'var(--hb-green)'
+                           : 'var(--text-secondary)',
+                    }}>
+                      {importStatus === 'done' ? '✓ ' : importStatus === 'error' ? '✕ ' : '› '}{importMsg}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

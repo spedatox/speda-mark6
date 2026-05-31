@@ -53,7 +53,7 @@ export default function Layout({ profile, config }: LayoutProps) {
         <ChatMain config={config} onSelectSession={handleSelectSession} />
       </div>
 
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <SettingsModal config={config} onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

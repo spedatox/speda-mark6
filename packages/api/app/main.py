@@ -155,13 +155,14 @@ def create_app() -> FastAPI:
     app.add_middleware(APIKeyMiddleware)
 
     # Routers
-    from app.routers import admin, agents, chat, health, trigger
+    from app.routers import admin, agents, chat, health, trigger, import_chats
 
     app.include_router(health.router)
     app.include_router(chat.router)
     app.include_router(trigger.router)
     app.include_router(agents.router)
     app.include_router(admin.router)
+    app.include_router(import_chats.router)
 
     return app
 
