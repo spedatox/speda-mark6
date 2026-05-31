@@ -85,7 +85,7 @@ async def get_messages(
 @router.get("/sessions")
 async def list_sessions(
     request: Request,
-    limit: int = 50,
+    limit: int = 500,
     db: AsyncSession = Depends(get_db),
 ):
     from sqlalchemy import select, desc
