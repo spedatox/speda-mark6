@@ -1,32 +1,35 @@
-import json
+"""
+Background memory services.
+
+Memory architecture follows Anthropic's agent memory pattern: SPEDA owns its
+memory and writes structured files via the `memory` tool during conversations
+(see app/skills/memory.py). These background tasks are the SUPPLEMENT to that —
+specifically the "end-of-session update" Anthropic recommends:
+
+  - update_session_log(): after each turn, append a one-line dated summary to
+    /memories/log.md so SPEDA always has a recent-session trail to read back.
+  - generate_title(): name the conversation for the sidebar.
+
+The old flat-fact "memories" table (app/models/memory.py) is superseded by the
+file-based system and no longer written here.
+"""
+
 import logging
+from datetime import datetime, timezone
 
 from fastapi import BackgroundTasks
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.models.memory import Memory
+from app.models.memory_file import MemoryFile
 from app.models.message import Message
 from app.models.session import Session
 
 logger = logging.getLogger(__name__)
 
-# ── Prompts ───────────────────────────────────────────────────────────────────
-
-_EXTRACT_PROMPT = """\
-Review the following conversation exchange and extract up to 5 facts worth \
-remembering about the user — preferences, ongoing projects, tools they use, \
-people they mention, or any explicit instructions for future interactions.
-
-Only extract facts that are genuinely useful to recall later. If the exchange \
-contains nothing worth remembering, return an empty array.
-
-Return ONLY a valid JSON array of short strings. No explanation, no markdown.
-Example: ["User prefers briefings at 8 AM", "User is building SPEDA on Contabo"]
-
-USER: {user_message}
-ASSISTANT: {assistant_message}"""
+LOG_PATH = "/memories/log.md"
+LOG_MAX_ENTRIES = 30   # keep the rolling log bounded
 
 _TITLE_PROMPT = """\
 Generate a short title (3-6 words) for this conversation.
@@ -35,65 +38,16 @@ Return ONLY the title — no punctuation, no quotes, nothing else.
 USER: {user_message}
 ASSISTANT: {assistant_message}"""
 
-_CONSOLIDATE_PROMPT = """\
-You are a memory deduplicator. Below is a list of facts about a user.
-Many facts may be redundant, outdated, or near-duplicates.
+_LOG_PROMPT = """\
+Summarise this conversation exchange in ONE short line (max 14 words) for a \
+session log — what the owner wanted and what was done. No fluff, no preamble.
+Return ONLY the line.
 
-Your job: merge and deduplicate them into a clean, canonical list.
-- Keep the most specific and accurate version of each fact.
-- Remove direct duplicates and near-duplicates.
-- Remove facts that are clearly superseded by newer ones.
-- Never invent new facts.
-- Return at most 60 facts.
-
-Return ONLY a valid JSON array of short strings. No explanation, no markdown.
-
-FACTS:
-{facts}"""
+USER: {user_message}
+ASSISTANT: {assistant_message}"""
 
 
-# ── Recall (the read half) ────────────────────────────────────────────────────
-
-async def recall_memories(db: AsyncSession, user_id: int, limit: int = 80) -> list[str]:
-    """
-    Load this user's stored memories from the DB.
-    Returns a deduplicated list of fact strings, most recent first.
-    Fast path — no LLM call, runs synchronously before the first Claude call.
-    """
-    result = await db.execute(
-        select(Memory)
-        .where(Memory.user_id == user_id)
-        .order_by(Memory.created_at.desc())
-        .limit(limit)
-    )
-    rows = result.scalars().all()
-    if not rows:
-        return []
-
-    # Cheap exact-dedup: preserve order, skip byte-identical duplicates
-    seen: set[str] = set()
-    facts: list[str] = []
-    for row in rows:
-        normalised = row.content.strip().lower()
-        if normalised not in seen:
-            seen.add(normalised)
-            facts.append(row.content.strip())
-
-    return facts
-
-
-def build_memory_block(facts: list[str]) -> str:
-    """
-    Format recalled facts as a system-prompt section.
-    Returns an empty string if there are no facts (no section injected).
-    """
-    if not facts:
-        return ""
-    lines = "\n".join(f"- {f}" for f in facts)
-    return f"## What you know about the owner\n\n{lines}"
-
-
-# ── Extraction (the write half) ───────────────────────────────────────────────
+# ── Shared helper ─────────────────────────────────────────────────────────────
 
 async def _load_last_exchange(db: AsyncSession, session_id: int) -> tuple[str, str]:
     """Return (last_user_message, last_assistant_message) for a session."""
@@ -127,141 +81,82 @@ async def _load_last_exchange(db: AsyncSession, session_id: int) -> tuple[str, s
     return user_msg, assistant_msg
 
 
-async def _should_consolidate(db: AsyncSession, user_id: int, threshold: int = 40) -> bool:
-    """Return True if the user has enough memories to warrant a consolidation pass."""
-    result = await db.execute(
-        select(Memory).where(Memory.user_id == user_id)
-    )
-    return len(result.scalars().all()) >= threshold
+# ── End-of-session log update (Anthropic memory pattern) ──────────────────────
 
-
-async def _consolidate_memories(db: AsyncSession, user_id: int, model: str) -> None:
-    """
-    Run a Haiku consolidation pass: load all facts, ask the model to merge
-    near-duplicates, replace the table rows with the cleaned list.
-    Runs inside extract_memory when count crosses the threshold.
-    """
-    from app.services.anthropic_client import AnthropicClient
-
-    result = await db.execute(
-        select(Memory).where(Memory.user_id == user_id).order_by(Memory.created_at.asc())
-    )
-    all_facts = [row.content for row in result.scalars().all()]
-    if not all_facts:
-        return
-
-    facts_text = json.dumps(all_facts, ensure_ascii=False)
-    client = AnthropicClient()
-    response = await client.create_message(
-        model=model,
-        system="You are a precise memory deduplicator. Follow instructions exactly.",
-        messages=[{
-            "role": "user",
-            "content": _CONSOLIDATE_PROMPT.format(facts=facts_text[:6000]),
-        }],
-        max_tokens=2048,
-    )
-
-    raw = response.content[0].text.strip() if response.content else "[]"
-    try:
-        consolidated: list[str] = json.loads(raw)
-        if not isinstance(consolidated, list):
-            return
-    except json.JSONDecodeError:
-        logger.warning("memory_consolidate_parse_error", extra={"raw": raw[:200]})
-        return
-
-    # Replace all memories for this user with the consolidated set
-    await db.execute(delete(Memory).where(Memory.user_id == user_id))
-    for fact in consolidated:
-        if isinstance(fact, str) and fact.strip():
-            db.add(Memory(user_id=user_id, content=fact.strip()[:512], source_session_id=None))
-    await db.commit()
-
-    logger.info(
-        "memory_consolidated",
-        extra={"user_id": user_id, "before": len(all_facts), "after": len(consolidated)},
-    )
-
-
-async def extract_memory(
+async def update_session_log(
     session_id: int,
     request_id: str,
     user_id: int,
     model: str,
 ) -> None:
     """
-    Background task: extract facts from the last exchange and persist to memories table.
-    Triggers a consolidation pass when the memory table grows past the threshold.
-    Creates its own DB session — never reuses the request session.
+    Append a one-line dated summary of this exchange to /memories/log.md.
+    Keeps the log bounded to the most recent LOG_MAX_ENTRIES entries.
     """
     from app.services.anthropic_client import AnthropicClient
-
-    logger.info(
-        "memory_extract_start",
-        extra={"request_id": request_id, "session_id": session_id},
-    )
+    from app.skills.memory import ensure_seeded
 
     try:
         async with AsyncSessionLocal() as db:
             user_msg, assistant_msg = await _load_last_exchange(db, session_id)
-
             if not user_msg or not assistant_msg:
                 return
 
             client = AnthropicClient()
             response = await client.create_message(
                 model=model,
-                system="You are a precise memory extractor. Follow instructions exactly.",
+                system="You write terse one-line session log entries. Follow instructions exactly.",
                 messages=[{
                     "role": "user",
-                    "content": _EXTRACT_PROMPT.format(
-                        user_message=user_msg[:2000],
-                        assistant_message=assistant_msg[:2000],
+                    "content": _LOG_PROMPT.format(
+                        user_message=user_msg[:1500],
+                        assistant_message=assistant_msg[:1500],
                     ),
                 }],
-                max_tokens=512,
+                max_tokens=64,
             )
-
-            raw = response.content[0].text.strip() if response.content else "[]"
-
-            try:
-                facts: list[str] = json.loads(raw)
-                if not isinstance(facts, list):
-                    facts = []
-            except json.JSONDecodeError:
-                logger.warning(
-                    "memory_extract_parse_error",
-                    extra={"request_id": request_id, "raw": raw[:200]},
-                )
+            summary = (response.content[0].text.strip() if response.content else "")
+            summary = summary.strip().splitlines()[0].strip() if summary else ""
+            if not summary:
                 return
 
-            for fact in facts:
-                if isinstance(fact, str) and fact.strip():
-                    db.add(Memory(
-                        user_id=user_id,
-                        content=fact.strip()[:512],
-                        source_session_id=session_id,
-                    ))
+            await ensure_seeded(user_id, db)
+            result = await db.execute(
+                select(MemoryFile).where(
+                    MemoryFile.user_id == user_id,
+                    MemoryFile.path == LOG_PATH,
+                )
+            )
+            log_file = result.scalar_one_or_none()
+            date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            entry = f"- {date} — {summary}"
+
+            if log_file is None:
+                log_file = MemoryFile(
+                    user_id=user_id,
+                    path=LOG_PATH,
+                    content=f"# Session Log\n\n{entry}\n",
+                )
+                db.add(log_file)
+            else:
+                # Insert new entry at the top of the list, keep header, cap length
+                lines = log_file.content.splitlines()
+                header = lines[0] if lines and lines[0].startswith("#") else "# Session Log"
+                entries = [l for l in lines[1:] if l.strip().startswith("- ")]
+                entries.insert(0, entry)
+                entries = entries[:LOG_MAX_ENTRIES]
+                log_file.content = header + "\n\n" + "\n".join(entries) + "\n"
+                log_file.updated_at = datetime.now(timezone.utc)
 
             await db.commit()
             logger.info(
-                "memory_extract_done",
-                extra={
-                    "request_id": request_id,
-                    "session_id": session_id,
-                    "facts_stored": len(facts),
-                },
+                "session_log_updated",
+                extra={"request_id": request_id, "session_id": session_id},
             )
-
-            # Trigger consolidation if memory is getting crowded
-            if await _should_consolidate(db, user_id):
-                logger.info("memory_consolidate_triggered", extra={"user_id": user_id})
-                await _consolidate_memories(db, user_id, model)
 
     except Exception as e:
         logger.error(
-            "memory_extract_error",
+            "session_log_error",
             extra={"request_id": request_id, "error": str(e)},
         )
 
@@ -276,7 +171,6 @@ async def generate_title(
     """
     Background task: generate a short session title after the first exchange.
     Only runs if the session has no title yet — idempotent.
-    Creates its own DB session.
     """
     from app.services.anthropic_client import AnthropicClient
 
@@ -332,8 +226,8 @@ def schedule_background_tasks(
     model: str,
 ) -> None:
     """
-    Schedule memory extraction and title generation after an SSE stream completes.
-    Both tasks are self-contained — they open their own DB sessions.
+    Schedule post-turn background work: session log update + title generation.
+    Both open their own DB sessions (never reuse the request session).
     """
-    background_tasks.add_task(extract_memory, session_id, request_id, user_id, model)
+    background_tasks.add_task(update_session_log, session_id, request_id, user_id, model)
     background_tasks.add_task(generate_title, session_id, request_id, model)
