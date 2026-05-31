@@ -11,8 +11,15 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+/* Pretendard — clean modern readable sans (Samsung One / Apple SF lineage) for body copy */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@latest/dist/web/static/pretendard.min.css');
 
 :root {
+  /* ── Fonts ────────────────────────────────────────────────────────────── */
+  --font-ui:   'Rajdhani', 'Saira', -apple-system, 'Segoe UI', sans-serif;   /* HUD chrome */
+  --font-read: 'Pretendard', 'Inter', -apple-system, 'Segoe UI', sans-serif; /* chat reading */
+  --font-mono: 'Share Tech Mono', monospace;                                  /* numerics */
+
   /* ── Core palette ─────────────────────────────────────────────────────── */
   --hb-void:        #04080a;   /* deepest background */
   --hb-base:        #060c0f;   /* base background */
@@ -234,11 +241,15 @@ body {
    ════════════════════════════════════════════════════════════════════════════ */
 .prose {
   user-select: text;
-  line-height: 1.65;
+  font-family: var(--font-read);   /* readable modern sans for message content */
+  line-height: 1.7;
+  letter-spacing: 0;
   color: var(--hb-text);
   font-size: 0.95rem;
   font-weight: 400;
 }
+/* Chat input + message-edit fields read as body copy too (beats inline 'inherit') */
+textarea { font-family: var(--font-read) !important; letter-spacing: 0 !important; }
 .prose p { margin: 0.5rem 0; }
 .prose p:first-child { margin-top: 0; }
 .prose p:last-child { margin-bottom: 0; }

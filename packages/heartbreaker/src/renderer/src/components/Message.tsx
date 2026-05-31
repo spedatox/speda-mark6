@@ -376,6 +376,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                 borderRadius: '1.125rem', borderBottomRightRadius: '0.25rem',
                 padding: '0.625rem 1rem',
                 color: 'var(--text-primary)', fontSize: '0.9375rem',
+                fontFamily: 'var(--font-read)',
                 lineHeight: 1.65, whiteSpace: 'pre-wrap', userSelect: 'text',
               }}>
                 {message.content}
