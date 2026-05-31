@@ -44,12 +44,14 @@ async def lifespan(app: FastAPI):
     from app.skills.memory import MemorySkill
     from app.skills.notifications import NotificationsSkill
     from app.skills.read_skill import ReadSkillSkill
+    from app.skills.search_history import SearchHistorySkill
     from app.skills.stt import STTSkill
     from app.skills.system import SystemSkill
     from app.skills.tts import TTSSkill
 
     await registry.register_skill(ReadSkillSkill())
     await registry.register_skill(MemorySkill())
+    await registry.register_skill(SearchHistorySkill())
     await registry.register_skill(TTSSkill())
     await registry.register_skill(STTSkill())
     await registry.register_skill(NotificationsSkill())

@@ -29,7 +29,55 @@ from app.models.session import Session
 logger = logging.getLogger(__name__)
 
 LOG_PATH = "/memories/log.md"
+CURRENT_PATH = "/memories/current.md"
+DOSSIER_PATH = "/memories/dossier.md"
 LOG_MAX_ENTRIES = 30   # keep the rolling log bounded
+
+_CURRENT_PROMPT = """\
+Today is {date}.
+
+Below is the previous "current" snapshot, the recent session log, and the active
+projects file. Produce an UPDATED snapshot of what is genuinely current in the
+owner's life as of today — ongoing work, active concerns, near-term plans.
+
+Rules:
+- Move anything finished, resolved, or stale OUT. Do not carry it forward.
+- Never present an old or completed item as if it were new.
+- 3-7 short bullet points. Date-stamp time-sensitive items, e.g. "(as of {date})".
+- Return ONLY the bullet list. No header, no preamble.
+
+PREVIOUS SNAPSHOT:
+{previous}
+
+RECENT SESSION LOG:
+{log}
+
+ACTIVE PROJECTS:
+{projects}"""
+
+_DOSSIER_PROMPT = """\
+You maintain a private behavioural dossier on the owner — a working model of how
+he likes to be treated, inferred from how he REACTS, not from facts he states.
+
+Below is the existing dossier and recent raw exchanges. Update the dossier based on
+observable signals: corrections, pushback, frustration, praise, repeated patterns,
+what he engages with vs. ignores.
+
+Rules:
+- Only record well-supported inferences. Do not invent or over-read single messages.
+- Keep each section tight — a few sharp bullets, not paragraphs.
+- Carry forward still-valid prior observations; drop ones that no longer hold.
+- Return the dossier body with exactly these four sections and nothing else:
+  ## Appreciates
+  ## Friction / dislikes
+  ## Working style
+  ## Open questions
+
+EXISTING DOSSIER:
+{dossier}
+
+RECENT EXCHANGES:
+{exchanges}"""
 
 _TITLE_PROMPT = """\
 Generate a short title (3-6 words) for this conversation.
@@ -161,6 +209,150 @@ async def update_session_log(
         )
 
 
+# ── Daily maintenance: current brief + behavioural dossier ───────────────────
+
+async def _get_file(db: AsyncSession, user_id: int, path: str) -> "MemoryFile | None":
+    result = await db.execute(
+        select(MemoryFile).where(
+            MemoryFile.user_id == user_id,
+            MemoryFile.path == path,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _recent_exchanges(db: AsyncSession, user_id: int, days: int = 2, cap: int = 50) -> str:
+    """Plain-text dump of the user's recent user/assistant messages for analysis."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    result = await db.execute(
+        select(Message)
+        .join(Session, Message.session_id == Session.id)
+        .where(Session.user_id == user_id, Message.created_at >= since)
+        .order_by(Message.created_at.desc())
+        .limit(cap)
+    )
+    rows = list(reversed(result.scalars().all()))
+    lines: list[str] = []
+    for m in rows:
+        if m.role not in ("user", "assistant"):
+            continue
+        content = m.content
+        if isinstance(content, list):
+            text = " ".join(
+                b.get("text", "") for b in content
+                if isinstance(b, dict) and b.get("type") == "text"
+            )
+        else:
+            text = str(content)
+        text = text.strip().replace("\n", " ")
+        if text:
+            lines.append(f"[{m.role}] {text[:600]}")
+    return "\n".join(lines)
+
+
+async def run_daily_maintenance(
+    session_id: int,
+    request_id: str,
+    user_id: int,
+    model: str,
+) -> None:
+    """
+    Once per day: refresh /memories/current.md (recency snapshot) and
+    /memories/dossier.md (inferred behavioural model). Self-guards on the
+    "Last updated" date stamp in current.md so it runs at most once per day.
+    """
+    from app.services.anthropic_client import AnthropicClient
+    from app.skills.memory import ensure_seeded
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await ensure_seeded(user_id, db)
+
+            current = await _get_file(db, user_id, CURRENT_PATH)
+            # Guard: already refreshed today?
+            if current and f"_Last updated: {today}_" in current.content:
+                return
+
+            log = await _get_file(db, user_id, LOG_PATH)
+            projects = await _get_file(db, user_id, "/memories/projects.md")
+            dossier = await _get_file(db, user_id, DOSSIER_PATH)
+            exchanges = await _recent_exchanges(db, user_id)
+
+            client = AnthropicClient()
+
+            # ── Refresh current.md ────────────────────────────────────────────
+            try:
+                resp = await client.create_message(
+                    model=model,
+                    system="You maintain a concise recency snapshot. Follow instructions exactly.",
+                    messages=[{
+                        "role": "user",
+                        "content": _CURRENT_PROMPT.format(
+                            date=today,
+                            previous=(current.content if current else "")[:2000],
+                            log=(log.content if log else "")[:2000],
+                            projects=(projects.content if projects else "")[:1500],
+                        ),
+                    }],
+                    max_tokens=512,
+                )
+                bullets = (resp.content[0].text.strip() if resp.content else "")
+                if bullets:
+                    new_current = (
+                        "# Current — what's active right now\n\n"
+                        f"_Last updated: {today}_\n\n"
+                        f"{bullets}\n"
+                    )
+                    if current:
+                        current.content = new_current
+                        current.updated_at = datetime.now(timezone.utc)
+                    else:
+                        db.add(MemoryFile(user_id=user_id, path=CURRENT_PATH, content=new_current))
+                    await db.commit()
+                    logger.info("current_brief_refreshed", extra={"request_id": request_id})
+            except Exception as e:
+                logger.error("current_brief_error", extra={"request_id": request_id, "error": str(e)})
+
+            # ── Update dossier.md ─────────────────────────────────────────────
+            if exchanges:
+                try:
+                    resp = await client.create_message(
+                        model=model,
+                        system="You maintain a precise behavioural dossier. Follow instructions exactly.",
+                        messages=[{
+                            "role": "user",
+                            "content": _DOSSIER_PROMPT.format(
+                                dossier=(dossier.content if dossier else "")[:3000],
+                                exchanges=exchanges[:6000],
+                            ),
+                        }],
+                        max_tokens=1024,
+                    )
+                    body = (resp.content[0].text.strip() if resp.content else "")
+                    if body and "##" in body:
+                        new_dossier = (
+                            "# Dossier — behavioural analysis\n\n"
+                            "_SPEDA's private working model of the owner, inferred from how he "
+                            "reacts. Used to tailor behaviour silently._\n\n"
+                            f"_Last updated: {today}_\n\n"
+                            f"{body}\n"
+                        )
+                        if dossier:
+                            dossier.content = new_dossier
+                            dossier.updated_at = datetime.now(timezone.utc)
+                        else:
+                            db.add(MemoryFile(user_id=user_id, path=DOSSIER_PATH, content=new_dossier))
+                        await db.commit()
+                        logger.info("dossier_updated", extra={"request_id": request_id})
+                except Exception as e:
+                    logger.error("dossier_error", extra={"request_id": request_id, "error": str(e)})
+
+    except Exception as e:
+        logger.error("daily_maintenance_error", extra={"request_id": request_id, "error": str(e)})
+
+
 # ── Title generation ──────────────────────────────────────────────────────────
 
 async def generate_title(
@@ -226,8 +418,12 @@ def schedule_background_tasks(
     model: str,
 ) -> None:
     """
-    Schedule post-turn background work: session log update + title generation.
-    Both open their own DB sessions (never reuse the request session).
+    Schedule post-turn background work:
+      - session log update (every turn)
+      - daily maintenance: current brief + dossier (self-guards to once/day)
+      - title generation (first turn only — idempotent)
+    All open their own DB sessions (never reuse the request session).
     """
     background_tasks.add_task(update_session_log, session_id, request_id, user_id, model)
+    background_tasks.add_task(run_daily_maintenance, session_id, request_id, user_id, model)
     background_tasks.add_task(generate_title, session_id, request_id, model)
