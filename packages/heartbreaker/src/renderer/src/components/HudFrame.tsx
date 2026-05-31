@@ -126,20 +126,6 @@ export default function HudFrame() {
         backgroundImage: 'repeating-linear-gradient(90deg, rgba(95,165,188,0.25) 0 1px, transparent 1px 10px)',
         opacity: 0.4,
       }} />
-
-      {/* Slow scanline (decorative) */}
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, height: 60, zIndex: 9997,
-        pointerEvents: 'none',
-        background: 'linear-gradient(180deg, transparent, rgba(95,204,230,0.05) 50%, transparent)',
-        animation: 'hbScan 9s linear infinite',
-      }} />
-
-      {/* Edge vignette */}
-      <div style={{
-        position: 'fixed', inset: 0, zIndex: 9996, pointerEvents: 'none',
-        boxShadow: 'inset 0 0 200px 40px rgba(2,6,8,0.85)',
-      }} />
     </>
   )
 }
