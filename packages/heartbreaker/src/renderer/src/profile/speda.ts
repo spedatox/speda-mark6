@@ -19,8 +19,8 @@ const profile: AppProfile = {
   userName: 'Erol',
   tagline: 'Specialized Personal Executive Digital Assistant',
   avatarInitial: 'S',
-  accent: '#3b82f6',
-  accentHover: '#2563eb',
+  accent: '#36abca',
+  accentHover: '#5fcce6',
   suggestedPrompts: [
     'Summarize my tasks and priorities for today',
     'Draft a professional email for me',

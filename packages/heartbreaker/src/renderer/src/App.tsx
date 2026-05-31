@@ -4,10 +4,11 @@ import { SettingsContext, useSettingsProvider } from './store/settings'
 import { ProfileContext } from './components/Sidebar'
 import PROFILE from './profile/speda'
 import Layout from './components/Layout'
+import HudFrame from './components/HudFrame'
 import type { AppConfig } from './lib/types'
 import { fetchSessions } from './lib/api'
 import 'katex/dist/katex.min.css'
-import './theme/base.css'
+import './theme/heartbreaker.css'
 
 function injectProfileTheme(accent: string, accentHover: string) {
   const root = document.documentElement
@@ -47,10 +48,16 @@ function AppInner() {
   if (!config) {
     return (
       <div style={{
-        height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--bg-primary)', color: 'var(--text-muted)', fontSize: '0.9rem',
+        height: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem',
+        alignItems: 'center', justifyContent: 'center',
+        background: 'var(--bg-primary)', color: 'var(--hb-cyan)',
+        fontFamily: "'Share Tech Mono', monospace", letterSpacing: '0.25em',
+        fontSize: '0.75rem', textTransform: 'uppercase',
       }}>
-        Loading…
+        <span style={{ animation: 'hbBlink 1.2s step-end infinite' }}>◢ INITIALISING ◣</span>
+        <span style={{ color: 'var(--hb-text-faint)', letterSpacing: '0.15em' }}>
+          establishing link · heartbreaker mk·vi
+        </span>
       </div>
     )
   }
@@ -58,6 +65,7 @@ function AppInner() {
   return (
     <ChatContext.Provider value={{ state, dispatch }}>
       <ProfileContext.Provider value={PROFILE}>
+        <HudFrame />
         <Layout profile={PROFILE} config={config} />
       </ProfileContext.Provider>
     </ChatContext.Provider>

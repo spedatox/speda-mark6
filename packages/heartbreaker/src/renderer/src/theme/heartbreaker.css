@@ -1,0 +1,285 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   PROJECT HEARTBREAKER — Stark FUI design system
+   Reference: Iron Man 2 holographic UI (Prologue / Jayse Hansen)
+
+   Principles (what keeps it real, not a toy):
+   - Desaturated petrol-blue + steel-grey on near-black. Restraint over neon.
+   - Hairline 1px borders, corner brackets, ruler ticks. Precision, not bloom.
+   - Sharp rectangular panels. No rounded glowing cards.
+   - Tiny technical typography: caps, letter-spaced labels, monospace numerics.
+   - Glow is minimal and cold. Information density reads as instrumentation.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+:root {
+  /* ── Core palette ─────────────────────────────────────────────────────── */
+  --hb-void:        #04080a;   /* deepest background */
+  --hb-base:        #060c0f;   /* base background */
+  --hb-petrol:      #0b1a22;   /* panel fill base */
+  --hb-steel:       #13303b;   /* raised surface */
+  --hb-line:        rgba(95, 165, 188, 0.26);  /* hairline border */
+  --hb-line-bright: rgba(110, 200, 228, 0.55); /* active border */
+  --hb-cyan:        #36abca;   /* primary accent — desaturated, cold */
+  --hb-cyan-bright: #5fcce6;   /* active accent */
+  --hb-cyan-dim:    #1d5d70;   /* dim accent */
+  --hb-amber:       #d39a3a;   /* warning */
+  --hb-red:         #c84a3a;   /* alert */
+  --hb-green:       #4fa377;   /* nominal */
+  --hb-text:        #cadbe2;   /* primary text — cool light */
+  --hb-text-dim:    #7a96a1;   /* secondary */
+  --hb-text-faint:  #46626d;   /* muted / captions */
+
+  /* ── Map the app's existing variables onto the FUI palette ───────────────
+     The ported components reference these — redefining them reskins the whole
+     app in one move, no component edits needed. */
+  --bg-primary:     var(--hb-base);
+  --bg-sidebar:     rgba(8, 18, 23, 0.72);
+  --bg-hover:       rgba(70, 150, 175, 0.12);
+  --bg-active:      rgba(54, 171, 202, 0.16);
+  --bg-input:       rgba(8, 20, 26, 0.66);
+  --bg-user-bubble: rgba(24, 56, 68, 0.46);
+  --bg-code:        #08151b;
+  --bg-code-header: #0a1d25;
+
+  --text-primary:   var(--hb-text);
+  --text-secondary: var(--hb-text-dim);
+  --text-muted:     var(--hb-text-faint);
+
+  --border:         var(--hb-line);
+  --border-focus:   var(--hb-line-bright);
+
+  --scrollbar-thumb:       rgba(70, 140, 160, 0.32);
+  --scrollbar-thumb-hover: rgba(90, 175, 200, 0.55);
+
+  --accent:        var(--hb-cyan);
+  --accent-hover:  var(--hb-cyan-bright);
+  --accent-muted:  rgba(54, 171, 202, 0.14);
+
+  --gradient-gem: linear-gradient(135deg, #5fcce6 0%, #36abca 50%, #1d5d70 100%);
+
+  --shadow-lg: 0 0 0 1px rgba(95,165,188,0.18), 0 18px 50px rgba(0,0,0,0.6);
+
+  --sidebar-width: 230px;
+
+  /* Sharp world — radii collapse to 0 */
+  --radius-bubble: 0; --radius-input: 0; --radius-card: 0;
+  --radius-sm: 0; --radius-xs: 0;
+}
+
+/* ── Reset + sharp corners everywhere (FUI is rectilinear) ────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0 !important; }
+.hb-round, .hb-round * { border-radius: 9999px !important; }   /* opt-out for gauges/dials */
+
+html, body, #root { height: 100%; overflow: hidden; }
+/* leave room for the fixed HUD top strip + bottom ruler */
+#root { padding-top: 22px; padding-bottom: 4px; }
+
+body {
+  font-family: 'Rajdhani', 'Saira', -apple-system, 'Segoe UI', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  color: var(--hb-text);
+  background:
+    radial-gradient(ellipse 90% 60% at 28% -5%, rgba(24, 64, 80, 0.30), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 85% 105%, rgba(16, 46, 60, 0.22), transparent 55%),
+    var(--hb-void);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
+/* ── Background grid — faint, instrument-like ─────────────────────────────── */
+#root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(96, 165, 188, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(96, 165, 188, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  /* fade the grid toward the edges */
+  -webkit-mask-image: radial-gradient(ellipse 100% 100% at 50% 45%, #000 35%, transparent 92%);
+          mask-image: radial-gradient(ellipse 100% 100% at 50% 45%, #000 35%, transparent 92%);
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar             { width: 0.3rem; height: 0.3rem; }
+::-webkit-scrollbar-track       { background: transparent; }
+::-webkit-scrollbar-thumb       { background: var(--scrollbar-thumb); }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+::selection { background: rgba(95, 204, 230, 0.30); color: #eafaff; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   FUI primitives — utility classes for components we restyle directly
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Tiny technical label — caps, letter-spaced */
+.hb-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hb-text-dim);
+}
+
+/* Monospace data readout */
+.hb-readout {
+  font-family: 'Share Tech Mono', monospace;
+  letter-spacing: 0.04em;
+  color: var(--hb-cyan-bright);
+}
+
+/* Panel — sharp, hairline, translucent petrol with corner brackets */
+.hb-panel {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(16, 38, 48, 0.5), rgba(8, 20, 26, 0.5));
+  border: 1px solid var(--hb-line);
+  box-shadow: inset 0 0 0 1px rgba(8, 16, 20, 0.6);
+}
+/* corner brackets via layered gradients on a pseudo element */
+.hb-bracketed::before,
+.hb-bracketed::after {
+  content: '';
+  position: absolute;
+  width: 9px; height: 9px;
+  border-color: var(--hb-cyan);
+  border-style: solid;
+  pointer-events: none;
+}
+.hb-bracketed::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+.hb-bracketed::after  { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+
+/* Panel header bar — solid teal strip with caps title */
+.hb-panel-head {
+  display: flex; align-items: center; gap: 0.4rem;
+  height: 22px;
+  padding: 0 0.5rem;
+  background: linear-gradient(90deg, var(--hb-cyan-dim), rgba(29, 93, 112, 0.4));
+  border-bottom: 1px solid var(--hb-line);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #d7eef5;
+}
+
+/* Status cells */
+.hb-cell { font-family: 'Share Tech Mono', monospace; font-size: 0.66rem; padding: 0 0.3rem; }
+.hb-ok   { color: var(--hb-green); }
+.hb-warn { color: var(--hb-amber); }
+.hb-alert{ color: var(--hb-red); }
+
+/* Ruler tick row */
+.hb-ticks {
+  height: 6px;
+  background-image: repeating-linear-gradient(
+    90deg, var(--hb-line) 0 1px, transparent 1px 8px);
+  opacity: 0.5;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Animations — restrained, cold, mechanical
+   ════════════════════════════════════════════════════════════════════════════ */
+@keyframes hbFadeIn   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes hbAssemble {
+  from { opacity: 0; clip-path: inset(0 100% 0 0); }
+  to   { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+@keyframes hbScan {
+  0%   { transform: translateY(0); opacity: 0; }
+  8%   { opacity: 0.5; }
+  92%  { opacity: 0.5; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+@keyframes hbBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+@keyframes hbFlicker {
+  0%,100% { opacity: 1; } 92% { opacity: 1; } 94% { opacity: 0.7; } 96% { opacity: 1; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+/* keep names used by ported components alive */
+@keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes blink    { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalIn  { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+@keyframes dropDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes widgetEntrance { from { opacity: 0; clip-path: inset(0 100% 0 0); } to { opacity: 1; clip-path: inset(0 0 0 0); } }
+@keyframes skeletonPulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.6; } }
+@keyframes textShimmer { 0% { background-position: 150% 0; } 100% { background-position: -50% 0; } }
+@keyframes caretBreathe {
+  0%,100% { opacity: 1; box-shadow: 0 0 5px 1px rgba(95,204,230,0.5); }
+  50%     { opacity: 0.4; box-shadow: 0 0 2px 0 rgba(95,204,230,0.2); }
+}
+@keyframes caretSheen { 0% { background-position: 0 120%; } 100% { background-position: 0 -20%; } }
+
+.thinking-shimmer {
+  background: linear-gradient(100deg,
+    var(--hb-text-faint) 0%, var(--hb-text-faint) 35%,
+    var(--hb-cyan-bright) 50%,
+    var(--hb-text-faint) 65%, var(--hb-text-faint) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  animation: textShimmer 1.6s linear infinite;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Prose (markdown) — technical, hairline, monospace data
+   ════════════════════════════════════════════════════════════════════════════ */
+.prose {
+  user-select: text;
+  line-height: 1.65;
+  color: var(--hb-text);
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+.prose p { margin: 0.5rem 0; }
+.prose p:first-child { margin-top: 0; }
+.prose p:last-child { margin-bottom: 0; }
+.prose h1,.prose h2,.prose h3,.prose h4 {
+  font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  margin: 1.1rem 0 0.4rem; color: #dcedf3;
+}
+.prose h1 { font-size: 1.1rem; } .prose h2 { font-size: 1rem; } .prose h3 { font-size: 0.9rem; }
+.prose ul,.prose ol { padding-left: 1.4rem; margin: 0.5rem 0; }
+.prose li { margin: 0.22rem 0; }
+.prose li::marker { color: var(--hb-cyan); }
+.prose code {
+  font-family: 'Share Tech Mono', monospace; font-size: 0.82em;
+  background: rgba(54, 171, 202, 0.1); padding: 0.1em 0.4em;
+  border: 1px solid rgba(54,171,202,0.18); color: var(--hb-cyan-bright);
+}
+.prose pre { margin: 0.75rem 0; }
+.prose pre code { background: none; padding: 0; border: none; color: inherit; }
+.prose blockquote {
+  border-left: 2px solid var(--hb-cyan-dim); margin: 0.75rem 0;
+  padding: 0.2rem 0 0.2rem 0.9rem; color: var(--hb-text-dim);
+}
+.prose a { color: var(--hb-cyan-bright); text-decoration: none; border-bottom: 1px solid rgba(95,204,230,0.3); }
+.prose a:hover { border-bottom-color: var(--hb-cyan-bright); }
+.prose table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.85rem; }
+.prose th,.prose td { border: 1px solid var(--hb-line); padding: 0.35rem 0.6rem; }
+.prose th {
+  background: rgba(54,171,202,0.08); font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.7rem; color: #cfe7ee;
+}
+.prose hr { border: none; border-top: 1px solid var(--hb-line); margin: 1.1rem 0; }
+.prose img { max-width: 100%; }
+.prose strong { font-weight: 700; color: #eafaff; }
+
+/* Range input — FUI slider */
+input[type=range] {
+  -webkit-appearance: none; appearance: none;
+  height: 2px; background: rgba(95,165,188,0.25); outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 10px; height: 14px;
+  background: var(--hb-cyan); cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(8,16,20,0.8);
+}
