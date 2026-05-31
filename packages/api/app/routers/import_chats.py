@@ -1,10 +1,11 @@
 import io
 import json
 import logging
+import uuid
 import zipfile
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,25 @@ from app.models.message import Message
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.post("/index-history")
+async def index_history_endpoint(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    force: bool = False,
+):
+    """
+    One-time: mine durable facts about the owner from the entire conversation
+    history (Haiku) and write a consolidated profile to /memories/history.md.
+    Runs in the background. Pass ?force=true to re-index.
+    """
+    from app.services.history_indexer import index_history
+
+    profile = request.app.state.profile
+    request_id = str(uuid.uuid4())
+    background_tasks.add_task(index_history, 1, request_id, profile.haiku_model, force)
+    return JSONResponse({"accepted": True, "message": "History indexing started in background"})
 
 
 @router.post("/import-chats")

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
-import { importChats, fetchSessions } from '../lib/api'
+import { importChats, fetchSessions, indexHistory } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 
 interface Props {
@@ -26,6 +26,23 @@ export default function SettingsModal({ config, onClose }: Props) {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importStatus, setImportStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle')
   const [importMsg, setImportMsg] = useState('')
+
+  const [indexStatus, setIndexStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [indexMsg, setIndexMsg] = useState('')
+
+  const handleIndex = async () => {
+    if (indexStatus === 'running') return
+    setIndexStatus('running')
+    setIndexMsg('Indexing started — mining facts from past conversations (background)…')
+    try {
+      const res = await indexHistory(config)
+      setIndexStatus('done')
+      setIndexMsg(res.message || 'Indexing started in the background.')
+    } catch (e) {
+      setIndexStatus('error')
+      setIndexMsg(e instanceof Error ? e.message : 'Indexing failed')
+    }
+  }
 
   const handleImport = async () => {
     if (!importFile || importStatus === 'uploading') return
@@ -329,6 +346,45 @@ export default function SettingsModal({ config, onClose }: Props) {
                            : 'var(--text-secondary)',
                     }}>
                       {importStatus === 'done' ? '✓ ' : importStatus === 'error' ? '✕ ' : '› '}{importMsg}
+                    </p>
+                  )}
+                </div>
+
+                <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
+
+                {/* Index past conversations */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
+                    Index past conversations
+                  </label>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.875rem', lineHeight: 1.55 }}>
+                    One-time: mine durable facts about you from your entire history (Haiku),
+                    consolidate them, and write a profile to memory so SPEDA actually knows you.
+                    Runs in the background; ~a couple of minutes, ~$2 once.
+                  </p>
+                  <button
+                    onClick={handleIndex}
+                    disabled={indexStatus === 'running'}
+                    style={{
+                      padding: '0.5rem 1.1rem',
+                      border: '1px solid var(--accent)',
+                      background: indexStatus === 'running' ? 'transparent' : 'rgba(54,171,202,0.12)',
+                      color: indexStatus === 'running' ? 'var(--text-muted)' : 'var(--accent)',
+                      cursor: indexStatus === 'running' ? 'not-allowed' : 'pointer',
+                      fontSize: '0.84rem', fontWeight: 600, letterSpacing: '0.04em',
+                      opacity: indexStatus === 'running' ? 0.5 : 1,
+                    }}
+                  >
+                    {indexStatus === 'running' ? 'Indexing…' : 'Index history'}
+                  </button>
+                  {indexMsg && (
+                    <p style={{
+                      marginTop: '0.875rem', fontSize: '0.8rem', fontFamily: 'var(--font-mono)',
+                      color: indexStatus === 'error' ? 'var(--hb-red)'
+                           : indexStatus === 'done' ? 'var(--hb-green)'
+                           : 'var(--text-secondary)',
+                    }}>
+                      {indexStatus === 'done' ? '✓ ' : indexStatus === 'error' ? '✕ ' : '› '}{indexMsg}
                     </p>
                   )}
                 </div>
