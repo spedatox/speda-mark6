@@ -126,3 +126,17 @@ export async function importChats(
   }
   return res.json()
 }
+
+export async function indexHistory(
+  config: AppConfig
+): Promise<{ accepted: boolean; message: string }> {
+  const res = await fetch(`${config.apiBase}/admin/index-history`, {
+    method: 'POST',
+    headers: { 'X-API-Key': config.apiKey },
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => `HTTP ${res.status}`)
+    throw new Error(text)
+  }
+  return res.json()
+}

@@ -92,11 +92,21 @@ Date-stamp anything time-sensitive.)
 
 (Rolling dated summary of recent sessions — most recent first)
 """,
+    "/memories/history.md": """\
+# History — profile mined from past conversations
+
+_(not yet indexed — run "Index past conversations" in Settings → Data)_
+""",
 }
 
 # Files preloaded into the system prompt every turn — the "always relevant" trio:
 # who the owner is, what's current, and how to treat him.
-PRELOAD_FILES = ["/memories/owner.md", "/memories/current.md", "/memories/dossier.md"]
+PRELOAD_FILES = [
+    "/memories/owner.md",
+    "/memories/current.md",
+    "/memories/dossier.md",
+    "/memories/history.md",
+]
 
 
 # ── Path validation ───────────────────────────────────────────────────────────
