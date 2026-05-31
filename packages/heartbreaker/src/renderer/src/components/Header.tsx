@@ -64,17 +64,22 @@ export default function Header({ sidebarOpen, onToggleSidebar }: Props) {
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Right readout cluster */}
+      {/* Right readout cluster — real session state */}
       <span className="hb-readout" style={{ fontSize: '0.62rem', color: 'var(--hb-text-faint)' }}>
-        BUFFER {String(state.messages.length).padStart(3, '0')}
+        MSGS {String(state.messages.length).padStart(3, '0')}
       </span>
       <span style={{
         display: 'flex', alignItems: 'center', gap: 5,
         fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
-        letterSpacing: '0.1em', color: 'var(--hb-green)',
+        letterSpacing: '0.1em',
+        color: state.isStreaming ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
       }}>
-        <span style={{ width: 6, height: 6, background: 'var(--hb-green)', display: 'inline-block' }} />
-        LINK ACTIVE
+        <span style={{
+          width: 6, height: 6, display: 'inline-block',
+          background: state.isStreaming ? 'var(--hb-cyan-bright)' : 'var(--hb-text-faint)',
+          animation: state.isStreaming ? 'hbBlink 0.8s step-end infinite' : 'none',
+        }} />
+        {state.isStreaming ? 'GENERATING' : 'IDLE'}
       </span>
     </header>
   )
