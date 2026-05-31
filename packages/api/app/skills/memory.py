@@ -200,10 +200,12 @@ class MemorySkill(Skill):
 
     name = "memory"
     description = (
-        "Read and write persistent memory files that survive across conversations. "
-        "ALWAYS view /memories at the start of a new task to check for relevant context. "
-        "Use str_replace to update existing facts rather than appending duplicates. "
-        "Keep files organised and up-to-date — delete or rename stale files."
+        "Read or write the owner's persistent memory files under /memories. "
+        "owner.md, current.md, and dossier.md are ALREADY in your context every turn — "
+        "never use this tool to read them. Use 'view' only to open a SPECIFIC other file "
+        "(projects.md, preferences.md, log.md) when the task needs detail you don't already have. "
+        "Use 'create'/'str_replace' only to record a genuinely new, durable fact. "
+        "Most turns need no memory operations at all."
     )
     read_only = False
     input_schema = {
