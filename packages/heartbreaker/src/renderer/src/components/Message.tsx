@@ -370,17 +370,29 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
             </div>
           ) : (
             <>
-              <div style={{
-                background: 'var(--bg-user-bubble)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: '1.125rem', borderBottomRightRadius: '0.25rem',
-                padding: '0.625rem 1rem',
-                color: 'var(--text-primary)', fontSize: '0.9375rem',
-                fontFamily: 'var(--font-read)',
-                lineHeight: 1.65, whiteSpace: 'pre-wrap', userSelect: 'text',
-              }}>
-                {message.content}
-              </div>
+              {message.images && message.images.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', justifyContent: 'flex-end', marginBottom: message.content ? '0.4rem' : 0 }}>
+                  {message.images.map((src, i) => (
+                    <img
+                      key={i} src={src} alt="attachment"
+                      style={{ maxWidth: 220, maxHeight: 220, objectFit: 'cover', border: '1px solid var(--border)', display: 'block' }}
+                    />
+                  ))}
+                </div>
+              )}
+              {message.content && (
+                <div style={{
+                  background: 'var(--bg-user-bubble)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: '1.125rem', borderBottomRightRadius: '0.25rem',
+                  padding: '0.625rem 1rem',
+                  color: 'var(--text-primary)', fontSize: '0.9375rem',
+                  fontFamily: 'var(--font-read)',
+                  lineHeight: 1.65, whiteSpace: 'pre-wrap', userSelect: 'text',
+                }}>
+                  {message.content}
+                </div>
+              )}
               <div style={{ opacity: hovered ? 1 : 0, transition: 'opacity 0.15s', display: 'flex', alignItems: 'center', gap: '0.125rem' }}>
                 {onEditAndResend && (
                   <ActionBtn title="Edit message" onClick={() => { setEditValue(message.content); setEditing(true) }}>

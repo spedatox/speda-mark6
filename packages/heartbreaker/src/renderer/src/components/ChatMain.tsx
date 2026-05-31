@@ -6,7 +6,7 @@ import { streamChat, fetchSessions } from '../lib/api'
 import { useProfile } from './Sidebar'
 import MessageList from './MessageList'
 import InputBar from './InputBar'
-import type { AppConfig } from '../lib/types'
+import type { AppConfig, ImageBlock } from '../lib/types'
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10)
@@ -128,12 +128,17 @@ export default function ChatMain({ config, onSelectSession }: Props) {
   const abortRef = useRef<AbortController | null>(null)
   const [, forceUpdate] = useState(0)
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, images?: ImageBlock[]) => {
     if (state.isStreaming) return
 
+    const displayImages = (images ?? []).map(b => `data:${b.media_type};base64,${b.data}`)
     dispatch({
       type: 'ADD_USER_MESSAGE',
-      payload: { id: makeId(), role: 'user', content: text, tools: [], isStreaming: false, isError: false },
+      payload: {
+        id: makeId(), role: 'user', content: text, tools: [],
+        isStreaming: false, isError: false,
+        ...(displayImages.length ? { images: displayImages } : {}),
+      },
     })
 
     const assistantId = makeId()
@@ -154,6 +159,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         ctrl.signal,
         settings.model,
         settings.systemPrompt || undefined,
+        images,
       )) {
         if (event.type === 'chunk') {
           flushSync(() => {

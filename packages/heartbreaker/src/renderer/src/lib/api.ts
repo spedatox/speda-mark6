@@ -1,4 +1,45 @@
-import type { AppConfig, SSEEvent, ModelInfo } from './types'
+import type { AppConfig, SSEEvent, ModelInfo, ImageBlock } from './types'
+
+/**
+ * Load an image file, downscale to <=1568px on the long edge (Anthropic's
+ * recommended max, keeps it well under the 5MB limit and cuts token cost),
+ * and return a base64 image block ready for the API.
+ */
+export async function fileToImageBlock(file: File): Promise<ImageBlock> {
+  const dataUrl: string = await new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result as string)
+    r.onerror = reject
+    r.readAsDataURL(file)
+  })
+
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image()
+    i.onload = () => resolve(i)
+    i.onerror = reject
+    i.src = dataUrl
+  })
+
+  const MAX = 1568
+  let { width, height } = img
+  const longest = Math.max(width, height)
+  if (longest > MAX) {
+    const scale = MAX / longest
+    width = Math.round(width * scale)
+    height = Math.round(height * scale)
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
+
+  const outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+  const out = canvas.toDataURL(outType, 0.9)        // data:image/...;base64,XXXX
+  const comma = out.indexOf(',')
+  const media_type = out.slice(5, out.indexOf(';')) // image/jpeg
+  return { media_type, data: out.slice(comma + 1) }
+}
 
 export async function* streamChat(
   message: string,
@@ -7,6 +48,7 @@ export async function* streamChat(
   signal: AbortSignal,
   model?: string,
   systemPrompt?: string,
+  images?: ImageBlock[],
 ): AsyncGenerator<SSEEvent> {
   const res = await fetch(`${config.apiBase}/chat`, {
     method: 'POST',
@@ -19,6 +61,7 @@ export async function* streamChat(
       session_id: sessionId,
       ...(model ? { model } : {}),
       ...(systemPrompt ? { system_prompt: systemPrompt } : {}),
+      ...(images && images.length ? { attachments: images } : {}),
     }),
     signal,
   })
