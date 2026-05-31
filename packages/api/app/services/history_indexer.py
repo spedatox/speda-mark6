@@ -27,8 +27,27 @@ logger = logging.getLogger(__name__)
 
 HISTORY_PATH = "/memories/history.md"
 MAX_CONV_CHARS = 6000   # cap per-conversation text fed to Haiku
-CONCURRENCY = 5         # parallel extraction calls
+CONCURRENCY = 4         # parallel extraction calls (rate limiter governs the actual rate)
+RATE_PER_MIN = 45       # stay safely under the 50 req/min org limit (tier 0)
 MAX_FACTS_CHARS = 14000 # cap on the facts blob sent to consolidation
+
+
+class _RateLimiter:
+    """Spaces out request starts to honour the org requests-per-minute limit."""
+
+    def __init__(self, per_minute: int) -> None:
+        self._interval = 60.0 / max(per_minute, 1)
+        self._lock = asyncio.Lock()
+        self._next = 0.0
+
+    async def wait(self) -> None:
+        async with self._lock:
+            loop = asyncio.get_event_loop()
+            now = loop.time()
+            delay = max(0.0, self._next - now)
+            self._next = max(now, self._next) + self._interval
+        if delay:
+            await asyncio.sleep(delay)
 
 _EXTRACT_PROMPT = """\
 Below is a past conversation between the user and an assistant, wrapped in
@@ -89,7 +108,8 @@ def _conversation_text(messages) -> str:
     return full[:half] + "\n…\n" + full[-half:]
 
 
-async def _extract_one(client, model: str, sem: asyncio.Semaphore, session_id: int) -> list[str]:
+async def _extract_one(client, model: str, sem: asyncio.Semaphore,
+                       limiter: "_RateLimiter", session_id: int) -> list[str]:
     async with sem:
         try:
             async with AsyncSessionLocal() as db:
@@ -101,6 +121,7 @@ async def _extract_one(client, model: str, sem: asyncio.Semaphore, session_id: i
             text = _conversation_text(rows)
             if not text:
                 return []
+            await limiter.wait()
             resp = await client.create_message(
                 model=model,
                 system="You extract durable facts about a user as JSON. Follow instructions exactly.",
@@ -154,8 +175,9 @@ async def index_history(
 
         client = AnthropicClient()
         sem = asyncio.Semaphore(CONCURRENCY)
+        limiter = _RateLimiter(RATE_PER_MIN)
         results = await asyncio.gather(
-            *[_extract_one(client, model, sem, sid) for sid in session_ids],
+            *[_extract_one(client, model, sem, limiter, sid) for sid in session_ids],
             return_exceptions=True,
         )
 
@@ -181,6 +203,7 @@ async def index_history(
             return
 
         facts_blob = json.dumps(facts, ensure_ascii=False)[:MAX_FACTS_CHARS]
+        await limiter.wait()
         resp = await client.create_message(
             model=model,
             system="You consolidate facts into a clean profile. Follow instructions exactly.",
