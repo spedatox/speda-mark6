@@ -64,7 +64,7 @@ export async function fetchMessages(
 
 export async function fetchSessions(
   config: AppConfig,
-  limit = 50
+  limit = 500
 ): Promise<Array<{ id: number; title: string | null; started_at: string }>> {
   const res = await fetch(`${config.apiBase}/sessions?limit=${limit}`, {
     headers: { 'X-API-Key': config.apiKey },
