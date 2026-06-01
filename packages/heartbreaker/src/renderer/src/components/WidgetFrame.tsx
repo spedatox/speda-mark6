@@ -132,18 +132,31 @@ export default function WidgetFrame({ language, children }: Props) {
 
   const isSvg = language === 'svg' || (language === 'html' && children.trim().startsWith('<svg'))
 
-  useEffect(() => { setFrameLoaded(false); setHeight(420) }, [children])
-
-  // Trigger the draw-in cascade once the SVG markup settles. During streaming
-  // `children` grows each chunk; debouncing ensures we animate the FINAL SVG once,
-  // not a flicker of half-drawn frames.
+  // Only commit markup to the DOM once it looks COMPLETE. During streaming the
+  // code grows each chunk; injecting every partial frame is what makes the SVG
+  // blink/redraw. We hold the last complete version and render only that.
+  const isComplete = (() => {
+    const t = children.trim()
+    if (isSvg) return /<\/svg>/i.test(t)
+    if (/^<!DOCTYPE/i.test(t) || /^<html[\s>]/i.test(t)) return /<\/html>/i.test(t)
+    return true // plain fragments have no clear terminator — render as-is
+  })()
+  const [stableContent, setStableContent] = useState(isComplete ? children : '')
   useEffect(() => {
-    if (!isSvg) return
+    if (isComplete) setStableContent(children)
+  }, [isComplete, children])
+
+  useEffect(() => { setFrameLoaded(false); setHeight(420) }, [stableContent])
+
+  // Animate the draw-in cascade ONCE, when the complete SVG is committed —
+  // never on partial streaming frames.
+  useEffect(() => {
+    if (!isSvg || !stableContent) return
     const id = setTimeout(() => {
       if (svgHostRef.current) animateSvgDrawIn(svgHostRef.current)
-    }, 180)
+    }, 60)
     return () => clearTimeout(id)
-  }, [isSvg, children])
+  }, [isSvg, stableContent])
 
   useEffect(() => {
     if (isSvg) return
@@ -187,15 +200,30 @@ export default function WidgetFrame({ language, children }: Props) {
     >
       {/* ── Render area — no chrome, feels like part of the message ── */}
       {isSvg ? (
-        <div
-          ref={svgHostRef}
-          style={{
-            overflowX: 'auto',
-            borderRadius: '0.75rem',
-            animation: 'fadeIn 0.3s ease both',
-          }}
-          dangerouslySetInnerHTML={{ __html: children }}
-        />
+        stableContent ? (
+          <div
+            ref={svgHostRef}
+            style={{
+              overflowX: 'auto',
+              borderRadius: '0.75rem',
+              animation: 'fadeIn 0.3s ease both',
+            }}
+            dangerouslySetInnerHTML={{ __html: stableContent }}
+          />
+        ) : (
+          // Streaming — SVG not closed yet. Calm placeholder, no flicker.
+          <div style={{
+            minHeight: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 6, borderRadius: '0.75rem', background: 'rgba(255,255,255,0.015)',
+          }}>
+            {[0, 0.18, 0.36].map((delay, i) => (
+              <span key={i} style={{
+                width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)',
+                animation: `skeletonPulse 1.1s ease ${delay}s infinite`,
+              }} />
+            ))}
+          </div>
+        )
       ) : (
         <div style={{
           position: 'relative',
@@ -223,7 +251,7 @@ export default function WidgetFrame({ language, children }: Props) {
 
           <iframe
             key={frameId.current}
-            srcDoc={buildSrcdoc(children)}
+            srcDoc={buildSrcdoc(stableContent || children)}
             sandbox="allow-scripts allow-downloads allow-same-origin allow-forms"
             scrolling="no"
             onLoad={() => setTimeout(() => setFrameLoaded(true), 120)}

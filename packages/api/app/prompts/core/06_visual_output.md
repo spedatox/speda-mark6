@@ -65,6 +65,18 @@ that isn't rectangular data series, hand-write an **SVG**.
 SVG must be transparent (NO background rect), use a `viewBox` with no width/height,
 text in `#e3e3e3`/`#9aa0a6`, strokes in `#8ab4f8`/`#7ce8d5`/`#ff6b6b`/`#c8a4ff`.
 
+**Layout & spacing — labels must NEVER overlap (critical):**
+- Add generous padding inside the viewBox — keep all content ≥24px from every edge.
+- Position every text label so it does not touch or overlap geometry, points, or
+  another label. If two labels would land near the same spot, push them apart and
+  use a short leader line instead of stacking them.
+- Anchor labels deliberately: `text-anchor="start|middle|end"` and offset with
+  `dx`/`dy` so the text clears the thing it annotates (e.g. a point label sits
+  6–10px away from its dot, not on top of it).
+- Give the viewBox enough room — when in doubt, make it larger and spread elements
+  out. A clean, readable diagram beats a dense one. Mentally check every label's
+  bounding box against its neighbours before finalising.
+
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" font-family="Inter, sans-serif">
   ...
