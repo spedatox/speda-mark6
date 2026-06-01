@@ -21,53 +21,269 @@ interface Props {
 }
 
 function shortModelName(name: string): string {
-  return name.replace(/^Claude\s+/i, '')
+  return name.replace(/^Claude\s+/i, '').toUpperCase()
 }
 
 function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`
 }
 
+/* ── Toolbar button — sharp square ───────────────────────────────────────── */
+function ToolBtn({
+  title, onClick, active = false, danger = false, children,
+}: {
+  title: string; onClick?: () => void; active?: boolean; danger?: boolean; children: React.ReactNode
+}) {
+  const [hover, setHover] = useState(false)
+  const lit = active || hover
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: 30, height: 30,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        border: `1px solid ${active ? 'rgba(95,165,188,0.55)' : lit ? 'rgba(95,165,188,0.3)' : 'rgba(95,165,188,0.15)'}`,
+        background: active
+          ? 'rgba(54,171,202,0.15)'
+          : hover
+          ? 'rgba(54,171,202,0.07)'
+          : 'transparent',
+        color: danger
+          ? (lit ? '#c84a3a' : '#3a5a65')
+          : active
+          ? '#5fcce6'
+          : lit
+          ? '#7ab8c8'
+          : '#3a5a65',
+        cursor: 'pointer',
+        transition: 'border-color 0.12s, background 0.12s, color 0.12s',
+        flexShrink: 0,
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+/* ── Send / Stop button ───────────────────────────────────────────────────── */
+function SendBtn({ canSend, isStreaming, onSend, onStop }: {
+  canSend: boolean; isStreaming: boolean; onSend: () => void; onStop?: () => void
+}) {
+  const [press, setPress] = useState(false)
+  if (isStreaming) {
+    return (
+      <button
+        title="Stop generating"
+        onClick={onStop}
+        onMouseDown={() => setPress(true)}
+        onMouseUp={() => setPress(false)}
+        style={{
+          width: 32, height: 32,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: '1px solid rgba(200,74,58,0.5)',
+          background: 'rgba(200,74,58,0.18)',
+          color: '#c84a3a',
+          cursor: 'pointer',
+          transform: press ? 'scale(0.9)' : 'scale(1)',
+          transition: 'transform 0.1s',
+        }}
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="4" y="4" width="16" height="16"/>
+        </svg>
+      </button>
+    )
+  }
+  return (
+    <button
+      title="Send message"
+      onClick={onSend}
+      disabled={!canSend}
+      onMouseDown={() => { if (canSend) setPress(true) }}
+      onMouseUp={() => setPress(false)}
+      style={{
+        width: 32, height: 32,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        border: canSend ? '1px solid #36abca' : '1px solid rgba(95,165,188,0.12)',
+        background: canSend ? '#36abca' : 'transparent',
+        color: canSend ? '#04080a' : '#2e5260',
+        cursor: canSend ? 'pointer' : 'default',
+        transform: press ? 'scale(0.9)' : 'scale(1)',
+        transition: 'background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s',
+      }}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="2.5" strokeLinecap="round">
+        <path d="M12 19V5M5 12l7-7 7 7"/>
+      </svg>
+    </button>
+  )
+}
+
+/* ── Model picker ─────────────────────────────────────────────────────────── */
+function ModelPicker({ models, activeId, onSelect, config }: {
+  models: ModelInfo[]; activeId: string; onSelect: (id: string) => void; config: AppConfig
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  void config
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  const active = models.find(m => m.id === activeId)
+  const label  = active ? shortModelName(active.name) : shortModelName(activeId)
+  const [hover, setHover] = useState(false)
+
+  return (
+    <div style={{ position: 'relative' }} ref={ref}>
+      <button
+        title="Select model"
+        onClick={() => setOpen(v => !v)}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          height: 30, padding: '0 0.45rem',
+          display: 'flex', alignItems: 'center', gap: '0.3rem',
+          border: `1px solid ${open ? 'rgba(95,165,188,0.45)' : hover ? 'rgba(95,165,188,0.25)' : 'rgba(95,165,188,0.12)'}`,
+          background: open ? 'rgba(54,171,202,0.1)' : 'transparent',
+          color: open || hover ? '#7ab8c8' : '#3a6472',
+          cursor: 'pointer',
+          transition: 'border-color 0.12s, background 0.12s, color 0.12s',
+        }}
+      >
+        <span style={{
+          fontFamily: "'Share Tech Mono', monospace",
+          fontSize: '0.68rem', letterSpacing: '0.08em',
+        }}>
+          {label}
+        </span>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 6px)', right: 0,
+          background: '#06111a',
+          border: '1px solid rgba(95,165,188,0.28)',
+          boxShadow: '0 -8px 32px rgba(0,0,0,0.7)',
+          animation: 'dropDown 0.12s ease',
+          zIndex: 100,
+          width: 290,
+          overflow: 'hidden',
+        }}>
+          {/* panel header */}
+          <div style={{
+            height: 22, padding: '0 0.6rem',
+            display: 'flex', alignItems: 'center',
+            background: 'linear-gradient(90deg, rgba(29,93,112,0.7), rgba(29,93,112,0.15) 60%, transparent)',
+            borderBottom: '1px solid rgba(95,165,188,0.2)',
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '0.62rem', fontWeight: 700,
+            letterSpacing: '0.2em', textTransform: 'uppercase',
+            color: '#7a96a1',
+          }}>
+            SELECT MODEL
+          </div>
+          <div style={{ padding: '0.2rem 0' }}>
+            {models.map(m => {
+              const sel = m.id === activeId
+              const [mHover, setMHover] = useState(false)
+              return (
+                <button key={m.id}
+                  onClick={() => { onSelect(m.id); setOpen(false) }}
+                  onMouseEnter={() => setMHover(true)}
+                  onMouseLeave={() => setMHover(false)}
+                  style={{
+                    width: '100%', padding: '0.45rem 0.7rem 0.45rem 0.8rem',
+                    display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
+                    border: 'none',
+                    borderLeft: sel ? '2px solid #36abca' : mHover ? '2px solid rgba(95,165,188,0.3)' : '2px solid transparent',
+                    background: sel
+                      ? 'rgba(54,171,202,0.1)'
+                      : mHover
+                      ? 'rgba(54,171,202,0.05)'
+                      : 'transparent',
+                    cursor: 'pointer', textAlign: 'left',
+                    transition: 'background 0.1s, border-color 0.1s',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontFamily: "'Rajdhani',sans-serif",
+                      fontSize: '0.8rem', fontWeight: sel ? 700 : 600,
+                      letterSpacing: '0.08em', textTransform: 'uppercase',
+                      color: sel ? '#5fcce6' : mHover ? '#9bbac5' : '#5d7f8a',
+                    }}>
+                      {shortModelName(m.name)}
+                    </div>
+                    {m.description && (
+                      <div style={{
+                        fontFamily: "'SamsungOne','Inter',sans-serif",
+                        fontSize: '0.7rem', color: '#2e5260',
+                        marginTop: '0.1rem', lineHeight: 1.35,
+                      }}>
+                        {m.description}
+                      </div>
+                    )}
+                  </div>
+                  {sel && (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#36abca"
+                      strokeWidth="2.5" style={{ flexShrink: 0, marginTop: '0.2rem' }}>
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── File icon ────────────────────────────────────────────────────────────── */
 function FileIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><polyline points="13 2 13 9 20 9" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+      <polyline points="13 2 13 9 20 9"/>
     </svg>
   )
 }
 
+/* ── Main component ───────────────────────────────────────────────────────── */
 export default function InputBar({ onSend, onStop, config }: Props) {
   const { state } = useChatContext()
   const { settings, update } = useSettings()
   const profile = useProfile()
-  const [value, setValue] = useState('')
-  const [focused, setFocused] = useState(false)
+  const [value, setValue]           = useState('')
+  const [focused, setFocused]       = useState(false)
   const [attachments, setAttachments] = useState<AttachedFile[]>([])
-  const [dragOver, setDragOver] = useState(false)
-  const [webSearch, setWebSearch] = useState(false)
-  const [listening, setListening] = useState(false)
-  const [models, setModels] = useState<ModelInfo[]>([])
-  const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const [dragOver, setDragOver]     = useState(false)
+  const [webSearch, setWebSearch]   = useState(false)
+  const [listening, setListening]   = useState(false)
+  const [models, setModels]         = useState<ModelInfo[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const modelMenuRef = useRef<HTMLDivElement>(null)
   const dragDepth = useRef(0)
 
   useEffect(() => { fetchModels(config).then(setModels).catch(() => {}) }, [config])
-
-  useEffect(() => {
-    if (!modelMenuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) setModelMenuOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [modelMenuOpen])
-
-  const activeModel = models.find(m => m.id === settings.model)
-  const activeModelLabel = activeModel ? shortModelName(activeModel.name) : shortModelName(settings.model)
 
   const resize = useCallback(() => {
     const el = textareaRef.current
@@ -77,24 +293,23 @@ export default function InputBar({ onSend, onStop, config }: Props) {
   }, [])
   useEffect(() => { resize() }, [value, resize])
 
-  // ── Attachments ──────────────────────────────────────────────────────────
+  /* ── Attachments ──────────────────────────────────────────────────────── */
   const addFiles = useCallback((files: File[]) => {
     if (!files.length) return
-    const next = files.map(f => ({
+    setAttachments(prev => [...prev, ...files.map(f => ({
       id: `${f.name}-${f.size}-${Math.random().toString(36).slice(2, 7)}`,
       file: f,
       name: f.name || (f.type.startsWith('image/') ? 'pasted-image.png' : 'file'),
       url: URL.createObjectURL(f),
       isImage: f.type.startsWith('image/'),
       size: f.size,
-    }))
-    setAttachments(prev => [...prev, ...next])
+    }))])
   }, [])
 
   const removeAttachment = (id: string) => {
     setAttachments(prev => {
-      const target = prev.find(a => a.id === id)
-      if (target) URL.revokeObjectURL(target.url)
+      const t = prev.find(a => a.id === id)
+      if (t) URL.revokeObjectURL(t.url)
       return prev.filter(a => a.id !== id)
     })
   }
@@ -112,31 +327,26 @@ export default function InputBar({ onSend, onStop, config }: Props) {
     }
   }
 
-  const onDragOver = (e: React.DragEvent) => { e.preventDefault() }
+  const onDragOver  = (e: React.DragEvent) => { e.preventDefault() }
   const onDragEnter = (e: React.DragEvent) => {
-    e.preventDefault()
-    dragDepth.current += 1
+    e.preventDefault(); dragDepth.current += 1
     if (e.dataTransfer.types.includes('Files')) setDragOver(true)
   }
   const onDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    dragDepth.current -= 1
+    e.preventDefault(); dragDepth.current -= 1
     if (dragDepth.current <= 0) { setDragOver(false); dragDepth.current = 0 }
   }
   const onDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    dragDepth.current = 0
-    setDragOver(false)
+    e.preventDefault(); dragDepth.current = 0; setDragOver(false)
     addFiles(Array.from(e.dataTransfer.files))
   }
 
+  /* ── Submit ───────────────────────────────────────────────────────────── */
   const submit = async () => {
     const msg = value.trim()
     if ((!msg && attachments.length === 0) || state.isStreaming) return
     const imageFiles = attachments.filter(a => a.isImage).map(a => a.file)
-    setValue('')
-    clearAttachments()
-    setTimeout(resize, 0)
+    setValue(''); clearAttachments(); setTimeout(resize, 0)
     let blocks: ImageBlock[] = []
     if (imageFiles.length) {
       try { blocks = await Promise.all(imageFiles.map(fileToImageBlock)) } catch { blocks = [] }
@@ -159,19 +369,19 @@ export default function InputBar({ onSend, onStop, config }: Props) {
     recognition.onresult = (e: { results: { [k: number]: { [k: number]: { transcript: string } } } }) => {
       setValue(prev => (prev ? prev + ' ' : '') + e.results[0][0].transcript); resize()
     }
-    recognition.onend = () => setListening(false)
+    recognition.onend  = () => setListening(false)
     recognition.onerror = () => setListening(false)
-    recognition.start()
-    setListening(true)
+    recognition.start(); setListening(true)
   }
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !state.isStreaming
 
+  /* ── Render ───────────────────────────────────────────────────────────── */
   return (
-    <div style={{ padding: '0.5rem 1rem 1rem', flexShrink: 0 }}>
-      <div style={{ maxWidth: 768, margin: '0 auto' }}>
+    <div style={{ padding: '0.5rem 1.25rem 0.875rem', flexShrink: 0 }}>
+      <div style={{ maxWidth: 780, margin: '0 auto' }}>
 
-        {/* Composer — paste + drag-and-drop enabled */}
+        {/* ── Composer panel ──────────────────────────────────────────── */}
         <div
           onDragEnter={onDragEnter}
           onDragOver={onDragOver}
@@ -179,61 +389,83 @@ export default function InputBar({ onSend, onStop, config }: Props) {
           onDrop={onDrop}
           style={{
             position: 'relative',
-            background: 'var(--bg-input)',
-            border: `1px solid ${dragOver ? 'var(--hb-cyan)' : focused ? 'rgba(110,200,228,0.45)' : 'var(--hb-line)'}`,
+            background: 'rgba(6,14,20,0.85)',
+            border: `1px solid ${
+              dragOver     ? '#36abca' :
+              focused      ? 'rgba(110,200,228,0.5)' :
+                             'rgba(95,165,188,0.22)'
+            }`,
             transition: 'border-color 0.15s',
           }}
         >
-          {/* Attachment previews — inside the composer, above the textarea */}
+          {/* corner brackets */}
+          <span style={{ position:'absolute', top:-1,    left:-1,  width:12, height:12, borderTop:   '1px solid #36abca', borderLeft:  '1px solid #36abca', pointerEvents:'none', zIndex:2 }} />
+          <span style={{ position:'absolute', top:-1,    right:-1, width:12, height:12, borderTop:   '1px solid #36abca', borderRight: '1px solid #36abca', pointerEvents:'none', zIndex:2 }} />
+          <span style={{ position:'absolute', bottom:-1, left:-1,  width:12, height:12, borderBottom:'1px solid #36abca', borderLeft:  '1px solid #36abca', pointerEvents:'none', zIndex:2 }} />
+          <span style={{ position:'absolute', bottom:-1, right:-1, width:12, height:12, borderBottom:'1px solid #36abca', borderRight: '1px solid #36abca', pointerEvents:'none', zIndex:2 }} />
+
+          {/* subtle top teal gradient when focused */}
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
+            background: focused
+              ? 'linear-gradient(90deg, transparent 0%, #36abca 30%, #5fcce6 50%, #36abca 70%, transparent 100%)'
+              : 'transparent',
+            transition: 'background 0.25s',
+            pointerEvents: 'none', zIndex: 1,
+          }} />
+
+          {/* Attachment previews */}
           {attachments.length > 0 && (
             <div style={{
-              display: 'flex', flexWrap: 'wrap', gap: '0.5rem',
-              padding: '0.625rem 0.75rem',
-              borderBottom: '1px solid var(--hb-line)',
+              display: 'flex', flexWrap: 'wrap', gap: '0.45rem',
+              padding: '0.6rem 0.85rem',
+              borderBottom: '1px solid rgba(95,165,188,0.14)',
             }}>
               {attachments.map(a => (
-                <div key={a.id} className="hb-attach" style={{ position: 'relative' }}>
+                <div key={a.id} style={{ position: 'relative' }}>
                   {a.isImage ? (
-                    <img
-                      src={a.url} alt={a.name}
-                      style={{ width: 58, height: 58, objectFit: 'cover', display: 'block',
-                               border: '1px solid var(--hb-line)' }}
+                    <img src={a.url} alt={a.name}
+                      style={{ width: 56, height: 56, objectFit: 'cover', display: 'block',
+                               border: '1px solid rgba(95,165,188,0.3)' }}
                     />
                   ) : (
                     <div style={{
-                      display: 'flex', alignItems: 'center', gap: '0.5rem',
-                      height: 58, padding: '0 0.7rem 0 0.55rem',
-                      background: 'rgba(54,171,202,0.06)', border: '1px solid var(--hb-line)',
-                      maxWidth: 220,
+                      display: 'flex', alignItems: 'center', gap: '0.45rem',
+                      height: 56, padding: '0 0.65rem 0 0.5rem',
+                      background: 'rgba(54,171,202,0.06)',
+                      border: '1px solid rgba(95,165,188,0.22)',
+                      maxWidth: 200,
                     }}>
-                      <span style={{ color: 'var(--hb-cyan)', flexShrink: 0 }}><FileIcon /></span>
+                      <span style={{ color: '#36abca', flexShrink: 0 }}><FileIcon /></span>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--hb-text)', overflow: 'hidden',
-                                      textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
-                        <div style={{ fontSize: '0.66rem', color: 'var(--hb-text-faint)', fontFamily: 'var(--font-mono)' }}>
-                          {formatSize(a.size)}
-                        </div>
+                        <div style={{
+                          fontFamily: "'SamsungOne','Inter',sans-serif",
+                          fontSize: '0.75rem', color: '#cadbe2',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>{a.name}</div>
+                        <div style={{
+                          fontFamily: "'Share Tech Mono', monospace",
+                          fontSize: '0.62rem', color: '#2e5260', marginTop: '1px',
+                        }}>{formatSize(a.size)}</div>
                       </div>
                     </div>
                   )}
-                  {/* image size tag */}
                   {a.isImage && (
                     <span style={{
                       position: 'absolute', bottom: 0, left: 0, right: 0,
-                      padding: '1px 3px', fontSize: '0.58rem', fontFamily: 'var(--font-mono)',
-                      color: '#dff', background: 'rgba(4,8,10,0.7)', textAlign: 'right',
+                      padding: '1px 4px', fontSize: '0.56rem',
+                      fontFamily: "'Share Tech Mono', monospace",
+                      color: '#7a96a1', background: 'rgba(4,8,12,0.75)', textAlign: 'right',
                     }}>{formatSize(a.size)}</span>
                   )}
-                  <button
-                    onClick={() => removeAttachment(a.id)}
-                    title="Remove"
+                  <button onClick={() => removeAttachment(a.id)} title="Remove"
                     style={{
-                      position: 'absolute', top: -7, right: -7,
-                      width: 18, height: 18,
-                      background: 'var(--hb-base)', border: '1px solid var(--hb-line)',
-                      color: 'var(--hb-text)', cursor: 'pointer',
+                      position: 'absolute', top: -6, right: -6,
+                      width: 16, height: 16,
+                      background: '#050d12', border: '1px solid rgba(95,165,188,0.4)',
+                      color: '#5d7f8a', cursor: 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '0.7rem', lineHeight: 1,
+                      fontSize: '0.65rem', lineHeight: 1,
                     }}
                   >×</button>
                 </div>
@@ -241,8 +473,8 @@ export default function InputBar({ onSend, onStop, config }: Props) {
             </div>
           )}
 
-          {/* Textarea row */}
-          <div style={{ display: 'flex', alignItems: 'center', padding: '0.625rem 0.75rem 0.375rem 1rem', gap: '0.5rem' }}>
+          {/* Textarea */}
+          <div style={{ padding: '0.75rem 0.85rem 0.4rem' }}>
             <textarea
               ref={textareaRef}
               rows={1}
@@ -254,194 +486,146 @@ export default function InputBar({ onSend, onStop, config }: Props) {
               onBlur={() => setFocused(false)}
               placeholder="How can I help you today?"
               style={{
-                flex: 1, background: 'transparent', border: 'none', outline: 'none',
-                resize: 'none', color: 'var(--text-primary)',
-                fontSize: '0.9375rem', lineHeight: 1.65, fontFamily: 'inherit',
-                overflowY: 'hidden', maxHeight: 200, caretColor: 'var(--accent)',
-                paddingTop: '0.1rem', userSelect: 'text',
+                width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                resize: 'none', color: '#cadbe2',
+                fontSize: '0.9375rem', lineHeight: 1.65,
+                fontFamily: "'SamsungOne','Inter',sans-serif",
+                overflowY: 'hidden', maxHeight: 200,
+                caretColor: '#36abca',
+                userSelect: 'text',
               }}
             />
           </div>
 
-          {/* Bottom toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.25rem 0.625rem 0.5rem' }}>
-            {/* Left: attach + web */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              <button
-                title="Attach files or images"
-                onClick={() => fileInputRef.current?.click()}
-                style={{
-                  width: 32, height: 32,
-                  border: '1px solid var(--hb-line)', background: 'transparent',
-                  color: 'var(--text-secondary)', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--hb-cyan)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--hb-cyan-bright)' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--hb-line)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+          {/* ── Toolbar ────────────────────────────────────────────── */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '0.25rem 0.6rem 0.5rem',
+            borderTop: '1px solid rgba(95,165,188,0.1)',
+          }}>
+            {/* Left controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              {/* Attach */}
+              <ToolBtn title="Attach files or images" onClick={() => fileInputRef.current?.click()}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
                 </svg>
-              </button>
+              </ToolBtn>
 
+              {/* Web search toggle */}
               <button
                 title={webSearch ? 'Disable web search' : 'Enable web search'}
                 onClick={() => setWebSearch(v => !v)}
                 style={{
-                  height: 32, padding: '0 0.625rem',
-                  border: `1px solid ${webSearch ? 'var(--hb-cyan)' : 'var(--hb-line)'}`,
-                  background: webSearch ? 'rgba(54,171,202,0.12)' : 'transparent',
-                  color: webSearch ? 'var(--accent)' : 'var(--text-muted)', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', fontWeight: 500,
+                  height: 30, padding: '0 0.55rem',
+                  display: 'flex', alignItems: 'center', gap: '0.35rem',
+                  border: `1px solid ${webSearch ? 'rgba(95,165,188,0.55)' : 'rgba(95,165,188,0.15)'}`,
+                  background: webSearch ? 'rgba(54,171,202,0.15)' : 'transparent',
+                  color: webSearch ? '#5fcce6' : '#3a6472',
+                  cursor: 'pointer',
                   transition: 'all 0.15s',
+                  fontFamily: "'Rajdhani',sans-serif",
+                  fontSize: '0.7rem', fontWeight: 700,
+                  letterSpacing: '0.15em', textTransform: 'uppercase',
                 }}
-                onMouseEnter={e => { if (!webSearch) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
-                onMouseLeave={e => { if (!webSearch) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)' }}
+                onMouseEnter={e => { if (!webSearch) (e.currentTarget as HTMLButtonElement).style.color = '#7ab8c8' }}
+                onMouseLeave={e => { if (!webSearch) (e.currentTarget as HTMLButtonElement).style.color = '#3a6472' }}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="2" y1="12" x2="22" y2="12"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                 </svg>
                 Web
               </button>
             </div>
 
-            {/* Right: model + mic + send/stop */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              <div style={{ position: 'relative' }} ref={modelMenuRef}>
-                <button
-                  title="Select model"
-                  onClick={() => setModelMenuOpen(v => !v)}
-                  style={{
-                    height: 32, padding: '0 0.5rem 0 0.625rem', border: '1px solid transparent',
-                    background: modelMenuOpen ? 'var(--bg-hover)' : 'transparent',
-                    color: 'var(--text-secondary)', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', fontWeight: 500,
-                    transition: 'background 0.15s, color 0.15s',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)' }}
-                  onMouseLeave={e => { if (!modelMenuOpen) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)' }}
-                >
-                  {activeModelLabel}
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                    style={{ transform: modelMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
-
-                {modelMenuOpen && (
-                  <div style={{
-                    position: 'absolute', bottom: 'calc(100% + 8px)', right: 0,
-                    background: 'var(--bg-sidebar)', border: '1px solid var(--border)',
-                    boxShadow: '0 8px 28px rgba(0,0,0,0.55)', animation: 'dropDown 0.12s ease', zIndex: 100,
-                    width: 280, padding: '0.35rem',
-                  }}>
-                    {models.map(m => {
-                      const selected = m.id === settings.model
-                      return (
-                        <button key={m.id}
-                          onClick={() => { update({ model: m.id }); setModelMenuOpen(false) }}
-                          style={{
-                            width: '100%', padding: '0.55rem 0.625rem',
-                            background: selected ? 'var(--bg-active)' : 'transparent', border: 'none',
-                            cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
-                            transition: 'background 0.1s',
-                          }}
-                          onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)' }}
-                          onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '0.83rem', fontWeight: 500, color: selected ? 'var(--accent)' : 'var(--text-primary)' }}>
-                              {shortModelName(m.name)}
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem', lineHeight: 1.4 }}>
-                              {m.description}
-                            </div>
-                          </div>
-                          {selected && (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" style={{ flexShrink: 0, marginTop: '0.15rem' }}>
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
+            {/* Right controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <ModelPicker
+                models={models}
+                activeId={settings.model}
+                onSelect={id => update({ model: id })}
+                config={config}
+              />
 
               {!state.isStreaming && (
-                <button
+                <ToolBtn
                   title={listening ? 'Stop listening' : 'Voice input'}
                   onClick={handleVoiceInput}
-                  style={{
-                    width: 32, height: 32,
-                    border: listening ? '1px solid rgba(239,68,68,0.4)' : '1px solid transparent',
-                    background: listening ? 'rgba(239,68,68,0.1)' : 'transparent',
-                    color: listening ? '#ef4444' : 'var(--text-muted)', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => { if (!listening) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)' }}
-                  onMouseLeave={e => { if (!listening) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)' }}
+                  active={listening}
+                  danger={listening}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill={listening ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
+                  <svg width="13" height="13" viewBox="0 0 24 24"
+                    fill={listening ? 'currentColor' : 'none'}
+                    stroke="currentColor" strokeWidth="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
                   </svg>
-                </button>
+                </ToolBtn>
               )}
 
-              {state.isStreaming ? (
-                <button onClick={onStop} title="Stop generating"
-                  style={{ width: 34, height: 34, border: 'none', background: 'var(--hb-cyan)', color: 'var(--hb-base)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.1s' }}
-                  onMouseDown={e => (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.9)'}
-                  onMouseUp={e => (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" /></svg>
-                </button>
-              ) : (
-                <button onClick={submit} disabled={!canSend} title="Send message"
-                  style={{
-                    width: 34, height: 34, border: 'none',
-                    background: canSend ? 'var(--hb-cyan)' : 'rgba(255,255,255,0.08)',
-                    color: canSend ? 'var(--hb-base)' : 'rgba(255,255,255,0.3)',
-                    cursor: canSend ? 'pointer' : 'default',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s, transform 0.1s',
-                  }}
-                  onMouseDown={e => { if (canSend) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.9)' }}
-                  onMouseUp={e => { if (canSend) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M12 19V5M5 12l7-7 7 7" />
-                  </svg>
-                </button>
-              )}
+              <SendBtn
+                canSend={canSend}
+                isStreaming={state.isStreaming}
+                onSend={submit}
+                onStop={onStop}
+              />
             </div>
           </div>
 
-          {/* Drag-and-drop overlay */}
+          {/* Drag overlay */}
           {dragOver && (
             <div style={{
               position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-              background: 'rgba(54,171,202,0.10)',
-              border: '1px dashed var(--hb-cyan)',
-              color: 'var(--hb-cyan-bright)', fontSize: '0.8rem', letterSpacing: '0.06em',
-              textTransform: 'uppercase', fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
+              background: 'rgba(54,171,202,0.08)',
+              outline: '1px dashed #36abca',
+              outlineOffset: '-4px',
+              color: '#5fcce6',
+              fontFamily: "'Rajdhani',sans-serif",
+              fontSize: '0.78rem', fontWeight: 700,
+              letterSpacing: '0.2em', textTransform: 'uppercase',
             }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
               Drop to attach
             </div>
           )}
         </div>
 
-        {/* Footer hint */}
-        <p style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-          {profile?.name ?? 'AI'} can make mistakes · paste or drop images · Enter to send · Shift+Enter for newline
-        </p>
+        {/* ── Status strip ──────────────────────────────────────────── */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: '0',
+          marginTop: '0.4rem',
+          fontFamily: "'Share Tech Mono', monospace",
+          fontSize: '0.62rem', letterSpacing: '0.06em',
+          color: '#1e3d4a',
+          userSelect: 'none',
+        }}>
+          {[
+            `${profile?.name ?? 'AI'} can make mistakes`,
+            'Enter to send',
+            'Shift+Enter for newline',
+            'paste or drop images',
+          ].map((seg, i) => (
+            <span key={i} style={{ display: 'flex', alignItems: 'center' }}>
+              {i > 0 && (
+                <span style={{ margin: '0 0.55rem', color: '#162a33' }}>·</span>
+              )}
+              {seg}
+            </span>
+          ))}
+        </div>
       </div>
 
-      {/* Single hidden file input (images + files) */}
+      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
