@@ -461,6 +461,37 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 /* ── Image ───────────────────────────────────────────────────────────────────── */
 .prose img { max-width: 100%; border: 1px solid var(--hb-line); }
 
+/* ── Sources line — "**Sources:** [A](u) · [B](u)" ─────────────────────────── */
+/* The paragraph that starts with bold "Sources:" gets subdued source-chip styling */
+.prose p:has(> strong:first-child) strong:first-child {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #2e5260;
+  margin-right: 0.35rem;
+}
+/* Source links inside the Sources paragraph */
+.prose p:has(> strong:first-child) a {
+  display: inline-block;
+  padding: 0.08em 0.45em;
+  background: rgba(54,171,202,0.08);
+  border: 1px solid rgba(95,165,188,0.2);
+  border-bottom: none;
+  color: #46818f !important;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68em;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+.prose p:has(> strong:first-child) a:hover {
+  background: rgba(54,171,202,0.18);
+  color: #5fcce6 !important;
+  border-color: rgba(95,165,188,0.45);
+}
+
 /* Range input — FUI slider */
 input[type=range] {
   -webkit-appearance: none; appearance: none;

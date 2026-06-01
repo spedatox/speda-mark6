@@ -37,6 +37,92 @@ const TOOL_STATUS: Record<string, string> = {
   Task:                   'Spawning a sub-agent',
 }
 
+// Tool names that count as "web search" for the disclosure label
+const SEARCH_TOOL_PATTERNS = [
+  'tavily', 'exa', 'brave', 'search', 'fetch', 'web',
+]
+function isSearchTool(name: string): boolean {
+  const n = name.toLowerCase()
+  return SEARCH_TOOL_PATTERNS.some(p => n.includes(p))
+}
+
+/* ── Tool disclosure — "Searched the web ▸" collapsible ─────────────────── */
+function ToolDisclosure({ tools }: { tools: { id: string; name: string }[] }) {
+  const [open, setOpen] = useState(false)
+  if (!tools.length) return null
+
+  const searchTools  = tools.filter(t => isSearchTool(t.name))
+  const otherTools   = tools.filter(t => !isSearchTool(t.name))
+  const hasSearch    = searchTools.length > 0
+
+  // Friendly label for the collapsed row
+  const label = hasSearch
+    ? `Searched the web${searchTools.length > 1 ? ` (${searchTools.length}×)` : ''}`
+    : `Used ${tools.length} tool${tools.length !== 1 ? 's' : ''}`
+
+  const friendlyName = (raw: string) =>
+    raw.replace(/_/g, ' ').replace(/-/g, ' ').toLowerCase()
+
+  return (
+    <div style={{ marginBottom: '0.6rem' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+          background: 'transparent', border: 'none',
+          padding: '0.15rem 0',
+          cursor: 'pointer',
+          fontFamily: "'Share Tech Mono', monospace",
+          fontSize: '0.68rem', letterSpacing: '0.08em',
+          color: '#3a6472',
+          transition: 'color 0.12s',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.color = '#5fcce6')}
+        onMouseLeave={e => (e.currentTarget.style.color = '#3a6472')}
+      >
+        {/* globe for search, wrench for other */}
+        {hasSearch
+          ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        }
+        {label}
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          marginTop: '0.25rem',
+          padding: '0.4rem 0.65rem',
+          background: 'rgba(6,14,20,0.7)',
+          border: '1px solid rgba(95,165,188,0.15)',
+          borderLeft: '2px solid rgba(95,165,188,0.3)',
+          animation: 'fadeSlideIn 0.15s ease',
+        }}>
+          {[...searchTools, ...otherTools].map((t, i) => (
+            <div key={t.id} style={{
+              display: 'flex', alignItems: 'center', gap: '0.45rem',
+              padding: '0.15rem 0',
+              borderTop: i > 0 ? '1px solid rgba(95,165,188,0.07)' : 'none',
+            }}>
+              <span style={{ color: '#1e4a5a', fontSize: '0.6rem' }}>▸</span>
+              <span style={{
+                fontFamily: "'Share Tech Mono', monospace",
+                fontSize: '0.66rem', letterSpacing: '0.06em',
+                color: isSearchTool(t.name) ? '#36abca' : '#46626d',
+              }}>
+                {friendlyName(t.name)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Generic phrases cycled while the model is thinking with no tool active.
 const THINKING_PHRASES = [
   'Thinking',
@@ -484,6 +570,11 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
           // No content yet — show the natural-language working indicator
           <WorkingStatus tools={message.tools} />
         ) : null}
+
+        {/* Tool disclosure — "Searched the web ▸" shown once streaming ends */}
+        {!message.isStreaming && message.tools.length > 0 && (
+          <ToolDisclosure tools={message.tools} />
+        )}
 
         {/* Action bar — appears on hover once streaming ends */}
         {!message.isStreaming && message.content && (
