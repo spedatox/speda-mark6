@@ -6,6 +6,7 @@ import rehypeKatex from 'rehype-katex'
 import type { ChatMessage } from '../lib/types'
 import CodeBlock from './CodeBlock'
 import WidgetFrame from './WidgetFrame'
+import ChartBlock from './ChartBlock'
 
 const RENDERABLE_LANGS = new Set(['html', 'svg'])
 
@@ -168,6 +169,9 @@ const mdComponents: any = {
     const lang = /language-(\w+)/.exec(className || '')?.[1] ?? ''
     const code = String(children).replace(/\n$/, '')
     if (!inline && (lang || code.includes('\n'))) {
+      if (lang === 'chart') {
+        return <ChartBlock>{code}</ChartBlock>
+      }
       if (RENDERABLE_LANGS.has(lang)) {
         return <WidgetFrame language={lang}>{code}</WidgetFrame>
       }
