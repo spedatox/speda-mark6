@@ -23,8 +23,18 @@ class AnthropicClient:
         return self._client
 
     async def create_message(self, **kwargs) -> anthropic.types.Message:
-        """Non-streaming message creation. Used by small background tasks (no caching)."""
-        return await self._client.messages.create(**kwargs)
+        """
+        Non-streaming message creation. Used by Task sub-agents and small
+        background tasks.
+
+        Caching IS applied here too: sub-agents carry the full tool prefix
+        (~38k tokens with all MCP servers) and run multiple iterations — without
+        caching, each iteration re-sends the entire prefix uncached, which both
+        explodes cost and blows the per-minute input-token rate limit (429s).
+        Background Haiku tasks pass a tiny system and no tools, so caching is a
+        no-op there (the API ignores sub-minimum blocks).
+        """
+        return await self._client.messages.create(**_apply_prompt_caching(kwargs))
 
     def stream_message(self, **kwargs) -> anthropic.AsyncMessageStream:
         """

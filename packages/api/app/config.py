@@ -59,6 +59,17 @@ class Settings(BaseSettings):
     # Anthropic, so 1h dramatically cuts cache-write cost for active sessions.
     prompt_cache_ttl: str = "1h"
 
+    # Which MCP servers to load (comma-separated server names). Each tool a
+    # server contributes is cached into the prompt prefix on EVERY request, so
+    # loading everything (notion=22 tools, filesystem=14, arxiv=10 …) bloats the
+    # prefix to ~38k tokens — which exceeds the tier-0 rate limit of 30k input
+    # tokens/minute and makes every cold call 429. Keep this lean; enable a
+    # server only when you actually use it. "all" loads every configured server.
+    # Heavy servers (notion=22, filesystem=14, arxiv=10) are OFF by default —
+    # add them here when you need them and your tier can afford the prefix.
+    # Default keeps ~10 tools (~12k prefix) — well under the tier-0 30k/min cap.
+    mcp_enabled: str = "tavily,exa,fetch,alpha_vantage"
+
     # Temp outputs
     temp_outputs_dir: str = str(_DATA_DIR / "outputs")
 
