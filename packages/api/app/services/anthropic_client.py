@@ -101,4 +101,27 @@ def _apply_prompt_caching(kwargs: dict) -> dict:
         cached_tools[-1] = {**cached_tools[-1], "cache_control": cache_control}
         out["tools"] = cached_tools
 
+    # Conversation history: incremental caching. Mark the LAST message's last
+    # content block — messages are append-only within a session, so on the next
+    # turn the whole prior history sits in the cached prefix and is read cheaply
+    # instead of re-sent at full input price. Without this, a long multi-turn
+    # chat re-sends the entire growing transcript uncached on every turn.
+    # Breakpoint budget stays within Anthropic's max of 4:
+    #   tools(1) + stable system(1) + memory system(≤1) + conversation(1).
+    messages = out.get("messages")
+    if messages:
+        msgs = [dict(m) for m in messages]
+        last = dict(msgs[-1])
+        content = last.get("content")
+        if isinstance(content, str) and content:
+            last["content"] = [
+                {"type": "text", "text": content, "cache_control": cache_control}
+            ]
+        elif isinstance(content, list) and content:
+            new_content = [dict(b) for b in content]
+            new_content[-1] = {**new_content[-1], "cache_control": cache_control}
+            last["content"] = new_content
+        msgs[-1] = last
+        out["messages"] = msgs
+
     return out
