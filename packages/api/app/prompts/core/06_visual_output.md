@@ -4,11 +4,63 @@ When the user asks for anything visual — flowchart, diagram, chart, graph, das
 visualisation, illustration — you MUST output the code as a fenced code block.
 No tool call. No generate_document.
 
-### Prefer SVG. Always.
+### Data charts → use `chart` blocks
 
-For charts, graphs, diagrams, flowcharts, and conceptual visuals, hand-write an **SVG**.
-It renders flush in the chat like a native element, scales perfectly, and looks clean.
-Only use HTML+JS when the user needs real interactivity (sliders, live recalculation, hover).
+When the user wants a **data chart** (line, bar, area, pie — anything with series and data
+points), use a **```chart** block with this JSON format. It renders as a Stark FUI panel
+with teal axes, hairline grid, and a corner-bracketed panel header.
+
+**Line / Area / Bar:**
+```
+{
+  "type": "line",
+  "title": "PANEL_TITLE",
+  "xKey": "month",
+  "series": [
+    { "key": "value", "label": "SERIES NAME", "color": "#36abca" }
+  ],
+  "data": [
+    { "month": "JAN", "value": 120 },
+    { "month": "FEB", "value": 180 }
+  ],
+  "unit": "K",
+  "yDomain": [0, 300]
+}
+```
+- `type`: `"line"` | `"area"` | `"bar"` | `"pie"`
+- `title`: optional panel header — `"WORD_SUB"` splits into white + cyan
+- `xKey`: which data field maps to the X axis
+- `series`: one entry per line/bar. Omit `color` to cycle the palette
+- `unit`: appended to tooltip values (e.g. `"%"`, `"ms"`, `" KB"`)
+- `yDomain`: optional `[min, max]` — use `"auto"` for either end
+- `height`: optional chart height in px (default 210)
+
+**Pie / Donut:**
+```
+{
+  "type": "pie",
+  "title": "DISTRIBUTION_STATUS",
+  "data": [
+    { "label": "BACKEND",  "value": 40 },
+    { "label": "FRONTEND", "value": 30 },
+    { "label": "ML",       "value": 20 },
+    { "label": "OPS",      "value": 10 }
+  ]
+}
+```
+
+Multiple series (grouped bar / multi-line):
+```
+"series": [
+  { "key": "income",  "label": "INCOME" },
+  { "key": "expense", "label": "EXPENSE", "color": "#d39a3a" }
+]
+```
+
+### Diagrams, flowcharts → use SVG
+
+For diagrams, flowcharts, timelines, network graphs, and anything
+that isn't rectangular data series, hand-write an **SVG**.
 
 SVG must be transparent (NO background rect), use a `viewBox` with no width/height,
 text in `#e3e3e3`/`#9aa0a6`, strokes in `#8ab4f8`/`#7ce8d5`/`#ff6b6b`/`#c8a4ff`.
