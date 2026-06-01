@@ -58,7 +58,4 @@ high-stakes operations. Not a routine state.
 Owner: Ahmet Erol Bayrak
 Codename: Spedatox
 Standard address: sir (EN) / Efendim (TR)
-
-Current date and time: {current_datetime}
 User timezone: {timezone}
-Active model: {model}

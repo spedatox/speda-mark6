@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import AsyncGenerator
@@ -60,17 +61,26 @@ class AgentOrchestrator:
         """
         log = logger.getChild("run")
 
-        # Build system prompt and inject into context.
-        # Anthropic memory pattern: prepend the memory directory listing + the
-        # always-relevant owner profile. SPEDA reads the rest of its memory files
-        # on demand via the `memory` tool (JIT retrieval), and writes back when it
-        # learns something durable.
-        base_prompt = self.build_system_prompt(context)
+        # Build the system prompt as THREE blocks, ordered for prompt caching.
+        # Caching keys on byte-identical prefixes, so volatile content must come
+        # last and stay OUT of the cached blocks (see anthropic_client._apply_prompt_caching):
+        #
+        #   1. stable_core   — identity + policies + tool guidance. Never changes
+        #                      between turns → cached (biggest block, ~13k tokens).
+        #   2. memory_block  — owner/current/dossier/history + size-free listing.
+        #                      Changes at most ~daily → cached.
+        #   3. volatile_tail — current datetime + active model. Changes every
+        #                      minute → NEVER cached (tiny, ~30 tokens).
+        #
+        # Previously all three were concatenated into one cached block, so the
+        # minute-precision clock busted the entire ~15k-token cache every minute.
+        stable_core = self.build_system_prompt(context)
+
+        memory_block = ""
         if context.db is not None:
             try:
-                memory_block = await recall_for_context(context.user_id, context.db)
+                memory_block = await recall_for_context(context.user_id, context.db) or ""
                 if memory_block:
-                    base_prompt = f"{base_prompt}\n\n{memory_block}"
                     logger.info(
                         "memory_context_injected",
                         extra={"request_id": context.request_id},
@@ -81,7 +91,21 @@ class AgentOrchestrator:
                     "memory_recall_failed",
                     extra={"request_id": context.request_id, "error": str(exc)},
                 )
-        context.system_prompt = base_prompt
+
+        now = datetime.now(timezone.utc).strftime("%A, %d %B %Y %H:%M UTC")
+        volatile_tail = (
+            f"## Now\n\nCurrent date and time: {now}\nActive model: {context.model}"
+        )
+
+        # Structured system blocks. `_cache: True` marks the block for an ephemeral
+        # cache breakpoint; the marker is stripped before the request is sent.
+        system_blocks: list[dict] = [{"type": "text", "text": stable_core, "_cache": True}]
+        if memory_block:
+            system_blocks.append({"type": "text", "text": memory_block, "_cache": True})
+        system_blocks.append({"type": "text", "text": volatile_tail})  # uncached
+
+        # Keep a plain-string copy for any downstream logging/inspection.
+        context.system_prompt = stable_core
 
         messages = list(context.conversation_history)
         tools = self._registry.list_tools()
@@ -128,7 +152,7 @@ class AgentOrchestrator:
             # are read from the final assembled message afterward.
             async with self._client.stream_message(
                 model=context.model,
-                system=context.system_prompt,
+                system=system_blocks,
                 messages=messages,
                 tools=tools,
                 max_tokens=8096,
@@ -142,6 +166,19 @@ class AgentOrchestrator:
                             request_id=context.request_id,
                         )
                 response = await stream.get_final_message()
+
+            # Observability: how much of the input prefix was served from cache.
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                log.info(
+                    "prompt_cache",
+                    extra={
+                        "request_id": context.request_id,
+                        "cache_read": getattr(usage, "cache_read_input_tokens", 0) or 0,
+                        "cache_write": getattr(usage, "cache_creation_input_tokens", 0) or 0,
+                        "input_tokens": getattr(usage, "input_tokens", 0) or 0,
+                    },
+                )
 
             stop_reason = response.stop_reason
 
@@ -160,7 +197,7 @@ class AgentOrchestrator:
                 iterations += 1
                 tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
 
-                tool_results = []
+                # 1. Stream all the TOOL start events to the frontend immediately
                 for tool_block in tool_use_blocks:
                     yield SSEEvent(
                         type=SSEEventType.TOOL,
@@ -176,16 +213,23 @@ class AgentOrchestrator:
                             "tool_id": tool_block.id,
                         },
                     )
-                    result = await self._registry.execute(
-                        tool_block.name, tool_block.input, context
-                    )
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_block.id,
-                            "content": result,
-                        }
-                    )
+
+                # 2. Execute all tools in parallel
+                exec_tasks = [
+                    self._registry.execute(block.name, block.input, context)
+                    for block in tool_use_blocks
+                ]
+                results = await asyncio.gather(*exec_tasks)
+
+                # 3. Zip the results back to their respective tool blocks
+                tool_results = [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": res,
+                    }
+                    for block, res in zip(tool_use_blocks, results)
+                ]
 
                 messages.append({"role": "user", "content": tool_results})
 

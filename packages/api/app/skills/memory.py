@@ -128,14 +128,20 @@ def _format_file_with_lines(path: str, content: str) -> str:
     return f"Here's the content of {path} with line numbers:\n{numbered}"
 
 
-def _format_directory(files: list[MemoryFile], path: str) -> str:
+def _format_directory(files: list[MemoryFile], path: str, *, with_sizes: bool = True) -> str:
     if not files:
         return f"Here are the files and directories up to 2 levels deep in {path}:\n(empty)"
     lines = [f"Here are the files and directories up to 2 levels deep in {path}:"]
     for f in sorted(files, key=lambda x: x.path):
-        size = len(f.content.encode("utf-8"))
-        size_str = f"{size / 1024:.1f}K" if size >= 1024 else f"{size}B"
-        lines.append(f"{size_str}\t{f.path}")
+        if with_sizes:
+            size = len(f.content.encode("utf-8"))
+            size_str = f"{size / 1024:.1f}K" if size >= 1024 else f"{size}B"
+            lines.append(f"{size_str}\t{f.path}")
+        else:
+            # Size-free listing — stable across turns so the recall block stays
+            # cacheable (file sizes change every turn as log.md grows, which would
+            # otherwise bust the prompt cache on every request).
+            lines.append(f.path)
     return "\n".join(lines)
 
 
@@ -180,7 +186,9 @@ async def recall_for_context(user_id: int, db) -> str:
     all_files = list(result.scalars().all())
     by_path = {f.path: f for f in all_files}
 
-    listing = _format_directory(all_files, MEMORY_ROOT)
+    # Size-free listing keeps this recall block byte-stable across turns so the
+    # prompt cache holds (file sizes otherwise change every turn as log.md grows).
+    listing = _format_directory(all_files, MEMORY_ROOT, with_sizes=False)
 
     sections = [f"### Directory\n\n{listing}"]
     for path in PRELOAD_FILES:
