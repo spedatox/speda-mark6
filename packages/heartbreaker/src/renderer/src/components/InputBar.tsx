@@ -125,13 +125,69 @@ function SendBtn({ canSend, isStreaming, onSend, onStop }: {
   )
 }
 
+/* ── Model item (extracted — hooks cannot live inside .map()) ────────────── */
+function ModelItem({ model, selected, onSelect }: {
+  model: ModelInfo; selected: boolean; onSelect: () => void
+}) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      onClick={onSelect}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: '100%', padding: '0.45rem 0.7rem 0.45rem 0.8rem',
+        display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
+        border: 'none',
+        borderLeft: selected
+          ? '2px solid #36abca'
+          : hover
+          ? '2px solid rgba(95,165,188,0.3)'
+          : '2px solid transparent',
+        background: selected
+          ? 'rgba(54,171,202,0.1)'
+          : hover
+          ? 'rgba(54,171,202,0.05)'
+          : 'transparent',
+        cursor: 'pointer', textAlign: 'left',
+        transition: 'background 0.1s, border-color 0.1s',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: "'Rajdhani',sans-serif",
+          fontSize: '0.8rem', fontWeight: selected ? 700 : 600,
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+          color: selected ? '#5fcce6' : hover ? '#9bbac5' : '#5d7f8a',
+        }}>
+          {shortModelName(model.name)}
+        </div>
+        {model.description && (
+          <div style={{
+            fontFamily: "'SamsungOne','Inter',sans-serif",
+            fontSize: '0.7rem', color: '#2e5260',
+            marginTop: '0.1rem', lineHeight: 1.35,
+          }}>
+            {model.description}
+          </div>
+        )}
+      </div>
+      {selected && (
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#36abca"
+          strokeWidth="2.5" style={{ flexShrink: 0, marginTop: '0.2rem' }}>
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      )}
+    </button>
+  )
+}
+
 /* ── Model picker ─────────────────────────────────────────────────────────── */
-function ModelPicker({ models, activeId, onSelect, config }: {
-  models: ModelInfo[]; activeId: string; onSelect: (id: string) => void; config: AppConfig
+function ModelPicker({ models, activeId, onSelect }: {
+  models: ModelInfo[]; activeId: string; onSelect: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  void config
 
   useEffect(() => {
     if (!open) return
@@ -200,56 +256,14 @@ function ModelPicker({ models, activeId, onSelect, config }: {
             SELECT MODEL
           </div>
           <div style={{ padding: '0.2rem 0' }}>
-            {models.map(m => {
-              const sel = m.id === activeId
-              const [mHover, setMHover] = useState(false)
-              return (
-                <button key={m.id}
-                  onClick={() => { onSelect(m.id); setOpen(false) }}
-                  onMouseEnter={() => setMHover(true)}
-                  onMouseLeave={() => setMHover(false)}
-                  style={{
-                    width: '100%', padding: '0.45rem 0.7rem 0.45rem 0.8rem',
-                    display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
-                    border: 'none',
-                    borderLeft: sel ? '2px solid #36abca' : mHover ? '2px solid rgba(95,165,188,0.3)' : '2px solid transparent',
-                    background: sel
-                      ? 'rgba(54,171,202,0.1)'
-                      : mHover
-                      ? 'rgba(54,171,202,0.05)'
-                      : 'transparent',
-                    cursor: 'pointer', textAlign: 'left',
-                    transition: 'background 0.1s, border-color 0.1s',
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontFamily: "'Rajdhani',sans-serif",
-                      fontSize: '0.8rem', fontWeight: sel ? 700 : 600,
-                      letterSpacing: '0.08em', textTransform: 'uppercase',
-                      color: sel ? '#5fcce6' : mHover ? '#9bbac5' : '#5d7f8a',
-                    }}>
-                      {shortModelName(m.name)}
-                    </div>
-                    {m.description && (
-                      <div style={{
-                        fontFamily: "'SamsungOne','Inter',sans-serif",
-                        fontSize: '0.7rem', color: '#2e5260',
-                        marginTop: '0.1rem', lineHeight: 1.35,
-                      }}>
-                        {m.description}
-                      </div>
-                    )}
-                  </div>
-                  {sel && (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#36abca"
-                      strokeWidth="2.5" style={{ flexShrink: 0, marginTop: '0.2rem' }}>
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                  )}
-                </button>
-              )
-            })}
+            {models.map(m => (
+              <ModelItem
+                key={m.id}
+                model={m}
+                selected={m.id === activeId}
+                onSelect={() => { onSelect(m.id); setOpen(false) }}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -546,7 +560,6 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                 models={models}
                 activeId={settings.model}
                 onSelect={id => update({ model: id })}
-                config={config}
               />
 
               {!state.isStreaming && (
