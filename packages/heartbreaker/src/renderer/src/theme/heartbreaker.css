@@ -90,7 +90,7 @@
 
   --shadow-lg: 0 0 0 1px rgba(95,165,188,0.18), 0 18px 50px rgba(0,0,0,0.6);
 
-  --sidebar-width: 230px;
+  --sidebar-width: 248px;
 
   /* Sharp world — radii collapse to 0 */
   --radius-bubble: 0; --radius-input: 0; --radius-card: 0;
