@@ -245,12 +245,36 @@ function StarkHeading({
   return <Tag>{children}</Tag>
 }
 
+/**
+ * Detect a "Sources:" paragraph so it can get the source-chip styling.
+ * Returns true only when the paragraph literally starts with "Sources" — this
+ * avoids hijacking every paragraph that merely begins with bold text.
+ */
+function isSourcesParagraph(children: React.ReactNode): boolean {
+  const arr = Array.isArray(children) ? children : [children]
+  const first = arr[0]
+  // First child is the <strong>Sources:</strong> element
+  if (first && typeof first === 'object' && 'props' in first) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const inner = (first as any).props?.children
+    const text = typeof inner === 'string' ? inner : ''
+    return /^sources\b/i.test(text.trim())
+  }
+  return false
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mdComponents: any = {
   h1({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h1">{children}</StarkHeading> },
   h2({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h2">{children}</StarkHeading> },
   h3({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h3">{children}</StarkHeading> },
   h4({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h4">{children}</StarkHeading> },
+  p({ children }: { children?: React.ReactNode }) {
+    if (isSourcesParagraph(children)) {
+      return <p className="hb-sources">{children}</p>
+    }
+    return <p>{children}</p>
+  },
   code({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) {
     const lang = /language-(\w+)/.exec(className || '')?.[1] ?? ''
     const code = String(children).replace(/\n$/, '')
