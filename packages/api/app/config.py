@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     # "all" loads every configured server (needs usage tier 1+ for the rate limit).
     mcp_enabled: str = "tavily"
 
+    # Model for Task sub-agents. Defaults to Haiku — research/synthesis grunt work
+    # doesn't need Sonnet, Haiku is ~5x cheaper, and crucially it uses a SEPARATE
+    # rate-limit pool, so a sub-agent's burst of calls doesn't stack against the
+    # main Sonnet loop's tokens-per-minute limit (the tier-0 429 cause). The
+    # user-facing answer is still composed by the main loop on the chosen model.
+    # Set empty to run sub-agents on the same model as the parent.
+    sub_agent_model: str = "claude-haiku-4-5-20251001"
+
     # Temp outputs
     temp_outputs_dir: str = str(_DATA_DIR / "outputs")
 

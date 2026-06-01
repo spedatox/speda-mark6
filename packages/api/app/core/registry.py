@@ -191,11 +191,19 @@ class CapabilityRegistry:
         description = args.get("description", "")
         prompt = args.get("prompt", "")
 
+        # Sub-agents run on a cheaper model with a SEPARATE rate-limit pool
+        # (Haiku by default), so their burst of tool-loop calls doesn't stack
+        # against the main loop's per-minute token limit. Falls back to the
+        # parent model if sub_agent_model is unset.
+        from app.config import settings
+        sub_model = settings.sub_agent_model or context.model
+
         logger.info(
             "task_sub_agent_start",
             extra={
                 "request_id": context.request_id,
                 "description": description,
+                "model": sub_model,
             },
         )
 
@@ -227,7 +235,7 @@ class CapabilityRegistry:
                 )
 
             response = await self._client.create_message(
-                model=context.model,
+                model=sub_model,
                 system=system,
                 messages=messages,
                 tools=tools,
