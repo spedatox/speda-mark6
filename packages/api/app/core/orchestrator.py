@@ -76,6 +76,21 @@ class AgentOrchestrator:
         # minute-precision clock busted the entire ~15k-token cache every minute.
         stable_core = self.build_system_prompt(context)
 
+        # Budget mode — hard frugality directive baked into the cached prompt.
+        from app.config import settings
+        if settings.budget_mode:
+            stable_core += (
+                "\n\n## BUDGET MODE — ACTIVE\n\n"
+                "The owner is on a strict budget. Enforce this every turn:\n"
+                "- Keep answers SHORT — the minimum that fully answers the question. "
+                "A few sentences or bullets. No multi-section reports, no scenario "
+                "tables, unless the owner explicitly says 'deep dive' / 'full briefing'.\n"
+                "- Run as FEW web searches as possible (ideally 1, at most 2-3).\n"
+                "- Sub-agents are disabled. Do all work yourself in this turn.\n"
+                "- If a request truly warrants depth, give a short answer first and "
+                "ask whether to expand — never assume."
+            )
+
         memory_block = ""
         if context.db is not None:
             try:

@@ -80,6 +80,12 @@ class Settings(BaseSettings):
     # Set empty to run sub-agents on the same model as the parent.
     sub_agent_model: str = "claude-haiku-4-5-20251001"
 
+    # Budget mode — a HARD, enforced frugality switch (not a prompt suggestion):
+    #   - the Task sub-agent tool is not registered at all (impossible to spawn)
+    #   - a strict concise-output directive is injected into the system prompt
+    # Toggle with BUDGET_MODE=true in .env. Survives restarts. Default ON.
+    budget_mode: bool = True
+
     # Temp outputs
     temp_outputs_dir: str = str(_DATA_DIR / "outputs")
 
