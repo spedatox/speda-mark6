@@ -60,30 +60,6 @@ Node 18+        Docker + Docker Compose
 
 ---
 
-## Current Status
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| **Real-time token streaming** | ✅ Live | Per-token SSE via Anthropic stream API |
-| **Agentic loop** | ✅ Live | Runs until `end_turn`, 30-iteration safety cap |
-| **Agent Skills system** | ✅ Live | Progressive disclosure, SKILL.md per capability |
-| **Long-term memory (write)** | ✅ Live | Haiku extracts facts after every turn |
-| **Long-term memory (recall)** | 🔧 Pending | Facts stored, recall injection not yet wired |
-| **Session history** | ✅ Live | Multi-turn context, PostgreSQL persistence |
-| **Auto session titles** | ✅ Live | Haiku generates title after first exchange |
-| **Math / LaTeX rendering** | ✅ Live | KaTeX, currency-safe, code-safe |
-| **SVG / HTML inline rendering** | ✅ Live | Draw-in animation, no chrome |
-| **Markdown + GFM** | ✅ Live | Tables, code blocks, syntax highlighting |
-| **Model selector** | ✅ Live | In-bar switcher, persisted to localStorage |
-| **Two-file agent forking** | ✅ Live | Profile + identity = full rebrand |
-| **Authentication** | ✅ Live | API key on all routes |
-| **Document generation** | 🔧 Stubbed | PPTX/DOCX/PDF functions registered |
-| **TTS / STT** | 🔧 Stubbed | Kokoro/Whisper not deployed |
-| **Push notifications** | 🔧 Stubbed | FCM not configured |
-| **MCP servers** | ⚠️ Config-only | 12 servers configured, SDK not wired |
-| **Sub-agent tasks** | ⚠️ Config-only | Task tool registered, Agent SDK not wired |
-
----
 
 ## The Frontend
 
