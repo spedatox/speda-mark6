@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from contextlib import AsyncExitStack
@@ -78,6 +79,15 @@ class MCPClient:
             # that return 4xx — these are BaseException, not Exception).
             if isinstance(e, (KeyboardInterrupt, SystemExit)):
                 raise
+            # CRITICAL: anyio's streamablehttp_client leaves the asyncio task
+            # internally marked as "cancelling" after a failed HTTP connection.
+            # Without clearing this, every subsequent await in the startup task
+            # immediately raises CancelledError (all remaining MCP servers fail
+            # with the same cancel scope ID). task.uncancel() requires Python 3.11+.
+            task = asyncio.current_task()
+            if task is not None:
+                while task.cancelling() > 0:
+                    task.uncancel()
             logger.warning(
                 "mcp_connect_failed",
                 extra={"server": self.server_name, "error": str(e)},
