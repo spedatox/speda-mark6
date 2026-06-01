@@ -544,6 +544,11 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
       style={{ display: 'flex', marginBottom: '1.5rem', alignItems: 'flex-start', animation: 'fadeSlideIn 0.2s ease' }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Tool disclosure — "Searched the web ▸" above the response */}
+        {!message.isStreaming && message.tools.length > 0 && (
+          <ToolDisclosure tools={message.tools} />
+        )}
+
         {/* Content, error, or live working status */}
         {message.isError ? (
           <div style={{
@@ -570,11 +575,6 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
           // No content yet — show the natural-language working indicator
           <WorkingStatus tools={message.tools} />
         ) : null}
-
-        {/* Tool disclosure — "Searched the web ▸" shown once streaming ends */}
-        {!message.isStreaming && message.tools.length > 0 && (
-          <ToolDisclosure tools={message.tools} />
-        )}
 
         {/* Action bar — appears on hover once streaming ends */}
         {!message.isStreaming && message.content && (
