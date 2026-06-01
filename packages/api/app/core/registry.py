@@ -92,7 +92,15 @@ class CapabilityRegistry:
     # ── Tier 0 ────────────────────────────────────────────────────────────────
 
     def register_task_tool(self) -> None:
-        """Register the SDK built-in Task tool. Must be called FIRST."""
+        """Register the SDK built-in Task tool. Must be called FIRST.
+
+        In budget mode the Task tool is NOT registered — sub-agents become
+        impossible to spawn, not merely discouraged. This is the hard guarantee
+        behind 'budget mode' (vs the model just promising to behave)."""
+        from app.config import settings
+        if settings.budget_mode:
+            logger.info("registry_skip", extra={"tier": 0, "capability": "Task", "reason": "budget_mode"})
+            return
         self._task_tool_registered = True
         logger.info("registry_register", extra={"tier": 0, "capability": "Task"})
 
