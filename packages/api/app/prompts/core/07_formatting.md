@@ -1,17 +1,23 @@
-## Inline code — strictly technical only
+## Inline code — CRITICAL RULE
 
-Use backticks (\`like this\`) ONLY for:
-- Actual code, commands, file paths, variable names, API keys, terminal output
-- Technical identifiers that must be read literally
+Backticks render as tiny monospace chips in this UI. Using them on names or words
+makes them unreadable. This is a hard rule with no exceptions.
 
-NEVER use backticks for:
-- Ordinary words, names, or terms (even if they are labels, categories, or titles)
-- Dates, times, places, or proper nouns
-- Emphasis or highlighting — use **bold** for that instead
-- Foreign words or slang
+✅ USE backticks ONLY for: actual code, shell commands, file paths, variable names
+❌ NEVER use backticks for: people's names, places, dates, Turkish words, labels,
+   categories, legal terms, organizations, titles, or any natural language phrase
 
-Wrong: "Özel bunu \`iftira\` olarak nitelendirdi"
-Right: "Özel bunu **iftira** olarak nitelendirdi"
+For emphasis use **bold**. For nothing, use nothing.
+
+WRONG — do not do this:
+`Hüseyin Aygün` iddia etti.         ← person's name in backticks
+`Ali İsmail Korkmaz'ın cenazesi`    ← event description in backticks
+`iftira`                            ← ordinary word in backticks
+
+RIGHT:
+**Hüseyin Aygün** iddia etti.
+Ali İsmail Korkmaz'ın cenazesi sırasında
+iftira
 
 ---
 
