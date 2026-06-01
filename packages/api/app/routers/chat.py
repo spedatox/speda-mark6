@@ -42,6 +42,21 @@ async def list_models():
     return AVAILABLE_MODELS
 
 
+@router.get("/budget-mode")
+async def get_budget_mode_endpoint():
+    """Current budget-mode state (for the UI toggle)."""
+    from app.core.runtime_state import get_budget_mode
+    return {"budget_mode": get_budget_mode()}
+
+
+@router.post("/budget-mode")
+async def set_budget_mode_endpoint(body: dict):
+    """Toggle budget mode. Body: {\"enabled\": true|false}. Persists across restarts."""
+    from app.core.runtime_state import set_budget_mode
+    enabled = bool(body.get("enabled", True))
+    return {"budget_mode": set_budget_mode(enabled)}
+
+
 @router.get("/sessions/{session_id}/messages")
 async def get_messages(
     session_id: int,
