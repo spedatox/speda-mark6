@@ -63,13 +63,18 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
 
     # ── Tier 2: HTTP servers (auth via headers) ──────────────────────────────
 
+    # Notion — official stdio package (integration token auth).
+    # The hosted mcp.notion.com/mcp requires full OAuth; the npm package
+    # works with a standard Notion integration token (starts with ntn_ or secret_).
+    # Create an integration at https://www.notion.so/profile/integrations
+    # and connect it to the pages/databases you want SPEDA to access.
     if settings.notion_api_key:
         servers.append(
             MCPClient(
                 server_name="notion",
-                transport="http",
-                url="https://mcp.notion.com/mcp",   # /mcp suffix required
-                headers={"Authorization": f"Bearer {settings.notion_api_key}"},
+                transport="stdio",
+                command=["npx", "-y", "@notionhq/notion-mcp-server"],
+                env={"OPENAPI_MCP_HEADERS": f'{{"Authorization":"Bearer {settings.notion_api_key}"}}'},
             )
         )
     else:
