@@ -45,30 +45,50 @@ def _apply_prompt_caching(kwargs: dict) -> dict:
     """
     Insert ephemeral cache breakpoints on the stable request prefix.
 
-    The Anthropic request prefix is [tools, system, messages]. We place one
-    breakpoint on the last tool (the 35 tool definitions are identical on every
-    call → near-100% cache hit) and one on the system prompt (identical across
-    the agentic loop's iterations and within a session → hits on iterations 1+
-    and on subsequent turns inside the 5-minute window). Only the variable
-    messages are billed at full input price.
+    The Anthropic request prefix is [tools, system, messages]. Caching keys on a
+    byte-identical prefix, so ONLY content that doesn't change between calls may
+    sit inside a cached block. We place breakpoints on:
 
-    Caching is ignored automatically by the API when the prefix is under the
-    minimum cacheable size, so this is always safe to apply.
+      - the last tool definition (all tools are identical every call), and
+      - every system block the caller flagged with `_cache: True`
+        (the orchestrator flags the stable core prompt and the memory block, and
+        leaves the volatile datetime/model tail unflagged → uncached).
+
+    TTL: we use a 1-hour cache. The cache is content-keyed server-side at
+    Anthropic, so a 1h window means the ~15k-token prefix is written roughly once
+    per hour instead of once per 5 minutes — and crucially it SURVIVES backend
+    restarts (a restart re-sends identical content → cache hit, no rewrite). The
+    1h write costs 1.6x a 5m write but is amortised over ~12x fewer writes.
+
+    Caching is ignored automatically by the API when a block is under the minimum
+    cacheable size, so this is always safe to apply.
     """
     out = dict(kwargs)
+    cache_control = {"type": "ephemeral", "ttl": settings.prompt_cache_ttl}
 
-    # System prompt: string → a single cached text block.
+    # System: list of blocks. Cache each block flagged with `_cache`, strip the
+    # marker (the API rejects unknown keys). A bare string is treated as one
+    # cached block for backward compatibility.
     system = out.get("system")
     if isinstance(system, str) and system:
         out["system"] = [
-            {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+            {"type": "text", "text": system, "cache_control": cache_control}
         ]
+    elif isinstance(system, list):
+        new_system = []
+        for blk in system:
+            b = dict(blk)
+            should_cache = b.pop("_cache", False)
+            if should_cache:
+                b["cache_control"] = cache_control
+            new_system.append(b)
+        out["system"] = new_system
 
     # Tools: mark the last tool so the whole tool block is cached.
     tools = out.get("tools")
     if tools:
         cached_tools = [dict(t) for t in tools]
-        cached_tools[-1] = {**cached_tools[-1], "cache_control": {"type": "ephemeral"}}
+        cached_tools[-1] = {**cached_tools[-1], "cache_control": cache_control}
         out["tools"] = cached_tools
 
     return out

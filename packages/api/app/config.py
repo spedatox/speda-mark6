@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
 
+    # Prompt cache TTL — "1h" (survives restarts, ~1 write/hour) or "5m".
+    # The stable prefix (tools + core prompt + memory) is content-keyed at
+    # Anthropic, so 1h dramatically cuts cache-write cost for active sessions.
+    prompt_cache_ttl: str = "1h"
+
     # Temp outputs
     temp_outputs_dir: str = str(_DATA_DIR / "outputs")
 
