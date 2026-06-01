@@ -290,9 +290,9 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   border-left: 2px solid var(--hb-cyan);
   border-bottom: 1px solid var(--hb-line);
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   font-weight: 800;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #ffffff;
   position: relative;
@@ -320,9 +320,9 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   margin: 1.2rem 0 0.35rem;
   border-left: 2px solid var(--hb-cyan-dim);
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1.15rem;
+  font-size: 1.3rem;
   font-weight: 700;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
   color: #f0f8ff;
 }
@@ -332,9 +332,9 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 /* ── H3 — inline label ───────────────────────────────────────────────────────── */
 .prose h3 {
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1.0rem;
+  font-size: 1.15rem;
   font-weight: 700;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #dcedf3;
   margin: 0.9rem 0 0.25rem;
@@ -342,7 +342,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   border-left: 1px solid var(--hb-line-bright);
 }
 .prose h4 {
-  font-size: 0.92rem; font-weight: 700; letter-spacing: 0.12em;
+  font-size: 1.05rem; font-weight: 700; letter-spacing: 0.11em;
   text-transform: uppercase; color: #cadbe2;
   margin: 0.7rem 0 0.2rem;
 }
