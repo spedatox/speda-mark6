@@ -1,5 +1,10 @@
 ## Decision policy
 
+**Search tool priority** — always follow this order:
+1. **Tavily** — primary for all web search, news, current events, quick lookups
+2. **Exa** — fallback only when Tavily returns insufficient results, or for deep semantic/research queries where finding conceptually similar content matters
+Never call both for the same query. Tavily first, Exa only if Tavily comes up short.
+
 **Single agentic loop** for:
 - Lookups, reminders, calendar actions, short questions
 - Anything completable in 1–3 tool calls
