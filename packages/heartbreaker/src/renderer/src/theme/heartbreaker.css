@@ -260,30 +260,133 @@ body {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Prose (markdown) — technical, hairline, monospace data
+   Prose (markdown) — Stark FUI instrumentation style
+   Reference: Iron Man 2 Jayse Hansen holographic UI
    ════════════════════════════════════════════════════════════════════════════ */
 .prose {
   user-select: text;
-  font-family: var(--font-read);   /* readable modern sans for message content */
+  font-family: var(--font-read);
   line-height: 1.7;
   letter-spacing: 0;
   color: var(--hb-text);
   font-size: 0.95rem;
   font-weight: 400;
 }
-/* Chat input + message-edit fields read as body copy too (beats inline 'inherit') */
+/* Chat input + edit fields read as body copy */
 textarea { font-family: var(--font-read) !important; letter-spacing: 0 !important; }
+
 .prose p { margin: 0.5rem 0; }
 .prose p:first-child { margin-top: 0; }
-.prose p:last-child { margin-bottom: 0; }
-.prose h1,.prose h2,.prose h3,.prose h4 {
-  font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-  margin: 1.1rem 0 0.4rem; color: #dcedf3;
+.prose p:last-child  { margin-bottom: 0; }
+
+/* ── H1 — full-width panel header bar (like "IP ADDRESS_BOOK" header) ──────── */
+.prose h1 {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 0.75rem 0 0.65rem;
+  margin: 1.6rem 0 0.6rem;
+  background: linear-gradient(90deg, rgba(29,93,112,0.7) 0%, rgba(29,93,112,0.22) 55%, transparent 100%);
+  border-left: 2px solid var(--hb-cyan);
+  border-bottom: 1px solid var(--hb-line);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #d7eef5;
+  position: relative;
 }
-.prose h1 { font-size: 1.1rem; } .prose h2 { font-size: 1rem; } .prose h3 { font-size: 0.9rem; }
-.prose ul,.prose ol { padding-left: 1.4rem; margin: 0.5rem 0; }
-.prose li { margin: 0.22rem 0; }
-.prose li::marker { color: var(--hb-cyan); }
+/* bottom-right corner tick */
+.prose h1::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; right: 0;
+  width: 18px; height: 1px;
+  background: var(--hb-cyan);
+}
+.prose h1:first-child { margin-top: 0; }
+
+/* H1 underscore split — "MAIN_SUB" → main in bright, _SUB in cyan */
+.prose h1 .hb-h-main { color: #dcedf3; }
+.prose h1 .hb-h-sub  { color: var(--hb-cyan); font-size: 0.9em; letter-spacing: 0.14em; margin-left: 0.05em; }
+
+/* ── H2 — section marker with left accent ───────────────────────────────────── */
+.prose h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0 0.15rem 0.65rem;
+  margin: 1.2rem 0 0.35rem;
+  border-left: 2px solid var(--hb-cyan-dim);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hb-text-dim);
+}
+.prose h2 .hb-h-main { color: var(--hb-text); }
+.prose h2 .hb-h-sub  { color: var(--hb-cyan-dim); font-size: 0.88em; }
+
+/* ── H3 — inline label ───────────────────────────────────────────────────────── */
+.prose h3 {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--hb-text-faint);
+  margin: 0.9rem 0 0.25rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--hb-line-bright);
+}
+.prose h4 {
+  font-size: 0.63rem; font-weight: 600; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--hb-text-faint);
+  margin: 0.7rem 0 0.2rem;
+}
+
+/* ── Strong → Stark cyan highlight ─────────────────────────────────────────── */
+.prose strong {
+  font-weight: 600;
+  color: var(--hb-cyan-bright);
+}
+
+/* ── Em → amber tint (warning/aside) ───────────────────────────────────────── */
+.prose em { font-style: normal; color: var(--hb-amber); }
+
+/* ── Lists — angular teal markers ───────────────────────────────────────────── */
+.prose ul {
+  list-style: none;
+  padding-left: 1.3rem;
+  margin: 0.5rem 0;
+}
+.prose ol {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+.prose ul li {
+  position: relative;
+  margin: 0.22rem 0;
+  padding-left: 0.1rem;
+}
+.prose ul li::before {
+  content: '▸';
+  position: absolute;
+  left: -1.1rem;
+  top: 0.08em;
+  color: var(--hb-cyan);
+  font-size: 0.72em;
+  line-height: 1;
+}
+.prose ol li { margin: 0.22rem 0; }
+.prose ol li::marker { color: var(--hb-cyan); font-family: 'Share Tech Mono', monospace; font-size: 0.82em; }
+
+/* Nested lists — dim the marker */
+.prose ul ul li::before { color: var(--hb-cyan-dim); content: '·'; font-size: 1em; top: 0; }
+
+/* ── Code ────────────────────────────────────────────────────────────────────── */
 .prose code {
   font-family: 'Share Tech Mono', monospace; font-size: 0.82em;
   background: rgba(54, 171, 202, 0.1); padding: 0.1em 0.4em;
@@ -291,21 +394,72 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 }
 .prose pre { margin: 0.75rem 0; }
 .prose pre code { background: none; padding: 0; border: none; color: inherit; }
+
+/* ── Blockquote — panel inset ───────────────────────────────────────────────── */
 .prose blockquote {
-  border-left: 2px solid var(--hb-cyan-dim); margin: 0.75rem 0;
-  padding: 0.2rem 0 0.2rem 0.9rem; color: var(--hb-text-dim);
+  position: relative;
+  border: none;
+  margin: 0.75rem 0;
+  padding: 0.4rem 0.75rem 0.4rem 0.85rem;
+  background: rgba(13, 42, 54, 0.45);
+  border-left: 2px solid var(--hb-cyan-dim);
+  color: var(--hb-text-dim);
 }
-.prose a { color: var(--hb-cyan-bright); text-decoration: none; border-bottom: 1px solid rgba(95,204,230,0.3); }
-.prose a:hover { border-bottom-color: var(--hb-cyan-bright); }
-.prose table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.85rem; }
-.prose th,.prose td { border: 1px solid var(--hb-line); padding: 0.35rem 0.6rem; }
+.prose blockquote::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--hb-line-bright), transparent 70%);
+}
+
+/* ── Links ───────────────────────────────────────────────────────────────────── */
+.prose a {
+  color: var(--hb-cyan-bright); text-decoration: none;
+  border-bottom: 1px solid rgba(95,204,230,0.3);
+}
+.prose a:hover { border-bottom-color: var(--hb-cyan-bright); color: #8ee6f5; }
+
+/* ── Table — data grid ───────────────────────────────────────────────────────── */
+.prose table {
+  border-collapse: collapse; width: 100%; margin: 0.75rem 0;
+  font-size: 0.82rem; font-family: 'Share Tech Mono', monospace;
+  border: 1px solid var(--hb-line);
+}
 .prose th {
-  background: rgba(54,171,202,0.08); font-weight: 600;
-  letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.7rem; color: #cfe7ee;
+  background: linear-gradient(90deg, rgba(29,93,112,0.7), rgba(29,93,112,0.35));
+  font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  font-size: 0.64rem; color: #cfe7ee;
+  border: 1px solid var(--hb-line); padding: 0.3rem 0.6rem;
+  font-family: 'Rajdhani', sans-serif;
 }
-.prose hr { border: none; border-top: 1px solid var(--hb-line); margin: 1.1rem 0; }
-.prose img { max-width: 100%; }
-.prose strong { font-weight: 700; color: #eafaff; }
+.prose td {
+  border: 1px solid rgba(95,165,188,0.14); padding: 0.28rem 0.6rem;
+  color: var(--hb-text-dim);
+}
+.prose tr:nth-child(even) td { background: rgba(54,171,202,0.04); }
+.prose tr:hover td { background: rgba(54,171,202,0.09); color: var(--hb-text); }
+
+/* ── HR — tick-mark ruler ────────────────────────────────────────────────────── */
+.prose hr {
+  border: none;
+  height: 1px;
+  margin: 1.25rem 0;
+  background-image: repeating-linear-gradient(
+    90deg, var(--hb-line) 0 1px, transparent 1px 8px
+  );
+  position: relative;
+}
+.prose hr::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0;
+  width: 32px; height: 1px;
+  background: var(--hb-cyan);
+}
+
+/* ── Image ───────────────────────────────────────────────────────────────────── */
+.prose img { max-width: 100%; border: 1px solid var(--hb-line); }
 
 /* Range input — FUI slider */
 input[type=range] {

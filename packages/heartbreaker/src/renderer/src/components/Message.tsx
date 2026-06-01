@@ -131,8 +131,39 @@ function ActionBtn({
   )
 }
 
+/**
+ * Stark-style heading: "MAIN_SUB" → <span main> + <span sub>.
+ * If no underscore, renders children as-is.
+ * Only splits when children is a plain string (e.g. "MAY 2026_REPORT");
+ * headings with nested bold/links pass through unchanged.
+ */
+function StarkHeading({
+  tag: Tag,
+  children,
+}: {
+  tag: 'h1' | 'h2' | 'h3' | 'h4'
+  children?: React.ReactNode
+}) {
+  if (typeof children === 'string') {
+    const idx = children.indexOf('_')
+    if (idx > -1) {
+      return (
+        <Tag>
+          <span className="hb-h-main">{children.slice(0, idx)}</span>
+          <span className="hb-h-sub">_{children.slice(idx + 1)}</span>
+        </Tag>
+      )
+    }
+  }
+  return <Tag>{children}</Tag>
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mdComponents: any = {
+  h1({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h1">{children}</StarkHeading> },
+  h2({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h2">{children}</StarkHeading> },
+  h3({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h3">{children}</StarkHeading> },
+  h4({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h4">{children}</StarkHeading> },
   code({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) {
     const lang = /language-(\w+)/.exec(className || '')?.[1] ?? ''
     const code = String(children).replace(/\n$/, '')
