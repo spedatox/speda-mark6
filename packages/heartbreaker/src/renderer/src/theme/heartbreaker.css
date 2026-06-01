@@ -319,9 +319,9 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   padding: 0 0 0.15rem 0.65rem;
   margin: 1.5rem 0 0.45rem;
   border-left: 3px solid var(--hb-cyan);
-  font-family: 'SamsungOne', 'Inter', sans-serif;
-  font-size: 1.45rem;
-  font-weight: 800;
+  font-family: 'SamsungOne', 'Inter', sans-serif !important;
+  font-size: 1.45rem !important;
+  font-weight: 800 !important;
   letter-spacing: -0.01em;
   color: #ffffff;
 }
@@ -330,9 +330,9 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 
 /* ── H3 — section label ──────────────────────────────────────────────────────── */
 .prose h3 {
-  font-family: 'SamsungOne', 'Inter', sans-serif;
-  font-size: 1.2rem;
-  font-weight: 800;
+  font-family: 'SamsungOne', 'Inter', sans-serif !important;
+  font-size: 1.2rem !important;
+  font-weight: 800 !important;
   letter-spacing: -0.01em;
   color: #cadbe2;
   margin: 1.2rem 0 0.35rem;
