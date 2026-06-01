@@ -18,10 +18,16 @@ _SUB_AGENT_MAX_ITERATIONS = 15  # Sub-agents are focused tasks; lower than the m
 _TASK_TOOL_DEFINITION: dict = {
     "name": "Task",
     "description": (
-        "Spawns an isolated sub-agent to work on a focused task in parallel with other sub-agents. "
-        "Use this when a task requires 3+ independent information sources, deep multi-source research, "
-        "or when intermediate results would significantly bloat this context window. "
-        "Do not use this for lookups, writes, reminders, or tasks completable in 1–3 tool calls. "
+        "Spawns an isolated, billed sub-agent for a heavy research task. This is "
+        "EXPENSIVE and RARE — avoid it unless clearly necessary. "
+        "Spawn ONLY when the user explicitly asked for a deep/thorough research "
+        "report AND it genuinely needs 6+ independent searches across distinct "
+        "subtopics. "
+        "Do NOT use it for news, current events, 'what's happening' queries, quick "
+        "facts, lookups, writes, reminders, or anything completable with a handful "
+        "of direct tool calls — handle those yourself in the main loop by calling "
+        "search tools directly. Running several searches yourself is preferred over "
+        "spawning a sub-agent. When in doubt, do NOT spawn. "
         "Returns the sub-agent's synthesised result as a string."
     ),
     "input_schema": {
