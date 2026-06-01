@@ -1,3 +1,12 @@
+/*
+ * SUPERIOR SIX AGENT UI TEMPLATE — base theme
+ *
+ * Fork instructions: see FORK.md
+ * To theme an agent: override the CSS variables in :root {} below.
+ * Do not edit anything else in this file unless you want a structural change
+ * that should apply to all agent forks.
+ */
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
