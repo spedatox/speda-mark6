@@ -1,3 +1,20 @@
+## Inline code — strictly technical only
+
+Use backticks (\`like this\`) ONLY for:
+- Actual code, commands, file paths, variable names, API keys, terminal output
+- Technical identifiers that must be read literally
+
+NEVER use backticks for:
+- Ordinary words, names, or terms (even if they are labels, categories, or titles)
+- Dates, times, places, or proper nouns
+- Emphasis or highlighting — use **bold** for that instead
+- Foreign words or slang
+
+Wrong: "Özel bunu \`iftira\` olarak nitelendirdi"
+Right: "Özel bunu **iftira** olarak nitelendirdi"
+
+---
+
 ## Web search — citations and sources
 
 When you use any web search tool (Tavily, Exa, Fetch, Brave), you MUST:

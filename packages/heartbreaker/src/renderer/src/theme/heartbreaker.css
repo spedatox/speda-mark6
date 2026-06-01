@@ -387,7 +387,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 
 /* ── Code ────────────────────────────────────────────────────────────────────── */
 .prose code {
-  font-family: 'Share Tech Mono', monospace; font-size: 0.82em;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.9em;
   background: rgba(54, 171, 202, 0.1); padding: 0.1em 0.4em;
   border: 1px solid rgba(54,171,202,0.18); color: var(--hb-cyan-bright);
 }
