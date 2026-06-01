@@ -1,7 +1,7 @@
 {
-  "name": "speda-desktop",
+  "name": "agent-ui-template",
   "version": "0.1.0",
-  "description": "Rebrandable AI assistant desktop client",
+  "description": "Superior Six agent UI template — fork this, edit profile/config.ts + theme/base.css only",
   "main": "./out/main/index.js",
   "author": "Ahmet Erol Bayrak",
   "scripts": {

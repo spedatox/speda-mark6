@@ -1,7 +1,7 @@
 {
-  "name": "speda-heartbreaker",
+  "name": "speda-mark6",
   "version": "0.1.0",
-  "description": "Project Heartbreaker — Stark-tech holographic frontend (experimental fork of speda-desktop)",
+  "description": "SPEDA Mark VI — primary desktop client (Stark FUI)",
   "main": "./out/main/index.js",
   "author": "Ahmet Erol Bayrak",
   "scripts": {
