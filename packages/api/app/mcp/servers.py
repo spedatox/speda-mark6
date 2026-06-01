@@ -33,6 +33,31 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+async def _refresh_google_token(client_id: str, client_secret: str, refresh_token: str) -> str | None:
+    """Exchange a Google OAuth refresh token for a fresh access token."""
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "refresh_token": refresh_token,
+                    "grant_type": "refresh_token",
+                },
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            token = resp.json().get("access_token")
+            if token:
+                logger.info("google_token_refreshed")
+            return token
+    except Exception as e:
+        logger.error("google_token_refresh_failed", extra={"error": str(e)})
+        return None
+
+
 async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
     servers: list[MCPClient] = []
 
@@ -162,37 +187,51 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
         )
     )
 
-    # ── Google Workspace — Gmail + Calendar + Drive ──────────────────────────
-    # Requires OAuth credentials.json from Google Cloud Console.
-    # Run the one-time auth flow first:
-    #   npx -y @aaronsb/google-workspace-mcp auth
-    # Then set GOOGLE_CREDENTIALS_PATH in .env pointing to your credentials.json.
-    if settings.google_credentials_path:
-        import pathlib
-        creds_path = pathlib.Path(settings.google_credentials_path)
-        tokens_dir = pathlib.Path(settings.google_tokens_dir)
-        tokens_dir.mkdir(parents=True, exist_ok=True)
-        if creds_path.exists():
-            servers.append(
-                MCPClient(
-                    server_name="google_workspace",
-                    transport="stdio",
-                    command=["npx", "-y", "@aaronsb/google-workspace-mcp"],
-                    env={
-                        "GOOGLE_CREDENTIALS_PATH": str(creds_path),
-                        "GOOGLE_TOKENS_DIR": str(tokens_dir),
-                    },
-                )
-            )
+    # ── Google Workspace — official remote MCP servers (googleapis.com) ──────
+    # Uses Google's hosted MCP endpoints — no npm package needed.
+    # One-time setup: run scripts/google_oauth.py to get a refresh token,
+    # then add GOOGLE_CLIENT_ID / _SECRET / _REFRESH_TOKEN to .env.
+    #
+    # Access tokens expire in ~1 hour; the server gets a fresh one at startup.
+    # If SPEDA runs longer than that, restart the backend to re-auth.
+    # (Proper background refresh is a future improvement.)
+    google_ready = all([
+        settings.google_client_id,
+        settings.google_client_secret,
+        settings.google_refresh_token,
+    ])
+    if google_ready:
+        access_token = await _refresh_google_token(
+            settings.google_client_id,
+            settings.google_client_secret,
+            settings.google_refresh_token,
+        )
+        if access_token:
+            auth = {"Authorization": f"Bearer {access_token}"}
+            # Official Google Workspace remote MCP endpoints
+            google_services = [
+                ("google_gmail",    "https://gmailmcp.googleapis.com/mcp/v1"),
+                ("google_calendar", "https://calendarmcp.googleapis.com/mcp/v1"),
+                ("google_drive",    "https://drivemcp.googleapis.com/mcp/v1"),
+                ("google_chat",     "https://chatmcp.googleapis.com/mcp/v1"),
+                ("google_people",   "https://people.googleapis.com/mcp/v1"),
+            ]
+            for name, url in google_services:
+                servers.append(MCPClient(
+                    server_name=name,
+                    transport="http",
+                    url=url,
+                    headers=auth,
+                ))
         else:
-            logger.warning("mcp_skip", extra={
+            logger.error("mcp_skip", extra={
                 "server": "google_workspace",
-                "reason": f"credentials file not found at {creds_path}",
+                "reason": "OAuth token refresh failed — check GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN",
             })
     else:
         logger.warning("mcp_skip", extra={
             "server": "google_workspace",
-            "reason": "GOOGLE_CREDENTIALS_PATH not set",
+            "reason": "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN not all set",
         })
 
     for server in servers:
