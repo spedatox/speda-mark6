@@ -544,8 +544,8 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
       style={{ display: 'flex', marginBottom: '1.5rem', alignItems: 'flex-start', animation: 'fadeSlideIn 0.2s ease' }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Tool disclosure — "Searched the web ▸" above the response */}
-        {!message.isStreaming && message.tools.length > 0 && (
+        {/* Tool disclosure — appears as soon as first tool fires, stays permanently */}
+        {message.tools.length > 0 && (
           <ToolDisclosure tools={message.tools} />
         )}
 
