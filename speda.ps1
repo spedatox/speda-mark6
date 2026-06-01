@@ -54,7 +54,7 @@ Write-Host ""
 Set-Location $PROJECT_ROOT
 
 try {
-    npm run desktop:dev
+    npm run heartbreaker:dev
 } finally {
     Write-Host ""
     Write-Host "  Shutting down..." -ForegroundColor DarkGray
