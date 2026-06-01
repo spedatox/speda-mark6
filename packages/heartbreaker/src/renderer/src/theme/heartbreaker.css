@@ -317,34 +317,33 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   align-items: center;
   gap: 0.45rem;
   padding: 0 0 0.15rem 0.65rem;
-  margin: 1.2rem 0 0.35rem;
+  margin: 1.4rem 0 0.4rem;
   border-left: 2px solid var(--hb-cyan-dim);
-  font-family: 'Rajdhani', sans-serif;
-  font-size: 1.3rem;
+  font-family: 'SamsungOne', 'Inter', sans-serif;
+  font-size: 1.2rem;
   font-weight: 700;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
+  letter-spacing: 0.03em;
   color: #f0f8ff;
 }
 .prose h2 .hb-h-main { color: #ffffff; }
 .prose h2 .hb-h-sub  { color: var(--hb-cyan); font-size: 0.88em; }
 
-/* ── H3 — inline label ───────────────────────────────────────────────────────── */
+/* ── H3 — section label ──────────────────────────────────────────────────────── */
 .prose h3 {
-  font-family: 'Rajdhani', sans-serif;
-  font-size: 1.15rem;
+  font-family: 'SamsungOne', 'Inter', sans-serif;
+  font-size: 1.05rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #dcedf3;
-  margin: 0.9rem 0 0.25rem;
-  padding-left: 0.5rem;
-  border-left: 1px solid var(--hb-line-bright);
+  letter-spacing: 0.02em;
+  color: #cadbe2;
+  margin: 1.1rem 0 0.3rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid rgba(95,165,188,0.4);
 }
 .prose h4 {
-  font-size: 1.05rem; font-weight: 700; letter-spacing: 0.11em;
-  text-transform: uppercase; color: #cadbe2;
-  margin: 0.7rem 0 0.2rem;
+  font-family: 'SamsungOne', 'Inter', sans-serif;
+  font-size: 0.97rem; font-weight: 700; letter-spacing: 0.01em;
+  color: #9bbac5;
+  margin: 0.8rem 0 0.2rem;
 }
 
 /* ── Strong → Stark cyan highlight ─────────────────────────────────────────── */
