@@ -239,5 +239,28 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
             "reason": "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN not all set",
         })
 
+    # ── Gate by the configured allowlist ─────────────────────────────────────
+    # Every loaded tool inflates the cached prompt prefix on every request, so
+    # only register the servers the operator enabled. "all" = no filtering.
+    enabled_raw = (settings.mcp_enabled or "").strip().lower()
+    if enabled_raw and enabled_raw != "all":
+        enabled = {name.strip() for name in enabled_raw.split(",") if name.strip()}
+
+        def _is_enabled(server_name: str) -> bool:
+            # google_gmail / google_calendar / … all match the "google" alias
+            if server_name.startswith("google_") and "google" in enabled:
+                return True
+            return server_name in enabled
+
+        kept, skipped = [], []
+        for s in servers:
+            (kept if _is_enabled(s.server_name) else skipped).append(s)
+        for s in skipped:
+            logger.info("mcp_disabled", extra={
+                "server": s.server_name,
+                "reason": "not in MCP_ENABLED allowlist",
+            })
+        servers = kept
+
     for server in servers:
         await registry.register_mcp(server)
