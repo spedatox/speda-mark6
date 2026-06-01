@@ -371,27 +371,29 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive }: {
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 0.5rem 0 0.85rem',
-      height: 38,
+      height: 46,
       borderBottom: '1px solid rgba(95,165,188,0.18)',
       background: 'linear-gradient(90deg, rgba(16,40,52,0.6), rgba(8,20,26,0.3) 60%, transparent)',
       flexShrink: 0,
       position: 'relative',
     }}>
       {/* Brand */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0px', lineHeight: 1 }}>
         <span style={{
           fontFamily: "'Rajdhani',sans-serif",
-          fontSize: '0.92rem', fontWeight: 700,
-          letterSpacing: '0.16em', textTransform: 'uppercase',
-          color: '#cadbe2',
+          fontSize: '1.15rem', fontWeight: 800,
+          letterSpacing: '0.2em', textTransform: 'uppercase',
+          color: '#ffffff',
+          lineHeight: 1.1,
         }}>
           {profile.name}
         </span>
         <span style={{
-          ...mono,
-          fontSize: '0.64rem',
+          fontFamily: "'Rajdhani',sans-serif",
+          fontSize: '0.68rem', fontWeight: 700,
+          letterSpacing: '0.28em', textTransform: 'uppercase',
           color: '#36abca',
-          letterSpacing: '0.08em',
+          lineHeight: 1.2,
         }}>
           {profile.modelNumber}
         </span>
