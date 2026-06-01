@@ -76,9 +76,9 @@ class AgentOrchestrator:
         # minute-precision clock busted the entire ~15k-token cache every minute.
         stable_core = self.build_system_prompt(context)
 
-        # Budget mode — hard frugality directive baked into the cached prompt.
-        from app.config import settings
-        if settings.budget_mode:
+        # Budget mode — hard frugality directive (runtime-toggleable, persistent).
+        from app.core.runtime_state import get_budget_mode
+        if get_budget_mode():
             stable_core += (
                 "\n\n## BUDGET MODE — ACTIVE\n\n"
                 "The owner is on a strict budget. Enforce this every turn:\n"

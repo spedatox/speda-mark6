@@ -94,13 +94,8 @@ class CapabilityRegistry:
     def register_task_tool(self) -> None:
         """Register the SDK built-in Task tool. Must be called FIRST.
 
-        In budget mode the Task tool is NOT registered — sub-agents become
-        impossible to spawn, not merely discouraged. This is the hard guarantee
-        behind 'budget mode' (vs the model just promising to behave)."""
-        from app.config import settings
-        if settings.budget_mode:
-            logger.info("registry_skip", extra={"tier": 0, "capability": "Task", "reason": "budget_mode"})
-            return
+        Always registered, but hidden at runtime when budget mode is on (see
+        list_tools) — so budget mode can be toggled live without a restart."""
         self._task_tool_registered = True
         logger.info("registry_register", extra={"tier": 0, "capability": "Task"})
 
@@ -146,9 +141,13 @@ class CapabilityRegistry:
         Return all tools across all four tiers in Anthropic tool format.
         Claude sees no difference between tiers.
         """
+        from app.core.runtime_state import get_budget_mode
+
         tools: list[dict] = []
 
-        if self._task_tool_registered:
+        # Task sub-agent is hidden in budget mode — the model can't spawn what it
+        # can't see. Runtime check so the UI/SPEDA can toggle without a restart.
+        if self._task_tool_registered and not get_budget_mode():
             tools.append(_TASK_TOOL_DEFINITION)
 
         for skill in self._skills.values():

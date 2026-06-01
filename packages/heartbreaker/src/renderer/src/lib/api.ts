@@ -128,6 +128,34 @@ export async function fetchModels(config: AppConfig): Promise<ModelInfo[]> {
   }
 }
 
+export async function getBudgetMode(config: AppConfig): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/budget-mode`, {
+      headers: { 'X-API-Key': config.apiKey },
+    })
+    if (!res.ok) return true
+    const data = await res.json()
+    return !!data.budget_mode
+  } catch {
+    return true
+  }
+}
+
+export async function setBudgetMode(config: AppConfig, enabled: boolean): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/budget-mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': config.apiKey },
+      body: JSON.stringify({ enabled }),
+    })
+    if (!res.ok) return enabled
+    const data = await res.json()
+    return !!data.budget_mode
+  } catch {
+    return enabled
+  }
+}
+
 export async function deleteSession(config: AppConfig, sessionId: number): Promise<void> {
   try {
     await fetch(`${config.apiBase}/sessions/${sessionId}`, {

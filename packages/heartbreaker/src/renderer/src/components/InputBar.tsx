@@ -2,7 +2,7 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
-import { fetchModels, fileToImageBlock } from '../lib/api'
+import { fetchModels, fileToImageBlock, getBudgetMode, setBudgetMode } from '../lib/api'
 import type { AppConfig, ModelInfo, ImageBlock } from '../lib/types'
 
 interface AttachedFile {
@@ -293,11 +293,25 @@ export default function InputBar({ onSend, onStop, config }: Props) {
   const [webSearch, setWebSearch]   = useState(false)
   const [listening, setListening]   = useState(false)
   const [models, setModels]         = useState<ModelInfo[]>([])
+  const [budget, setBudget]         = useState(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragDepth = useRef(0)
 
   useEffect(() => { fetchModels(config).then(setModels).catch(() => {}) }, [config])
+  // Load budget state on mount, and re-sync whenever a turn finishes (SPEDA can
+  // toggle it itself via the set_budget_mode tool).
+  useEffect(() => { getBudgetMode(config).then(setBudget).catch(() => {}) }, [config])
+  useEffect(() => {
+    if (!state.isStreaming) getBudgetMode(config).then(setBudget).catch(() => {})
+  }, [state.isStreaming, config])
+
+  const toggleBudget = useCallback(async () => {
+    const next = !budget
+    setBudget(next) // optimistic
+    const confirmed = await setBudgetMode(config, next)
+    setBudget(confirmed)
+  }, [budget, config])
 
   const resize = useCallback(() => {
     const el = textareaRef.current
@@ -551,6 +565,33 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                 </svg>
                 Web
+              </button>
+
+              {/* Budget mode toggle — green when frugal, amber when unleashed */}
+              <button
+                title={budget
+                  ? 'Budget mode ON — concise answers, no sub-agents. Click to unleash.'
+                  : 'Full power — deep research enabled. Click to go frugal.'}
+                onClick={toggleBudget}
+                style={{
+                  height: 30, padding: '0 0.55rem',
+                  display: 'flex', alignItems: 'center', gap: '0.35rem',
+                  border: `1px solid ${budget ? 'rgba(79,163,119,0.55)' : 'rgba(211,154,58,0.5)'}`,
+                  background: budget ? 'rgba(79,163,119,0.14)' : 'rgba(211,154,58,0.12)',
+                  color: budget ? '#5fc78f' : '#d3a04a',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  fontFamily: "'Rajdhani',sans-serif",
+                  fontSize: '0.7rem', fontWeight: 700,
+                  letterSpacing: '0.12em', textTransform: 'uppercase',
+                }}
+              >
+                {/* coin/wallet glyph */}
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="9"/>
+                  <path d="M12 7v10M9.5 9.2a2.4 2.4 0 0 1 2.5-1.7c1.3 0 2.3.8 2.3 1.9 0 2.4-4.6 1.4-4.6 3.7 0 1.1 1 1.9 2.3 1.9a2.4 2.4 0 0 0 2.5-1.7"/>
+                </svg>
+                {budget ? 'Budget' : 'Full'}
               </button>
             </div>
 
