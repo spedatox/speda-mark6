@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -100,7 +101,9 @@ class CapabilityRegistry:
     async def register_mcp(self, client: "MCPClient") -> None:
         try:
             await client.connect()
-        except Exception as exc:
+        except BaseException as exc:
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
             logger.warning(
                 "mcp_connect_failed",
                 extra={"server": client.server_name, "reason": str(exc)},
@@ -252,7 +255,8 @@ class CapabilityRegistry:
             if stop_reason == "tool_use":
                 iterations += 1
                 tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-                tool_results = []
+                
+                # Log all tool calls first
                 for block in tool_use_blocks:
                     logger.info(
                         "sub_agent_tool_call",
@@ -262,14 +266,24 @@ class CapabilityRegistry:
                             "tool_id": block.id,
                         },
                     )
-                    tool_result = await self.execute(block.name, block.input, context)
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": tool_result,
-                        }
-                    )
+                    
+                # Execute all tools in parallel
+                exec_tasks = [
+                    self.execute(block.name, block.input, context)
+                    for block in tool_use_blocks
+                ]
+                results = await asyncio.gather(*exec_tasks)
+                
+                # Format results and zip them back
+                tool_results = [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": res,
+                    }
+                    for block, res in zip(tool_use_blocks, results)
+                ]
+                
                 messages.append({"role": "user", "content": tool_results})
 
             elif stop_reason in ("max_tokens", "pause_turn"):

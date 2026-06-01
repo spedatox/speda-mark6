@@ -68,7 +68,7 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
             MCPClient(
                 server_name="notion",
                 transport="http",
-                url="https://mcp.notion.com",
+                url="https://mcp.notion.com/mcp",   # /mcp suffix required
                 headers={"Authorization": f"Bearer {settings.notion_api_key}"},
             )
         )
@@ -80,8 +80,8 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
             MCPClient(
                 server_name="alpha_vantage",
                 transport="http",
-                url="https://mcp.alphavantage.co",
-                headers={"Authorization": f"Bearer {settings.alpha_vantage_api_key}"},
+                # API key goes in query string, not Authorization header
+                url=f"https://mcp.alphavantage.co/mcp?apikey={settings.alpha_vantage_api_key}",
             )
         )
     else:

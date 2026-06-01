@@ -72,7 +72,12 @@ class MCPClient:
                     "tools": len(self._tools),
                 },
             )
-        except Exception as e:
+        except BaseException as e:
+            # Re-raise real signals; swallow everything else (including
+            # CancelledError / anyio cancel-scope errors from HTTP transports
+            # that return 4xx — these are BaseException, not Exception).
+            if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                raise
             logger.warning(
                 "mcp_connect_failed",
                 extra={"server": self.server_name, "error": str(e)},
