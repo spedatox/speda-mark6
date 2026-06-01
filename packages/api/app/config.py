@@ -65,11 +65,12 @@ class Settings(BaseSettings):
     exa_api_key: str = ""
     github_token: str = ""
 
-    # Google Workspace MCP — OAuth credentials from Google Cloud Console
-    # Path to the credentials.json file downloaded from Google Cloud Console
-    google_credentials_path: str = ""
-    # Directory where tokens are stored after OAuth flow (default: ~/.speda/google_tokens)
-    google_tokens_dir: str = str(_DATA_DIR / "google_tokens")
+    # Google Workspace MCP — official remote servers (googleapis.com/mcp/v1)
+    # Get these from Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client
+    # Run scripts/google_oauth.py once to obtain the refresh token.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_refresh_token: str = ""
 
     # OSS Adapter URLs
     gpt_researcher_url: str = "http://localhost:8001"
