@@ -317,13 +317,13 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   align-items: center;
   gap: 0.45rem;
   padding: 0 0 0.15rem 0.65rem;
-  margin: 1.4rem 0 0.4rem;
-  border-left: 2px solid var(--hb-cyan-dim);
+  margin: 1.5rem 0 0.45rem;
+  border-left: 3px solid var(--hb-cyan);
   font-family: 'SamsungOne', 'Inter', sans-serif;
-  font-size: 1.2rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  color: #f0f8ff;
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #ffffff;
 }
 .prose h2 .hb-h-main { color: #ffffff; }
 .prose h2 .hb-h-sub  { color: var(--hb-cyan); font-size: 0.88em; }
@@ -331,19 +331,19 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 /* ── H3 — section label ──────────────────────────────────────────────────────── */
 .prose h3 {
   font-family: 'SamsungOne', 'Inter', sans-serif;
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   color: #cadbe2;
-  margin: 1.1rem 0 0.3rem;
+  margin: 1.2rem 0 0.35rem;
   padding-left: 0.6rem;
-  border-left: 2px solid rgba(95,165,188,0.4);
+  border-left: 2px solid rgba(95,165,188,0.5);
 }
 .prose h4 {
   font-family: 'SamsungOne', 'Inter', sans-serif;
-  font-size: 0.97rem; font-weight: 700; letter-spacing: 0.01em;
+  font-size: 1.05rem; font-weight: 700; letter-spacing: 0;
   color: #9bbac5;
-  margin: 0.8rem 0 0.2rem;
+  margin: 0.9rem 0 0.25rem;
 }
 
 /* ── Strong → Stark cyan highlight ─────────────────────────────────────────── */
