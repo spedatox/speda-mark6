@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     exa_api_key: str = ""
     github_token: str = ""
 
+    # Google Workspace MCP — OAuth credentials from Google Cloud Console
+    # Path to the credentials.json file downloaded from Google Cloud Console
+    google_credentials_path: str = ""
+    # Directory where tokens are stored after OAuth flow (default: ~/.speda/google_tokens)
+    google_tokens_dir: str = str(_DATA_DIR / "google_tokens")
+
     # OSS Adapter URLs
     gpt_researcher_url: str = "http://localhost:8001"
     shannon_url: str = "http://localhost:9000"
