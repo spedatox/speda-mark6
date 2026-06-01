@@ -290,11 +290,11 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   border-left: 2px solid var(--hb-cyan);
   border-bottom: 1px solid var(--hb-line);
   font-family: 'Rajdhani', sans-serif;
-  font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #d7eef5;
+  color: #ffffff;
   position: relative;
 }
 /* bottom-right corner tick */
@@ -307,8 +307,8 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 }
 .prose h1:first-child { margin-top: 0; }
 
-/* H1 underscore split — "MAIN_SUB" → main in bright, _SUB in cyan */
-.prose h1 .hb-h-main { color: #dcedf3; }
+/* H1 underscore split — "MAIN_SUB" → main in white, _SUB in cyan */
+.prose h1 .hb-h-main { color: #ffffff; }
 .prose h1 .hb-h-sub  { color: var(--hb-cyan); font-size: 0.9em; letter-spacing: 0.14em; margin-left: 0.05em; }
 
 /* ── H2 — section marker with left accent ───────────────────────────────────── */
@@ -320,30 +320,30 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   margin: 1.2rem 0 0.35rem;
   border-left: 2px solid var(--hb-cyan-dim);
   font-family: 'Rajdhani', sans-serif;
-  font-size: 0.84rem;
-  font-weight: 600;
-  letter-spacing: 0.18em;
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: 0.17em;
   text-transform: uppercase;
-  color: var(--hb-text-dim);
+  color: #f0f8ff;
 }
-.prose h2 .hb-h-main { color: var(--hb-text); }
-.prose h2 .hb-h-sub  { color: var(--hb-cyan-dim); font-size: 0.88em; }
+.prose h2 .hb-h-main { color: #ffffff; }
+.prose h2 .hb-h-sub  { color: var(--hb-cyan); font-size: 0.88em; }
 
 /* ── H3 — inline label ───────────────────────────────────────────────────────── */
 .prose h3 {
   font-family: 'Rajdhani', sans-serif;
-  font-size: 0.76rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--hb-text-faint);
+  color: #dcedf3;
   margin: 0.9rem 0 0.25rem;
   padding-left: 0.5rem;
   border-left: 1px solid var(--hb-line-bright);
 }
 .prose h4 {
-  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--hb-text-faint);
+  font-size: 0.82rem; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: #cadbe2;
   margin: 0.7rem 0 0.2rem;
 }
 
