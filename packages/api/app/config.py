@@ -65,10 +65,12 @@ class Settings(BaseSettings):
     # prefix to ~38k tokens — which exceeds the tier-0 rate limit of 30k input
     # tokens/minute and makes every cold call 429. Keep this lean; enable a
     # server only when you actually use it. "all" loads every configured server.
-    # Heavy servers (notion=22, filesystem=14, arxiv=10) are OFF by default —
-    # add them here when you need them and your tier can afford the prefix.
-    # Default keeps ~10 tools (~12k prefix) — well under the tier-0 30k/min cap.
-    mcp_enabled: str = "tavily,exa,fetch,alpha_vantage"
+    # Only Tavily (web search) loads by default — the leanest possible prefix,
+    # keeping cost and the cached tool block minimal at tier 0. Activate other
+    # servers on demand by adding their names here, e.g.
+    #   MCP_ENABLED=tavily,exa,alpha_vantage,notion
+    # "all" loads every configured server (needs usage tier 1+ for the rate limit).
+    mcp_enabled: str = "tavily"
 
     # Temp outputs
     temp_outputs_dir: str = str(_DATA_DIR / "outputs")
