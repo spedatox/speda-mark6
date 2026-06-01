@@ -162,5 +162,38 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
         )
     )
 
+    # ── Google Workspace — Gmail + Calendar + Drive ──────────────────────────
+    # Requires OAuth credentials.json from Google Cloud Console.
+    # Run the one-time auth flow first:
+    #   npx -y @aaronsb/google-workspace-mcp auth
+    # Then set GOOGLE_CREDENTIALS_PATH in .env pointing to your credentials.json.
+    if settings.google_credentials_path:
+        import pathlib
+        creds_path = pathlib.Path(settings.google_credentials_path)
+        tokens_dir = pathlib.Path(settings.google_tokens_dir)
+        tokens_dir.mkdir(parents=True, exist_ok=True)
+        if creds_path.exists():
+            servers.append(
+                MCPClient(
+                    server_name="google_workspace",
+                    transport="stdio",
+                    command=["npx", "-y", "@aaronsb/google-workspace-mcp"],
+                    env={
+                        "GOOGLE_CREDENTIALS_PATH": str(creds_path),
+                        "GOOGLE_TOKENS_DIR": str(tokens_dir),
+                    },
+                )
+            )
+        else:
+            logger.warning("mcp_skip", extra={
+                "server": "google_workspace",
+                "reason": f"credentials file not found at {creds_path}",
+            })
+    else:
+        logger.warning("mcp_skip", extra={
+            "server": "google_workspace",
+            "reason": "GOOGLE_CREDENTIALS_PATH not set",
+        })
+
     for server in servers:
         await registry.register_mcp(server)
