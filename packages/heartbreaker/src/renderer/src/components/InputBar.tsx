@@ -281,6 +281,28 @@ function FileIcon() {
   )
 }
 
+/* ── Image thumbnail ──────────────────────────────────────────────────────────
+ * Reads the file as a data URL via FileReader instead of URL.createObjectURL.
+ * Electron's renderer CSP can block blob: URLs in <img>, which showed a broken
+ * image. data: URLs render reliably and match what the vision pipeline sends. */
+function Thumb({ file, alt }: { file: File; alt: string }) {
+  const [src, setSrc] = useState('')
+  useEffect(() => {
+    let live = true
+    const r = new FileReader()
+    r.onload = () => { if (live) setSrc(r.result as string) }
+    r.readAsDataURL(file)
+    return () => { live = false }
+  }, [file])
+  return (
+    <div style={{
+      width: 56, height: 56, flexShrink: 0,
+      border: '1px solid rgba(95,165,188,0.3)',
+      background: src ? `center/cover no-repeat url("${src}")` : 'rgba(54,171,202,0.06)',
+    }} title={alt} />
+  )
+}
+
 /* ── Main component ───────────────────────────────────────────────────────── */
 export default function InputBar({ onSend, onStop, config }: Props) {
   const { state } = useChatContext()
@@ -442,6 +464,43 @@ export default function InputBar({ onSend, onStop, config }: Props) {
             pointerEvents: 'none', zIndex: 1,
           }} />
 
+          {/* ── Panel header strip (FUI) ──────────────────────────────── */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            height: 22, padding: '0 0.6rem',
+            background: 'linear-gradient(90deg, rgba(29,93,112,0.7) 0%, rgba(29,93,112,0.18) 55%, transparent 100%)',
+            borderBottom: '1px solid rgba(95,165,188,0.2)',
+            userSelect: 'none',
+          }}>
+            {/* left — status square + WORD_SUB title */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <span style={{
+                width: 7, height: 7, flexShrink: 0,
+                background: state.isStreaming ? '#d39a3a' : focused ? '#5fcce6' : '#4fa377',
+                boxShadow: `0 0 5px ${state.isStreaming ? '#d39a3a' : focused ? '#5fcce6' : '#4fa377'}`,
+                animation: state.isStreaming ? 'hbBlink 1s step-end infinite' : 'none',
+              }} />
+              <span style={{
+                fontFamily: "'Rajdhani',sans-serif", fontSize: '0.66rem', fontWeight: 700,
+                letterSpacing: '0.2em', textTransform: 'uppercase', lineHeight: 1,
+              }}>
+                <span style={{ color: '#ffffff' }}>MESSAGE</span>
+                <span style={{ color: '#36abca' }}>_INPUT</span>
+              </span>
+            </div>
+            {/* right — mono readout */}
+            <div style={{
+              fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
+              letterSpacing: '0.08em', color: '#46818f', display: 'flex', gap: '0.5rem',
+            }}>
+              <span>CHARS {String(value.length).padStart(4, '0')}</span>
+              <span style={{ color: '#2e5260' }}>·</span>
+              <span style={{ color: state.isStreaming ? '#d39a3a' : '#4fa377' }}>
+                {state.isStreaming ? 'TRANSMITTING' : 'READY'}
+              </span>
+            </div>
+          </div>
+
           {/* Attachment previews */}
           {attachments.length > 0 && (
             <div style={{
@@ -452,10 +511,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
               {attachments.map(a => (
                 <div key={a.id} style={{ position: 'relative' }}>
                   {a.isImage ? (
-                    <img src={a.url} alt={a.name}
-                      style={{ width: 56, height: 56, objectFit: 'cover', display: 'block',
-                               border: '1px solid rgba(95,165,188,0.3)' }}
-                    />
+                    <Thumb file={a.file} alt={a.name} />
                   ) : (
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: '0.45rem',
