@@ -441,38 +441,19 @@ export default function InputBar({ onSend, onStop, config }: Props) {
           onDrop={onDrop}
           style={{
             position: 'relative',
-            background: 'rgba(255,255,255,0.04)',
-            backdropFilter: 'blur(22px) saturate(1.4)',
-            WebkitBackdropFilter: 'blur(22px) saturate(1.4)',
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.09), rgba(255,255,255,0.025))',
+            backdropFilter: 'blur(28px) saturate(1.6)',
+            WebkitBackdropFilter: 'blur(28px) saturate(1.6)',
             border: `1px solid ${
-              dragOver ? 'rgba(150,215,235,0.55)' :
-              focused  ? 'rgba(150,215,235,0.35)' :
-                         'rgba(255,255,255,0.10)'
+              dragOver ? 'rgba(160,220,240,0.6)' :
+              focused  ? 'rgba(160,220,240,0.4)' :
+                         'rgba(255,255,255,0.16)'
             }`,
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+            // Neutral elevation (depth, not a cyan glow) + top sheen line
+            boxShadow: '0 10px 36px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12)',
             transition: 'border-color 0.2s',
           }}
         >
-          {/* ── Minimal status readout — clean glass, no title bar ──────── */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-            gap: '0.4rem', height: 18, padding: '0 0.9rem',
-            userSelect: 'none',
-          }}>
-            <span style={{
-              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-              background: state.isStreaming ? '#d39a3a' : focused ? '#5fcce6' : 'rgba(150,215,235,0.5)',
-              animation: state.isStreaming ? 'hbBlink 1s step-end infinite' : 'none',
-            }} />
-            <span style={{
-              fontFamily: "'Share Tech Mono', monospace", fontSize: '0.58rem',
-              letterSpacing: '0.1em', textTransform: 'uppercase',
-              color: state.isStreaming ? '#d39a3a' : 'rgba(255,255,255,0.32)',
-            }}>
-              {state.isStreaming ? 'Transmitting' : 'Ready'}
-            </span>
-          </div>
-
           {/* Attachment previews */}
           {attachments.length > 0 && (
             <div style={{
@@ -530,7 +511,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
           )}
 
           {/* Textarea */}
-          <div style={{ padding: '0.75rem 0.85rem 0.4rem' }}>
+          <div style={{ padding: '1.05rem 1.05rem 0.5rem' }}>
             <textarea
               ref={textareaRef}
               rows={1}
