@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI):
     # read_skill is the progressive-disclosure meta-tool (registered first so it's
     # always available when Claude wants to load full SKILL.md instructions).
     from app.skills.budget import BudgetModeSkill
+    from app.skills.sandbox import RunCommandSkill
     from app.skills.documents import DocumentsSkill
     from app.skills.memory import MemorySkill
     from app.skills.notifications import NotificationsSkill
@@ -59,6 +60,7 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(DocumentsSkill())
     await registry.register_skill(SystemSkill())
     await registry.register_skill(BudgetModeSkill())
+    await registry.register_skill(RunCommandSkill())
 
     # Tier 2 — MCP Servers
     from app.mcp.servers import register_all_mcp_servers

@@ -24,11 +24,30 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://speda:speda@postgres:5432/speda
       PLAYWRIGHT_MCP_URL: http://playwright-mcp:3000
+      SANDBOX_URL: http://sandbox:9000
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - /tmp/speda_outputs:/tmp/speda_outputs
 
+  # SPEDA's "capable computer" — isolated container it runs commands in.
+  # No host mounts, no secrets, resource-limited, reachable only on this network.
+  sandbox:
+    build: ./packages/sandbox
+    # No host port mapping — only the app talks to it over the internal network.
+    expose:
+      - "9000"
+    volumes:
+      - sandbox_workspace:/workspace
+    # Resource ceilings so a runaway command can't starve the host.
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  sandbox_workspace:
