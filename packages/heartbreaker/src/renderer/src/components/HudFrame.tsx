@@ -85,14 +85,8 @@ export default function HudFrame() {
         background: 'linear-gradient(180deg, rgba(6,14,18,0.94), rgba(6,14,18,0))',
         borderBottom: '1px solid rgba(95,165,188,0.12)',
       }}>
-        {/* Left — identity + connection */}
+        {/* Left — connection */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{
-            padding: '1px 6px', border: '1px solid var(--hb-cyan)',
-            borderTop: '1px solid var(--hb-cyan)', color: 'var(--hb-cyan-bright)',
-            background: 'rgba(54,171,202,0.08)', letterSpacing: '0.14em', fontWeight: 600,
-          }}>HEARTBREAKER</span>
-          <Divider />
           <Stat label="HOST" value={hostOf(apiBase)} />
           <Divider />
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: linkColor }}>

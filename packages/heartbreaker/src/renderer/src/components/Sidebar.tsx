@@ -372,12 +372,12 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive }: {
       flexShrink: 0,
       position: 'relative',
     }}>
-      {/* Brand */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0px', lineHeight: 1 }}>
+      {/* Brand — horizontal lockup */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
         <span style={{
           fontFamily: "'Rajdhani',sans-serif",
           fontSize: '1.15rem', fontWeight: 800,
-          letterSpacing: '0.2em', textTransform: 'uppercase',
+          letterSpacing: '0.18em', textTransform: 'uppercase',
           color: '#ffffff',
           lineHeight: 1.1,
         }}>
@@ -385,10 +385,10 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive }: {
         </span>
         <span style={{
           fontFamily: "'Rajdhani',sans-serif",
-          fontSize: '0.68rem', fontWeight: 700,
-          letterSpacing: '0.28em', textTransform: 'uppercase',
+          fontSize: '0.7rem', fontWeight: 700,
+          letterSpacing: '0.22em', textTransform: 'uppercase',
           color: '#36abca',
-          lineHeight: 1.2,
+          lineHeight: 1.1,
         }}>
           {profile.modelNumber}
         </span>
