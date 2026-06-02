@@ -220,8 +220,9 @@ function ModelPicker({ models, activeId, onSelect }: {
         }}
       >
         <span style={{
-          fontFamily: "'Share Tech Mono', monospace",
-          fontSize: '0.68rem', letterSpacing: '0.08em',
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '0.78rem', fontWeight: 600,
+          letterSpacing: '0.08em', textTransform: 'uppercase',
         }}>
           {label}
         </span>
