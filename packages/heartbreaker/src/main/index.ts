@@ -55,9 +55,19 @@ app.whenReady().then(() => {
   // Config IPC — renderer reads API base + key from the main process env.
   // Defaults must match the backend (speda_api_key="dev-key") and the web
   // fallback in App.tsx, otherwise the auth middleware rejects every request 401.
+  // Resolution order: runtime env > value baked at build time (MAIN_VITE_*) >
+  // localhost default. build-app.ps1 bakes the server URL + key into the installer.
   ipcMain.handle('get-config', () => ({
-    apiBase: process.env.SPEDA_API_BASE ?? 'http://localhost:8000',
-    apiKey: process.env.SPEDA_API_KEY ?? 'dev-key'
+    apiBase:
+      process.env.SPEDA_API_BASE ??
+      // @ts-ignore - electron-vite injects MAIN_VITE_* into import.meta.env
+      (import.meta.env.MAIN_VITE_SPEDA_API_BASE as string | undefined) ??
+      'http://localhost:8000',
+    apiKey:
+      process.env.SPEDA_API_KEY ??
+      // @ts-ignore
+      (import.meta.env.MAIN_VITE_SPEDA_API_KEY as string | undefined) ??
+      'dev-key'
   }))
 
   createWindow()
