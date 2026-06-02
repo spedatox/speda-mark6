@@ -1,0 +1,27 @@
+appId: com.spedatox.speda-mark6
+productName: SPEDA Mark VI
+
+directories:
+  output: dist
+  buildResources: build
+
+# electron-vite outputs the compiled main/preload/renderer to out/.
+files:
+  - out/**
+  - package.json
+
+# Windows installer (NSIS) — lets you pick the install dir.
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: SPEDA Mark VI
+
+# No code signing for personal/internal builds (Windows SmartScreen will warn;
+# that's expected for an unsigned in-house app).
