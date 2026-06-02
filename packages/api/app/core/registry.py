@@ -141,7 +141,7 @@ class CapabilityRegistry:
         Return all tools across all four tiers in Anthropic tool format.
         Claude sees no difference between tiers.
         """
-        from app.core.runtime_state import get_budget_mode
+        from app.core.runtime_state import get_budget_mode, get_disabled_servers
 
         tools: list[dict] = []
 
@@ -153,12 +153,46 @@ class CapabilityRegistry:
         for skill in self._skills.values():
             tools.append(skill.to_tool_definition())
 
-        tools.extend(self._mcp_tool_defs)
+        # MCP tools, minus any whose server the user toggled off in Connections.
+        # Hiding them shrinks the cached prefix live (smaller cold-write → fits
+        # under the ITPM limit), no restart needed.
+        disabled = get_disabled_servers()
+        for tool in self._mcp_tool_defs:
+            if self._mcp_tool_map.get(tool["name"]) in disabled:
+                continue
+            tools.append(tool)
 
         for adapter in self._adapters.values():
             tools.append(adapter.to_tool_definition())
 
         return tools
+
+    def server_summary(self) -> list[dict]:
+        """Per-MCP-server status for the Connections UI: name, connected, tool
+        count, active (not user-disabled), and a rough token estimate."""
+        from app.core.runtime_state import get_disabled_servers
+
+        disabled = get_disabled_servers()
+        # Rough token estimate per tool definition (chars/4).
+        def est(tool: dict) -> int:
+            import json
+            return len(json.dumps(tool)) // 4
+
+        by_server: dict[str, dict] = {}
+        for tool in self._mcp_tool_defs:
+            srv = self._mcp_tool_map.get(tool["name"], "unknown")
+            s = by_server.setdefault(srv, {"server": srv, "tools": 0, "tokens": 0})
+            s["tools"] += 1
+            s["tokens"] += est(tool)
+        for srv, client in self._mcp_clients.items():
+            s = by_server.setdefault(srv, {"server": srv, "tools": 0, "tokens": 0})
+            s["connected"] = getattr(client, "_connected", False)
+        out = []
+        for srv, s in by_server.items():
+            s.setdefault("connected", False)
+            s["active"] = srv not in disabled
+            out.append(s)
+        return sorted(out, key=lambda x: x["server"])
 
     async def execute(self, tool_name: str, args: dict, context: "AgentContext") -> str:
         """Route a tool call to the correct tier handler."""

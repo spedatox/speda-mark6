@@ -51,3 +51,26 @@ def set_budget_mode(value: bool) -> bool:
     _save()
     logger.info("budget_mode_set", extra={"budget_mode": bool(value)})
     return bool(value)
+
+
+# ── MCP connection toggles ──────────────────────────────────────────────────
+# Servers all connect at startup (per MCP_ENABLED), but their tools are only
+# shown to Claude if the server is "active". Toggling here hides/shows a server's
+# tools live — no restart — which directly shrinks/grows the cached prompt prefix
+# (and thus the cold-write that the ITPM limit cares about).
+
+def get_disabled_servers() -> set[str]:
+    return set(_load().get("disabled_servers", []))
+
+
+def set_server_active(server: str, active: bool) -> bool:
+    state = _load()
+    disabled = set(state.get("disabled_servers", []))
+    if active:
+        disabled.discard(server)
+    else:
+        disabled.add(server)
+    state["disabled_servers"] = sorted(disabled)
+    _save()
+    logger.info("server_active_set", extra={"server": server, "active": active})
+    return active
