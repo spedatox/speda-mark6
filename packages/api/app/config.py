@@ -54,19 +54,21 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
 
-    # Prompt cache TTL — "1h" (survives restarts, ~1 write/hour) or "5m".
-    # The stable prefix (tools + core prompt + memory) is content-keyed at
-    # Anthropic, so 1h dramatically cuts cache-write cost for active sessions.
-    prompt_cache_ttl: str = "1h"
+    # Prompt cache TTL — "5m" or "1h".
+    # 5m is cheaper for bursty/personal use: the write premium is 1.25x vs 1h's
+    # 2x, and short sessions stay warm within the 5-min window anyway. 1h only
+    # wins for sustained sessions with 5-60 min gaps. A cache write is only worth
+    # it if the prefix is READ back more than ~2x within the TTL — so keep the
+    # prefix small (few tools) and the 5m write barely costs anything.
+    prompt_cache_ttl: str = "5m"
 
-    # Which MCP servers to load (comma-separated server names). Each tool a
-    # server contributes is cached into the prompt prefix on EVERY request.
-    # Default set: web search + Gmail + Calendar + Notion. This is ~57 tools
-    # (~33k tokens) — heavy for the tier-0 limit (30k input tokens/min), so
-    # expect occasional 429 backoffs on multi-tool turns until you advance to
-    # tier 1 (a small credit purchase). Override via MCP_ENABLED in .env;
-    # "all" loads every configured server.
-    mcp_enabled: str = "tavily,google_gmail,google_calendar,notion"
+    # Which MCP servers to load. Each tool is cached into the prompt prefix on
+    # EVERY request, so a big set means an expensive cold cache-write each time
+    # the cache goes cold (which dominated cost during testing). LEAN BY DEFAULT:
+    # just web search (~12k prefix → cheap writes). Enable Gmail/Calendar/Notion
+    # from the Connections panel only when you need them — and ideally on Tier 2
+    # (450k ITPM) so the big prefix doesn't 429. Override via MCP_ENABLED.
+    mcp_enabled: str = "tavily"
 
     # Model for Task sub-agents. Defaults to Haiku — research/synthesis grunt work
     # doesn't need Sonnet, Haiku is ~5x cheaper, and crucially it uses a SEPARATE
