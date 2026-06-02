@@ -150,6 +150,7 @@ export interface ConnectionInfo {
   label: string
   connected: boolean
   active: boolean
+  always_on?: boolean
   tools: number
   tokens: number
   needs: string | null

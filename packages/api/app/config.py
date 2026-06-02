@@ -62,13 +62,19 @@ class Settings(BaseSettings):
     # prefix small (few tools) and the 5m write barely costs anything.
     prompt_cache_ttl: str = "5m"
 
-    # Which MCP servers to load. Each tool is cached into the prompt prefix on
-    # EVERY request, so a big set means an expensive cold cache-write each time
-    # the cache goes cold (which dominated cost during testing). LEAN BY DEFAULT:
-    # just web search (~12k prefix → cheap writes). Enable Gmail/Calendar/Notion
-    # from the Connections panel only when you need them — and ideally on Tier 2
-    # (450k ITPM) so the big prefix doesn't 429. Override via MCP_ENABLED.
-    mcp_enabled: str = "tavily"
+    # Which MCP servers to CONNECT at startup. With lazy tool loading (below),
+    # connecting a server is cheap — its tools only enter the prompt prefix when
+    # SPEDA actually loads them via use_toolset. So this can be generous.
+    mcp_enabled: str = "tavily,google_gmail,google_calendar,notion"
+
+    # Lazy tool loading (progressive disclosure). When True, only always_on
+    # servers' tools sit in the prompt prefix; everything else is listed in a
+    # compact catalog and pulled in on demand via the use_toolset tool. This
+    # keeps the cached prefix tiny (cheap writes, no rate-limit pressure) while
+    # all tools stay available. Set False to load every connected tool eagerly.
+    lazy_tools: bool = True
+    # Servers whose tools are always in the prefix (no use_toolset needed).
+    always_on_servers: str = "tavily"
 
     # Model for Task sub-agents. Defaults to Haiku — research/synthesis grunt work
     # doesn't need Sonnet, Haiku is ~5x cheaper, and crucially it uses a SEPARATE
