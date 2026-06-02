@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     gpt_researcher_url: str = "http://localhost:8001"
     shannon_url: str = "http://localhost:9000"
 
+    # Sandbox — the isolated container SPEDA runs commands in ("capable computer").
+    # In Docker this is the sandbox service; empty disables the run_command tool.
+    sandbox_url: str = "http://localhost:9000"
+
 
 settings = Settings()
 
