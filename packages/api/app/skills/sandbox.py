@@ -78,3 +78,58 @@ class RunCommandSkill(Skill):
         if not out and not err:
             parts.append("(no output)")
         return "\n\n".join(parts)
+
+
+class DeliverFileSkill(Skill):
+    name = "deliver_file"
+    description = (
+        "Delivers a file you created in the sandbox (/workspace) to the user as a "
+        "downloadable file in the chat. Use this AFTER run_command has produced a "
+        "file the user should receive — e.g. you generated a PDF/CSV/image with a "
+        "Python script. Pass the path relative to /workspace (e.g. 'report.pdf'). "
+        "The file is copied out of the sandbox and shown to the user as a download "
+        "card. Returns confirmation; do not also paste a path or link."
+    )
+    read_only = False
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "File path inside /workspace, e.g. 'report.pdf'."},
+            "title": {"type": "string", "description": "Friendly title for the download card."},
+        },
+        "required": ["path"],
+    }
+
+    async def execute(self, args: dict, context: AgentContext) -> str:
+        import os
+        from pathlib import Path
+        from app.core.files import register_file
+
+        if not settings.sandbox_url:
+            return "The sandbox is not configured, so files can't be delivered from it."
+
+        rel = (args.get("path") or "").strip()
+        if not rel:
+            return "No file path provided."
+        title = (args.get("title") or "").strip() or Path(rel).stem
+
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(f"{settings.sandbox_url}/file", params={"path": rel})
+                resp.raise_for_status()
+                data = resp.content
+        except Exception as e:  # noqa: BLE001
+            logger.error("deliver_file_failed", extra={"request_id": context.request_id, "error": str(e)})
+            return f"Couldn't fetch '{rel}' from the sandbox: {e}"
+
+        out_dir = Path(settings.temp_outputs_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dest = out_dir / os.path.basename(rel)
+        dest.write_bytes(data)
+
+        meta = register_file(context, str(dest), title=title)
+        logger.info("deliver_file", extra={"request_id": context.request_id, "name": meta["name"], "size": meta["size"]})
+        return (
+            f"Delivered '{meta['title']}' ({meta['size']} bytes) to the user as a "
+            f"downloadable file. Just tell them it's ready — no path or link needed."
+        )

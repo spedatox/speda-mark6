@@ -6,6 +6,7 @@ class SSEEventType(str, Enum):
     START = "start"
     CHUNK = "chunk"
     TOOL = "tool"
+    FILE = "file"     # a downloadable file SPEDA produced this turn
     DONE = "done"
     ERROR = "error"
 

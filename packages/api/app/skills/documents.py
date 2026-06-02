@@ -264,7 +264,15 @@ class DocumentsSkill(Skill):
                     "format": fmt,
                 },
             )
-            return path
+            # Register for delivery — the orchestrator emits a `file` SSE event so
+            # the frontend renders a download card.
+            from app.core.files import register_file
+            meta = register_file(context, path, title=title)
+            return (
+                f"Created {fmt.upper()} '{title}' ({meta['size']} bytes). "
+                f"Delivered to the user as a downloadable file — do NOT paste the "
+                f"path or a link, just tell them it's ready."
+            )
         except ImportError:
             lib = _REQUIRED_LIBS.get(fmt, "required library")
             return (

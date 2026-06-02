@@ -128,6 +128,23 @@ export async function fetchModels(config: AppConfig): Promise<ModelInfo[]> {
   }
 }
 
+/** Download a produced file (fetch with auth header, then save as a blob). */
+export async function downloadFile(config: AppConfig, url: string, filename: string): Promise<void> {
+  const res = await fetch(`${config.apiBase}${url}`, {
+    headers: { 'X-API-Key': config.apiKey },
+  })
+  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
+  const blob = await res.blob()
+  const objUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = objUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(objUrl), 1000)
+}
+
 export async function getBudgetMode(config: AppConfig): Promise<boolean> {
   try {
     const res = await fetch(`${config.apiBase}/budget-mode`, {

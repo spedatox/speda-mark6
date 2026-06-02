@@ -286,6 +286,16 @@ class AgentOrchestrator:
                 )
                 break
 
+        # Emit a `file` event for each downloadable file produced this turn
+        # (generate_document, sandbox file-saver) so the UI renders a card.
+        for meta in context.extra.get("produced_files", []):
+            yield SSEEvent(
+                type=SSEEventType.FILE,
+                data=meta,
+                session_id=context.session_id,
+                request_id=context.request_id,
+            )
+
         yield SSEEvent(
             type=SSEEventType.DONE,
             data={},
