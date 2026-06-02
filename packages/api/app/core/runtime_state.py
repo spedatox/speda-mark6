@@ -63,6 +63,19 @@ def get_disabled_servers() -> set[str]:
     return set(_load().get("disabled_servers", []))
 
 
+def get_google_refresh_token() -> str:
+    """Refresh token captured via the in-app 'Sign in with Google' flow.
+    Falls back to the .env value if the user hasn't signed in through the UI."""
+    return _load().get("google_refresh_token", settings.google_refresh_token)
+
+
+def set_google_refresh_token(token: str) -> None:
+    state = _load()
+    state["google_refresh_token"] = token
+    _save()
+    logger.info("google_refresh_token_saved")
+
+
 def set_server_active(server: str, active: bool) -> bool:
     state = _load()
     disabled = set(state.get("disabled_servers", []))

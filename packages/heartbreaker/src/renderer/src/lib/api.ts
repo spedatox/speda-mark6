@@ -161,6 +161,12 @@ export async function getConnections(config: AppConfig): Promise<{ servers: Conn
   return res.json()
 }
 
+export async function googleLoginUrl(config: AppConfig): Promise<{ auth_url?: string; error?: string }> {
+  const res = await fetch(`${config.apiBase}/connections/google/login`, { headers: { 'X-API-Key': config.apiKey } })
+  if (!res.ok) return { error: `HTTP ${res.status}` }
+  return res.json()
+}
+
 export async function setConnection(config: AppConfig, server: string, active: boolean): Promise<void> {
   await fetch(`${config.apiBase}/connections`, {
     method: 'POST',

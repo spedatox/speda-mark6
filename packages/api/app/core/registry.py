@@ -128,6 +128,30 @@ class CapabilityRegistry:
             extra={"tier": 2, "capability": client.server_name, "tools": len(tools)},
         )
 
+    async def reconnect_mcp_servers(self, clients: list["MCPClient"]) -> int:
+        """Live (re)connect a set of MCP clients — drop any existing same-named
+        server's tools first, then connect + register the new ones. Used by the
+        in-app 'Sign in with Google' flow so services appear without a restart.
+        Returns the number successfully connected."""
+        connected = 0
+        for client in clients:
+            name = client.server_name
+            # Drop the old instance's tools/mapping if present.
+            old = self._mcp_clients.pop(name, None)
+            if old is not None:
+                try:
+                    await old.disconnect()
+                except BaseException:
+                    pass
+            self._mcp_tool_defs = [
+                t for t in self._mcp_tool_defs if self._mcp_tool_map.get(t["name"]) != name
+            ]
+            self._mcp_tool_map = {k: v for k, v in self._mcp_tool_map.items() if v != name}
+            await self.register_mcp(client)
+            if name in self._mcp_clients:
+                connected += 1
+        return connected
+
     # ── Tier 3 ────────────────────────────────────────────────────────────────
 
     async def register_adapter(self, adapter: "OSSAdapter") -> None:
