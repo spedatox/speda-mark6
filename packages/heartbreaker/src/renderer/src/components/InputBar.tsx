@@ -40,6 +40,7 @@ function ToolBtn({
   const lit = active || hover
   return (
     <button
+      className="hb-glass-xs"
       title={title}
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
@@ -78,6 +79,7 @@ function SendBtn({ canSend, isStreaming, onSend, onStop }: {
   if (isStreaming) {
     return (
       <button
+        className="hb-glass-xs"
         title="Stop generating"
         onClick={onStop}
         onMouseDown={() => setPress(true)}
@@ -101,6 +103,7 @@ function SendBtn({ canSend, isStreaming, onSend, onStop }: {
   }
   return (
     <button
+      className="hb-glass-xs"
       title="Send message"
       onClick={onSend}
       disabled={!canSend}
@@ -205,6 +208,7 @@ function ModelPicker({ models, activeId, onSelect }: {
   return (
     <div style={{ position: 'relative' }} ref={ref}>
       <button
+        className="hb-glass-xs"
         title="Select model"
         onClick={() => setOpen(v => !v)}
         onMouseEnter={() => setHover(true)}
@@ -313,7 +317,6 @@ export default function InputBar({ onSend, onStop, config }: Props) {
   const [focused, setFocused]       = useState(false)
   const [attachments, setAttachments] = useState<AttachedFile[]>([])
   const [dragOver, setDragOver]     = useState(false)
-  const [webSearch, setWebSearch]   = useState(false)
   const [listening, setListening]   = useState(false)
   const [models, setModels]         = useState<ModelInfo[]>([])
   const [budget, setBudget]         = useState(true)
@@ -549,35 +552,9 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                 </svg>
               </ToolBtn>
 
-              {/* Web search toggle */}
-              <button
-                title={webSearch ? 'Disable web search' : 'Enable web search'}
-                onClick={() => setWebSearch(v => !v)}
-                style={{
-                  height: 30, padding: '0 0.55rem',
-                  display: 'flex', alignItems: 'center', gap: '0.35rem',
-                  border: `1px solid ${webSearch ? 'rgba(95,165,188,0.55)' : 'rgba(95,165,188,0.15)'}`,
-                  background: webSearch ? 'rgba(54,171,202,0.15)' : 'transparent',
-                  color: webSearch ? '#5fcce6' : '#3a6472',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
-                  fontFamily: "'Rajdhani',sans-serif",
-                  fontSize: '0.7rem', fontWeight: 700,
-                  letterSpacing: '0.15em', textTransform: 'uppercase',
-                }}
-                onMouseEnter={e => { if (!webSearch) (e.currentTarget as HTMLButtonElement).style.color = '#7ab8c8' }}
-                onMouseLeave={e => { if (!webSearch) (e.currentTarget as HTMLButtonElement).style.color = '#3a6472' }}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="2" y1="12" x2="22" y2="12"/>
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                </svg>
-                Web
-              </button>
-
               {/* Budget mode toggle — green when frugal, amber when unleashed */}
               <button
+                className="hb-glass-xs"
                 title={budget
                   ? 'Budget mode ON — concise answers, no sub-agents. Click to unleash.'
                   : 'Full power — deep research enabled. Click to go frugal.'}
