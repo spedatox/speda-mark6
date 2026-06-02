@@ -431,45 +431,35 @@ export default function InputBar({ onSend, onStop, config }: Props) {
     <div style={{ padding: '0.5rem 1.25rem 0.875rem', flexShrink: 0 }}>
       <div style={{ maxWidth: 780, margin: '0 auto' }}>
 
-        {/* ── Composer panel ──────────────────────────────────────────── */}
+        {/* ── Composer panel — rounded glass hologram ───────────────────── */}
         <div
+          className="hb-glass"
           onDragEnter={onDragEnter}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
           style={{
             position: 'relative',
-            background: 'rgba(6,14,20,0.85)',
+            background: 'rgba(8,20,28,0.55)',
+            backdropFilter: 'blur(18px) saturate(1.3)',
+            WebkitBackdropFilter: 'blur(18px) saturate(1.3)',
             border: `1px solid ${
-              dragOver     ? '#36abca' :
-              focused      ? 'rgba(110,200,228,0.5)' :
-                             'rgba(95,165,188,0.22)'
+              dragOver     ? '#5fcce6' :
+              focused      ? 'rgba(110,200,228,0.6)' :
+                             'rgba(95,200,228,0.26)'
             }`,
-            transition: 'border-color 0.15s',
+            boxShadow: focused
+              ? '0 10px 44px rgba(0,0,0,0.5), 0 0 30px rgba(54,171,202,0.24), inset 0 1px 0 rgba(255,255,255,0.05)'
+              : '0 8px 36px rgba(0,0,0,0.42), 0 0 18px rgba(54,171,202,0.10), inset 0 1px 0 rgba(255,255,255,0.04)',
+            transition: 'border-color 0.2s, box-shadow 0.35s',
           }}
         >
-          {/* corner brackets */}
-          <span style={{ position:'absolute', top:-1,    left:-1,  width:12, height:12, borderTop:   '1px solid #36abca', borderLeft:  '1px solid #36abca', pointerEvents:'none', zIndex:2 }} />
-          <span style={{ position:'absolute', top:-1,    right:-1, width:12, height:12, borderTop:   '1px solid #36abca', borderRight: '1px solid #36abca', pointerEvents:'none', zIndex:2 }} />
-          <span style={{ position:'absolute', bottom:-1, left:-1,  width:12, height:12, borderBottom:'1px solid #36abca', borderLeft:  '1px solid #36abca', pointerEvents:'none', zIndex:2 }} />
-          <span style={{ position:'absolute', bottom:-1, right:-1, width:12, height:12, borderBottom:'1px solid #36abca', borderRight: '1px solid #36abca', pointerEvents:'none', zIndex:2 }} />
-
-          {/* subtle top teal gradient when focused */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
-            background: focused
-              ? 'linear-gradient(90deg, transparent 0%, #36abca 30%, #5fcce6 50%, #36abca 70%, transparent 100%)'
-              : 'transparent',
-            transition: 'background 0.25s',
-            pointerEvents: 'none', zIndex: 1,
-          }} />
-
-          {/* ── Panel header strip (FUI) ──────────────────────────────── */}
-          <div style={{
+          {/* ── Panel header strip ────────────────────────────────────── */}
+          <div className="hb-glass-top" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            height: 22, padding: '0 0.6rem',
-            background: 'linear-gradient(90deg, rgba(29,93,112,0.7) 0%, rgba(29,93,112,0.18) 55%, transparent 100%)',
-            borderBottom: '1px solid rgba(95,165,188,0.2)',
+            height: 24, padding: '0 0.85rem',
+            background: 'linear-gradient(90deg, rgba(54,171,202,0.16) 0%, rgba(54,171,202,0.04) 55%, transparent 100%)',
+            borderBottom: '1px solid rgba(95,165,188,0.16)',
             userSelect: 'none',
           }}>
             {/* left — status square + WORD_SUB title */}
@@ -688,12 +678,12 @@ export default function InputBar({ onSend, onStop, config }: Props) {
 
           {/* Drag overlay */}
           {dragOver && (
-            <div style={{
+            <div className="hb-glass" style={{
               position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
-              background: 'rgba(54,171,202,0.08)',
-              outline: '1px dashed #36abca',
-              outlineOffset: '-4px',
+              background: 'rgba(54,171,202,0.12)',
+              backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+              border: '1px dashed #5fcce6',
               color: '#5fcce6',
               fontFamily: "'Rajdhani',sans-serif",
               fontSize: '0.78rem', fontWeight: 700,
