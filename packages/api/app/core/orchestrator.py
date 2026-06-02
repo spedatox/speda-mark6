@@ -112,6 +112,13 @@ class AgentOrchestrator:
             f"## Now\n\nCurrent date and time: {now}\nActive model: {context.model}"
         )
 
+        # Catalog of lazily-loadable toolsets (small, stable → cached). SPEDA
+        # pulls a toolset in via use_toolset only when a task needs it, keeping
+        # the prompt prefix tiny instead of shipping every MCP tool every call.
+        catalog = self._registry.toolset_catalog()
+        if catalog:
+            stable_core = f"{stable_core}\n\n{catalog}"
+
         # Structured system blocks. `_cache: True` marks the block for an ephemeral
         # cache breakpoint; the marker is stripped before the request is sent.
         system_blocks: list[dict] = [{"type": "text", "text": stable_core, "_cache": True}]
@@ -122,8 +129,11 @@ class AgentOrchestrator:
         # Keep a plain-string copy for any downstream logging/inspection.
         context.system_prompt = stable_core
 
+        # Toolsets loaded this turn (grows when use_toolset is called).
+        context.extra.setdefault("active_servers", set())
+
         messages = list(context.conversation_history)
-        tools = self._registry.list_tools()
+        tools = self._registry.list_tools(context.extra["active_servers"])
         iterations = 0
         produced_text = False  # any text streamed yet this turn (for paragraph breaks)
 
@@ -274,6 +284,10 @@ class AgentOrchestrator:
                 ]
 
                 messages.append({"role": "user", "content": tool_results})
+
+                # A use_toolset call may have loaded new toolsets — rebuild the
+                # tool list so they're available on the next iteration.
+                tools = self._registry.list_tools(context.extra["active_servers"])
 
             # ── max_tokens ──────────────────────────────────────────────────
             elif stop_reason == "max_tokens":

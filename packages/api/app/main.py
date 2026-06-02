@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
     # always available when Claude wants to load full SKILL.md instructions).
     from app.skills.budget import BudgetModeSkill
     from app.skills.sandbox import RunCommandSkill, DeliverFileSkill
+    from app.skills.toolsets import UseToolsetSkill
     from app.skills.documents import DocumentsSkill
     from app.skills.memory import MemorySkill
     from app.skills.notifications import NotificationsSkill
@@ -62,6 +63,7 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(BudgetModeSkill())
     await registry.register_skill(RunCommandSkill())
     await registry.register_skill(DeliverFileSkill())
+    await registry.register_skill(UseToolsetSkill())
 
     # Tier 2 — MCP Servers
     from app.mcp.servers import register_all_mcp_servers

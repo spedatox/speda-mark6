@@ -160,36 +160,79 @@ class CapabilityRegistry:
 
     # ── Unified interface ──────────────────────────────────────────────────────
 
-    def list_tools(self) -> list[dict]:
+    def _always_on(self) -> set[str]:
+        from app.config import settings
+        return {s.strip() for s in settings.always_on_servers.split(",") if s.strip()}
+
+    def list_tools(self, active_servers: set[str] | None = None) -> list[dict]:
         """
-        Return all tools across all four tiers in Anthropic tool format.
-        Claude sees no difference between tiers.
+        Return tools across all tiers in Anthropic tool format.
+
+        With lazy_tools on, MCP tools are included only for servers that are
+        always-on or have been loaded this turn (active_servers) — keeping the
+        cached prefix small. The rest are advertised via toolset_catalog() and
+        pulled in on demand by the use_toolset tool.
         """
+        from app.config import settings
         from app.core.runtime_state import get_budget_mode, get_disabled_servers
+
+        active = set(active_servers or set()) | self._always_on()
+        disabled = get_disabled_servers()
 
         tools: list[dict] = []
 
-        # Task sub-agent is hidden in budget mode — the model can't spawn what it
-        # can't see. Runtime check so the UI/SPEDA can toggle without a restart.
         if self._task_tool_registered and not get_budget_mode():
             tools.append(_TASK_TOOL_DEFINITION)
 
         for skill in self._skills.values():
             tools.append(skill.to_tool_definition())
 
-        # MCP tools, minus any whose server the user toggled off in Connections.
-        # Hiding them shrinks the cached prefix live (smaller cold-write → fits
-        # under the ITPM limit), no restart needed.
-        disabled = get_disabled_servers()
         for tool in self._mcp_tool_defs:
-            if self._mcp_tool_map.get(tool["name"]) in disabled:
+            srv = self._mcp_tool_map.get(tool["name"])
+            if srv in disabled:
                 continue
+            if settings.lazy_tools and srv not in active:
+                continue  # not loaded yet — advertised in the catalog instead
             tools.append(tool)
 
         for adapter in self._adapters.values():
             tools.append(adapter.to_tool_definition())
 
         return tools
+
+    def toolset_catalog(self) -> str:
+        """Compact catalog of NOT-yet-loaded MCP toolsets for the system prompt,
+        so SPEDA knows what it can pull in via use_toolset."""
+        from app.config import settings
+        from app.core.runtime_state import get_disabled_servers
+
+        if not settings.lazy_tools:
+            return ""
+        always_on = self._always_on()
+        disabled = get_disabled_servers()
+
+        by_server: dict[str, list[str]] = {}
+        for tool in self._mcp_tool_defs:
+            srv = self._mcp_tool_map.get(tool["name"], "?")
+            by_server.setdefault(srv, []).append(tool["name"])
+
+        lines = []
+        for srv in sorted(by_server):
+            if srv in always_on or srv in disabled:
+                continue
+            names = by_server[srv]
+            sample = ", ".join(n.replace("_", " ") for n in names[:6])
+            more = f", +{len(names) - 6} more" if len(names) > 6 else ""
+            lines.append(f"- `{srv}` ({len(names)} tools): {sample}{more}")
+        if not lines:
+            return ""
+        return (
+            "## Loadable toolsets\n\n"
+            "To stay fast and cheap, most tools are NOT loaded by default. When a "
+            "task needs one, call `use_toolset` with the server name to load it, "
+            "THEN use its tools (they aren't callable until loaded). Load only what "
+            "the task needs.\n\n" + "\n".join(lines)
+        )
 
     def server_summary(self) -> list[dict]:
         """Per-MCP-server status for the Connections UI: name, connected, tool
@@ -211,10 +254,12 @@ class CapabilityRegistry:
         for srv, client in self._mcp_clients.items():
             s = by_server.setdefault(srv, {"server": srv, "tools": 0, "tokens": 0})
             s["connected"] = getattr(client, "_connected", False)
+        always_on = self._always_on()
         out = []
         for srv, s in by_server.items():
             s.setdefault("connected", False)
             s["active"] = srv not in disabled
+            s["always_on"] = srv in always_on  # in prefix without use_toolset
             out.append(s)
         return sorted(out, key=lambda x: x["server"])
 

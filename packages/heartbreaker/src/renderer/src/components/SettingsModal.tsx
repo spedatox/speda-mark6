@@ -363,7 +363,9 @@ export default function SettingsModal({ config, onClose }: Props) {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: '0.86rem', color: 'var(--text-primary)', fontWeight: 500 }}>{c.label}</div>
                         <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '1px' }}>
-                          {c.connected ? `${c.tools} tools · ~${c.tokens.toLocaleString()} tok` : (c.needs ? `needs ${c.needs}` : 'offline')}
+                          {c.connected
+                            ? `${c.tools} tools · ${c.always_on ? 'always on' : 'loaded on demand'}`
+                            : (c.needs ? `needs ${c.needs}` : 'offline')}
                         </div>
                       </div>
                       {/* toggle */}

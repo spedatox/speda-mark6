@@ -53,12 +53,15 @@ async def list_connections(request: Request):
         meta = _INFO.get(r["server"], {})
         r["label"] = meta.get("label", r["server"])
         r["needs"] = meta.get("needs")
-    active_tokens = sum(r["tokens"] for r in rows if r["active"])
+    # With lazy loading, only always-on servers sit in the prefix by default;
+    # the rest load on demand and don't count toward the baseline cold-write.
+    baseline_tokens = sum(r["tokens"] for r in rows if r.get("always_on") and r["active"])
     return {
         "servers": rows,
         # Tier-1 Sonnet ITPM is 30k; the cached cold-write must fit under it.
-        "active_tool_tokens": active_tokens,
+        "active_tool_tokens": baseline_tokens,
         "itpm_limit": 30000,
+        "lazy": True,
     }
 
 
