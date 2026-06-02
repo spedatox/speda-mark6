@@ -60,17 +60,13 @@ class Settings(BaseSettings):
     prompt_cache_ttl: str = "1h"
 
     # Which MCP servers to load (comma-separated server names). Each tool a
-    # server contributes is cached into the prompt prefix on EVERY request, so
-    # loading everything (notion=22 tools, filesystem=14, arxiv=10 …) bloats the
-    # prefix to ~38k tokens — which exceeds the tier-0 rate limit of 30k input
-    # tokens/minute and makes every cold call 429. Keep this lean; enable a
-    # server only when you actually use it. "all" loads every configured server.
-    # Only Tavily (web search) loads by default — the leanest possible prefix,
-    # keeping cost and the cached tool block minimal at tier 0. Activate other
-    # servers on demand by adding their names here, e.g.
-    #   MCP_ENABLED=tavily,exa,alpha_vantage,notion
-    # "all" loads every configured server (needs usage tier 1+ for the rate limit).
-    mcp_enabled: str = "tavily"
+    # server contributes is cached into the prompt prefix on EVERY request.
+    # Default set: web search + Gmail + Calendar + Notion. This is ~57 tools
+    # (~33k tokens) — heavy for the tier-0 limit (30k input tokens/min), so
+    # expect occasional 429 backoffs on multi-tool turns until you advance to
+    # tier 1 (a small credit purchase). Override via MCP_ENABLED in .env;
+    # "all" loads every configured server.
+    mcp_enabled: str = "tavily,google_gmail,google_calendar,notion"
 
     # Model for Task sub-agents. Defaults to Haiku — research/synthesis grunt work
     # doesn't need Sonnet, Haiku is ~5x cheaper, and crucially it uses a SEPARATE
