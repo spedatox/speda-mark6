@@ -116,34 +116,30 @@ function SessionItem({ session, active, onSelect, config }: {
         />
       ) : (
         <button
+          className="hb-glass-xs"
           onClick={onSelect}
           style={{
             width: '100%',
-            padding: '0.42rem 0.6rem 0.42rem 0.85rem',
-            border: 'none',
-            borderLeft: active
-              ? '2px solid #36abca'
-              : hover
-              ? '2px solid rgba(110,200,228,0.4)'
-              : '2px solid transparent',
+            padding: '0.5rem 0.7rem',
+            border: `1px solid ${active ? 'rgba(160,220,240,0.2)' : 'transparent'}`,
             background: active
-              ? 'rgba(54,171,202,0.1)'
+              ? 'linear-gradient(135deg, rgba(255,255,255,0.09), rgba(255,255,255,0.02))'
               : hover
-              ? 'rgba(54,171,202,0.055)'
+              ? 'rgba(255,255,255,0.05)'
               : 'transparent',
-            color: active ? '#cadbe2' : hover ? '#9bbac5' : '#5d7f8a',
+            color: active ? '#eaf3f7' : hover ? '#c2d6de' : '#6e8c97',
             cursor: 'pointer',
-            fontSize: '0.855rem',
+            fontSize: '0.875rem',
             fontFamily: "'SamsungOne','Inter',sans-serif",
-            fontWeight: active ? 500 : 400,
+            fontWeight: active ? 600 : 400,
             lineHeight: 1.45,
             textAlign: 'left',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: 'block',
-            transition: 'border-color 0.12s, background 0.12s, color 0.12s',
-            paddingRight: lit ? '3.75rem' : '0.6rem',
+            transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+            paddingRight: lit ? '3.75rem' : '0.7rem',
           }}
         >
           {displayTitle || 'New conversation'}
@@ -209,19 +205,19 @@ function GroupLabel({ label }: { label: string }) {
       marginBottom: '1px',
     }}>
       <span style={{
-        ...mono,
-        fontSize: '0.6rem',
-        fontWeight: 600,
-        letterSpacing: '0.18em',
+        fontFamily: "'Rajdhani', sans-serif",
+        fontSize: '0.72rem',
+        fontWeight: 700,
+        letterSpacing: '0.1em',
         textTransform: 'uppercase',
-        color: '#2e5260',
+        color: 'rgba(160,200,215,0.55)',
         whiteSpace: 'nowrap',
       }}>
         {label}
       </span>
       <span style={{
         flex: 1, height: '1px',
-        background: 'rgba(95,165,188,0.12)',
+        background: 'rgba(255,255,255,0.06)',
       }} />
     </div>
   )
@@ -514,12 +510,12 @@ function SidebarFooter({ profile, onOpenSettings }: { profile: AppProfile; onOpe
             {displayName}
           </p>
           <p style={{
-            ...mono,
-            fontSize: '0.6rem',
-            color: '#2e5260',
-            letterSpacing: '0.06em',
+            fontFamily: "'SamsungOne','Inter',sans-serif",
+            fontSize: '0.68rem',
+            color: 'rgba(160,200,215,0.45)',
+            letterSpacing: '0.01em',
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            marginTop: '1px',
+            marginTop: '2px',
           }}>
             {profile.tagline}
           </p>
@@ -569,8 +565,11 @@ export default function Sidebar({ profile, config, isOpen, onSelectSession, onTo
       width: isOpen ? 'var(--sidebar-width)' : '0px',
       minWidth: isOpen ? 'var(--sidebar-width)' : '0px',
       height: '100%',
-      background: 'var(--bg-sidebar)',
-      borderRight: isOpen ? '1px solid rgba(95,165,188,0.15)' : 'none',
+      // Frosted-glass sidebar — translucent fill + blur of the content behind it
+      background: 'rgba(10,20,28,0.55)',
+      backdropFilter: 'blur(24px) saturate(1.3)',
+      WebkitBackdropFilter: 'blur(24px) saturate(1.3)',
+      borderRight: isOpen ? '1px solid rgba(255,255,255,0.08)' : 'none',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
       transition: 'width 0.2s ease, min-width 0.2s ease',
       flexShrink: 0,
@@ -598,7 +597,7 @@ export default function Sidebar({ profile, config, isOpen, onSelectSession, onTo
         <NewChatBtn onClick={onNewChat} />
 
         {/* Session list */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem 0 0.5rem' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem 0.4rem 0.5rem' }}>
           {groups.length === 0 ? (
             <div style={{
               padding: '2rem 0.85rem 1rem',
