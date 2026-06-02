@@ -23,18 +23,25 @@ function PromptCard({ text, icon, onClick }: { text: string; icon: React.ReactNo
   const [hover, setHover] = useState(false)
   return (
     <button
+      className="hb-glass-sm"
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        padding: '0.875rem 1rem',
-        borderRadius: '0.75rem',
-        border: `1px solid ${hover ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)'}`,
-        background: hover ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.025)',
+        padding: '0.95rem 1.05rem',
+        border: `1px solid ${hover ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.10)'}`,
+        background: hover
+          ? 'linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03))'
+          : 'linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
+        backdropFilter: 'blur(20px) saturate(1.5)',
+        WebkitBackdropFilter: 'blur(20px) saturate(1.5)',
+        boxShadow: hover
+          ? '0 8px 28px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)'
+          : '0 4px 18px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)',
         color: hover ? 'var(--text-primary)' : 'var(--text-secondary)',
         fontSize: '0.84rem', lineHeight: 1.55,
         textAlign: 'left', cursor: 'pointer',
-        transition: 'border-color 0.15s, background 0.15s, color 0.15s',
+        transition: 'border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s',
         display: 'flex', flexDirection: 'column', gap: '0.5rem',
         width: '100%', height: '100%',
       }}

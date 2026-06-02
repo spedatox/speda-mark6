@@ -103,6 +103,7 @@
 /* Hologram composer — rounded glass opt-outs (beat the global radius reset) */
 .hb-glass     { border-radius: 22px !important; }
 .hb-glass-top { border-radius: 22px 22px 0 0 !important; }
+.hb-glass-sm  { border-radius: 16px !important; }
 
 html, body, #root { height: 100%; overflow: hidden; }
 /* leave room for the fixed HUD top strip + bottom ruler */
