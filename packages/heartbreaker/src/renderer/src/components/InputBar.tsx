@@ -440,55 +440,36 @@ export default function InputBar({ onSend, onStop, config }: Props) {
           onDrop={onDrop}
           style={{
             position: 'relative',
-            background: 'rgba(8,20,28,0.55)',
-            backdropFilter: 'blur(18px) saturate(1.3)',
-            WebkitBackdropFilter: 'blur(18px) saturate(1.3)',
+            background: 'rgba(255,255,255,0.04)',
+            backdropFilter: 'blur(22px) saturate(1.4)',
+            WebkitBackdropFilter: 'blur(22px) saturate(1.4)',
             border: `1px solid ${
-              dragOver     ? '#5fcce6' :
-              focused      ? 'rgba(110,200,228,0.6)' :
-                             'rgba(95,200,228,0.26)'
+              dragOver ? 'rgba(150,215,235,0.55)' :
+              focused  ? 'rgba(150,215,235,0.35)' :
+                         'rgba(255,255,255,0.10)'
             }`,
-            boxShadow: focused
-              ? '0 10px 44px rgba(0,0,0,0.5), 0 0 30px rgba(54,171,202,0.24), inset 0 1px 0 rgba(255,255,255,0.05)'
-              : '0 8px 36px rgba(0,0,0,0.42), 0 0 18px rgba(54,171,202,0.10), inset 0 1px 0 rgba(255,255,255,0.04)',
-            transition: 'border-color 0.2s, box-shadow 0.35s',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+            transition: 'border-color 0.2s',
           }}
         >
-          {/* ── Panel header strip ────────────────────────────────────── */}
-          <div className="hb-glass-top" style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            height: 24, padding: '0 0.85rem',
-            background: 'linear-gradient(90deg, rgba(54,171,202,0.16) 0%, rgba(54,171,202,0.04) 55%, transparent 100%)',
-            borderBottom: '1px solid rgba(95,165,188,0.16)',
+          {/* ── Minimal status readout — clean glass, no title bar ──────── */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+            gap: '0.4rem', height: 18, padding: '0 0.9rem',
             userSelect: 'none',
           }}>
-            {/* left — status square + WORD_SUB title */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-              <span style={{
-                width: 7, height: 7, flexShrink: 0,
-                background: state.isStreaming ? '#d39a3a' : focused ? '#5fcce6' : '#4fa377',
-                boxShadow: `0 0 5px ${state.isStreaming ? '#d39a3a' : focused ? '#5fcce6' : '#4fa377'}`,
-                animation: state.isStreaming ? 'hbBlink 1s step-end infinite' : 'none',
-              }} />
-              <span style={{
-                fontFamily: "'Rajdhani',sans-serif", fontSize: '0.66rem', fontWeight: 700,
-                letterSpacing: '0.2em', textTransform: 'uppercase', lineHeight: 1,
-              }}>
-                <span style={{ color: '#ffffff' }}>MESSAGE</span>
-                <span style={{ color: '#36abca' }}>_INPUT</span>
-              </span>
-            </div>
-            {/* right — mono readout */}
-            <div style={{
-              fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
-              letterSpacing: '0.08em', color: '#46818f', display: 'flex', gap: '0.5rem',
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+              background: state.isStreaming ? '#d39a3a' : focused ? '#5fcce6' : 'rgba(150,215,235,0.5)',
+              animation: state.isStreaming ? 'hbBlink 1s step-end infinite' : 'none',
+            }} />
+            <span style={{
+              fontFamily: "'Share Tech Mono', monospace", fontSize: '0.58rem',
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              color: state.isStreaming ? '#d39a3a' : 'rgba(255,255,255,0.32)',
             }}>
-              <span>CHARS {String(value.length).padStart(4, '0')}</span>
-              <span style={{ color: '#2e5260' }}>·</span>
-              <span style={{ color: state.isStreaming ? '#d39a3a' : '#4fa377' }}>
-                {state.isStreaming ? 'TRANSMITTING' : 'READY'}
-              </span>
-            </div>
+              {state.isStreaming ? 'Transmitting' : 'Ready'}
+            </span>
           </div>
 
           {/* Attachment previews */}
