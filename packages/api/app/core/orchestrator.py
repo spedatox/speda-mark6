@@ -125,6 +125,7 @@ class AgentOrchestrator:
         messages = list(context.conversation_history)
         tools = self._registry.list_tools()
         iterations = 0
+        produced_text = False  # any text streamed yet this turn (for paragraph breaks)
 
         yield SSEEvent(
             type=SSEEventType.START,
@@ -172,14 +173,27 @@ class AgentOrchestrator:
                 tools=tools,
                 max_tokens=8096,
             ) as stream:
+                first_delta = True
                 async for delta in stream.text_stream:
-                    if delta:
-                        yield SSEEvent(
-                            type=SSEEventType.CHUNK,
-                            data=delta,
-                            session_id=context.session_id,
-                            request_id=context.request_id,
-                        )
+                    if not delta:
+                        continue
+                    # When a new text segment begins after earlier text in the same
+                    # turn (i.e. resuming after a tool call), open a fresh paragraph
+                    # so "Let me check.<tool>Done." doesn't render glued together.
+                    if first_delta:
+                        if produced_text:
+                            yield SSEEvent(
+                                type=SSEEventType.CHUNK, data="\n\n",
+                                session_id=context.session_id, request_id=context.request_id,
+                            )
+                        first_delta = False
+                    yield SSEEvent(
+                        type=SSEEventType.CHUNK,
+                        data=delta,
+                        session_id=context.session_id,
+                        request_id=context.request_id,
+                    )
+                    produced_text = True
                 response = await stream.get_final_message()
 
             # Observability: how much of the input prefix was served from cache.
@@ -212,11 +226,13 @@ class AgentOrchestrator:
                 iterations += 1
                 tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
 
-                # 1. Stream all the TOOL start events to the frontend immediately
+                # 1. Stream all the TOOL start events to the frontend immediately.
+                #    Include the tool INPUT so the UI can show WHAT it did
+                #    (memory content added, search query, command run, …).
                 for tool_block in tool_use_blocks:
                     yield SSEEvent(
                         type=SSEEventType.TOOL,
-                        data={"name": tool_block.name, "id": tool_block.id},
+                        data={"name": tool_block.name, "id": tool_block.id, "input": tool_block.input},
                         session_id=context.session_id,
                         request_id=context.request_id,
                     )
@@ -235,6 +251,17 @@ class AgentOrchestrator:
                     for block in tool_use_blocks
                 ]
                 results = await asyncio.gather(*exec_tasks)
+
+                # 2b. Emit each tool's RESULT (truncated) so the UI can show what
+                #     came back when the user expands the tool disclosure.
+                for block, res in zip(tool_use_blocks, results):
+                    preview = res if isinstance(res, str) else str(res)
+                    yield SSEEvent(
+                        type=SSEEventType.TOOL_RESULT,
+                        data={"id": block.id, "result": preview[:1500]},
+                        session_id=context.session_id,
+                        request_id=context.request_id,
+                    )
 
                 # 3. Zip the results back to their respective tool blocks
                 tool_results = [

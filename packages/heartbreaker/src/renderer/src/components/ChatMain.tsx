@@ -173,7 +173,10 @@ export default function ChatMain({ config, onSelectSession }: Props) {
             dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk: event.data as string } })
           })
         } else if (event.type === 'tool') {
-          dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool: event.data as { id: string; name: string } } })
+          dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool: event.data as import('../lib/types').ToolBadge } })
+        } else if (event.type === 'tool_result') {
+          const d = event.data as { id: string; result: string }
+          dispatch({ type: 'SET_TOOL_RESULT', payload: { id: assistantId, toolId: d.id, result: d.result } })
         } else if (event.type === 'file') {
           dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
         } else if (event.type === 'done') {

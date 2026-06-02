@@ -83,6 +83,19 @@ async def get_messages(
             )
         return ''
 
+    def extract_images(content) -> list[str]:
+        """Rebuild data: URLs from stored base64 image blocks so attachments
+        re-render when an old session is reopened (they're persisted in the DB)."""
+        if not isinstance(content, list):
+            return []
+        out = []
+        for block in content:
+            if isinstance(block, dict) and block.get('type') == 'image':
+                src = block.get('source', {})
+                if src.get('type') == 'base64' and src.get('data'):
+                    out.append(f"data:{src.get('media_type', 'image/png')};base64,{src['data']}")
+        return out
+
     return [
         {
             'id': str(m.id),
@@ -91,6 +104,7 @@ async def get_messages(
             'tools': [],
             'isStreaming': False,
             'isError': False,
+            **({'images': imgs} if (imgs := extract_images(m.content)) else {}),
         }
         for m in messages
         if m.role in ('user', 'assistant')
