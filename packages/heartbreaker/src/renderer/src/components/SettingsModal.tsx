@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
-import { importChats, fetchSessions, indexHistory } from '../lib/api'
+import { importChats, fetchSessions, indexHistory, getConnections, setConnection } from '../lib/api'
+import type { ConnectionInfo } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'general' | 'interface' | 'data' | 'account'
+type Tab = 'general' | 'connections' | 'interface' | 'data' | 'account'
 
 export default function SettingsModal({ config, onClose }: Props) {
   const { settings, update } = useSettings()
@@ -29,6 +30,21 @@ export default function SettingsModal({ config, onClose }: Props) {
 
   const [indexStatus, setIndexStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [indexMsg, setIndexMsg] = useState('')
+
+  // ── Connections ───────────────────────────────────────────────────────────
+  const [conns, setConns] = useState<ConnectionInfo[]>([])
+  const [connBudget, setConnBudget] = useState({ used: 0, limit: 30000 })
+  const loadConns = async () => {
+    const r = await getConnections(config)
+    setConns(r.servers)
+    setConnBudget({ used: r.active_tool_tokens, limit: r.itpm_limit })
+  }
+  useEffect(() => { if (tab === 'connections') loadConns() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  const toggleConn = async (server: string, active: boolean) => {
+    setConns(cs => cs.map(c => c.server === server ? { ...c, active } : c)) // optimistic
+    await setConnection(config, server, active)
+    loadConns()
+  }
 
   const handleIndex = async () => {
     if (indexStatus === 'running') return
@@ -85,6 +101,7 @@ export default function SettingsModal({ config, onClose }: Props) {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'general', label: 'General' },
+    { id: 'connections', label: 'Connections' },
     { id: 'interface', label: 'Interface' },
     { id: 'data', label: 'Data' },
     { id: 'account', label: 'Account' },
@@ -229,6 +246,94 @@ export default function SettingsModal({ config, onClose }: Props) {
                     <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Creative (1.0)</span>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Connections tab — toggle MCP servers live */}
+            {tab === 'connections' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>
+                  Toggle which services SPEDA can use. Disabling one hides its tools instantly
+                  (no restart) — which shrinks the prompt and keeps you under the rate limit.
+                </p>
+
+                {/* Prefix budget bar */}
+                {(() => {
+                  const pct = Math.min(100, Math.round((connBudget.used / connBudget.limit) * 100))
+                  const over = connBudget.used > connBudget.limit
+                  const col = over ? 'var(--hb-red)' : pct > 80 ? 'var(--hb-amber)' : 'var(--hb-green)'
+                  return (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                          ACTIVE TOOL TOKENS
+                        </span>
+                        <span style={{ color: col, fontFamily: 'var(--font-mono)' }}>
+                          ~{connBudget.used.toLocaleString()} / {connBudget.limit.toLocaleString()}
+                        </span>
+                      </div>
+                      <div style={{ height: 6, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: col, transition: 'width 0.2s' }} />
+                      </div>
+                      {over && (
+                        <p style={{ fontSize: '0.74rem', color: 'var(--hb-red)', marginTop: '0.4rem' }}>
+                          Over the 30k cold-write limit — disable a server (Notion is heaviest) or upgrade to Tier 2.
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Server list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {conns.length === 0 && (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      No MCP servers loaded.
+                    </p>
+                  )}
+                  {conns.map(c => (
+                    <div key={c.server} style={{
+                      display: 'flex', alignItems: 'center', gap: '0.75rem',
+                      padding: '0.6rem 0.75rem',
+                      border: '1px solid var(--border)',
+                      background: 'rgba(255,255,255,0.02)',
+                    }}>
+                      {/* status dot */}
+                      <span style={{
+                        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                        background: c.connected ? 'var(--hb-green)' : 'var(--hb-red)',
+                      }} title={c.connected ? 'Connected' : 'Not connected'} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.86rem', color: 'var(--text-primary)', fontWeight: 500 }}>{c.label}</div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '1px' }}>
+                          {c.connected ? `${c.tools} tools · ~${c.tokens.toLocaleString()} tok` : (c.needs ? `needs ${c.needs}` : 'offline')}
+                        </div>
+                      </div>
+                      {/* toggle */}
+                      <button
+                        onClick={() => toggleConn(c.server, !c.active)}
+                        disabled={!c.connected}
+                        title={c.active ? 'Active — click to disable' : 'Disabled — click to enable'}
+                        style={{
+                          width: 42, height: 24, flexShrink: 0, borderRadius: 999,
+                          border: 'none', position: 'relative', cursor: c.connected ? 'pointer' : 'not-allowed',
+                          background: c.active && c.connected ? 'var(--accent)' : 'rgba(255,255,255,0.12)',
+                          opacity: c.connected ? 1 : 0.4, transition: 'background 0.15s',
+                        }}
+                      >
+                        <span style={{
+                          position: 'absolute', top: 3, left: c.active && c.connected ? 21 : 3,
+                          width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                          transition: 'left 0.15s',
+                        }} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                  A server greyed out as “needs …” requires its API key in the backend <code style={{ fontFamily: 'var(--font-mono)' }}>.env</code> and a restart.
+                </p>
               </div>
             )}
 

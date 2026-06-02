@@ -145,6 +145,30 @@ export async function downloadFile(config: AppConfig, url: string, filename: str
   setTimeout(() => URL.revokeObjectURL(objUrl), 1000)
 }
 
+export interface ConnectionInfo {
+  server: string
+  label: string
+  connected: boolean
+  active: boolean
+  tools: number
+  tokens: number
+  needs: string | null
+}
+
+export async function getConnections(config: AppConfig): Promise<{ servers: ConnectionInfo[]; active_tool_tokens: number; itpm_limit: number }> {
+  const res = await fetch(`${config.apiBase}/connections`, { headers: { 'X-API-Key': config.apiKey } })
+  if (!res.ok) return { servers: [], active_tool_tokens: 0, itpm_limit: 30000 }
+  return res.json()
+}
+
+export async function setConnection(config: AppConfig, server: string, active: boolean): Promise<void> {
+  await fetch(`${config.apiBase}/connections`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': config.apiKey },
+    body: JSON.stringify({ server, active }),
+  })
+}
+
 export async function getBudgetMode(config: AppConfig): Promise<boolean> {
   try {
     const res = await fetch(`${config.apiBase}/budget-mode`, {
