@@ -10,6 +10,14 @@ export interface ImageBlock {
   data: string   // base64, no data: prefix
 }
 
+export interface FileMeta {
+  name: string
+  title: string
+  kind: string   // "PDF", "Word", "Image", …
+  size: number
+  url: string    // e.g. /files/report.pdf
+}
+
 export interface ChatMessage {
   id: string
   role: Role
@@ -18,6 +26,7 @@ export interface ChatMessage {
   isStreaming: boolean
   isError: boolean
   images?: string[]   // data: URLs for display in the user bubble
+  files?: FileMeta[]  // downloadable files SPEDA produced
 }
 
 export interface Session {
@@ -39,7 +48,7 @@ export interface ModelInfo {
 }
 
 export interface SSEEvent {
-  type: 'start' | 'chunk' | 'tool' | 'done' | 'error'
+  type: 'start' | 'chunk' | 'tool' | 'file' | 'done' | 'error'
   data: unknown
   session_id: number
   request_id: string

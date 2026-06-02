@@ -7,8 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl wget git jq unzip ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# A few ubiquitous Python libs preinstalled so simple tasks need no install step.
-RUN pip install --no-cache-dir requests pandas numpy
+# Preinstalled libs so common tasks (incl. document generation) need no install:
+# data (requests/pandas/numpy/openpyxl), documents (reportlab/docx/pptx), plots.
+RUN pip install --no-cache-dir \
+    requests pandas numpy openpyxl \
+    reportlab python-docx python-pptx \
+    matplotlib
 
 WORKDIR /workspace
 ENV SANDBOX_WORKSPACE=/workspace SANDBOX_PORT=9000

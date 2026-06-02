@@ -3,7 +3,9 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
-import type { ChatMessage } from '../lib/types'
+import type { ChatMessage, FileMeta } from '../lib/types'
+import { useChatContext } from '../store/chat'
+import { downloadFile } from '../lib/api'
 import CodeBlock from './CodeBlock'
 import WidgetFrame from './WidgetFrame'
 import ChartBlock from './ChartBlock'
@@ -346,6 +348,95 @@ function sanitizePartialMarkdown(text: string): string {
   return text
 }
 
+/* ── File card — glassmorphism download card for produced files ──────────── */
+function fmtBytes(b: number): string {
+  if (b < 1024) return `${b} B`
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`
+  return `${(b / 1024 / 1024).toFixed(1)} MB`
+}
+
+function FileCard({ file }: { file: FileMeta }) {
+  const { state } = useChatContext()
+  const [hover, setHover] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const onDownload = async () => {
+    if (!state.config || busy) return
+    setBusy(true)
+    try { await downloadFile(state.config, file.url, file.name) }
+    catch { /* swallow — user can retry */ }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div
+      className="hb-glass-sm"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '0.75rem',
+        padding: '0.7rem 0.8rem',
+        maxWidth: 420,
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025))',
+        backdropFilter: 'blur(20px) saturate(1.5)',
+        WebkitBackdropFilter: 'blur(20px) saturate(1.5)',
+        border: `1px solid ${hover ? 'rgba(160,220,240,0.3)' : 'rgba(255,255,255,0.12)'}`,
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+        transition: 'border-color 0.15s',
+      }}
+    >
+      {/* doc glyph in a tinted square */}
+      <div className="hb-glass-xs" style={{
+        width: 38, height: 38, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(54,171,202,0.14)', border: '1px solid rgba(95,165,188,0.28)',
+        color: '#5fcce6',
+      }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+      </div>
+
+      {/* title + meta */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: 'var(--font-read)', fontSize: '0.88rem', fontWeight: 600,
+          color: 'var(--text-primary)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>{file.title}</div>
+        <div style={{
+          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
+          letterSpacing: '0.06em', color: 'var(--text-muted)', marginTop: '2px',
+        }}>{file.kind} · {fmtBytes(file.size)}</div>
+      </div>
+
+      {/* download button */}
+      <button
+        onClick={onDownload}
+        title="Download"
+        className="hb-glass-xs"
+        style={{
+          flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.4rem',
+          padding: '0.4rem 0.7rem',
+          border: '1px solid rgba(95,200,228,0.4)',
+          background: busy ? 'rgba(54,171,202,0.15)' : 'rgba(54,171,202,0.22)',
+          color: '#cdeefa', cursor: busy ? 'default' : 'pointer',
+          fontFamily: "'Rajdhani',sans-serif", fontSize: '0.72rem', fontWeight: 700,
+          letterSpacing: '0.1em', textTransform: 'uppercase',
+          transition: 'background 0.15s',
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        {busy ? '…' : 'Download'}
+      </button>
+    </div>
+  )
+}
+
 /* ── Props ───────────────────────────────────────────────────────────────── */
 interface Props {
   message: ChatMessage
@@ -599,6 +690,13 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
           // No content yet — show the natural-language working indicator
           <WorkingStatus tools={message.tools} />
         ) : null}
+
+        {/* Downloadable files SPEDA produced this turn */}
+        {message.files && message.files.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
+            {message.files.map((f, i) => <FileCard key={i} file={f} />)}
+          </div>
+        )}
 
         {/* Action bar — appears on hover once streaming ends */}
         {!message.isStreaming && message.content && (

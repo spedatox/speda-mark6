@@ -174,6 +174,8 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           })
         } else if (event.type === 'tool') {
           dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool: event.data as { id: string; name: string } } })
+        } else if (event.type === 'file') {
+          dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
         } else if (event.type === 'done') {
           dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: event.session_id } })
           fetchSessions(config).then(s => dispatch({ type: 'SET_SESSIONS', payload: s })).catch(() => {})

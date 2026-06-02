@@ -67,8 +67,26 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if self.path == "/health":
             self._send(200, {"status": "ok", "workspace": WORKSPACE})
+        elif self.path.startswith("/file?"):
+            self._serve_file()
         else:
             self._send(404, {"error": "not found"})
+
+    def _serve_file(self):
+        from urllib.parse import urlparse, parse_qs
+        q = parse_qs(urlparse(self.path).query)
+        rel = (q.get("path", [""])[0]).lstrip("/")
+        target = os.path.normpath(os.path.join(WORKSPACE, rel))
+        if not target.startswith(WORKSPACE) or not os.path.isfile(target):
+            self._send(404, {"error": "file not found in workspace"})
+            return
+        with open(target, "rb") as f:
+            body = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_POST(self):  # noqa: N802
         if self.path != "/exec":
