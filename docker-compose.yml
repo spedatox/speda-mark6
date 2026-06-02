@@ -51,6 +51,26 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
 
+  # Reverse proxy + automatic HTTPS for your domain. Only starts when you run
+  # with `--profile domain` and DOMAIN is set (deploy.sh does this for you).
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["domain"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
 volumes:
   postgres_data:
   sandbox_workspace:
+  caddy_data:
+  caddy_config:
