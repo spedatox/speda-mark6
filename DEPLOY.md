@@ -37,12 +37,10 @@ messages, and memory (migrated from your current SQLite — no re-indexing).
 
 ```bash
 git clone <your-repo> speda && cd speda
-# Create packages/api/.env (or repo-root .env that compose reads) with your keys:
-#   ANTHROPIC_API_KEY=...
-#   TAVILY_API_KEY=...
-#   SPEDA_API_KEY=<pick a strong shared secret>   # the desktop app must match
-#   MCP_ENABLED=tavily            # keep lean; add more when on a higher tier
-#   BUDGET_MODE=true
+# Compose reads packages/api/.env — copy the template and fill it in:
+cp packages/api/.env.example packages/api/.env
+# Required: ANTHROPIC_API_KEY, SPEDA_API_KEY (the desktop app must send the same).
+# Optional: TAVILY_API_KEY, NOTION_API_KEY, GOOGLE_* etc. See the file's comments.
 ```
 
 ## 3. Bring up Postgres + sandbox first
