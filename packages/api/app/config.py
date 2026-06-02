@@ -54,13 +54,14 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
 
-    # Prompt cache TTL — "5m" or "1h".
-    # 5m is cheaper for bursty/personal use: the write premium is 1.25x vs 1h's
-    # 2x, and short sessions stay warm within the 5-min window anyway. 1h only
-    # wins for sustained sessions with 5-60 min gaps. A cache write is only worth
-    # it if the prefix is READ back more than ~2x within the TTL — so keep the
-    # prefix small (few tools) and the 5m write barely costs anything.
-    prompt_cache_ttl: str = "5m"
+    # Prompt cache TTL — Anthropic offers only "5m" or "1h" (no 24h exists).
+    # 1h is the max, and the TTL RESETS on every cache read — so with regular use
+    # (e.g. an always-on server) the prefix stays warm continuously and is
+    # re-written at most ~once/day. The cache is content-keyed at the ORG level,
+    # so this warm prefix is shared across ALL sessions automatically. Combined
+    # with lazy loading (small, stable prefix), the tool/system tokens are
+    # effectively written once and read forever.
+    prompt_cache_ttl: str = "1h"
 
     # Which MCP servers to CONNECT at startup. With lazy tool loading (below),
     # connecting a server is cheap — its tools only enter the prompt prefix when
