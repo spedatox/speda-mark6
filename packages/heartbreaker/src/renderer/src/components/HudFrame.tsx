@@ -25,20 +25,6 @@ function hostOf(apiBase?: string | null): string {
   try { return new URL(apiBase).host } catch { return apiBase }
 }
 
-function Bracket({ corner }: { corner: 'tl' | 'tr' | 'bl' | 'br' }) {
-  const size = 18
-  const v = corner[0] === 't' ? { top: 8 } : { bottom: 8 }
-  const h = corner[1] === 'l' ? { left: 8 } : { right: 8 }
-  return (
-    <div style={{
-      position: 'fixed', width: size, height: size, ...v, ...h,
-      borderColor: 'var(--hb-cyan)', borderStyle: 'solid',
-      borderWidth: `${corner[0] === 't' ? 1 : 0}px ${corner[1] === 'r' ? 1 : 0}px ${corner[0] === 'b' ? 1 : 0}px ${corner[1] === 'l' ? 1 : 0}px`,
-      opacity: 0.8, zIndex: 9999, pointerEvents: 'none',
-    }} />
-  )
-}
-
 /** label: value readout cell */
 function Stat({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
   return (
@@ -72,9 +58,6 @@ export default function HudFrame() {
 
   return (
     <>
-      <Bracket corner="tl" /><Bracket corner="tr" />
-      <Bracket corner="bl" /><Bracket corner="br" />
-
       {/* Top strip — real telemetry */}
       <div style={{
         position: 'fixed', top: 0, left: 0, right: 0, height: 22,

@@ -385,8 +385,8 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive }: {
         </span>
         <span style={{
           fontFamily: "'Rajdhani',sans-serif",
-          fontSize: '0.7rem', fontWeight: 700,
-          letterSpacing: '0.22em', textTransform: 'uppercase',
+          fontSize: '1.15rem', fontWeight: 800,
+          letterSpacing: '0.18em', textTransform: 'uppercase',
           color: '#36abca',
           lineHeight: 1.1,
         }}>
