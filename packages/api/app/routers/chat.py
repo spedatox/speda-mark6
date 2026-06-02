@@ -96,19 +96,35 @@ async def get_messages(
                     out.append(f"data:{src.get('media_type', 'image/png')};base64,{src['data']}")
         return out
 
-    return [
-        {
+    def extract_meta(content) -> dict:
+        """Pull the SPEDA display-only meta block (tools + files) so the tool
+        disclosure and download cards survive a reload."""
+        if not isinstance(content, list):
+            return {}
+        for block in content:
+            if isinstance(block, dict) and block.get('type') == '_speda_meta':
+                return {'tools': block.get('tools', []), 'files': block.get('files', [])}
+        return {}
+
+    out = []
+    for m in messages:
+        if m.role not in ('user', 'assistant'):
+            continue
+        meta = extract_meta(m.content)
+        row = {
             'id': str(m.id),
             'role': m.role,
             'content': extract_text(m.content),
-            'tools': [],
+            'tools': meta.get('tools', []),
             'isStreaming': False,
             'isError': False,
-            **({'images': imgs} if (imgs := extract_images(m.content)) else {}),
         }
-        for m in messages
-        if m.role in ('user', 'assistant')
-    ]
+        if (imgs := extract_images(m.content)):
+            row['images'] = imgs
+        if meta.get('files'):
+            row['files'] = meta['files']
+        out.append(row)
+    return out
 
 
 @router.get("/sessions")
@@ -223,16 +239,40 @@ async def chat(
     )
 
     collected_chunks: list[str] = []
+    collected_tools: list[dict] = []   # {id, name, input, result?}
+    collected_files: list[dict] = []
 
     async def generate():
         async for event in orchestrator.run(context):
-            if event.type.value == "chunk":
+            et = event.type.value
+            if et == "chunk":
                 collected_chunks.append(str(event.data))
+            elif et == "tool":
+                d = event.data if isinstance(event.data, dict) else {}
+                collected_tools.append({"id": d.get("id"), "name": d.get("name"), "input": d.get("input")})
+            elif et == "tool_result":
+                d = event.data if isinstance(event.data, dict) else {}
+                for t in collected_tools:
+                    if t.get("id") == d.get("id"):
+                        t["result"] = d.get("result")
+                        break
+            elif et == "file":
+                collected_files.append(event.data)
             yield event.to_sse()
 
         full_response = "".join(collected_chunks)
-        if full_response:
-            await session_manager.save_message(db, session.id, "assistant", full_response)
+        if full_response or collected_files:
+            # Persist the answer text plus a display-only meta block so the tool
+            # disclosure, sources and file cards survive a page reload. The meta
+            # block is stripped before history is sent back to Claude.
+            content: list = [{"type": "text", "text": full_response}]
+            if collected_tools or collected_files:
+                content.append({
+                    "type": "_speda_meta",
+                    "tools": collected_tools,
+                    "files": collected_files,
+                })
+            await session_manager.save_message(db, session.id, "assistant", content)
 
     schedule_background_tasks(
         background_tasks,

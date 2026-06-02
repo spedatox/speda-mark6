@@ -72,7 +72,19 @@ class SessionManager:
             .order_by(Message.created_at.asc())
         )
         messages = result.scalars().all()
-        return [{"role": m.role, "content": m.content} for m in messages]
+
+        def _clean(content):
+            # Strip SPEDA display-only blocks (tools/files metadata) before the
+            # history goes back to Claude — they aren't valid Anthropic blocks.
+            if not isinstance(content, list):
+                return content
+            cleaned = [
+                b for b in content
+                if not (isinstance(b, dict) and str(b.get("type", "")).startswith("_speda"))
+            ]
+            return cleaned or [{"type": "text", "text": ""}]
+
+        return [{"role": m.role, "content": _clean(m.content)} for m in messages]
 
     async def save_message(
         self,
