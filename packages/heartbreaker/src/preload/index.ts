@@ -7,7 +7,8 @@ const api = {
     ipcRenderer.invoke('get-config'),
   windowMinimize: () => ipcRenderer.send('window-minimize'),
   windowMaximize: () => ipcRenderer.send('window-maximize'),
-  windowClose: () => ipcRenderer.send('window-close')
+  windowClose: () => ipcRenderer.send('window-close'),
+  openExternal: (url: string) => ipcRenderer.send('open-external', url)
 }
 
 if (process.contextIsolated) {

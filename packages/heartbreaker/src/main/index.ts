@@ -47,6 +47,11 @@ app.whenReady().then(() => {
   })
   ipcMain.on('window-close', (e) => BrowserWindow.fromWebContents(e.sender)?.close())
 
+  // Open a URL in the system browser (used by Sign in with Google)
+  ipcMain.on('open-external', (_e, url: string) => {
+    if (typeof url === 'string' && /^https?:\/\//.test(url)) shell.openExternal(url)
+  })
+
   // Config IPC — renderer reads API base + key from the main process env.
   // Defaults must match the backend (speda_api_key="dev-key") and the web
   // fallback in App.tsx, otherwise the auth middleware rejects every request 401.

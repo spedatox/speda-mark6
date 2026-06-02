@@ -9,6 +9,7 @@ declare global {
       windowMinimize: () => void
       windowMaximize: () => void
       windowClose: () => void
+      openExternal: (url: string) => void
     }
   }
 }

@@ -9,7 +9,10 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Paths that bypass API key validation
-UNPROTECTED_PATHS = frozenset({"/health", "/docs", "/openapi.json", "/redoc"})
+# /oauth/google/callback is hit by Google's redirect, which can't carry our header.
+UNPROTECTED_PATHS = frozenset({
+    "/health", "/docs", "/openapi.json", "/redoc", "/oauth/google/callback",
+})
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):

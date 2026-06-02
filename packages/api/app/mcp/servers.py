@@ -33,6 +33,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Official Google Workspace remote MCP endpoints.
+GOOGLE_SERVICES = [
+    ("google_gmail",    "https://gmailmcp.googleapis.com/mcp/v1"),
+    ("google_calendar", "https://calendarmcp.googleapis.com/mcp/v1"),
+    ("google_drive",    "https://drivemcp.googleapis.com/mcp/v1"),
+    ("google_chat",     "https://chatmcp.googleapis.com/mcp/v1"),
+    ("google_people",   "https://people.googleapis.com/mcp/v1"),
+]
+
+
+def build_google_clients(access_token: str) -> list[MCPClient]:
+    """Build the Google Workspace MCP clients for a given access token."""
+    auth = {"Authorization": f"Bearer {access_token}"}
+    return [
+        MCPClient(server_name=name, transport="http", url=url, headers=auth)
+        for name, url in GOOGLE_SERVICES
+    ]
+
+
 async def _refresh_google_token(client_id: str, client_secret: str, refresh_token: str) -> str | None:
     """Exchange a Google OAuth refresh token for a fresh access token."""
     try:
@@ -200,34 +219,21 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
     # Access tokens expire in ~1 hour; the server gets a fresh one at startup.
     # If SPEDA runs longer than that, restart the backend to re-auth.
     # (Proper background refresh is a future improvement.)
+    from app.core.runtime_state import get_google_refresh_token
+    google_refresh = get_google_refresh_token()  # UI sign-in token, or .env fallback
     google_ready = all([
         settings.google_client_id,
         settings.google_client_secret,
-        settings.google_refresh_token,
+        google_refresh,
     ])
     if google_ready:
         access_token = await _refresh_google_token(
             settings.google_client_id,
             settings.google_client_secret,
-            settings.google_refresh_token,
+            google_refresh,
         )
         if access_token:
-            auth = {"Authorization": f"Bearer {access_token}"}
-            # Official Google Workspace remote MCP endpoints
-            google_services = [
-                ("google_gmail",    "https://gmailmcp.googleapis.com/mcp/v1"),
-                ("google_calendar", "https://calendarmcp.googleapis.com/mcp/v1"),
-                ("google_drive",    "https://drivemcp.googleapis.com/mcp/v1"),
-                ("google_chat",     "https://chatmcp.googleapis.com/mcp/v1"),
-                ("google_people",   "https://people.googleapis.com/mcp/v1"),
-            ]
-            for name, url in google_services:
-                servers.append(MCPClient(
-                    server_name=name,
-                    transport="http",
-                    url=url,
-                    headers=auth,
-                ))
+            servers.extend(build_google_clients(access_token))
         else:
             logger.error("mcp_skip", extra={
                 "server": "google_workspace",

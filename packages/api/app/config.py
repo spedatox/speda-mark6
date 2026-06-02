@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_refresh_token: str = ""
+    # Redirect the in-app "Sign in with Google" flow comes back to. For a Desktop
+    # OAuth client, loopback redirects are allowed automatically.
+    google_oauth_redirect: str = "http://localhost:8000/oauth/google/callback"
 
     # OSS Adapter URLs
     gpt_researcher_url: str = "http://localhost:8001"
