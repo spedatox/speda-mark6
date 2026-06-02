@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
-import type { ChatMessage, FileMeta } from '../lib/types'
+import type { ChatMessage, FileMeta, ToolBadge } from '../lib/types'
 import { useChatContext } from '../store/chat'
 import { downloadFile } from '../lib/api'
 import CodeBlock from './CodeBlock'
@@ -49,7 +49,61 @@ function isSearchTool(name: string): boolean {
 }
 
 /* ── Tool disclosure — "Searched the web ▸" collapsible ─────────────────── */
-function ToolDisclosure({ tools }: { tools: { id: string; name: string }[] }) {
+/* Per-tool detail: friendly name + what it did (input) + what came back (result). */
+function ToolDetail({ tool }: { tool: ToolBadge }) {
+  const name = tool.name.replace(/_/g, ' ').replace(/-/g, ' ')
+
+  // Pull the most meaningful fields out of the tool input.
+  const inputRows: [string, string][] = []
+  if (tool.input && typeof tool.input === 'object') {
+    for (const [k, v] of Object.entries(tool.input as Record<string, unknown>)) {
+      if (v == null || v === '') continue
+      const val = typeof v === 'string' ? v : JSON.stringify(v)
+      inputRows.push([k, val.length > 400 ? val.slice(0, 400) + '…' : val])
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '0.4rem',
+        fontFamily: "'Share Tech Mono', monospace", fontSize: '0.68rem',
+        letterSpacing: '0.06em',
+        color: isSearchTool(tool.name) ? '#5fcce6' : '#7ab8c8',
+      }}>
+        <span style={{ color: '#1e4a5a' }}>▸</span>{name}
+      </div>
+      {inputRows.length > 0 && (
+        <div style={{ paddingLeft: '0.9rem', display: 'flex', flexDirection: 'column', gap: '1px' }}>
+          {inputRows.map(([k, v]) => (
+            <div key={k} style={{
+              fontFamily: "'Share Tech Mono', monospace", fontSize: '0.63rem',
+              color: '#46818f', lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}>
+              <span style={{ color: '#2e5260' }}>{k}:</span> {v}
+            </div>
+          ))}
+        </div>
+      )}
+      {tool.result && (
+        <details style={{ paddingLeft: '0.9rem' }}>
+          <summary style={{
+            cursor: 'pointer', fontFamily: "'Share Tech Mono', monospace",
+            fontSize: '0.6rem', letterSpacing: '0.08em', color: '#2e5260',
+            textTransform: 'uppercase',
+          }}>result</summary>
+          <pre style={{
+            margin: '0.2rem 0 0', fontFamily: "'Share Tech Mono', monospace",
+            fontSize: '0.62rem', color: '#5d7f8a', lineHeight: 1.5,
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 180, overflow: 'auto',
+          }}>{tool.result}</pre>
+        </details>
+      )}
+    </div>
+  )
+}
+
+function ToolDisclosure({ tools }: { tools: ToolBadge[] }) {
   const [open, setOpen] = useState(false)
   if (!tools.length) return null
 
@@ -97,27 +151,15 @@ function ToolDisclosure({ tools }: { tools: { id: string; name: string }[] }) {
       {open && (
         <div style={{
           marginTop: '0.25rem',
-          padding: '0.4rem 0.65rem',
+          padding: '0.55rem 0.7rem',
           background: 'rgba(6,14,20,0.7)',
           border: '1px solid rgba(95,165,188,0.15)',
           borderLeft: '2px solid rgba(95,165,188,0.3)',
           animation: 'fadeSlideIn 0.15s ease',
+          display: 'flex', flexDirection: 'column', gap: '0.6rem',
         }}>
-          {[...searchTools, ...otherTools].map((t, i) => (
-            <div key={t.id} style={{
-              display: 'flex', alignItems: 'center', gap: '0.45rem',
-              padding: '0.15rem 0',
-              borderTop: i > 0 ? '1px solid rgba(95,165,188,0.07)' : 'none',
-            }}>
-              <span style={{ color: '#1e4a5a', fontSize: '0.6rem' }}>▸</span>
-              <span style={{
-                fontFamily: "'Share Tech Mono', monospace",
-                fontSize: '0.66rem', letterSpacing: '0.06em',
-                color: isSearchTool(t.name) ? '#36abca' : '#46626d',
-              }}>
-                {friendlyName(t.name)}
-              </span>
-            </div>
+          {[...searchTools, ...otherTools].map(t => (
+            <ToolDetail key={t.id} tool={t} />
           ))}
         </div>
       )}
@@ -348,6 +390,41 @@ function sanitizePartialMarkdown(text: string): string {
   return text
 }
 
+/* ── Lightbox — full-screen image viewer (click an attachment to open) ───── */
+function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(2,6,10,0.85)', backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)', cursor: 'zoom-out',
+        animation: 'fadeIn 0.15s ease',
+      }}
+    >
+      <img src={src} alt="attachment"
+        style={{ maxWidth: '92vw', maxHeight: '92vh', objectFit: 'contain',
+                 border: '1px solid rgba(95,200,228,0.3)', boxShadow: '0 12px 60px rgba(0,0,0,0.6)' }} />
+      <button onClick={onClose} title="Close (Esc)" style={{
+        position: 'fixed', top: 18, right: 18, width: 34, height: 34,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(8,20,28,0.7)', border: '1px solid rgba(95,200,228,0.3)',
+        color: '#cdeefa', cursor: 'pointer',
+      }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  )
+}
+
 /* ── File card — glassmorphism download card for produced files ──────────── */
 function fmtBytes(b: number): string {
   if (b < 1024) return `${b} B`
@@ -454,6 +531,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
   const [speaking, setSpeaking] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(message.content)
+  const [lightbox, setLightbox] = useState<string | null>(null)
 
   // ── Typewriter reveal (rAF, adaptive catch-up) ───────────────────────────
   // A requestAnimationFrame loop reveals characters with exponential easing:
@@ -611,7 +689,8 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                   {message.images.map((src, i) => (
                     <img
                       key={i} src={src} alt="attachment"
-                      style={{ maxWidth: 220, maxHeight: 220, objectFit: 'cover', border: '1px solid var(--border)', display: 'block' }}
+                      onClick={() => setLightbox(src)}
+                      style={{ maxWidth: 220, maxHeight: 220, objectFit: 'cover', border: '1px solid var(--border)', display: 'block', cursor: 'zoom-in' }}
                     />
                   ))}
                 </div>
@@ -647,6 +726,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
             </>
           )}
         </div>
+        {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
       </div>
     )
   }

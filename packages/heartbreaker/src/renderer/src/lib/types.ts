@@ -3,6 +3,8 @@ export type Role = 'user' | 'assistant'
 export interface ToolBadge {
   id: string
   name: string
+  input?: unknown    // arguments the model passed (what it searched/added/ran)
+  result?: string    // truncated tool output
 }
 
 export interface ImageBlock {
@@ -48,7 +50,7 @@ export interface ModelInfo {
 }
 
 export interface SSEEvent {
-  type: 'start' | 'chunk' | 'tool' | 'file' | 'done' | 'error'
+  type: 'start' | 'chunk' | 'tool' | 'tool_result' | 'file' | 'done' | 'error'
   data: unknown
   session_id: number
   request_id: string

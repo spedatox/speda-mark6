@@ -25,7 +25,8 @@ export type ChatAction =
   | { type: 'ADD_USER_MESSAGE'; payload: ChatMessage }
   | { type: 'ADD_ASSISTANT_MESSAGE'; payload: ChatMessage }
   | { type: 'APPEND_CHUNK'; payload: { id: string; chunk: string } }
-  | { type: 'ADD_TOOL'; payload: { id: string; tool: { id: string; name: string } } }
+  | { type: 'ADD_TOOL'; payload: { id: string; tool: import('../lib/types').ToolBadge } }
+  | { type: 'SET_TOOL_RESULT'; payload: { id: string; toolId: string; result: string } }
   | { type: 'ADD_FILE'; payload: { id: string; file: import('../lib/types').FileMeta } }
   | { type: 'FINISH_MESSAGE'; payload: { id: string; sessionId: number } }
   | { type: 'ERROR_MESSAGE'; payload: { id: string; error: string } }
@@ -75,6 +76,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: state.messages.map(m =>
           m.id === action.payload.id
             ? { ...m, tools: [...m.tools, action.payload.tool] }
+            : m
+        ),
+      }
+
+    case 'SET_TOOL_RESULT':
+      return {
+        ...state,
+        messages: state.messages.map(m =>
+          m.id === action.payload.id
+            ? { ...m, tools: m.tools.map(t =>
+                t.id === action.payload.toolId ? { ...t, result: action.payload.result } : t) }
             : m
         ),
       }
