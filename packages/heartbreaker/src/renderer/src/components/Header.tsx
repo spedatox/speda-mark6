@@ -36,12 +36,14 @@ export default function Header({ sidebarOpen, onToggleSidebar, boardOpen, onTogg
   const hasMessages = state.messages.length > 0
 
   return (
-    <header style={{
+    <header className="hb-seam-b" style={{
       height: 40, flexShrink: 0,
       display: 'flex', alignItems: 'center', gap: '0.6rem',
       padding: '0 0.85rem',
-      borderBottom: '1px solid var(--hb-line)',
-      background: 'linear-gradient(180deg, rgba(10,24,30,0.6), transparent)',
+      // Structural plate: zero tint, pure frost; fading hairline seam at its base
+      background: 'transparent',
+      backdropFilter: 'var(--hb-holo-blur)',
+      WebkitBackdropFilter: 'var(--hb-holo-blur)',
       position: 'relative', zIndex: 10,
     }}>
       {!sidebarOpen && onToggleSidebar && (

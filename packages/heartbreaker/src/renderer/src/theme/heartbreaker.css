@@ -68,6 +68,26 @@
   --hb-bar-cyan:       linear-gradient(180deg, #43aecd 0%, #2b85a3 70%, #226e88 100%);
   --hb-bar-cyan-text:  #eafaff;
 
+  /* ── Liquid glass (iOS-26 reference grade) ────────────────────────────────
+     The material is a thick frosted slab, not a tint: a milky cool-white
+     fill gives the glass visible body over the dark void, deep blur frosts
+     what passes through, and the slab is rimmed by light — a bright specular
+     catch on top, a fainter one underneath (the slab's thickness), and a
+     soft drop that lifts it off the background. Still zero gradient fills. */
+  --hb-edge:        rgba(150, 205, 245, 0.22); /* lit glass rim */
+  --hb-edge-bright: rgba(170, 225, 255, 0.55); /* focused / hovered rim */
+  --hb-holo-fill:   rgba(190, 215, 235, 0.045); /* a whisper of white — void stays visible */
+  --hb-holo-blur:   blur(28px) saturate(140%);  /* the frost itself */
+  --hb-holo-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25),   /* top specular catch */
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.07),  /* bottom rim — slab thickness */
+    0 8px 32px rgba(0, 0, 0, 0.35);              /* soft lift off the void */
+  /* Focused / hovered — brighter catch, same construction */
+  --hb-holo-shadow-active:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.1),
+    0 8px 32px rgba(0, 0, 0, 0.4);
+
   /* ── Map the app's existing variables onto the FUI palette ───────────────
      The ported components reference these — redefining them reskins the whole
      app in one move, no component edits needed. */
@@ -105,15 +125,72 @@
   --radius-sm: 0; --radius-xs: 0;
 }
 
-/* ── Reset + sharp corners everywhere (FUI is rectilinear) ────────────────── */
+/* ── Reset — chrome stays structurally sharp (0px grounds the app window);
+   glass layers opt into the 4px micro-radius below. ─────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0 !important; }
 .hb-round, .hb-round * { border-radius: 9999px !important; }   /* opt-out for gauges/dials */
-/* Reference screens are rectilinear — the former 22px "hologram" radii are
-   collapsed to a 2–3px machine-edge so panels read as Stark instrumentation. */
-.hb-glass     { border-radius: 3px !important; }
-.hb-glass-top { border-radius: 3px 3px 0 0 !important; }
-.hb-glass-sm  { border-radius: 2px !important; }
-.hb-glass-xs  { border-radius: 2px !important; }
+/* Liquid-glass radius scale (per iOS-26 reference) — chrome bars stay 0px */
+.hb-glass     { border-radius: 16px !important; }
+.hb-glass-top { border-radius: 16px 16px 0 0 !important; }
+.hb-glass-sm  { border-radius: 12px !important; }
+.hb-glass-xs  { border-radius: 9px !important; }
+
+/* Etched-glass seams — structural boundaries with physical light behavior.
+   A real glass edge has TWO lines, not a colored stroke: a light-catching
+   side (::after, white 0.08) and a shadow-casting groove right beside it
+   (::before, black 0.4). Both lines live INSIDE the element so overflow
+   clipping never eats them, and both dissolve toward the corners. */
+.hb-seam-r, .hb-seam-b, .hb-seam-t { position: relative; }
+.hb-seam-r::before, .hb-seam-b::before, .hb-seam-t::before,
+.hb-seam-r::after,  .hb-seam-b::after,  .hb-seam-t::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+/* Vertical boundary (sidebar → chat): groove, then light catch at the edge */
+.hb-seam-r::before {
+  top: 0; bottom: 0; right: 1px; width: 1px;
+  background: linear-gradient(180deg,
+    transparent, rgba(0, 0, 0, 0.4) 18%, rgba(0, 0, 0, 0.4) 82%, transparent);
+}
+.hb-seam-r::after {
+  top: 0; bottom: 0; right: 0; width: 1px;
+  background: linear-gradient(180deg,
+    transparent, rgba(255, 255, 255, 0.08) 18%, rgba(255, 255, 255, 0.08) 82%, transparent);
+}
+/* Bottom edge of a plate: groove above, razor specular at the rim */
+.hb-seam-b::before {
+  left: 0; right: 0; bottom: 1px; height: 1px;
+  background: linear-gradient(90deg,
+    transparent, rgba(0, 0, 0, 0.4) 12%, rgba(0, 0, 0, 0.4) 88%, transparent);
+}
+.hb-seam-b::after {
+  left: 0; right: 0; bottom: 0; height: 1px;
+  background: linear-gradient(90deg,
+    transparent, rgba(255, 255, 255, 0.08) 12%, rgba(255, 255, 255, 0.08) 88%, transparent);
+}
+/* Top edge of a plate: light catch on the rim, groove just beneath it */
+.hb-seam-t::before {
+  left: 0; right: 0; top: 1px; height: 1px;
+  background: linear-gradient(90deg,
+    transparent, rgba(0, 0, 0, 0.4) 12%, rgba(0, 0, 0, 0.4) 88%, transparent);
+}
+.hb-seam-t::after {
+  left: 0; right: 0; top: 0; height: 1px;
+  background: linear-gradient(90deg,
+    transparent, rgba(255, 255, 255, 0.08) 12%, rgba(255, 255, 255, 0.08) 88%, transparent);
+}
+
+/* The glass layer — frosted slab + lit rim + specular catches.
+   Components add state via inline borderColor / boxShadow overrides only. */
+.hb-holo {
+  border-radius: 16px !important;
+  background: var(--hb-holo-fill);
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
+  border: 1px solid var(--hb-edge);
+  box-shadow: var(--hb-holo-shadow);
+}
 
 html, body, #root { height: 100%; overflow: hidden; }
 /* leave room for the fixed HUD top strip + bottom ruler */
@@ -126,44 +203,33 @@ body {
   line-height: 1.5;
   letter-spacing: 0.01em;
   color: var(--hb-text);
-  background:
-    radial-gradient(ellipse 90% 60% at 28% -5%, rgba(24, 64, 80, 0.30), transparent 60%),
-    radial-gradient(ellipse 70% 50% at 85% 105%, rgba(16, 46, 60, 0.22), transparent 55%),
-    var(--hb-void);
+  /* Static deep base — carbon-black flowing into midnight blue */
+  background: linear-gradient(160deg, #03070a 0%, #060d14 38%, #08131d 62%, #040a10 100%);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none;
 }
 
-/* ── Background grid — faint, instrument-like ─────────────────────────────── */
+/* ── Fluid ambient engine — a living, sleeping system void ──────────────────
+   Oversized soft teal/midnight pools drifting on an 18s alternate cycle.
+   GPU-composited (transform only), sits behind all content. No grids, no
+   wireframes — pure organic gradient motion under the glass. */
 #root::before {
   content: '';
   position: fixed;
-  inset: 0;
+  inset: -40%;
   pointer-events: none;
   z-index: 0;
-  background-image:
-    linear-gradient(rgba(96, 165, 188, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(96, 165, 188, 0.035) 1px, transparent 1px);
-  background-size: 44px 44px;
-  /* fade the grid toward the edges */
-  -webkit-mask-image: radial-gradient(ellipse 100% 100% at 50% 45%, #000 35%, transparent 92%);
-          mask-image: radial-gradient(ellipse 100% 100% at 50% 45%, #000 35%, transparent 92%);
+  background:
+    radial-gradient(ellipse 42% 36% at 28% 26%, rgba(30, 86, 112, 0.5), transparent 62%),
+    radial-gradient(ellipse 38% 34% at 74% 72%, rgba(18, 58, 80, 0.44), transparent 60%),
+    radial-gradient(ellipse 26% 24% at 56% 42%, rgba(36, 105, 128, 0.22), transparent 65%);
+  animation: hbDrift 18s ease-in-out infinite alternate;
+  will-change: transform;
 }
-
-/* ── CRT scanlines + vignette — the filmic layer over everything ────────────
-   Two ultra-subtle textures: 3px-pitch horizontal scanlines and a corner
-   vignette. Sits above all content (modals included) with pointer-events off,
-   exactly like the reference frames where the texture rides on the glass. */
-#root::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 10000;
-  background-image:
-    repeating-linear-gradient(180deg, rgba(2, 8, 12, 0.14) 0 1px, transparent 1px 3px),
-    radial-gradient(ellipse 120% 110% at 50% 40%, transparent 60%, rgba(2, 6, 10, 0.42) 100%);
+@keyframes hbDrift {
+  from { transform: translate3d(-2.5%, -2%, 0) scale(1); }
+  to   { transform: translate3d(2.5%, 2.5%, 0) scale(1.07); }
 }
 
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
@@ -194,26 +260,13 @@ body {
   color: var(--hb-cyan-bright);
 }
 
-/* Panel — sharp, hairline, translucent petrol with corner brackets */
+/* Panel — translucent glass module on a clean light-edge (no prop geometry) */
 .hb-panel {
   position: relative;
-  background:
-    linear-gradient(180deg, rgba(16, 38, 48, 0.5), rgba(8, 20, 26, 0.5));
-  border: 1px solid var(--hb-line);
-  box-shadow: inset 0 0 0 1px rgba(8, 16, 20, 0.6);
+  background: var(--hb-holo-fill);
+  border: 1px solid var(--hb-edge);
+  box-shadow: var(--hb-holo-shadow);
 }
-/* corner brackets via layered gradients on a pseudo element */
-.hb-bracketed::before,
-.hb-bracketed::after {
-  content: '';
-  position: absolute;
-  width: 9px; height: 9px;
-  border-color: var(--hb-cyan);
-  border-style: solid;
-  pointer-events: none;
-}
-.hb-bracketed::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
-.hb-bracketed::after  { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
 
 /* Panel header bar — solid teal strip with caps title */
 .hb-panel-head {
@@ -301,33 +354,14 @@ body {
   line-height: 1;
 }
 
-/* Panel scanline fill — horizontal banding inside panels */
-.hb-scan {
-  background-image: repeating-linear-gradient(180deg,
-    rgba(140, 205, 228, 0.026) 0 1px, transparent 1px 3px);
-}
-
-/* Ruler tick row */
-.hb-ticks {
-  height: 6px;
-  background-image: repeating-linear-gradient(
-    90deg, var(--hb-line) 0 1px, transparent 1px 8px);
-  opacity: 0.5;
-}
-
 /* ════════════════════════════════════════════════════════════════════════════
-   Animations — restrained, cold, mechanical
+   Animations — restrained, fluid, hardware-smooth
    ════════════════════════════════════════════════════════════════════════════ */
 @keyframes hbFadeIn   { from { opacity: 0; } to { opacity: 1; } }
-@keyframes hbAssemble {
-  from { opacity: 0; clip-path: inset(0 100% 0 0); }
-  to   { opacity: 1; clip-path: inset(0 0 0 0); }
-}
-@keyframes hbScan {
-  0%   { transform: translateY(0); opacity: 0; }
-  8%   { opacity: 0.5; }
-  92%  { opacity: 0.5; }
-  100% { transform: translateY(100vh); opacity: 0; }
+/* Glass-layer entrance — soft rise + fade, replaces the old clip-path wipe */
+@keyframes hbRise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes hbBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
 @keyframes hbFlicker {
@@ -340,7 +374,7 @@ body {
 @keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modalIn  { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
 @keyframes dropDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes widgetEntrance { from { opacity: 0; clip-path: inset(0 100% 0 0); } to { opacity: 1; clip-path: inset(0 0 0 0); } }
+@keyframes widgetEntrance { from { opacity: 0; transform: translateY(10px) scale(0.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes skeletonPulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.6; } }
 @keyframes textShimmer { 0% { background-position: 150% 0; } 100% { background-position: -50% 0; } }
 @keyframes caretBreathe {
@@ -566,22 +600,12 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   border-color: rgba(217,156,68,0.3);
 }
 
-/* ── HR — tick-mark ruler ────────────────────────────────────────────────────── */
+/* ── HR — clean fading hairline ──────────────────────────────────────────────── */
 .prose hr {
   border: none;
   height: 1px;
   margin: 1.25rem 0;
-  background-image: repeating-linear-gradient(
-    90deg, var(--hb-line) 0 1px, transparent 1px 8px
-  );
-  position: relative;
-}
-.prose hr::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0;
-  width: 32px; height: 1px;
-  background: var(--hb-cyan);
+  background: linear-gradient(90deg, rgba(95, 165, 188, 0.4), rgba(95, 165, 188, 0.04));
 }
 
 /* ── Image ───────────────────────────────────────────────────────────────────── */

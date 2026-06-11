@@ -20,9 +20,6 @@ import type { AppConfig, ModelInfo } from '../lib/types'
  * Every value on this board comes from the backend. Nothing is set dressing.
  */
 
-const STEEL =
-  'repeating-linear-gradient(180deg, rgba(140,205,228,0.024) 0 1px, transparent 1px 3px), ' +
-  'linear-gradient(180deg, rgba(14,33,43,0.92), rgba(7,16,22,0.94))'
 
 const MONO = "'Share Tech Mono', monospace"
 const UI = "'Rajdhani', sans-serif"
@@ -53,12 +50,10 @@ function Panel({ title, light, right, pad = true, style, children }: {
   children: React.ReactNode
 }) {
   return (
-    <section className="hb-bracketed" style={{
+    <section className="hb-holo" style={{
       position: 'relative', display: 'flex', flexDirection: 'column',
-      border: '1px solid rgba(95,165,188,0.24)',
-      background: STEEL,
-      boxShadow: 'inset 0 1px 0 rgba(140,215,240,0.12), 0 8px 28px rgba(0,0,0,0.35)',
       minHeight: 0, minWidth: 0,
+      overflow: 'hidden',
       ...style,
     }}>
       <header className={light ? 'hb-head-light' : 'hb-head-cyan'}
@@ -98,6 +93,7 @@ function ModelTile({ m, idx, active, onSelect }: {
   const [hover, setHover] = useState(false)
   return (
     <button
+      className="hb-glass-xs"
       title={`${m.name} — ${m.description}`}
       onClick={onSelect}
       onMouseEnter={() => setHover(true)}
@@ -108,13 +104,15 @@ function ModelTile({ m, idx, active, onSelect }: {
         cursor: 'pointer',
         border: `1px solid ${active ? 'rgba(242,183,92,0.8)' : hover ? 'rgba(110,200,228,0.75)' : 'rgba(95,165,188,0.4)'}`,
         background: active
-          ? 'linear-gradient(180deg, rgba(216,110,62,0.5), rgba(146,58,40,0.48))'
+          ? 'rgba(216, 110, 62, 0.3)'
           : hover
-          ? 'linear-gradient(180deg, rgba(54,140,168,0.5), rgba(24,70,90,0.5))'
-          : 'linear-gradient(180deg, rgba(36,98,122,0.42), rgba(16,46,60,0.42))',
+          ? 'rgba(54, 140, 168, 0.28)'
+          : 'rgba(36, 98, 122, 0.18)',
+        backdropFilter: 'var(--hb-holo-blur)',
+        WebkitBackdropFilter: 'var(--hb-holo-blur)',
         boxShadow: active
-          ? 'inset 0 1px 0 rgba(255,210,160,0.35), 0 0 14px rgba(232,150,74,0.18)'
-          : 'inset 0 1px 0 rgba(160,225,245,0.2)',
+          ? 'inset 0 1px 0 0 rgba(255,210,160,0.35)'
+          : 'inset 0 1px 0 0 rgba(255,255,255,0.15)',
         transition: 'border-color 0.12s, background 0.12s, box-shadow 0.12s',
       }}
     >
@@ -151,6 +149,7 @@ function ToolTile({ c, idx, onToggle }: { c: ConnectionInfo; idx: number; onTogg
   const engaged = c.connected && c.active
   return (
     <button
+      className="hb-glass-xs"
       title={`${c.label} — ${c.tools} tools · ~${c.tokens} tokens${offline ? ' · OFFLINE' : engaged ? ' · click to disable' : ' · click to enable'}`}
       onClick={onToggle}
       disabled={offline}
@@ -166,14 +165,14 @@ function ToolTile({ c, idx, onToggle }: { c: ConnectionInfo; idx: number; onTogg
           'rgba(95,165,188,0.2)'
         }`,
         background: offline
-          ? 'linear-gradient(180deg, rgba(86,34,30,0.35), rgba(40,18,16,0.4))'
+          ? 'rgba(86, 34, 30, 0.25)'
           : engaged
-          ? (hover
-            ? 'linear-gradient(180deg, rgba(54,140,168,0.5), rgba(24,70,90,0.5))'
-            : 'linear-gradient(180deg, rgba(36,98,122,0.42), rgba(16,46,60,0.42))')
-          : 'linear-gradient(180deg, rgba(20,42,52,0.3), rgba(10,22,28,0.3))',
+          ? (hover ? 'rgba(54, 140, 168, 0.28)' : 'rgba(36, 98, 122, 0.18)')
+          : 'rgba(20, 42, 52, 0.15)',
+        backdropFilter: 'var(--hb-holo-blur)',
+        WebkitBackdropFilter: 'var(--hb-holo-blur)',
         opacity: !offline && !engaged ? 0.65 : 1,
-        boxShadow: 'inset 0 1px 0 rgba(160,225,245,0.14)',
+        boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
         transition: 'border-color 0.12s, background 0.12s, opacity 0.12s',
       }}
     >
@@ -304,9 +303,9 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
       gridTemplateColumns: '218px 1fr 232px',
       gridTemplateRows: '34px 1fr 158px',
       gap: 8, padding: 10,
-      background:
-        'radial-gradient(ellipse 80% 60% at 30% 0%, rgba(24,64,80,0.25), transparent 60%), ' +
-        'rgba(4, 9, 12, 0.96)',
+      background: 'rgba(4, 9, 12, 0.5)',
+      backdropFilter: 'blur(6px)',
+      WebkitBackdropFilter: 'blur(6px)',
       animation: 'fadeIn 0.18s ease',
     }}>
 
@@ -340,7 +339,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
       {/* ── Left column — uplink telemetry + network nodes ───────────────── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
-        <Panel title="UPLINK_STATUS" style={{ flexShrink: 0, animation: 'hbAssemble 0.4s 0.05s ease both' }}>
+        <Panel title="UPLINK_STATUS" style={{ flexShrink: 0, animation: 'hbRise 0.4s 0.05s ease both' }}>
           <KV k="LINK" v={health.online ? 'ONLINE' : 'DENY'}
               color={health.online ? 'var(--hb-green)' : 'var(--hb-red)'} />
           <KV k="HOST" v={config.apiBase.replace(/^https?:\/\//, '')} alt />
@@ -354,7 +353,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               color={ollamaUp ? 'var(--hb-green)' : 'var(--hb-text-faint)'} />
         </Panel>
 
-        <Panel title="NETWORK_NODES" style={{ flex: 1, animation: 'hbAssemble 0.4s 0.12s ease both' }}>
+        <Panel title="NETWORK_NODES" style={{ flex: 1, animation: 'hbRise 0.4s 0.12s ease both' }}>
           {servers.length === 0 ? (
             <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: '#2e5260', padding: '0.3rem 0.35rem' }}>
               // NO NODES
@@ -388,7 +387,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         right={<span style={{ fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.08em', textTransform: 'none' }}>
           {models.length} CORES · {servers.length} SHARDS
         </span>}
-        style={{ animation: 'hbAssemble 0.45s 0.08s ease both' }}
+        style={{ animation: 'hbRise 0.45s 0.08s ease both' }}
       >
         <div style={{ position: 'relative', padding: '0.7rem 0.75rem', minHeight: '100%' }}>
           {/* faint oversized designation — "B.12" */}
@@ -450,7 +449,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
       {/* ── Right column — token budget + response trace ─────────────────── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
-        <Panel title="TOKEN_BUDGET" style={{ flexShrink: 0, animation: 'hbAssemble 0.4s 0.16s ease both' }}>
+        <Panel title="TOKEN_BUDGET" style={{ flexShrink: 0, animation: 'hbRise 0.4s 0.16s ease both' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '0.2rem 0.1rem 0.45rem' }}>
             <span className="hb-num-thin" style={{ fontSize: '2.6rem', color: gaugeColor }}>
               {pct}<span style={{ fontSize: '1.1rem' }}>%</span>
@@ -492,7 +491,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           ))}
         </Panel>
 
-        <Panel title="RESPONSE_TRACE" style={{ flex: 1, animation: 'hbAssemble 0.4s 0.22s ease both' }}>
+        <Panel title="RESPONSE_TRACE" style={{ flex: 1, animation: 'hbRise 0.4s 0.22s ease both' }}>
           <Spark samples={rtt} />
           <div style={{
             display: 'flex', justifyContent: 'space-between',
@@ -511,7 +510,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         right={<span style={{ fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.08em', color: '#41606e', textTransform: 'none' }}>
           {state.sessions.length} RECORDS
         </span>}
-        style={{ gridColumn: '1 / -1', animation: 'hbAssemble 0.45s 0.26s ease both' }}
+        style={{ gridColumn: '1 / -1', animation: 'hbRise 0.45s 0.26s ease both' }}
       >
         {sessions.length === 0 ? (
           <div style={{

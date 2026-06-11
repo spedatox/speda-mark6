@@ -23,26 +23,20 @@ function PromptCard({ text, icon, idx, onClick }: { text: string; icon: React.Re
   const [hover, setHover] = useState(false)
   return (
     <button
-      className="hb-panel hb-bracketed"
+      className="hb-holo"
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         padding: '0.6rem 0.85rem 0.8rem',
-        border: `1px solid ${hover ? 'rgba(110,200,228,0.55)' : 'rgba(95,165,188,0.22)'}`,
-        background:
-          'repeating-linear-gradient(180deg, rgba(140,205,228,0.026) 0 1px, transparent 1px 3px), ' +
-          (hover
-            ? 'linear-gradient(180deg, rgba(22,52,66,0.62), rgba(10,26,34,0.62))'
-            : 'linear-gradient(180deg, rgba(16,38,48,0.5), rgba(8,20,26,0.5))'),
-        boxShadow: hover
-          ? 'inset 0 1px 0 rgba(140,215,240,0.22), 0 8px 28px rgba(0,0,0,0.45)'
-          : 'inset 0 1px 0 rgba(140,215,240,0.1), 0 4px 18px rgba(0,0,0,0.3)',
+        borderColor: hover ? 'var(--hb-edge-bright)' : 'var(--hb-edge)',
+        boxShadow: hover ? 'var(--hb-holo-shadow-active)' : undefined,
         color: hover ? '#d7e7ee' : '#9bb5bf',
         fontSize: '0.84rem', lineHeight: 1.55,
         fontFamily: "'SamsungOne','Inter',sans-serif",
         textAlign: 'left', cursor: 'pointer',
-        transition: 'border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s',
+        transition: 'border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.15s',
+        transform: hover ? 'translateY(-1px)' : 'none',
         display: 'flex', flexDirection: 'column', gap: '0.45rem',
         width: '100%', height: '100%',
       }}
@@ -120,7 +114,7 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
         fontSize: '4.6rem', color: '#cfe9f2',
         marginBottom: '0.35rem',
         textShadow: '0 0 22px rgba(95,204,230,0.22)',
-        animation: 'hbAssemble 0.7s ease both',
+        animation: 'hbRise 0.7s ease both',
       }}>
         {clock}
       </p>
@@ -170,7 +164,7 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
           alignItems: 'stretch',
         }}>
           {profile.suggestedPrompts.map((p, i) => (
-            <div key={i} style={{ display: 'flex', animation: `hbAssemble 0.45s ${0.3 + i * 0.09}s ease both` }}>
+            <div key={i} style={{ display: 'flex', animation: `hbRise 0.45s ${0.3 + i * 0.09}s ease both` }}>
               <PromptCard text={p} icon={PROMPT_ICONS[i % PROMPT_ICONS.length]} idx={i} onClick={() => onSend(p)} />
             </div>
           ))}
