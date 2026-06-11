@@ -121,13 +121,15 @@ function SessionItem({ session, active, onSelect, config }: {
           style={{
             width: '100%',
             padding: '0.5rem 0.7rem',
-            border: `1px solid ${active ? 'rgba(160,220,240,0.2)' : 'transparent'}`,
+            // Selected row goes AMBER — the phone-book highlighted-entry look
+            border: `1px solid ${active ? 'rgba(242,183,92,0.3)' : 'transparent'}`,
+            borderLeft: active ? '2px solid var(--hb-amber)' : hover ? '2px solid rgba(95,165,188,0.35)' : '2px solid transparent',
             background: active
-              ? 'linear-gradient(135deg, rgba(255,255,255,0.09), rgba(255,255,255,0.02))'
+              ? 'linear-gradient(90deg, rgba(217,156,68,0.18), rgba(217,156,68,0.04))'
               : hover
-              ? 'rgba(255,255,255,0.05)'
+              ? 'rgba(54,171,202,0.07)'
               : 'transparent',
-            color: active ? '#eaf3f7' : hover ? '#c2d6de' : '#6e8c97',
+            color: active ? '#f3e2c4' : hover ? '#c2d6de' : '#6e8c97',
             cursor: 'pointer',
             fontSize: '0.875rem',
             fontFamily: "'SamsungOne','Inter',sans-serif",
@@ -185,7 +187,7 @@ function ActionIcon({ title, onClick, hoverColor, children }: {
       style={{
         width: 22, height: 22,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: 'none', background: hover ? 'rgba(255,255,255,0.06)' : 'transparent',
+        border: 'none', background: hover ? 'rgba(54,171,202,0.12)' : 'transparent',
         color: hover ? hoverColor : '#3a5a65',
         cursor: 'pointer', transition: 'color 0.1s, background 0.1s',
         flexShrink: 0,
@@ -205,19 +207,27 @@ function GroupLabel({ label }: { label: string }) {
       marginBottom: '1px',
     }}>
       <span style={{
+        fontFamily: "'Share Tech Mono', monospace",
+        fontSize: '0.6rem',
+        color: 'rgba(54,171,202,0.55)',
+        whiteSpace: 'nowrap',
+      }}>
+        {'>>:'}
+      </span>
+      <span style={{
         fontFamily: "'Rajdhani', sans-serif",
-        fontSize: '0.72rem',
+        fontSize: '0.7rem',
         fontWeight: 700,
-        letterSpacing: '0.1em',
+        letterSpacing: '0.18em',
         textTransform: 'uppercase',
-        color: 'rgba(160,200,215,0.55)',
+        color: 'rgba(160,200,215,0.6)',
         whiteSpace: 'nowrap',
       }}>
         {label}
       </span>
       <span style={{
         flex: 1, height: '1px',
-        background: 'rgba(255,255,255,0.06)',
+        backgroundImage: 'repeating-linear-gradient(90deg, rgba(95,165,188,0.25) 0 1px, transparent 1px 6px)',
       }} />
     </div>
   )
@@ -569,7 +579,7 @@ export default function Sidebar({ profile, config, isOpen, onSelectSession, onTo
       background: 'rgba(10,20,28,0.55)',
       backdropFilter: 'blur(24px) saturate(1.3)',
       WebkitBackdropFilter: 'blur(24px) saturate(1.3)',
-      borderRight: isOpen ? '1px solid rgba(255,255,255,0.08)' : 'none',
+      borderRight: isOpen ? '1px solid rgba(95,165,188,0.18)' : 'none',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
       transition: 'width 0.2s ease, min-width 0.2s ease',
       flexShrink: 0,

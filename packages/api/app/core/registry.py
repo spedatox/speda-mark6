@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from app.adapters.base import OSSAdapter
     from app.core.context import AgentContext
     from app.mcp.client import MCPClient
-    from app.services.anthropic_client import AnthropicClient
+    from app.services.llm_client import LLMClient
     from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ class CapabilityRegistry:
       Tier 0 (Task) → Tier 1 (Skills) → Tier 2 (MCP) → Tier 3 (Adapters)
     """
 
-    def __init__(self, client: "AnthropicClient | None" = None) -> None:
+    def __init__(self, client: "LLMClient | None" = None) -> None:
         self._client = client            # Injected at startup — required for Task sub-agents
         self._task_tool_registered = False
         self._skills: dict[str, "Skill"] = {}
@@ -296,13 +296,13 @@ class CapabilityRegistry:
         """
         Tier 0 — Task sub-agent execution.
 
-        Runs an isolated agentic loop using the same AnthropicClient and registry tools
+        Runs an isolated agentic loop using the same LLMClient and registry tools
         as the parent. The Task tool is excluded from the sub-agent's tool list to
         prevent recursive spawning. Safety guard fires at _SUB_AGENT_MAX_ITERATIONS.
         """
         if self._client is None:
             logger.error("task_tool_no_client", extra={"request_id": context.request_id})
-            return "Task sub-agent unavailable: AnthropicClient was not injected into the registry."
+            return "Task sub-agent unavailable: LLMClient was not injected into the registry."
 
         description = args.get("description", "")
         prompt = args.get("prompt", "")

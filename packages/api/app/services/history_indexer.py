@@ -152,7 +152,7 @@ async def index_history(
     force: bool = False,
 ) -> None:
     """Mine facts from all of a user's conversations into /memories/history.md."""
-    from app.services.anthropic_client import AnthropicClient
+    from app.services.llm_client import LLMClient
     from app.skills.memory import ensure_seeded
 
     try:
@@ -173,7 +173,7 @@ async def index_history(
 
         logger.info("index_history_start", extra={"request_id": request_id, "sessions": len(session_ids)})
 
-        client = AnthropicClient()
+        client = LLMClient()
         sem = asyncio.Semaphore(CONCURRENCY)
         limiter = _RateLimiter(RATE_PER_MIN)
         results = await asyncio.gather(

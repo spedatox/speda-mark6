@@ -30,6 +30,7 @@ export interface ModelInfo {
   name: string
   description: string
   tags?: string[]
+  provider?: string // 'anthropic' | 'openai' | 'gemini' | 'ollama' — absent on old backends
 }
 
 export interface SSEEvent {

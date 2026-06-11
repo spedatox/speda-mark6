@@ -1,7 +1,10 @@
 {
   "name": "speda-mark6",
   "private": true,
-  "workspaces": ["packages/desktop", "packages/heartbreaker"],
+  "workspaces": [
+    "packages/desktop",
+    "packages/heartbreaker"
+  ],
   "scripts": {
     "desktop:dev": "npm run dev --workspace=packages/desktop",
     "desktop:build": "npm run build --workspace=packages/desktop",
@@ -13,5 +16,8 @@
     "heartbreaker:typecheck": "npm run typecheck --workspace=packages/heartbreaker",
     "heartbreaker:web:dev": "npm run web:dev --workspace=packages/heartbreaker",
     "heartbreaker:web:build": "npm run web:build --workspace=packages/heartbreaker"
+  },
+  "dependencies": {
+    "electron": "^42.4.0"
   }
 }

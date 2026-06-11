@@ -53,12 +53,20 @@
   --hb-cyan:        #36abca;   /* primary accent — desaturated, cold */
   --hb-cyan-bright: #5fcce6;   /* active accent */
   --hb-cyan-dim:    #1d5d70;   /* dim accent */
-  --hb-amber:       #d39a3a;   /* warning */
+  --hb-amber:        #d99c44;  /* Stark orange — selection, folders, timestamps */
+  --hb-amber-bright: #f2b75c;  /* active orange */
+  --hb-amber-dim:    rgba(217,156,68,0.14); /* orange fill */
   --hb-red:         #c84a3a;   /* alert */
   --hb-green:       #4fa377;   /* nominal */
   --hb-text:        #cadbe2;   /* primary text — cool light */
   --hb-text-dim:    #7a96a1;   /* secondary */
   --hb-text-faint:  #46626d;   /* muted / captions */
+  /* White header bars — "IP ADDRESS BOOK" / "SEARCH CONFIGURATION" style */
+  --hb-bar-light:      linear-gradient(180deg, #edf3f5 0%, #cfdade 55%, #b9c9cf 100%);
+  --hb-bar-light-text: #16242c;
+  /* Cyan filled header bars — "_FROM A DHCP SERVER" style */
+  --hb-bar-cyan:       linear-gradient(180deg, #43aecd 0%, #2b85a3 70%, #226e88 100%);
+  --hb-bar-cyan-text:  #eafaff;
 
   /* ── Map the app's existing variables onto the FUI palette ───────────────
      The ported components reference these — redefining them reskins the whole
@@ -100,11 +108,12 @@
 /* ── Reset + sharp corners everywhere (FUI is rectilinear) ────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0 !important; }
 .hb-round, .hb-round * { border-radius: 9999px !important; }   /* opt-out for gauges/dials */
-/* Hologram composer — rounded glass opt-outs (beat the global radius reset) */
-.hb-glass     { border-radius: 22px !important; }
-.hb-glass-top { border-radius: 22px 22px 0 0 !important; }
-.hb-glass-sm  { border-radius: 16px !important; }
-.hb-glass-xs  { border-radius: 10px !important; }
+/* Reference screens are rectilinear — the former 22px "hologram" radii are
+   collapsed to a 2–3px machine-edge so panels read as Stark instrumentation. */
+.hb-glass     { border-radius: 3px !important; }
+.hb-glass-top { border-radius: 3px 3px 0 0 !important; }
+.hb-glass-sm  { border-radius: 2px !important; }
+.hb-glass-xs  { border-radius: 2px !important; }
 
 html, body, #root { height: 100%; overflow: hidden; }
 /* leave room for the fixed HUD top strip + bottom ruler */
@@ -140,6 +149,21 @@ body {
   /* fade the grid toward the edges */
   -webkit-mask-image: radial-gradient(ellipse 100% 100% at 50% 45%, #000 35%, transparent 92%);
           mask-image: radial-gradient(ellipse 100% 100% at 50% 45%, #000 35%, transparent 92%);
+}
+
+/* ── CRT scanlines + vignette — the filmic layer over everything ────────────
+   Two ultra-subtle textures: 3px-pitch horizontal scanlines and a corner
+   vignette. Sits above all content (modals included) with pointer-events off,
+   exactly like the reference frames where the texture rides on the glass. */
+#root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10000;
+  background-image:
+    repeating-linear-gradient(180deg, rgba(2, 8, 12, 0.14) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse 120% 110% at 50% 40%, transparent 60%, rgba(2, 6, 10, 0.42) 100%);
 }
 
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
@@ -210,6 +234,78 @@ body {
 .hb-ok   { color: var(--hb-green); }
 .hb-warn { color: var(--hb-amber); }
 .hb-alert{ color: var(--hb-red); }
+
+/* White header bar — "IP ADDRESS BOOK" / "SEARCH CONFIGURATION" */
+.hb-head-light {
+  display: flex; align-items: center; gap: 0.45rem;
+  min-height: 24px;
+  padding: 0 0.6rem;
+  background: var(--hb-bar-light);
+  color: var(--hb-bar-light-text);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  box-shadow: inset 0 -1px 0 rgba(10, 24, 32, 0.45);
+}
+
+/* Cyan filled header bar — "_FROM A DHCP SERVER" */
+.hb-head-cyan {
+  display: flex; align-items: center; gap: 0.45rem;
+  min-height: 22px;
+  padding: 0 0.6rem;
+  background: var(--hb-bar-cyan);
+  color: var(--hb-bar-cyan-text);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(8, 30, 40, 0.4);
+}
+
+/* Amber data chip — "05.06.10" timestamp boxes */
+.hb-chip-amber {
+  display: inline-flex; align-items: center;
+  padding: 1px 6px;
+  background: linear-gradient(180deg, #e8a850, #c98a35);
+  color: #1c1206;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem; letter-spacing: 0.08em;
+  box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.45);
+}
+
+/* Outlined query box — ":ANTON VANKO" search tag */
+.hb-query-box {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 1px 10px 1px 8px;
+  border: 1px solid rgba(195, 228, 238, 0.45);
+  background: rgba(6, 16, 22, 0.55);
+  color: #eaf6fa;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.hb-query-box::before { content: ':'; color: var(--hb-cyan-bright); font-weight: 700; }
+
+/* Segmented data bar — the orange/teal block meters */
+.hb-seg {
+  height: 5px;
+  background-image: repeating-linear-gradient(90deg,
+    currentColor 0 6px, transparent 6px 8px);
+  opacity: 0.85;
+}
+
+/* Thin oversized numerals — the calendar / countdown digits */
+.hb-num-thin {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+/* Panel scanline fill — horizontal banding inside panels */
+.hb-scan {
+  background-image: repeating-linear-gradient(180deg,
+    rgba(140, 205, 228, 0.026) 0 1px, transparent 1px 3px);
+}
 
 /* Ruler tick row */
 .hb-ticks {
@@ -284,72 +380,76 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 .prose p:first-child { margin-top: 0; }
 .prose p:last-child  { margin-bottom: 0; }
 
-/* ── H1 — full-width panel header bar (like "IP ADDRESS_BOOK" header) ──────── */
+/* ── H1 — WHITE header bar, 1:1 with "IP ADDRESS BOOK" / "SEARCH
+   CONFIGURATION": light gradient plate, dark slate text, amber end-block. ── */
 .prose h1 {
   display: flex;
   align-items: center;
   min-height: 32px;
-  padding: 0 0.75rem 0 0.65rem;
+  padding: 0 1.5rem 0 0.7rem;
   margin: 1.6rem 0 0.6rem;
-  background: linear-gradient(90deg, rgba(29,93,112,0.7) 0%, rgba(29,93,112,0.22) 55%, transparent 100%);
-  border-left: 2px solid var(--hb-cyan);
-  border-bottom: 1px solid var(--hb-line);
+  background: var(--hb-bar-light);
+  border-bottom: 1px solid rgba(10, 24, 32, 0.5);
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1.5rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  font-size: 1.32rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: #ffffff;
+  color: var(--hb-bar-light-text);
   position: relative;
+  box-shadow: 0 1px 0 rgba(140, 205, 228, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
-/* bottom-right corner tick */
+/* amber end block — the orange tag the reference bars terminate in */
 .prose h1::after {
   content: '';
   position: absolute;
-  bottom: -1px; right: 0;
-  width: 18px; height: 1px;
-  background: var(--hb-cyan);
+  top: 6px; bottom: 6px; right: 6px;
+  width: 7px;
+  background: linear-gradient(180deg, #e8a850, #c98a35);
 }
 .prose h1:first-child { margin-top: 0; }
 
-/* H1 underscore split — "MAIN_SUB" → main in white, _SUB in cyan */
-.prose h1 .hb-h-main { color: #ffffff; }
-.prose h1 .hb-h-sub  { color: var(--hb-cyan); font-size: 0.9em; letter-spacing: 0.14em; margin-left: 0.05em; }
+/* H1 underscore split — "MAIN_SUB" → main in slate, _SUB in petrol */
+.prose h1 .hb-h-main { color: var(--hb-bar-light-text); }
+.prose h1 .hb-h-sub  { color: #1d6c84; font-size: 0.9em; letter-spacing: 0.13em; margin-left: 0.05em; }
 
-/* ── H2 — panel header bar (same style as H1, scaled down) ──────────────────── */
+/* ── H2 — CYAN filled bar, 1:1 with "IP ADDRESS_FROM A DHCP SERVER" ────────── */
 .prose h2 {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  min-height: 30px;
-  padding: 0 0.7rem 0 0.6rem;
+  min-height: 28px;
+  padding: 0 0.7rem 0 0.65rem;
   margin: 1.5rem 0 0.5rem;
-  background: linear-gradient(90deg, rgba(29,93,112,0.6) 0%, rgba(29,93,112,0.18) 55%, transparent 100%);
-  border-left: 3px solid var(--hb-cyan);
-  border-bottom: 1px solid var(--hb-line);
-  font-family: 'SamsungOne', 'Inter', sans-serif !important;
-  font-size: 1.3rem !important;
-  font-weight: 800 !important;
-  letter-spacing: -0.01em;
-  color: #ffffff;
+  background: var(--hb-bar-cyan);
+  border-bottom: 1px solid rgba(8, 30, 40, 0.55);
+  font-family: 'Rajdhani', sans-serif !important;
+  font-size: 1.12rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hb-bar-cyan-text);
+  text-shadow: 0 1px 0 rgba(8, 30, 40, 0.35);
+  box-shadow: inset 0 1px 0 rgba(220, 245, 252, 0.35);
 }
-.prose h2 .hb-h-main { color: #ffffff; }
-.prose h2 .hb-h-sub  { color: var(--hb-cyan); font-size: 0.88em; }
+.prose h2 .hb-h-main { color: var(--hb-bar-cyan-text); }
+.prose h2 .hb-h-sub  { color: #bfecf7; font-size: 0.9em; }
 
-/* ── H3 — panel header bar (lighter) ────────────────────────────────────────── */
+/* ── H3 — teal gradient bar with left accent (tertiary) ─────────────────────── */
 .prose h3 {
   display: flex;
   align-items: center;
   min-height: 26px;
   padding: 0 0.65rem 0 0.6rem;
   margin: 1.2rem 0 0.4rem;
-  background: linear-gradient(90deg, rgba(29,93,112,0.42) 0%, rgba(29,93,112,0.1) 55%, transparent 100%);
-  border-left: 2px solid rgba(95,165,188,0.6);
-  border-bottom: 1px solid rgba(95,165,188,0.14);
-  font-family: 'SamsungOne', 'Inter', sans-serif !important;
-  font-size: 1.12rem !important;
-  font-weight: 800 !important;
-  letter-spacing: -0.01em;
+  background: linear-gradient(90deg, rgba(29,93,112,0.5) 0%, rgba(29,93,112,0.12) 55%, transparent 100%);
+  border-left: 2px solid var(--hb-cyan);
+  border-bottom: 1px solid rgba(95,165,188,0.18);
+  font-family: 'Rajdhani', sans-serif !important;
+  font-size: 1.02rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: #dcedf3;
 }
 /* ── H4 — panel header bar (lightest) ───────────────────────────────────────── */
@@ -440,25 +540,31 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 }
 .prose a:hover { border-bottom-color: var(--hb-cyan-bright); color: #8ee6f5; }
 
-/* ── Table — data grid ───────────────────────────────────────────────────────── */
+/* ── Table — the "BUSINESS PHONE BOOK" data grid: white header plate, dark
+   rows, AMBER row highlight on hover (the FENIX EXPRESS selected-row look). ── */
 .prose table {
   border-collapse: collapse; width: 100%; margin: 0.75rem 0;
   font-size: 0.82rem; font-family: 'Share Tech Mono', monospace;
   border: 1px solid var(--hb-line);
 }
 .prose th {
-  background: linear-gradient(90deg, rgba(29,93,112,0.7), rgba(29,93,112,0.35));
-  font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
-  font-size: 0.64rem; color: #cfe7ee;
-  border: 1px solid var(--hb-line); padding: 0.3rem 0.6rem;
+  background: var(--hb-bar-light);
+  font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
+  font-size: 0.66rem; color: var(--hb-bar-light-text);
+  border: 1px solid rgba(10, 24, 32, 0.4); padding: 0.32rem 0.6rem;
   font-family: 'Rajdhani', sans-serif;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
 }
 .prose td {
   border: 1px solid rgba(95,165,188,0.14); padding: 0.28rem 0.6rem;
   color: var(--hb-text-dim);
 }
 .prose tr:nth-child(even) td { background: rgba(54,171,202,0.04); }
-.prose tr:hover td { background: rgba(54,171,202,0.09); color: var(--hb-text); }
+.prose tr:hover td {
+  background: var(--hb-amber-dim);
+  color: #f3e2c4;
+  border-color: rgba(217,156,68,0.3);
+}
 
 /* ── HR — tick-mark ruler ────────────────────────────────────────────────────── */
 .prose hr {

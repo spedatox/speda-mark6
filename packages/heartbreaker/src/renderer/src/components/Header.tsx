@@ -26,11 +26,14 @@ function IconBtn({ onClick, title, children }: { onClick: () => void; title: str
 interface Props {
   sidebarOpen?: boolean
   onToggleSidebar?: () => void
+  boardOpen?: boolean
+  onToggleBoard?: () => void
 }
 
-export default function Header({ sidebarOpen, onToggleSidebar }: Props) {
+export default function Header({ sidebarOpen, onToggleSidebar, boardOpen, onToggleBoard }: Props) {
   const { state } = useChatContext()
   const activeSession = state.sessions.find(s => s.id === state.activeSessionId)
+  const hasMessages = state.messages.length > 0
 
   return (
     <header style={{
@@ -49,17 +52,38 @@ export default function Header({ sidebarOpen, onToggleSidebar }: Props) {
         </IconBtn>
       )}
 
-      {/* Section marker */}
-      <span className="hb-label" style={{ color: 'var(--hb-cyan)' }}>// SESSION</span>
-
-      {/* Active session title */}
-      <span style={{
-        fontSize: '0.8rem', fontWeight: 500, letterSpacing: '0.06em',
-        textTransform: 'uppercase', color: 'var(--hb-text)',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>
-        {activeSession?.title || 'NEW LINK'}
+      {/* Section marker — "MONITOR No. 1" style */}
+      <span className="hb-label" style={{ color: 'var(--hb-cyan)', whiteSpace: 'nowrap' }}>
+        MONITOR <span style={{ color: 'var(--hb-text-faint)' }}>No. 1</span>
       </span>
+
+      {/* Magnifier — the reference search glyph */}
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="2" style={{ color: 'var(--hb-text-faint)', flexShrink: 0 }}>
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+
+      {/* Active session title — the ":ANTON VANKO" query box */}
+      <span className="hb-query-box" style={{
+        fontSize: '0.76rem', height: 22, maxWidth: '40%',
+        overflow: 'hidden',
+      }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {activeSession?.title || 'NEW LINK'}
+        </span>
+      </span>
+
+      {/* Searching band while streaming */}
+      {state.isStreaming && (
+        <span style={{
+          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
+          letterSpacing: '0.22em', color: 'var(--hb-cyan)',
+          whiteSpace: 'nowrap', overflow: 'hidden',
+          animation: 'hbFlicker 2.2s linear infinite',
+        }}>
+          {'>>:'} SEARCHING_ ALL _DATA _BANKS
+        </span>
+      )}
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
@@ -68,19 +92,52 @@ export default function Header({ sidebarOpen, onToggleSidebar }: Props) {
       <span className="hb-readout" style={{ fontSize: '0.62rem', color: 'var(--hb-text-faint)' }}>
         MSGS {String(state.messages.length).padStart(3, '0')}
       </span>
-      <span style={{
-        display: 'flex', alignItems: 'center', gap: 5,
-        fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
-        letterSpacing: '0.1em',
-        color: state.isStreaming ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
-      }}>
+      {state.isStreaming ? (
         <span style={{
-          width: 6, height: 6, display: 'inline-block',
-          background: state.isStreaming ? 'var(--hb-cyan-bright)' : 'var(--hb-text-faint)',
-          animation: state.isStreaming ? 'hbBlink 0.8s step-end infinite' : 'none',
-        }} />
-        {state.isStreaming ? 'GENERATING' : 'IDLE'}
-      </span>
+          display: 'flex', alignItems: 'center', gap: 5,
+          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
+          letterSpacing: '0.1em', color: 'var(--hb-amber-bright)',
+        }}>
+          <span style={{
+            width: 6, height: 6, display: 'inline-block',
+            background: 'var(--hb-amber-bright)',
+            animation: 'hbBlink 0.8s step-end infinite',
+          }} />
+          PROCESSING
+        </span>
+      ) : (
+        <span style={{
+          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
+          letterSpacing: '0.1em',
+          color: hasMessages ? 'var(--hb-amber)' : 'var(--hb-text-faint)',
+        }}>
+          {hasMessages ? 'QUERY COMPLETE' : 'STANDBY'}
+        </span>
+      )}
+
+      {/* Systems board toggle */}
+      {onToggleBoard && (
+        <button
+          onClick={onToggleBoard}
+          title={boardOpen ? 'Close systems board' : 'Open systems board'}
+          style={{
+            height: 24, padding: '0 0.5rem',
+            display: 'flex', alignItems: 'center', gap: '0.35rem',
+            border: `1px solid ${boardOpen ? 'rgba(242,183,92,0.6)' : 'var(--hb-line)'}`,
+            background: boardOpen ? 'rgba(217,156,68,0.14)' : 'transparent',
+            color: boardOpen ? 'var(--hb-amber-bright)' : 'var(--hb-text-dim)',
+            cursor: 'pointer', transition: 'all 0.12s', flexShrink: 0,
+            fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
+            letterSpacing: '0.16em',
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+          </svg>
+          SYS
+        </button>
+      )}
     </header>
   )
 }

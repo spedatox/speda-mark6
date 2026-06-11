@@ -227,12 +227,11 @@ function StreamingCursor() {
         height: '1.05em',
         marginLeft: '3px',
         verticalAlign: 'text-bottom',
-        borderRadius: '2px',
-        // bright white core with a faint blue-tinted base + a slow light sweep
+        // bright white core over a cold cyan base + a slow light sweep
         background:
-          'linear-gradient(180deg, #ffffff 0%, #ffffff 55%, rgba(255,255,255,0.85) 75%, rgba(168,199,250,0.85) 100%)',
+          'linear-gradient(180deg, #ffffff 0%, #eafaff 45%, rgba(150,225,245,0.9) 75%, rgba(95,204,230,0.85) 100%)',
         backgroundSize: '100% 220%',
-        boxShadow: '0 0 6px 1px rgba(255,255,255,0.55), 0 0 14px 2px rgba(168,199,250,0.25)',
+        boxShadow: '0 0 6px 1px rgba(190,235,250,0.55), 0 0 14px 2px rgba(95,204,230,0.3)',
         animation: 'caretBreathe 1.15s ease-in-out infinite, caretSheen 2.4s linear infinite',
       }}
     />
@@ -333,8 +332,10 @@ const mdComponents: any = {
     }
     return (
       <code style={{
-        background: 'rgba(255,255,255,0.09)', borderRadius: '0.25rem',
-        padding: '0.1em 0.4em', fontSize: '0.83em',
+        background: 'rgba(54,171,202,0.1)',
+        border: '1px solid rgba(95,165,188,0.18)',
+        padding: '0.05em 0.4em', fontSize: '0.83em',
+        color: '#7fd4e8',
       }}>
         {children}
       </code>
@@ -447,18 +448,21 @@ function FileCard({ file }: { file: FileMeta }) {
 
   return (
     <div
-      className="hb-glass-sm"
+      className="hb-glass-sm hb-bracketed"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
+        position: 'relative',
         display: 'flex', alignItems: 'center', gap: '0.75rem',
         padding: '0.7rem 0.8rem',
         maxWidth: 420,
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025))',
-        backdropFilter: 'blur(20px) saturate(1.5)',
-        WebkitBackdropFilter: 'blur(20px) saturate(1.5)',
-        border: `1px solid ${hover ? 'rgba(160,220,240,0.3)' : 'rgba(255,255,255,0.12)'}`,
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+        background:
+          'repeating-linear-gradient(180deg, rgba(140,205,228,0.024) 0 1px, transparent 1px 3px), ' +
+          'linear-gradient(180deg, rgba(18,44,56,0.62), rgba(9,22,30,0.66))',
+        backdropFilter: 'blur(14px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
+        border: `1px solid ${hover ? 'rgba(110,200,228,0.5)' : 'rgba(95,165,188,0.25)'}`,
+        boxShadow: 'inset 0 1px 0 rgba(140,215,240,0.16)',
         transition: 'border-color 0.15s',
       }}
     >
@@ -488,7 +492,7 @@ function FileCard({ file }: { file: FileMeta }) {
         }}>{file.kind} · {fmtBytes(file.size)}</div>
       </div>
 
-      {/* download button */}
+      {/* download button — amber action chip, like the reference tags */}
       <button
         onClick={onDownload}
         title="Download"
@@ -496,11 +500,14 @@ function FileCard({ file }: { file: FileMeta }) {
         style={{
           flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.4rem',
           padding: '0.4rem 0.7rem',
-          border: '1px solid rgba(95,200,228,0.4)',
-          background: busy ? 'rgba(54,171,202,0.15)' : 'rgba(54,171,202,0.22)',
-          color: '#cdeefa', cursor: busy ? 'default' : 'pointer',
+          border: '1px solid rgba(242,183,92,0.55)',
+          background: busy
+            ? 'rgba(217,156,68,0.12)'
+            : 'linear-gradient(180deg, rgba(232,168,80,0.28), rgba(201,138,53,0.2))',
+          color: '#f6d9a8', cursor: busy ? 'default' : 'pointer',
           fontFamily: "'Rajdhani',sans-serif", fontSize: '0.72rem', fontWeight: 700,
           letterSpacing: '0.1em', textTransform: 'uppercase',
+          boxShadow: 'inset 0 1px 0 rgba(255,225,180,0.25)',
           transition: 'background 0.15s',
         }}
       >
@@ -651,9 +658,9 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit() } if (e.key === 'Escape') { setEditing(false); setEditValue(message.content) } }}
                 rows={3}
                 style={{
-                  width: '100%', background: 'rgba(255,255,255,0.07)',
+                  width: '100%', background: 'rgba(8,20,26,0.7)',
                   border: '1px solid var(--border-focus)',
-                  borderRadius: '1rem', padding: '0.625rem 1rem',
+                  padding: '0.625rem 1rem',
                   color: 'var(--text-primary)', fontSize: '0.9375rem',
                   lineHeight: 1.65, fontFamily: 'inherit', resize: 'none',
                   outline: 'none', userSelect: 'text',
@@ -697,15 +704,25 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
               )}
               {message.content && (
                 <div style={{
-                  background: 'var(--bg-user-bubble)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  borderRadius: '1.125rem', borderBottomRightRadius: '0.25rem',
-                  padding: '0.625rem 1rem',
-                  color: 'var(--text-primary)', fontSize: '0.9375rem',
+                  position: 'relative',
+                  background:
+                    'repeating-linear-gradient(180deg, rgba(140,205,228,0.022) 0 1px, transparent 1px 3px), ' +
+                    'linear-gradient(135deg, rgba(29,93,112,0.30), rgba(11,30,40,0.55))',
+                  border: '1px solid rgba(120,195,220,0.28)',
+                  borderTop: '1px solid rgba(165,225,245,0.42)',
+                  padding: '0.6rem 0.95rem',
+                  color: '#dfeef4', fontSize: '0.9375rem',
                   fontFamily: 'var(--font-read)',
                   lineHeight: 1.65, whiteSpace: 'pre-wrap', userSelect: 'text',
                 }}>
                   {message.content}
+                  {/* bottom-right corner tick */}
+                  <span style={{
+                    position: 'absolute', bottom: -1, right: -1,
+                    width: 9, height: 9, pointerEvents: 'none',
+                    borderRight: '1px solid var(--hb-cyan)',
+                    borderBottom: '1px solid var(--hb-cyan)',
+                  }} />
                 </div>
               )}
               <div style={{ opacity: hovered ? 1 : 0, transition: 'opacity 0.15s', display: 'flex', alignItems: 'center', gap: '0.125rem' }}>
