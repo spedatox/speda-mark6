@@ -125,7 +125,7 @@ function SessionItem({ session, active, onSelect, config }: {
             border: `1px solid ${active ? 'rgba(242,183,92,0.3)' : 'transparent'}`,
             borderLeft: active ? '2px solid var(--hb-amber)' : hover ? '2px solid rgba(95,165,188,0.35)' : '2px solid transparent',
             background: active
-              ? 'linear-gradient(90deg, rgba(217,156,68,0.18), rgba(217,156,68,0.04))'
+              ? 'rgba(217, 156, 68, 0.12)'
               : hover
               ? 'rgba(54,171,202,0.07)'
               : 'transparent',
@@ -227,7 +227,7 @@ function GroupLabel({ label }: { label: string }) {
       </span>
       <span style={{
         flex: 1, height: '1px',
-        backgroundImage: 'repeating-linear-gradient(90deg, rgba(95,165,188,0.25) 0 1px, transparent 1px 6px)',
+        background: 'linear-gradient(90deg, rgba(95,165,188,0.28), rgba(95,165,188,0.03))',
       }} />
     </div>
   )
@@ -238,6 +238,7 @@ function NewChatBtn({ onClick }: { onClick: () => void }) {
   const [hover, setHover] = useState(false)
   return (
     <button
+      className="hb-seam-b"
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -247,10 +248,7 @@ function NewChatBtn({ onClick }: { onClick: () => void }) {
         padding: '0.5rem 0.85rem',
         display: 'flex', alignItems: 'center', gap: '0.55rem',
         border: 'none',
-        borderBottom: `1px solid ${hover ? 'rgba(95,165,188,0.35)' : 'rgba(95,165,188,0.14)'}`,
-        background: hover
-          ? 'linear-gradient(90deg, rgba(29,93,112,0.5), rgba(29,93,112,0.12) 70%, transparent)'
-          : 'linear-gradient(90deg, rgba(29,93,112,0.22), transparent 80%)',
+        background: hover ? 'rgba(54,171,202,0.08)' : 'transparent',
         color: hover ? '#cadbe2' : '#5d7f8a',
         cursor: 'pointer',
         transition: 'background 0.15s, border-color 0.15s, color 0.15s',
@@ -279,10 +277,9 @@ function SearchBar({ value, onChange, onClose }: {
   value: string; onChange: (v: string) => void; onClose: () => void
 }) {
   return (
-    <div style={{
+    <div className="hb-seam-b" style={{
       display: 'flex', alignItems: 'center', gap: '0.4rem',
       padding: '0 0.75rem 0.5rem',
-      borderBottom: '1px solid rgba(95,165,188,0.12)',
     }}>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         strokeWidth="2" style={{ color: '#36abca', flexShrink: 0 }}>
@@ -322,11 +319,13 @@ function SearchBar({ value, onChange, onClose }: {
 /* ── Settings menu popup ──────────────────────────────────────────────────── */
 function SettingsPopup({ onSettings, onClose }: { onSettings: () => void; onClose: () => void }) {
   return (
-    <div style={{
+    <div className="hb-glass" style={{
       position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, right: 0,
-      background: '#07141a',
-      border: '1px solid rgba(95,165,188,0.3)',
-      boxShadow: '0 -8px 32px rgba(0,0,0,0.7)',
+      background: 'rgba(150, 190, 225, 0.07)',
+      backdropFilter: 'var(--hb-holo-blur)',
+      WebkitBackdropFilter: 'var(--hb-holo-blur)',
+      border: '1px solid var(--hb-edge)',
+      boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.15)',
       animation: 'dropDown 0.12s ease',
       zIndex: 50,
       overflow: 'hidden',
@@ -373,12 +372,10 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive }: {
   profile: AppProfile; onToggle: () => void; onSearch: () => void; searchActive: boolean
 }) {
   return (
-    <div style={{
+    <div className="hb-seam-b" style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 0.5rem 0 0.85rem',
-      height: 46,
-      borderBottom: '1px solid rgba(95,165,188,0.18)',
-      background: 'linear-gradient(90deg, rgba(16,40,52,0.6), rgba(8,20,26,0.3) 60%, transparent)',
+      height: 40,  // matches the session header — seams align across the full width
       flexShrink: 0,
       position: 'relative',
     }}>
@@ -420,8 +417,6 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive }: {
         </HeaderBtn>
       </div>
 
-      {/* right corner tick */}
-      <span style={{ position:'absolute', bottom:-1, right:0, width:24, height:1, background:'rgba(54,171,202,0.5)' }} />
     </div>
   )
 }
@@ -476,6 +471,7 @@ function SidebarFooter({ profile, onOpenSettings }: { profile: AppProfile; onOpe
         <SettingsPopup onSettings={onOpenSettings} onClose={() => setMenuOpen(false)} />
       )}
       <button
+        className="hb-seam-t"
         onClick={() => setMenuOpen(v => !v)}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
@@ -484,18 +480,18 @@ function SidebarFooter({ profile, onOpenSettings }: { profile: AppProfile; onOpe
           display: 'flex', alignItems: 'center', gap: '0.6rem',
           background: menuOpen || hover ? 'rgba(54,171,202,0.07)' : 'transparent',
           border: 'none',
-          borderTop: '1px solid rgba(95,165,188,0.18)',
           cursor: 'pointer',
           transition: 'background 0.12s',
           textAlign: 'left',
         }}
       >
         {/* Avatar — sharp square with teal border */}
-        <div style={{
+        <div className="hb-glass-xs" style={{
           width: 28, height: 28,
           flexShrink: 0,
-          background: 'rgba(29,93,112,0.6)',
-          border: `1px solid ${menuOpen || hover ? '#36abca' : 'rgba(95,165,188,0.3)'}`,
+          background: 'rgba(54,171,202,0.12)',
+          boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.15)',
+          border: `1px solid ${menuOpen || hover ? 'var(--hb-edge-bright)' : 'var(--hb-edge)'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: "'Rajdhani',sans-serif",
           fontSize: '0.8rem', fontWeight: 700,
@@ -571,15 +567,15 @@ export default function Sidebar({ profile, config, isOpen, onSelectSession, onTo
   const groups = useMemo(() => groupSessions(filtered), [filtered])
 
   return (
-    <aside style={{
+    <aside className="hb-seam-r" style={{
       width: isOpen ? 'var(--sidebar-width)' : '0px',
       minWidth: isOpen ? 'var(--sidebar-width)' : '0px',
       height: '100%',
-      // Frosted-glass sidebar — translucent fill + blur of the content behind it
-      background: 'rgba(10,20,28,0.55)',
-      backdropFilter: 'blur(24px) saturate(1.3)',
-      WebkitBackdropFilter: 'blur(24px) saturate(1.3)',
-      borderRight: isOpen ? '1px solid rgba(95,165,188,0.18)' : 'none',
+      // Reading-hierarchy tint: a touch denser than the floating cards so the
+      // conversation list sits back; etched boundary on the right (hb-seam-r).
+      background: 'rgba(6, 11, 19, 0.2)',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
       transition: 'width 0.2s ease, min-width 0.2s ease',
       flexShrink: 0,

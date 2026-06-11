@@ -171,8 +171,6 @@ function ChartPanel({ title, children }: { title?: string; children: React.React
         }}>
           <span style={{ color: '#ffffff' }}>{main}</span>
           {sub && <span style={{ color: '#36abca' }}>{sub}</span>}
-          {/* right corner tick on header bottom */}
-          <span style={{ position:'absolute', bottom:-1, right:0, width:20, height:1, background:'#36abca' }} />
         </div>
       )}
 

@@ -136,16 +136,16 @@ export default function SettingsModal({ config, onClose }: Props) {
         animation: 'fadeIn 0.15s ease',
       }}
     >
-      <div className="hb-bracketed" style={{
+      <div className="hb-glass" style={{
         width: 'min(720px, 95vw)', height: 'min(600px, 88vh)',
-        background:
-          'repeating-linear-gradient(180deg, rgba(140,205,228,0.02) 0 1px, transparent 1px 3px), ' +
-          'linear-gradient(180deg, rgba(12,28,36,0.97), rgba(6,14,19,0.97))',
-        border: '1px solid rgba(95,165,188,0.35)',
+        background: 'rgba(150, 190, 225, 0.06)',
+        backdropFilter: 'var(--hb-holo-blur)',
+        WebkitBackdropFilter: 'var(--hb-holo-blur)',
+        border: '1px solid var(--hb-edge)',
         display: 'flex',
         overflow: 'hidden',
         animation: 'modalIn 0.15s ease',
-        boxShadow: 'inset 0 1px 0 rgba(140,215,240,0.18), 0 24px 80px rgba(0,0,0,0.75)',
+        boxShadow: 'var(--hb-holo-shadow)',
         position: 'relative',
       }}>
         {/* Left nav */}

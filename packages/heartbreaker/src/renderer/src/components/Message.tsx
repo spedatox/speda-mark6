@@ -448,7 +448,7 @@ function FileCard({ file }: { file: FileMeta }) {
 
   return (
     <div
-      className="hb-glass-sm hb-bracketed"
+      className="hb-holo"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
@@ -456,14 +456,9 @@ function FileCard({ file }: { file: FileMeta }) {
         display: 'flex', alignItems: 'center', gap: '0.75rem',
         padding: '0.7rem 0.8rem',
         maxWidth: 420,
-        background:
-          'repeating-linear-gradient(180deg, rgba(140,205,228,0.024) 0 1px, transparent 1px 3px), ' +
-          'linear-gradient(180deg, rgba(18,44,56,0.62), rgba(9,22,30,0.66))',
-        backdropFilter: 'blur(14px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(14px) saturate(1.2)',
-        border: `1px solid ${hover ? 'rgba(110,200,228,0.5)' : 'rgba(95,165,188,0.25)'}`,
-        boxShadow: 'inset 0 1px 0 rgba(140,215,240,0.16)',
-        transition: 'border-color 0.15s',
+        borderColor: hover ? 'var(--hb-edge-bright)' : 'var(--hb-edge)',
+        boxShadow: hover ? 'var(--hb-holo-shadow-active)' : undefined,
+        transition: 'border-color 0.15s, box-shadow 0.15s',
       }}
     >
       {/* doc glyph in a tinted square */}
@@ -500,14 +495,14 @@ function FileCard({ file }: { file: FileMeta }) {
         style={{
           flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.4rem',
           padding: '0.4rem 0.7rem',
-          border: '1px solid rgba(242,183,92,0.55)',
-          background: busy
-            ? 'rgba(217,156,68,0.12)'
-            : 'linear-gradient(180deg, rgba(232,168,80,0.28), rgba(201,138,53,0.2))',
+          border: '1px solid rgba(242,183,92,0.45)',
+          background: busy ? 'rgba(217,156,68,0.1)' : 'rgba(217,156,68,0.16)',
+          backdropFilter: 'var(--hb-holo-blur)',
+          WebkitBackdropFilter: 'var(--hb-holo-blur)',
           color: '#f6d9a8', cursor: busy ? 'default' : 'pointer',
           fontFamily: "'Rajdhani',sans-serif", fontSize: '0.72rem', fontWeight: 700,
           letterSpacing: '0.1em', textTransform: 'uppercase',
-          boxShadow: 'inset 0 1px 0 rgba(255,225,180,0.25)',
+          boxShadow: 'inset 0 1px 0 0 rgba(255,225,180,0.3)',
           transition: 'background 0.15s',
         }}
       >
@@ -703,26 +698,13 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                 </div>
               )}
               {message.content && (
-                <div style={{
-                  position: 'relative',
-                  background:
-                    'repeating-linear-gradient(180deg, rgba(140,205,228,0.022) 0 1px, transparent 1px 3px), ' +
-                    'linear-gradient(135deg, rgba(29,93,112,0.30), rgba(11,30,40,0.55))',
-                  border: '1px solid rgba(120,195,220,0.28)',
-                  borderTop: '1px solid rgba(165,225,245,0.42)',
+                <div className="hb-holo" style={{
                   padding: '0.6rem 0.95rem',
                   color: '#dfeef4', fontSize: '0.9375rem',
                   fontFamily: 'var(--font-read)',
                   lineHeight: 1.65, whiteSpace: 'pre-wrap', userSelect: 'text',
                 }}>
                   {message.content}
-                  {/* bottom-right corner tick */}
-                  <span style={{
-                    position: 'absolute', bottom: -1, right: -1,
-                    width: 9, height: 9, pointerEvents: 'none',
-                    borderRight: '1px solid var(--hb-cyan)',
-                    borderBottom: '1px solid var(--hb-cyan)',
-                  }} />
                 </div>
               )}
               <div style={{ opacity: hovered ? 1 : 0, transition: 'opacity 0.15s', display: 'flex', alignItems: 'center', gap: '0.125rem' }}>

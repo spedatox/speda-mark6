@@ -55,12 +55,15 @@ function ToolBtn({
       style={{
         width: 30, height: 30,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: `1px solid ${active ? 'rgba(95,165,188,0.55)' : lit ? 'rgba(95,165,188,0.3)' : 'rgba(95,165,188,0.15)'}`,
+        border: `1px solid ${active ? 'var(--hb-edge-bright)' : lit ? 'rgba(0,163,255,0.3)' : 'var(--hb-edge)'}`,
         background: active
-          ? 'rgba(54,171,202,0.15)'
+          ? 'rgba(54,171,202,0.18)'
           : hover
-          ? 'rgba(54,171,202,0.07)'
-          : 'transparent',
+          ? 'rgba(255,255,255,0.08)'
+          : 'var(--hb-holo-fill)',
+        backdropFilter: 'var(--hb-holo-blur)',
+        WebkitBackdropFilter: 'var(--hb-holo-blur)',
+        boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
         color: danger
           ? (lit ? '#c84a3a' : '#3a5a65')
           : active
@@ -119,9 +122,14 @@ function SendBtn({ canSend, isStreaming, onSend, onStop }: {
       style={{
         width: 32, height: 32,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: canSend ? '1px solid #36abca' : '1px solid rgba(95,165,188,0.12)',
-        background: canSend ? '#36abca' : 'transparent',
-        color: canSend ? '#04080a' : '#2e5260',
+        border: canSend ? '1px solid rgba(95,204,230,0.7)' : '1px solid var(--hb-edge)',
+        background: canSend ? 'rgba(54,171,202,0.35)' : 'var(--hb-holo-fill)',
+        backdropFilter: 'var(--hb-holo-blur)',
+        WebkitBackdropFilter: 'var(--hb-holo-blur)',
+        boxShadow: canSend
+          ? 'inset 0 1px 0 0 rgba(255,255,255,0.3)'
+          : 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
+        color: canSend ? '#eafaff' : '#2e5260',
         cursor: canSend ? 'pointer' : 'default',
         transform: press ? 'scale(0.9)' : 'scale(1)',
         transition: 'background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s',
@@ -223,8 +231,11 @@ function ModelPicker({ models, activeId, onSelect }: {
         style={{
           height: 30, padding: '0 0.45rem',
           display: 'flex', alignItems: 'center', gap: '0.3rem',
-          border: `1px solid ${open ? 'rgba(95,165,188,0.45)' : hover ? 'rgba(95,165,188,0.25)' : 'rgba(95,165,188,0.12)'}`,
-          background: open ? 'rgba(54,171,202,0.1)' : 'transparent',
+          border: `1px solid ${open ? 'var(--hb-edge-bright)' : hover ? 'rgba(170,225,255,0.35)' : 'var(--hb-edge)'}`,
+          background: open ? 'rgba(54,171,202,0.14)' : 'var(--hb-holo-fill)',
+          backdropFilter: 'var(--hb-holo-blur)',
+          WebkitBackdropFilter: 'var(--hb-holo-blur)',
+          boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
           color: open || hover ? '#7ab8c8' : '#3a6472',
           cursor: 'pointer',
           transition: 'border-color 0.12s, background 0.12s, color 0.12s',
@@ -244,11 +255,13 @@ function ModelPicker({ models, activeId, onSelect }: {
       </button>
 
       {open && (
-        <div style={{
+        <div className="hb-glass" style={{
           position: 'absolute', bottom: 'calc(100% + 6px)', right: 0,
-          background: '#06111a',
-          border: '1px solid rgba(95,165,188,0.28)',
-          boxShadow: '0 -8px 32px rgba(0,0,0,0.7)',
+          background: 'rgba(150, 190, 225, 0.07)',
+          backdropFilter: 'var(--hb-holo-blur)',
+          WebkitBackdropFilter: 'var(--hb-holo-blur)',
+          border: '1px solid var(--hb-edge)',
+          boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.15)',
           animation: 'dropDown 0.12s ease',
           zIndex: 100,
           width: 290,
@@ -455,29 +468,22 @@ export default function InputBar({ onSend, onStop, config }: Props) {
     <div style={{ padding: '0.5rem 1.25rem 0.875rem', flexShrink: 0 }}>
       <div style={{ maxWidth: 780, margin: '0 auto' }}>
 
-        {/* ── Composer panel — Stark steel, edge-lit, corner brackets ───── */}
+        {/* ── Composer panel — precision-machined holographic glass ─────── */}
         <div
-          className="hb-glass hb-bracketed"
+          className="hb-holo"
           onDragEnter={onDragEnter}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
           style={{
             position: 'relative',
-            background:
-              'repeating-linear-gradient(180deg, rgba(140,205,228,0.026) 0 1px, transparent 1px 3px), ' +
-              'linear-gradient(180deg, rgba(16,38,50,0.78), rgba(7,17,23,0.86))',
-            backdropFilter: 'blur(18px) saturate(1.25)',
-            WebkitBackdropFilter: 'blur(18px) saturate(1.25)',
-            border: `1px solid ${
-              dragOver ? 'rgba(242,183,92,0.7)' :
-              focused  ? 'rgba(110,200,228,0.6)' :
-                         'rgba(95,165,188,0.28)'
-            }`,
-            // Bright top edge-light + cold depth, like the reference panels
-            boxShadow: focused
-              ? 'inset 0 1px 0 rgba(160,225,245,0.32), 0 14px 40px rgba(0,0,0,0.5), 0 0 24px rgba(54,171,202,0.08)'
-              : 'inset 0 1px 0 rgba(140,215,240,0.18), 0 14px 40px rgba(0,0,0,0.5)',
+            borderColor: dragOver
+              ? 'rgba(242,183,92,0.7)'
+              : focused
+              ? 'var(--hb-edge-bright)'
+              : 'var(--hb-edge)',
+            // Focus brightens the specular horizon + aura; base stack from .hb-holo
+            boxShadow: focused ? 'var(--hb-holo-shadow-active)' : undefined,
             transition: 'border-color 0.2s, box-shadow 0.2s',
           }}
         >
@@ -586,8 +592,11 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                 style={{
                   height: 30, padding: '0 0.55rem',
                   display: 'flex', alignItems: 'center', gap: '0.35rem',
-                  border: `1px solid ${budget ? 'rgba(79,163,119,0.55)' : 'rgba(211,154,58,0.5)'}`,
-                  background: budget ? 'rgba(79,163,119,0.14)' : 'rgba(211,154,58,0.12)',
+                  border: `1px solid ${budget ? 'rgba(79,163,119,0.45)' : 'rgba(211,154,58,0.4)'}`,
+                  background: budget ? 'rgba(79,163,119,0.1)' : 'rgba(211,154,58,0.08)',
+                  backdropFilter: 'var(--hb-holo-blur)',
+                  WebkitBackdropFilter: 'var(--hb-holo-blur)',
+                  boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
                   color: budget ? '#5fc78f' : '#d3a04a',
                   cursor: 'pointer',
                   transition: 'all 0.15s',

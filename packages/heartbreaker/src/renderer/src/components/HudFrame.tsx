@@ -62,15 +62,16 @@ export default function HudFrame() {
   return (
     <>
       {/* Top strip — real telemetry */}
-      <div style={{
+      <div className="hb-seam-b" style={{
         position: 'fixed', top: 0, left: 0, right: 0, height: 22,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 26px', gap: 10, zIndex: 9998, pointerEvents: 'none',
         fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
         letterSpacing: '0.06em',
-        background: 'linear-gradient(180deg, rgba(5,12,16,0.96), rgba(5,12,16,0.65))',
-        borderBottom: '1px solid rgba(95,165,188,0.18)',
-        boxShadow: '0 1px 0 rgba(4,8,12,0.6)',
+        // Top anchor of the glass HUD — whisper tint, gentle frost under the telemetry
+        background: 'rgba(10, 16, 26, 0.15)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
       }}>
         {/* Left — connection */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -112,13 +113,6 @@ export default function HudFrame() {
         </div>
       </div>
 
-      {/* Bottom hairline ruler (decorative) */}
-      <div style={{
-        position: 'fixed', bottom: 0, left: 26, right: 26, height: 4, zIndex: 9998,
-        pointerEvents: 'none',
-        backgroundImage: 'repeating-linear-gradient(90deg, rgba(95,165,188,0.25) 0 1px, transparent 1px 10px)',
-        opacity: 0.4,
-      }} />
     </>
   )
 }
