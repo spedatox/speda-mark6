@@ -21,7 +21,14 @@ interface Props {
 }
 
 function shortModelName(name: string): string {
-  return name.replace(/^Claude\s+/i, '').toUpperCase()
+  return name.replace(/^(anthropic|openai|gemini|ollama):/, '').replace(/^Claude\s+/i, '').toUpperCase()
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: 'ANTHROPIC',
+  openai: 'OPENAI',
+  gemini: 'GOOGLE GEMINI',
+  ollama: 'OLLAMA — LOCAL',
 }
 
 function formatSize(bytes: number): string {
@@ -260,14 +267,27 @@ function ModelPicker({ models, activeId, onSelect }: {
           }}>
             SELECT MODEL
           </div>
-          <div style={{ padding: '0.2rem 0' }}>
-            {models.map(m => (
-              <ModelItem
-                key={m.id}
-                model={m}
-                selected={m.id === activeId}
-                onSelect={() => { onSelect(m.id); setOpen(false) }}
-              />
+          <div style={{ padding: '0.2rem 0', maxHeight: 420, overflowY: 'auto' }}>
+            {Array.from(new Set(models.map(m => m.provider ?? 'anthropic'))).map(provider => (
+              <div key={provider}>
+                <div style={{
+                  padding: '0.45rem 0.8rem 0.1rem',
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '0.6rem', fontWeight: 700,
+                  letterSpacing: '0.2em', textTransform: 'uppercase',
+                  color: '#3a6472',
+                }}>
+                  {PROVIDER_LABELS[provider] ?? provider}
+                </div>
+                {models.filter(m => (m.provider ?? 'anthropic') === provider).map(m => (
+                  <ModelItem
+                    key={m.id}
+                    model={m}
+                    selected={m.id === activeId}
+                    onSelect={() => { onSelect(m.id); setOpen(false) }}
+                  />
+                ))}
+              </div>
             ))}
           </div>
         </div>
@@ -435,26 +455,30 @@ export default function InputBar({ onSend, onStop, config }: Props) {
     <div style={{ padding: '0.5rem 1.25rem 0.875rem', flexShrink: 0 }}>
       <div style={{ maxWidth: 780, margin: '0 auto' }}>
 
-        {/* ── Composer panel — rounded glass hologram ───────────────────── */}
+        {/* ── Composer panel — Stark steel, edge-lit, corner brackets ───── */}
         <div
-          className="hb-glass"
+          className="hb-glass hb-bracketed"
           onDragEnter={onDragEnter}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
           style={{
             position: 'relative',
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.09), rgba(255,255,255,0.025))',
-            backdropFilter: 'blur(28px) saturate(1.6)',
-            WebkitBackdropFilter: 'blur(28px) saturate(1.6)',
+            background:
+              'repeating-linear-gradient(180deg, rgba(140,205,228,0.026) 0 1px, transparent 1px 3px), ' +
+              'linear-gradient(180deg, rgba(16,38,50,0.78), rgba(7,17,23,0.86))',
+            backdropFilter: 'blur(18px) saturate(1.25)',
+            WebkitBackdropFilter: 'blur(18px) saturate(1.25)',
             border: `1px solid ${
-              dragOver ? 'rgba(160,220,240,0.6)' :
-              focused  ? 'rgba(160,220,240,0.4)' :
-                         'rgba(255,255,255,0.16)'
+              dragOver ? 'rgba(242,183,92,0.7)' :
+              focused  ? 'rgba(110,200,228,0.6)' :
+                         'rgba(95,165,188,0.28)'
             }`,
-            // Neutral elevation (depth, not a cyan glow) + top sheen line
-            boxShadow: '0 10px 36px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12)',
-            transition: 'border-color 0.2s',
+            // Bright top edge-light + cold depth, like the reference panels
+            boxShadow: focused
+              ? 'inset 0 1px 0 rgba(160,225,245,0.32), 0 14px 40px rgba(0,0,0,0.5), 0 0 24px rgba(54,171,202,0.08)'
+              : 'inset 0 1px 0 rgba(140,215,240,0.18), 0 14px 40px rgba(0,0,0,0.5)',
+            transition: 'border-color 0.2s, box-shadow 0.2s',
           }}
         >
           {/* Attachment previews */}

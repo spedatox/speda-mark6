@@ -136,40 +136,48 @@ export default function SettingsModal({ config, onClose }: Props) {
         animation: 'fadeIn 0.15s ease',
       }}
     >
-      <div style={{
+      <div className="hb-bracketed" style={{
         width: 'min(720px, 95vw)', height: 'min(600px, 88vh)',
-        background: '#1a1a1a',
-        border: '1px solid rgba(255,255,255,0.1)',
-        borderRadius: '1rem',
+        background:
+          'repeating-linear-gradient(180deg, rgba(140,205,228,0.02) 0 1px, transparent 1px 3px), ' +
+          'linear-gradient(180deg, rgba(12,28,36,0.97), rgba(6,14,19,0.97))',
+        border: '1px solid rgba(95,165,188,0.35)',
         display: 'flex',
         overflow: 'hidden',
         animation: 'modalIn 0.15s ease',
-        boxShadow: '0 24px 80px rgba(0,0,0,0.75)',
+        boxShadow: 'inset 0 1px 0 rgba(140,215,240,0.18), 0 24px 80px rgba(0,0,0,0.75)',
+        position: 'relative',
       }}>
         {/* Left nav */}
         <div style={{
           width: 190, flexShrink: 0,
-          borderRight: '1px solid var(--border)',
-          padding: '1.25rem 0.75rem',
+          borderRight: '1px solid var(--hb-line)',
+          padding: '1.1rem 0.6rem',
           display: 'flex', flexDirection: 'column',
+          background: 'linear-gradient(180deg, rgba(10,24,32,0.5), transparent)',
         }}>
           <p style={{
-            fontSize: '0.69rem', fontWeight: 600, color: 'var(--text-muted)',
-            padding: '0 0.625rem 0.75rem', letterSpacing: '0.07em', textTransform: 'uppercase',
+            fontFamily: "'Share Tech Mono', monospace",
+            fontSize: '0.6rem', color: 'var(--hb-cyan)',
+            padding: '0 0.625rem 0.75rem', letterSpacing: '0.22em', textTransform: 'uppercase',
           }}>
-            Settings
+            {'>>:'} CONFIG
           </p>
           {tabs.map(({ id, label }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
               style={{
-                width: '100%', padding: '0.5rem 0.75rem',
-                borderRadius: '0.5rem', border: 'none', textAlign: 'left',
-                background: tab === id ? 'var(--bg-active)' : 'transparent',
-                color: tab === id ? 'var(--text-primary)' : 'var(--text-secondary)',
-                cursor: 'pointer', fontSize: '0.875rem', fontWeight: tab === id ? 500 : 400,
-                transition: 'background 0.1s, color 0.1s',
+                width: '100%', padding: '0.45rem 0.75rem',
+                border: 'none', textAlign: 'left',
+                borderLeft: tab === id ? '2px solid var(--hb-cyan)' : '2px solid transparent',
+                background: tab === id ? 'rgba(54,171,202,0.12)' : 'transparent',
+                color: tab === id ? '#dff2f8' : 'var(--hb-text-dim)',
+                cursor: 'pointer',
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '0.78rem', fontWeight: 700,
+                letterSpacing: '0.12em', textTransform: 'uppercase',
+                transition: 'background 0.1s, color 0.1s, border-color 0.1s',
                 marginBottom: '0.125rem',
               }}
               onMouseEnter={e => { if (tab !== id) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)' }}
@@ -182,27 +190,31 @@ export default function SettingsModal({ config, onClose }: Props) {
 
         {/* Right content */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Header row */}
+          {/* Header row — white "SEARCH CONFIGURATION" plate */}
           <div style={{
-            height: 56, flexShrink: 0, display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', padding: '0 1.25rem',
-            borderBottom: '1px solid var(--border)',
+            height: 46, flexShrink: 0, display: 'flex', alignItems: 'stretch',
+            gap: 0, borderBottom: '1px solid var(--hb-line)',
           }}>
-            <h2 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+            <h2 className="hb-head-light" style={{ flex: 1, fontSize: '0.82rem', minHeight: 0 }}>
               {tabs.find(t => t.id === tab)?.label}
+              <span style={{ flex: 1 }} />
+              <span style={{
+                width: 7, height: 14, alignSelf: 'center',
+                background: 'linear-gradient(180deg, #e8a850, #c98a35)',
+              }} />
             </h2>
             <button
               onClick={onClose}
               style={{
-                width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: '50%', border: 'none',
-                background: 'transparent', color: 'var(--text-muted)',
-                cursor: 'pointer', transition: 'background 0.1s, color 0.1s',
+                width: 46, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: 'none', borderLeft: '1px solid rgba(10,24,32,0.4)',
+                background: 'var(--hb-bar-light)', color: '#2c4350',
+                cursor: 'pointer', transition: 'color 0.1s',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#0c1a22' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#2c4350' }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             </button>
@@ -227,9 +239,9 @@ export default function SettingsModal({ config, onClose }: Props) {
                     placeholder="You are a helpful assistant…"
                     rows={5}
                     style={{
-                      width: '100%', background: 'rgba(255,255,255,0.05)',
+                      width: '100%', background: 'rgba(8,20,26,0.6)',
                       border: '1px solid var(--border)',
-                      borderRadius: '0.625rem', padding: '0.75rem',
+                      padding: '0.75rem',
                       color: 'var(--text-primary)', fontSize: '0.875rem',
                       lineHeight: 1.6, fontFamily: 'inherit', resize: 'vertical',
                       outline: 'none', transition: 'border-color 0.15s',
@@ -329,7 +341,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                           ~{connBudget.used.toLocaleString()} / {connBudget.limit.toLocaleString()}
                         </span>
                       </div>
-                      <div style={{ height: 6, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                      <div style={{ height: 6, background: 'rgba(95,165,188,0.12)', overflow: 'hidden' }}>
                         <div style={{ width: `${pct}%`, height: '100%', background: col, transition: 'width 0.2s' }} />
                       </div>
                       {over && (
@@ -376,7 +388,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                         style={{
                           width: 42, height: 24, flexShrink: 0, borderRadius: 999,
                           border: 'none', position: 'relative', cursor: c.connected ? 'pointer' : 'not-allowed',
-                          background: c.active && c.connected ? 'var(--accent)' : 'rgba(255,255,255,0.12)',
+                          background: c.active && c.connected ? 'var(--accent)' : 'rgba(95,165,188,0.2)',
                           opacity: c.connected ? 1 : 0.4, transition: 'background 0.15s',
                         }}
                       >
@@ -595,9 +607,9 @@ export default function SettingsModal({ config, onClose }: Props) {
                     onKeyDown={e => { if (e.key === 'Enter') { update({ userName: localUserName.trim() }); (e.currentTarget as HTMLInputElement).blur() } }}
                     placeholder="Enter your name…"
                     style={{
-                      width: '100%', background: 'rgba(255,255,255,0.05)',
+                      width: '100%', background: 'rgba(8,20,26,0.6)',
                       border: '1px solid var(--border)',
-                      borderRadius: '0.625rem', padding: '0.625rem 0.75rem',
+                      padding: '0.625rem 0.75rem',
                       color: 'var(--text-primary)', fontSize: '0.9375rem',
                       fontFamily: 'inherit', outline: 'none',
                       transition: 'border-color 0.15s', userSelect: 'text',

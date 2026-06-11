@@ -24,15 +24,15 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("startup_db_ready")
 
-    # ── 2. Anthropic Client (created early — registry needs it for sub-agents) ──
-    from app.services.anthropic_client import AnthropicClient
+    # ── 2. LLM Client (created early — registry needs it for sub-agents) ────────
+    from app.services.llm_client import LLMClient
 
-    anthropic_client = AnthropicClient()
+    llm_client = LLMClient()
 
     # ── 3. Capability Registry ─────────────────────────────────────────────────
     from app.core.registry import CapabilityRegistry
 
-    registry = CapabilityRegistry(client=anthropic_client)
+    registry = CapabilityRegistry(client=llm_client)
 
     # Tier 0 — Task tool (SDK built-in, MUST be registered first)
     registry.register_task_tool()
@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
     # ── 7. Orchestrator (reuses the client already injected into the registry) ──
     from app.core.orchestrator import AgentOrchestrator
 
-    orchestrator = AgentOrchestrator(registry, anthropic_client, profile)
+    orchestrator = AgentOrchestrator(registry, llm_client, profile)
 
     # ── 8. Inject into app.state ───────────────────────────────────────────────
     app.state.registry = registry

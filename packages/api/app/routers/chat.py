@@ -15,31 +15,12 @@ from app.services.memory import schedule_background_tasks
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
 
-AVAILABLE_MODELS = [
-    {
-        "id": "claude-opus-4-7",
-        "name": "Claude Opus 4.7",
-        "description": "Most capable — complex reasoning & deep analysis",
-        "tags": ["powerful"],
-    },
-    {
-        "id": "claude-sonnet-4-6",
-        "name": "Claude Sonnet 4.6",
-        "description": "Smart and efficient for most tasks",
-        "tags": ["fast", "default"],
-    },
-    {
-        "id": "claude-haiku-4-5-20251001",
-        "name": "Claude Haiku 4.5",
-        "description": "Fastest — great for simple, quick tasks",
-        "tags": ["fastest"],
-    },
-]
-
-
 @router.get("/models")
 async def list_models():
-    return AVAILABLE_MODELS
+    """Models across all configured providers — the LLM layer owns the catalog."""
+    from app.services.llm_client import available_models
+
+    return await available_models()
 
 
 @router.get("/budget-mode")

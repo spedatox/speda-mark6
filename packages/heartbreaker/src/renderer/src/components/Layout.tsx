@@ -8,6 +8,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import ChatMain from './ChatMain'
 import SettingsModal from './SettingsModal'
+import SystemsBoard from './SystemsBoard'
 
 interface LayoutProps {
   profile: AppProfile
@@ -18,6 +19,7 @@ export default function Layout({ profile, config }: LayoutProps) {
   const { dispatch } = useChatContext()
   const { settings, update } = useSettings()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [boardOpen, setBoardOpen] = useState(false)
 
   const sidebarOpen = settings.sidebarOpen
 
@@ -49,10 +51,13 @@ export default function Layout({ profile, config }: LayoutProps) {
         <Header
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => update({ sidebarOpen: !sidebarOpen })}
+          boardOpen={boardOpen}
+          onToggleBoard={() => setBoardOpen(v => !v)}
         />
         <ChatMain config={config} onSelectSession={handleSelectSession} />
       </div>
 
+      {boardOpen && <SystemsBoard config={config} onClose={() => setBoardOpen(false)} />}
       {settingsOpen && <SettingsModal config={config} onClose={() => setSettingsOpen(false)} />}
     </div>
   )

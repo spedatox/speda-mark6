@@ -12,6 +12,7 @@ dependencies = [
     "alembic>=1.14.0",
     "pydantic-settings>=2.6.0",
     "anthropic>=0.50.0",
+    "openai>=1.60.0",
     "httpx>=0.28.0",
     "mcp>=1.0.0",
     "python-pptx>=0.6.23",

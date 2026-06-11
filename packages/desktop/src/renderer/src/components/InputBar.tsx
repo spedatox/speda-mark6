@@ -17,9 +17,16 @@ interface Props {
   config: AppConfig
 }
 
-// "Claude Sonnet 4.6" → "Sonnet 4.6" for the compact pill
+// "Claude Sonnet 4.6" → "Sonnet 4.6", "ollama:llama3.1:8b" → "llama3.1:8b"
 function shortModelName(name: string): string {
-  return name.replace(/^Claude\s+/i, '')
+  return name.replace(/^(anthropic|openai|gemini|ollama):/, '').replace(/^Claude\s+/i, '')
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  gemini: 'Google Gemini',
+  ollama: 'Ollama — Local',
 }
 
 export default function InputBar({ onSend, onStop, config }: Props) {
@@ -341,43 +348,56 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                     boxShadow: '0 8px 28px rgba(0,0,0,0.55)',
                     animation: 'dropDown 0.12s ease', zIndex: 100,
                     width: 280, padding: '0.35rem',
+                    maxHeight: 420, overflowY: 'auto',
                   }}>
-                    {models.map(m => {
-                      const selected = m.id === settings.model
-                      return (
-                        <button
-                          key={m.id}
-                          onClick={() => { update({ model: m.id }); setModelMenuOpen(false) }}
-                          style={{
-                            width: '100%', padding: '0.55rem 0.625rem',
-                            background: selected ? 'var(--bg-active)' : 'transparent',
-                            border: 'none', borderRadius: '0.5rem',
-                            cursor: 'pointer', textAlign: 'left',
-                            display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
-                            transition: 'background 0.1s',
-                          }}
-                          onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)' }}
-                          onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                              fontSize: '0.83rem', fontWeight: 500,
-                              color: selected ? 'var(--accent)' : 'var(--text-primary)',
-                            }}>
-                              {shortModelName(m.name)}
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem', lineHeight: 1.4 }}>
-                              {m.description}
-                            </div>
-                          </div>
-                          {selected && (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" style={{ flexShrink: 0, marginTop: '0.15rem' }}>
-                              <polyline points="20 6 9 17 4 12"/>
-                            </svg>
-                          )}
-                        </button>
-                      )
-                    })}
+                    {Array.from(new Set(models.map(m => m.provider ?? 'anthropic'))).map(provider => (
+                      <div key={provider}>
+                        <div style={{
+                          padding: '0.5rem 0.625rem 0.25rem',
+                          fontSize: '0.66rem', fontWeight: 600,
+                          letterSpacing: '0.08em', textTransform: 'uppercase',
+                          color: 'var(--text-muted)',
+                        }}>
+                          {PROVIDER_LABELS[provider] ?? provider}
+                        </div>
+                        {models.filter(m => (m.provider ?? 'anthropic') === provider).map(m => {
+                          const selected = m.id === settings.model
+                          return (
+                            <button
+                              key={m.id}
+                              onClick={() => { update({ model: m.id }); setModelMenuOpen(false) }}
+                              style={{
+                                width: '100%', padding: '0.55rem 0.625rem',
+                                background: selected ? 'var(--bg-active)' : 'transparent',
+                                border: 'none', borderRadius: '0.5rem',
+                                cursor: 'pointer', textAlign: 'left',
+                                display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
+                                transition: 'background 0.1s',
+                              }}
+                              onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)' }}
+                              onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                            >
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{
+                                  fontSize: '0.83rem', fontWeight: 500,
+                                  color: selected ? 'var(--accent)' : 'var(--text-primary)',
+                                }}>
+                                  {shortModelName(m.name)}
+                                </div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem', lineHeight: 1.4 }}>
+                                  {m.description}
+                                </div>
+                              </div>
+                              {selected && (
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" style={{ flexShrink: 0, marginTop: '0.15rem' }}>
+                                  <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

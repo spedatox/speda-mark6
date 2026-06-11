@@ -43,6 +43,26 @@ class Settings(BaseSettings):
     # Anthropic
     anthropic_api_key: str = "not-set"
 
+    # ── Multi-provider LLM routing ──────────────────────────────────────────
+    # Model refs everywhere are "provider:model" — e.g. "openai:gpt-4o",
+    # "gemini:gemini-2.5-flash", "ollama:llama3.1:8b" (Ollama is local,
+    # dev/testing only). A bare model name means Anthropic, so existing refs
+    # keep working. Routing lives in app/services/llm_client.py.
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
+    ollama_base_url: str = "http://localhost:11434/v1"
+
+    # Optional model-ref overrides for the profile's defaults (per-agent
+    # assignment stays in each agent's profile; these swap it via .env without
+    # touching code). Empty = use the profile's models.
+    llm_main_model: str = ""        # user-facing interactive responses
+    llm_background_model: str = ""  # n8n/agent-triggered + background tasks
+
+    # Comma-separated "provider:model" refs tried in order when the primary
+    # provider call fails (auth, rate limit, connection, 5xx). Empty = no
+    # fallback. Example: "openai:gpt-4o,ollama:llama3.1:8b"
+    llm_fallback_chain: str = ""
+
     # Database — SQLite by default (no server needed); override with postgresql+asyncpg:// for prod
     database_url: str = f"sqlite+aiosqlite:///{_DATA_DIR / 'speda.db'}"
 

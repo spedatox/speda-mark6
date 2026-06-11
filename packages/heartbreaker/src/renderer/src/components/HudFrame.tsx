@@ -52,6 +52,9 @@ export default function HudFrame() {
     return () => clearInterval(id)
   }, [])
   const time = now.toLocaleTimeString('en-GB', { hour12: false })
+  // Reference chrome clock — "MON. 02 09"
+  const wkday = now.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+  const dateTag = `${wkday}. ${String(now.getDate()).padStart(2, '0')} ${String(now.getMonth() + 1).padStart(2, '0')}`
 
   const online = health.online
   const linkColor = online ? 'var(--hb-green)' : 'var(--hb-red)'
@@ -65,8 +68,9 @@ export default function HudFrame() {
         padding: '0 26px', gap: 10, zIndex: 9998, pointerEvents: 'none',
         fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
         letterSpacing: '0.06em',
-        background: 'linear-gradient(180deg, rgba(6,14,18,0.94), rgba(6,14,18,0))',
-        borderBottom: '1px solid rgba(95,165,188,0.12)',
+        background: 'linear-gradient(180deg, rgba(5,12,16,0.96), rgba(5,12,16,0.65))',
+        borderBottom: '1px solid rgba(95,165,188,0.18)',
+        boxShadow: '0 1px 0 rgba(4,8,12,0.6)',
       }}>
         {/* Left — connection */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -81,6 +85,16 @@ export default function HudFrame() {
           </span>
         </div>
 
+        {/* Center — system designation */}
+        <span style={{
+          position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+          fontFamily: "'Rajdhani', sans-serif", fontSize: '0.62rem', fontWeight: 700,
+          letterSpacing: '0.42em', textTransform: 'uppercase',
+          color: 'rgba(122,150,161,0.55)', whiteSpace: 'nowrap',
+        }}>
+          SPEDA OS<span style={{ color: 'rgba(54,171,202,0.6)' }}> // </span>HEARTBREAKER
+        </span>
+
         {/* Right — operating parameters */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Stat label="MODEL" value={shortModel(settings.model)} color="var(--hb-cyan-bright)" />
@@ -92,6 +106,8 @@ export default function HudFrame() {
           <Divider />
           <Stat label="SESS" value={String(state.sessions.length).padStart(2, '0')} />
           <Divider />
+          {/* Amber date chip + time — "05.06.10 | 04:30:14" */}
+          <span className="hb-chip-amber" style={{ height: 13 }}>{dateTag}</span>
           <span style={{ color: 'var(--hb-cyan-bright)' }}>{time}</span>
         </div>
       </div>

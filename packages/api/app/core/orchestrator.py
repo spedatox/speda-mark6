@@ -7,7 +7,7 @@ from app.core.context import AgentContext
 from app.core.registry import CapabilityRegistry
 from app.profiles.base import AgentProfile
 from app.schemas.sse import SSEEvent, SSEEventType
-from app.services.anthropic_client import AnthropicClient
+from app.services.llm_client import LLMClient
 from app.skills.memory import recall_for_context
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ class AgentOrchestrator:
     def __init__(
         self,
         registry: CapabilityRegistry,
-        client: AnthropicClient,
+        client: LLMClient,
         profile: AgentProfile,
     ) -> None:
         self._registry = registry

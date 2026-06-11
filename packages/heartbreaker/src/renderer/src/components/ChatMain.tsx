@@ -19,34 +19,45 @@ const PROMPT_ICONS = [
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
 ]
 
-function PromptCard({ text, icon, onClick }: { text: string; icon: React.ReactNode; onClick: () => void }) {
+function PromptCard({ text, icon, idx, onClick }: { text: string; icon: React.ReactNode; idx: number; onClick: () => void }) {
   const [hover, setHover] = useState(false)
   return (
     <button
-      className="hb-glass-sm"
+      className="hb-panel hb-bracketed"
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        padding: '0.95rem 1.05rem',
-        border: `1px solid ${hover ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.10)'}`,
-        background: hover
-          ? 'linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03))'
-          : 'linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
-        backdropFilter: 'blur(20px) saturate(1.5)',
-        WebkitBackdropFilter: 'blur(20px) saturate(1.5)',
+        padding: '0.6rem 0.85rem 0.8rem',
+        border: `1px solid ${hover ? 'rgba(110,200,228,0.55)' : 'rgba(95,165,188,0.22)'}`,
+        background:
+          'repeating-linear-gradient(180deg, rgba(140,205,228,0.026) 0 1px, transparent 1px 3px), ' +
+          (hover
+            ? 'linear-gradient(180deg, rgba(22,52,66,0.62), rgba(10,26,34,0.62))'
+            : 'linear-gradient(180deg, rgba(16,38,48,0.5), rgba(8,20,26,0.5))'),
         boxShadow: hover
-          ? '0 8px 28px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)'
-          : '0 4px 18px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)',
-        color: hover ? 'var(--text-primary)' : 'var(--text-secondary)',
+          ? 'inset 0 1px 0 rgba(140,215,240,0.22), 0 8px 28px rgba(0,0,0,0.45)'
+          : 'inset 0 1px 0 rgba(140,215,240,0.1), 0 4px 18px rgba(0,0,0,0.3)',
+        color: hover ? '#d7e7ee' : '#9bb5bf',
         fontSize: '0.84rem', lineHeight: 1.55,
+        fontFamily: "'SamsungOne','Inter',sans-serif",
         textAlign: 'left', cursor: 'pointer',
         transition: 'border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s',
-        display: 'flex', flexDirection: 'column', gap: '0.5rem',
+        display: 'flex', flexDirection: 'column', gap: '0.45rem',
         width: '100%', height: '100%',
       }}
     >
-      <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{icon}</span>
+      {/* File-card index row — "F_06.8/2.3" microcopy */}
+      <span style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        fontFamily: "'Share Tech Mono', monospace", fontSize: '0.58rem',
+        letterSpacing: '0.12em',
+        color: hover ? 'var(--hb-amber-bright)' : 'var(--hb-amber)',
+        transition: 'color 0.15s',
+      }}>
+        F_0{idx + 1}.{idx + 2}/2.{idx + 1}
+        <span style={{ color: hover ? '#5fcce6' : '#3a6472', transition: 'color 0.15s' }}>{icon}</span>
+      </span>
       <span>{text}</span>
     </button>
   )
@@ -59,7 +70,7 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
   const salutation = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
   // Settings value takes priority; fall back to profile file default
   const displayName = settings.userName.trim() || profile?.userName || ''
-  const fullGreeting = displayName ? `${salutation}, ${displayName}` : salutation
+  const fullGreeting = (displayName ? `${salutation}, ${displayName}` : salutation).toUpperCase()
 
   // Typewriter over the full greeting string
   const [typed, setTyped] = useState('')
@@ -77,20 +88,64 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
     return () => clearInterval(id)
   }, [fullGreeting])
 
+  // Live clock — the "VIDEO CONFERENCE PENDING IN 3:56:09" thin digits
+  const [now, setNow] = useState(new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const clock = now.toLocaleTimeString('en-GB', { hour12: false })
+  const dateLine = now.toLocaleDateString('en-GB', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+  }).toUpperCase()
+
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', padding: '0 1.5rem 1rem',
     }}>
+      {/* Monitor band — ">>: SEARCHING_ ALL _LIBRARY _ARCHIVES" style */}
+      <p style={{
+        fontFamily: "'Share Tech Mono', monospace",
+        fontSize: '0.62rem', letterSpacing: '0.3em',
+        color: 'var(--hb-cyan)',
+        marginBottom: '1.1rem',
+        animation: 'fadeIn 0.6s ease both',
+      }}>
+        {'>>:'} ALL _SYSTEMS _NOMINAL
+      </p>
+
+      {/* Thin oversized clock */}
+      <p className="hb-num-thin" style={{
+        fontSize: '4.6rem', color: '#cfe9f2',
+        marginBottom: '0.35rem',
+        textShadow: '0 0 22px rgba(95,204,230,0.22)',
+        animation: 'hbAssemble 0.7s ease both',
+      }}>
+        {clock}
+      </p>
+      <p style={{
+        fontFamily: "'Rajdhani', sans-serif",
+        fontSize: '0.66rem', fontWeight: 600, letterSpacing: '0.34em',
+        color: 'var(--hb-text-faint)',
+        marginBottom: '2.2rem',
+        animation: 'fadeIn 0.6s 0.15s ease both',
+      }}>
+        {dateLine}
+      </p>
+
+      {/* Greeting typewriter — thin uppercase Stark title */}
       <h1 style={{
-        fontSize: '2.1rem', fontWeight: 600, color: 'var(--text-primary)',
-        marginBottom: '0.5rem', textAlign: 'center', letterSpacing: '-0.02em',
-        minHeight: '2.8rem',
+        fontFamily: "'Rajdhani', sans-serif",
+        fontSize: '1.7rem', fontWeight: 500, color: '#ecf6f9',
+        marginBottom: '0.5rem', textAlign: 'center',
+        letterSpacing: '0.22em',
+        minHeight: '2.3rem',
       }}>
         {typed}
         <span style={{
-          display: 'inline-block', width: '2px', height: '1.1em',
-          background: 'var(--text-primary)', marginLeft: '1px',
+          display: 'inline-block', width: '0.55em', height: '1.02em',
+          background: 'rgba(95,204,230,0.65)', marginLeft: '4px',
           verticalAlign: 'text-bottom',
           opacity: done ? 0 : 1,
           transition: 'opacity 0.5s',
@@ -99,8 +154,9 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
       </h1>
 
       <p style={{
-        fontSize: '1rem', color: 'var(--text-muted)',
-        marginBottom: '2.5rem', textAlign: 'center',
+        fontFamily: "'SamsungOne','Inter',sans-serif",
+        fontSize: '0.92rem', color: 'var(--hb-text-dim)',
+        marginBottom: '2.4rem', textAlign: 'center',
         animation: 'fadeSlideIn 0.4s 0.2s ease both',
       }}>
         How can I help you today?
@@ -110,12 +166,12 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
           gridAutoRows: '1fr',
-          gap: '0.5rem', width: '100%', maxWidth: 580, marginBottom: '2rem',
+          gap: '0.5rem', width: '100%', maxWidth: 620, marginBottom: '2rem',
           alignItems: 'stretch',
         }}>
           {profile.suggestedPrompts.map((p, i) => (
-            <div key={i} style={{ display: 'flex', animation: `fadeSlideIn 0.4s ${0.3 + i * 0.07}s ease both` }}>
-              <PromptCard text={p} icon={PROMPT_ICONS[i % PROMPT_ICONS.length]} onClick={() => onSend(p)} />
+            <div key={i} style={{ display: 'flex', animation: `hbAssemble 0.45s ${0.3 + i * 0.09}s ease both` }}>
+              <PromptCard text={p} icon={PROMPT_ICONS[i % PROMPT_ICONS.length]} idx={i} onClick={() => onSend(p)} />
             </div>
           ))}
         </div>

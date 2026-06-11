@@ -26,7 +26,11 @@ class AgentProfile(ABC):
         SPEDA governs model allocation — agents do not decide independently (D-C4).
         - User-facing interactive → Sonnet 4.6
         - Background / automated → Haiku 4.5
+        LLM_MAIN_MODEL / LLM_BACKGROUND_MODEL in .env override per deployment
+        (any "provider:model" ref — see app/services/llm_client.py).
         """
+        from app.config import settings
+
         if is_background or triggered_by in ("n8n", "agent"):
-            return self.haiku_model
-        return self.sonnet_model
+            return settings.llm_background_model or self.haiku_model
+        return settings.llm_main_model or self.sonnet_model

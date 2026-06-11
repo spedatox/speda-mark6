@@ -141,7 +141,7 @@ async def update_session_log(
     Append a one-line dated summary of this exchange to /memories/log.md.
     Keeps the log bounded to the most recent LOG_MAX_ENTRIES entries.
     """
-    from app.services.anthropic_client import AnthropicClient
+    from app.services.llm_client import LLMClient
     from app.skills.memory import ensure_seeded
 
     try:
@@ -150,7 +150,7 @@ async def update_session_log(
             if not user_msg or not assistant_msg:
                 return
 
-            client = AnthropicClient()
+            client = LLMClient()
             response = await client.create_message(
                 model=model,
                 system="You write terse one-line session log entries. Follow instructions exactly.",
@@ -261,7 +261,7 @@ async def run_daily_maintenance(
     /memories/dossier.md (inferred behavioural model). Self-guards on the
     "Last updated" date stamp in current.md so it runs at most once per day.
     """
-    from app.services.anthropic_client import AnthropicClient
+    from app.services.llm_client import LLMClient
     from app.skills.memory import ensure_seeded
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -280,7 +280,7 @@ async def run_daily_maintenance(
             dossier = await _get_file(db, user_id, DOSSIER_PATH)
             exchanges = await _recent_exchanges(db, user_id)
 
-            client = AnthropicClient()
+            client = LLMClient()
 
             # ── Refresh current.md ────────────────────────────────────────────
             try:
@@ -364,7 +364,7 @@ async def generate_title(
     Background task: generate a short session title after the first exchange.
     Only runs if the session has no title yet — idempotent.
     """
-    from app.services.anthropic_client import AnthropicClient
+    from app.services.llm_client import LLMClient
 
     try:
         async with AsyncSessionLocal() as db:
@@ -378,7 +378,7 @@ async def generate_title(
             if not user_msg or not assistant_msg:
                 return
 
-            client = AnthropicClient()
+            client = LLMClient()
             response = await client.create_message(
                 model=model,
                 system="You generate short conversation titles. Follow instructions exactly.",
