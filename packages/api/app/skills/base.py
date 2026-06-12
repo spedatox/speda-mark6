@@ -19,6 +19,9 @@ class Skill(ABC):
     description: str
     input_schema: dict
     read_only: bool = False  # Set True for research/retrieval skills (Rule 9)
+    # Set True for skills that need an INTERNET uplink (not just a local
+    # service) — they are filtered out under the Dead Zone Protocol.
+    requires_network: bool = False
 
     @abstractmethod
     async def execute(self, args: dict, context: "AgentContext") -> str:

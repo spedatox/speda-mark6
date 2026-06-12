@@ -272,7 +272,7 @@ async def available_models() -> list[dict]:
                     {
                         "id": f"ollama:{m['name']}",
                         "name": m["name"],
-                        "description": "Local model via Ollama — dev/testing only",
+                        "description": "Local weights — operational with zero uplink",
                         "tags": ["local"],
                         "provider": "ollama",
                     }

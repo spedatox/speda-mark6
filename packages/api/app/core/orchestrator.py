@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from app.core.context import AgentContext
@@ -38,12 +37,15 @@ class AgentOrchestrator:
         """
         Build the full system prompt from the profile template + runtime context vars.
         Only called here — never in a router, never in a service.
+
+        Deliberately NO time-derived vars: a clock anywhere in the system prompt
+        changes the request prefix every minute, which silently invalidates
+        prompt caching on every provider (Anthropic explicit, OpenAI/Gemini
+        implicit, Ollama KV). Current time reaches the model via the timestamp
+        stamped onto each user message (SessionManager.stamp_user_content).
         """
         return self._profile.build_system_prompt(
             {
-                "current_datetime": datetime.now(timezone.utc).strftime(
-                    "%A, %d %B %Y %H:%M UTC"
-                ),
                 "timezone": context.timezone,
                 "model": context.model,
             }
@@ -61,19 +63,21 @@ class AgentOrchestrator:
         """
         log = logger.getChild("run")
 
-        # Build the system prompt as THREE blocks, ordered for prompt caching.
-        # Caching keys on byte-identical prefixes, so volatile content must come
-        # last and stay OUT of the cached blocks (see anthropic_client._apply_prompt_caching):
+        # Build the system prompt as TWO fully-cacheable blocks. The ENTIRE
+        # system is stable now — no clock anywhere in the prefix:
         #
-        #   1. stable_core   — identity + policies + tool guidance. Never changes
-        #                      between turns → cached (biggest block, ~13k tokens).
+        #   1. stable_core   — identity + policies + tool guidance + per-model
+        #                      addenda. Stable per model (and caches are
+        #                      model-scoped anyway) → cached (biggest block).
         #   2. memory_block  — owner/current/dossier/history + size-free listing.
         #                      Changes at most ~daily → cached.
-        #   3. volatile_tail — current datetime + active model. Changes every
-        #                      minute → NEVER cached (tiny, ~30 tokens).
         #
-        # Previously all three were concatenated into one cached block, so the
-        # minute-precision clock busted the entire ~15k-token cache every minute.
+        # Current time lives in per-message timestamps (stamped from each
+        # message's DB created_at), AFTER the cached prefix and byte-stable
+        # across turns. The previous design kept a minute-precision clock in an
+        # uncached system tail — that tail sat in front of the conversation, so
+        # the conversation cache entry was rewritten at the 1h-TTL 2x price on
+        # EVERY turn and read ~never. Worse than no caching at all.
         stable_core = self.build_system_prompt(context)
 
         # Budget mode — hard frugality directive (runtime-toggleable, persistent).
@@ -107,15 +111,51 @@ class AgentOrchestrator:
                     extra={"request_id": context.request_id, "error": str(exc)},
                 )
 
-        now = datetime.now(timezone.utc).strftime("%A, %d %B %Y %H:%M UTC")
-        volatile_tail = (
-            f"## Now\n\nCurrent date and time: {now}\nActive model: {context.model}"
+        # Time protocol — replaces the old volatile "## Now" tail. Stable text;
+        # the actual clock rides on the user messages. Model line is stable per
+        # model, and provider caches are model-scoped anyway.
+        stable_core += (
+            "\n\n## Time\n\n"
+            "Every user message is prefixed with its UTC timestamp, formatted "
+            "[YYYY-MM-DD HH:MM UTC]. The newest user message's stamp IS the "
+            "current date and time — trust it over any internal sense of time.\n"
+            f"Active model: {context.model}"
         )
+
+        # ── Dead Zone Protocol ──────────────────────────────────────────────
+        # Offline mode: only offline-capable tools are exposed, and the model
+        # is told the uplink is gone. Outside the dead zone, every provider —
+        # including Ollama in dev — gets the full online toolset.
+        dead_zone = await self._registry.dead_zone_active()
+        provider = context.model.partition(":")[0] if ":" in context.model else "anthropic"
+
+        if provider == "ollama":
+            # Local models need firmer tool discipline: they call web search to
+            # answer greetings and invent tool names. Stable per model → cached.
+            stable_core += (
+                "\n\n## Tool discipline\n\n"
+                "Call a tool ONLY when the task genuinely requires it — live "
+                "data, the user's files/memory, or an explicit action. Never "
+                "call tools for greetings, small talk, or anything you already "
+                "know. Only the tools in the tools list exist; never invent a "
+                "tool name. When no tool fits, answer directly."
+            )
+
+        if dead_zone:
+            stable_core += (
+                "\n\n## DEAD ZONE PROTOCOL — ACTIVE\n\n"
+                "No uplink. You are running on local compute only. Online "
+                "capabilities (web search, mail, calendar, sub-agents) are "
+                "unavailable and have been removed from your tools. Work from "
+                "local knowledge, memory and files; be direct about what cannot "
+                "be done until the link is restored."
+            )
 
         # Catalog of lazily-loadable toolsets (small, stable → cached). SPEDA
         # pulls a toolset in via use_toolset only when a task needs it, keeping
         # the prompt prefix tiny instead of shipping every MCP tool every call.
-        catalog = self._registry.toolset_catalog()
+        # Pointless in a dead zone — every loadable toolset is remote.
+        catalog = "" if dead_zone else self._registry.toolset_catalog()
         if catalog:
             stable_core = f"{stable_core}\n\n{catalog}"
 
@@ -124,7 +164,6 @@ class AgentOrchestrator:
         system_blocks: list[dict] = [{"type": "text", "text": stable_core, "_cache": True}]
         if memory_block:
             system_blocks.append({"type": "text", "text": memory_block, "_cache": True})
-        system_blocks.append({"type": "text", "text": volatile_tail})  # uncached
 
         # Keep a plain-string copy for any downstream logging/inspection.
         context.system_prompt = stable_core
@@ -133,7 +172,9 @@ class AgentOrchestrator:
         context.extra.setdefault("active_servers", set())
 
         messages = list(context.conversation_history)
-        tools = self._registry.list_tools(context.extra["active_servers"])
+        tools = self._registry.list_tools(
+            context.extra["active_servers"], offline_only=dead_zone
+        )
         iterations = 0
         produced_text = False  # any text streamed yet this turn (for paragraph breaks)
 
@@ -287,7 +328,9 @@ class AgentOrchestrator:
 
                 # A use_toolset call may have loaded new toolsets — rebuild the
                 # tool list so they're available on the next iteration.
-                tools = self._registry.list_tools(context.extra["active_servers"])
+                tools = self._registry.list_tools(
+                    context.extra["active_servers"], offline_only=dead_zone
+                )
 
             # ── max_tokens ──────────────────────────────────────────────────
             elif stop_reason == "max_tokens":

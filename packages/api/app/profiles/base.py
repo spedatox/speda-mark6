@@ -12,10 +12,34 @@ class AgentProfile(ABC):
     sonnet_model: str = "claude-sonnet-4-6"
     haiku_model: str = "claude-haiku-4-5-20251001"
 
+    # Per-provider cheap models for background tasks (title generation, session
+    # log, daily maintenance). Populated by the concrete profile — Rule 10:
+    # model IDs live in the profile file, never in core. Keys are provider
+    # names ("openai", "gemini"); Anthropic uses haiku_model, Ollama reuses
+    # the active local model (it's the only one available in a dead zone).
+    background_models: dict[str, str] = {}
+
     @abstractmethod
     def build_system_prompt(self, context_vars: dict) -> str:
         """Build the full system prompt string from the template and runtime context vars."""
         ...
+
+    def background_model(self, active_model_ref: str) -> str:
+        """
+        Cheap model ON THE SAME PROVIDER as the active chat model, for background
+        tasks. Chatting on OpenAI/Gemini must not silently spend Anthropic
+        credit (or fail when no Anthropic key is configured), and in the Dead
+        Zone (Ollama, no uplink) the local model is the only one that answers.
+        """
+        from app.config import settings
+
+        provider, sep, _ = active_model_ref.partition(":")
+        if not sep or provider not in ("openai", "gemini", "ollama"):
+            # Anthropic path — keep honoring the .env override.
+            return settings.llm_background_model or self.haiku_model
+        if provider == "ollama":
+            return active_model_ref
+        return self.background_models.get(provider, active_model_ref)
 
     def allocate_model(
         self,

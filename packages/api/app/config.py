@@ -82,6 +82,19 @@ class Settings(BaseSettings):
     # with lazy loading (small, stable prefix), the tool/system tokens are
     # effectively written once and read forever.
     prompt_cache_ttl: str = "1h"
+    # TTL for the CONVERSATION breakpoint (the growing message history). The
+    # history changes every turn, so its cache entry is rewritten incrementally
+    # anyway — the cheaper 5m write (1.25x base vs 2x for 1h) wins. Anthropic
+    # requires longer-TTL breakpoints to precede shorter ones; tools/system
+    # render before messages, so 1h prefix + 5m conversation is always valid.
+    prompt_cache_conversation_ttl: str = "5m"
+
+    # Dead Zone Protocol — offline operating mode (Ollama is the only provider
+    # that still answers without an uplink). "auto" probes connectivity and
+    # engages by itself when the internet is gone; "on" forces it (dev testing);
+    # "off" disables it. OUTSIDE the dead zone, Ollama models run with the full
+    # online toolset like any other provider — dev testing stays unrestricted.
+    dead_zone_mode: str = "auto"  # auto | on | off
 
     # Which MCP servers to CONNECT at startup. With lazy tool loading (below),
     # connecting a server is cheap — its tools only enter the prompt prefix when

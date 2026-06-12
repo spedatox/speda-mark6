@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 class UseToolsetSkill(Skill):
     name = "use_toolset"
+    requires_network = True  # loads MCP toolsets — all remote, useless in a dead zone
     description = (
         "Loads a toolset so its tools become usable. Most tools (Gmail, Calendar, "
         "Notion, etc.) are NOT loaded by default — the list of loadable toolsets is "

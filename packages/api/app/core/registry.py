@@ -88,6 +88,52 @@ class CapabilityRegistry:
         self._mcp_tool_map: dict[str, str] = {}  # tool_name → server_name
         self._mcp_tool_defs: list[dict] = []     # full definitions for list_tools()
         self._adapters: dict[str, "OSSAdapter"] = {}
+        # Dead Zone Protocol — cached connectivity probe (registry lives on
+        # app.state, so this is instance state, not a module global).
+        self._dz_checked_at: float = 0.0
+        self._dz_offline: bool = False
+
+    # ── Dead Zone Protocol ─────────────────────────────────────────────────────
+
+    async def dead_zone_active(self) -> bool:
+        """
+        True when SPEDA is operating without an uplink. DEAD_ZONE_MODE=on forces
+        it (dev testing), =off disables it, =auto (default) probes connectivity
+        and caches the verdict for 60s. In the dead zone, list_tools() filters
+        to offline-capable Tier-1 skills only — a local model calling web search
+        with no internet just burns its own context on guaranteed failures.
+        """
+        import time
+
+        from app.config import settings
+
+        mode = settings.dead_zone_mode.strip().lower()
+        if mode == "on":
+            return True
+        if mode == "off":
+            return False
+
+        now = time.monotonic()
+        if self._dz_checked_at and now - self._dz_checked_at < 60:
+            return self._dz_offline
+
+        import httpx
+
+        was_offline = self._dz_offline
+        try:
+            # Any HTTP response at all (even 4xx) proves the uplink is alive.
+            async with httpx.AsyncClient(timeout=2.0) as probe:
+                await probe.head("https://api.anthropic.com")
+            self._dz_offline = False
+        except Exception:
+            self._dz_offline = True
+        self._dz_checked_at = now
+        if self._dz_offline != was_offline:
+            logger.warning(
+                "dead_zone_engaged" if self._dz_offline else "dead_zone_lifted",
+                extra={"mode": mode},
+            )
+        return self._dz_offline
 
     # ── Tier 0 ────────────────────────────────────────────────────────────────
 
@@ -164,7 +210,11 @@ class CapabilityRegistry:
         from app.config import settings
         return {s.strip() for s in settings.always_on_servers.split(",") if s.strip()}
 
-    def list_tools(self, active_servers: set[str] | None = None) -> list[dict]:
+    def list_tools(
+        self,
+        active_servers: set[str] | None = None,
+        offline_only: bool = False,
+    ) -> list[dict]:
         """
         Return tools across all tiers in Anthropic tool format.
 
@@ -172,6 +222,10 @@ class CapabilityRegistry:
         always-on or have been loaded this turn (active_servers) — keeping the
         cached prefix small. The rest are advertised via toolset_catalog() and
         pulled in on demand by the use_toolset tool.
+
+        offline_only (Dead Zone Protocol): only Tier-1 skills that work without
+        an uplink survive — MCP servers, adapters and Task sub-agents (which
+        spawn LLM calls of their own) are all dropped.
         """
         from app.config import settings
         from app.core.runtime_state import get_budget_mode, get_disabled_servers
@@ -181,11 +235,16 @@ class CapabilityRegistry:
 
         tools: list[dict] = []
 
-        if self._task_tool_registered and not get_budget_mode():
+        if self._task_tool_registered and not get_budget_mode() and not offline_only:
             tools.append(_TASK_TOOL_DEFINITION)
 
         for skill in self._skills.values():
+            if offline_only and getattr(skill, "requires_network", False):
+                continue
             tools.append(skill.to_tool_definition())
+
+        if offline_only:
+            return tools
 
         for tool in self._mcp_tool_defs:
             srv = self._mcp_tool_map.get(tool["name"])
@@ -279,7 +338,25 @@ class CapabilityRegistry:
             if tool_name in self._adapters:
                 return await self._adapters[tool_name].execute(args, context)
 
-            return f"Unknown tool: '{tool_name}'"
+            # Hallucinated tool name (open-weight models do this). Return a
+            # corrective result instead of a bare error so the model can
+            # self-recover in the next iteration rather than looping or dying.
+            known = sorted(
+                ({"Task"} if self._task_tool_registered else set())
+                | set(self._skills)
+                | set(self._mcp_tool_map)
+                | set(self._adapters)
+            )
+            logger.warning(
+                "unknown_tool_called",
+                extra={"tool": tool_name, "request_id": context.request_id},
+            )
+            return (
+                f"Error: the tool '{tool_name}' does not exist — do not call it "
+                f"again. Tools that actually exist: {', '.join(known)}. If none "
+                "of them fits, answer directly from your own knowledge instead "
+                "of calling a tool."
+            )
 
         except Exception as e:
             logger.error(
