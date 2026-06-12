@@ -40,6 +40,7 @@ async def lifespan(app: FastAPI):
     # Tier 1 — Python Skills
     # read_skill is the progressive-disclosure meta-tool (registered first so it's
     # always available when Claude wants to load full SKILL.md instructions).
+    from app.skills.automations import AutomationsSkill
     from app.skills.budget import BudgetModeSkill
     from app.skills.sandbox import RunCommandSkill, DeliverFileSkill
     from app.skills.toolsets import UseToolsetSkill
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(RunCommandSkill())
     await registry.register_skill(DeliverFileSkill())
     await registry.register_skill(UseToolsetSkill())
+    await registry.register_skill(AutomationsSkill())
 
     # Tier 2 — MCP Servers
     from app.mcp.servers import register_all_mcp_servers
@@ -109,6 +111,11 @@ async def lifespan(app: FastAPI):
 
     orchestrator = AgentOrchestrator(registry, llm_client, profile)
 
+    # ── 7.5 Proactive delivery + automation engine clients ─────────────────────
+    from app.services.telegram import TelegramClient
+
+    telegram = TelegramClient()
+
     # ── 8. Inject into app.state ───────────────────────────────────────────────
     app.state.registry = registry
     app.state.agent_registry = agent_registry
@@ -116,6 +123,7 @@ async def lifespan(app: FastAPI):
     app.state.ws_manager = ws_manager
     app.state.session_manager = session_manager
     app.state.profile = profile
+    app.state.telegram = telegram
 
     logger.info(
         "startup_complete",
@@ -162,7 +170,7 @@ def create_app() -> FastAPI:
     app.add_middleware(APIKeyMiddleware)
 
     # Routers
-    from app.routers import admin, agents, chat, health, trigger, import_chats, files, connections
+    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -172,6 +180,7 @@ def create_app() -> FastAPI:
     app.include_router(import_chats.router)
     app.include_router(files.router)
     app.include_router(connections.router)
+    app.include_router(automations.router)
 
     return app
 

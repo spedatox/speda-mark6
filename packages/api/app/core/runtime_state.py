@@ -63,6 +63,19 @@ def get_disabled_servers() -> set[str]:
     return set(_load().get("disabled_servers", []))
 
 
+def get_telegram_chat_id() -> str:
+    """Chat id captured via the in-app 'Connect Telegram' flow. Falls back to the
+    .env value if the owner hasn't connected through the UI yet."""
+    return _load().get("telegram_chat_id", settings.telegram_chat_id)
+
+
+def set_telegram_chat_id(chat_id: str) -> None:
+    state = _load()
+    state["telegram_chat_id"] = str(chat_id)
+    _save()
+    logger.info("telegram_chat_id_saved")
+
+
 def get_google_refresh_token() -> str:
     """Refresh token captured via the in-app 'Sign in with Google' flow.
     Falls back to the .env value if the user hasn't signed in through the UI."""

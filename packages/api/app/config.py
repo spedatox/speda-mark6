@@ -70,6 +70,23 @@ class Settings(BaseSettings):
     speda_api_key: str = "dev-key"
     n8n_secret: str = "dev-n8n-secret"
 
+    # ── n8n automation engine ────────────────────────────────────────────────
+    # n8n is the sole scheduling/automation organ (CLAUDE.md). SPEDA is a CONTROL
+    # PLANE over its REST API — it composes/lists/toggles workflows but never
+    # schedules anything internally. Default host is the docker-compose service.
+    n8n_api_url: str = "http://n8n:5678"
+    n8n_api_key: str = ""   # n8n → Settings → n8n API → create key
+    # URL n8n uses to call BACK into SPEDA's /trigger endpoint. Internal compose
+    # network by default; override with the public domain if n8n runs elsewhere.
+    speda_callback_url: str = "http://app:8000"
+
+    # ── Telegram (proactive outbound delivery) ───────────────────────────────
+    # When an n8n watcher fires, SPEDA composes a message and pushes it here.
+    telegram_bot_token: str = ""   # from @BotFather
+    # Captured at runtime via the in-app "Connect Telegram" flow (runtime_state);
+    # this is only a fallback for headless setups.
+    telegram_chat_id: str = ""
+
     # App
     debug: bool = False
     log_level: str = "INFO"
