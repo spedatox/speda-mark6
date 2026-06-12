@@ -7,5 +7,6 @@ from app.models.memory_file import MemoryFile
 from app.models.agent import AgentRecord
 from app.models.tool_call import ToolCall
 from app.models.notification import Notification
+from app.models.automation import Automation
 
-__all__ = ["User", "Session", "Message", "Memory", "AgentRecord", "ToolCall", "Notification"]
+__all__ = ["User", "Session", "Message", "Memory", "AgentRecord", "ToolCall", "Notification", "Automation"]
