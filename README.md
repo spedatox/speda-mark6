@@ -1,4 +1,4 @@
-# SPEDA Mark VI
+# S.P.E.D.A. Mark VI
 
 **Specialized Personal Executive Digital Assistant** — a single-user, proactive, ambient AI system. FastAPI agentic backend, multi-provider LLM routing, n8n-driven automations with Telegram delivery, and an Electron desktop client.
 
