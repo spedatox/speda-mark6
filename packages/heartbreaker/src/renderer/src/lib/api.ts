@@ -176,6 +176,73 @@ export async function setConnection(config: AppConfig, server: string, active: b
   })
 }
 
+/* ── Automations — SPEDA's proactive n8n watchers ─────────────────────────── */
+
+export interface AutomationInfo {
+  id: number
+  n8n_workflow_id: string | null
+  name: string
+  kind: 'schedule' | 'web_watch' | 'rss_watch' | 'webhook' | string
+  intent: string
+  active: boolean
+  created_at: string | null
+  expires_at: string | null
+  last_fired_at: string | null
+  summary: string
+}
+
+export interface AutomationsStatus {
+  n8n_configured: boolean
+  n8n_online: boolean
+  n8n_url: string
+  telegram_configured: boolean
+  telegram_connected: boolean
+}
+
+export async function getAutomations(config: AppConfig): Promise<AutomationInfo[]> {
+  const res = await fetch(`${config.apiBase}/automations`, { headers: { 'X-API-Key': config.apiKey } })
+  if (!res.ok) return []
+  return (await res.json()).automations ?? []
+}
+
+export async function toggleAutomation(config: AppConfig, id: number, active: boolean): Promise<void> {
+  await fetch(`${config.apiBase}/automations/${id}/toggle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': config.apiKey },
+    body: JSON.stringify({ active }),
+  })
+}
+
+export async function deleteAutomation(config: AppConfig, id: number): Promise<void> {
+  await fetch(`${config.apiBase}/automations/${id}`, {
+    method: 'DELETE',
+    headers: { 'X-API-Key': config.apiKey },
+  })
+}
+
+export async function getAutomationsStatus(config: AppConfig): Promise<AutomationsStatus | null> {
+  try {
+    const res = await fetch(`${config.apiBase}/automations/status`, { headers: { 'X-API-Key': config.apiKey } })
+    if (!res.ok) return null
+    return res.json()
+  } catch { return null }
+}
+
+export async function telegramConnect(config: AppConfig): Promise<{ link?: string; error?: string }> {
+  const res = await fetch(`${config.apiBase}/automations/telegram/connect`, {
+    method: 'POST',
+    headers: { 'X-API-Key': config.apiKey },
+  })
+  if (!res.ok) return { error: `HTTP ${res.status}` }
+  return res.json()
+}
+
+export async function telegramStatus(config: AppConfig): Promise<{ configured: boolean; connected: boolean }> {
+  const res = await fetch(`${config.apiBase}/automations/telegram/status`, { headers: { 'X-API-Key': config.apiKey } })
+  if (!res.ok) return { configured: false, connected: false }
+  return res.json()
+}
+
 export async function getBudgetMode(config: AppConfig): Promise<boolean> {
   try {
     const res = await fetch(`${config.apiBase}/budget-mode`, {

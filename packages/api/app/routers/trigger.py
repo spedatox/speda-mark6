@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 
@@ -5,7 +6,8 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.context import AgentContext
-from app.database import get_db
+from app.database import AsyncSessionLocal, get_db
+from app.schemas.sse import SSEEventType
 from app.schemas.trigger import TriggerRequest, TriggerResponse
 from app.services.n8n import format_trigger_context, validate_n8n_secret
 
@@ -30,6 +32,7 @@ async def trigger(
     orchestrator = request.app.state.orchestrator
     session_manager = request.app.state.session_manager
     profile = request.app.state.profile
+    telegram = request.app.state.telegram
 
     request_id = str(uuid.uuid4())
     user_id = 1
@@ -54,10 +57,14 @@ async def trigger(
         conversation_history=[
             {
                 "role": "user",
-                "content": f"Automated trigger received: {body.payload}",
+                "content": (
+                    "Automated trigger received. Compose the message the owner should "
+                    "see — short, concrete, leading with what happened. The 'intent' "
+                    f"field is your past instruction to yourself. Payload: {body.payload}"
+                ),
             }
         ],
-        db=db,
+        db=db,  # replaced with a task-owned session in _run_trigger
         timezone="UTC",
     )
 
@@ -71,23 +78,53 @@ async def trigger(
         },
     )
 
-    # Run the orchestrator as a background task
-    # For push/silent modes we don't stream — fire and forget
-    import asyncio
-
-    asyncio.create_task(_run_trigger(orchestrator, context))
+    # Run the orchestrator as a background task — push/silent modes don't stream.
+    asyncio.create_task(_run_trigger(orchestrator, telegram, context, body.payload))
 
     return TriggerResponse(accepted=True, request_id=request_id)
 
 
-async def _run_trigger(orchestrator, context: AgentContext) -> None:
-    """Run the orchestrator loop for a trigger request, consuming all SSE events."""
+async def _run_trigger(orchestrator, telegram, context: AgentContext, payload: dict) -> None:
+    """Run the orchestrator loop for a trigger request and deliver the result.
+
+    Owns its DB session: the request-scoped session closes the moment the
+    HTTP response returns, so this task must not touch it. push → Telegram;
+    silent → stored in the session transcript only.
+    """
     try:
-        async for event in orchestrator.run(context):
-            # Events are consumed internally for push/silent modes
-            # TODO: For push mode, call NotificationsSkill when DONE event arrives
-            pass
-    except Exception as e:
+        async with AsyncSessionLocal() as db:
+            context.db = db
+
+            chunks: list[str] = []
+            async for event in orchestrator.run(context):
+                if event.type == SSEEventType.CHUNK and isinstance(event.data, str):
+                    chunks.append(event.data)
+                elif event.type == SSEEventType.ERROR:
+                    logger.error(
+                        "trigger_orchestrator_error",
+                        extra={"request_id": context.request_id, "error": str(event.data)},
+                    )
+            final_text = "".join(chunks).strip()
+
+            # Stamp the automation's last-fired time (best-effort, by name).
+            automation_name = payload.get("automation")
+            if automation_name:
+                from app.automations.manager import mark_fired
+
+                await mark_fired(str(automation_name), db)
+
+            if context.output_mode == "push" and final_text:
+                delivered = await telegram.send_message(final_text)
+                logger.info(
+                    "trigger_push_delivered" if delivered else "trigger_push_failed",
+                    extra={"request_id": context.request_id, "chars": len(final_text)},
+                )
+            elif context.output_mode == "push":
+                logger.warning(
+                    "trigger_push_empty",
+                    extra={"request_id": context.request_id},
+                )
+    except Exception as e:  # noqa: BLE001
         logger.error(
             "trigger_run_error",
             extra={"request_id": context.request_id, "error": str(e)},

@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
-import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl } from '../lib/api'
-import type { ConnectionInfo } from '../lib/api'
+import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
+import type { ConnectionInfo, AutomationInfo, AutomationsStatus } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'general' | 'connections' | 'interface' | 'data' | 'account'
+type Tab = 'general' | 'connections' | 'automations' | 'interface' | 'data' | 'account'
 
 export default function SettingsModal({ config, onClose }: Props) {
   const { settings, update } = useSettings()
@@ -45,6 +45,46 @@ export default function SettingsModal({ config, onClose }: Props) {
     await setConnection(config, server, active)
     loadConns()
   }
+  // ── Automations ───────────────────────────────────────────────────────────
+  const [autos, setAutos] = useState<AutomationInfo[]>([])
+  const [autoStatus, setAutoStatus] = useState<AutomationsStatus | null>(null)
+  const [tgMsg, setTgMsg] = useState('')
+  const loadAutos = async () => {
+    setAutos(await getAutomations(config))
+    setAutoStatus(await getAutomationsStatus(config))
+  }
+  useEffect(() => { if (tab === 'automations') loadAutos() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  const handleToggleAuto = async (id: number, active: boolean) => {
+    setAutos(as => as.map(a => a.id === id ? { ...a, active } : a)) // optimistic
+    await toggleAutomation(config, id, active)
+    loadAutos()
+  }
+  const handleDeleteAuto = async (id: number) => {
+    setAutos(as => as.filter(a => a.id !== id))
+    await deleteAutomation(config, id)
+    loadAutos()
+  }
+  const handleTelegramConnect = async () => {
+    setTgMsg('Opening Telegram…')
+    const r = await telegramConnect(config)
+    if (r.error || !r.link) { setTgMsg(r.error || 'Could not start the connect flow.'); return }
+    window.api?.openExternal ? window.api.openExternal(r.link) : window.open(r.link, '_blank')
+    setTgMsg('Tap START in Telegram — connecting automatically…')
+    let n = 0
+    const poll = setInterval(async () => {
+      n++
+      const s = await telegramStatus(config)
+      if (s.connected) {
+        clearInterval(poll)
+        setTgMsg('')
+        loadAutos()
+      } else if (n > 40) {
+        clearInterval(poll)
+        setTgMsg('No response from Telegram — try Connect again.')
+      }
+    }, 3000)
+  }
+
   const [googleMsg, setGoogleMsg] = useState('')
   const signInGoogle = async () => {
     setGoogleMsg('Opening Google sign-in…')
@@ -120,6 +160,7 @@ export default function SettingsModal({ config, onClose }: Props) {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'general', label: 'General' },
     { id: 'connections', label: 'Connections' },
+    { id: 'automations', label: 'Automations' },
     { id: 'interface', label: 'Interface' },
     { id: 'data', label: 'Data' },
     { id: 'account', label: 'Account' },
@@ -404,6 +445,151 @@ export default function SettingsModal({ config, onClose }: Props) {
 
                 <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
                   A server greyed out as “needs …” requires its API key in the backend <code style={{ fontFamily: 'var(--font-mono)' }}>.env</code> and a restart.
+                </p>
+              </div>
+            )}
+
+            {/* Automations tab — SPEDA's proactive n8n watchers */}
+            {tab === 'automations' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+                {/* Pipeline status — n8n engine + Telegram delivery */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {[
+                    {
+                      label: 'n8n ENGINE',
+                      ok: !!autoStatus?.n8n_online,
+                      detail: !autoStatus?.n8n_configured
+                        ? 'needs N8N_API_KEY in the backend .env (n8n → Settings → n8n API)'
+                        : autoStatus?.n8n_online ? autoStatus.n8n_url : 'unreachable — is the n8n container running?',
+                    },
+                    {
+                      label: 'TELEGRAM DELIVERY',
+                      ok: !!autoStatus?.telegram_connected,
+                      detail: !autoStatus?.telegram_configured
+                        ? 'needs TELEGRAM_BOT_TOKEN in the backend .env (create a bot with @BotFather)'
+                        : autoStatus?.telegram_connected ? 'connected — SPEDA can reach you' : 'bot ready — connect your chat below',
+                    },
+                  ].map(row => (
+                    <div key={row.label} style={{
+                      display: 'flex', alignItems: 'center', gap: '0.75rem',
+                      padding: '0.55rem 0.75rem',
+                      border: '1px solid var(--border)',
+                      background: 'rgba(255,255,255,0.02)',
+                    }}>
+                      <span style={{
+                        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                        background: row.ok ? 'var(--hb-green)' : 'var(--hb-amber)',
+                      }} />
+                      <span style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', letterSpacing: '0.08em', flexShrink: 0 }}>
+                        {row.label}
+                      </span>
+                      <span style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {row.detail}
+                      </span>
+                    </div>
+                  ))}
+
+                  {autoStatus?.telegram_configured && !autoStatus?.telegram_connected && (
+                    <div>
+                      <button
+                        onClick={handleTelegramConnect}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          border: '1px solid rgba(95,204,230,0.5)',
+                          background: 'rgba(54,171,202,0.14)',
+                          color: '#cdeefa', cursor: 'pointer',
+                          fontFamily: "'Rajdhani',sans-serif", fontSize: '0.76rem', fontWeight: 700,
+                          letterSpacing: '0.12em', textTransform: 'uppercase',
+                        }}
+                      >
+                        Connect Telegram
+                      </button>
+                      {tgMsg && (
+                        <p style={{ marginTop: '0.5rem', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                          {tgMsg}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Watcher list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {autos.length === 0 && (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      Nothing is being watched yet.
+                    </p>
+                  )}
+                  {autos.map(a => (
+                    <div key={a.id} style={{
+                      display: 'flex', alignItems: 'center', gap: '0.75rem',
+                      padding: '0.6rem 0.75rem',
+                      border: '1px solid var(--border)',
+                      background: 'rgba(255,255,255,0.02)',
+                      opacity: a.active ? 1 : 0.55,
+                    }}>
+                      {/* kind chip */}
+                      <span style={{
+                        flexShrink: 0, padding: '1px 6px',
+                        fontSize: '0.58rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.1em',
+                        color: a.active ? 'var(--hb-cyan-bright)' : 'var(--text-muted)',
+                        border: '1px solid rgba(95,165,188,0.3)',
+                      }}>
+                        {{ web_watch: 'WEB', rss_watch: 'RSS', schedule: 'CRON', webhook: 'HOOK' }[a.kind] ?? a.kind.toUpperCase()}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.86rem', color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {a.name}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {a.summary}
+                          {a.last_fired_at && ` · last fired ${new Date(a.last_fired_at).toLocaleString()}`}
+                          {a.expires_at && ` · until ${new Date(a.expires_at).toLocaleDateString()}`}
+                        </div>
+                      </div>
+                      {/* pause/resume toggle */}
+                      <button
+                        onClick={() => handleToggleAuto(a.id, !a.active)}
+                        title={a.active ? 'Active — click to pause' : 'Paused — click to resume'}
+                        style={{
+                          width: 42, height: 24, flexShrink: 0, borderRadius: 999,
+                          border: 'none', position: 'relative', cursor: 'pointer',
+                          background: a.active ? 'var(--accent)' : 'rgba(95,165,188,0.2)',
+                          transition: 'background 0.15s',
+                        }}
+                      >
+                        <span style={{
+                          position: 'absolute', top: 3, left: a.active ? 21 : 3,
+                          width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                          transition: 'left 0.15s',
+                        }} />
+                      </button>
+                      {/* delete */}
+                      <button
+                        onClick={() => handleDeleteAuto(a.id)}
+                        title="Delete watcher (also removes the n8n workflow)"
+                        style={{
+                          width: 26, height: 26, flexShrink: 0,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          border: '1px solid transparent', background: 'transparent',
+                          color: 'var(--text-muted)', cursor: 'pointer', transition: 'color 0.12s',
+                        }}
+                        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--hb-red)')}
+                        onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)')}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                          <path d="M10 11v6M14 11v6"/>
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                  SPEDA creates these itself — just ask: <em style={{ color: 'var(--hb-amber)', fontStyle: 'normal' }}>“track this page for a month and tell me when my results are up”</em>. When a watcher fires, SPEDA composes the message and pings you on Telegram.
                 </p>
               </div>
             )}
