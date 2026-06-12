@@ -2,6 +2,7 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
+import { useIsMobile } from '../lib/useIsMobile'
 import { fetchModels, fileToImageBlock, getBudgetMode, setBudgetMode } from '../lib/api'
 import type { AppConfig, ModelInfo, ImageBlock } from '../lib/types'
 
@@ -28,7 +29,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   anthropic: 'ANTHROPIC',
   openai: 'OPENAI',
   gemini: 'GOOGLE GEMINI',
-  ollama: 'OLLAMA — LOCAL',
+  ollama: 'DEAD ZONE PROTOCOL',
 }
 
 function formatSize(bytes: number): string {
@@ -309,6 +310,145 @@ function ModelPicker({ models, activeId, onSelect }: {
   )
 }
 
+/* ── Mobile overflow menu — collapses the secondary composer toggles ──────────
+ * Under 768px the attach / budget / voice controls live in a single "+" menu
+ * so the toolbar holds only: [+] · model picker · send. The model picker stays
+ * outside on purpose — it is the one control worth a permanent slot. */
+function MenuRow({ icon, label, value, valueColor, onClick }: {
+  icon: React.ReactNode; label: string; value?: string; valueColor?: string; onClick: () => void
+}) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: '100%', padding: '0.6rem 0.8rem',
+        display: 'flex', alignItems: 'center', gap: '0.6rem',
+        background: hover ? 'rgba(54,171,202,0.1)' : 'transparent',
+        border: 'none',
+        borderLeft: hover ? '2px solid #36abca' : '2px solid transparent',
+        color: hover ? '#cadbe2' : '#7a96a1',
+        cursor: 'pointer',
+        fontFamily: "'Rajdhani',sans-serif",
+        fontSize: '0.76rem', fontWeight: 600,
+        letterSpacing: '0.12em', textTransform: 'uppercase',
+        textAlign: 'left',
+        transition: 'background 0.1s, color 0.1s, border-color 0.1s',
+      }}
+    >
+      <span style={{ color: hover ? '#36abca' : '#3a6472', flexShrink: 0, display: 'flex' }}>{icon}</span>
+      <span style={{ flex: 1 }}>{label}</span>
+      {value && (
+        <span style={{
+          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
+          letterSpacing: '0.1em', color: valueColor || 'var(--hb-text-faint)',
+        }}>
+          {value}
+        </span>
+      )}
+    </button>
+  )
+}
+
+function MobileToolsMenu({ budget, listening, isStreaming, onAttach, onToggleBudget, onVoice }: {
+  budget: boolean; listening: boolean; isStreaming: boolean
+  onAttach: () => void; onToggleBudget: () => void; onVoice: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        className="hb-glass-xs"
+        title="More tools"
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: 30, height: 30,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: `1px solid ${open ? 'var(--hb-edge-bright)' : 'var(--hb-edge)'}`,
+          background: open ? 'rgba(54,171,202,0.18)' : 'var(--hb-holo-fill)',
+          backdropFilter: 'var(--hb-holo-blur)',
+          WebkitBackdropFilter: 'var(--hb-holo-blur)',
+          boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
+          color: open ? '#5fcce6' : '#3a5a65',
+          cursor: 'pointer',
+          transition: 'border-color 0.12s, background 0.12s, color 0.12s',
+          flexShrink: 0,
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          style={{ transform: open ? 'rotate(45deg)' : 'none', transition: 'transform 0.15s' }}>
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div className="hb-glass" style={{
+          position: 'absolute', bottom: 'calc(100% + 6px)', left: 0,
+          width: 224,
+          // Dense frost: the composer's own backdrop-filter creates a nested
+          // backdrop root, which stops this panel's blur from sampling the
+          // textarea beneath it — so the fill itself must do the occluding.
+          background: 'rgba(10, 20, 27, 0.92)',
+          backdropFilter: 'var(--hb-holo-blur)',
+          WebkitBackdropFilter: 'var(--hb-holo-blur)',
+          border: '1px solid var(--hb-edge)',
+          boxShadow: 'var(--hb-holo-shadow)',
+          animation: 'dropDown 0.12s ease',
+          zIndex: 100,
+          overflow: 'hidden',
+        }}>
+          {/* panel header */}
+          <div style={{
+            height: 22, padding: '0 0.6rem',
+            display: 'flex', alignItems: 'center',
+            background: 'linear-gradient(90deg, rgba(29,93,112,0.7), rgba(29,93,112,0.15) 60%, transparent)',
+            borderBottom: '1px solid rgba(95,165,188,0.2)',
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: '0.62rem', fontWeight: 700,
+            letterSpacing: '0.2em', textTransform: 'uppercase',
+            color: '#7a96a1',
+          }}>
+            TOOLS
+          </div>
+          <MenuRow
+            icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>}
+            label="Attach files"
+            onClick={() => { onAttach(); setOpen(false) }}
+          />
+          <MenuRow
+            icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.2a2.4 2.4 0 0 1 2.5-1.7c1.3 0 2.3.8 2.3 1.9 0 2.4-4.6 1.4-4.6 3.7 0 1.1 1 1.9 2.3 1.9a2.4 2.4 0 0 0 2.5-1.7"/></svg>}
+            label="Budget mode"
+            value={budget ? 'ON' : 'OFF'}
+            valueColor={budget ? '#5fc78f' : '#d3a04a'}
+            onClick={onToggleBudget}
+          />
+          {!isStreaming && (
+            <MenuRow
+              icon={<svg width="13" height="13" viewBox="0 0 24 24" fill={listening ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
+              label={listening ? 'Stop listening' : 'Voice input'}
+              onClick={() => { onVoice(); setOpen(false) }}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── File icon ────────────────────────────────────────────────────────────── */
 function FileIcon() {
   return (
@@ -346,6 +486,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
   const { state } = useChatContext()
   const { settings, update } = useSettings()
   const profile = useProfile()
+  const isMobile = useIsMobile()
   const [value, setValue]           = useState('')
   const [focused, setFocused]       = useState(false)
   const [attachments, setAttachments] = useState<AttachedFile[]>([])
@@ -465,7 +606,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
 
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (
-    <div style={{ padding: '0.5rem 1.25rem 0.875rem', flexShrink: 0 }}>
+    <div className="hb-composer" style={{ padding: '0.5rem 1.25rem 0.875rem', flexShrink: 0 }}>
       <div style={{ maxWidth: 780, margin: '0 auto' }}>
 
         {/* ── Composer panel — precision-machined holographic glass ─────── */}
@@ -573,8 +714,19 @@ export default function InputBar({ onSend, onStop, config }: Props) {
             padding: '0.25rem 0.6rem 0.5rem',
             borderTop: '1px solid rgba(95,165,188,0.1)',
           }}>
-            {/* Left controls */}
+            {/* Left controls — on mobile the secondary toggles collapse into
+                a single "+" overflow menu; the model picker keeps its slot */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              {isMobile ? (
+                <MobileToolsMenu
+                  budget={budget}
+                  listening={listening}
+                  isStreaming={state.isStreaming}
+                  onAttach={() => fileInputRef.current?.click()}
+                  onToggleBudget={toggleBudget}
+                  onVoice={handleVoiceInput}
+                />
+              ) : (<>
               {/* Attach */}
               <ToolBtn title="Attach files or images" onClick={() => fileInputRef.current?.click()}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -612,6 +764,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                 </svg>
                 {budget ? 'Budget' : 'Full'}
               </button>
+              </>)}
             </div>
 
             {/* Right controls */}
@@ -622,7 +775,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                 onSelect={id => update({ model: id })}
               />
 
-              {!state.isStreaming && (
+              {!isMobile && !state.isStreaming && (
                 <ToolBtn
                   title={listening ? 'Stop listening' : 'Voice input'}
                   onClick={handleVoiceInput}

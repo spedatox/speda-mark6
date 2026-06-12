@@ -55,12 +55,12 @@ export default function Header({ sidebarOpen, onToggleSidebar, boardOpen, onTogg
       )}
 
       {/* Section marker — "MONITOR No. 1" style */}
-      <span className="hb-label" style={{ color: 'var(--hb-cyan)', whiteSpace: 'nowrap' }}>
+      <span className="hb-label hb-hide-sm" style={{ color: 'var(--hb-cyan)', whiteSpace: 'nowrap' }}>
         MONITOR <span style={{ color: 'var(--hb-text-faint)' }}>No. 1</span>
       </span>
 
       {/* Magnifier — the reference search glyph */}
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      <svg className="hb-hide-sm" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         strokeWidth="2" style={{ color: 'var(--hb-text-faint)', flexShrink: 0 }}>
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
       </svg>
@@ -77,7 +77,7 @@ export default function Header({ sidebarOpen, onToggleSidebar, boardOpen, onTogg
 
       {/* Searching band while streaming */}
       {state.isStreaming && (
-        <span style={{
+        <span className="hb-hide-sm" style={{
           fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
           letterSpacing: '0.22em', color: 'var(--hb-cyan)',
           whiteSpace: 'nowrap', overflow: 'hidden',
@@ -91,11 +91,11 @@ export default function Header({ sidebarOpen, onToggleSidebar, boardOpen, onTogg
       <div style={{ flex: 1 }} />
 
       {/* Right readout cluster — real session state */}
-      <span className="hb-readout" style={{ fontSize: '0.62rem', color: 'var(--hb-text-faint)' }}>
+      <span className="hb-readout hb-hide-sm" style={{ fontSize: '0.62rem', color: 'var(--hb-text-faint)' }}>
         MSGS {String(state.messages.length).padStart(3, '0')}
       </span>
       {state.isStreaming ? (
-        <span style={{
+        <span className="hb-hide-sm" style={{
           display: 'flex', alignItems: 'center', gap: 5,
           fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
           letterSpacing: '0.1em', color: 'var(--hb-amber-bright)',
@@ -108,7 +108,7 @@ export default function Header({ sidebarOpen, onToggleSidebar, boardOpen, onTogg
           PROCESSING
         </span>
       ) : (
-        <span style={{
+        <span className="hb-hide-sm" style={{
           fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
           letterSpacing: '0.1em',
           color: hasMessages ? 'var(--hb-amber)' : 'var(--hb-text-faint)',

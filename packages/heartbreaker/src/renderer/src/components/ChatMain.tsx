@@ -19,7 +19,7 @@ const PROMPT_ICONS = [
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
 ]
 
-function PromptCard({ text, icon, idx, onClick }: { text: string; icon: React.ReactNode; idx: number; onClick: () => void }) {
+function PromptCard({ text, icon, onClick }: { text: string; icon: React.ReactNode; onClick: () => void }) {
   const [hover, setHover] = useState(false)
   return (
     <button
@@ -41,15 +41,8 @@ function PromptCard({ text, icon, idx, onClick }: { text: string; icon: React.Re
         width: '100%', height: '100%',
       }}
     >
-      {/* File-card index row — "F_06.8/2.3" microcopy */}
-      <span style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        fontFamily: "'Share Tech Mono', monospace", fontSize: '0.58rem',
-        letterSpacing: '0.12em',
-        color: hover ? 'var(--hb-amber-bright)' : 'var(--hb-amber)',
-        transition: 'color 0.15s',
-      }}>
-        F_0{idx + 1}.{idx + 2}/2.{idx + 1}
+      {/* Icon row — glyph keeps its top-right position */}
+      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
         <span style={{ color: hover ? '#5fcce6' : '#3a6472', transition: 'color 0.15s' }}>{icon}</span>
       </span>
       <span>{text}</span>
@@ -98,31 +91,20 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
       flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', padding: '0 1.5rem 1rem',
     }}>
-      {/* Monitor band — ">>: SEARCHING_ ALL _LIBRARY _ARCHIVES" style */}
-      <p style={{
-        fontFamily: "'Share Tech Mono', monospace",
-        fontSize: '0.62rem', letterSpacing: '0.3em',
-        color: 'var(--hb-cyan)',
-        marginBottom: '1.1rem',
-        animation: 'fadeIn 0.6s ease both',
-      }}>
-        {'>>:'} ALL _SYSTEMS _NOMINAL
-      </p>
-
-      {/* Thin oversized clock */}
+      {/* Thin oversized clock — fluid scale so it never wraps on narrow viewports */}
       <p className="hb-num-thin" style={{
-        fontSize: '4.6rem', color: '#cfe9f2',
-        marginBottom: '0.35rem',
+        fontSize: 'clamp(1.875rem, 10vw, 4.6rem)', color: '#cfe9f2',
+        marginBottom: '0.35rem', whiteSpace: 'nowrap',
         textShadow: '0 0 22px rgba(95,204,230,0.22)',
         animation: 'hbRise 0.7s ease both',
       }}>
         {clock}
       </p>
-      <p style={{
+      <p className="hb-welcome-date" style={{
         fontFamily: "'Rajdhani', sans-serif",
         fontSize: '0.66rem', fontWeight: 600, letterSpacing: '0.34em',
         color: 'var(--hb-text-faint)',
-        marginBottom: '2.2rem',
+        marginBottom: '2.2rem', textAlign: 'center',
         animation: 'fadeIn 0.6s 0.15s ease both',
       }}>
         {dateLine}
@@ -131,7 +113,7 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
       {/* Greeting typewriter — thin uppercase Stark title */}
       <h1 style={{
         fontFamily: "'Rajdhani', sans-serif",
-        fontSize: '1.7rem', fontWeight: 500, color: '#ecf6f9',
+        fontSize: 'clamp(1.1rem, 4.5vw, 1.7rem)', fontWeight: 500, color: '#ecf6f9',
         marginBottom: '0.5rem', textAlign: 'center',
         letterSpacing: '0.22em',
         minHeight: '2.3rem',
@@ -157,7 +139,7 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
       </p>
 
       {profile && profile.suggestedPrompts.length > 0 && (
-        <div style={{
+        <div className="hb-prompt-grid" style={{
           display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
           gridAutoRows: '1fr',
           gap: '0.5rem', width: '100%', maxWidth: 620, marginBottom: '2rem',
@@ -165,7 +147,7 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
         }}>
           {profile.suggestedPrompts.map((p, i) => (
             <div key={i} style={{ display: 'flex', animation: `hbRise 0.45s ${0.3 + i * 0.09}s ease both` }}>
-              <PromptCard text={p} icon={PROMPT_ICONS[i % PROMPT_ICONS.length]} idx={i} onClick={() => onSend(p)} />
+              <PromptCard text={p} icon={PROMPT_ICONS[i % PROMPT_ICONS.length]} onClick={() => onSend(p)} />
             </div>
           ))}
         </div>

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "heartbreaker-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "web:dev", "--prefix", "packages/heartbreaker"],
+      "port": 5273
+    }
+  ]
+}

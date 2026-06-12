@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useHealth } from '../lib/useHealth'
+import { useIsMobile } from '../lib/useIsMobile'
 import { fetchModels, getConnections, getBudgetMode, setConnection } from '../lib/api'
 import type { ConnectionInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
@@ -252,6 +253,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const { state } = useChatContext()
   const { settings, update } = useSettings()
   const health = useHealth(config.apiBase, config.apiKey, 4000)
+  const isMobile = useIsMobile()
 
   const [models, setModels] = useState<ModelInfo[]>([])
   const [servers, setServers] = useState<ConnectionInfo[]>([])
@@ -300,8 +302,11 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
     <div style={{
       position: 'fixed', top: 22, bottom: 4, left: 0, right: 0, zIndex: 500,
       display: 'grid',
-      gridTemplateColumns: '218px 1fr 232px',
-      gridTemplateRows: '34px 1fr 158px',
+      // Mobile collapses the tactical grid into one scrollable column;
+      // panel order follows source order (uplink → matrix → budget → banks).
+      gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : '218px 1fr 232px',
+      gridTemplateRows: isMobile ? 'auto' : '34px 1fr 158px',
+      overflowY: isMobile ? 'auto' : undefined,
       gap: 8, padding: 10,
       background: 'rgba(4, 9, 12, 0.5)',
       backdropFilter: 'blur(6px)',
@@ -312,14 +317,14 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
       {/* ── Title plate — "PERIODIC 56A." convention ─────────────────────── */}
       <div className="hb-head-light" style={{ gridColumn: '1 / -1', minHeight: 0, gap: '0.7rem' }}>
         <span style={{ fontSize: '0.82rem' }}>SYSTEMS 56A.</span>
-        <span style={{
+        <span className="hb-hide-sm" style={{
           fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.1em',
           color: '#41606e', textTransform: 'none',
         }}>
           MODE / 3Dx. 78A
         </span>
         <span style={{ flex: 1 }} />
-        <span style={{ fontFamily: MONO, fontSize: '0.56rem', color: '#41606e', textTransform: 'none' }}>
+        <span className="hb-hide-sm" style={{ fontFamily: MONO, fontSize: '0.56rem', color: '#41606e', textTransform: 'none' }}>
           ver 17 · MK VI
         </span>
         <span style={{ width: 7, height: 14, background: 'linear-gradient(180deg, #e8a850, #c98a35)' }} />

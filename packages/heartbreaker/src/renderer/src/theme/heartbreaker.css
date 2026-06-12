@@ -329,8 +329,13 @@ body {
 .hb-query-box {
   display: inline-flex; align-items: center; gap: 0.35rem;
   padding: 1px 10px 1px 8px;
-  border: 1px solid rgba(195, 228, 238, 0.45);
-  background: rgba(6, 16, 22, 0.55);
+  /* frosted glass pill — same material as .hb-holo buttons */
+  border-radius: 9999px !important;
+  border: 1px solid var(--hb-edge);
+  background: var(--hb-holo-fill);
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
+  box-shadow: var(--hb-holo-shadow);
   color: #eaf6fa;
   font-family: 'Rajdhani', sans-serif;
   font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
@@ -414,76 +419,72 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 .prose p:first-child { margin-top: 0; }
 .prose p:last-child  { margin-bottom: 0; }
 
-/* ── H1 — WHITE header bar, 1:1 with "IP ADDRESS BOOK" / "SEARCH
-   CONFIGURATION": light gradient plate, dark slate text, amber end-block. ── */
+/* ── H1 — full-width panel header bar (like "IP ADDRESS_BOOK" header) ──────── */
 .prose h1 {
   display: flex;
   align-items: center;
   min-height: 32px;
-  padding: 0 1.5rem 0 0.7rem;
+  padding: 0 0.75rem 0 0.65rem;
   margin: 1.6rem 0 0.6rem;
-  background: var(--hb-bar-light);
-  border-bottom: 1px solid rgba(10, 24, 32, 0.5);
+  background: linear-gradient(90deg, rgba(29,93,112,0.7) 0%, rgba(29,93,112,0.22) 55%, transparent 100%);
+  border-left: 2px solid var(--hb-cyan);
+  border-bottom: 1px solid var(--hb-line);
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1.32rem;
-  font-weight: 700;
-  letter-spacing: 0.13em;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--hb-bar-light-text);
+  color: #ffffff;
   position: relative;
-  box-shadow: 0 1px 0 rgba(140, 205, 228, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
-/* amber end block — the orange tag the reference bars terminate in */
+/* bottom-right corner tick */
 .prose h1::after {
   content: '';
   position: absolute;
-  top: 6px; bottom: 6px; right: 6px;
-  width: 7px;
-  background: linear-gradient(180deg, #e8a850, #c98a35);
+  bottom: -1px; right: 0;
+  width: 18px; height: 1px;
+  background: var(--hb-cyan);
 }
 .prose h1:first-child { margin-top: 0; }
 
-/* H1 underscore split — "MAIN_SUB" → main in slate, _SUB in petrol */
-.prose h1 .hb-h-main { color: var(--hb-bar-light-text); }
-.prose h1 .hb-h-sub  { color: #1d6c84; font-size: 0.9em; letter-spacing: 0.13em; margin-left: 0.05em; }
+/* H1 underscore split — "MAIN_SUB" → main in white, _SUB in cyan */
+.prose h1 .hb-h-main { color: #ffffff; }
+.prose h1 .hb-h-sub  { color: var(--hb-cyan); font-size: 0.9em; letter-spacing: 0.14em; margin-left: 0.05em; }
 
-/* ── H2 — CYAN filled bar, 1:1 with "IP ADDRESS_FROM A DHCP SERVER" ────────── */
+/* ── H2 — panel header bar (same style as H1, scaled down) ──────────────────── */
 .prose h2 {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  min-height: 28px;
-  padding: 0 0.7rem 0 0.65rem;
+  min-height: 30px;
+  padding: 0 0.7rem 0 0.6rem;
   margin: 1.5rem 0 0.5rem;
-  background: var(--hb-bar-cyan);
-  border-bottom: 1px solid rgba(8, 30, 40, 0.55);
-  font-family: 'Rajdhani', sans-serif !important;
-  font-size: 1.12rem !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--hb-bar-cyan-text);
-  text-shadow: 0 1px 0 rgba(8, 30, 40, 0.35);
-  box-shadow: inset 0 1px 0 rgba(220, 245, 252, 0.35);
+  background: linear-gradient(90deg, rgba(29,93,112,0.6) 0%, rgba(29,93,112,0.18) 55%, transparent 100%);
+  border-left: 3px solid var(--hb-cyan);
+  border-bottom: 1px solid var(--hb-line);
+  font-family: 'SamsungOne', 'Inter', sans-serif !important;
+  font-size: 1.3rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em;
+  color: #ffffff;
 }
-.prose h2 .hb-h-main { color: var(--hb-bar-cyan-text); }
-.prose h2 .hb-h-sub  { color: #bfecf7; font-size: 0.9em; }
+.prose h2 .hb-h-main { color: #ffffff; }
+.prose h2 .hb-h-sub  { color: var(--hb-cyan); font-size: 0.88em; }
 
-/* ── H3 — teal gradient bar with left accent (tertiary) ─────────────────────── */
+/* ── H3 — panel header bar (lighter) ────────────────────────────────────────── */
 .prose h3 {
   display: flex;
   align-items: center;
   min-height: 26px;
   padding: 0 0.65rem 0 0.6rem;
   margin: 1.2rem 0 0.4rem;
-  background: linear-gradient(90deg, rgba(29,93,112,0.5) 0%, rgba(29,93,112,0.12) 55%, transparent 100%);
-  border-left: 2px solid var(--hb-cyan);
-  border-bottom: 1px solid rgba(95,165,188,0.18);
-  font-family: 'Rajdhani', sans-serif !important;
-  font-size: 1.02rem !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  background: linear-gradient(90deg, rgba(29,93,112,0.42) 0%, rgba(29,93,112,0.1) 55%, transparent 100%);
+  border-left: 2px solid rgba(95,165,188,0.6);
+  border-bottom: 1px solid rgba(95,165,188,0.14);
+  font-family: 'SamsungOne', 'Inter', sans-serif !important;
+  font-size: 1.12rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em;
   color: #dcedf3;
 }
 /* ── H4 — panel header bar (lightest) ───────────────────────────────────────── */
@@ -574,38 +575,42 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 }
 .prose a:hover { border-bottom-color: var(--hb-cyan-bright); color: #8ee6f5; }
 
-/* ── Table — the "BUSINESS PHONE BOOK" data grid: white header plate, dark
-   rows, AMBER row highlight on hover (the FENIX EXPRESS selected-row look). ── */
+/* ── Table — data grid ───────────────────────────────────────────────────────── */
 .prose table {
   border-collapse: collapse; width: 100%; margin: 0.75rem 0;
   font-size: 0.82rem; font-family: 'Share Tech Mono', monospace;
   border: 1px solid var(--hb-line);
 }
 .prose th {
-  background: var(--hb-bar-light);
-  font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
-  font-size: 0.66rem; color: var(--hb-bar-light-text);
-  border: 1px solid rgba(10, 24, 32, 0.4); padding: 0.32rem 0.6rem;
+  background: linear-gradient(90deg, rgba(29,93,112,0.7), rgba(29,93,112,0.35));
+  font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  font-size: 0.64rem; color: #cfe7ee;
+  border: 1px solid var(--hb-line); padding: 0.3rem 0.6rem;
   font-family: 'Rajdhani', sans-serif;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
 }
 .prose td {
   border: 1px solid rgba(95,165,188,0.14); padding: 0.28rem 0.6rem;
   color: var(--hb-text-dim);
 }
 .prose tr:nth-child(even) td { background: rgba(54,171,202,0.04); }
-.prose tr:hover td {
-  background: var(--hb-amber-dim);
-  color: #f3e2c4;
-  border-color: rgba(217,156,68,0.3);
-}
+.prose tr:hover td { background: rgba(54,171,202,0.09); color: var(--hb-text); }
 
-/* ── HR — clean fading hairline ──────────────────────────────────────────────── */
+/* ── HR — tick-mark ruler ────────────────────────────────────────────────────── */
 .prose hr {
   border: none;
   height: 1px;
   margin: 1.25rem 0;
-  background: linear-gradient(90deg, rgba(95, 165, 188, 0.4), rgba(95, 165, 188, 0.04));
+  background-image: repeating-linear-gradient(
+    90deg, var(--hb-line) 0 1px, transparent 1px 8px
+  );
+  position: relative;
+}
+.prose hr::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0;
+  width: 32px; height: 1px;
+  background: var(--hb-cyan);
 }
 
 /* ── Image ───────────────────────────────────────────────────────────────────── */
@@ -651,4 +656,69 @@ input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 10px; height: 14px;
   background: var(--hb-cyan); cursor: pointer;
   box-shadow: 0 0 0 1px rgba(8,16,20,0.8);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Mobile — tactical OS under 768px
+   Breakpoint must stay in sync with lib/useIsMobile.ts, which drives the
+   structural pieces (sidebar drawer, HUD telemetry consolidation).
+   ════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* Secondary chrome text nodes collapse on small displays */
+  .hb-hide-sm { display: none !important; }
+
+  /* Session title query box may breathe once the MONITOR label is gone */
+  .hb-query-box { max-width: 58vw !important; }
+
+  /* Suggestion cards — 2x2 grid becomes a tight vertical stack.
+     The cards themselves keep the exact .hb-holo glass material. */
+  .hb-prompt-grid {
+    display: flex !important;
+    flex-direction: column;
+    max-width: 100% !important;
+  }
+
+  /* Welcome date line — relax the 0.34em tracking so it never wraps */
+  .hb-welcome-date { letter-spacing: 0.18em !important; }
+
+  /* Composer locks to the live viewport bottom, full-width with a micro
+     edge buffer; frosts what scrolls beneath it. */
+  .hb-composer {
+    position: sticky;
+    bottom: 0;
+    z-index: 50;
+    padding: 0.4rem 0.55rem calc(0.55rem + env(safe-area-inset-bottom)) !important;
+    background: rgba(6, 12, 16, 0.55);
+    backdrop-filter: var(--hb-holo-blur);
+    -webkit-backdrop-filter: var(--hb-holo-blur);
+  }
+  /* 16px floor stops iOS Safari from zooming the page on input focus */
+  .hb-composer textarea { font-size: 16px !important; }
+}
+
+/* Mobile browsers: track the dynamic viewport so the composer hugs the
+   keyboard/URL-bar edge instead of hiding behind it */
+@supports (height: 100dvh) {
+  @media (max-width: 767px) {
+    html, body, #root { height: 100dvh; }
+  }
+}
+
+/* ── Touch targets — 44px minimum hit area on coarse pointers ────────────────
+   An invisible centered pseudo-element extends each button's tappable zone
+   without moving a single visual pixel or thickening any 1px border.
+   Seam/bracket classes are excluded — their pseudos draw the etched lines. */
+@media (pointer: coarse) {
+  button:not(.hb-seam-b):not(.hb-seam-t):not(.hb-seam-r):not(.hb-bracketed) {
+    position: relative;
+  }
+  button:not(.hb-seam-b):not(.hb-seam-t):not(.hb-seam-r):not(.hb-bracketed)::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
 }
