@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 class NotificationsSkill(Skill):
     name = "send_push_notification"
+    requires_network = True  # FCM delivery — dead in a dead zone
     description = (
         "Delivers a push notification to the user's Flutter app on their Android device. "
         "Use this when output_mode is 'push' or when SPEDA determines a background result "

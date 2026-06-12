@@ -201,9 +201,13 @@ async def chat(
     else:
         user_content = body.message
 
-    history = await session_manager.load_history(db, session.id)
+    # Save FIRST, then load history including the new message. load_history
+    # stamps user messages from their DB created_at, so the prompt built this
+    # turn is byte-identical to the prefix reconstructed on every future turn —
+    # that identity is what keeps the conversation prompt-cache valid (see
+    # SessionManager.stamp_user_content).
     await session_manager.save_message(db, session.id, "user", user_content)
-    history.append({"role": "user", "content": user_content})
+    history = await session_manager.load_history(db, session.id)
 
     context = AgentContext(
         user_id=user_id,
@@ -260,7 +264,11 @@ async def chat(
         session_id=session.id,
         request_id=request_id,
         user_id=user_id,
-        model=profile.haiku_model,
+        # Background work (title, session log, maintenance) runs on the SAME
+        # provider as the active chat model — never silently burns Anthropic
+        # credit while chatting on OpenAI/Gemini, and keeps working in the
+        # Dead Zone where only the local Ollama model exists.
+        model=profile.background_model(model),
     )
 
     return StreamingResponse(generate(), media_type="text/event-stream")
@@ -306,9 +314,10 @@ async def websocket_chat(websocket: WebSocket):
                     session_id=session_id_req,
                 )
 
-                history = await session_manager.load_history(db, session.id)
+                # Save first; load_history returns the new message already
+                # timestamp-stamped from its DB created_at (cache-stable).
                 await session_manager.save_message(db, session.id, "user", message)
-                history.append({"role": "user", "content": message})
+                history = await session_manager.load_history(db, session.id)
 
                 context = AgentContext(
                     user_id=user_id,
@@ -338,7 +347,10 @@ async def websocket_chat(websocket: WebSocket):
                     )
 
             asyncio.create_task(
-                _run_background(session.id, request_id, user_id, profile.haiku_model)
+                _run_background(
+                    session.id, request_id, user_id,
+                    profile.background_model(profile.allocate_model("user")),
+                )
             )
 
     except WebSocketDisconnect:

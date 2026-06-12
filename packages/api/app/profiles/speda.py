@@ -52,6 +52,13 @@ class SPEDAProfile(AgentProfile):
     sonnet_model = "claude-sonnet-4-6"
     haiku_model = "claude-haiku-4-5-20251001"
 
+    # Cheapest sensible model per non-Anthropic provider, used for background
+    # tasks when the user is chatting on that provider (see base.background_model).
+    background_models = {
+        "openai": "openai:gpt-5-mini",
+        "gemini": "gemini:gemini-2.5-flash",
+    }
+
     def build_system_prompt(self, context_vars: dict) -> str:
         core = assemble(PROMPT_SECTIONS, context_vars)
         manifest = build_skills_manifest()

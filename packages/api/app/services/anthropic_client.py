@@ -59,22 +59,31 @@ def _apply_prompt_caching(kwargs: dict) -> dict:
     byte-identical prefix, so ONLY content that doesn't change between calls may
     sit inside a cached block. We place breakpoints on:
 
-      - the last tool definition (all tools are identical every call), and
-      - every system block the caller flagged with `_cache: True`
-        (the orchestrator flags the stable core prompt and the memory block, and
-        leaves the volatile datetime/model tail unflagged → uncached).
+      - the last tool definition (all tools are identical every call),
+      - every system block the caller flagged with `_cache: True` (the
+        orchestrator flags the stable core prompt and the memory block — the
+        ENTIRE system is stable now; the clock lives in per-message timestamps
+        derived from each message's DB created_at, so the prefix never changes
+        retroactively), and
+      - the last conversation message (incremental history caching).
 
-    TTL: we use a 1-hour cache. The cache is content-keyed server-side at
-    Anthropic, so a 1h window means the ~15k-token prefix is written roughly once
-    per hour instead of once per 5 minutes — and crucially it SURVIVES backend
-    restarts (a restart re-sends identical content → cache hit, no rewrite). The
-    1h write costs 1.6x a 5m write but is amortised over ~12x fewer writes.
+    Mixed TTLs (per Anthropic docs, longer TTLs must precede shorter ones —
+    tools/system render before messages, so the ordering is always satisfied):
 
-    Caching is ignored automatically by the API when a block is under the minimum
-    cacheable size, so this is always safe to apply.
+      - tools + system: 1h (settings.prompt_cache_ttl). Rewritten only when the
+        prompt/tooling actually changes or after >1h idle; survives restarts
+        (content-keyed server-side). Write costs 2x base but happens rarely.
+      - conversation:   5m (settings.prompt_cache_conversation_ttl). The history
+        grows every turn, so this entry is rewritten incrementally anyway —
+        the cheaper 1.25x write wins; within a chat burst (or a multi-iteration
+        tool loop) every follow-up reads the whole transcript at 0.1x.
+
+    Caching is ignored automatically by the API when a block is under the model's
+    minimum cacheable size, so this is always safe to apply.
     """
     out = dict(kwargs)
-    cache_control = {"type": "ephemeral", "ttl": settings.prompt_cache_ttl}
+    prefix_cc = {"type": "ephemeral", "ttl": settings.prompt_cache_ttl}
+    convo_cc = {"type": "ephemeral", "ttl": settings.prompt_cache_conversation_ttl}
 
     # System: list of blocks. Cache each block flagged with `_cache`, strip the
     # marker (the API rejects unknown keys). A bare string is treated as one
@@ -82,7 +91,7 @@ def _apply_prompt_caching(kwargs: dict) -> dict:
     system = out.get("system")
     if isinstance(system, str) and system:
         out["system"] = [
-            {"type": "text", "text": system, "cache_control": cache_control}
+            {"type": "text", "text": system, "cache_control": prefix_cc}
         ]
     elif isinstance(system, list):
         new_system = []
@@ -90,7 +99,7 @@ def _apply_prompt_caching(kwargs: dict) -> dict:
             b = dict(blk)
             should_cache = b.pop("_cache", False)
             if should_cache:
-                b["cache_control"] = cache_control
+                b["cache_control"] = prefix_cc
             new_system.append(b)
         out["system"] = new_system
 
@@ -98,7 +107,7 @@ def _apply_prompt_caching(kwargs: dict) -> dict:
     tools = out.get("tools")
     if tools:
         cached_tools = [dict(t) for t in tools]
-        cached_tools[-1] = {**cached_tools[-1], "cache_control": cache_control}
+        cached_tools[-1] = {**cached_tools[-1], "cache_control": prefix_cc}
         out["tools"] = cached_tools
 
     # Conversation history: incremental caching. Mark the LAST message's last
@@ -115,11 +124,11 @@ def _apply_prompt_caching(kwargs: dict) -> dict:
         content = last.get("content")
         if isinstance(content, str) and content:
             last["content"] = [
-                {"type": "text", "text": content, "cache_control": cache_control}
+                {"type": "text", "text": content, "cache_control": convo_cc}
             ]
         elif isinstance(content, list) and content:
             new_content = [dict(b) for b in content]
-            new_content[-1] = {**new_content[-1], "cache_control": cache_control}
+            new_content[-1] = {**new_content[-1], "cache_control": convo_cc}
             last["content"] = new_content
         msgs[-1] = last
         out["messages"] = msgs
