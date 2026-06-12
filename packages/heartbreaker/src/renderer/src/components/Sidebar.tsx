@@ -547,13 +547,15 @@ interface Props {
   profile: AppProfile
   config: AppConfig
   isOpen: boolean
+  /** Under the 768px breakpoint the sidebar becomes an off-canvas drawer */
+  mobile?: boolean
   onSelectSession: (id: number) => void
   onToggle: () => void
   onNewChat: () => void
   onOpenSettings: () => void
 }
 
-export default function Sidebar({ profile, config, isOpen, onSelectSession, onToggle, onNewChat, onOpenSettings }: Props) {
+export default function Sidebar({ profile, config, isOpen, mobile, onSelectSession, onToggle, onNewChat, onOpenSettings }: Props) {
   const { state } = useChatContext()
   const [search, setSearch]         = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -567,7 +569,21 @@ export default function Sidebar({ profile, config, isOpen, onSelectSession, onTo
   const groups = useMemo(() => groupSessions(filtered), [filtered])
 
   return (
-    <aside className="hb-seam-r" style={{
+    <aside className="hb-seam-r" style={mobile ? {
+      // Off-canvas drawer — fixed under the HUD strip, slides in from the left
+      // as a fully frosted glass sheet. Stays mounted off-screen so the slide
+      // animates both ways.
+      position: 'fixed', top: 22, bottom: 4, left: 0, zIndex: 9001,
+      width: 'min(84vw, 330px)', minWidth: 0, height: 'auto',
+      background: 'rgba(8, 14, 20, 0.55)',
+      backdropFilter: 'var(--hb-holo-blur)',
+      WebkitBackdropFilter: 'var(--hb-holo-blur)',
+      boxShadow: '8px 0 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255,255,255,0.12)',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      transform: isOpen ? 'translateX(0)' : 'translateX(-105%)',
+      transition: 'transform 0.28s cubic-bezier(0.32, 0.72, 0.33, 1)',
+      flexShrink: 0,
+    } : {
       width: isOpen ? 'var(--sidebar-width)' : '0px',
       minWidth: isOpen ? 'var(--sidebar-width)' : '0px',
       height: '100%',
@@ -580,7 +596,7 @@ export default function Sidebar({ profile, config, isOpen, onSelectSession, onTo
       transition: 'width 0.2s ease, min-width 0.2s ease',
       flexShrink: 0,
     }}>
-      <div style={{ width: 'var(--sidebar-width)', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: mobile ? '100%' : 'var(--sidebar-width)', height: '100%', display: 'flex', flexDirection: 'column' }}>
 
         {/* Header */}
         <SidebarHeader

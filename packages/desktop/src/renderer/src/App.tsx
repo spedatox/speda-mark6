@@ -8,6 +8,7 @@ import type { AppConfig } from './lib/types'
 import { fetchSessions } from './lib/api'
 import 'katex/dist/katex.min.css'
 import './theme/base.css'
+import './theme/speda.css'
 
 function injectProfileTheme(accent: string, accentHover: string) {
   const root = document.documentElement
