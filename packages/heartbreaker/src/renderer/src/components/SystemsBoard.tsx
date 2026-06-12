@@ -3,8 +3,8 @@ import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useHealth } from '../lib/useHealth'
 import { useIsMobile } from '../lib/useIsMobile'
-import { fetchModels, getConnections, getBudgetMode, setConnection } from '../lib/api'
-import type { ConnectionInfo } from '../lib/api'
+import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles } from '../lib/api'
+import type { ConnectionInfo, MemoryFileInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
 
 /**
@@ -260,6 +260,8 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const [budgetTokens, setBudgetTokens] = useState({ used: 0, limit: 30000 })
   const [budgetMode, setBudgetMode] = useState(true)
   const [rtt, setRtt] = useState<number[]>([])
+  const [memFiles, setMemFiles] = useState<MemoryFileInfo[]>([])
+  const [memPath, setMemPath] = useState<string | null>(null)
 
   const loadConns = () => getConnections(config).then(r => {
     setServers(r.servers)
@@ -269,6 +271,12 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   useEffect(() => {
     fetchModels(config).then(setModels).catch(() => {})
     getBudgetMode(config).then(setBudgetMode).catch(() => {})
+    fetchMemoryFiles(config).then(files => {
+      setMemFiles(files)
+      // Open on the owner file — the extracted facts about the user.
+      const preferred = files.find(f => f.path.endsWith('/owner.md')) ?? files[0]
+      if (preferred) setMemPath(preferred.path)
+    }).catch(() => {})
     loadConns()
   }, [config]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -295,7 +303,6 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const pct = Math.round((budgetTokens.used / Math.max(budgetTokens.limit, 1)) * 100)
   const gaugeColor = pct > 100 ? '#c84a3a' : pct > 70 ? '#f2b75c' : '#5fcce6'
   const maxServerTokens = Math.max(...servers.map(s => s.tokens), 1)
-  const sessions = state.sessions.slice(0, 7)
   const ollamaUp = models.some(m => m.provider === 'ollama')
 
   return (
@@ -510,44 +517,107 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         </Panel>
       </div>
 
-      {/* ── Bottom band — session data banks ─────────────────────────────── */}
-      <Panel title="DATA_BANKS // SESSION ARCHIVE" light pad={false}
+      {/* ── Bottom band — knowledge bank: what SPEDA knows about the owner ─ */}
+      <Panel title="DATA_BANKS // KNOWLEDGE" light pad={false}
         right={<span style={{ fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.08em', color: '#41606e', textTransform: 'none' }}>
-          {state.sessions.length} RECORDS
+          {memFiles.length} FILES
         </span>}
         style={{ gridColumn: '1 / -1', animation: 'hbRise 0.45s 0.26s ease both' }}
       >
-        {sessions.length === 0 ? (
+        {memFiles.length === 0 ? (
           <div style={{
-            margin: '0.8rem', width: 120, padding: '0.8rem 0',
+            margin: '0.8rem', width: 160, padding: '0.8rem 0',
             border: '1px solid rgba(95,165,188,0.3)', background: 'rgba(29,93,112,0.25)',
             textAlign: 'center', fontFamily: UI, fontSize: '0.72rem', fontWeight: 700,
             letterSpacing: '0.2em', color: '#46818f',
           }}>
-            NOT FOUND
+            NO RECORDS
           </div>
-        ) : sessions.map((s, i) => (
-          <div key={s.id} style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '0.28rem 0.6rem',
-            background: i % 2 ? 'rgba(54,171,202,0.04)' : 'transparent',
-            borderBottom: '1px solid rgba(95,165,188,0.08)',
-          }}>
-            <span className="hb-chip-amber">{fmtDate(s.started_at)}</span>
-            <span style={{
-              flex: 1, fontFamily: "'SamsungOne','Inter',sans-serif", fontSize: '0.78rem',
-              color: '#9bbac5', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        ) : (
+          <div style={{ display: 'flex', height: isMobile ? 280 : '100%', minHeight: 0 }}>
+            {/* File rail — one entry per memory file */}
+            <div style={{
+              width: 142, flexShrink: 0, overflowY: 'auto',
+              borderRight: '1px solid rgba(95,165,188,0.14)',
             }}>
-              {s.title || 'Untitled session'}
-            </span>
-            <span style={{ fontFamily: MONO, fontSize: '0.52rem', color: '#33505b' }}>
-              SESSION.HMM
-            </span>
-            <span style={{ fontFamily: MONO, fontSize: '0.52rem', color: '#46818f' }}>
-              {String(s.id).padStart(4, '0')}
-            </span>
+              {memFiles.map(f => {
+                const name = (f.path.split('/').pop() || f.path).replace(/\.md$/, '').toUpperCase()
+                const sel = f.path === memPath
+                return (
+                  <button
+                    key={f.path}
+                    onClick={() => setMemPath(f.path)}
+                    style={{
+                      width: '100%', padding: '0.3rem 0.55rem',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      border: 'none', cursor: 'pointer', textAlign: 'left',
+                      borderLeft: sel ? '2px solid var(--hb-amber)' : '2px solid transparent',
+                      background: sel ? 'rgba(217,156,68,0.1)' : 'transparent',
+                      fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.08em',
+                      color: sel ? '#f2b75c' : '#46818f',
+                      transition: 'background 0.1s, color 0.1s, border-color 0.1s',
+                    }}
+                  >
+                    <span style={{ color: sel ? 'var(--hb-amber)' : '#2e5260' }}>▸</span>
+                    {name}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Fact readout — the selected file's extracted knowledge */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0.35rem 0.7rem 0.5rem' }}>
+              {(() => {
+                const file = memFiles.find(f => f.path === memPath)
+                if (!file) return null
+                const lines = file.content.split('\n').map(l => l.trim()).filter(Boolean)
+                if (lines.length === 0) return (
+                  <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: '#2e5260', padding: '0.3rem 0' }}>
+                    // EMPTY — SPEDA HAS NOT WRITTEN HERE YET
+                  </p>
+                )
+                return (
+                  <>
+                    {file.updated_at && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 2 }}>
+                        <span style={{ fontFamily: MONO, fontSize: '0.5rem', color: '#33505b' }}>
+                          LAST WRITE {fmtDate(file.updated_at)}
+                        </span>
+                      </div>
+                    )}
+                    {lines.map((line, i) => {
+                      if (line.startsWith('#')) {
+                        return (
+                          <div key={i} style={{
+                            fontFamily: UI, fontSize: '0.66rem', fontWeight: 700,
+                            letterSpacing: '0.18em', textTransform: 'uppercase',
+                            color: 'var(--hb-cyan)', margin: '0.45rem 0 0.15rem',
+                          }}>
+                            {line.replace(/^#+\s*/, '')}
+                          </div>
+                        )
+                      }
+                      const isFact = /^[-*]\s/.test(line)
+                      const isNote = /^_.*_$/.test(line)
+                      return (
+                        <div key={i} style={{
+                          display: 'flex', gap: 7, padding: '0.12rem 0',
+                          fontFamily: "'SamsungOne','Inter',sans-serif",
+                          fontSize: '0.74rem', lineHeight: 1.45,
+                          color: isNote ? '#41606e' : '#9bbac5',
+                          fontStyle: isNote ? 'italic' : 'normal',
+                        }}>
+                          {isFact && <span style={{ color: 'var(--hb-cyan)', fontSize: '0.62em', lineHeight: 2 }}>▸</span>}
+                          <span>{line.replace(/^[-*]\s+/, '').replace(/^_|_$/g, '')}</span>
+                        </div>
+                      )
+                    })}
+                  </>
+                )
+              })()}
+            </div>
           </div>
-        ))}
+        )}
       </Panel>
     </div>
   )
