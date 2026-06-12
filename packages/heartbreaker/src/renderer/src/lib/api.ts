@@ -145,6 +145,23 @@ export async function downloadFile(config: AppConfig, url: string, filename: str
   setTimeout(() => URL.revokeObjectURL(objUrl), 1000)
 }
 
+export interface MemoryFileInfo {
+  path: string
+  content: string
+  updated_at: string | null
+}
+
+/** SPEDA's knowledge bank — the /memories virtual filesystem (read-only). */
+export async function fetchMemoryFiles(config: AppConfig): Promise<MemoryFileInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/memory/files`, { headers: { 'X-API-Key': config.apiKey } })
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
 export interface ConnectionInfo {
   server: string
   label: string
