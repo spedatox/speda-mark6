@@ -34,6 +34,22 @@ services:
     volumes:
       - /tmp/speda_outputs:/tmp/speda_outputs
 
+  # The automation organ — n8n owns ALL scheduling and polling (CLAUDE.md).
+  # SPEDA composes workflows over its REST API; fired watchers call back into
+  # the app's /trigger endpoint over this internal network.
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"          # editor UI — visit http://<server>:5678 to set up + create the API key
+    environment:
+      - GENERIC_TIMEZONE=${TZ:-UTC}
+      - TZ=${TZ:-UTC}
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_RUNNERS_ENABLED=true
+    volumes:
+      - n8n_data:/home/node/.n8n
+
   # SPEDA's "capable computer" — isolated container it runs commands in.
   # No host mounts, no secrets, resource-limited, reachable only on this network.
   sandbox:
@@ -72,5 +88,6 @@ services:
 volumes:
   postgres_data:
   sandbox_workspace:
+  n8n_data:
   caddy_data:
   caddy_config:
