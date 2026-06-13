@@ -2,7 +2,7 @@ import asyncio
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.context import AgentContext
@@ -31,8 +31,13 @@ async def trigger(
 
     orchestrator = request.app.state.orchestrator
     session_manager = request.app.state.session_manager
-    profile = request.app.state.profile
     telegram = request.app.state.telegram
+
+    # Resolve the addressed agent. n8n targets a specific agent by path; an
+    # unknown agent_id is a routing error, not a silent fallback.
+    profile = request.app.state.profiles.get(agent_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail=f"Unknown agent '{agent_id}'")
 
     request_id = str(uuid.uuid4())
     user_id = 1
@@ -46,6 +51,7 @@ async def trigger(
     )
 
     context = AgentContext(
+        agent_id=agent_id,
         user_id=user_id,
         session_id=session.id,
         request_id=request_id,

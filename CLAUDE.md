@@ -6,7 +6,11 @@ Read this file in full before touching a single file. This is not optional.
 
 ## What This Repo Is
 
-This is `speda-mark-vi` — the backend core of SPEDA (Specialized Personal Executive Digital Assistant). It is a single-user, proactive ambient AI assistant. SPEDA is the orchestrator. The Superior Six (Sentinel, NightCrawler, Ultron, Optimus, Unicron, Ratchet) are separate microservices that fork this repo and swap identity profiles. They are not built here.
+This is `speda-mark-vi` — the backend core of SPEDA (Specialized Personal Executive Digital Assistant). It is a single-user, proactive ambient AI assistant.
+
+**Multi-tenant architecture.** SPEDA and five of the Superior Six — Sentinel, NightCrawler, Ultron, Centurion, Atomix — are **in-process agent profiles** inside this single backend. Each is an `AgentProfile` subclass with its own identity, model policy, tool allowlist, and prompt directory. They share one event loop, one database, one `CapabilityRegistry`, and one owner's memory. They are addressed by `agent_id` on every request.
+
+**Optimus is the single exception.** Optimus is a standalone, independently deployed framework. It connects back to this backend as an external WebSocket peer via `WebSocketManager`. It is not built here and does not run in-process.
 
 Deployment target: Contabo Cloud. Production-grade from day one.
 
@@ -49,8 +53,8 @@ Never OpenAI wire format. Never hardcoded tool call IDs.
 **9. All research and retrieval skills must be annotated read-only.**
 This enables true parallel tool execution. Tavily, Exa, arXiv, Alpha Vantage, Brave Search, Fetch — all read-only annotated.
 
-**10. The repo is rebrandable. Zero identity strings in core.**
-Agent name, personality, system prompt template, and model policy live in `app/profiles/`. The fork swaps the profile. The engine is untouched. Model IDs (`claude-sonnet-4-6`, `claude-haiku-4-5-20251001`) live exclusively in `app/profiles/speda.py`. They must not appear in `config.py`, `orchestrator.py`, or any core module.
+**10. Zero identity strings in core. All identity lives in `app/profiles/`.**
+Agent name, personality, system prompt template, tool allowlist, and model policy live in `app/profiles/{agent_id}.py`. The engine is untouched by identity. Model IDs (`claude-sonnet-4-6`, `claude-haiku-4-5-20251001`) live exclusively in individual profile files under `app/profiles/`. They must not appear in `config.py`, `orchestrator.py`, or any core module.
 
 **11. Every tool description is a minimum of 3–4 sentences.**
 State: what the tool does, when to use it, when NOT to use it, and what it returns. This is the most critical factor in Claude's tool selection accuracy per Anthropic's own documentation. A one-line description makes a good tool unusable. Enforce this at skill authoring time, not at runtime.
@@ -66,11 +70,11 @@ Three distinct communication channels exist. Do not confuse them.
 
 | Channel | Protocol | Used For |
 |---------|----------|----------|
-| `POST /chat` | HTTP + SSE | User sends a message; response streams back to Flutter |
+| `POST /chat/{agent_id}` | HTTP + SSE | User sends a message to a specific agent; response streams back |
 | `WS /ws` | WebSocket | Flutter real-time chat (bidirectional, for voice/low-latency) |
-| `websocket/manager.py` | WebSocket | Superior Six agent connections ONLY — presence, dispatch, results |
+| `websocket/manager.py` | WebSocket | **Optimus ONLY** — external peer presence, dispatch, results |
 
-`WebSocketManager` manages agent connections. It is not used for Flutter user sessions. If you are writing Flutter chat logic, you are using either `POST /chat` (SSE) or `WS /ws` — not `WebSocketManager`.
+`WebSocketManager` manages the Optimus external connection. It is not used for in-process agents (Sentinel, NightCrawler, Ultron, Centurion, Atomix are profiles, not sockets) and not used for Flutter user sessions. If you are writing Flutter chat logic, use either `POST /chat/{agent_id}` (SSE) or `WS /ws` — not `WebSocketManager`.
 
 ---
 
@@ -130,8 +134,23 @@ speda-mark-vi/
     ├── middleware/
     │   └── auth.py              # API key validation — applied to all routes
     ├── profiles/
-    │   ├── base.py              # AgentProfile ABC — name, system prompt template, model policy
-    │   └── speda.py             # SPEDA identity — fork this for Superior Six
+    │   ├── base.py              # AgentProfile ABC — agent_id, domain, tool_allowlist, model policy
+    │   ├── registry.py          # ProfileRegistry — loads all enabled profiles, lookup by agent_id
+    │   ├── speda.py             # SPEDA orchestrator profile
+    │   ├── sentinel.py          # Sentinel — finance & budget intelligence
+    │   ├── nightcrawler.py      # NightCrawler — OSINT, web surveillance, research
+    │   ├── ultron.py            # Ultron — academic research, knowledge synthesis
+    │   ├── centurion.py         # Centurion — productivity, tasks, calendar
+    │   └── atomix.py            # Atomix — system ops, code, infrastructure
+    ├── prompts/
+    │   ├── shared/              # Common sections: formatting, memory protocol, output rules
+    │   └── agents/
+    │       ├── speda/           # SPEDA-specific identity/voice/boundary prompts
+    │       ├── sentinel/
+    │       ├── nightcrawler/
+    │       ├── ultron/
+    │       ├── centurion/
+    │       └── atomix/
     ├── core/
     │   ├── orchestrator.py      # AgentOrchestrator — owns the agentic loop + system prompt
     │   ├── context.py           # AgentContext dataclass
@@ -201,6 +220,7 @@ Claude sees all four tiers identically in the tools array. The registry is the o
 ```python
 @dataclass
 class AgentContext:
+    agent_id: str                             # which agent is running — "speda", "sentinel", etc.
     user_id: int
     session_id: int
     request_id: str                           # UUID, generated at context construction, in every log line
@@ -214,6 +234,8 @@ class AgentContext:
     timezone: str
 ```
 
+`agent_id` is the discriminator that selects the profile, scopes sessions, scopes automations, and filters tool allowlists. It is the first field resolved at context construction time.
+
 `triggered_by` has exactly three values: `"user"`, `"n8n"`, `"agent"`. There is no `"schedule"` value — n8n is the catch-all for everything automated including scheduled jobs.
 
 `request_id` propagates through every log statement, every tool call record, and every SSE event. It is the only way to trace a request through a multi-tool, multi-sub-agent execution.
@@ -224,10 +246,13 @@ class AgentContext:
 
 ```python
 class SessionManager:
-    async def get_or_create(self, user_id: int, triggered_by: str) -> Session
+    async def get_or_create(self, user_id: int, agent_id: str, triggered_by: str) -> Session
     async def close(self, session_id: int) -> None
     async def load_history(self, session_id: int) -> list[dict]  # Anthropic messages format
+    async def list_sessions(self, user_id: int, agent_id: str) -> list[Session]
 ```
+
+Sessions are scoped by `(user_id, agent_id)` — Sentinel's conversation history never appears in Ultron's session list. `agent_id` is a required parameter for all session creation and listing calls.
 
 SessionManager lives at Phase 9.5 in the build order. AgentContext construction depends on it. It is injected into `app.state` in the lifespan handler alongside the orchestrator and registry.
 
@@ -277,7 +302,7 @@ Do not implement any internal scheduler. Do not add cron logic to the backend. E
 | Agent-to-agent subtasks | claude-haiku-4-5-20251001 (Sonnet if complexity demands) |
 | House Party Protocol (future) | claude-sonnet-4-6 across all agents |
 
-SPEDA governs model allocation. Agents do not decide independently. These model IDs live in `app/profiles/speda.py` only. The profile is loaded at startup, attached to `app.state`, and its `allocate_model()` method is called at context construction time.
+Each agent's `AgentProfile` governs its own model allocation via `allocate_model()`. Model IDs live exclusively in individual profile files under `app/profiles/`. The `ProfileRegistry` loads all profiles at startup and attaches them to `app.state`. The orchestrator resolves the correct profile from `context.agent_id` and calls its `allocate_model()` at context construction time.
 
 ---
 
@@ -285,7 +310,7 @@ SPEDA governs model allocation. Agents do not decide independently. These model 
 
 - **API key auth:** All endpoints require `X-API-Key` header. Validated in `app/middleware/auth.py` before routing.
 - **n8n trigger auth:** `POST /trigger/{agent_id}` additionally validates `X-N8N-Secret`. Both checks must pass.
-- **Playwright MCP (`@playwright/mcp`):** CVE-2025-9611 (CSRF vulnerability). Must run in an isolated Docker container. Never expose the Playwright MCP port to the public network. Internal Contabo network only. Apply to both NightCrawler and Optimus deployments.
+- **Playwright MCP (`@playwright/mcp`):** CVE-2025-9611 (CSRF vulnerability). Must run in an isolated Docker container. Never expose the Playwright MCP port to the public network. Internal Contabo network only. Applies to NightCrawler (in-process profile). Optimus manages its own Playwright isolation as a standalone deployment.
 - **MCP transport:** STDIO for all local MCP servers (subprocess on Contabo). HTTP/SSE only for officially managed remote servers (Google Workspace, Notion) with OAuth 2.1. No community servers exposed on public ports.
 
 ---
@@ -307,14 +332,14 @@ SPEDA governs model allocation. Agents do not decide independently. These model 
 - Do not hardcode any tool definition in the orchestrator.
 - Do not use OpenAI wire format for tool calls.
 - Do not add internal scheduling logic. n8n handles all of that.
-- Do not give agents direct access to each other. All inter-agent comms route through the backend.
-- Do not put identity strings (agent name, persona, model policy) in core modules. They belong in `app/profiles/`.
-- Do not implement House Party Protocol. It is parked until all six agents are operational.
+- Do not give agents direct access to each other. In-process agents dispatch through `app/core/dispatch.py` (the orchestrator-routed primitive); Optimus communicates only via WebSocket through `WebSocketManager`.
+- Do not put identity strings (agent name, persona, model policy, tool allowlist) in core modules. They belong in `app/profiles/{agent_id}.py`.
+- Do not implement House Party Protocol. It is parked until all five in-process agents are operational and OQ6/OQ9 are settled.
 - Do not use `break` after the first tool call. The loop runs until `end_turn`.
 - Do not store generated files permanently. `/tmp/speda_outputs/` with 24-hour cleanup via n8n → `DELETE /admin/outputs`.
 - Do not run Playwright MCP without container isolation. CVE-2025-9611. Internal network only.
 - Do not write one-line tool descriptions. Minimum 3–4 sentences per Rule 11.
-- Do not hardcode model IDs outside of `app/profiles/speda.py`.
+- Do not hardcode model IDs outside of `app/profiles/`. Each agent's model IDs live in its own profile file only.
 - Do not add a fourth value to `triggered_by`. n8n covers all automated triggers including scheduled jobs.
 
 ---

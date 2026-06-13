@@ -43,10 +43,16 @@ PROMPT_SECTIONS = [
 
 class SPEDAProfile(AgentProfile):
     """
-    SPEDA identity profile.
-    Fork this file for each Superior Six agent — change name, models, and PROMPT_SECTIONS.
-    Never put prompt content in core modules.
+    SPEDA — the orchestrator profile and primary owner-facing agent.
+    One profile among several in the multi-tenant backend; addressed by
+    agent_id="speda". Never put prompt content in core modules.
     """
+
+    agent_id = "speda"
+    domain = "orchestration & general executive assistance"
+    # None = full registry access. SPEDA is the orchestrator; it sees every
+    # tool. The domain-specialised agents declare narrower allowlists.
+    tool_allowlist = None
 
     name = AGENT_NAME   # derived from 01_identity.md — never hardcode here
     sonnet_model = "claude-sonnet-4-6"

@@ -101,15 +101,20 @@ async def lifespan(app: FastAPI):
 
     session_manager = SessionManager()
 
-    # ── 6. Profile ─────────────────────────────────────────────────────────────
+    # ── 6. Profiles (multi-tenant) ─────────────────────────────────────────────
+    # One ProfileRegistry holds every enabled in-process agent, addressed by
+    # agent_id. Phase 1: SPEDA only — the Superior Six profiles are authored in
+    # later phases. Optimus is NOT here (external WebSocket peer, not a profile).
+    from app.profiles.registry import ProfileRegistry
     from app.profiles.speda import SPEDAProfile
 
-    profile = SPEDAProfile()
+    profiles = ProfileRegistry()
+    profiles.register(SPEDAProfile())
 
     # ── 7. Orchestrator (reuses the client already injected into the registry) ──
     from app.core.orchestrator import AgentOrchestrator
 
-    orchestrator = AgentOrchestrator(registry, llm_client, profile)
+    orchestrator = AgentOrchestrator(registry, llm_client, profiles)
 
     # ── 7.5 Proactive delivery + automation engine clients ─────────────────────
     from app.services.telegram import TelegramClient
@@ -122,7 +127,7 @@ async def lifespan(app: FastAPI):
     app.state.orchestrator = orchestrator
     app.state.ws_manager = ws_manager
     app.state.session_manager = session_manager
-    app.state.profile = profile
+    app.state.profiles = profiles
     app.state.telegram = telegram
 
     logger.info(

@@ -4,9 +4,24 @@ from typing import Literal
 
 class AgentProfile(ABC):
     """
-    ABC for all agent identity profiles.
-    Fork this for each of the Superior Six — swap the profile, the engine is untouched.
+    ABC for all in-process agent identity profiles (SPEDA + the five Superior
+    Six that run here). One subclass per agent_id; the engine is untouched by
+    identity (Rule 10). The ProfileRegistry loads every enabled subclass at
+    startup and the orchestrator resolves one per request from context.agent_id.
     """
+
+    # ── Identity ────────────────────────────────────────────────────────────
+    # agent_id is the discriminator that selects this profile, scopes sessions,
+    # scopes automations, and (Phase 3) filters the tool allowlist. It must be
+    # unique across all enabled profiles and stable (it is persisted on rows).
+    agent_id: str = "speda"
+    domain: str = ""                          # Short human label, e.g. "finance & budget"
+
+    # Declarative tool allowlist (Rule 5/10): which skills/MCP servers/toolsets
+    # this agent may use. None = no restriction (sees the full registry). The
+    # CapabilityRegistry applies this filter — the profile only declares it.
+    # Filter wiring lands in Phase 3; declaring it now is harmless.
+    tool_allowlist: list[str] | None = None
 
     name: str
     sonnet_model: str = "claude-sonnet-4-6"

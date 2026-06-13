@@ -171,7 +171,9 @@ async def chat(
 ):
     orchestrator = request.app.state.orchestrator
     session_manager = request.app.state.session_manager
-    profile = request.app.state.profile
+    # Bare /chat targets the default agent (SPEDA). The /chat/{agent_id} split
+    # that lets the UI address any agent lands in Phase 3.
+    profile = request.app.state.profiles.default
 
     request_id = str(uuid.uuid4())
     user_id = 1
@@ -184,6 +186,7 @@ async def chat(
         user_id=user_id,
         triggered_by="user",
         model_used=model,
+        agent_id=profile.agent_id,
         session_id=body.session_id,
     )
 
@@ -210,6 +213,7 @@ async def chat(
     history = await session_manager.load_history(db, session.id)
 
     context = AgentContext(
+        agent_id=profile.agent_id,
         user_id=user_id,
         session_id=session.id,
         request_id=request_id,
@@ -280,7 +284,8 @@ async def websocket_chat(websocket: WebSocket):
 
     orchestrator = websocket.app.state.orchestrator
     session_manager = websocket.app.state.session_manager
-    profile = websocket.app.state.profile
+    # Real-time chat targets the default agent (SPEDA) for now.
+    profile = websocket.app.state.profiles.default
 
     logger.info("ws_flutter_connect")
 
@@ -311,6 +316,7 @@ async def websocket_chat(websocket: WebSocket):
                     user_id=user_id,
                     triggered_by="user",
                     model_used=profile.allocate_model("user"),
+                    agent_id=profile.agent_id,
                     session_id=session_id_req,
                 )
 
@@ -320,6 +326,7 @@ async def websocket_chat(websocket: WebSocket):
                 history = await session_manager.load_history(db, session.id)
 
                 context = AgentContext(
+                    agent_id=profile.agent_id,
                     user_id=user_id,
                     session_id=session.id,
                     request_id=request_id,
