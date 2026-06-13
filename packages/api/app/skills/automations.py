@@ -78,7 +78,7 @@ class AutomationsSkill(Skill):
         try:
             if action == "create":
                 spec = args.get("spec") or {}
-                result = await manager.create_automation(spec, context.db)
+                result = await manager.create_automation(spec, context.db, context.agent_id)
                 logger.info(
                     "automation_created_by_agent",
                     extra={"request_id": context.request_id, "automation_id": result["id"]},

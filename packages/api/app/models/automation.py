@@ -22,6 +22,9 @@ class Automation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), default=1)
+    # Which in-process agent owns this watcher — it fires back through that
+    # agent's /trigger/{agent_id}, so the push is composed in that agent's voice.
+    agent_id: Mapped[str] = mapped_column(String(64), default="speda", index=True)
     n8n_workflow_id: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
     name: Mapped[str] = mapped_column(String(160))
     kind: Mapped[str] = mapped_column(String(32))

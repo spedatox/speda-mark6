@@ -30,6 +30,7 @@ def _now() -> datetime:
 def _as_dict(a: Automation) -> dict:
     return {
         "id": a.id,
+        "agent_id": a.agent_id,
         "n8n_workflow_id": a.n8n_workflow_id,
         "name": a.name,
         "kind": a.kind,
@@ -43,16 +44,17 @@ def _as_dict(a: Automation) -> dict:
     }
 
 
-async def create_automation(spec: dict, db: AsyncSession) -> dict:
+async def create_automation(spec: dict, db: AsyncSession, agent_id: str = "speda") -> dict:
     """Compose → push to n8n → activate → persist. Returns the automation dict,
     or raises ValueError with a actionable message (bad spec / n8n unreachable)
-    that SPEDA can read and repair."""
+    that SPEDA can read and repair. agent_id is the creating agent — the watcher
+    fires back through that agent's /trigger and is voiced by it."""
     # "track this for a month" → concrete expiry the gate node enforces.
     duration_days = spec.pop("duration_days", None)
     if duration_days and not spec.get("expires_at"):
         spec["expires_at"] = (_now() + timedelta(days=float(duration_days))).isoformat()
 
-    workflow = composer.compose(spec)  # raises ValueError on a bad spec
+    workflow = composer.compose(spec, agent_id)  # raises ValueError on a bad spec
 
     n8n = N8nClient()
     if not n8n.configured:
@@ -75,6 +77,7 @@ async def create_automation(spec: dict, db: AsyncSession) -> dict:
 
     row = Automation(
         user_id=1,
+        agent_id=agent_id,
         n8n_workflow_id=workflow_id,
         name=spec.get("name") or workflow["name"],
         kind=spec["kind"],
