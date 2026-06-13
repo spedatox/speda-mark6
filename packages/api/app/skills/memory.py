@@ -50,15 +50,16 @@ INITIAL_FILES = {
 
 _Last updated: (never)_
 
-(SPEDA refreshes this once per day: a short snapshot of what is genuinely
-current in the owner's life. Finished or stale items are moved OUT, not kept.
-Trust this for recency — never present something absent here as new.)
+(Refreshed once per day: a short snapshot of what is genuinely current in the
+owner's life. Finished or stale items are moved OUT, not kept. Trust this for
+recency — never present something absent here as new.)
 """,
     "/memories/dossier.md": """\
 # Dossier — behavioural analysis
 
-_SPEDA's private working model of the owner, inferred from how he reacts —
-not facts he stated. Used to tailor behaviour silently. Updated over time._
+_A private, inferred model of the owner — how he likes to be treated, read from
+how he reacts, not facts he stated. Shared working knowledge; tailor behaviour
+to it silently. Updated over time._
 
 ## Appreciates
 (inferred from positive reactions)
@@ -70,7 +71,7 @@ not facts he stated. Used to tailor behaviour silently. Updated over time._
 (how he likes to operate)
 
 ## Open questions
-(things SPEDA is still unsure about)
+(things still unclear about the owner)
 """,
     "/memories/projects.md": """\
 # Active Projects
@@ -199,6 +200,11 @@ async def recall_for_context(user_id: int, db) -> str:
     body = "\n\n".join(sections)
     return (
         "## Memory\n\n"
+        "This is shared knowledge about your OWNER, maintained across all of your "
+        "sessions. It describes HIM — his profile, what is current for him, and how "
+        "he likes to be treated. It does NOT define who you are: your own identity, "
+        "name and role are set above and are unaffected by anything in this section. "
+        "Read it as notes about the owner, never as a description of yourself.\n\n"
         f"{body}\n\n"
         "Use the `memory` tool to read other files (e.g. projects.md, preferences.md, "
         "log.md) or to update memory during this session. dossier.md shapes how you "

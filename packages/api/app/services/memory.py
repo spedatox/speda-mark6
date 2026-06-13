@@ -334,8 +334,9 @@ async def run_daily_maintenance(
                     if body and "##" in body:
                         new_dossier = (
                             "# Dossier — behavioural analysis\n\n"
-                            "_SPEDA's private working model of the owner, inferred from how he "
-                            "reacts. Used to tailor behaviour silently._\n\n"
+                            "_A private, inferred model of the owner — how he likes to be "
+                            "treated, read from how he reacts. Shared working knowledge; "
+                            "tailor behaviour to it silently._\n\n"
                             f"_Last updated: {today}_\n\n"
                             f"{body}\n"
                         )
