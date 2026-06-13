@@ -1,6 +1,6 @@
 # Multi-Tenant Architecture Migration Plan — SPEDA Mark VI
 
-**Status:** APPROVED — implementation underway. Phase 0 (governance) and Phase 1 (identity threading) are **done**. Phases 2–5 pending.
+**Status:** APPROVED — implementation underway. Phases 0–2 are **done** (governance, identity threading, session/automation scoping). Phase 3 next: **Ultron** is the first live second agent (owner's choice — see §8). Phases 3–5 pending.
 
 **Scope:** Collapse the "fork-per-agent" Superior Six model into a single multi-tenant backend where all agents run as profiles inside one FastAPI process, sharing one event loop, one database, and one `CapabilityRegistry`, addressed by `agent_id`.
 
@@ -167,7 +167,7 @@ No destructive migrations: every change is additive (new nullable columns / new 
 | File | Responsibility |
 |---|---|
 | `app/profiles/registry.py` | `ProfileRegistry` — loads/holds all enabled `AgentProfile`s, lookup by `agent_id`, lists the roster. Replaces the single `app.state.profile`. |
-| `app/profiles/{sentinel,nightcrawler,ultron,optimus,…}.py` | One profile per agent: `agent_id`, domain, model policy, tool allowlist, prompt-section list. (Could be data-driven from one module + per-agent prompt dirs to avoid six near-identical files — §7-OQ5.) |
+| `app/profiles/{ultron,sentinel,nightcrawler,centurion,atomix}.py` | One profile per in-process agent: `agent_id`, domain, model policy, tool allowlist, prompt-section list. **Ultron is authored first** (Phase 3 demonstrator). Six separate files, not data-driven (OQ5). Optimus is NOT here — it is an external WebSocket peer, not a profile (OQ4). |
 | `app/prompts/agents/{agent_id}/*.md` | Per-agent identity/voice/boundary prompt sections; shared policy sections stay in a common dir with loader fallback. |
 | `app/core/dispatch.py` | **(Final phase only)** The in-process inter-agent dispatch primitive (§6-design). Houses the call-stack/cycle guard and depth/budget accounting. |
 | `app/middleware/license.py` | **(If Skyfall is real)** The single license checkpoint middleware. |
@@ -258,10 +258,10 @@ Verdict: async concurrency is sufficient; the gating factors are provider rate l
 
 Rationale: the `agent_id` threading touches the core (`AgentContext`, orchestrator, session manager, routers). Doing it now — while SPEDA is the only live agent and the others are config-only — means near-zero migration cost (no six deployments, no cross-fork data to reconcile). If MCP/Agent-SDK are fully wired first, that tool-routing and sub-agent code gets reworked under multi-tenancy anyway. Build the scoping mechanism into the registry *now* so later MCP wiring lands in a multi-tenant-aware registry. House Party genuinely must be last (`CLAUDE.md` parks it until all six are operational).
 
-- **Phase 0 — Governance.** Resolve OQ1 (amend `CLAUDE.md`), OQ2/OQ3 (memory model), OQ8 (canonical roster). No code.
-- **Phase 1 — Identity threading (no behavior change for SPEDA).** Add `agent_id` to `AgentContext`; build `ProfileRegistry`; un-bind the orchestrator from a single profile; resolve profile per request. SPEDA-only still works end-to-end. Verify via the existing Phase-1 done-signal round-trip.
-- **Phase 2 — Session & memory scoping.** Scope sessions by `(user_id, agent_id)`; add the schema columns/indexes (§4); implement the shared/working memory resolution in `services/memory.py`. Still effectively single-agent until profiles exist.
-- **Phase 3 — Registry scoping + second profile.** Add the allowlist filter to `list_tools()`; declare allowlists on profiles; author *one* additional agent (e.g. Sentinel) as the proof that two agents coexist with different tools/voice in one process. Routers move to `/chat/{agent_id}`.
+- **Phase 0 — Governance.** ✅ **Done.** OQ1 (`CLAUDE.md` amended), OQ2/OQ3 (fully-shared memory), OQ4 (WebSocket kept for Optimus), OQ5 (six files), OQ8 (roster) all resolved.
+- **Phase 1 — Identity threading (no behavior change for SPEDA).** ✅ **Done.** `agent_id` on `AgentContext`; `ProfileRegistry` built; orchestrator un-bound from a single profile and resolving per request; routers stamp `agent_id`. SPEDA-only works end-to-end.
+- **Phase 2 — Session & automation scoping.** ✅ **Done.** Sessions scoped by `(user_id, agent_id)` with a composite index; `automations.agent_id` added via an idempotent additive migration; watchers fire back through `/trigger/{agent_id}`. **Memory is fully shared (OQ3)** — no per-agent memory partitioning; identity-safety handled by framing the shared memory block as owner-knowledge (separate commit).
+- **Phase 3 — Registry scoping + second profile.** Add the allowlist filter to `list_tools()`; declare allowlists on profiles; author **Ultron** (academic research & synthesis) as the first live second agent — the owner's chosen demonstrator. Its allowlist (`arxiv`, `exa`, `tavily`, `fetch` + synthesis/document skills) is narrower than SPEDA's and proves filtering, a distinct scholarly voice, and `/chat/{agent_id}` routing. (Ultron's research tools partly overlap SPEDA's, so `arxiv` is the clearly agent-specific tool; the voice + routing carry the rest of the proof. A finance agent would give sharper tool-distinctness, but Ultron is the priority.) Routers move to `/chat/{agent_id}`.
 - **Phase 4 — Roster completion + frontend.** Author the remaining agents; UI agent switcher + per-agent session lists. Retire the WebSocket agent transport (OQ4).
 - **Phase 5 — Inter-agent dispatch + House Party.** Build `dispatch.py` (cycle/depth/budget guards), the `dispatch_to_agent` tool, and only then enable concurrent multi-agent operation — after MCP concurrency (OQ6) and rate-limit policy (OQ9) are settled. Skyfall middleware (OQ7) lands before any of this is exposed beyond the owner.
 
