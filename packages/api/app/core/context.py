@@ -12,6 +12,7 @@ class AgentContext:
     No module-level globals. No ad-hoc dicts.
     """
 
+    agent_id: str                            # Which agent is running — "speda", "sentinel", …
     user_id: int
     session_id: int
     request_id: str                          # UUID — in every log line and SSE event

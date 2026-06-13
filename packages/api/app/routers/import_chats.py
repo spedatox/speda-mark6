@@ -30,7 +30,9 @@ async def index_history_endpoint(
     """
     from app.services.history_indexer import index_history
 
-    profile = request.app.state.profile
+    # History indexing is an owner-level (cross-agent) job — run it on the
+    # default agent's cheap model.
+    profile = request.app.state.profiles.default
     request_id = str(uuid.uuid4())
     background_tasks.add_task(index_history, 1, request_id, profile.haiku_model, force)
     return JSONResponse({"accepted": True, "message": "History indexing started in background"})

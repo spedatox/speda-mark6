@@ -4,7 +4,7 @@ from typing import AsyncGenerator
 
 from app.core.context import AgentContext
 from app.core.registry import CapabilityRegistry
-from app.profiles.base import AgentProfile
+from app.profiles.registry import ProfileRegistry
 from app.schemas.sse import SSEEvent, SSEEventType
 from app.services.llm_client import LLMClient
 from app.skills.memory import recall_for_context
@@ -19,6 +19,10 @@ class AgentOrchestrator:
     Owns the agentic loop and the system prompt.
     Neither lives anywhere else (CLAUDE.md Rules 1, 2, 4).
 
+    Stateless with respect to identity: it holds the ProfileRegistry, not one
+    profile, and resolves the agent per request from context.agent_id. The same
+    loop serves every in-process agent (SPEDA + the five Superior Six).
+
     Router contract: call run(context) and stream the SSEEvents.
     Zero logic in the router beyond that.
     """
@@ -27,16 +31,18 @@ class AgentOrchestrator:
         self,
         registry: CapabilityRegistry,
         client: LLMClient,
-        profile: AgentProfile,
+        profiles: ProfileRegistry,
     ) -> None:
         self._registry = registry
         self._client = client
-        self._profile = profile
+        self._profiles = profiles
 
     def build_system_prompt(self, context: AgentContext) -> str:
         """
-        Build the full system prompt from the profile template + runtime context vars.
-        Only called here — never in a router, never in a service.
+        Build the full system prompt from the agent's profile template + runtime
+        context vars. The profile is resolved per request from context.agent_id
+        (Rule 2: prompt construction stays here; it just selects which profile to
+        build from). Only called here — never in a router, never in a service.
 
         Deliberately NO time-derived vars: a clock anywhere in the system prompt
         changes the request prefix every minute, which silently invalidates
@@ -44,7 +50,8 @@ class AgentOrchestrator:
         implicit, Ollama KV). Current time reaches the model via the timestamp
         stamped onto each user message (SessionManager.stamp_user_content).
         """
-        return self._profile.build_system_prompt(
+        profile = self._profiles.require(context.agent_id)
+        return profile.build_system_prompt(
             {
                 "timezone": context.timezone,
                 "model": context.model,
