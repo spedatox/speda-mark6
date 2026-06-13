@@ -52,6 +52,24 @@ class SessionManager:
         )
         return session
 
+    async def list_sessions(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        agent_id: str,
+        limit: int = 500,
+    ) -> list[Session]:
+        """Sessions for one (user, agent), newest first. Scoped by agent_id so
+        one agent's history never leaks into another's list (CLAUDE.md
+        SessionManager contract). Backed by ix_sessions_user_agent_started."""
+        result = await db.execute(
+            select(Session)
+            .where(Session.user_id == user_id, Session.agent_id == agent_id)
+            .order_by(Session.started_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def close(self, db: AsyncSession, session_id: int) -> None:
         """Mark a session as ended."""
         result = await db.execute(select(Session).where(Session.id == session_id))

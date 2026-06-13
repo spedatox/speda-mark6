@@ -111,19 +111,16 @@ async def get_messages(
 @router.get("/sessions")
 async def list_sessions(
     request: Request,
+    agent_id: str = "speda",
     limit: int = 500,
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy import select, desc
-    from app.models.session import Session
-
-    result = await db.execute(
-        select(Session)
-        .where(Session.user_id == 1)
-        .order_by(desc(Session.started_at))
-        .limit(limit)
+    # Agent-scoped: defaults to SPEDA so the existing UI is unchanged; pass
+    # ?agent_id=… to list another agent's sessions once the UI addresses them.
+    session_manager = request.app.state.session_manager
+    sessions = await session_manager.list_sessions(
+        db, user_id=1, agent_id=agent_id, limit=limit
     )
-    sessions = result.scalars().all()
     return [
         {"id": s.id, "title": s.title, "started_at": s.started_at.isoformat()}
         for s in sessions
