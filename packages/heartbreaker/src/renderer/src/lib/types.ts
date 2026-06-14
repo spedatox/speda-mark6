@@ -29,6 +29,7 @@ export interface ChatMessage {
   isError: boolean
   images?: string[]   // data: URLs for display in the user bubble
   files?: FileMeta[]  // downloadable files SPEDA produced
+  status?: string     // live status line while streaming (real phase, not looped filler)
 }
 
 export interface Session {

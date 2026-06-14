@@ -15,6 +15,24 @@ from app.services.memory import schedule_background_tasks
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
 
+
+def _friendly_error(model: str, exc: Exception) -> str:
+    """Turn a raw provider exception into a short, actionable message for the UI.
+    Covers the common dead-ends (missing key, no credit, rate limit, no uplink)
+    across every provider so the user sees WHY instead of a frozen spinner."""
+    provider = model.partition(":")[0] if ":" in model else "anthropic"
+    text = str(exc).lower()
+    if "401" in text or "unauthorized" in text or "api key" in text or "authentication" in text:
+        key = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}.get(provider, "ANTHROPIC_API_KEY")
+        return f"{provider.title()} rejected the request — check that {key} is set and valid."
+    if "credit" in text or "billing" in text or "quota" in text or "insufficient" in text:
+        return f"{provider.title()} reports no available credit/quota for this account."
+    if "429" in text or "rate limit" in text or "overloaded" in text or "529" in text:
+        return f"{provider.title()} is rate-limited or overloaded right now — try again shortly."
+    if "connect" in text or "timeout" in text or "connection" in text:
+        return f"Couldn't reach {provider.title()}. Check the network (or the local Ollama daemon)."
+    return f"{provider.title()} request failed: {exc}"
+
 @router.get("/models")
 async def list_models():
     """Models across all configured providers — the LLM layer owns the catalog."""
@@ -187,27 +205,41 @@ async def chat(
         session_id=body.session_id,
     )
 
-    # Build the user turn — plain text, or a content-block array when images are attached.
-    if body.attachments:
-        user_content: list | str = [
-            {
-                "type": "image",
-                "source": {"type": "base64", "media_type": att.media_type, "data": att.data},
-            }
-            for att in body.attachments
-        ]
-        if body.message:
-            user_content.append({"type": "text", "text": body.message})
-    else:
-        user_content = body.message
+    # Regenerate / edit: truncate the stored history to the kept prefix BEFORE
+    # anything else, so the model can't be re-fed its own previous answer.
+    #   - edit:       drop the old user turn + its assistant reply, then resend
+    #                 the edited prompt as a fresh user message.
+    #   - regenerate: drop just the last assistant reply, then re-run on the
+    #                 existing history WITHOUT appending a new user message.
+    if body.keep_messages is not None:
+        await session_manager.truncate(db, session.id, body.keep_messages)
 
-    # Save FIRST, then load history including the new message. load_history
-    # stamps user messages from their DB created_at, so the prompt built this
-    # turn is byte-identical to the prefix reconstructed on every future turn —
-    # that identity is what keeps the conversation prompt-cache valid (see
-    # SessionManager.stamp_user_content).
-    await session_manager.save_message(db, session.id, "user", user_content)
-    history = await session_manager.load_history(db, session.id)
+    if body.regenerate:
+        # No new user message — re-run on the existing (now-truncated) history,
+        # which already ends with the user turn being regenerated.
+        history = await session_manager.load_history(db, session.id)
+    else:
+        # Build the user turn — plain text, or a content-block array when images are attached.
+        if body.attachments:
+            user_content: list | str = [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": att.media_type, "data": att.data},
+                }
+                for att in body.attachments
+            ]
+            if body.message:
+                user_content.append({"type": "text", "text": body.message})
+        else:
+            user_content = body.message
+
+        # Save FIRST, then load history including the new message. load_history
+        # stamps user messages from their DB created_at, so the prompt built this
+        # turn is byte-identical to the prefix reconstructed on every future turn —
+        # that identity is what keeps the conversation prompt-cache valid (see
+        # SessionManager.stamp_user_content).
+        await session_manager.save_message(db, session.id, "user", user_content)
+        history = await session_manager.load_history(db, session.id)
 
     context = AgentContext(
         agent_id=profile.agent_id,
@@ -229,22 +261,40 @@ async def chat(
     collected_files: list[dict] = []
 
     async def generate():
-        async for event in orchestrator.run(context):
-            et = event.type.value
-            if et == "chunk":
-                collected_chunks.append(str(event.data))
-            elif et == "tool":
-                d = event.data if isinstance(event.data, dict) else {}
-                collected_tools.append({"id": d.get("id"), "name": d.get("name"), "input": d.get("input")})
-            elif et == "tool_result":
-                d = event.data if isinstance(event.data, dict) else {}
-                for t in collected_tools:
-                    if t.get("id") == d.get("id"):
-                        t["result"] = d.get("result")
-                        break
-            elif et == "file":
-                collected_files.append(event.data)
-            yield event.to_sse()
+        # A model/provider failure (no credits, bad key, rate limit) must reach
+        # the client as a terminal `error` event — never a silent stream close,
+        # which would leave the UI stuck "thinking" with no way to cancel.
+        try:
+            async for event in orchestrator.run(context):
+                et = event.type.value
+                if et == "chunk":
+                    collected_chunks.append(str(event.data))
+                elif et == "tool":
+                    d = event.data if isinstance(event.data, dict) else {}
+                    collected_tools.append({"id": d.get("id"), "name": d.get("name"), "input": d.get("input")})
+                elif et == "tool_result":
+                    d = event.data if isinstance(event.data, dict) else {}
+                    for t in collected_tools:
+                        if t.get("id") == d.get("id"):
+                            t["result"] = d.get("result")
+                            break
+                elif et == "file":
+                    collected_files.append(event.data)
+                yield event.to_sse()
+        except Exception as exc:
+            from app.schemas.sse import SSEEvent, SSEEventType
+
+            logger.error(
+                "chat_stream_failed",
+                extra={"request_id": request_id, "model": model, "error": str(exc)},
+            )
+            yield SSEEvent(
+                type=SSEEventType.ERROR,
+                data=_friendly_error(model, exc),
+                session_id=session.id,
+                request_id=request_id,
+            ).to_sse()
+            return  # nothing partial worth persisting
 
         full_response = "".join(collected_chunks)
         if full_response or collected_files:

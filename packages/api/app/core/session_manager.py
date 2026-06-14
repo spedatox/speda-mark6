@@ -132,6 +132,37 @@ class SessionManager:
             out.append({"role": m.role, "content": content})
         return out
 
+    async def truncate(self, db: AsyncSession, session_id: int, keep: int) -> int:
+        """
+        Keep the first `keep` messages of a session (oldest first) and delete the
+        rest. Powers regenerate (drop the last assistant turn) and edit (drop the
+        old user turn + everything after it) so the model genuinely re-runs from
+        a clean history instead of seeing its previous answer.
+
+        Position-based to match the client, which only knows message ORDER, not
+        DB ids (freshly streamed messages never carried a DB id). Returns the
+        number of rows deleted.
+        """
+        keep = max(0, keep)
+        result = await db.execute(
+            select(Message.id)
+            .where(Message.session_id == session_id)
+            .order_by(Message.created_at.asc())
+            .offset(keep)
+        )
+        ids = [row[0] for row in result.all()]
+        if not ids:
+            return 0
+        from sqlalchemy import delete as _delete
+
+        await db.execute(_delete(Message).where(Message.id.in_(ids)))
+        await db.commit()
+        logger.info(
+            "session_truncated",
+            extra={"session_id": session_id, "kept": keep, "deleted": len(ids)},
+        )
+        return len(ids)
+
     async def save_message(
         self,
         db: AsyncSession,
