@@ -145,8 +145,11 @@ class LLMClient:
         for provider, model in self._chain(kwargs.get("model", "")):
             try:
                 if provider == "anthropic":
+                    # `reasoning_effort` is an OpenAI/Gemini hint; the Anthropic
+                    # SDK rejects unknown kwargs, so strip it on this path.
+                    anthro = {k: v for k, v in kwargs.items() if k != "reasoning_effort"}
                     return await self._anthropic.create_message(
-                        **{**kwargs, "model": model}
+                        **{**anthro, "model": model}
                     )
                 return await self._openai_create(provider, model, kwargs)
             except Exception as exc:
@@ -324,6 +327,16 @@ def _to_openai_params(provider: str, model: str, kwargs: dict) -> dict:
             params["max_completion_tokens"] = max_tokens
         else:
             params["max_tokens"] = max_tokens
+
+    # Reasoning-effort hint — lets short background tasks (e.g. title generation)
+    # work on reasoning models. Without it, a GPT-5 / Gemini-2.5 model spends its
+    # whole token budget on hidden reasoning and returns EMPTY visible content,
+    # which silently broke conversation titles on every non-Anthropic provider.
+    # Only openai and gemini document this param; Ollama (local, non-reasoning)
+    # is left alone.
+    reasoning_effort = kwargs.get("reasoning_effort")
+    if reasoning_effort and provider in ("openai", "gemini"):
+        params["reasoning_effort"] = reasoning_effort
 
     return params
 

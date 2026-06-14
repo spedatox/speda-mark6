@@ -15,6 +15,7 @@ file-based system and no longer written here.
 """
 
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 
 from fastapi import BackgroundTasks
@@ -356,14 +357,52 @@ async def run_daily_maintenance(
 
 # ── Title generation ──────────────────────────────────────────────────────────
 
+def _clean_title(raw: str) -> str:
+    """Normalise a model's title output into a single clean line. Handles the
+    ways different providers wrap output: code fences (Ollama coder models),
+    'Title:' prefixes, surrounding quotes, trailing punctuation, multi-line."""
+    if not raw:
+        return ""
+    text = raw.strip().strip("`").strip()
+    # first non-empty line only
+    line = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+    line = re.sub(r"^(?:conversation\s+)?title\s*[:\-]\s*", "", line, flags=re.I)
+    line = re.sub(r"\s+", " ", line).strip()
+    # strip wrapping quotes AND trailing/leading punctuation, repeatedly (handles
+    # e.g. '"Black Hole Basics".' → 'Black Hole Basics')
+    line = line.strip("\"'“”‘’.,;:!?-—– ").strip()
+    return line[:80]
+
+
+def _fallback_title(seed: str) -> str:
+    """Deterministic title derived from the user's message — never fails, so a
+    session is ALWAYS titled even if every model call returns empty or errors."""
+    text = (seed or "").strip()
+    # defensively strip a leading per-message timestamp stamp, if present
+    text = re.sub(r"^\[\d{4}-\d{2}-\d{2}[^\]]*\]\s*", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return "New conversation"
+    short = " ".join(text.split(" ")[:8]).rstrip(".,!?;:").strip()
+    if len(short) > 60:
+        short = short[:60].rstrip() + "…"
+    return (short[:1].upper() + short[1:]) if short else "New conversation"
+
+
 async def generate_title(
     session_id: int,
     request_id: str,
     model: str,
 ) -> None:
     """
-    Background task: generate a short session title after the first exchange.
-    Only runs if the session has no title yet — idempotent.
+    Background task: title a session after the first exchange. Idempotent (only
+    runs when the session has no title yet).
+
+    A title is GUARANTEED regardless of provider: we start from a deterministic
+    fallback derived from the user's message, then best-effort upgrade it with
+    the model. If the model returns empty (reasoning models on a tight budget)
+    or the provider is down (no key, dead zone, rate limit), the fallback stands
+    — the session never gets stuck on "New conversation".
     """
     from app.services.llm_client import LLMClient
 
@@ -376,33 +415,49 @@ async def generate_title(
                 return
 
             user_msg, assistant_msg = await _load_last_exchange(db, session_id)
-            if not user_msg or not assistant_msg:
-                return
+            if not user_msg and not assistant_msg:
+                return  # truly nothing to title
 
-            client = LLMClient()
-            response = await client.create_message(
-                model=model,
-                system="You generate short conversation titles. Follow instructions exactly.",
-                messages=[{
-                    "role": "user",
-                    "content": _TITLE_PROMPT.format(
-                        user_message=user_msg[:500],
-                        assistant_message=assistant_msg[:500],
-                    ),
-                }],
-                max_tokens=32,
-            )
+            # 1) Deterministic fallback — this alone guarantees a title.
+            title = _fallback_title(user_msg or assistant_msg)
+            source = "fallback"
 
-            title = response.content[0].text.strip() if response.content else ""
-            title = title.strip('"\'').strip()[:255]
-
-            if title:
-                session.title = title
-                await db.commit()
-                logger.info(
-                    "title_generated",
-                    extra={"request_id": request_id, "session_id": session_id, "title": title},
+            # 2) Best-effort upgrade to a model-written title (provider-agnostic).
+            try:
+                client = LLMClient()
+                response = await client.create_message(
+                    model=model,
+                    system="You generate short conversation titles. Follow instructions exactly.",
+                    messages=[{
+                        "role": "user",
+                        "content": _TITLE_PROMPT.format(
+                            user_message=user_msg[:500],
+                            assistant_message=assistant_msg[:500],
+                        ),
+                    }],
+                    # Generous cap + minimal reasoning so this works uniformly across
+                    # providers: reasoning models (GPT-5, Gemini 2.5) otherwise burn
+                    # the whole budget thinking and emit no title. Anthropic/Ollama
+                    # ignore reasoning_effort and stop early anyway, so the cap is
+                    # just a ceiling there.
+                    max_tokens=512,
+                    reasoning_effort="minimal",
                 )
+                cleaned = _clean_title(response.content[0].text if response.content else "")
+                if cleaned:
+                    title, source = cleaned, "model"
+            except Exception as e:
+                logger.warning(
+                    "title_model_failed_using_fallback",
+                    extra={"request_id": request_id, "model": model, "error": str(e)},
+                )
+
+            session.title = title[:255]
+            await db.commit()
+            logger.info(
+                "title_generated",
+                extra={"request_id": request_id, "session_id": session_id, "title": title, "source": source},
+            )
 
     except Exception as e:
         logger.error(
