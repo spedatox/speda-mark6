@@ -160,4 +160,4 @@ async def mark_fired(automation_name: str, db: AsyncSession) -> None:
             row.last_fired_at = _now()
             await db.commit()
     except Exception as exc:  # noqa: BLE001
-        logger.warning("mark_fired_failed", extra={"name": automation_name, "error": str(exc)})
+        logger.warning("mark_fired_failed", extra={"automation": automation_name, "error": str(exc)})

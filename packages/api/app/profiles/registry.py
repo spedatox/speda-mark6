@@ -34,7 +34,9 @@ class ProfileRegistry:
         self._profiles[agent_id] = profile
         logger.info(
             "profile_register",
-            extra={"agent_id": agent_id, "name": profile.name, "domain": profile.domain},
+            # `name` is a reserved LogRecord attribute — passing it in extra
+            # raises KeyError at record creation. Use a namespaced key.
+            extra={"agent_id": agent_id, "profile_name": profile.name, "domain": profile.domain},
         )
 
     def get(self, agent_id: str) -> AgentProfile | None:
