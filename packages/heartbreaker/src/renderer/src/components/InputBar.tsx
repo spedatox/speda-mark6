@@ -16,7 +16,7 @@ interface AttachedFile {
 }
 
 interface Props {
-  onSend: (message: string, images?: ImageBlock[]) => void
+  onSend: (message: string, opts?: { images?: ImageBlock[] }) => void
   onStop?: () => void
   config: AppConfig
 }
@@ -258,11 +258,14 @@ function ModelPicker({ models, activeId, onSelect }: {
       {open && (
         <div className="hb-glass" style={{
           position: 'absolute', bottom: 'calc(100% + 6px)', right: 0,
-          background: 'rgba(150, 190, 225, 0.07)',
+          // Dense frost: this dropdown lives inside the composer, which has its
+          // own backdrop-filter. Nested backdrop roots cancel the child's blur
+          // (Chromium), so the fill itself must occlude what's behind it.
+          background: 'rgba(10, 20, 27, 0.94)',
           backdropFilter: 'var(--hb-holo-blur)',
           WebkitBackdropFilter: 'var(--hb-holo-blur)',
           border: '1px solid var(--hb-edge)',
-          boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.15)',
+          boxShadow: 'var(--hb-holo-shadow)',
           animation: 'dropDown 0.12s ease',
           zIndex: 100,
           width: 290,
@@ -579,7 +582,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
     if (imageFiles.length) {
       try { blocks = await Promise.all(imageFiles.map(fileToImageBlock)) } catch { blocks = [] }
     }
-    onSend(msg, blocks.length ? blocks : undefined)
+    onSend(msg, blocks.length ? { images: blocks } : undefined)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
