@@ -88,12 +88,24 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
     # Create an integration at https://www.notion.so/profile/integrations
     # and connect it to the pages/databases you want SPEDA to access.
     if settings.notion_api_key:
+        # @notionhq/notion-mcp-server passes OPENAPI_MCP_HEADERS straight to the
+        # Notion REST API, which REQUIRES a Notion-Version header on every call.
+        # Sending only Authorization makes Notion reject every request with a
+        # "Notion-Version header should be included" 400 — pages can't be
+        # listed/searched even though auth itself is valid. Pin the current
+        # stable API version alongside the token.
+        import json as _json
+
+        notion_headers = _json.dumps({
+            "Authorization": f"Bearer {settings.notion_api_key}",
+            "Notion-Version": settings.notion_version,
+        })
         servers.append(
             MCPClient(
                 server_name="notion",
                 transport="stdio",
                 command=["npx", "-y", "@notionhq/notion-mcp-server"],
-                env={"OPENAPI_MCP_HEADERS": f'{{"Authorization":"Bearer {settings.notion_api_key}"}}'},
+                env={"OPENAPI_MCP_HEADERS": notion_headers},
             )
         )
     else:

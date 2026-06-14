@@ -146,6 +146,9 @@ class Settings(BaseSettings):
 
     # MCP API keys (optional — servers degrade gracefully if missing)
     notion_api_key: str = ""
+    # Notion REST API version — required on every Notion request. Pinned here so
+    # it can be bumped via .env without touching code when Notion ships a new one.
+    notion_version: str = "2022-06-28"
     brave_search_api_key: str = ""
     alpha_vantage_api_key: str = ""
     tavily_api_key: str = ""

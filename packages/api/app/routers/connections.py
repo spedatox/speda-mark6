@@ -16,12 +16,28 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["connections"])
 
-# Scopes for the Google services SPEDA uses.
+# Scopes for the Google services SPEDA uses. One scope set per registered MCP
+# service — a missing scope makes that service's tools return PERMISSION_DENIED
+# ("caller is not authorized") at call time even though the MCP handshake and
+# tool listing succeed. Chat had NO scope at all before, and People (Contacts)
+# needs directory + profile, not just contacts.readonly.
+# NOTE: changing this set invalidates the stored refresh token — the user must
+# disconnect and re-run "Sign in with Google" to grant the new scopes, and the
+# matching scopes must be present on the OAuth consent screen in Google Cloud.
 _GOOGLE_SCOPES = [
+    # Gmail
     "https://www.googleapis.com/auth/gmail.modify",
+    # Calendar
     "https://www.googleapis.com/auth/calendar",
+    # Drive
     "https://www.googleapis.com/auth/drive",
+    # Chat
+    "https://www.googleapis.com/auth/chat.messages",
+    "https://www.googleapis.com/auth/chat.spaces.readonly",
+    # People / Contacts
     "https://www.googleapis.com/auth/contacts.readonly",
+    "https://www.googleapis.com/auth/directory.readonly",
+    "https://www.googleapis.com/auth/userinfo.profile",
 ]
 
 # Human-friendly metadata for known servers (label + what credential it needs).
