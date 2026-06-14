@@ -116,6 +116,27 @@ async def google_login():
     return {"auth_url": "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)}
 
 
+@router.get("/connections/google/status")
+async def google_status():
+    """Whether Google is connected (a refresh token is stored). Drives the
+    Settings UI so the 'Sign in' button is replaced by a connected state."""
+    from app.core.runtime_state import get_google_refresh_token
+    return {"connected": bool(get_google_refresh_token())}
+
+
+@router.post("/connections/google/disconnect")
+async def google_disconnect():
+    """Forget the stored Google login. Tools will report 'not connected' until
+    the owner signs in again."""
+    from app.core.runtime_state import set_google_refresh_token
+    from app.mcp.google_rest import _Token
+    set_google_refresh_token("")
+    _Token._access = None
+    _Token._exp = 0.0
+    logger.info("google_disconnected")
+    return {"connected": False}
+
+
 @router.get("/oauth/google/callback", response_class=HTMLResponse)
 async def google_callback(request: Request, code: str = "", error: str = ""):
     """Google redirects here after consent. Exchange the code for a refresh

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
-import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
+import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 
@@ -86,22 +86,33 @@ export default function SettingsModal({ config, onClose }: Props) {
   }
 
   const [googleMsg, setGoogleMsg] = useState('')
+  const [googleConnected, setGoogleConnected] = useState(false)
+  useEffect(() => { googleStatus(config).then(setGoogleConnected) }, [config])
+
   const signInGoogle = async () => {
     setGoogleMsg('Opening Google sign-in…')
     const r = await googleLoginUrl(config)
     if (r.auth_url) {
       window.api?.openExternal ? window.api.openExternal(r.auth_url) : window.open(r.auth_url, '_blank')
       setGoogleMsg('Complete sign-in in your browser, then come back — it connects automatically.')
-      // Poll for the Google servers to come online
+      // Poll for the connection to come online, then flip the UI to "connected".
       let n = 0
       const poll = setInterval(async () => {
         n++
         await loadConns()
-        if (n > 20) clearInterval(poll)
+        if (await googleStatus(config)) { setGoogleConnected(true); setGoogleMsg(''); clearInterval(poll) }
+        else if (n > 20) clearInterval(poll)
       }, 3000)
     } else {
       setGoogleMsg(r.error || 'Could not start Google sign-in.')
     }
+  }
+
+  const disconnectGoogle = async () => {
+    await googleDisconnect(config)
+    setGoogleConnected(false)
+    setGoogleMsg('')
+    loadConns()
   }
 
   const handleIndex = async () => {
@@ -339,26 +350,50 @@ export default function SettingsModal({ config, onClose }: Props) {
                         Google Workspace
                       </div>
                       <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Connect your account for Gmail, Calendar, Drive.
+                        {googleConnected
+                          ? 'Connected — Gmail, Calendar, Drive & Contacts are live.'
+                          : 'Connect your account for Gmail, Calendar, Drive.'}
                       </div>
                     </div>
-                    <button
-                      onClick={signInGoogle}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                        padding: '0.5rem 0.9rem', border: '1px solid var(--border)',
-                        background: '#fff', color: '#1f2937', cursor: 'pointer',
-                        fontSize: '0.82rem', fontWeight: 600, borderRadius: '0.4rem',
-                      }}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 48 48">
-                        <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h11.8c-.5 2.7-2 5-4.4 6.6v5.5h7.1c4.1-3.8 6.6-9.4 6.6-16.1z"/>
-                        <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.4l-7.1-5.5c-2 1.3-4.5 2.1-7.4 2.1-5.7 0-10.5-3.8-12.2-9h-7.3v5.7C8.1 41.1 15.4 46 24 46z"/>
-                        <path fill="#FBBC05" d="M11.8 28.2c-.4-1.3-.7-2.7-.7-4.2s.2-2.9.7-4.2v-5.7H4.5C3 17.2 2.1 20.5 2.1 24s.9 6.8 2.4 9.9l7.3-5.7z"/>
-                        <path fill="#EA4335" d="M24 10.7c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 4.1 29.9 2 24 2 15.4 2 8.1 6.9 4.5 14.1l7.3 5.7c1.7-5.2 6.5-9.1 12.2-9.1z"/>
-                      </svg>
-                      Sign in with Google
-                    </button>
+                    {googleConnected ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <span style={{
+                          display: 'flex', alignItems: 'center', gap: '0.35rem',
+                          fontSize: '0.8rem', fontWeight: 600, color: 'var(--hb-green)',
+                        }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                          Connected
+                        </span>
+                        <button
+                          onClick={disconnectGoogle}
+                          style={{
+                            padding: '0.45rem 0.8rem', border: '1px solid var(--border)',
+                            background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer',
+                            fontSize: '0.78rem', fontWeight: 500, borderRadius: '0.4rem',
+                          }}
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={signInGoogle}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.5rem',
+                          padding: '0.5rem 0.9rem', border: '1px solid var(--border)',
+                          background: '#fff', color: '#1f2937', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: 600, borderRadius: '0.4rem',
+                        }}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 48 48">
+                          <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h11.8c-.5 2.7-2 5-4.4 6.6v5.5h7.1c4.1-3.8 6.6-9.4 6.6-16.1z"/>
+                          <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.4l-7.1-5.5c-2 1.3-4.5 2.1-7.4 2.1-5.7 0-10.5-3.8-12.2-9h-7.3v5.7C8.1 41.1 15.4 46 24 46z"/>
+                          <path fill="#FBBC05" d="M11.8 28.2c-.4-1.3-.7-2.7-.7-4.2s.2-2.9.7-4.2v-5.7H4.5C3 17.2 2.1 20.5 2.1 24s.9 6.8 2.4 9.9l7.3-5.7z"/>
+                          <path fill="#EA4335" d="M24 10.7c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 4.1 29.9 2 24 2 15.4 2 8.1 6.9 4.5 14.1l7.3 5.7c1.7-5.2 6.5-9.1 12.2-9.1z"/>
+                        </svg>
+                        Sign in with Google
+                      </button>
+                    )}
                   </div>
                   {googleMsg && (
                     <p style={{ marginTop: '0.6rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>

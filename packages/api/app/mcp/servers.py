@@ -33,23 +33,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# Official Google Workspace remote MCP endpoints.
-GOOGLE_SERVICES = [
-    ("google_gmail",    "https://gmailmcp.googleapis.com/mcp/v1"),
-    ("google_calendar", "https://calendarmcp.googleapis.com/mcp/v1"),
-    ("google_drive",    "https://drivemcp.googleapis.com/mcp/v1"),
-    ("google_chat",     "https://chatmcp.googleapis.com/mcp/v1"),
-    ("google_people",   "https://people.googleapis.com/mcp/v1"),
-]
+def build_google_clients(access_token: str | None = None):
+    """Build the Google Workspace clients.
 
+    These now talk to the STANDARD Google REST APIs (gmail.googleapis.com, …)
+    rather than Google's gated preview MCP endpoints (gmailmcp.googleapis.com),
+    which blanket-deny "caller does not have permission" outside the Developer
+    Preview Program even with a valid token. The REST clients duck-type the
+    MCPClient surface the registry drives, so registration / lazy loading / the
+    Connections panel / sign-in flow are unchanged. See app/mcp/google_rest.py.
+    The access_token arg is ignored (clients self-refresh) but kept so existing
+    callers (connections.py) don't change.
+    """
+    from app.mcp.google_rest import build_google_clients as _build_rest
 
-def build_google_clients(access_token: str) -> list[MCPClient]:
-    """Build the Google Workspace MCP clients for a given access token."""
-    auth = {"Authorization": f"Bearer {access_token}"}
-    return [
-        MCPClient(server_name=name, transport="http", url=url, headers=auth)
-        for name, url in GOOGLE_SERVICES
-    ]
+    return _build_rest(access_token)
 
 
 async def _refresh_google_token(client_id: str, client_secret: str, refresh_token: str) -> str | None:
@@ -223,14 +221,12 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
         )
     )
 
-    # ── Google Workspace — official remote MCP servers (googleapis.com) ──────
-    # Uses Google's hosted MCP endpoints — no npm package needed.
-    # One-time setup: run scripts/google_oauth.py to get a refresh token,
-    # then add GOOGLE_CLIENT_ID / _SECRET / _REFRESH_TOKEN to .env.
-    #
-    # Access tokens expire in ~1 hour; the server gets a fresh one at startup.
-    # If SPEDA runs longer than that, restart the backend to re-auth.
-    # (Proper background refresh is a future improvement.)
+    # ── Google Workspace — STANDARD REST APIs (see app/mcp/google_rest.py) ───
+    # Gmail / Calendar / Drive / Contacts via gmail.googleapis.com etc. The REST
+    # clients self-refresh their access token on demand, so no startup token
+    # exchange is needed and a long-running session no longer dies after ~1h.
+    # Registration just needs the OAuth client + a stored refresh token; each
+    # client's connect() validates the token can actually be obtained.
     from app.core.runtime_state import get_google_refresh_token
     google_refresh = get_google_refresh_token()  # UI sign-in token, or .env fallback
     google_ready = all([
@@ -239,18 +235,7 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
         google_refresh,
     ])
     if google_ready:
-        access_token = await _refresh_google_token(
-            settings.google_client_id,
-            settings.google_client_secret,
-            google_refresh,
-        )
-        if access_token:
-            servers.extend(build_google_clients(access_token))
-        else:
-            logger.error("mcp_skip", extra={
-                "server": "google_workspace",
-                "reason": "OAuth token refresh failed — check GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN",
-            })
+        servers.extend(build_google_clients())
     else:
         logger.warning("mcp_skip", extra={
             "server": "google_workspace",
