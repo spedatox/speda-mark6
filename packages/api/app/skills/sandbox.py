@@ -128,7 +128,7 @@ class DeliverFileSkill(Skill):
         dest.write_bytes(data)
 
         meta = register_file(context, str(dest), title=title)
-        logger.info("deliver_file", extra={"request_id": context.request_id, "name": meta["name"], "size": meta["size"]})
+        logger.info("deliver_file", extra={"request_id": context.request_id, "file_name": meta["name"], "size": meta["size"]})
         return (
             f"Delivered '{meta['title']}' ({meta['size']} bytes) to the user as a "
             f"downloadable file. Just tell them it's ready — no path or link needed."
