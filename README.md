@@ -1,6 +1,6 @@
 # S.P.E.D.A. Mark VI
 
-**Specialized Personal Executive Digital Assistant** — a single-user, proactive, ambient AI system. FastAPI agentic backend, multi-provider LLM routing, n8n-driven automations with Telegram delivery, and an Electron desktop client.
+**Specialized Personal Executive Digital Assistant Mark VI** — a single-user, proactive, ambient AI system. FastAPI agentic backend, multi-provider LLM routing, n8n-driven automations with Telegram delivery, and an Electron desktop client.
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
