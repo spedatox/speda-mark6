@@ -167,14 +167,6 @@ function ToolDisclosure({ tools }: { tools: ToolBadge[] }) {
   )
 }
 
-// Generic phrases cycled while the model is thinking with no tool active.
-const THINKING_PHRASES = [
-  'Thinking',
-  'Working through it',
-  'Gathering my thoughts',
-  'Composing a response',
-]
-
 function statusLabel(toolName: string): string {
   return TOOL_STATUS[toolName] ?? `Using ${toolName.replace(/_/g, ' ')}`
 }
@@ -188,18 +180,14 @@ function Spinner() {
   )
 }
 
-function WorkingStatus({ tools }: { tools: { id: string; name: string }[] }) {
+function WorkingStatus({ tools, status }: { tools: { id: string; name: string }[]; status?: string }) {
   const lastTool = tools.length ? tools[tools.length - 1].name : null
-  const [phraseIdx, setPhraseIdx] = useState(0)
 
-  // Cycle generic phrases only when no real tool is driving the status
-  useEffect(() => {
-    if (lastTool) return
-    const id = setInterval(() => setPhraseIdx(i => (i + 1) % THINKING_PHRASES.length), 2400)
-    return () => clearInterval(id)
-  }, [lastTool])
-
-  const label = lastTool ? statusLabel(lastTool) : THINKING_PHRASES[phraseIdx]
+  // Real status only — an active tool drives the label; otherwise the live
+  // phase the stream reports (Connecting → Thinking → slow/timeout). No looped
+  // filler: if nothing's happening it says so, and the watchdog eventually
+  // turns this into an error rather than spinning forever.
+  const label = lastTool ? statusLabel(lastTool) : (status ?? 'Thinking')
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.15rem 0' }}>
@@ -767,7 +755,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
           </div>
         ) : message.isStreaming ? (
           // No content yet — show the natural-language working indicator
-          <WorkingStatus tools={message.tools} />
+          <WorkingStatus tools={message.tools} status={message.status} />
         ) : null}
 
         {/* Downloadable files SPEDA produced this turn */}

@@ -167,44 +167,85 @@ export default function ChatMain({ config, onSelectSession }: Props) {
   const abortRef = useRef<AbortController | null>(null)
   const [, forceUpdate] = useState(0)
 
-  const send = useCallback(async (text: string, images?: ImageBlock[]) => {
+  interface SendOpts {
+    images?: ImageBlock[]
+    keepMessages?: number   // regenerate/edit: keep the first N stored messages
+    regenerate?: boolean    // re-run without adding a new user message
+  }
+
+  const send = useCallback(async (text: string, opts: SendOpts = {}) => {
     if (state.isStreaming) return
 
-    const displayImages = (images ?? []).map(b => `data:${b.media_type};base64,${b.data}`)
-    dispatch({
-      type: 'ADD_USER_MESSAGE',
-      payload: {
-        id: makeId(), role: 'user', content: text, tools: [],
-        isStreaming: false, isError: false,
-        ...(displayImages.length ? { images: displayImages } : {}),
-      },
-    })
+    // Regenerate re-runs the existing last user turn — no new user bubble.
+    if (!opts.regenerate) {
+      const displayImages = (opts.images ?? []).map(b => `data:${b.media_type};base64,${b.data}`)
+      dispatch({
+        type: 'ADD_USER_MESSAGE',
+        payload: {
+          id: makeId(), role: 'user', content: text, tools: [],
+          isStreaming: false, isError: false,
+          ...(displayImages.length ? { images: displayImages } : {}),
+        },
+      })
+    }
 
     const assistantId = makeId()
     dispatch({
       type: 'ADD_ASSISTANT_MESSAGE',
-      payload: { id: assistantId, role: 'assistant', content: '', tools: [], isStreaming: true, isError: false },
+      payload: { id: assistantId, role: 'assistant', content: '', tools: [], isStreaming: true, isError: false, status: 'Connecting' },
     })
 
     const ctrl = new AbortController()
     abortRef.current = ctrl
     forceUpdate(n => n + 1)
 
+    // ── Watchdog ────────────────────────────────────────────────────────────
+    // Real status, not looped filler — and a hard stop if the backend goes
+    // quiet. We track the last activity instant; the ticker escalates the
+    // status line and finally aborts so the UI never spins forever.
+    const STALL_MS = 9000    // no events this long → tell the user it's slow
+    const DEAD_MS = 45000    // no events this long → give up, surface an error
+    let lastActivity = Date.now()
+    let gotContent = false
+    let gotTool = false
+    let timedOut = false
+    let settled = false  // did we emit a terminal (done/error/abort) for this message?
+
+    const watchdog = setInterval(() => {
+      const idle = Date.now() - lastActivity
+      if (gotContent) return  // tokens are flowing — the cursor is the status now
+      if (idle >= DEAD_MS) {
+        timedOut = true
+        ctrl.abort()
+      } else if (idle >= STALL_MS && !gotTool) {
+        dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Still working — the backend is taking longer than usual' } })
+      }
+    }, 1000)
+
     try {
       for await (const event of streamChat(
-        text,
+        opts.regenerate ? '' : text,
         state.activeSessionId,
         config,
         ctrl.signal,
-        settings.model,
-        settings.systemPrompt || undefined,
-        images,
+        {
+          model: settings.model,
+          systemPrompt: settings.systemPrompt || undefined,
+          images: opts.images,
+          keepMessages: opts.keepMessages,
+          regenerate: opts.regenerate,
+        },
       )) {
-        if (event.type === 'chunk') {
+        lastActivity = Date.now()
+        if (event.type === 'start') {
+          dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Thinking' } })
+        } else if (event.type === 'chunk') {
+          gotContent = true
           flushSync(() => {
             dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk: event.data as string } })
           })
         } else if (event.type === 'tool') {
+          gotTool = true
           dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool: event.data as import('../lib/types').ToolBadge } })
         } else if (event.type === 'tool_result') {
           const d = event.data as { id: string; result: string }
@@ -212,6 +253,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         } else if (event.type === 'file') {
           dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
         } else if (event.type === 'done') {
+          settled = true
           dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: event.session_id } })
           fetchSessions(config).then(s => dispatch({ type: 'SET_SESSIONS', payload: s })).catch(() => {})
           // Poll for the title — generate_title is a background task that finishes
@@ -233,16 +275,29 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           }
           setTimeout(pollTitle, 1500)
         } else if (event.type === 'error') {
+          settled = true
           dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: event.data as string } })
         }
       }
+      // Stream ended. If the backend closed it without a terminal event (e.g. it
+      // crashed mid-turn), finalize anyway so the message never stays stuck
+      // "thinking" with no way out. Keep whatever text streamed.
+      if (!settled) {
+        settled = true
+        dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: state.activeSessionId ?? 0 } })
+      }
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') {
+      settled = true
+      if (timedOut) {
+        dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: "SPEDA isn't responding. Check that the backend is running, then try again." } })
+      } else if (err instanceof Error && err.name === 'AbortError') {
+        // User-initiated stop — keep whatever streamed so far.
         dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: state.activeSessionId ?? 0 } })
       } else if (err instanceof Error) {
         dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: err.message } })
       }
     } finally {
+      clearInterval(watchdog)
       abortRef.current = null
       forceUpdate(n => n + 1)
     }
@@ -254,21 +309,29 @@ export default function ChatMain({ config, onSelectSession }: Props) {
     dispatch({ type: 'DELETE_MESSAGE', payload: { id } })
   }, [dispatch])
 
+  // Regenerate: keep everything up to and including the user turn, drop the old
+  // answer, and re-run on that clean history (keepMessages = the answer's index).
+  // The backend truncates its DB rows to match, so the model sees the prompt
+  // fresh instead of being handed its previous reply.
   const handleRegenerate = useCallback((assistantId: string) => {
     if (state.isStreaming) return
     const idx = state.messages.findIndex(m => m.id === assistantId)
     if (idx <= 0) return
     const userMsg = state.messages[idx - 1]
     if (!userMsg || userMsg.role !== 'user') return
-    dispatch({ type: 'DELETE_MESSAGE', payload: { id: assistantId } })
-    send(userMsg.content)
+    dispatch({ type: 'TRUNCATE_FROM', payload: { id: assistantId } })
+    send('', { keepMessages: idx, regenerate: true })
   }, [state.messages, state.isStreaming, dispatch, send])
 
+  // Edit & resend: drop the old user turn + its answer (keepMessages = the
+  // user turn's index), then send the edited prompt as a brand-new turn.
   const handleEditAndResend = useCallback((userId: string, newContent: string) => {
     if (state.isStreaming) return
+    const idx = state.messages.findIndex(m => m.id === userId)
+    if (idx < 0) return
     dispatch({ type: 'TRUNCATE_FROM', payload: { id: userId } })
-    send(newContent)
-  }, [state.isStreaming, dispatch, send])
+    send(newContent, { keepMessages: idx })
+  }, [state.messages, state.isStreaming, dispatch, send])
 
   const isEmpty = state.messages.length === 0
 

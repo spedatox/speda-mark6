@@ -25,6 +25,7 @@ export type ChatAction =
   | { type: 'ADD_USER_MESSAGE'; payload: ChatMessage }
   | { type: 'ADD_ASSISTANT_MESSAGE'; payload: ChatMessage }
   | { type: 'APPEND_CHUNK'; payload: { id: string; chunk: string } }
+  | { type: 'SET_STATUS'; payload: { id: string; status: string } }
   | { type: 'ADD_TOOL'; payload: { id: string; tool: import('../lib/types').ToolBadge } }
   | { type: 'SET_TOOL_RESULT'; payload: { id: string; toolId: string; result: string } }
   | { type: 'ADD_FILE'; payload: { id: string; file: import('../lib/types').FileMeta } }
@@ -65,8 +66,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         messages: state.messages.map(m =>
           m.id === action.payload.id
-            ? { ...m, content: m.content + action.payload.chunk }
+            // First text clears any pending status line.
+            ? { ...m, content: m.content + action.payload.chunk, status: undefined }
             : m
+        ),
+      }
+
+    case 'SET_STATUS':
+      return {
+        ...state,
+        messages: state.messages.map(m =>
+          m.id === action.payload.id ? { ...m, status: action.payload.status } : m
         ),
       }
 
@@ -101,26 +111,36 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ),
       }
 
-    case 'FINISH_MESSAGE':
+    case 'FINISH_MESSAGE': {
+      // If the streaming message is no longer in view, the user switched away
+      // mid-generation. The backend still finished and saved it, so we must NOT
+      // yank them back to this session or flip the global streaming flag — just
+      // ignore. Returning to that session reloads the saved answer from the DB.
+      const present = state.messages.some(m => m.id === action.payload.id)
+      if (!present) return state
       return {
         ...state,
         isStreaming: false,
         activeSessionId: action.payload.sessionId,
         messages: state.messages.map(m =>
-          m.id === action.payload.id ? { ...m, isStreaming: false } : m
+          m.id === action.payload.id ? { ...m, isStreaming: false, status: undefined } : m
         ),
       }
+    }
 
-    case 'ERROR_MESSAGE':
+    case 'ERROR_MESSAGE': {
+      const present = state.messages.some(m => m.id === action.payload.id)
+      if (!present) return state
       return {
         ...state,
         isStreaming: false,
         messages: state.messages.map(m =>
           m.id === action.payload.id
-            ? { ...m, isStreaming: false, isError: true, content: action.payload.error }
+            ? { ...m, isStreaming: false, isError: true, content: action.payload.error, status: undefined }
             : m
         ),
       }
+    }
 
     case 'UPDATE_SESSION_TITLE':
       return {

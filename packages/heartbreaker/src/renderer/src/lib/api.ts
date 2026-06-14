@@ -41,14 +41,22 @@ export async function fileToImageBlock(file: File): Promise<ImageBlock> {
   return { media_type, data: out.slice(comma + 1) }
 }
 
+export interface StreamOpts {
+  model?: string
+  systemPrompt?: string
+  images?: ImageBlock[]
+  /** Regenerate/edit: delete all but the first N stored messages before running. */
+  keepMessages?: number
+  /** Re-run on existing history without appending a new user message. */
+  regenerate?: boolean
+}
+
 export async function* streamChat(
   message: string,
   sessionId: number | null,
   config: AppConfig,
   signal: AbortSignal,
-  model?: string,
-  systemPrompt?: string,
-  images?: ImageBlock[],
+  opts: StreamOpts = {},
 ): AsyncGenerator<SSEEvent> {
   const res = await fetch(`${config.apiBase}/chat`, {
     method: 'POST',
@@ -59,9 +67,11 @@ export async function* streamChat(
     body: JSON.stringify({
       message,
       session_id: sessionId,
-      ...(model ? { model } : {}),
-      ...(systemPrompt ? { system_prompt: systemPrompt } : {}),
-      ...(images && images.length ? { attachments: images } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.systemPrompt ? { system_prompt: opts.systemPrompt } : {}),
+      ...(opts.images && opts.images.length ? { attachments: opts.images } : {}),
+      ...(opts.keepMessages != null ? { keep_messages: opts.keepMessages } : {}),
+      ...(opts.regenerate ? { regenerate: true } : {}),
     }),
     signal,
   })

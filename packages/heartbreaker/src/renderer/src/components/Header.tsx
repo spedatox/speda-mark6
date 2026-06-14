@@ -75,17 +75,6 @@ export default function Header({ sidebarOpen, onToggleSidebar, boardOpen, onTogg
         </span>
       </span>
 
-      {/* Searching band while streaming */}
-      {state.isStreaming && (
-        <span className="hb-hide-sm" style={{
-          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
-          letterSpacing: '0.22em', color: 'var(--hb-cyan)',
-          whiteSpace: 'nowrap', overflow: 'hidden',
-          animation: 'hbFlicker 2.2s linear infinite',
-        }}>
-          {'>>:'} SEARCHING_ ALL _DATA _BANKS
-        </span>
-      )}
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
