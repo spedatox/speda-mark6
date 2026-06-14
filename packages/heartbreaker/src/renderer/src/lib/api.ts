@@ -195,6 +195,21 @@ export async function googleLoginUrl(config: AppConfig): Promise<{ auth_url?: st
   return res.json()
 }
 
+export async function googleStatus(config: AppConfig): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/connections/google/status`, { headers: { 'X-API-Key': config.apiKey } })
+    if (!res.ok) return false
+    return (await res.json()).connected === true
+  } catch { return false }
+}
+
+export async function googleDisconnect(config: AppConfig): Promise<void> {
+  await fetch(`${config.apiBase}/connections/google/disconnect`, {
+    method: 'POST',
+    headers: { 'X-API-Key': config.apiKey },
+  })
+}
+
 export async function setConnection(config: AppConfig, server: string, active: boolean): Promise<void> {
   await fetch(`${config.apiBase}/connections`, {
     method: 'POST',
