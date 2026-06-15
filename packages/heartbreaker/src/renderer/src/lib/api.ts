@@ -1,6 +1,60 @@
 import type { AppConfig, SSEEvent, ModelInfo, ImageBlock } from './types'
 
 /**
+ * Auth header for every backend call. Prefers the owner-login JWT (Bearer);
+ * falls back to the service X-API-Key when no session token is present. The
+ * backend accepts either (see AuthMiddleware).
+ */
+export function authHeaders(
+  config: AppConfig,
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  const h: Record<string, string> = { ...extra }
+  if (config.token) h['Authorization'] = `Bearer ${config.token}`
+  else if (config.apiKey) h['X-API-Key'] = config.apiKey
+  return h
+}
+
+export interface LoginResult {
+  token?: string
+  expires_at?: number
+  error?: string
+}
+
+/** Owner login: username/password -> session JWT. */
+export async function login(
+  apiBase: string,
+  username: string,
+  password: string,
+): Promise<LoginResult> {
+  try {
+    const res = await fetch(`${apiBase}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+    if (res.status === 429) {
+      const retry = res.headers.get('Retry-After')
+      return { error: `Too many attempts. Try again${retry ? ` in ${retry}s` : ' later'}.` }
+    }
+    if (!res.ok) return { error: 'Invalid username or password' }
+    return await res.json()
+  } catch {
+    return { error: 'Cannot reach the server. Check the address.' }
+  }
+}
+
+/** Confirm a stored token is still valid (calls the authenticated /auth/me). */
+export async function verifyAuth(config: AppConfig): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/auth/me`, { headers: authHeaders(config) })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+/**
  * Load an image file, downscale to <=1568px on the long edge (Anthropic's
  * recommended max, keeps it well under the 5MB limit and cuts token cost),
  * and return a base64 image block ready for the API.
@@ -60,10 +114,7 @@ export async function* streamChat(
 ): AsyncGenerator<SSEEvent> {
   const res = await fetch(`${config.apiBase}/chat`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key': config.apiKey,
-    },
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       message,
       session_id: sessionId,
@@ -109,7 +160,7 @@ export async function fetchMessages(
   sessionId: number
 ): Promise<import('./types').ChatMessage[]> {
   const res = await fetch(`${config.apiBase}/sessions/${sessionId}/messages`, {
-    headers: { 'X-API-Key': config.apiKey },
+    headers: authHeaders(config),
   })
   if (!res.ok) return []
   return res.json()
@@ -120,7 +171,7 @@ export async function fetchSessions(
   limit = 500
 ): Promise<Array<{ id: number; title: string | null; started_at: string }>> {
   const res = await fetch(`${config.apiBase}/sessions?limit=${limit}`, {
-    headers: { 'X-API-Key': config.apiKey },
+    headers: authHeaders(config),
   })
   if (!res.ok) return []
   return res.json()
@@ -129,7 +180,7 @@ export async function fetchSessions(
 export async function fetchModels(config: AppConfig): Promise<ModelInfo[]> {
   try {
     const res = await fetch(`${config.apiBase}/models`, {
-      headers: { 'X-API-Key': config.apiKey },
+      headers: authHeaders(config),
     })
     if (!res.ok) return []
     return res.json()
@@ -141,7 +192,7 @@ export async function fetchModels(config: AppConfig): Promise<ModelInfo[]> {
 /** Download a produced file (fetch with auth header, then save as a blob). */
 export async function downloadFile(config: AppConfig, url: string, filename: string): Promise<void> {
   const res = await fetch(`${config.apiBase}${url}`, {
-    headers: { 'X-API-Key': config.apiKey },
+    headers: authHeaders(config),
   })
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
   const blob = await res.blob()
@@ -164,7 +215,7 @@ export interface MemoryFileInfo {
 /** SPEDA's knowledge bank — the /memories virtual filesystem (read-only). */
 export async function fetchMemoryFiles(config: AppConfig): Promise<MemoryFileInfo[]> {
   try {
-    const res = await fetch(`${config.apiBase}/memory/files`, { headers: { 'X-API-Key': config.apiKey } })
+    const res = await fetch(`${config.apiBase}/memory/files`, { headers: authHeaders(config)})
     if (!res.ok) return []
     return res.json()
   } catch {
@@ -184,20 +235,20 @@ export interface ConnectionInfo {
 }
 
 export async function getConnections(config: AppConfig): Promise<{ servers: ConnectionInfo[]; active_tool_tokens: number; itpm_limit: number }> {
-  const res = await fetch(`${config.apiBase}/connections`, { headers: { 'X-API-Key': config.apiKey } })
+  const res = await fetch(`${config.apiBase}/connections`, { headers: authHeaders(config)})
   if (!res.ok) return { servers: [], active_tool_tokens: 0, itpm_limit: 30000 }
   return res.json()
 }
 
 export async function googleLoginUrl(config: AppConfig): Promise<{ auth_url?: string; error?: string }> {
-  const res = await fetch(`${config.apiBase}/connections/google/login`, { headers: { 'X-API-Key': config.apiKey } })
+  const res = await fetch(`${config.apiBase}/connections/google/login`, { headers: authHeaders(config)})
   if (!res.ok) return { error: `HTTP ${res.status}` }
   return res.json()
 }
 
 export async function googleStatus(config: AppConfig): Promise<boolean> {
   try {
-    const res = await fetch(`${config.apiBase}/connections/google/status`, { headers: { 'X-API-Key': config.apiKey } })
+    const res = await fetch(`${config.apiBase}/connections/google/status`, { headers: authHeaders(config)})
     if (!res.ok) return false
     return (await res.json()).connected === true
   } catch { return false }
@@ -206,14 +257,14 @@ export async function googleStatus(config: AppConfig): Promise<boolean> {
 export async function googleDisconnect(config: AppConfig): Promise<void> {
   await fetch(`${config.apiBase}/connections/google/disconnect`, {
     method: 'POST',
-    headers: { 'X-API-Key': config.apiKey },
+    headers: authHeaders(config),
   })
 }
 
 export async function setConnection(config: AppConfig, server: string, active: boolean): Promise<void> {
   await fetch(`${config.apiBase}/connections`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-API-Key': config.apiKey },
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({ server, active }),
   })
 }
@@ -242,7 +293,7 @@ export interface AutomationsStatus {
 }
 
 export async function getAutomations(config: AppConfig): Promise<AutomationInfo[]> {
-  const res = await fetch(`${config.apiBase}/automations`, { headers: { 'X-API-Key': config.apiKey } })
+  const res = await fetch(`${config.apiBase}/automations`, { headers: authHeaders(config)})
   if (!res.ok) return []
   return (await res.json()).automations ?? []
 }
@@ -250,7 +301,7 @@ export async function getAutomations(config: AppConfig): Promise<AutomationInfo[
 export async function toggleAutomation(config: AppConfig, id: number, active: boolean): Promise<void> {
   await fetch(`${config.apiBase}/automations/${id}/toggle`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-API-Key': config.apiKey },
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({ active }),
   })
 }
@@ -258,13 +309,13 @@ export async function toggleAutomation(config: AppConfig, id: number, active: bo
 export async function deleteAutomation(config: AppConfig, id: number): Promise<void> {
   await fetch(`${config.apiBase}/automations/${id}`, {
     method: 'DELETE',
-    headers: { 'X-API-Key': config.apiKey },
+    headers: authHeaders(config),
   })
 }
 
 export async function getAutomationsStatus(config: AppConfig): Promise<AutomationsStatus | null> {
   try {
-    const res = await fetch(`${config.apiBase}/automations/status`, { headers: { 'X-API-Key': config.apiKey } })
+    const res = await fetch(`${config.apiBase}/automations/status`, { headers: authHeaders(config)})
     if (!res.ok) return null
     return res.json()
   } catch { return null }
@@ -273,14 +324,14 @@ export async function getAutomationsStatus(config: AppConfig): Promise<Automatio
 export async function telegramConnect(config: AppConfig): Promise<{ link?: string; error?: string }> {
   const res = await fetch(`${config.apiBase}/automations/telegram/connect`, {
     method: 'POST',
-    headers: { 'X-API-Key': config.apiKey },
+    headers: authHeaders(config),
   })
   if (!res.ok) return { error: `HTTP ${res.status}` }
   return res.json()
 }
 
 export async function telegramStatus(config: AppConfig): Promise<{ configured: boolean; connected: boolean }> {
-  const res = await fetch(`${config.apiBase}/automations/telegram/status`, { headers: { 'X-API-Key': config.apiKey } })
+  const res = await fetch(`${config.apiBase}/automations/telegram/status`, { headers: authHeaders(config)})
   if (!res.ok) return { configured: false, connected: false }
   return res.json()
 }
@@ -288,7 +339,7 @@ export async function telegramStatus(config: AppConfig): Promise<{ configured: b
 export async function getBudgetMode(config: AppConfig): Promise<boolean> {
   try {
     const res = await fetch(`${config.apiBase}/budget-mode`, {
-      headers: { 'X-API-Key': config.apiKey },
+      headers: authHeaders(config),
     })
     if (!res.ok) return true
     const data = await res.json()
@@ -302,7 +353,7 @@ export async function setBudgetMode(config: AppConfig, enabled: boolean): Promis
   try {
     const res = await fetch(`${config.apiBase}/budget-mode`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': config.apiKey },
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
       body: JSON.stringify({ enabled }),
     })
     if (!res.ok) return enabled
@@ -317,7 +368,7 @@ export async function deleteSession(config: AppConfig, sessionId: number): Promi
   try {
     await fetch(`${config.apiBase}/sessions/${sessionId}`, {
       method: 'DELETE',
-      headers: { 'X-API-Key': config.apiKey },
+      headers: authHeaders(config),
     })
   } catch { /* non-fatal */ }
 }
@@ -330,7 +381,7 @@ export async function renameSession(
   try {
     await fetch(`${config.apiBase}/sessions/${sessionId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': config.apiKey },
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
       body: JSON.stringify({ title }),
     })
   } catch { /* non-fatal */ }
@@ -345,7 +396,7 @@ export async function importChats(
   // NOTE: do not set Content-Type — the browser adds the multipart boundary.
   const res = await fetch(`${config.apiBase}/admin/import-chats`, {
     method: 'POST',
-    headers: { 'X-API-Key': config.apiKey },
+    headers: authHeaders(config),
     body: form,
   })
   if (!res.ok) {
@@ -360,7 +411,7 @@ export async function indexHistory(
 ): Promise<{ accepted: boolean; message: string }> {
   const res = await fetch(`${config.apiBase}/admin/index-history`, {
     method: 'POST',
-    headers: { 'X-API-Key': config.apiKey },
+    headers: authHeaders(config),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => `HTTP ${res.status}`)

@@ -41,6 +41,17 @@ else
   say "No DOMAIN set — API will be on http://<server-ip>:8000 (no TLS)"
 fi
 
+# ── Postgres credentials ───────────────────────────────────────────────────--
+# Exported (from the one secret file) so compose interpolates them into the
+# postgres service AND the app's DATABASE_URL — they stay in sync, and nothing
+# sensitive lives in the repo. Note: POSTGRES_PASSWORD only takes effect on a
+# FRESH database volume; to rotate it on an existing volume, change it in
+# postgres directly (ALTER ROLE) or recreate the volume.
+for var in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB; do
+  val="$(grep -E "^${var}=" packages/api/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' || true)"
+  [[ -n "${val}" ]] && export "${var}=${val}"
+done
+
 # ── Build + start ────────────────────────────────────────────────────────────
 say "Building and starting the stack (postgres + sandbox + api${DOMAIN:+ + caddy})…"
 docker compose "${PROFILE[@]}" up -d --build

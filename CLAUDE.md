@@ -60,7 +60,7 @@ Agent name, personality, system prompt template, tool allowlist, and model polic
 State: what the tool does, when to use it, when NOT to use it, and what it returns. This is the most critical factor in Claude's tool selection accuracy per Anthropic's own documentation. A one-line description makes a good tool unusable. Enforce this at skill authoring time, not at runtime.
 
 **12. All endpoints require authentication.**
-A single API key (`X-API-Key` header) is validated by middleware before any router logic runs. The key lives in `.env` as `SPEDA_API_KEY`. The n8n trigger endpoint uses its own separate shared secret (`X-N8N-Secret`) in addition. There is no public endpoint.
+`AuthMiddleware` validates every request before any router logic runs, accepting either of two credentials: a **Bearer JWT** from owner login (`POST /auth/login`, username/password → HS256 token) for human/browser access, or the **`X-API-Key`** service credential for the desktop app and scripts. The n8n trigger endpoint additionally validates `X-N8N-Secret`. Owner credentials live in the environment, never the database (`OWNER_USERNAME`, scrypt `OWNER_PASSWORD_HASH`, `JWT_SECRET`); the service key is `SPEDA_API_KEY`. Auth crypto is stdlib-only (`hashlib.scrypt` + HMAC-SHA256) — no third-party JWT/crypto dependency. The only unauthenticated paths are `/health`, `/auth/login`, and `/oauth/google/callback`. Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are disabled outside `DEBUG`. There is no public data endpoint.
 
 ---
 
@@ -140,8 +140,8 @@ speda-mark-vi/
     │   ├── sentinel.py          # Sentinel — finance & budget intelligence
     │   ├── nightcrawler.py      # NightCrawler — OSINT, web surveillance, research
     │   ├── ultron.py            # Ultron — academic research, knowledge synthesis
-    │   ├── centurion.py         # Centurion — productivity, tasks, calendar
-    │   └── atomix.py            # Atomix — system ops, code, infrastructure
+    │   ├── centurion.py         # Centurion — cyber security (owns cve_intelligence)
+    │   └── atomix.py            # Atomix — personal health (the owner's health, not system health)
     ├── prompts/
     │   ├── shared/              # Common sections: formatting, memory protocol, output rules
     │   └── agents/

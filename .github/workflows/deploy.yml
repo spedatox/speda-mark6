@@ -1,0 +1,75 @@
+name: deploy-backend
+
+# Auto-deploy the backend to the Contabo server on every push to main that
+# touches backend code. Nothing about the server (host, user, path, key) lives
+# in this file — it is ALL in GitHub Actions Secrets, so the public repo never
+# discloses the deployment architecture. Required repo secrets:
+#   SSH_HOST       server hostname or IP
+#   SSH_USER       deploy user
+#   SSH_KEY        that user's PRIVATE deploy key (public half in authorized_keys)
+#   SSH_PORT       SSH port (optional; defaults to 22)
+#   DEPLOY_PATH    absolute path of the cloned repo on the server
+#
+# Server prerequisites (one-time): git + Docker + Docker Compose v2 installed,
+# the repo cloned at DEPLOY_PATH, and packages/api/.env present (gitignored,
+# never committed).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/api/**"
+      - "packages/sandbox/**"
+      - "docker-compose.yml"
+      - "deploy.sh"
+      - "Caddyfile"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch: {}
+
+# Never let two deploys overlap; a newer push supersedes an in-flight one.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate (import + compile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      # Pin third-party actions to a major tag; consider SHA-pinning for max
+      # supply-chain safety since these run with access to deploy secrets.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Install dependencies (frozen)
+        run: uv sync --frozen --no-dev
+      - name: Byte-compile
+        run: uv run python -m compileall -q packages/api/app
+      - name: Import smoke (catches broken wiring before deploy)
+        working-directory: packages/api
+        run: uv run python -c "from app.main import create_app; create_app()"
+
+  deploy:
+    name: Deploy over SSH
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            # Mirror main exactly. .env is gitignored, so it is preserved.
+            git fetch --prune origin main
+            git reset --hard origin/main
+            ./deploy.sh
+            # Resilience gate: fail the deploy loudly if the API isn't healthy.
+            curl -fsS http://localhost:8000/health > /dev/null

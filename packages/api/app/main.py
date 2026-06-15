@@ -121,6 +121,11 @@ async def lifespan(app: FastAPI):
 
     telegram = TelegramClient()
 
+    # ── 7.6 Login brute-force throttle ─────────────────────────────────────────
+    from app.auth.rate_limit import LoginRateLimiter
+
+    login_rate_limiter = LoginRateLimiter()
+
     # ── 8. Inject into app.state ───────────────────────────────────────────────
     app.state.registry = registry
     app.state.agent_registry = agent_registry
@@ -129,6 +134,7 @@ async def lifespan(app: FastAPI):
     app.state.session_manager = session_manager
     app.state.profiles = profiles
     app.state.telegram = telegram
+    app.state.login_rate_limiter = login_rate_limiter
 
     logger.info(
         "startup_complete",
@@ -149,35 +155,69 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    # Interactive docs and the OpenAPI schema expose the full API surface, so
+    # they are DISABLED outside DEBUG. On an internet-facing server they must
+    # never be public (CLAUDE.md / endpoint-leak hardening).
+    docs_enabled = settings.debug
     app = FastAPI(
         title=f"{AGENT_NAME} Backend",
         description="Agent backend core — identity defined in prompts/core/01_identity.md",
         version="0.1.0",
         lifespan=lifespan,
-        docs_url="/docs",
-        redoc_url="/redoc",
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
 
-    # CORS — allow Electron renderer (null origin) and local web dev server
+    # ── Global exception handler — never leak internals ─────────────────────────
+    # Any unhandled exception is logged in full server-side and returned to the
+    # caller as a generic 500. Prevents stack traces / paths / SQL from leaking
+    # through endpoints. HTTPExceptions keep their intended status/detail.
+    from fastapi.responses import JSONResponse as _JSONResponse
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request, exc):  # noqa: ANN001
+        logger.error(
+            "unhandled_exception",
+            extra={"path": request.url.path, "error": str(exc)},
+            exc_info=exc,
+        )
+        return _JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+    # ── CORS — locked down ──────────────────────────────────────────────────────
+    # The API is header-authenticated (Bearer / X-API-Key), which browsers never
+    # attach cross-origin automatically, so CSRF risk is low — but we still refuse
+    # to advertise "*". Origins come from config; DEBUG additionally allows local
+    # dev servers. The packaged desktop client is not a browser origin and is
+    # unaffected by CORS.
     from fastapi.middleware.cors import CORSMiddleware
+
+    origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+    if settings.debug:
+        origins += ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=origins,
         allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-N8N-Secret"],
     )
 
-    # Middleware (applied in reverse order — auth runs first)
-    from app.middleware.auth import APIKeyMiddleware
+    # Middleware (Starlette applies these in REVERSE registration order, so the
+    # LAST added runs FIRST: security headers wrap everything, then auth gates
+    # before any router logic).
+    from app.middleware.auth import AuthMiddleware
+    from app.middleware.security import SecurityHeadersMiddleware
 
-    app.add_middleware(APIKeyMiddleware)
+    app.add_middleware(AuthMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections, memory
+    from app.routers import admin, agents, auth, automations, chat, health, trigger, import_chats, files, connections, memory
 
     app.include_router(health.router)
+    app.include_router(auth.router)
     app.include_router(chat.router)
     app.include_router(trigger.router)
     app.include_router(agents.router)
