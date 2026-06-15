@@ -2,11 +2,14 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: speda
-      POSTGRES_PASSWORD: speda
-      POSTGRES_DB: speda
+      POSTGRES_USER: ${POSTGRES_USER:-speda}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-speda}
+      POSTGRES_DB: ${POSTGRES_DB:-speda}
     ports:
-      - "5432:5432"
+      # localhost-only — the database is NEVER exposed to the internet. The app
+      # reaches it over the internal compose network (postgres:5432) regardless.
+      # For admin, tunnel in: ssh -L 5432:127.0.0.1:5432 <server>
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -25,7 +28,7 @@ services:
       # Single source of secrets — same file the dev backend (uvicorn) reads.
       - packages/api/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://speda:speda@postgres:5432/speda
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-speda}:${POSTGRES_PASSWORD:-speda}@postgres:5432/${POSTGRES_DB:-speda}
       PLAYWRIGHT_MCP_URL: http://playwright-mcp:3000
       SANDBOX_URL: http://sandbox:9000
     depends_on:
@@ -41,7 +44,10 @@ services:
     image: docker.n8n.io/n8nio/n8n:latest
     restart: unless-stopped
     ports:
-      - "5678:5678"          # editor UI — visit http://<server>:5678 to set up + create the API key
+      # localhost-only — the n8n editor is NOT exposed to the internet. Reach it
+      # via an SSH tunnel for setup: ssh -L 5678:127.0.0.1:5678 <server>, then
+      # open http://localhost:5678 to create the API key.
+      - "127.0.0.1:5678:5678"
     environment:
       - GENERIC_TIMEZONE=${TZ:-UTC}
       - TZ=${TZ:-UTC}

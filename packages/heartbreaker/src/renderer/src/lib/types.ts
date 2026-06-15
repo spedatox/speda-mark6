@@ -41,6 +41,9 @@ export interface Session {
 export interface AppConfig {
   apiBase: string
   apiKey: string
+  /** Owner-login session JWT. When present it is sent as Authorization: Bearer
+   *  and takes precedence over apiKey. Obtained via POST /auth/login. */
+  token?: string
 }
 
 export interface ModelInfo {
