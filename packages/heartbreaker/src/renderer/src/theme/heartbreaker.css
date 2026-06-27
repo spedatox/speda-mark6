@@ -48,11 +48,20 @@
   --hb-base:        #060c0f;   /* base background */
   --hb-petrol:      #0b1a22;   /* panel fill base */
   --hb-steel:       #13303b;   /* raised surface */
-  --hb-line:        rgba(95, 165, 188, 0.26);  /* hairline border */
-  --hb-line-bright: rgba(110, 200, 228, 0.55); /* active border */
+  --hb-line:        rgba(var(--hb-accent-rgb), 0.26);  /* hairline border */
+  --hb-line-bright: rgba(var(--hb-accent-rgb), 0.55); /* active border */
   --hb-cyan:        #36abca;   /* primary accent — desaturated, cold */
   --hb-cyan-bright: #5fcce6;   /* active accent */
   --hb-cyan-dim:    #1d5d70;   /* dim accent */
+  /* Raw accent triplets — applyTheme() overrides these per agent so every
+     rgba(var(--hb-…-rgb), A) in the UI recolours with the brand. */
+  --hb-accent-rgb:      54, 171, 202;
+  --hb-cyan-bright-rgb: 95, 204, 230;
+  --hb-cyan-dim-rgb:    29, 93, 112;
+  /* Dim icon scale — inactive chrome icons. Re-hued per agent. */
+  --hb-icon:        #3a6472;
+  --hb-icon-dim:    #2e5260;
+  --hb-icon-bright: #5d7f8a;
   --hb-amber:        #d99c44;  /* Stark orange — selection, folders, timestamps */
   --hb-amber-bright: #f2b75c;  /* active orange */
   --hb-amber-dim:    rgba(217,156,68,0.14); /* orange fill */
@@ -74,8 +83,8 @@
      what passes through, and the slab is rimmed by light — a bright specular
      catch on top, a fainter one underneath (the slab's thickness), and a
      soft drop that lifts it off the background. Still zero gradient fills. */
-  --hb-edge:        rgba(150, 205, 245, 0.22); /* lit glass rim */
-  --hb-edge-bright: rgba(170, 225, 255, 0.55); /* focused / hovered rim */
+  --hb-edge:        rgba(var(--hb-accent-rgb), 0.22); /* lit glass rim */
+  --hb-edge-bright: rgba(var(--hb-accent-rgb), 0.55); /* focused / hovered rim */
   --hb-holo-fill:   rgba(190, 215, 235, 0.045); /* a whisper of white — void stays visible */
   --hb-holo-blur:   blur(28px) saturate(140%);  /* the frost itself */
   --hb-holo-shadow:
@@ -94,7 +103,7 @@
   --bg-primary:     var(--hb-base);
   --bg-sidebar:     rgba(8, 18, 23, 0.72);
   --bg-hover:       rgba(70, 150, 175, 0.12);
-  --bg-active:      rgba(54, 171, 202, 0.16);
+  --bg-active:      rgba(var(--hb-accent-rgb), 0.16);
   --bg-input:       rgba(8, 20, 26, 0.66);
   --bg-user-bubble: rgba(24, 56, 68, 0.46);
   --bg-code:        #08151b;
@@ -112,11 +121,11 @@
 
   --accent:        var(--hb-cyan);
   --accent-hover:  var(--hb-cyan-bright);
-  --accent-muted:  rgba(54, 171, 202, 0.14);
+  --accent-muted:  rgba(var(--hb-accent-rgb), 0.14);
 
-  --gradient-gem: linear-gradient(135deg, #5fcce6 0%, #36abca 50%, #1d5d70 100%);
+  --gradient-gem: linear-gradient(135deg, var(--hb-cyan-bright) 0%, var(--hb-cyan) 50%, var(--hb-cyan-dim) 100%);
 
-  --shadow-lg: 0 0 0 1px rgba(95,165,188,0.18), 0 18px 50px rgba(0,0,0,0.6);
+  --shadow-lg: 0 0 0 1px rgba(var(--hb-accent-rgb),0.18), 0 18px 50px rgba(0,0,0,0.6);
 
   --sidebar-width: 248px;
 
@@ -210,26 +219,23 @@ body {
   user-select: none;
 }
 
-/* ── Fluid ambient engine — a living, sleeping system void ──────────────────
-   Oversized soft teal/midnight pools drifting on an 18s alternate cycle.
-   GPU-composited (transform only), sits behind all content. No grids, no
-   wireframes — pure organic gradient motion under the glass. */
-#root::before {
-  content: '';
-  position: fixed;
-  inset: -40%;
-  pointer-events: none;
-  z-index: 0;
-  background:
-    radial-gradient(ellipse 42% 36% at 28% 26%, rgba(30, 86, 112, 0.5), transparent 62%),
-    radial-gradient(ellipse 38% 34% at 74% 72%, rgba(18, 58, 80, 0.44), transparent 60%),
-    radial-gradient(ellipse 26% 24% at 56% 42%, rgba(36, 105, 128, 0.22), transparent 65%);
-  animation: hbDrift 18s ease-in-out infinite alternate;
-  will-change: transform;
+/* ── Fluid ambient engine ───────────────────────────────────────────────────
+   The neural canvas (NeuralBackground.tsx) handles the living background.
+   No CSS pseudo-element blobs needed — the canvas draws drifting nodes,
+   synaptic connections forming/breaking, and pulses traveling along them,
+   all in the agent's accent color. */
+
+/* ── Agent-swap morph ───────────────────────────────────────────────────────
+   morphTheme() in theme.ts handles the colour shift — every frame the palette is
+   rebuilt at the interpolated accent. The class below crossfades brand-specific
+   text (agent name, tagline, prompts) so they dissolve out at the morph start
+   and reform with the new content at the midpoint. Attach [data-brand-text] to
+   any element whose text content changes on agent swap. */
+[data-brand-text] {
+  transition: opacity 0.18s ease;
 }
-@keyframes hbDrift {
-  from { transform: translate3d(-2.5%, -2%, 0) scale(1); }
-  to   { transform: translate3d(2.5%, 2.5%, 0) scale(1.07); }
+.agent-morphing [data-brand-text] {
+  opacity: 0;
 }
 
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
@@ -238,7 +244,7 @@ body {
 ::-webkit-scrollbar-thumb       { background: var(--scrollbar-thumb); }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
-::selection { background: rgba(95, 204, 230, 0.30); color: #eafaff; }
+::selection { background: rgba(var(--hb-accent-rgb), 0.30); color: #eafaff; }
 
 /* ════════════════════════════════════════════════════════════════════════════
    FUI primitives — utility classes for components we restyle directly
@@ -273,7 +279,7 @@ body {
   display: flex; align-items: center; gap: 0.4rem;
   height: 22px;
   padding: 0 0.5rem;
-  background: linear-gradient(90deg, var(--hb-cyan-dim), rgba(29, 93, 112, 0.4));
+  background: linear-gradient(90deg, var(--hb-cyan-dim), rgba(var(--hb-cyan-dim-rgb), 0.4));
   border-bottom: 1px solid var(--hb-line);
   font-size: 0.64rem;
   font-weight: 600;
@@ -373,6 +379,9 @@ body {
   0%,100% { opacity: 1; } 92% { opacity: 1; } 94% { opacity: 0.7; } 96% { opacity: 1; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* Insignia arc rotations — slow and deliberate, not a spinner */
+@keyframes insigniaRotCW  { to { transform: rotate(360deg); } }
+@keyframes insigniaRotCCW { to { transform: rotate(-360deg); } }
 /* keep names used by ported components alive */
 @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes blink    { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
@@ -383,8 +392,8 @@ body {
 @keyframes skeletonPulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.6; } }
 @keyframes textShimmer { 0% { background-position: 150% 0; } 100% { background-position: -50% 0; } }
 @keyframes caretBreathe {
-  0%,100% { opacity: 1; box-shadow: 0 0 5px 1px rgba(95,204,230,0.5); }
-  50%     { opacity: 0.4; box-shadow: 0 0 2px 0 rgba(95,204,230,0.2); }
+  0%,100% { opacity: 1; box-shadow: 0 0 5px 1px rgba(var(--hb-cyan-bright-rgb),0.5); }
+  50%     { opacity: 0.4; box-shadow: 0 0 2px 0 rgba(var(--hb-cyan-bright-rgb),0.2); }
 }
 @keyframes caretSheen { 0% { background-position: 0 120%; } 100% { background-position: 0 -20%; } }
 
@@ -426,7 +435,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   min-height: 32px;
   padding: 0 0.75rem 0 0.65rem;
   margin: 1.6rem 0 0.6rem;
-  background: linear-gradient(90deg, rgba(29,93,112,0.7) 0%, rgba(29,93,112,0.22) 55%, transparent 100%);
+  background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.7) 0%, rgba(var(--hb-cyan-dim-rgb),0.22) 55%, transparent 100%);
   border-left: 2px solid var(--hb-cyan);
   border-bottom: 1px solid var(--hb-line);
   font-family: 'Rajdhani', sans-serif;
@@ -459,7 +468,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   min-height: 30px;
   padding: 0 0.7rem 0 0.6rem;
   margin: 1.5rem 0 0.5rem;
-  background: linear-gradient(90deg, rgba(29,93,112,0.6) 0%, rgba(29,93,112,0.18) 55%, transparent 100%);
+  background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.6) 0%, rgba(var(--hb-cyan-dim-rgb),0.18) 55%, transparent 100%);
   border-left: 3px solid var(--hb-cyan);
   border-bottom: 1px solid var(--hb-line);
   font-family: 'SamsungOne', 'Inter', sans-serif !important;
@@ -478,9 +487,9 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   min-height: 26px;
   padding: 0 0.65rem 0 0.6rem;
   margin: 1.2rem 0 0.4rem;
-  background: linear-gradient(90deg, rgba(29,93,112,0.42) 0%, rgba(29,93,112,0.1) 55%, transparent 100%);
-  border-left: 2px solid rgba(95,165,188,0.6);
-  border-bottom: 1px solid rgba(95,165,188,0.14);
+  background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.42) 0%, rgba(var(--hb-cyan-dim-rgb),0.1) 55%, transparent 100%);
+  border-left: 2px solid rgba(var(--hb-accent-rgb),0.6);
+  border-bottom: 1px solid rgba(var(--hb-accent-rgb),0.14);
   font-family: 'SamsungOne', 'Inter', sans-serif !important;
   font-size: 1.12rem !important;
   font-weight: 800 !important;
@@ -494,8 +503,8 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   min-height: 24px;
   padding: 0 0.6rem 0 0.55rem;
   margin: 1rem 0 0.3rem;
-  background: linear-gradient(90deg, rgba(29,93,112,0.28) 0%, rgba(29,93,112,0.06) 55%, transparent 100%);
-  border-left: 2px solid rgba(95,165,188,0.4);
+  background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.28) 0%, rgba(var(--hb-cyan-dim-rgb),0.06) 55%, transparent 100%);
+  border-left: 2px solid rgba(var(--hb-accent-rgb),0.4);
   font-family: 'SamsungOne', 'Inter', sans-serif;
   font-size: 1.02rem; font-weight: 700; letter-spacing: 0;
   color: #9bbac5;
@@ -556,7 +565,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   border: none;
   margin: 0.75rem 0;
   padding: 0.4rem 0.75rem 0.4rem 0.85rem;
-  background: rgba(13, 42, 54, 0.45);
+  background: rgba(var(--hb-cyan-dim-rgb), 0.45);
   border-left: 2px solid var(--hb-cyan-dim);
   color: var(--hb-text-dim);
 }
@@ -571,7 +580,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 /* ── Links ───────────────────────────────────────────────────────────────────── */
 .prose a {
   color: var(--hb-cyan-bright); text-decoration: none;
-  border-bottom: 1px solid rgba(95,204,230,0.3);
+  border-bottom: 1px solid rgba(var(--hb-cyan-bright-rgb),0.3);
 }
 .prose a:hover { border-bottom-color: var(--hb-cyan-bright); color: #8ee6f5; }
 
@@ -582,18 +591,18 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   border: 1px solid var(--hb-line);
 }
 .prose th {
-  background: linear-gradient(90deg, rgba(29,93,112,0.7), rgba(29,93,112,0.35));
+  background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.7), rgba(var(--hb-cyan-dim-rgb),0.35));
   font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
   font-size: 0.64rem; color: #cfe7ee;
   border: 1px solid var(--hb-line); padding: 0.3rem 0.6rem;
   font-family: 'Rajdhani', sans-serif;
 }
 .prose td {
-  border: 1px solid rgba(95,165,188,0.14); padding: 0.28rem 0.6rem;
+  border: 1px solid rgba(var(--hb-accent-rgb),0.14); padding: 0.28rem 0.6rem;
   color: var(--hb-text-dim);
 }
-.prose tr:nth-child(even) td { background: rgba(54,171,202,0.04); }
-.prose tr:hover td { background: rgba(54,171,202,0.09); color: var(--hb-text); }
+.prose tr:nth-child(even) td { background: rgba(var(--hb-accent-rgb),0.04); }
+.prose tr:hover td { background: rgba(var(--hb-accent-rgb),0.09); color: var(--hb-text); }
 
 /* ── HR — tick-mark ruler ────────────────────────────────────────────────────── */
 .prose hr {
@@ -625,14 +634,14 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #2e5260;
+  color: var(--hb-icon-dim);
   margin-right: 0.35rem;
 }
 .prose p.hb-sources a {
   display: inline-block;
   padding: 0.08em 0.45em;
-  background: rgba(54,171,202,0.08);
-  border: 1px solid rgba(95,165,188,0.2);
+  background: rgba(var(--hb-accent-rgb),0.08);
+  border: 1px solid rgba(var(--hb-accent-rgb),0.2);
   border-bottom: none;
   color: #46818f !important;
   font-family: 'Share Tech Mono', monospace;
@@ -642,15 +651,15 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   transition: background 0.12s, color 0.12s;
 }
 .prose p.hb-sources a:hover {
-  background: rgba(54,171,202,0.18);
-  color: #5fcce6 !important;
-  border-color: rgba(95,165,188,0.45);
+  background: rgba(var(--hb-accent-rgb),0.18);
+  color: var(--hb-cyan-bright) !important;
+  border-color: rgba(var(--hb-accent-rgb),0.45);
 }
 
 /* Range input — FUI slider */
 input[type=range] {
   -webkit-appearance: none; appearance: none;
-  height: 2px; background: rgba(95,165,188,0.25); outline: none;
+  height: 2px; background: rgba(var(--hb-accent-rgb),0.25); outline: none;
 }
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 10px; height: 14px;

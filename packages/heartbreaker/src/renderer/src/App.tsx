@@ -1,95 +1,89 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useCallback, useEffect, useReducer, useState } from 'react'
 import { ChatContext, chatReducer, initialState } from './store/chat'
 import { SettingsContext, useSettingsProvider } from './store/settings'
 import { ProfileContext } from './components/Sidebar'
-import PROFILE from './profile/speda'
+import DEFAULT_PROFILE from './profile'
+import { BRANDS } from './profile/brands'
+import { applyTheme, morphTheme, deriveAccents } from './profile/theme'
+import type { AppProfile } from './profile/types'
 import Layout from './components/Layout'
 import HudFrame from './components/HudFrame'
-import Login from './components/Login'
+import NeuralBackground from './components/NeuralBackground'
 import type { AppConfig } from './lib/types'
-import { fetchSessions, verifyAuth } from './lib/api'
+import { fetchSessions } from './lib/api'
 import 'katex/dist/katex.min.css'
 import './theme/heartbreaker.css'
 
-// Owner-login session, persisted in the renderer between launches.
-const TOKEN_KEY = 'speda.token'
-const TOKEN_EXP_KEY = 'speda.token_exp'
-const SERVER_KEY = 'speda.server'
-
-function clearSession() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(TOKEN_EXP_KEY)
-}
-
-function injectProfileTheme(accent: string, accentHover: string) {
-  const root = document.documentElement
-  root.style.setProperty('--accent', accent)
-  root.style.setProperty('--accent-hover', accentHover)
-  root.style.setProperty('--accent-muted', accent + '26')
+function buildProfile(agentId: string): AppProfile {
+  const brand = BRANDS[agentId] || BRANDS['speda']
+  return { ...brand, accentHover: deriveAccents(brand.accent).bright }
 }
 
 function AppInner() {
   const [state, dispatch] = useReducer(chatReducer, initialState)
+  const [profile, setProfile] = useState<AppProfile>(DEFAULT_PROFILE)
   const [config, setConfig] = useState<AppConfig | null>(null)
-  const [authed, setAuthed] = useState(false)
-  const [checking, setChecking] = useState(true)
 
-  useEffect(() => { injectProfileTheme(PROFILE.accent, PROFILE.accentHover) }, [])
+  useEffect(() => { applyTheme(profile.accent) }, [profile.accent])
 
-  // 1. Load base config (server + service key) and restore any valid session.
   useEffect(() => {
     const load = async () => {
-      let base: AppConfig
+      let cfg: AppConfig
       if (window.api?.getConfig) {
         const raw = await window.api.getConfig()
-        base = { apiBase: raw.apiBase, apiKey: raw.apiKey }
+        cfg = { apiBase: raw.apiBase, apiKey: raw.apiKey, agentId: profile.agentId }
       } else {
-        base = {
+        cfg = {
           apiBase: (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8000',
           apiKey: (import.meta.env.VITE_API_KEY as string) || 'dev-key',
+          agentId: profile.agentId,
         }
       }
-      // A server chosen during a previous successful login wins over the default.
-      const savedServer = localStorage.getItem(SERVER_KEY)
-      if (savedServer) base = { ...base, apiBase: savedServer }
-
-      // Restore a non-expired session token and confirm the backend still honors it.
-      const token = localStorage.getItem(TOKEN_KEY)
-      const exp = Number(localStorage.getItem(TOKEN_EXP_KEY) || 0)
-      if (token && exp * 1000 > Date.now()) {
-        const withToken = { ...base, token }
-        if (await verifyAuth(withToken)) {
-          setConfig(withToken)
-          setAuthed(true)
-          setChecking(false)
-          return
-        }
-        clearSession()
-      }
-      setConfig(base)
-      setChecking(false)
+      dispatch({ type: 'SET_CONFIG', payload: cfg })
+      setConfig(cfg)
+      try {
+        const sessions = await fetchSessions(cfg)
+        dispatch({ type: 'SET_SESSIONS', payload: sessions })
+      } catch { /* backend not available */ }
     }
     load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 2. Once authenticated, load the session list (sent with the Bearer token).
-  useEffect(() => {
-    if (!authed || !config) return
-    dispatch({ type: 'SET_CONFIG', payload: config })
-    fetchSessions(config)
-      .then((sessions) => dispatch({ type: 'SET_SESSIONS', payload: sessions }))
-      .catch(() => { /* backend not available */ })
-  }, [authed, config])
+  const switchAgent = useCallback(async (agentId: string) => {
+    const next = buildProfile(agentId)
+    const prevAccent = profile.accent
+    const root = document.getElementById('root')
 
-  const onLoginSuccess = (token: string, expiresAt: number, server: string) => {
-    localStorage.setItem(TOKEN_KEY, token)
-    localStorage.setItem(TOKEN_EXP_KEY, String(expiresAt))
-    localStorage.setItem(SERVER_KEY, server)
-    setConfig((c) => ({ apiBase: server, apiKey: c?.apiKey ?? '', token }))
-    setAuthed(true)
-  }
+    // 1. Start the color morph (backgrounds, rims, icons, glass — everything).
+    morphTheme(prevAccent, next.accent, 500)
 
-  if (checking || !config) {
+    // 2. Dissolve brand-specific text out (agent name, tagline, prompts).
+    root?.classList.add('agent-morphing')
+
+    // 3. At the morph midpoint (~200ms), the text is invisible — swap the
+    //    profile state so React renders the new name/tagline/prompts, then
+    //    remove the class so the new text fades back in.
+    const nextConfig: AppConfig = {
+      apiBase: config?.apiBase || 'http://localhost:8000',
+      apiKey: config?.apiKey || '',
+      agentId,
+    }
+    await new Promise(r => setTimeout(r, 200))
+    setProfile(next)
+    setConfig(nextConfig)
+    dispatch({ type: 'SET_CONFIG', payload: nextConfig })
+    dispatch({ type: 'NEW_CHAT' })
+    await new Promise(r => setTimeout(r, 30))
+    root?.classList.remove('agent-morphing')
+
+    try {
+      const sessions = await fetchSessions(nextConfig)
+      dispatch({ type: 'SET_SESSIONS', payload: sessions })
+    } catch { /* backend not available */ }
+  }, [config, profile.accent])
+
+  if (!config) {
     return (
       <div style={{
         height: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem',
@@ -103,15 +97,12 @@ function AppInner() {
     )
   }
 
-  if (!authed) {
-    return <Login apiBase={config.apiBase} onSuccess={onLoginSuccess} />
-  }
-
   return (
     <ChatContext.Provider value={{ state, dispatch }}>
-      <ProfileContext.Provider value={PROFILE}>
+      <ProfileContext.Provider value={profile}>
+        <NeuralBackground />
         <HudFrame />
-        <Layout profile={PROFILE} config={config} />
+        <Layout profile={profile} config={config} switchAgent={switchAgent} />
       </ProfileContext.Provider>
     </ChatContext.Provider>
   )

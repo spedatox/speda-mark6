@@ -75,10 +75,10 @@ function KV({ k, v, color, alt }: { k: string; v: React.ReactNode; color?: strin
     <div style={{
       display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8,
       padding: '0.22rem 0.35rem',
-      background: alt ? 'rgba(54,171,202,0.04)' : 'transparent',
+      background: alt ? 'rgba(var(--hb-accent-rgb),0.04)' : 'transparent',
       fontFamily: MONO, fontSize: '0.6rem', letterSpacing: '0.05em',
     }}>
-      <span style={{ color: '#3a6472', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{k}</span>
+      <span style={{ color: 'var(--hb-icon)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{k}</span>
       <span style={{
         color: color || 'var(--hb-text-dim)', textAlign: 'right',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -103,12 +103,12 @@ function ModelTile({ m, idx, active, onSelect }: {
         width: 58, height: 58, position: 'relative', flexShrink: 0,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         cursor: 'pointer',
-        border: `1px solid ${active ? 'rgba(242,183,92,0.8)' : hover ? 'rgba(110,200,228,0.75)' : 'rgba(95,165,188,0.4)'}`,
+        border: `1px solid ${active ? 'rgba(242,183,92,0.8)' : hover ? 'rgba(var(--hb-accent-rgb),0.75)' : 'rgba(var(--hb-accent-rgb),0.4)'}`,
         background: active
           ? 'rgba(216, 110, 62, 0.3)'
           : hover
-          ? 'rgba(54, 140, 168, 0.28)'
-          : 'rgba(36, 98, 122, 0.18)',
+          ? 'rgba(var(--hb-accent-rgb), 0.28)'
+          : 'rgba(var(--hb-cyan-dim-rgb), 0.18)',
         backdropFilter: 'var(--hb-holo-blur)',
         WebkitBackdropFilter: 'var(--hb-holo-blur)',
         boxShadow: active
@@ -127,7 +127,7 @@ function ModelTile({ m, idx, active, onSelect }: {
       <span style={{
         fontFamily: UI, fontWeight: 600, fontSize: '1.18rem', lineHeight: 1,
         color: active ? '#ffd9a8' : '#bfe6f2',
-        textShadow: active ? '0 0 8px rgba(232,150,74,0.4)' : '0 0 8px rgba(95,204,230,0.25)',
+        textShadow: active ? '0 0 8px rgba(232,150,74,0.4)' : '0 0 8px rgba(var(--hb-cyan-bright-rgb),0.25)',
       }}>
         {symbolOf(m.name)}
       </span>
@@ -162,13 +162,13 @@ function ToolTile({ c, idx, onToggle }: { c: ConnectionInfo; idx: number; onTogg
         cursor: offline ? 'not-allowed' : 'pointer',
         border: `1px solid ${
           offline ? 'rgba(200,74,58,0.45)' :
-          engaged ? (hover ? 'rgba(110,200,228,0.75)' : 'rgba(95,165,188,0.5)') :
-          'rgba(95,165,188,0.2)'
+          engaged ? (hover ? 'rgba(var(--hb-accent-rgb),0.75)' : 'rgba(var(--hb-accent-rgb),0.5)') :
+          'rgba(var(--hb-accent-rgb),0.2)'
         }`,
         background: offline
           ? 'rgba(86, 34, 30, 0.25)'
           : engaged
-          ? (hover ? 'rgba(54, 140, 168, 0.28)' : 'rgba(36, 98, 122, 0.18)')
+          ? (hover ? 'rgba(var(--hb-accent-rgb), 0.28)' : 'rgba(var(--hb-cyan-dim-rgb), 0.18)')
           : 'rgba(20, 42, 52, 0.15)',
         backdropFilter: 'var(--hb-holo-blur)',
         WebkitBackdropFilter: 'var(--hb-holo-blur)',
@@ -185,7 +185,7 @@ function ToolTile({ c, idx, onToggle }: { c: ConnectionInfo; idx: number; onTogg
       </span>
       <span style={{
         fontFamily: UI, fontWeight: 600, fontSize: '1.18rem', lineHeight: 1,
-        color: offline ? '#d98a7a' : engaged ? '#bfe6f2' : '#5d8693',
+        color: offline ? '#d98a7a' : engaged ? '#bfe6f2' : 'var(--hb-icon-bright)',
       }}>
         {symbolOf(c.label)}
       </span>
@@ -208,7 +208,7 @@ function SegBar({ pct, color }: { pct: number; color: string }) {
       {Array.from({ length: SEGS }, (_, i) => (
         <span key={i} style={{
           flex: 1, height: 7,
-          background: i < lit ? color : 'rgba(95,165,188,0.14)',
+          background: i < lit ? color : 'rgba(var(--hb-accent-rgb),0.14)',
           boxShadow: i < lit ? `0 0 5px ${color}55` : 'none',
         }} />
       ))}
@@ -223,7 +223,7 @@ function Spark({ samples }: { samples: number[] }) {
     return (
       <div style={{
         height: H, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.18em', color: '#2e5260',
+        fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.18em', color: 'var(--hb-icon-dim)',
       }}>
         AWAITING TELEMETRY_
       </div>
@@ -237,10 +237,10 @@ function Spark({ samples }: { samples: number[] }) {
     <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block' }}>
       {[0.25, 0.5, 0.75].map(f => (
         <line key={f} x1={0} y1={H * f} x2={W} y2={H * f}
-          stroke="rgba(95,165,188,0.12)" strokeWidth={1} strokeDasharray="2 4" />
+          stroke="rgba(var(--hb-accent-rgb),0.12)" strokeWidth={1} strokeDasharray="2 4" />
       ))}
-      <polyline points={pts} fill="none" stroke="#5fcce6" strokeWidth={1.2}
-        style={{ filter: 'drop-shadow(0 0 3px rgba(95,204,230,0.5))' }} />
+      <polyline points={pts} fill="none" stroke="var(--hb-cyan-bright)" strokeWidth={1.2}
+        style={{ filter: 'drop-shadow(0 0 3px rgba(var(--hb-cyan-bright-rgb),0.5))' }} />
       <circle
         cx={W} cy={H - 4 - (samples[samples.length - 1] / max) * (H - 10)} r={2}
         fill="#f2b75c" />
@@ -301,7 +301,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
   const providers = Array.from(new Set(models.map(m => m.provider ?? 'anthropic')))
   const pct = Math.round((budgetTokens.used / Math.max(budgetTokens.limit, 1)) * 100)
-  const gaugeColor = pct > 100 ? '#c84a3a' : pct > 70 ? '#f2b75c' : '#5fcce6'
+  const gaugeColor = pct > 100 ? '#c84a3a' : pct > 70 ? '#f2b75c' : 'var(--hb-cyan-bright)'
   const maxServerTokens = Math.max(...servers.map(s => s.tokens), 1)
   const ollamaUp = models.some(m => m.provider === 'ollama')
 
@@ -326,12 +326,12 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         <span style={{ fontSize: '0.82rem' }}>SYSTEMS 56A.</span>
         <span className="hb-hide-sm" style={{
           fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.1em',
-          color: '#41606e', textTransform: 'none',
+          color: 'var(--hb-icon)', textTransform: 'none',
         }}>
           MODE / 3Dx. 78A
         </span>
         <span style={{ flex: 1 }} />
-        <span className="hb-hide-sm" style={{ fontFamily: MONO, fontSize: '0.56rem', color: '#41606e', textTransform: 'none' }}>
+        <span className="hb-hide-sm" style={{ fontFamily: MONO, fontSize: '0.56rem', color: 'var(--hb-icon)', textTransform: 'none' }}>
           ver 17 · MK VI
         </span>
         <span style={{ width: 7, height: 14, background: 'linear-gradient(180deg, #e8a850, #c98a35)' }} />
@@ -340,7 +340,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           title="Close (Esc)"
           style={{
             border: 'none', background: 'transparent', cursor: 'pointer',
-            color: '#2c4350', display: 'flex', alignItems: 'center', padding: '0 2px',
+            color: 'var(--hb-icon-dim)', display: 'flex', alignItems: 'center', padding: '0 2px',
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -367,26 +367,26 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
         <Panel title="NETWORK_NODES" style={{ flex: 1, animation: 'hbRise 0.4s 0.12s ease both' }}>
           {servers.length === 0 ? (
-            <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: '#2e5260', padding: '0.3rem 0.35rem' }}>
+            <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: 'var(--hb-icon-dim)', padding: '0.3rem 0.35rem' }}>
               // NO NODES
             </p>
           ) : servers.map((c, i) => (
             <div key={c.server} style={{
               display: 'flex', flexDirection: 'column', gap: 1,
               padding: '0.26rem 0.35rem',
-              background: i % 2 ? 'rgba(54,171,202,0.04)' : 'transparent',
-              borderLeft: `2px solid ${!c.connected ? 'rgba(200,74,58,0.55)' : c.active ? 'rgba(54,171,202,0.55)' : 'rgba(95,165,188,0.18)'}`,
+              background: i % 2 ? 'rgba(var(--hb-accent-rgb),0.04)' : 'transparent',
+              borderLeft: `2px solid ${!c.connected ? 'rgba(200,74,58,0.55)' : c.active ? 'rgba(var(--hb-accent-rgb),0.55)' : 'rgba(var(--hb-accent-rgb),0.18)'}`,
             }}>
               <span style={{
                 fontFamily: UI, fontSize: '0.66rem', fontWeight: 700,
                 letterSpacing: '0.1em', textTransform: 'uppercase',
-                color: c.connected ? '#9bbac5' : '#7d6660',
+                color: c.connected ? 'var(--hb-text-dim)' : '#7d6660',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
                 {c.label}
               </span>
               <span style={{ fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.06em',
-                color: !c.connected ? 'var(--hb-red)' : c.active ? 'var(--hb-cyan)' : '#3a6472' }}>
+                color: !c.connected ? 'var(--hb-red)' : c.active ? 'var(--hb-cyan)' : 'var(--hb-icon)' }}>
                 {!c.connected ? 'MEDIA DISCONNECTED' : c.active ? `LINKED · ${c.tools} TOOLS` : 'STANDBY'}
               </span>
             </div>
@@ -405,7 +405,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           {/* faint oversized designation — "B.12" */}
           <span className="hb-num-thin" aria-hidden style={{
             position: 'absolute', right: 14, bottom: 4,
-            fontSize: '5.4rem', color: 'rgba(95,204,230,0.05)', pointerEvents: 'none',
+            fontSize: '5.4rem', color: 'rgba(var(--hb-cyan-bright-rgb),0.05)', pointerEvents: 'none',
           }}>
             B.12
           </span>
@@ -413,11 +413,11 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           {models.length === 0 && (
             <div style={{
               width: 120, padding: '0.8rem 0',
-              border: '1px solid rgba(95,165,188,0.3)',
-              background: 'rgba(29,93,112,0.25)',
+              border: '1px solid rgba(var(--hb-accent-rgb),0.3)',
+              background: 'rgba(var(--hb-cyan-dim-rgb),0.25)',
               textAlign: 'center',
               fontFamily: UI, fontSize: '0.72rem', fontWeight: 700,
-              letterSpacing: '0.2em', color: '#46818f',
+              letterSpacing: '0.2em', color: 'var(--hb-icon)',
             }}>
               NOT FOUND
             </div>
@@ -468,7 +468,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
             </span>
             <span style={{
               fontFamily: UI, fontSize: '0.56rem', fontWeight: 700,
-              letterSpacing: '0.16em', color: '#3a6472', lineHeight: 1.5,
+              letterSpacing: '0.16em', color: 'var(--hb-icon)', lineHeight: 1.5,
             }}>
               PREFIX<br/>SATURATION
             </span>
@@ -476,7 +476,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           <SegBar pct={pct} color={gaugeColor} />
           <p style={{
             fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.06em',
-            color: '#3a6472', margin: '0.35rem 0 0.6rem',
+            color: 'var(--hb-icon)', margin: '0.35rem 0 0.6rem',
           }}>
             ~{budgetTokens.used.toLocaleString()} / {budgetTokens.limit.toLocaleString()} ITPM
           </p>
@@ -484,19 +484,19 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
             <div key={s.server} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
               <span style={{
                 width: 64, flexShrink: 0, fontFamily: MONO, fontSize: '0.5rem',
-                color: s.active ? '#5d8693' : '#33505b', textTransform: 'uppercase',
+                color: s.active ? 'var(--hb-icon-bright)' : 'var(--hb-icon-dim)', textTransform: 'uppercase',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {s.server}
               </span>
-              <span style={{ flex: 1, height: 4, background: 'rgba(95,165,188,0.1)' }}>
+              <span style={{ flex: 1, height: 4, background: 'rgba(var(--hb-accent-rgb),0.1)' }}>
                 <span style={{
                   display: 'block', height: '100%',
                   width: `${Math.round((s.tokens / maxServerTokens) * 100)}%`,
-                  background: s.active ? 'rgba(95,204,230,0.6)' : 'rgba(95,165,188,0.25)',
+                  background: s.active ? 'rgba(var(--hb-cyan-bright-rgb),0.6)' : 'rgba(var(--hb-accent-rgb),0.25)',
                 }} />
               </span>
-              <span style={{ width: 30, flexShrink: 0, textAlign: 'right', fontFamily: MONO, fontSize: '0.5rem', color: '#3a6472' }}>
+              <span style={{ width: 30, flexShrink: 0, textAlign: 'right', fontFamily: MONO, fontSize: '0.5rem', color: 'var(--hb-icon)' }}>
                 {(s.tokens / 1000).toFixed(1)}K
               </span>
             </div>
@@ -507,10 +507,10 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           <Spark samples={rtt} />
           <div style={{
             display: 'flex', justifyContent: 'space-between',
-            fontFamily: MONO, fontSize: '0.52rem', color: '#3a6472', marginTop: 4,
+            fontFamily: MONO, fontSize: '0.52rem', color: 'var(--hb-icon)', marginTop: 4,
           }}>
             <span>RTT / 4s PROBE</span>
-            <span style={{ color: '#5fcce6' }}>
+            <span style={{ color: 'var(--hb-cyan-bright)' }}>
               {health.latencyMs != null ? `${health.latencyMs}ms` : '--'}
             </span>
           </div>
@@ -519,7 +519,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
       {/* ── Bottom band — knowledge bank: what SPEDA knows about the owner ─ */}
       <Panel title="DATA_BANKS // KNOWLEDGE" light pad={false}
-        right={<span style={{ fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.08em', color: '#41606e', textTransform: 'none' }}>
+        right={<span style={{ fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.08em', color: 'var(--hb-icon)', textTransform: 'none' }}>
           {memFiles.length} FILES
         </span>}
         style={{ gridColumn: '1 / -1', animation: 'hbRise 0.45s 0.26s ease both' }}
@@ -527,9 +527,9 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         {memFiles.length === 0 ? (
           <div style={{
             margin: '0.8rem', width: 160, padding: '0.8rem 0',
-            border: '1px solid rgba(95,165,188,0.3)', background: 'rgba(29,93,112,0.25)',
+            border: '1px solid rgba(var(--hb-accent-rgb),0.3)', background: 'rgba(var(--hb-cyan-dim-rgb),0.25)',
             textAlign: 'center', fontFamily: UI, fontSize: '0.72rem', fontWeight: 700,
-            letterSpacing: '0.2em', color: '#46818f',
+            letterSpacing: '0.2em', color: 'var(--hb-icon)',
           }}>
             NO RECORDS
           </div>
@@ -538,7 +538,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
             {/* File rail — one entry per memory file */}
             <div style={{
               width: 142, flexShrink: 0, overflowY: 'auto',
-              borderRight: '1px solid rgba(95,165,188,0.14)',
+              borderRight: '1px solid rgba(var(--hb-accent-rgb),0.14)',
             }}>
               {memFiles.map(f => {
                 const name = (f.path.split('/').pop() || f.path).replace(/\.md$/, '').toUpperCase()
@@ -554,11 +554,11 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                       borderLeft: sel ? '2px solid var(--hb-amber)' : '2px solid transparent',
                       background: sel ? 'rgba(217,156,68,0.1)' : 'transparent',
                       fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.08em',
-                      color: sel ? '#f2b75c' : '#46818f',
+                      color: sel ? '#f2b75c' : 'var(--hb-icon)',
                       transition: 'background 0.1s, color 0.1s, border-color 0.1s',
                     }}
                   >
-                    <span style={{ color: sel ? 'var(--hb-amber)' : '#2e5260' }}>▸</span>
+                    <span style={{ color: sel ? 'var(--hb-amber)' : 'var(--hb-icon-dim)' }}>▸</span>
                     {name}
                   </button>
                 )
@@ -572,7 +572,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                 if (!file) return null
                 const lines = file.content.split('\n').map(l => l.trim()).filter(Boolean)
                 if (lines.length === 0) return (
-                  <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: '#2e5260', padding: '0.3rem 0' }}>
+                  <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: 'var(--hb-icon-dim)', padding: '0.3rem 0' }}>
                     // EMPTY — SPEDA HAS NOT WRITTEN HERE YET
                   </p>
                 )
@@ -580,7 +580,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                   <>
                     {file.updated_at && (
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 2 }}>
-                        <span style={{ fontFamily: MONO, fontSize: '0.5rem', color: '#33505b' }}>
+                        <span style={{ fontFamily: MONO, fontSize: '0.5rem', color: 'var(--hb-icon-dim)' }}>
                           LAST WRITE {fmtDate(file.updated_at)}
                         </span>
                       </div>
@@ -604,7 +604,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                           display: 'flex', gap: 7, padding: '0.12rem 0',
                           fontFamily: "'SamsungOne','Inter',sans-serif",
                           fontSize: '0.74rem', lineHeight: 1.45,
-                          color: isNote ? '#41606e' : '#9bbac5',
+                          color: isNote ? 'var(--hb-icon)' : 'var(--hb-text-dim)',
                           fontStyle: isNote ? 'italic' : 'normal',
                         }}>
                           {isFact && <span style={{ color: 'var(--hb-cyan)', fontSize: '0.62em', lineHeight: 2 }}>▸</span>}

@@ -40,7 +40,7 @@ function Stat({ label, value, color }: { label: string; value: React.ReactNode; 
 }
 
 function Divider() {
-  return <span style={{ width: 1, height: 10, background: 'rgba(95,165,188,0.2)' }} />
+  return <span style={{ width: 1, height: 10, background: 'rgba(var(--hb-accent-rgb),0.2)' }} />
 }
 
 /** One row of the mobile DIAG dropdown */
@@ -121,7 +121,7 @@ export default function HudFrame() {
           overflow: 'hidden', textOverflow: 'ellipsis',
           fontFamily: "'Rajdhani', sans-serif", fontSize: '0.56rem', fontWeight: 700,
           letterSpacing: '0.2em', textTransform: 'uppercase',
-          color: 'rgba(122,150,161,0.55)', whiteSpace: 'nowrap',
+          color: 'rgba(var(--hb-accent-rgb),0.55)', whiteSpace: 'nowrap',
         }}>
           HEARTBREAKER
         </span>
@@ -138,7 +138,7 @@ export default function HudFrame() {
               display: 'flex', alignItems: 'center', gap: 4,
               height: 16, padding: '0 6px',
               border: `1px solid ${diagOpen ? 'var(--hb-edge-bright)' : 'var(--hb-edge)'}`,
-              background: diagOpen ? 'rgba(54,171,202,0.16)' : 'var(--hb-holo-fill)',
+              background: diagOpen ? 'rgba(var(--hb-accent-rgb),0.16)' : 'var(--hb-holo-fill)',
               color: diagOpen ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
               fontFamily: "'Share Tech Mono', monospace", fontSize: '0.56rem',
               letterSpacing: '0.1em', cursor: 'pointer',
@@ -202,9 +202,9 @@ export default function HudFrame() {
           position: 'absolute', left: '50%', transform: 'translateX(-50%)',
           fontFamily: "'Rajdhani', sans-serif", fontSize: '0.62rem', fontWeight: 700,
           letterSpacing: '0.42em', textTransform: 'uppercase',
-          color: 'rgba(122,150,161,0.55)', whiteSpace: 'nowrap',
+          color: 'rgba(var(--hb-accent-rgb),0.55)', whiteSpace: 'nowrap',
         }}>
-          SPEDA OS<span style={{ color: 'rgba(54,171,202,0.6)' }}> // </span>HEARTBREAKER
+          SPEDA OS<span style={{ color: 'rgba(var(--hb-accent-rgb),0.6)' }}> // </span>HEARTBREAKER
         </span>
 
         {/* Right — operating parameters */}

@@ -12,54 +12,14 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10)
 }
 
-const PROMPT_ICONS = [
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>,
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
-]
-
-function PromptCard({ text, icon, onClick }: { text: string; icon: React.ReactNode; onClick: () => void }) {
-  const [hover, setHover] = useState(false)
-  return (
-    <button
-      className="hb-holo"
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        padding: '0.6rem 0.85rem 0.8rem',
-        borderColor: hover ? 'var(--hb-edge-bright)' : 'var(--hb-edge)',
-        boxShadow: hover ? 'var(--hb-holo-shadow-active)' : undefined,
-        color: hover ? '#d7e7ee' : '#9bb5bf',
-        fontSize: '0.84rem', lineHeight: 1.55,
-        fontFamily: "'SamsungOne','Inter',sans-serif",
-        textAlign: 'left', cursor: 'pointer',
-        transition: 'border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.15s',
-        transform: hover ? 'translateY(-1px)' : 'none',
-        display: 'flex', flexDirection: 'column', gap: '0.45rem',
-        width: '100%', height: '100%',
-      }}
-    >
-      {/* Icon row — glyph keeps its top-right position */}
-      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-        <span style={{ color: hover ? '#5fcce6' : '#3a6472', transition: 'color 0.15s' }}>{icon}</span>
-      </span>
-      <span>{text}</span>
-    </button>
-  )
-}
-
 function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
   const profile = useProfile()
   const { settings } = useSettings()
   const hour = new Date().getHours()
   const salutation = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
-  // Settings value takes priority; fall back to profile file default
   const displayName = settings.userName.trim() || profile?.userName || ''
   const fullGreeting = (displayName ? `${salutation}, ${displayName}` : salutation).toUpperCase()
 
-  // Typewriter over the full greeting string
   const [typed, setTyped] = useState('')
   const [done, setDone] = useState(false)
 
@@ -75,7 +35,6 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
     return () => clearInterval(id)
   }, [fullGreeting])
 
-  // Live clock — the "VIDEO CONFERENCE PENDING IN 3:56:09" thin digits
   const [now, setNow] = useState(new Date())
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000)
@@ -89,69 +48,82 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', padding: '0 1.5rem 1rem',
+      justifyContent: 'center', padding: '0 1.5rem 1rem', gap: 0,
     }}>
-      {/* Thin oversized clock — fluid scale so it never wraps on narrow viewports */}
+      {/* Clock + date — compact, top of the stack */}
       <p className="hb-num-thin" style={{
-        fontSize: 'clamp(1.875rem, 10vw, 4.6rem)', color: '#cfe9f2',
-        marginBottom: '0.35rem', whiteSpace: 'nowrap',
-        textShadow: '0 0 22px rgba(95,204,230,0.22)',
-        animation: 'hbRise 0.7s ease both',
+        fontSize: 'clamp(1.6rem, 7vw, 3.2rem)', color: 'var(--hb-text)',
+        marginBottom: '0.15rem', whiteSpace: 'nowrap',
+        textShadow: '0 0 30px rgba(var(--hb-accent-rgb), 0.15)',
+        animation: 'hbRise 0.5s ease both',
       }}>
         {clock}
       </p>
-      <p className="hb-welcome-date" style={{
+      <p style={{
         fontFamily: "'Rajdhani', sans-serif",
-        fontSize: '0.66rem', fontWeight: 600, letterSpacing: '0.34em',
+        fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.3em',
         color: 'var(--hb-text-faint)',
-        marginBottom: '2.2rem', textAlign: 'center',
-        animation: 'fadeIn 0.6s 0.15s ease both',
+        marginBottom: '2rem',
+        animation: 'fadeIn 0.4s 0.1s ease both',
       }}>
         {dateLine}
       </p>
 
-      {/* Greeting typewriter — thin uppercase Stark title */}
+      {/* Agent name + mark — the hero, biggest element on screen */}
+      <div data-brand-text style={{
+        display: 'flex', alignItems: 'baseline', gap: '0.7rem',
+        marginBottom: '0.5rem',
+        animation: 'fadeSlideIn 0.5s 0.15s ease both',
+      }}>
+        <span style={{
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: 'clamp(2.4rem, 10vw, 5rem)', fontWeight: 800,
+          letterSpacing: '0.3em', textTransform: 'uppercase',
+          color: 'var(--hb-cyan)',
+          textShadow: '0 0 40px rgba(var(--hb-accent-rgb), 0.3)',
+          lineHeight: 1,
+        }}>
+          {profile?.name}
+        </span>
+        <span style={{
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: 'clamp(1.2rem, 4.5vw, 2.2rem)', fontWeight: 700,
+          letterSpacing: '0.24em', textTransform: 'uppercase',
+          color: 'var(--hb-cyan-dim)',
+          lineHeight: 1,
+        }}>
+          {profile?.modelNumber}
+        </span>
+      </div>
+
+      {/* Domain tagline */}
+      <p data-brand-text style={{
+        fontFamily: "'Share Tech Mono', monospace",
+        fontSize: '0.68rem', letterSpacing: '0.22em', textTransform: 'uppercase',
+        color: 'var(--hb-text-faint)',
+        marginBottom: '2.2rem',
+        animation: 'fadeIn 0.4s 0.25s ease both',
+      }}>
+        {profile?.tagline}
+      </p>
+
+      {/* Greeting typewriter — below the agent identity */}
       <h1 style={{
         fontFamily: "'Rajdhani', sans-serif",
         fontSize: 'clamp(1.1rem, 4.5vw, 1.7rem)', fontWeight: 500, color: '#ecf6f9',
-        marginBottom: '0.5rem', textAlign: 'center',
-        letterSpacing: '0.22em',
+        textAlign: 'center', letterSpacing: '0.22em',
         minHeight: '2.3rem',
       }}>
         {typed}
         <span style={{
-          display: 'inline-block', width: '0.55em', height: '1.02em',
-          background: 'rgba(95,204,230,0.65)', marginLeft: '4px',
+          display: 'inline-block', width: '0.5em', height: '0.95em',
+          background: 'rgba(var(--hb-cyan-bright-rgb),0.55)', marginLeft: '3px',
           verticalAlign: 'text-bottom',
           opacity: done ? 0 : 1,
           transition: 'opacity 0.5s',
           animation: done ? 'none' : 'blink 0.8s step-end infinite',
         }} />
       </h1>
-
-      <p style={{
-        fontFamily: "'SamsungOne','Inter',sans-serif",
-        fontSize: '0.92rem', color: 'var(--hb-text-dim)',
-        marginBottom: '2.4rem', textAlign: 'center',
-        animation: 'fadeSlideIn 0.4s 0.2s ease both',
-      }}>
-        How can I help you today?
-      </p>
-
-      {profile && profile.suggestedPrompts.length > 0 && (
-        <div className="hb-prompt-grid" style={{
-          display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
-          gridAutoRows: '1fr',
-          gap: '0.5rem', width: '100%', maxWidth: 620, marginBottom: '2rem',
-          alignItems: 'stretch',
-        }}>
-          {profile.suggestedPrompts.map((p, i) => (
-            <div key={i} style={{ display: 'flex', animation: `hbRise 0.45s ${0.3 + i * 0.09}s ease both` }}>
-              <PromptCard text={p} icon={PROMPT_ICONS[i % PROMPT_ICONS.length]} onClick={() => onSend(p)} />
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

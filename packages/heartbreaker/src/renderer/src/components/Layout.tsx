@@ -14,9 +14,10 @@ import SystemsBoard from './SystemsBoard'
 interface LayoutProps {
   profile: AppProfile
   config: AppConfig
+  switchAgent: (agentId: string) => void
 }
 
-export default function Layout({ profile, config }: LayoutProps) {
+export default function Layout({ profile, config, switchAgent }: LayoutProps) {
   const { dispatch } = useChatContext()
   const { settings, update } = useSettings()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -67,6 +68,7 @@ export default function Layout({ profile, config }: LayoutProps) {
         onToggle={() => (isMobile ? setDrawerOpen(false) : update({ sidebarOpen: !sidebarOpen }))}
         onNewChat={handleNewChat}
         onOpenSettings={() => { setDrawerOpen(false); setSettingsOpen(true) }}
+        switchAgent={switchAgent}
       />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>

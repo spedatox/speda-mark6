@@ -223,7 +223,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                 width: '100%', padding: '0.45rem 0.75rem',
                 border: 'none', textAlign: 'left',
                 borderLeft: tab === id ? '2px solid var(--hb-cyan)' : '2px solid transparent',
-                background: tab === id ? 'rgba(54,171,202,0.12)' : 'transparent',
+                background: tab === id ? 'rgba(var(--hb-accent-rgb),0.12)' : 'transparent',
                 color: tab === id ? '#dff2f8' : 'var(--hb-text-dim)',
                 cursor: 'pointer',
                 fontFamily: "'Rajdhani', sans-serif",
@@ -260,11 +260,11 @@ export default function SettingsModal({ config, onClose }: Props) {
               style={{
                 width: 46, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 border: 'none', borderLeft: '1px solid rgba(10,24,32,0.4)',
-                background: 'var(--hb-bar-light)', color: '#2c4350',
+                background: 'var(--hb-bar-light)', color: 'var(--hb-icon-dim)',
                 cursor: 'pointer', transition: 'color 0.1s',
               }}
               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#0c1a22' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#2c4350' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--hb-icon-dim)' }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -417,7 +417,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                           ~{connBudget.used.toLocaleString()} / {connBudget.limit.toLocaleString()}
                         </span>
                       </div>
-                      <div style={{ height: 6, background: 'rgba(95,165,188,0.12)', overflow: 'hidden' }}>
+                      <div style={{ height: 6, background: 'rgba(var(--hb-accent-rgb),0.12)', overflow: 'hidden' }}>
                         <div style={{ width: `${pct}%`, height: '100%', background: col, transition: 'width 0.2s' }} />
                       </div>
                       {over && (
@@ -464,7 +464,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                         style={{
                           width: 42, height: 24, flexShrink: 0, borderRadius: 999,
                           border: 'none', position: 'relative', cursor: c.connected ? 'pointer' : 'not-allowed',
-                          background: c.active && c.connected ? 'var(--accent)' : 'rgba(95,165,188,0.2)',
+                          background: c.active && c.connected ? 'var(--accent)' : 'rgba(var(--hb-accent-rgb),0.2)',
                           opacity: c.connected ? 1 : 0.4, transition: 'background 0.15s',
                         }}
                       >
@@ -531,8 +531,8 @@ export default function SettingsModal({ config, onClose }: Props) {
                         onClick={handleTelegramConnect}
                         style={{
                           padding: '0.5rem 1rem',
-                          border: '1px solid rgba(95,204,230,0.5)',
-                          background: 'rgba(54,171,202,0.14)',
+                          border: '1px solid rgba(var(--hb-cyan-bright-rgb),0.5)',
+                          background: 'rgba(var(--hb-accent-rgb),0.14)',
                           color: '#cdeefa', cursor: 'pointer',
                           fontFamily: "'Rajdhani',sans-serif", fontSize: '0.76rem', fontWeight: 700,
                           letterSpacing: '0.12em', textTransform: 'uppercase',
@@ -569,7 +569,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                         flexShrink: 0, padding: '1px 6px',
                         fontSize: '0.58rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.1em',
                         color: a.active ? 'var(--hb-cyan-bright)' : 'var(--text-muted)',
-                        border: '1px solid rgba(95,165,188,0.3)',
+                        border: '1px solid rgba(var(--hb-accent-rgb),0.3)',
                       }}>
                         {{ web_watch: 'WEB', rss_watch: 'RSS', schedule: 'CRON', webhook: 'HOOK' }[a.kind] ?? a.kind.toUpperCase()}
                       </span>
@@ -590,7 +590,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                         style={{
                           width: 42, height: 24, flexShrink: 0, borderRadius: 999,
                           border: 'none', position: 'relative', cursor: 'pointer',
-                          background: a.active ? 'var(--accent)' : 'rgba(95,165,188,0.2)',
+                          background: a.active ? 'var(--accent)' : 'rgba(var(--hb-accent-rgb),0.2)',
                           transition: 'background 0.15s',
                         }}
                       >
@@ -723,7 +723,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                       style={{
                         padding: '0.5rem 1.1rem',
                         border: '1px solid var(--accent)',
-                        background: (!importFile || importStatus === 'uploading') ? 'transparent' : 'rgba(54,171,202,0.12)',
+                        background: (!importFile || importStatus === 'uploading') ? 'transparent' : 'rgba(var(--hb-accent-rgb),0.12)',
                         color: (!importFile || importStatus === 'uploading') ? 'var(--text-muted)' : 'var(--accent)',
                         cursor: (!importFile || importStatus === 'uploading') ? 'not-allowed' : 'pointer',
                         fontSize: '0.84rem', fontWeight: 600, letterSpacing: '0.04em',
@@ -765,7 +765,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                     style={{
                       padding: '0.5rem 1.1rem',
                       border: '1px solid var(--accent)',
-                      background: indexStatus === 'running' ? 'transparent' : 'rgba(54,171,202,0.12)',
+                      background: indexStatus === 'running' ? 'transparent' : 'rgba(var(--hb-accent-rgb),0.12)',
                       color: indexStatus === 'running' ? 'var(--text-muted)' : 'var(--accent)',
                       cursor: indexStatus === 'running' ? 'not-allowed' : 'pointer',
                       fontSize: '0.84rem', fontWeight: 600, letterSpacing: '0.04em',

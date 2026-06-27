@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react'
+import { createContext, useContext, useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { BRANDS } from '../profile/brands'
 import type { AppProfile } from '../profile/types'
 import type { Session, AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
@@ -104,10 +105,10 @@ function SessionItem({ session, active, onSelect, config }: {
           style={{
             width: '100%',
             padding: '0.4rem 0.6rem 0.4rem 0.85rem',
-            background: 'rgba(54,171,202,0.08)',
-            border: '1px solid rgba(110,200,228,0.55)',
-            borderLeft: '2px solid #36abca',
-            color: '#cadbe2',
+            background: 'rgba(var(--hb-accent-rgb),0.08)',
+            border: '1px solid rgba(var(--hb-accent-rgb),0.55)',
+            borderLeft: '2px solid var(--hb-cyan)',
+            color: 'var(--hb-text)',
             fontSize: '0.855rem',
             fontFamily: "'SamsungOne','Inter',sans-serif",
             outline: 'none',
@@ -123,13 +124,13 @@ function SessionItem({ session, active, onSelect, config }: {
             padding: '0.5rem 0.7rem',
             // Selected row goes AMBER — the phone-book highlighted-entry look
             border: `1px solid ${active ? 'rgba(242,183,92,0.3)' : 'transparent'}`,
-            borderLeft: active ? '2px solid var(--hb-amber)' : hover ? '2px solid rgba(95,165,188,0.35)' : '2px solid transparent',
+            borderLeft: active ? '2px solid var(--hb-amber)' : hover ? '2px solid rgba(var(--hb-accent-rgb),0.35)' : '2px solid transparent',
             background: active
               ? 'rgba(217, 156, 68, 0.12)'
               : hover
-              ? 'rgba(54,171,202,0.07)'
+              ? 'rgba(var(--hb-accent-rgb),0.07)'
               : 'transparent',
-            color: active ? '#f3e2c4' : hover ? '#c2d6de' : '#6e8c97',
+            color: active ? '#f3e2c4' : hover ? 'var(--hb-text)' : 'var(--hb-text-dim)',
             cursor: 'pointer',
             fontSize: '0.875rem',
             fontFamily: "'SamsungOne','Inter',sans-serif",
@@ -154,7 +155,7 @@ function SessionItem({ session, active, onSelect, config }: {
           position: 'absolute', right: '0.3rem', top: '50%', transform: 'translateY(-50%)',
           display: 'flex', alignItems: 'center', gap: '2px',
         }}>
-          <ActionIcon title="Rename" onClick={handleRenameStart} hoverColor="#5fcce6">
+          <ActionIcon title="Rename" onClick={handleRenameStart} hoverColor="var(--hb-cyan-bright)">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -187,8 +188,8 @@ function ActionIcon({ title, onClick, hoverColor, children }: {
       style={{
         width: 22, height: 22,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: 'none', background: hover ? 'rgba(54,171,202,0.12)' : 'transparent',
-        color: hover ? hoverColor : '#3a5a65',
+        border: 'none', background: hover ? 'rgba(var(--hb-accent-rgb),0.12)' : 'transparent',
+        color: hover ? hoverColor : 'var(--hb-icon-dim)',
         cursor: 'pointer', transition: 'color 0.1s, background 0.1s',
         flexShrink: 0,
       }}
@@ -209,7 +210,7 @@ function GroupLabel({ label }: { label: string }) {
       <span style={{
         fontFamily: "'Share Tech Mono', monospace",
         fontSize: '0.6rem',
-        color: 'rgba(54,171,202,0.55)',
+        color: 'rgba(var(--hb-accent-rgb),0.55)',
         whiteSpace: 'nowrap',
       }}>
         {'>>:'}
@@ -227,7 +228,7 @@ function GroupLabel({ label }: { label: string }) {
       </span>
       <span style={{
         flex: 1, height: '1px',
-        background: 'linear-gradient(90deg, rgba(95,165,188,0.28), rgba(95,165,188,0.03))',
+        background: 'linear-gradient(90deg, rgba(var(--hb-accent-rgb),0.28), rgba(var(--hb-accent-rgb),0.03))',
       }} />
     </div>
   )
@@ -248,8 +249,8 @@ function NewChatBtn({ onClick }: { onClick: () => void }) {
         padding: '0.5rem 0.85rem',
         display: 'flex', alignItems: 'center', gap: '0.55rem',
         border: 'none',
-        background: hover ? 'rgba(54,171,202,0.08)' : 'transparent',
-        color: hover ? '#cadbe2' : '#5d7f8a',
+        background: hover ? 'rgba(var(--hb-accent-rgb),0.08)' : 'transparent',
+        color: hover ? 'var(--hb-text)' : 'var(--hb-icon-bright)',
         cursor: 'pointer',
         transition: 'background 0.15s, border-color 0.15s, color 0.15s',
         textAlign: 'left',
@@ -257,7 +258,7 @@ function NewChatBtn({ onClick }: { onClick: () => void }) {
     >
       {/* plus icon */}
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="2" style={{ flexShrink: 0, color: hover ? '#36abca' : '#2e5260' }}>
+        strokeWidth="2" style={{ flexShrink: 0, color: hover ? 'var(--hb-cyan)' : 'var(--hb-icon-dim)' }}>
         <line x1="12" y1="5" x2="12" y2="19"/>
         <line x1="5" y1="12" x2="19" y2="12"/>
       </svg>
@@ -282,7 +283,7 @@ function SearchBar({ value, onChange, onClose }: {
       padding: '0 0.75rem 0.5rem',
     }}>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="2" style={{ color: '#36abca', flexShrink: 0 }}>
+        strokeWidth="2" style={{ color: 'var(--hb-cyan)', flexShrink: 0 }}>
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
       </svg>
       <input
@@ -296,7 +297,7 @@ function SearchBar({ value, onChange, onClose }: {
           background: 'transparent',
           border: 'none',
           outline: 'none',
-          color: '#cadbe2',
+          color: 'var(--hb-text)',
           fontSize: '0.72rem',
           fontFamily: "'Share Tech Mono', monospace",
           letterSpacing: '0.1em',
@@ -305,7 +306,7 @@ function SearchBar({ value, onChange, onClose }: {
       />
       <button onClick={onClose} style={{
         background: 'transparent', border: 'none',
-        color: '#2e5260', cursor: 'pointer', padding: '2px',
+        color: 'var(--hb-icon-dim)', cursor: 'pointer', padding: '2px',
         lineHeight: 1, flexShrink: 0,
       }}>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -349,10 +350,10 @@ function PopupItem({ icon, label, onClick }: { icon: React.ReactNode; label: str
       style={{
         width: '100%', padding: '0.55rem 0.85rem',
         display: 'flex', alignItems: 'center', gap: '0.6rem',
-        background: hover ? 'rgba(54,171,202,0.1)' : 'transparent',
+        background: hover ? 'rgba(var(--hb-accent-rgb),0.1)' : 'transparent',
         border: 'none',
-        borderLeft: hover ? '2px solid #36abca' : '2px solid transparent',
-        color: hover ? '#cadbe2' : '#5d7f8a',
+        borderLeft: hover ? '2px solid var(--hb-cyan)' : '2px solid transparent',
+        color: hover ? 'var(--hb-text)' : 'var(--hb-icon-bright)',
         cursor: 'pointer',
         fontFamily: "'Rajdhani',sans-serif",
         fontSize: '0.76rem', fontWeight: 600,
@@ -361,45 +362,173 @@ function PopupItem({ icon, label, onClick }: { icon: React.ReactNode; label: str
         transition: 'background 0.1s, color 0.1s, border-color 0.1s',
       }}
     >
-      <span style={{ color: hover ? '#36abca' : '#2e5260', flexShrink: 0 }}>{icon}</span>
+      <span style={{ color: hover ? 'var(--hb-cyan)' : 'var(--hb-icon-dim)', flexShrink: 0 }}>{icon}</span>
       {label}
     </button>
   )
 }
 
-/* ── Header ───────────────────────────────────────────────────────────────── */
-function SidebarHeader({ profile, onToggle, onSearch, searchActive }: {
-  profile: AppProfile; onToggle: () => void; onSearch: () => void; searchActive: boolean
+/* ── Agent switcher dropdown ──────────────────────────────────────────────── */
+function AgentDropdown({ current, onSelect, onClose }: {
+  current: string; onSelect: (id: string) => void; onClose: () => void
 }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [onClose])
+
+  const agents = Object.values(BRANDS).filter(b => b.agentId !== 'optimus')
+
+  return (
+    <div ref={ref} className="hb-holo" style={{
+      position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0,
+      zIndex: 100, overflow: 'hidden',
+      animation: 'dropDown 0.12s ease',
+      background: 'rgba(8, 12, 18, 0.82)',
+    }}>
+      {agents.map(b => {
+        const active = b.agentId === current
+        return (
+          <AgentRow key={b.agentId} brand={b} active={active}
+            onClick={() => { if (!active) onSelect(b.agentId); onClose() }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+function AgentRow({ brand, active, onClick }: {
+  brand: (typeof BRANDS)[string]; active: boolean; onClick: () => void
+}) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: '100%', padding: '0.45rem 0.75rem',
+        display: 'flex', alignItems: 'center', gap: '0.55rem',
+        background: active ? 'rgba(var(--hb-accent-rgb), 0.12)' : hover ? 'rgba(var(--hb-accent-rgb), 0.06)' : 'transparent',
+        border: 'none',
+        borderLeft: active ? `2px solid ${brand.accent}` : '2px solid transparent',
+        cursor: active ? 'default' : 'pointer',
+        transition: 'background 0.1s',
+        textAlign: 'left',
+      }}
+    >
+      {/* Color dot */}
+      <div style={{
+        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+        background: brand.accent,
+        boxShadow: active ? `0 0 6px ${brand.accent}` : 'none',
+      }} />
+      {/* Name + mark */}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <span style={{
+          fontFamily: "'Rajdhani',sans-serif",
+          fontSize: '0.72rem', fontWeight: 700,
+          letterSpacing: '0.1em', textTransform: 'uppercase',
+          color: active ? '#fff' : hover ? '#cadbe2' : '#7a96a1',
+        }}>
+          {brand.name}
+        </span>
+        <span style={{
+          fontFamily: "'Rajdhani',sans-serif",
+          fontSize: '0.62rem', fontWeight: 600,
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+          color: active ? brand.accent : '#46626d',
+          marginLeft: '0.35rem',
+        }}>
+          {brand.modelNumber}
+        </span>
+      </div>
+      {/* Domain chip */}
+      <span style={{
+        fontFamily: "'Share Tech Mono', monospace",
+        fontSize: '0.52rem', letterSpacing: '0.04em',
+        color: '#46626d',
+        whiteSpace: 'nowrap',
+      }}>
+        {brand.tagline.split(' ').slice(0, 2).join(' ')}
+      </span>
+    </button>
+  )
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+function SidebarHeader({ profile, onToggle, onSearch, searchActive, switchAgent }: {
+  profile: AppProfile; onToggle: () => void; onSearch: () => void; searchActive: boolean
+  switchAgent: (agentId: string) => void
+}) {
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const toggleDropdown = useCallback(() => setDropdownOpen(v => !v), [])
+
+  const brandLen = `${profile.name} ${profile.modelNumber}`.length
+  const nameSize = brandLen > 18 ? '0.82rem' : brandLen > 14 ? '0.96rem' : '1.15rem'
+  const markSize = brandLen > 18 ? '0.62rem' : brandLen > 14 ? '0.72rem' : '0.82rem'
+  const tracking = brandLen > 14 ? '0.1em' : '0.18em'
+
   return (
     <div className="hb-seam-b" style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 0.5rem 0 0.85rem',
-      height: 40,  // matches the session header — seams align across the full width
+      height: 40,
       flexShrink: 0,
       position: 'relative',
+      gap: '0.4rem',
     }}>
-      {/* Brand — horizontal lockup */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-        <span style={{
+      {/* Brand — clickable to open the agent switcher */}
+      <button
+        onClick={toggleDropdown}
+        title="Switch agent"
+        style={{
+          display: 'flex', alignItems: 'baseline', gap: '0.4rem',
+          minWidth: 0, overflow: 'hidden',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          padding: 0, margin: 0,
+        }}
+      >
+        <span data-brand-text style={{
           fontFamily: "'Rajdhani',sans-serif",
-          fontSize: '1.15rem', fontWeight: 800,
-          letterSpacing: '0.18em', textTransform: 'uppercase',
+          fontSize: nameSize, fontWeight: 800,
+          letterSpacing: tracking, textTransform: 'uppercase',
           color: '#ffffff',
-          lineHeight: 1.1,
+          lineHeight: 1.1, whiteSpace: 'nowrap',
         }}>
           {profile.name}
         </span>
-        <span style={{
+        <span data-brand-text style={{
           fontFamily: "'Rajdhani',sans-serif",
-          fontSize: '1.15rem', fontWeight: 800,
-          letterSpacing: '0.18em', textTransform: 'uppercase',
-          color: '#36abca',
-          lineHeight: 1.1,
+          fontSize: markSize, fontWeight: 800,
+          letterSpacing: tracking, textTransform: 'uppercase',
+          color: 'var(--hb-cyan)',
+          lineHeight: 1.1, whiteSpace: 'nowrap', flexShrink: 0,
         }}>
           {profile.modelNumber}
         </span>
-      </div>
+        {/* Dropdown chevron */}
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="3" style={{
+            color: 'var(--hb-cyan-dim)', flexShrink: 0,
+            transform: dropdownOpen ? 'rotate(180deg)' : 'none',
+            transition: 'transform 0.15s',
+          }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      {/* Agent dropdown */}
+      {dropdownOpen && (
+        <AgentDropdown
+          current={profile.agentId}
+          onSelect={switchAgent}
+          onClose={() => setDropdownOpen(false)}
+        />
+      )}
 
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
@@ -416,7 +545,6 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive }: {
           </svg>
         </HeaderBtn>
       </div>
-
     </div>
   )
 }
@@ -435,8 +563,8 @@ function HeaderBtn({ title, onClick, active, children }: {
         width: 28, height: 28,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         border: 'none',
-        background: active || hover ? 'rgba(54,171,202,0.1)' : 'transparent',
-        color: active ? '#36abca' : hover ? '#9bbac5' : '#3a5a65',
+        background: active || hover ? 'rgba(var(--hb-accent-rgb),0.1)' : 'transparent',
+        color: active ? 'var(--hb-cyan)' : hover ? 'var(--hb-text-dim)' : 'var(--hb-icon-dim)',
         cursor: 'pointer',
         transition: 'background 0.1s, color 0.1s',
         flexShrink: 0,
@@ -478,7 +606,7 @@ function SidebarFooter({ profile, onOpenSettings }: { profile: AppProfile; onOpe
         style={{
           width: '100%', padding: '0.55rem 0.75rem 0.55rem 0.85rem',
           display: 'flex', alignItems: 'center', gap: '0.6rem',
-          background: menuOpen || hover ? 'rgba(54,171,202,0.07)' : 'transparent',
+          background: menuOpen || hover ? 'rgba(var(--hb-accent-rgb),0.07)' : 'transparent',
           border: 'none',
           cursor: 'pointer',
           transition: 'background 0.12s',
@@ -489,13 +617,13 @@ function SidebarFooter({ profile, onOpenSettings }: { profile: AppProfile; onOpe
         <div className="hb-glass-xs" style={{
           width: 28, height: 28,
           flexShrink: 0,
-          background: 'rgba(54,171,202,0.12)',
+          background: 'rgba(var(--hb-accent-rgb),0.12)',
           boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.15)',
           border: `1px solid ${menuOpen || hover ? 'var(--hb-edge-bright)' : 'var(--hb-edge)'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: "'Rajdhani',sans-serif",
           fontSize: '0.8rem', fontWeight: 700,
-          color: menuOpen || hover ? '#5fcce6' : '#36abca',
+          color: menuOpen || hover ? 'var(--hb-cyan-bright)' : 'var(--hb-cyan)',
           letterSpacing: '0.05em',
           transition: 'border-color 0.12s, color 0.12s',
           userSelect: 'none',
@@ -508,14 +636,14 @@ function SidebarFooter({ profile, onOpenSettings }: { profile: AppProfile; onOpe
           <p style={{
             fontFamily: "'SamsungOne','Inter',sans-serif",
             fontSize: '0.83rem', fontWeight: 500,
-            color: menuOpen || hover ? '#cadbe2' : '#7a96a1',
+            color: menuOpen || hover ? 'var(--hb-text)' : 'var(--hb-text-dim)',
             lineHeight: 1.2,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             transition: 'color 0.12s',
           }}>
             {displayName}
           </p>
-          <p style={{
+          <p data-brand-text style={{
             fontFamily: "'SamsungOne','Inter',sans-serif",
             fontSize: '0.68rem',
             color: 'rgba(160,200,215,0.45)',
@@ -530,7 +658,7 @@ function SidebarFooter({ profile, onOpenSettings }: { profile: AppProfile; onOpe
         {/* Chevron */}
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
           style={{
-            color: menuOpen || hover ? '#36abca' : '#2e5260',
+            color: menuOpen || hover ? 'var(--hb-cyan)' : 'var(--hb-icon-dim)',
             flexShrink: 0,
             transform: menuOpen ? 'rotate(180deg)' : 'none',
             transition: 'transform 0.15s, color 0.12s',
@@ -553,9 +681,10 @@ interface Props {
   onToggle: () => void
   onNewChat: () => void
   onOpenSettings: () => void
+  switchAgent: (agentId: string) => void
 }
 
-export default function Sidebar({ profile, config, isOpen, mobile, onSelectSession, onToggle, onNewChat, onOpenSettings }: Props) {
+export default function Sidebar({ profile, config, isOpen, mobile, onSelectSession, onToggle, onNewChat, onOpenSettings, switchAgent }: Props) {
   const { state } = useChatContext()
   const [search, setSearch]         = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -604,6 +733,7 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
           onToggle={onToggle}
           onSearch={() => { setSearchOpen(v => !v); if (searchOpen) setSearch('') }}
           searchActive={searchOpen}
+          switchAgent={switchAgent}
         />
 
         {/* Search */}
@@ -629,7 +759,7 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
                 ...mono,
                 fontSize: '0.63rem',
                 letterSpacing: '0.12em',
-                color: '#2e5260',
+                color: 'var(--hb-icon-dim)',
                 textTransform: 'uppercase',
               }}>
                 {search ? '// No results' : '// No sessions'}
