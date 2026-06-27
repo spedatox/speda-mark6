@@ -13,6 +13,12 @@ logger = logging.getLogger(__name__)
 
 _SUB_AGENT_MAX_ITERATIONS = 15  # Sub-agents are focused tasks; lower than the main loop's 30
 
+# Runtime-infrastructure skills every agent gets regardless of its tool
+# allowlist: memory, the progressive-disclosure loader, and the lazy-load
+# meta-tool are part of the engine, not domain capabilities. A scoped agent
+# still needs them to function.
+_ALWAYS_AVAILABLE: frozenset = frozenset({"memory", "read_skill", "use_toolset"})
+
 # The Task tool definition (Tier 0 — Anthropic Agent SDK built-in).
 # Registered first at startup, before all other tiers.
 _TASK_TOOL_DEFINITION: dict = {
@@ -214,6 +220,7 @@ class CapabilityRegistry:
         self,
         active_servers: set[str] | None = None,
         offline_only: bool = False,
+        allowlist: set[str] | None = None,
     ) -> list[dict]:
         """
         Return tools across all tiers in Anthropic tool format.
@@ -226,6 +233,12 @@ class CapabilityRegistry:
         offline_only (Dead Zone Protocol): only Tier-1 skills that work without
         an uplink survive — MCP servers, adapters and Task sub-agents (which
         spawn LLM calls of their own) are all dropped.
+
+        allowlist (per-agent scoping): when set, only tools whose owning
+        capability (skill name / MCP server / adapter / "Task") is listed are
+        returned — runtime-infrastructure skills (_ALWAYS_AVAILABLE) always pass.
+        None = the full registry (e.g. SPEDA the orchestrator). The profile
+        declares the allowlist; the registry enforces it (Rules 5 + 10).
         """
         from app.config import settings
         from app.core.runtime_state import get_budget_mode, get_disabled_servers
@@ -244,7 +257,7 @@ class CapabilityRegistry:
             tools.append(skill.to_tool_definition())
 
         if offline_only:
-            return tools
+            return self._apply_allowlist(tools, allowlist)
 
         for tool in self._mcp_tool_defs:
             srv = self._mcp_tool_map.get(tool["name"])
@@ -257,11 +270,34 @@ class CapabilityRegistry:
         for adapter in self._adapters.values():
             tools.append(adapter.to_tool_definition())
 
-        return tools
+        return self._apply_allowlist(tools, allowlist)
 
-    def toolset_catalog(self) -> str:
+    def _apply_allowlist(self, tools: list[dict], allowlist: set[str] | None) -> list[dict]:
+        if allowlist is None:
+            return tools
+        return [t for t in tools if self._tool_in_allowlist(t["name"], allowlist)]
+
+    def _tool_in_allowlist(self, tool_name: str, allowed: set[str]) -> bool:
+        """A tool is permitted if it is runtime infrastructure, or its owning
+        capability (skill name / MCP server / adapter / 'Task') is in the agent's
+        declared allowlist."""
+        if tool_name in _ALWAYS_AVAILABLE:
+            return True
+        if tool_name == "Task":
+            return "Task" in allowed
+        if tool_name in self._skills:
+            return tool_name in allowed
+        srv = self._mcp_tool_map.get(tool_name)
+        if srv is not None:
+            return srv in allowed
+        if tool_name in self._adapters:
+            return tool_name in allowed
+        return tool_name in allowed
+
+    def toolset_catalog(self, allowlist: set[str] | None = None) -> str:
         """Compact catalog of NOT-yet-loaded MCP toolsets for the system prompt,
-        so SPEDA knows what it can pull in via use_toolset."""
+        so an agent knows what it can pull in via use_toolset. When an allowlist
+        is given, only servers the agent may use are advertised."""
         from app.config import settings
         from app.core.runtime_state import get_disabled_servers
 
@@ -279,6 +315,8 @@ class CapabilityRegistry:
         for srv in sorted(by_server):
             if srv in always_on or srv in disabled:
                 continue
+            if allowlist is not None and srv not in allowlist:
+                continue  # agent isn't scoped for this server
             names = by_server[srv]
             sample = ", ".join(n.replace("_", " ") for n in names[:6])
             more = f", +{len(names) - 6} more" if len(names) > 6 else ""
@@ -400,8 +438,12 @@ class CapabilityRegistry:
             },
         )
 
-        # Sub-agents get all tools except Task (prevent infinite recursion)
-        tools = [t for t in self.list_tools() if t["name"] != "Task"]
+        # Sub-agents get all tools except Task (prevent infinite recursion),
+        # scoped to the spawning agent's allowlist (inherited via the context).
+        tools = [
+            t for t in self.list_tools(allowlist=context.extra.get("tool_allowlist"))
+            if t["name"] != "Task"
+        ]
 
         messages: list[dict] = [{"role": "user", "content": prompt}]
         system = (

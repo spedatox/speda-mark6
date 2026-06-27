@@ -66,22 +66,10 @@ class Settings(BaseSettings):
     # Database — SQLite by default (no server needed); override with postgresql+asyncpg:// for prod
     database_url: str = f"sqlite+aiosqlite:///{_DATA_DIR / 'speda.db'}"
 
-    # Auth
-    # Service credential for machine clients (desktop app, scripts) — X-API-Key.
+    # Auth — single service credential (X-API-Key) for the desktop app + scripts.
     speda_api_key: str = "dev-key"
     # Shared secret for the n8n webhook trigger — X-N8N-Secret.
     n8n_secret: str = "dev-n8n-secret"
-
-    # ── Owner login (username/password -> JWT) ───────────────────────────────
-    # The single owner authenticates here for human/browser access. Credentials
-    # live in the ENVIRONMENT, never the database: a DB compromise can't yield
-    # the login. OWNER_PASSWORD_HASH is a scrypt hash from scripts/hash_password.py.
-    # JWT_SECRET signs session tokens (HS256). Empty JWT_SECRET disables login —
-    # the server fails closed (Bearer auth is simply rejected), it never opens up.
-    owner_username: str = ""
-    owner_password_hash: str = ""
-    jwt_secret: str = ""
-    jwt_ttl_seconds: int = 43200  # 12h session token lifetime
 
     # ── CORS ─────────────────────────────────────────────────────────────────
     # Comma-separated allowed browser origins. Empty in production = no
