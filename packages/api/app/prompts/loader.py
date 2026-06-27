@@ -79,14 +79,26 @@ def assemble(sections: list[str], context_vars: dict | None = None) -> str:
 
 # ── Skills manifest ───────────────────────────────────────────────────────────
 
+_cached_manifest: str | None = None
+
+
 def build_skills_manifest() -> str:
     """
     Build a compact skills manifest from SKILL.md frontmatter.
 
     Only names and descriptions are included here — the system prompt stays lean.
     Full instructions are available on demand via the read_skill tool.
+
+    Cached after the first call: the manifest only changes when you add or remove
+    a skill file (i.e. a deploy), never mid-request. Saves a filesystem scan on
+    every turn.
     """
+    global _cached_manifest
+    if _cached_manifest is not None:
+        return _cached_manifest
+
     if not SKILL_DOCS_DIR.exists():
+        _cached_manifest = ""
         return ""
 
     entries: list[tuple[str, str]] = []
@@ -100,6 +112,7 @@ def build_skills_manifest() -> str:
         entries.append((name, description))
 
     if not entries:
+        _cached_manifest = ""
         return ""
 
     lines = [
@@ -111,4 +124,5 @@ def build_skills_manifest() -> str:
     for name, description in entries:
         lines.append(f"- **{name}**: {description}")
 
-    return "\n".join(lines)
+    _cached_manifest = "\n".join(lines)
+    return _cached_manifest
