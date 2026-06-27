@@ -69,18 +69,18 @@ function ToolDetail({ tool }: { tool: ToolBadge }) {
         display: 'flex', alignItems: 'center', gap: '0.4rem',
         fontFamily: "'Share Tech Mono', monospace", fontSize: '0.68rem',
         letterSpacing: '0.06em',
-        color: isSearchTool(tool.name) ? '#5fcce6' : '#7ab8c8',
+        color: isSearchTool(tool.name) ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
       }}>
-        <span style={{ color: '#1e4a5a' }}>▸</span>{name}
+        <span style={{ color: 'var(--hb-cyan-dim)' }}>▸</span>{name}
       </div>
       {inputRows.length > 0 && (
         <div style={{ paddingLeft: '0.9rem', display: 'flex', flexDirection: 'column', gap: '1px' }}>
           {inputRows.map(([k, v]) => (
             <div key={k} style={{
               fontFamily: "'Share Tech Mono', monospace", fontSize: '0.63rem',
-              color: '#46818f', lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              color: 'var(--hb-icon)', lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
             }}>
-              <span style={{ color: '#2e5260' }}>{k}:</span> {v}
+              <span style={{ color: 'var(--hb-icon-dim)' }}>{k}:</span> {v}
             </div>
           ))}
         </div>
@@ -89,12 +89,12 @@ function ToolDetail({ tool }: { tool: ToolBadge }) {
         <details style={{ paddingLeft: '0.9rem' }}>
           <summary style={{
             cursor: 'pointer', fontFamily: "'Share Tech Mono', monospace",
-            fontSize: '0.6rem', letterSpacing: '0.08em', color: '#2e5260',
+            fontSize: '0.6rem', letterSpacing: '0.08em', color: 'var(--hb-icon-dim)',
             textTransform: 'uppercase',
           }}>result</summary>
           <pre style={{
             margin: '0.2rem 0 0', fontFamily: "'Share Tech Mono', monospace",
-            fontSize: '0.62rem', color: '#5d7f8a', lineHeight: 1.5,
+            fontSize: '0.62rem', color: 'var(--hb-icon-bright)', lineHeight: 1.5,
             whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 180, overflow: 'auto',
           }}>{tool.result}</pre>
         </details>
@@ -130,11 +130,11 @@ function ToolDisclosure({ tools }: { tools: ToolBadge[] }) {
           cursor: 'pointer',
           fontFamily: "'Share Tech Mono', monospace",
           fontSize: '0.68rem', letterSpacing: '0.08em',
-          color: '#3a6472',
+          color: 'var(--hb-icon)',
           transition: 'color 0.12s',
         }}
-        onMouseEnter={e => (e.currentTarget.style.color = '#5fcce6')}
-        onMouseLeave={e => (e.currentTarget.style.color = '#3a6472')}
+        onMouseEnter={e => (e.currentTarget.style.color = 'var(--hb-cyan-bright)')}
+        onMouseLeave={e => (e.currentTarget.style.color = 'var(--hb-icon)')}
       >
         {/* globe for search, wrench for other */}
         {hasSearch
@@ -153,8 +153,8 @@ function ToolDisclosure({ tools }: { tools: ToolBadge[] }) {
           marginTop: '0.25rem',
           padding: '0.55rem 0.7rem',
           background: 'rgba(6,14,20,0.7)',
-          border: '1px solid rgba(95,165,188,0.15)',
-          borderLeft: '2px solid rgba(95,165,188,0.3)',
+          border: '1px solid rgba(var(--hb-accent-rgb),0.15)',
+          borderLeft: '2px solid rgba(var(--hb-accent-rgb),0.3)',
           animation: 'fadeSlideIn 0.15s ease',
           display: 'flex', flexDirection: 'column', gap: '0.6rem',
         }}>
@@ -217,9 +217,9 @@ function StreamingCursor() {
         verticalAlign: 'text-bottom',
         // bright white core over a cold cyan base + a slow light sweep
         background:
-          'linear-gradient(180deg, #ffffff 0%, #eafaff 45%, rgba(150,225,245,0.9) 75%, rgba(95,204,230,0.85) 100%)',
+          'linear-gradient(180deg, #ffffff 0%, var(--hb-cyan-bright) 45%, rgba(150,225,245,0.9) 75%, rgba(var(--hb-cyan-bright-rgb),0.85) 100%)',
         backgroundSize: '100% 220%',
-        boxShadow: '0 0 6px 1px rgba(190,235,250,0.55), 0 0 14px 2px rgba(95,204,230,0.3)',
+        boxShadow: '0 0 6px 1px rgba(190,235,250,0.55), 0 0 14px 2px rgba(var(--hb-cyan-bright-rgb),0.3)',
         animation: 'caretBreathe 1.15s ease-in-out infinite, caretSheen 2.4s linear infinite',
       }}
     />
@@ -320,10 +320,10 @@ const mdComponents: any = {
     }
     return (
       <code style={{
-        background: 'rgba(54,171,202,0.1)',
-        border: '1px solid rgba(95,165,188,0.18)',
+        background: 'rgba(var(--hb-accent-rgb),0.1)',
+        border: '1px solid rgba(var(--hb-accent-rgb),0.18)',
         padding: '0.05em 0.4em', fontSize: '0.83em',
-        color: '#7fd4e8',
+        color: 'var(--hb-cyan-bright)',
       }}>
         {children}
       </code>
@@ -399,11 +399,11 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
     >
       <img src={src} alt="attachment"
         style={{ maxWidth: '92vw', maxHeight: '92vh', objectFit: 'contain',
-                 border: '1px solid rgba(95,200,228,0.3)', boxShadow: '0 12px 60px rgba(0,0,0,0.6)' }} />
+                 border: '1px solid rgba(var(--hb-cyan-bright-rgb),0.3)', boxShadow: '0 12px 60px rgba(0,0,0,0.6)' }} />
       <button onClick={onClose} title="Close (Esc)" style={{
         position: 'fixed', top: 18, right: 18, width: 34, height: 34,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(8,20,28,0.7)', border: '1px solid rgba(95,200,228,0.3)',
+        background: 'rgba(8,20,28,0.7)', border: '1px solid rgba(var(--hb-cyan-bright-rgb),0.3)',
         color: '#cdeefa', cursor: 'pointer',
       }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -453,8 +453,8 @@ function FileCard({ file }: { file: FileMeta }) {
       <div className="hb-glass-xs" style={{
         width: 38, height: 38, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(54,171,202,0.14)', border: '1px solid rgba(95,165,188,0.28)',
-        color: '#5fcce6',
+        background: 'rgba(var(--hb-accent-rgb),0.14)', border: '1px solid rgba(var(--hb-accent-rgb),0.28)',
+        color: 'var(--hb-cyan-bright)',
       }}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>

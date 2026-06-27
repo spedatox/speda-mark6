@@ -58,7 +58,7 @@ function ToolBtn({
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         border: `1px solid ${active ? 'var(--hb-edge-bright)' : lit ? 'rgba(0,163,255,0.3)' : 'var(--hb-edge)'}`,
         background: active
-          ? 'rgba(54,171,202,0.18)'
+          ? 'rgba(var(--hb-accent-rgb),0.18)'
           : hover
           ? 'rgba(255,255,255,0.08)'
           : 'var(--hb-holo-fill)',
@@ -66,12 +66,12 @@ function ToolBtn({
         WebkitBackdropFilter: 'var(--hb-holo-blur)',
         boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
         color: danger
-          ? (lit ? '#c84a3a' : '#3a5a65')
+          ? (lit ? '#c84a3a' : 'var(--hb-icon-dim)')
           : active
-          ? '#5fcce6'
+          ? 'var(--hb-cyan-bright)'
           : lit
-          ? '#7ab8c8'
-          : '#3a5a65',
+          ? 'var(--hb-text-dim)'
+          : 'var(--hb-icon-dim)',
         cursor: 'pointer',
         transition: 'border-color 0.12s, background 0.12s, color 0.12s',
         flexShrink: 0,
@@ -123,14 +123,14 @@ function SendBtn({ canSend, isStreaming, onSend, onStop }: {
       style={{
         width: 32, height: 32,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: canSend ? '1px solid rgba(95,204,230,0.7)' : '1px solid var(--hb-edge)',
-        background: canSend ? 'rgba(54,171,202,0.35)' : 'var(--hb-holo-fill)',
+        border: canSend ? '1px solid rgba(var(--hb-cyan-bright-rgb),0.7)' : '1px solid var(--hb-edge)',
+        background: canSend ? 'rgba(var(--hb-accent-rgb),0.35)' : 'var(--hb-holo-fill)',
         backdropFilter: 'var(--hb-holo-blur)',
         WebkitBackdropFilter: 'var(--hb-holo-blur)',
         boxShadow: canSend
           ? 'inset 0 1px 0 0 rgba(255,255,255,0.3)'
           : 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
-        color: canSend ? '#eafaff' : '#2e5260',
+        color: canSend ? 'var(--hb-cyan-bright)' : 'var(--hb-icon-dim)',
         cursor: canSend ? 'pointer' : 'default',
         transform: press ? 'scale(0.9)' : 'scale(1)',
         transition: 'background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s',
@@ -159,14 +159,14 @@ function ModelItem({ model, selected, onSelect }: {
         display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
         border: 'none',
         borderLeft: selected
-          ? '2px solid #36abca'
+          ? '2px solid var(--hb-cyan)'
           : hover
-          ? '2px solid rgba(95,165,188,0.3)'
+          ? '2px solid rgba(var(--hb-accent-rgb),0.3)'
           : '2px solid transparent',
         background: selected
-          ? 'rgba(54,171,202,0.1)'
+          ? 'rgba(var(--hb-accent-rgb),0.1)'
           : hover
-          ? 'rgba(54,171,202,0.05)'
+          ? 'rgba(var(--hb-accent-rgb),0.05)'
           : 'transparent',
         cursor: 'pointer', textAlign: 'left',
         transition: 'background 0.1s, border-color 0.1s',
@@ -177,14 +177,14 @@ function ModelItem({ model, selected, onSelect }: {
           fontFamily: "'Rajdhani',sans-serif",
           fontSize: '0.8rem', fontWeight: selected ? 700 : 600,
           letterSpacing: '0.08em', textTransform: 'uppercase',
-          color: selected ? '#5fcce6' : hover ? '#9bbac5' : '#5d7f8a',
+          color: selected ? 'var(--hb-cyan-bright)' : hover ? 'var(--hb-text-dim)' : 'var(--hb-icon-bright)',
         }}>
           {shortModelName(model.name)}
         </div>
         {model.description && (
           <div style={{
             fontFamily: "'SamsungOne','Inter',sans-serif",
-            fontSize: '0.7rem', color: '#2e5260',
+            fontSize: '0.7rem', color: 'var(--hb-icon-dim)',
             marginTop: '0.1rem', lineHeight: 1.35,
           }}>
             {model.description}
@@ -192,7 +192,7 @@ function ModelItem({ model, selected, onSelect }: {
         )}
       </div>
       {selected && (
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#36abca"
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--hb-cyan)"
           strokeWidth="2.5" style={{ flexShrink: 0, marginTop: '0.2rem' }}>
           <polyline points="20 6 9 17 4 12"/>
         </svg>
@@ -232,12 +232,12 @@ function ModelPicker({ models, activeId, onSelect }: {
         style={{
           height: 30, padding: '0 0.45rem',
           display: 'flex', alignItems: 'center', gap: '0.3rem',
-          border: `1px solid ${open ? 'var(--hb-edge-bright)' : hover ? 'rgba(170,225,255,0.35)' : 'var(--hb-edge)'}`,
-          background: open ? 'rgba(54,171,202,0.14)' : 'var(--hb-holo-fill)',
+          border: `1px solid ${open ? 'var(--hb-edge-bright)' : hover ? 'rgba(var(--hb-accent-rgb),0.35)' : 'var(--hb-edge)'}`,
+          background: open ? 'rgba(var(--hb-accent-rgb),0.14)' : 'var(--hb-holo-fill)',
           backdropFilter: 'var(--hb-holo-blur)',
           WebkitBackdropFilter: 'var(--hb-holo-blur)',
           boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
-          color: open || hover ? '#7ab8c8' : '#3a6472',
+          color: open || hover ? 'var(--hb-text-dim)' : 'var(--hb-icon)',
           cursor: 'pointer',
           transition: 'border-color 0.12s, background 0.12s, color 0.12s',
         }}
@@ -275,12 +275,12 @@ function ModelPicker({ models, activeId, onSelect }: {
           <div style={{
             height: 22, padding: '0 0.6rem',
             display: 'flex', alignItems: 'center',
-            background: 'linear-gradient(90deg, rgba(29,93,112,0.7), rgba(29,93,112,0.15) 60%, transparent)',
-            borderBottom: '1px solid rgba(95,165,188,0.2)',
+            background: 'linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.7), rgba(var(--hb-cyan-dim-rgb),0.15) 60%, transparent)',
+            borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.2)',
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '0.62rem', fontWeight: 700,
             letterSpacing: '0.2em', textTransform: 'uppercase',
-            color: '#7a96a1',
+            color: 'var(--hb-text-dim)',
           }}>
             SELECT MODEL
           </div>
@@ -292,7 +292,7 @@ function ModelPicker({ models, activeId, onSelect }: {
                   fontFamily: "'Rajdhani', sans-serif",
                   fontSize: '0.6rem', fontWeight: 700,
                   letterSpacing: '0.2em', textTransform: 'uppercase',
-                  color: '#3a6472',
+                  color: 'var(--hb-icon)',
                 }}>
                   {PROVIDER_LABELS[provider] ?? provider}
                 </div>
@@ -329,10 +329,10 @@ function MenuRow({ icon, label, value, valueColor, onClick }: {
       style={{
         width: '100%', padding: '0.6rem 0.8rem',
         display: 'flex', alignItems: 'center', gap: '0.6rem',
-        background: hover ? 'rgba(54,171,202,0.1)' : 'transparent',
+        background: hover ? 'rgba(var(--hb-accent-rgb),0.1)' : 'transparent',
         border: 'none',
-        borderLeft: hover ? '2px solid #36abca' : '2px solid transparent',
-        color: hover ? '#cadbe2' : '#7a96a1',
+        borderLeft: hover ? '2px solid var(--hb-cyan)' : '2px solid transparent',
+        color: hover ? 'var(--hb-text)' : 'var(--hb-text-dim)',
         cursor: 'pointer',
         fontFamily: "'Rajdhani',sans-serif",
         fontSize: '0.76rem', fontWeight: 600,
@@ -341,7 +341,7 @@ function MenuRow({ icon, label, value, valueColor, onClick }: {
         transition: 'background 0.1s, color 0.1s, border-color 0.1s',
       }}
     >
-      <span style={{ color: hover ? '#36abca' : '#3a6472', flexShrink: 0, display: 'flex' }}>{icon}</span>
+      <span style={{ color: hover ? 'var(--hb-cyan)' : 'var(--hb-icon)', flexShrink: 0, display: 'flex' }}>{icon}</span>
       <span style={{ flex: 1 }}>{label}</span>
       {value && (
         <span style={{
@@ -381,11 +381,11 @@ function MobileToolsMenu({ budget, listening, isStreaming, onAttach, onToggleBud
           width: 30, height: 30,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           border: `1px solid ${open ? 'var(--hb-edge-bright)' : 'var(--hb-edge)'}`,
-          background: open ? 'rgba(54,171,202,0.18)' : 'var(--hb-holo-fill)',
+          background: open ? 'rgba(var(--hb-accent-rgb),0.18)' : 'var(--hb-holo-fill)',
           backdropFilter: 'var(--hb-holo-blur)',
           WebkitBackdropFilter: 'var(--hb-holo-blur)',
           boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
-          color: open ? '#5fcce6' : '#3a5a65',
+          color: open ? 'var(--hb-cyan-bright)' : 'var(--hb-icon-dim)',
           cursor: 'pointer',
           transition: 'border-color 0.12s, background 0.12s, color 0.12s',
           flexShrink: 0,
@@ -418,12 +418,12 @@ function MobileToolsMenu({ budget, listening, isStreaming, onAttach, onToggleBud
           <div style={{
             height: 22, padding: '0 0.6rem',
             display: 'flex', alignItems: 'center',
-            background: 'linear-gradient(90deg, rgba(29,93,112,0.7), rgba(29,93,112,0.15) 60%, transparent)',
-            borderBottom: '1px solid rgba(95,165,188,0.2)',
+            background: 'linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.7), rgba(var(--hb-cyan-dim-rgb),0.15) 60%, transparent)',
+            borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.2)',
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '0.62rem', fontWeight: 700,
             letterSpacing: '0.2em', textTransform: 'uppercase',
-            color: '#7a96a1',
+            color: 'var(--hb-text-dim)',
           }}>
             TOOLS
           </div>
@@ -478,8 +478,8 @@ function Thumb({ file, alt }: { file: File; alt: string }) {
   return (
     <div style={{
       width: 56, height: 56, flexShrink: 0,
-      border: '1px solid rgba(95,165,188,0.3)',
-      background: src ? `center/cover no-repeat url("${src}")` : 'rgba(54,171,202,0.06)',
+      border: '1px solid rgba(var(--hb-accent-rgb),0.3)',
+      background: src ? `center/cover no-repeat url("${src}")` : 'rgba(var(--hb-accent-rgb),0.06)',
     }} title={alt} />
   )
 }
@@ -636,7 +636,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
             <div style={{
               display: 'flex', flexWrap: 'wrap', gap: '0.45rem',
               padding: '0.6rem 0.85rem',
-              borderBottom: '1px solid rgba(95,165,188,0.14)',
+              borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.14)',
             }}>
               {attachments.map(a => (
                 <div key={a.id} style={{ position: 'relative' }}>
@@ -646,20 +646,20 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: '0.45rem',
                       height: 56, padding: '0 0.65rem 0 0.5rem',
-                      background: 'rgba(54,171,202,0.06)',
-                      border: '1px solid rgba(95,165,188,0.22)',
+                      background: 'rgba(var(--hb-accent-rgb),0.06)',
+                      border: '1px solid rgba(var(--hb-accent-rgb),0.22)',
                       maxWidth: 200,
                     }}>
-                      <span style={{ color: '#36abca', flexShrink: 0 }}><FileIcon /></span>
+                      <span style={{ color: 'var(--hb-cyan)', flexShrink: 0 }}><FileIcon /></span>
                       <div style={{ minWidth: 0 }}>
                         <div style={{
                           fontFamily: "'SamsungOne','Inter',sans-serif",
-                          fontSize: '0.75rem', color: '#cadbe2',
+                          fontSize: '0.75rem', color: 'var(--hb-text)',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>{a.name}</div>
                         <div style={{
                           fontFamily: "'Share Tech Mono', monospace",
-                          fontSize: '0.62rem', color: '#2e5260', marginTop: '1px',
+                          fontSize: '0.62rem', color: 'var(--hb-icon-dim)', marginTop: '1px',
                         }}>{formatSize(a.size)}</div>
                       </div>
                     </div>
@@ -669,15 +669,15 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                       position: 'absolute', bottom: 0, left: 0, right: 0,
                       padding: '1px 4px', fontSize: '0.56rem',
                       fontFamily: "'Share Tech Mono', monospace",
-                      color: '#7a96a1', background: 'rgba(4,8,12,0.75)', textAlign: 'right',
+                      color: 'var(--hb-text-dim)', background: 'rgba(4,8,12,0.75)', textAlign: 'right',
                     }}>{formatSize(a.size)}</span>
                   )}
                   <button onClick={() => removeAttachment(a.id)} title="Remove"
                     style={{
                       position: 'absolute', top: -6, right: -6,
                       width: 16, height: 16,
-                      background: '#050d12', border: '1px solid rgba(95,165,188,0.4)',
-                      color: '#5d7f8a', cursor: 'pointer',
+                      background: '#050d12', border: '1px solid rgba(var(--hb-accent-rgb),0.4)',
+                      color: 'var(--hb-icon-bright)', cursor: 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: '0.65rem', lineHeight: 1,
                     }}
@@ -701,11 +701,11 @@ export default function InputBar({ onSend, onStop, config }: Props) {
               placeholder="How can I help you today?"
               style={{
                 width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                resize: 'none', color: '#cadbe2',
+                resize: 'none', color: 'var(--hb-text)',
                 fontSize: '0.9375rem', lineHeight: 1.65,
                 fontFamily: "'SamsungOne','Inter',sans-serif",
                 overflowY: 'hidden', maxHeight: 200,
-                caretColor: '#36abca',
+                caretColor: 'var(--hb-cyan)',
                 userSelect: 'text',
               }}
             />
@@ -715,7 +715,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '0.25rem 0.6rem 0.5rem',
-            borderTop: '1px solid rgba(95,165,188,0.1)',
+            borderTop: '1px solid rgba(var(--hb-accent-rgb),0.1)',
           }}>
             {/* Left controls — on mobile the secondary toggles collapse into
                 a single "+" overflow menu; the model picker keeps its slot */}
@@ -810,10 +810,10 @@ export default function InputBar({ onSend, onStop, config }: Props) {
             <div className="hb-glass" style={{
               position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
-              background: 'rgba(54,171,202,0.12)',
+              background: 'rgba(var(--hb-accent-rgb),0.12)',
               backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-              border: '1px dashed #5fcce6',
-              color: '#5fcce6',
+              border: '1px dashed var(--hb-cyan-bright)',
+              color: 'var(--hb-cyan-bright)',
               fontFamily: "'Rajdhani',sans-serif",
               fontSize: '0.78rem', fontWeight: 700,
               letterSpacing: '0.2em', textTransform: 'uppercase',
@@ -835,7 +835,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
           marginTop: '0.4rem',
           fontFamily: "'Share Tech Mono', monospace",
           fontSize: '0.62rem', letterSpacing: '0.06em',
-          color: '#1e3d4a',
+          color: 'var(--hb-icon-dim)',
           userSelect: 'none',
         }}>
           {[
@@ -844,7 +844,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
             'Shift+Enter for newline',
             'paste or drop images',
           ].map((seg, i) => (
-            <span key={i} style={{ display: 'flex', alignItems: 'center' }}>
+            <span key={i} data-brand-text={i === 0 ? '' : undefined} style={{ display: 'flex', alignItems: 'center' }}>
               {i > 0 && (
                 <span style={{ margin: '0 0.55rem', color: '#162a33' }}>·</span>
               )}

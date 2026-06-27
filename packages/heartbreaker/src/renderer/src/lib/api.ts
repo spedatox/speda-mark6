@@ -1,57 +1,11 @@
 import type { AppConfig, SSEEvent, ModelInfo, ImageBlock } from './types'
 
-/**
- * Auth header for every backend call. Prefers the owner-login JWT (Bearer);
- * falls back to the service X-API-Key when no session token is present. The
- * backend accepts either (see AuthMiddleware).
- */
+/** Auth header for every backend call — the service X-API-Key. */
 export function authHeaders(
   config: AppConfig,
   extra: Record<string, string> = {},
 ): Record<string, string> {
-  const h: Record<string, string> = { ...extra }
-  if (config.token) h['Authorization'] = `Bearer ${config.token}`
-  else if (config.apiKey) h['X-API-Key'] = config.apiKey
-  return h
-}
-
-export interface LoginResult {
-  token?: string
-  expires_at?: number
-  error?: string
-}
-
-/** Owner login: username/password -> session JWT. */
-export async function login(
-  apiBase: string,
-  username: string,
-  password: string,
-): Promise<LoginResult> {
-  try {
-    const res = await fetch(`${apiBase}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    })
-    if (res.status === 429) {
-      const retry = res.headers.get('Retry-After')
-      return { error: `Too many attempts. Try again${retry ? ` in ${retry}s` : ' later'}.` }
-    }
-    if (!res.ok) return { error: 'Invalid username or password' }
-    return await res.json()
-  } catch {
-    return { error: 'Cannot reach the server. Check the address.' }
-  }
-}
-
-/** Confirm a stored token is still valid (calls the authenticated /auth/me). */
-export async function verifyAuth(config: AppConfig): Promise<boolean> {
-  try {
-    const res = await fetch(`${config.apiBase}/auth/me`, { headers: authHeaders(config) })
-    return res.ok
-  } catch {
-    return false
-  }
+  return { ...extra, 'X-API-Key': config.apiKey }
 }
 
 /**
@@ -112,7 +66,7 @@ export async function* streamChat(
   signal: AbortSignal,
   opts: StreamOpts = {},
 ): AsyncGenerator<SSEEvent> {
-  const res = await fetch(`${config.apiBase}/chat`, {
+  const res = await fetch(`${config.apiBase}/chat/${config.agentId}`, {
     method: 'POST',
     headers: authHeaders(config, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({
@@ -170,7 +124,7 @@ export async function fetchSessions(
   config: AppConfig,
   limit = 500
 ): Promise<Array<{ id: number; title: string | null; started_at: string }>> {
-  const res = await fetch(`${config.apiBase}/sessions?limit=${limit}`, {
+  const res = await fetch(`${config.apiBase}/sessions?agent_id=${config.agentId}&limit=${limit}`, {
     headers: authHeaders(config),
   })
   if (!res.ok) return []

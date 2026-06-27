@@ -41,9 +41,9 @@ export interface Session {
 export interface AppConfig {
   apiBase: string
   apiKey: string
-  /** Owner-login session JWT. When present it is sent as Authorization: Bearer
-   *  and takes precedence over apiKey. Obtained via POST /auth/login. */
-  token?: string
+  /** Backend agent this build targets — chat goes to /chat/{agentId} and the
+   *  session list is scoped to it. Set from the active brand (profile). */
+  agentId: string
 }
 
 export interface ModelInfo {

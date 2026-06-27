@@ -13,7 +13,7 @@ function IconBtn({ onClick, title, children }: { onClick: () => void; title: str
         width: 30, height: 26,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         border: `1px solid ${hover ? 'var(--hb-cyan)' : 'var(--hb-line)'}`,
-        background: hover ? 'rgba(54,171,202,0.1)' : 'transparent',
+        background: hover ? 'rgba(var(--hb-accent-rgb),0.1)' : 'transparent',
         color: hover ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
         cursor: 'pointer', transition: 'all 0.12s', flexShrink: 0,
       }}

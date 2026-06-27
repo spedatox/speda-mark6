@@ -24,7 +24,7 @@ export default function CodeBlock({ language, children }: Props) {
       {/* Header — teal tag bar, ".HMM document" style */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        background: 'linear-gradient(90deg, rgba(29,93,112,0.55), rgba(29,93,112,0.18) 70%, transparent)',
+        background: 'linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.55), rgba(var(--hb-cyan-dim-rgb),0.18) 70%, transparent)',
         padding: '0.32rem 0.75rem',
         borderBottom: '1px solid var(--hb-line)',
       }}>

@@ -13,7 +13,7 @@
  *   "title": "PANEL_TITLE",           // optional, underscore splits style
  *   "xKey": "month",                  // which data field is the X axis
  *   "series": [
- *     { "key": "revenue", "label": "REVENUE", "color": "#36abca" }
+ *     { "key": "revenue", "label": "REVENUE", "color": "var(--hb-cyan)" }
  *   ],
  *   "data": [
  *     { "month": "JAN", "revenue": 120 },
@@ -29,7 +29,7 @@
  *   "type": "pie",
  *   "title": "COMPLETION_STATUS",
  *   "data": [
- *     { "label": "BACKEND", "value": 40, "color": "#36abca" },
+ *     { "label": "BACKEND", "value": 40, "color": "var(--hb-cyan)" },
  *     ...
  *   ],
  *   "height": 220
@@ -48,13 +48,13 @@ import {
 } from 'recharts'
 
 /* ── Palette ──────────────────────────────────────────────────────────────── */
-const PALETTE = ['#36abca', '#d39a3a', '#4fa377', '#5fcce6', '#c84a3a', '#9b72cf', '#7aa4b5']
-const GRID    = 'rgba(95,165,188,0.10)'
-const AXIS_C  = 'rgba(95,165,188,0.30)'
+const PALETTE = ['var(--hb-cyan)', '#d39a3a', '#4fa377', 'var(--hb-cyan-bright)', '#c84a3a', '#9b72cf', 'var(--hb-text-dim)']
+const GRID    = 'rgba(var(--hb-accent-rgb),0.10)'
+const AXIS_C  = 'rgba(var(--hb-accent-rgb),0.30)'
 const TICK    = {
   fontFamily: "'Share Tech Mono', monospace",
   fontSize: 10,
-  fill: '#46626d',
+  fill: 'var(--hb-text-faint)',
 }
 
 /* ── Shared axis props ────────────────────────────────────────────────────── */
@@ -92,7 +92,7 @@ function StarkTooltip({ active, payload, label, unit }: any) {
   return (
     <div style={{
       background: 'rgba(3,8,12,0.97)',
-      border: '1px solid rgba(95,165,188,0.5)',
+      border: '1px solid rgba(var(--hb-accent-rgb),0.5)',
       padding: '0.35rem 0.6rem',
       fontFamily: "'Share Tech Mono', monospace",
       fontSize: '0.69rem',
@@ -100,13 +100,13 @@ function StarkTooltip({ active, payload, label, unit }: any) {
       pointerEvents: 'none',
     }}>
       {label != null && (
-        <div style={{ color: '#46626d', marginBottom: '0.2rem', textTransform: 'uppercase' }}>
+        <div style={{ color: 'var(--hb-text-faint)', marginBottom: '0.2rem', textTransform: 'uppercase' }}>
           {String(label)}
         </div>
       )}
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
       {payload.map((p: any, i: number) => (
-        <div key={i} style={{ color: p.color ?? '#5fcce6' }}>
+        <div key={i} style={{ color: p.color ?? 'var(--hb-cyan-bright)' }}>
           {p.name ? `${String(p.name).toUpperCase()}  ` : ''}{p.value}{unit ?? ''}
         </div>
       ))}
@@ -123,7 +123,7 @@ function StarkLegend({ payload }: any) {
       display: 'flex', gap: '1.1rem', justifyContent: 'center',
       paddingTop: '0.35rem',
       fontFamily: "'Share Tech Mono', monospace",
-      fontSize: '0.62rem', letterSpacing: '0.1em', color: '#46626d',
+      fontSize: '0.62rem', letterSpacing: '0.1em', color: 'var(--hb-text-faint)',
     }}>
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
       {payload.map((e: any, i: number) => (
@@ -146,23 +146,23 @@ function ChartPanel({ title, children }: { title?: string; children: React.React
     <div style={{
       position: 'relative',
       background: '#040c11',
-      border: '1px solid rgba(95,165,188,0.24)',
+      border: '1px solid rgba(var(--hb-accent-rgb),0.24)',
       margin: '0.75rem 0',
       animation: 'widgetEntrance 0.35s ease both',
     }}>
       {/* corner brackets */}
       <span style={{ position:'absolute', top:-1, left:-1, width:11, height:11,
-        borderTop:'1px solid #36abca', borderLeft:'1px solid #36abca', pointerEvents:'none' }} />
+        borderTop:'1px solid var(--hb-cyan)', borderLeft:'1px solid var(--hb-cyan)', pointerEvents:'none' }} />
       <span style={{ position:'absolute', bottom:-1, right:-1, width:11, height:11,
-        borderBottom:'1px solid #36abca', borderRight:'1px solid #36abca', pointerEvents:'none' }} />
+        borderBottom:'1px solid var(--hb-cyan)', borderRight:'1px solid var(--hb-cyan)', pointerEvents:'none' }} />
 
       {/* panel header */}
       {title && (
         <div style={{
           display: 'flex', alignItems: 'center',
           height: 28, padding: '0 0.75rem',
-          background: 'linear-gradient(90deg, rgba(29,93,112,0.85) 0%, rgba(29,93,112,0.22) 55%, transparent 100%)',
-          borderBottom: '1px solid rgba(95,165,188,0.22)',
+          background: 'linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.85) 0%, rgba(var(--hb-cyan-dim-rgb),0.22) 55%, transparent 100%)',
+          borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.22)',
           fontFamily: "'Rajdhani', sans-serif",
           fontSize: '0.82rem', fontWeight: 700,
           letterSpacing: '0.2em', textTransform: 'uppercase',
@@ -170,7 +170,7 @@ function ChartPanel({ title, children }: { title?: string; children: React.React
           position: 'relative',
         }}>
           <span style={{ color: '#ffffff' }}>{main}</span>
-          {sub && <span style={{ color: '#36abca' }}>{sub}</span>}
+          {sub && <span style={{ color: 'var(--hb-cyan)' }}>{sub}</span>}
         </div>
       )}
 
@@ -211,7 +211,7 @@ function StarkLineChart({ spec }: { spec: ChartSpec }) {
         <CartesianGrid stroke={GRID} vertical={false} />
         <XAxis dataKey={xKey} {...xAxisProps} />
         <YAxis domain={yDomain ?? ['auto', 'auto']} {...yAxisProps} />
-        <Tooltip content={tip} cursor={{ stroke: 'rgba(95,165,188,0.18)', strokeWidth: 1 }} />
+        <Tooltip content={tip} cursor={{ stroke: 'rgba(var(--hb-accent-rgb),0.18)', strokeWidth: 1 }} />
         <Legend content={StarkLegend} />
         {series.map((s, i) => {
           const c = resolveColor(s, i)
@@ -251,7 +251,7 @@ function StarkAreaChart({ spec }: { spec: ChartSpec }) {
         <CartesianGrid stroke={GRID} vertical={false} />
         <XAxis dataKey={xKey} {...xAxisProps} />
         <YAxis domain={yDomain ?? ['auto', 'auto']} {...yAxisProps} />
-        <Tooltip content={tip} cursor={{ stroke: 'rgba(95,165,188,0.18)', strokeWidth: 1 }} />
+        <Tooltip content={tip} cursor={{ stroke: 'rgba(var(--hb-accent-rgb),0.18)', strokeWidth: 1 }} />
         <Legend content={StarkLegend} />
         {series.map((s, i) => {
           const c = resolveColor(s, i)
@@ -280,7 +280,7 @@ function StarkBarChart({ spec }: { spec: ChartSpec }) {
         <CartesianGrid stroke={GRID} vertical={false} />
         <XAxis dataKey={xKey} {...xAxisProps} />
         <YAxis domain={yDomain ?? [0, 'auto']} {...yAxisProps} />
-        <Tooltip content={tip} cursor={{ fill: 'rgba(95,165,188,0.05)' }} />
+        <Tooltip content={tip} cursor={{ fill: 'rgba(var(--hb-accent-rgb),0.05)' }} />
         <Legend content={StarkLegend} />
         {series.map((s, i) => {
           const c = resolveColor(s, i)
@@ -308,7 +308,7 @@ function PieLabel({ cx, cy, midAngle, outerRadius, name, percent }: any) {
       x={x} y={y}
       textAnchor={x > cx ? 'start' : 'end'}
       dominantBaseline="central"
-      style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 10, fill: '#7a96a1', letterSpacing: '0.06em' }}
+      style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 10, fill: 'var(--hb-text-dim)', letterSpacing: '0.06em' }}
     >
       {`${String(name).toUpperCase()} ${(percent * 100).toFixed(0)}%`}
     </text>
@@ -326,7 +326,7 @@ function StarkPieChart({ spec }: { spec: ChartSpec }) {
           data={data} dataKey="value" nameKey="label"
           cx="50%" cy="50%" outerRadius={75} innerRadius={38}
           strokeWidth={0} isAnimationActive={false}
-          labelLine={{ stroke: 'rgba(95,165,188,0.28)', strokeWidth: 1 }}
+          labelLine={{ stroke: 'rgba(var(--hb-accent-rgb),0.28)', strokeWidth: 1 }}
           label={PieLabel}
         >
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -355,7 +355,7 @@ function ParseError({ raw }: { raw: string }) {
       margin: '0.5rem 0', letterSpacing: '0.05em',
     }}>
       CHART // PARSE ERROR<br />
-      <span style={{ color: '#46626d', fontSize: '0.65rem' }}>{raw.slice(0, 120)}</span>
+      <span style={{ color: 'var(--hb-text-faint)', fontSize: '0.65rem' }}>{raw.slice(0, 120)}</span>
     </div>
   )
 }

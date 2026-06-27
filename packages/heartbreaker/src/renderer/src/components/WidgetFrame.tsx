@@ -8,15 +8,15 @@ const BASE_STYLES = `
   html, body { margin: 0; padding: 0; background: transparent; }
   body {
     font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-    font-size: 14px; line-height: 1.6; color: #cadbe2;
+    font-size: 14px; line-height: 1.6; color: var(--hb-text);
     -webkit-font-smoothing: antialiased;
   }
   :root {
     --bg-primary: #060c0f; --bg-sidebar: #0b1a22;
-    --bg-hover: rgba(70,150,175,0.12); --bg-active: rgba(54,171,202,0.16);
-    --text-primary: #cadbe2; --text-secondary: #7a96a1; --text-muted: #46626d;
-    --border: rgba(95,165,188,0.26); --border-focus: rgba(110,200,228,0.55);
-    --accent: #36abca; --accent-hover: #5fcce6;
+    --bg-hover: rgba(70,150,175,0.12); --bg-active: rgba(var(--hb-accent-rgb),0.16);
+    --text-primary: var(--hb-text); --text-secondary: var(--hb-text-dim); --text-muted: var(--hb-text-faint);
+    --border: rgba(var(--hb-accent-rgb),0.26); --border-focus: rgba(var(--hb-accent-rgb),0.55);
+    --accent: var(--hb-cyan); --accent-hover: var(--hb-cyan-bright);
   }
 </style>`
 
@@ -178,11 +178,11 @@ export default function WidgetFrame({ language, children }: Props) {
   const btnBase: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: '0.3rem',
     padding: '0.28rem 0.6rem',
-    border: '1px solid rgba(95,165,188,0.3)',
+    border: '1px solid rgba(var(--hb-accent-rgb),0.3)',
     background: 'rgba(6,14,19,0.82)',
     backdropFilter: 'blur(10px)',
     WebkitBackdropFilter: 'blur(10px)',
-    color: '#9bbac5',
+    color: 'var(--hb-text-dim)',
     fontSize: '0.64rem',
     fontFamily: "'Rajdhani', sans-serif",
     fontWeight: 700,
@@ -289,9 +289,9 @@ export default function WidgetFrame({ language, children }: Props) {
           onClick={() => setShowCode(s => !s)}
           style={{
             ...btnBase,
-            color: showCode ? 'var(--hb-cyan-bright)' : '#9bbac5',
-            borderColor: showCode ? 'rgba(110,200,228,0.5)' : 'rgba(95,165,188,0.3)',
-            background: showCode ? 'rgba(54,171,202,0.14)' : 'rgba(6,14,19,0.82)',
+            color: showCode ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
+            borderColor: showCode ? 'rgba(var(--hb-accent-rgb),0.5)' : 'rgba(var(--hb-accent-rgb),0.3)',
+            background: showCode ? 'rgba(var(--hb-accent-rgb),0.14)' : 'rgba(6,14,19,0.82)',
           }}
         >
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -301,7 +301,7 @@ export default function WidgetFrame({ language, children }: Props) {
         </button>
 
         {/* Copy */}
-        <button onClick={copy} style={{ ...btnBase, color: copied ? 'var(--hb-green)' : '#9bbac5' }}>
+        <button onClick={copy} style={{ ...btnBase, color: copied ? 'var(--hb-green)' : 'var(--hb-text-dim)' }}>
           {copied
             ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
             : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
