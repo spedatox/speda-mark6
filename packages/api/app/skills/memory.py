@@ -172,6 +172,14 @@ async def ensure_seeded(user_id: int, db) -> None:
 
 # ── Recall for context injection (used by orchestrator) ──────────────────────
 
+# In-process recall cache: the assembled memory block is stable within a
+# session (memory rarely changes mid-conversation). Cache the result keyed on
+# the max updated_at timestamp — if no memory file was written since the last
+# recall, skip the full assembly and return the cached string. Saves a DB
+# round-trip + string assembly on every turn after the first.
+_recall_cache: dict[int, tuple[str, str]] = {}  # user_id -> (watermark, block)
+
+
 async def recall_for_context(user_id: int, db) -> str:
     """
     Load the memory context to prepend to the system prompt.
@@ -185,6 +193,13 @@ async def recall_for_context(user_id: int, db) -> str:
         select(MemoryFile).where(MemoryFile.user_id == user_id)
     )
     all_files = list(result.scalars().all())
+
+    # Watermark: if no file changed since last recall, return the cached block.
+    watermark = max((f.updated_at.isoformat() for f in all_files), default="")
+    cached = _recall_cache.get(user_id)
+    if cached and cached[0] == watermark:
+        return cached[1]
+
     by_path = {f.path: f for f in all_files}
 
     # Size-free listing keeps this recall block byte-stable across turns so the
@@ -198,7 +213,7 @@ async def recall_for_context(user_id: int, db) -> str:
             sections.append(f"### {path}\n\n{f.content.strip()}")
 
     body = "\n\n".join(sections)
-    return (
+    block = (
         "## Memory\n\n"
         "This is shared knowledge about your OWNER, maintained across all of your "
         "sessions. It describes HIM — his profile, what is current for him, and how "
@@ -210,6 +225,8 @@ async def recall_for_context(user_id: int, db) -> str:
         "log.md) or to update memory during this session. dossier.md shapes how you "
         "respond — act on it, never cite it aloud."
     )
+    _recall_cache[user_id] = (watermark, block)
+    return block
 
 
 # ── The skill ─────────────────────────────────────────────────────────────────
