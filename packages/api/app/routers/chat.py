@@ -448,9 +448,11 @@ async def _run_background(
     session_id: int, request_id: str, user_id: int, model: str
 ) -> None:
     from app.services.memory import update_session_log, generate_title
+    from app.services.compaction import maybe_compact_session
 
     await asyncio.gather(
         update_session_log(session_id, request_id, user_id, model),
         generate_title(session_id, request_id, model),
+        maybe_compact_session(session_id, request_id, model),
         return_exceptions=True,
     )

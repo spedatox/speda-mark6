@@ -105,13 +105,23 @@ class SessionManager:
         Returns a list of {"role": ..., "content": ...} dicts. User messages are
         timestamp-stamped (see stamp_user_content) — deterministically from
         created_at, so the rendered history is byte-identical across turns.
+
+        If the session has been compacted, only messages AFTER the summary
+        watermark are loaded, with the rolling summary prepended — so a long
+        chat sends [summary] + [recent window] instead of the full transcript.
         """
-        result = await db.execute(
-            select(Message)
-            .where(Message.session_id == session_id)
-            .order_by(Message.created_at.asc())
-        )
-        messages = result.scalars().all()
+        sess = (
+            await db.execute(select(Session).where(Session.id == session_id))
+        ).scalar_one_or_none()
+        summary = sess.summary if sess else None
+        through_id = (sess.summary_through_id if sess else None) or 0
+
+        stmt = select(Message).where(Message.session_id == session_id)
+        if summary and through_id:
+            stmt = stmt.where(Message.id > through_id)
+        messages = (
+            await db.execute(stmt.order_by(Message.created_at.asc()))
+        ).scalars().all()
 
         def _clean(content):
             # Strip SPEDA display-only blocks (tools/files metadata) before the
@@ -130,7 +140,36 @@ class SessionManager:
             if m.role == "user":
                 content = self.stamp_user_content(content, m.created_at)
             out.append({"role": m.role, "content": content})
+
+        if summary:
+            out = self._prepend_summary(summary, out)
         return out
+
+    @staticmethod
+    def _prepend_summary(summary: str, messages: list[dict]) -> list[dict]:
+        """Inject the compaction summary at the front of the history. Merged into
+        the first message if it's a user turn (so we never emit two user turns in
+        a row); otherwise inserted as a standalone leading user message."""
+        block = {
+            "type": "text",
+            "text": (
+                "[EARLIER CONVERSATION — COMPACTED]\n"
+                "The opening of this conversation was summarized to save context. "
+                "Treat the following as established background you already know "
+                "and continue seamlessly:\n\n"
+                f"{summary}\n\n"
+                "[END SUMMARY — the most recent messages follow verbatim]"
+            ),
+        }
+        if messages and messages[0]["role"] == "user":
+            first = dict(messages[0])
+            content = first["content"]
+            if isinstance(content, list):
+                first["content"] = [block, *content]
+            else:
+                first["content"] = [block, {"type": "text", "text": str(content)}]
+            return [first, *messages[1:]]
+        return [{"role": "user", "content": [block]}, *messages]
 
     async def truncate(self, db: AsyncSession, session_id: int, keep: int) -> int:
         """

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey, Index, String
+from sqlalchemy import ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -23,3 +23,14 @@ class Session(Base):
     ended_at: Mapped[datetime | None] = mapped_column(nullable=True, default=None)
     token_count_input: Mapped[int | None] = mapped_column(nullable=True, default=None)
     token_count_output: Mapped[int | None] = mapped_column(nullable=True, default=None)
+
+    # ── Conversation compaction ──────────────────────────────────────────────
+    # When a session's history grows large, older turns are summarized (in a
+    # background task) into `summary`, and `summary_through_id` records the
+    # highest message.id that summary covers. load_history then sends
+    # [summary] + [messages after the watermark] instead of the full transcript,
+    # capping the per-turn input cost on long conversations. NULL = not yet
+    # compacted (send everything). The raw messages are never deleted — the UI
+    # still shows the full history; only the model's context is compacted.
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    summary_through_id: Mapped[int | None] = mapped_column(nullable=True, default=None)

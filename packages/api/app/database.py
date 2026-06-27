@@ -61,9 +61,15 @@ def _apply_additive_migrations(sync_conn) -> None:
             text("CREATE INDEX IF NOT EXISTS ix_automations_agent_id ON automations (agent_id)")
         )
 
-    # Agent-scoped session listing. create_all won't add an index to a table
-    # that already exists, so ensure it idempotently (no-op on fresh DBs).
+    # Agent-scoped session listing + conversation-compaction columns.
     if "sessions" in tables:
+        scols = {c["name"] for c in insp.get_columns("sessions")}
+        if "summary" not in scols:
+            sync_conn.execute(text("ALTER TABLE sessions ADD COLUMN summary TEXT"))
+            logger.info("schema_migrated", extra={"change": "sessions.summary"})
+        if "summary_through_id" not in scols:
+            sync_conn.execute(text("ALTER TABLE sessions ADD COLUMN summary_through_id INTEGER"))
+            logger.info("schema_migrated", extra={"change": "sessions.summary_through_id"})
         sync_conn.execute(
             text(
                 "CREATE INDEX IF NOT EXISTS ix_sessions_user_agent_started "

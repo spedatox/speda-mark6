@@ -135,6 +135,17 @@ class Settings(BaseSettings):
     # Servers whose tools are always in the prefix (no use_toolset needed).
     always_on_servers: str = "tavily"
 
+    # ── Conversation compaction ──────────────────────────────────────────────
+    # On a long chat, older turns are summarized (background, Haiku) so the model
+    # sees [summary] + recent window instead of the whole growing transcript —
+    # the single biggest cost driver on long conversations. Raw messages are
+    # never deleted (the UI still shows everything); only the model's context is
+    # compacted. Compaction triggers when the live history exceeds the token
+    # threshold, keeping at least the most recent `keep` tokens verbatim.
+    compaction_enabled: bool = True
+    compaction_threshold_tokens: int = 12000
+    compaction_keep_tokens: int = 4000
+
     # Model for Task sub-agents. Defaults to Haiku — research/synthesis grunt work
     # doesn't need Sonnet, Haiku is ~5x cheaper, and crucially it uses a SEPARATE
     # rate-limit pool, so a sub-agent's burst of calls doesn't stack against the
