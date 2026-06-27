@@ -379,7 +379,7 @@ function AgentDropdown({ current, onSelect, onClose }: {
     return () => document.removeEventListener('mousedown', h)
   }, [onClose])
 
-  const agents = Object.values(BRANDS).filter(b => b.agentId !== 'optimus')
+  const agents = Object.values(BRANDS)
 
   return (
     <div ref={ref} className="hb-holo" style={{
