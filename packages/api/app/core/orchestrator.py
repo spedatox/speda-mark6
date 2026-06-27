@@ -87,6 +87,16 @@ class AgentOrchestrator:
         # EVERY turn and read ~never. Worse than no caching at all.
         stable_core = self.build_system_prompt(context)
 
+        # Per-agent tool scoping: the profile's declared allowlist (None = the
+        # full registry, e.g. SPEDA the orchestrator) governs what this agent can
+        # see and load. Resolved once here and stored on the context so the
+        # toolset catalog, the tool list, and Task sub-agents all share one scope.
+        profile = self._profiles.require(context.agent_id)
+        allowlist = (
+            set(profile.tool_allowlist) if profile.tool_allowlist is not None else None
+        )
+        context.extra["tool_allowlist"] = allowlist
+
         # Budget mode — hard frugality directive (runtime-toggleable, persistent).
         from app.core.runtime_state import get_budget_mode
         if get_budget_mode():
@@ -162,7 +172,7 @@ class AgentOrchestrator:
         # pulls a toolset in via use_toolset only when a task needs it, keeping
         # the prompt prefix tiny instead of shipping every MCP tool every call.
         # Pointless in a dead zone — every loadable toolset is remote.
-        catalog = "" if dead_zone else self._registry.toolset_catalog()
+        catalog = "" if dead_zone else self._registry.toolset_catalog(allowlist=allowlist)
         if catalog:
             stable_core = f"{stable_core}\n\n{catalog}"
 
@@ -180,7 +190,7 @@ class AgentOrchestrator:
 
         messages = list(context.conversation_history)
         tools = self._registry.list_tools(
-            context.extra["active_servers"], offline_only=dead_zone
+            context.extra["active_servers"], offline_only=dead_zone, allowlist=allowlist
         )
         iterations = 0
         produced_text = False  # any text streamed yet this turn (for paragraph breaks)
@@ -336,7 +346,7 @@ class AgentOrchestrator:
                 # A use_toolset call may have loaded new toolsets — rebuild the
                 # tool list so they're available on the next iteration.
                 tools = self._registry.list_tools(
-                    context.extra["active_servers"], offline_only=dead_zone
+                    context.extra["active_servers"], offline_only=dead_zone, allowlist=allowlist
                 )
 
             # ── max_tokens ──────────────────────────────────────────────────

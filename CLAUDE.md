@@ -60,7 +60,7 @@ Agent name, personality, system prompt template, tool allowlist, and model polic
 State: what the tool does, when to use it, when NOT to use it, and what it returns. This is the most critical factor in Claude's tool selection accuracy per Anthropic's own documentation. A one-line description makes a good tool unusable. Enforce this at skill authoring time, not at runtime.
 
 **12. All endpoints require authentication.**
-`AuthMiddleware` validates every request before any router logic runs, accepting either of two credentials: a **Bearer JWT** from owner login (`POST /auth/login`, username/password → HS256 token) for human/browser access, or the **`X-API-Key`** service credential for the desktop app and scripts. The n8n trigger endpoint additionally validates `X-N8N-Secret`. Owner credentials live in the environment, never the database (`OWNER_USERNAME`, scrypt `OWNER_PASSWORD_HASH`, `JWT_SECRET`); the service key is `SPEDA_API_KEY`. Auth crypto is stdlib-only (`hashlib.scrypt` + HMAC-SHA256) — no third-party JWT/crypto dependency. The only unauthenticated paths are `/health`, `/auth/login`, and `/oauth/google/callback`. Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are disabled outside `DEBUG`. There is no public data endpoint.
+`AuthMiddleware` validates the **`X-API-Key`** header on every request before any router logic runs, comparing it in constant time against `SPEDA_API_KEY` (from the environment). The n8n trigger endpoint additionally validates `X-N8N-Secret`. The only unauthenticated paths are `/health` and `/oauth/google/callback`. Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are disabled outside `DEBUG`. There is no public data endpoint.
 
 ---
 

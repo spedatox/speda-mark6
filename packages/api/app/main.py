@@ -106,10 +106,20 @@ async def lifespan(app: FastAPI):
     # agent_id. Phase 1: SPEDA only — the Superior Six profiles are authored in
     # later phases. Optimus is NOT here (external WebSocket peer, not a profile).
     from app.profiles.registry import ProfileRegistry
+    from app.profiles.atomix import AtomixProfile
+    from app.profiles.centurion import CenturionProfile
+    from app.profiles.nightcrawler import NightCrawlerProfile
+    from app.profiles.sentinel import SentinelProfile
     from app.profiles.speda import SPEDAProfile
+    from app.profiles.ultron import UltronProfile
 
     profiles = ProfileRegistry()
-    profiles.register(SPEDAProfile())
+    profiles.register(SPEDAProfile())       # orchestrator
+    profiles.register(UltronProfile())      # academic research
+    profiles.register(AtomixProfile())      # personal health
+    profiles.register(SentinelProfile())    # finance
+    profiles.register(NightCrawlerProfile())  # OSINT / web surveillance
+    profiles.register(CenturionProfile())   # cyber security
 
     # ── 7. Orchestrator (reuses the client already injected into the registry) ──
     from app.core.orchestrator import AgentOrchestrator
@@ -121,11 +131,6 @@ async def lifespan(app: FastAPI):
 
     telegram = TelegramClient()
 
-    # ── 7.6 Login brute-force throttle ─────────────────────────────────────────
-    from app.auth.rate_limit import LoginRateLimiter
-
-    login_rate_limiter = LoginRateLimiter()
-
     # ── 8. Inject into app.state ───────────────────────────────────────────────
     app.state.registry = registry
     app.state.agent_registry = agent_registry
@@ -134,7 +139,6 @@ async def lifespan(app: FastAPI):
     app.state.session_manager = session_manager
     app.state.profiles = profiles
     app.state.telegram = telegram
-    app.state.login_rate_limiter = login_rate_limiter
 
     logger.info(
         "startup_complete",
@@ -214,10 +218,9 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, auth, automations, chat, health, trigger, import_chats, files, connections, memory
+    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections, memory
 
     app.include_router(health.router)
-    app.include_router(auth.router)
     app.include_router(chat.router)
     app.include_router(trigger.router)
     app.include_router(agents.router)

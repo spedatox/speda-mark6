@@ -3,7 +3,7 @@ import json
 import logging
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -177,18 +177,21 @@ async def rename_session(
     return {"ok": True}
 
 
-@router.post("/chat")
-async def chat(
+async def _run_chat(
     request: Request,
+    agent_id: str,
     body: ChatRequest,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession,
 ):
+    """Shared chat handler. Both the bare /chat (SPEDA) and /chat/{agent_id}
+    routes call through here — the only difference is which agent is addressed."""
     orchestrator = request.app.state.orchestrator
     session_manager = request.app.state.session_manager
-    # Bare /chat targets the default agent (SPEDA). The /chat/{agent_id} split
-    # that lets the UI address any agent lands in Phase 3.
-    profile = request.app.state.profiles.default
+    # Resolve the addressed agent; an unknown agent_id is a routing error.
+    profile = request.app.state.profiles.get(agent_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail=f"Unknown agent '{agent_id}'")
 
     request_id = str(uuid.uuid4())
     user_id = 1
@@ -323,6 +326,30 @@ async def chat(
     )
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.post("/chat")
+async def chat(
+    request: Request,
+    body: ChatRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Bare /chat targets the default agent (SPEDA) — backward compatible with
+    the desktop client."""
+    return await _run_chat(request, "speda", body, background_tasks, db)
+
+
+@router.post("/chat/{agent_id}")
+async def chat_agent(
+    agent_id: str,
+    request: Request,
+    body: ChatRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Address a specific in-process agent (e.g. /chat/ultron). 404 if unknown."""
+    return await _run_chat(request, agent_id, body, background_tasks, db)
 
 
 @router.websocket("/ws")
