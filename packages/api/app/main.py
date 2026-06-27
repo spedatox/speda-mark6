@@ -104,11 +104,11 @@ async def lifespan(app: FastAPI):
     # ── 6. Profiles (multi-tenant) ─────────────────────────────────────────────
     # One ProfileRegistry holds every enabled in-process agent, addressed by
     # agent_id. Phase 1: SPEDA only — the Superior Six profiles are authored in
-    # later phases. Optimus is NOT here (external WebSocket peer, not a profile).
     from app.profiles.registry import ProfileRegistry
     from app.profiles.atomix import AtomixProfile
     from app.profiles.centurion import CenturionProfile
     from app.profiles.nightcrawler import NightCrawlerProfile
+    from app.profiles.optimus import OptimusProfile
     from app.profiles.sentinel import SentinelProfile
     from app.profiles.speda import SPEDAProfile
     from app.profiles.ultron import UltronProfile
@@ -120,6 +120,7 @@ async def lifespan(app: FastAPI):
     profiles.register(SentinelProfile())    # finance
     profiles.register(NightCrawlerProfile())  # OSINT / web surveillance
     profiles.register(CenturionProfile())   # cyber security
+    profiles.register(OptimusProfile())     # systems / code / infrastructure
 
     # ── 7. Orchestrator (reuses the client already injected into the registry) ──
     from app.core.orchestrator import AgentOrchestrator
