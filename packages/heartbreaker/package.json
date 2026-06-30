@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit",
     "web:dev": "vite --config vite.web.config.ts",
     "web:build": "vite build --config vite.web.config.ts",
+    "teaser:dev": "vite --config vite.teaser.config.ts",
+    "teaser:build": "vite build --config vite.teaser.config.ts",
     "dist": "electron-vite build && electron-builder --win"
   },
   "devDependencies": {
