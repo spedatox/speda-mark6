@@ -471,10 +471,10 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.6) 0%, rgba(var(--hb-cyan-dim-rgb),0.18) 55%, transparent 100%);
   border-left: 3px solid var(--hb-cyan);
   border-bottom: 1px solid var(--hb-line);
-  font-family: 'SamsungOne', 'Inter', sans-serif !important;
+  font-family: 'Rajdhani', sans-serif !important;
   font-size: 1.3rem !important;
   font-weight: 800 !important;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.04em;
   color: #ffffff;
 }
 .prose h2 .hb-h-main { color: #ffffff; }
@@ -490,10 +490,10 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.42) 0%, rgba(var(--hb-cyan-dim-rgb),0.1) 55%, transparent 100%);
   border-left: 2px solid rgba(var(--hb-accent-rgb),0.6);
   border-bottom: 1px solid rgba(var(--hb-accent-rgb),0.14);
-  font-family: 'SamsungOne', 'Inter', sans-serif !important;
+  font-family: 'Rajdhani', sans-serif !important;
   font-size: 1.12rem !important;
   font-weight: 800 !important;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.04em;
   color: #dcedf3;
 }
 /* ── H4 — panel header bar (lightest) ───────────────────────────────────────── */
@@ -505,8 +505,8 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   margin: 1rem 0 0.3rem;
   background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.28) 0%, rgba(var(--hb-cyan-dim-rgb),0.06) 55%, transparent 100%);
   border-left: 2px solid rgba(var(--hb-accent-rgb),0.4);
-  font-family: 'SamsungOne', 'Inter', sans-serif;
-  font-size: 1.02rem; font-weight: 700; letter-spacing: 0;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.02rem; font-weight: 700; letter-spacing: 0.04em;
   color: #9bbac5;
 }
 
