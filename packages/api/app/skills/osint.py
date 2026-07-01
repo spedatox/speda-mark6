@@ -1099,7 +1099,7 @@ class IntelXSearchSkill(Skill):
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT, headers=headers) as client:
                 start = await client.post(
-                    "https://2.intelx.io/intelligent/search",
+                    "https://free.intelx.io/intelligent/search",
                     json={"term": term, "maxresults": 10, "media": 0, "sort": 2, "terminate": []},
                 )
                 if start.status_code in (401, 402, 403):
@@ -1112,7 +1112,7 @@ class IntelXSearchSkill(Skill):
                 records: list = []
                 for _ in range(4):  # poll: status 3 = results not ready yet
                     res = await client.get(
-                        "https://2.intelx.io/intelligent/search/result",
+                        "https://free.intelx.io/intelligent/search/result",
                         params={"id": search_id, "limit": 10},
                     )
                     res.raise_for_status()
