@@ -762,99 +762,6 @@ class ShodanLookupSkill(Skill):
             return f"shodan_lookup: lookup failed ({_exc_msg(exc)})."
 
 
-# ── SecurityTrails — DNS / WHOIS history (free tier) ─────────────────────────
-
-
-class DNSIntelSkill(Skill):
-    name = "dns_intel"
-    description = (
-        "Queries SecurityTrails for DNS and WHOIS intelligence on a domain: current DNS "
-        "records (A/MX/NS/TXT), the list of known subdomains, WHOIS registration/registrar "
-        "details, or historical A-record (hosting IP) changes over time. Use it to map a "
-        "domain's infrastructure, enumerate subdomains, or trace where a domain was hosted "
-        "historically during OSINT/attack-surface work. Do NOT use it for live device "
-        "scanning (use shodan_lookup) or threat reputation (use otx_lookup). Returns a "
-        "plain-text summary for the requested section; requires SECURITYTRAILS_API_KEY."
-    )
-    read_only = True
-    requires_network = True
-    input_schema = {
-        "type": "object",
-        "properties": {
-            "domain": {"type": "string", "description": "The apex domain to query, e.g. 'example.com'."},
-            "section": {
-                "type": "string",
-                "description": "Which dataset to return.",
-                "enum": ["current_dns", "subdomains", "whois", "history_a"],
-                "default": "current_dns",
-            },
-        },
-        "required": ["domain"],
-    }
-
-    async def execute(self, args: dict, context: AgentContext) -> str:
-        if not settings.securitytrails_api_key:
-            return "dns_intel: set SECURITYTRAILS_API_KEY in .env (https://securitytrails.com)."
-        domain = str(args.get("domain", "")).strip().lower()
-        if not domain or "." not in domain:
-            return "dns_intel: provide a valid domain, e.g. 'example.com'."
-        section = str(args.get("section", "current_dns")).strip().lower()
-        paths = {
-            "current_dns": f"/v1/domain/{domain}",
-            "subdomains": f"/v1/domain/{domain}/subdomains",
-            "whois": f"/v1/domain/{domain}/whois",
-            "history_a": f"/v1/history/{domain}/dns/a",
-        }
-        path = paths.get(section, paths["current_dns"])
-        try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                resp = await client.get(
-                    f"https://api.securitytrails.com{path}",
-                    headers={"APIKEY": settings.securitytrails_api_key, "Accept": "application/json", "User-Agent": _UA},
-                )
-                if resp.status_code in (401, 403):
-                    return "dns_intel: SecurityTrails rejected the key (check SECURITYTRAILS_API_KEY)."
-                if resp.status_code == 429:
-                    return "dns_intel: SecurityTrails quota exhausted (free tier is 50/month)."
-                resp.raise_for_status()
-                d = resp.json()
-        except Exception as exc:
-            logger.warning("dns_intel_failed", extra={"error": _exc_msg(exc), "request_id": context.request_id})
-            return f"dns_intel: lookup failed ({_exc_msg(exc)})."
-
-        if section == "current_dns":
-            cur = d.get("current_dns") or {}
-            def vals(rec):
-                return ", ".join(
-                    v.get("ip") or v.get("nameserver") or v.get("hostname") or v.get("value", "?")
-                    for v in (cur.get(rec, {}).get("values") or [])
-                ) or "none"
-            return (
-                f"SecurityTrails current DNS for {domain}:\n"
-                f"- A: {vals('a')}\n- MX: {vals('mx')}\n- NS: {vals('ns')}\n- TXT: {vals('txt')}\n"
-                f"- Alexa rank: {d.get('alexa_rank') or 'n/a'}"
-            )
-        if section == "subdomains":
-            subs = d.get("subdomains") or []
-            shown = ", ".join(f"{s}.{domain}" for s in subs[:30])
-            return f"SecurityTrails subdomains for {domain} — {d.get('subdomain_count', len(subs))} found:\n{shown}" + (" …" if len(subs) > 30 else "")
-        if section == "whois":
-            contacts = d.get("contacts") or []
-            org = next((c.get("organization") for c in contacts if c.get("organization")), None)
-            return (
-                f"SecurityTrails WHOIS for {domain}:\n"
-                f"- Registrar: {d.get('registrarName') or '?'}\n"
-                f"- Created: {d.get('createdDate') or '?'}  ·  Expires: {d.get('expiresDate') or '?'}\n"
-                f"- Organization: {org or '?'}  ·  Contacts: {len(contacts)}"
-            )
-        records = d.get("records") or []
-        lines = [f"SecurityTrails A-record history for {domain} — {len(records)} entries:"]
-        for r in records[:10]:
-            ips = ", ".join(v.get("ip", "?") for v in (r.get("values") or []))
-            lines.append(f"- {r.get('first_seen', '?')} → {r.get('last_seen', '?')}: {ips}")
-        return "\n".join(lines)
-
-
 # ── Hunter.io — email discovery (free tier) ──────────────────────────────────
 
 
@@ -1159,7 +1066,6 @@ OSINT_SKILLS: list[type[Skill]] = [
     DarkWebSearchSkill,
     OTXLookupSkill,
     ShodanLookupSkill,
-    DNSIntelSkill,
     EmailDiscoverySkill,
     CryptoTraceSkill,
     IntelXSearchSkill,

@@ -191,13 +191,12 @@ class Settings(BaseSettings):
     abuseipdb_api_key: str = ""
     abuse_ch_api_key: str = ""
     # AlienVault OTX (https://otx.alienvault.com — free), Shodan
-    # (https://account.shodan.io), SecurityTrails (https://securitytrails.com —
-    # 50/mo free), Hunter.io (https://hunter.io — 25/mo free), Etherscan
-    # (https://etherscan.io/apis — free), Intelligence X (https://intelx.io —
-    # free tier). Blockchair runs keyless; a key just raises the rate limit.
+    # (https://account.shodan.io), Hunter.io (https://hunter.io — 25/mo free),
+    # Etherscan (https://etherscan.io/apis — free), Intelligence X
+    # (https://intelx.io — free tier). Blockchair runs keyless; a key just
+    # raises the rate limit.
     otx_api_key: str = ""
     shodan_api_key: str = ""
-    securitytrails_api_key: str = ""
     hunter_api_key: str = ""
     etherscan_api_key: str = ""
     intelx_api_key: str = ""
