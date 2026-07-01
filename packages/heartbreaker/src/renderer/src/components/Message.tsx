@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -294,6 +294,13 @@ function isSourcesParagraph(children: React.ReactNode): boolean {
   }
   return false
 }
+
+// Plugin arrays and config are hoisted to module scope so their identity is
+// stable across renders — recreating them inline makes react-markdown rebuild
+// its remark/rehype processor on every render, defeating its internal reuse.
+const REMARK_PLUGINS = [remarkGfm, remarkMath]
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const REHYPE_PLUGINS: any = [[rehypeKatex, { throwOnError: false, errorColor: '#f87171' }]]
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mdComponents: any = {
@@ -649,6 +656,24 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
   // Normalize fence placement, then prepare math (currency-safe, code-safe).
   const visibleContent = prepareMath(normalizeCodeFences(rawVisible))
 
+  // Memoize the parsed markdown subtree on the visible content ALONE. The full
+  // remark→rehype→react pass is the single most expensive thing this component
+  // does; keying it here means interaction state (hover, copy, thumbs, edit)
+  // never triggers a re-parse — only genuinely new text does. Quality is
+  // untouched: same plugins, same components, same partial-markdown sanitation.
+  const rendered = useMemo(
+    () => (
+      <ReactMarkdown
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
+        components={mdComponents}
+      >
+        {visibleContent}
+      </ReactMarkdown>
+    ),
+    [visibleContent],
+  )
+
   const copy = () => {
     navigator.clipboard.writeText(message.content).then(() => {
       setCopied(true)
@@ -804,13 +829,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
           </div>
         ) : message.content ? (
           <div className="prose" style={{ userSelect: 'text' }}>
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkMath]}
-              rehypePlugins={[[rehypeKatex, { throwOnError: false, errorColor: '#f87171' }]]}
-              components={mdComponents}
-            >
-              {visibleContent}
-            </ReactMarkdown>
+            {rendered}
             {/* Cursor: visible while streaming, or while typewriter is still catching up */}
             {(message.isStreaming || (!hasCodeBlock && isRevealing)) && <StreamingCursor />}
           </div>

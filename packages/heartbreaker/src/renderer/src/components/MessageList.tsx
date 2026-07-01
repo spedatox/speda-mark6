@@ -14,21 +14,38 @@ interface Props {
  * changes (content, streaming, tools, etc.), NOT when a sibling message updates.
  * This is the single biggest perf win: during streaming, only the active message
  * re-renders instead of the entire list.
+ *
+ * CRITICAL: the handler props are the STABLE, id-taking callbacks from the parent
+ * (never re-created per render). The message.id binding and role gating happen
+ * INSIDE this component, so MemoMessage's props are `message` (which the reducer
+ * only replaces for the one message that changed) plus three constant function
+ * refs. That is what lets React's shallow `memo` compare short-circuit every
+ * completed row during streaming. Binding ids in the parent's `.map()` (fresh
+ * closures each render) would silently defeat the memo.
  */
 const MemoMessage = memo(function MemoMessage({
   message, onDelete, onRegenerate, onEditAndResend,
 }: {
   message: ChatMessage
-  onDelete: () => void
-  onRegenerate?: () => void
-  onEditAndResend?: (newContent: string) => void
+  onDelete: (id: string) => void
+  onRegenerate: (id: string) => void
+  onEditAndResend: (id: string, newContent: string) => void
 }) {
+  const handleDelete = useCallback(() => onDelete(message.id), [onDelete, message.id])
+  const handleRegenerate = useCallback(
+    () => onRegenerate(message.id),
+    [onRegenerate, message.id],
+  )
+  const handleEdit = useCallback(
+    (newContent: string) => onEditAndResend(message.id, newContent),
+    [onEditAndResend, message.id],
+  )
   return (
     <Message
       message={message}
-      onDelete={onDelete}
-      onRegenerate={onRegenerate}
-      onEditAndResend={onEditAndResend}
+      onDelete={handleDelete}
+      onRegenerate={message.role === 'assistant' ? handleRegenerate : undefined}
+      onEditAndResend={message.role === 'user' ? handleEdit : undefined}
     />
   )
 })
@@ -65,9 +82,9 @@ export default function MessageList({ onDelete, onRegenerate, onEditAndResend }:
           <MemoMessage
             key={msg.id}
             message={msg}
-            onDelete={() => onDelete(msg.id)}
-            onRegenerate={msg.role === 'assistant' ? () => onRegenerate(msg.id) : undefined}
-            onEditAndResend={msg.role === 'user' ? (newContent) => onEditAndResend(msg.id, newContent) : undefined}
+            onDelete={onDelete}
+            onRegenerate={onRegenerate}
+            onEditAndResend={onEditAndResend}
           />
         ))}
         <div ref={bottomRef} style={{ height: '1rem' }} />
