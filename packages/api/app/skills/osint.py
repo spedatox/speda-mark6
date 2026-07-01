@@ -837,7 +837,22 @@ class EmailDiscoverySkill(Skill):
             return f"email_discovery: lookup failed ({_exc_msg(exc)})."
 
 
-# ── Etherscan + Blockchair — crypto address tracing ──────────────────────────
+# ── Crypto address tracing — mempool.space / Etherscan / Blockchair ──────────
+
+# Primary UTXO source: mempool.space-style APIs. These are keyless, fast, and
+# have generous rate limits — unlike Blockchair's free tier, which 429s on two
+# rapid calls. chain → (api base, symbol). Blockchair stays as the fallback for
+# chains without a mempool clone (DOGE / BCH / DASH).
+_MEMPOOL_HOSTS = {
+    "bitcoin": ("https://mempool.space/api", "BTC"),
+    "litecoin": ("https://litecoinspace.org/api", "LTC"),
+}
+
+# Blockchair rate-limit status codes (per API docs): 402 limit exceeded, 429 too
+# many requests, 435 the 5-req/sec soft limit; 430/434/503 mean the IP is
+# temporarily blocked. We distinguish the two so the error message is actionable.
+_BC_RATELIMIT = {402, 429, 435}
+_BC_IPBLOCK = {430, 434, 503}
 
 # chain → (blockchair slug, decimals, symbol) for keyless Blockchair dashboards.
 _CHAINS = {
@@ -853,21 +868,30 @@ _CHAINS = {
 class CryptoTraceSkill(Skill):
     name = "crypto_trace"
     description = (
-        "Traces a cryptocurrency address, returning its balance, total received/spent "
-        "and transaction count, plus recent transactions for Ethereum. Ethereum "
-        "addresses (0x…) are read via Etherscan when ETHERSCAN_API_KEY is set (richer "
-        "tx detail) and otherwise via Blockchair; Bitcoin and other UTXO chains use "
-        "Blockchair, which works keyless. Use it to check on-chain activity and holdings "
-        "for a wallet during crypto OSINT or fraud tracing. Do NOT expect identity "
-        "attribution — it reports on-chain data only, not who owns the address. Returns a "
-        "plain-text on-chain summary."
+        "Traces one or more cryptocurrency addresses, returning each address's balance, "
+        "total received/spent and transaction count (plus recent transactions for "
+        "Ethereum). Bitcoin and Litecoin are read from the keyless, generously rate-limited "
+        "mempool.space / litecoinspace explorers; Ethereum uses Etherscan when "
+        "ETHERSCAN_API_KEY is set; Dogecoin, Bitcoin Cash and Dash use Blockchair. Pass "
+        "several comma-separated addresses on the SAME chain to trace them in a single "
+        "batched request — this avoids the per-second rate limits that separate parallel "
+        "calls would trip. Use it to check on-chain activity and holdings during crypto "
+        "OSINT or fraud tracing; do NOT expect identity attribution — it reports on-chain "
+        "data only, not who owns the address."
     )
     read_only = True
     requires_network = True
     input_schema = {
         "type": "object",
         "properties": {
-            "address": {"type": "string", "description": "The wallet address to trace."},
+            "address": {
+                "type": "string",
+                "description": (
+                    "A wallet address, or several comma-separated addresses on the same "
+                    "chain (e.g. 'addr1,addr2') to batch into one request. Batching is "
+                    "supported for the UTXO chains (BTC/LTC/DOGE/BCH/DASH), max 100."
+                ),
+            },
             "chain": {
                 "type": "string",
                 "description": "Blockchain. Leave 'auto' to detect Ethereum vs Bitcoin from the address.",
@@ -879,19 +903,90 @@ class CryptoTraceSkill(Skill):
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
-        addr = str(args.get("address", "")).strip()
-        if not addr:
+        raw = str(args.get("address", "")).strip()
+        if not raw:
             return "crypto_trace: no address provided."
+        addresses = [a.strip() for a in raw.split(",") if a.strip()]
+        if not addresses:
+            return "crypto_trace: no address provided."
+        if len(addresses) > 100:
+            return "crypto_trace: too many addresses (Blockchair caps a batch at 100)."
+
         chain = str(args.get("chain", "auto")).strip().lower()
-        is_eth = bool(re.fullmatch(r"0x[0-9a-fA-F]{40}", addr))
         if chain in ("", "auto"):
+            is_eth = bool(re.fullmatch(r"0x[0-9a-fA-F]{40}", addresses[0]))
             chain = "ethereum" if is_eth else "bitcoin"
 
-        if chain == "ethereum" and settings.etherscan_api_key:
-            return await self._etherscan(addr, context)
-        return await self._blockchair(addr, chain, context)
+        # Multiple UTXO addresses → one batched Blockchair call (dashboards/addresses,
+        # docs #link_M05). One HTTP request instead of N parallel ones, so it never
+        # trips Blockchair's 5-req/sec soft limit.
+        if len(addresses) > 1 and chain in _CHAINS and chain != "ethereum":
+            return await self._blockchair(addresses, chain, context)
 
-    async def _etherscan(self, addr: str, context: AgentContext) -> str:
+        addr = addresses[0]
+
+        # Ethereum — Etherscan (richest, with key) → Blockchair fallback.
+        if chain == "ethereum":
+            if settings.etherscan_api_key:
+                result = await self._etherscan(addr, context)
+                if result is not None:
+                    return result
+            return await self._blockchair([addr], chain, context)
+
+        # BTC / LTC — keyless mempool explorers first (no Blockchair rate limits) →
+        # Blockchair fallback on any hiccup.
+        if chain in _MEMPOOL_HOSTS:
+            host, symbol = _MEMPOOL_HOSTS[chain]
+            result = await self._mempool(addr, chain, host, symbol, context)
+            if result is not None:
+                return result
+
+        # DOGE / BCH / DASH (and any fallback) — Blockchair.
+        return await self._blockchair([addr], chain, context)
+
+    async def _mempool(
+        self, addr: str, chain: str, host: str, symbol: str, context: AgentContext
+    ) -> str | None:
+        """Read a UTXO address from a mempool.space-style explorer (keyless). Returns
+        None on any non-200 or error so the caller falls back to Blockchair."""
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT, headers={"User-Agent": _UA}) as client:
+                resp = await client.get(f"{host}/address/{urllib.parse.quote(addr)}")
+                if resp.status_code != 200:
+                    logger.info(
+                        "crypto_trace_mempool_fallback",
+                        extra={"status": resp.status_code, "chain": chain, "request_id": context.request_id},
+                    )
+                    return None
+                d = resp.json()
+        except Exception as exc:
+            logger.warning(
+                "crypto_trace_mempool_failed",
+                extra={"error": _exc_msg(exc), "chain": chain, "request_id": context.request_id},
+            )
+            return None
+
+        cs = d.get("chain_stats") or {}
+        ms = d.get("mempool_stats") or {}
+        funded = int(cs.get("funded_txo_sum", 0))
+        spent = int(cs.get("spent_txo_sum", 0))
+        bal = (funded - spent) / 1e8
+        host_name = host.split("//", 1)[-1].split("/", 1)[0]
+        lines = [
+            f"crypto_trace ({symbol}) for {addr}:",
+            f"- Balance: {bal:.8f} {symbol}",
+            f"- Transactions: {cs.get('tx_count', '?')}",
+            f"- Total received: {funded / 1e8:.8f} {symbol}  ·  Total spent: {spent / 1e8:.8f} {symbol}",
+        ]
+        if ms.get("tx_count"):
+            pending = (int(ms.get("funded_txo_sum", 0)) - int(ms.get("spent_txo_sum", 0))) / 1e8
+            lines.append(f"- Unconfirmed (mempool): {ms.get('tx_count')} tx, {pending:+.8f} {symbol}")
+        lines.append(f"- Source: {host_name}")
+        return "\n".join(lines)
+
+    async def _etherscan(self, addr: str, context: AgentContext) -> str | None:
+        """Ethereum via Etherscan. Returns None on network failure so the caller can
+        fall back to Blockchair; returns a message string on a genuine rejection."""
         base = "https://api.etherscan.io/v2/api"
         key = settings.etherscan_api_key
         try:
@@ -905,11 +1000,11 @@ class CryptoTraceSkill(Skill):
                     "address": addr, "page": 1, "offset": 5, "sort": "desc", "apikey": key,
                 })).json()
         except Exception as exc:
-            logger.warning("crypto_trace_failed", extra={"error": _exc_msg(exc), "request_id": context.request_id})
-            return f"crypto_trace: Etherscan lookup failed ({_exc_msg(exc)})."
+            logger.warning("crypto_trace_etherscan_failed", extra={"error": _exc_msg(exc), "request_id": context.request_id})
+            return None
 
         if str(bal.get("status")) == "0" and "Invalid" in str(bal.get("result", "")):
-            return f"crypto_trace: Etherscan rejected the request ({bal.get('result')})."
+            return f"crypto_trace: Etherscan rejected the address ({bal.get('result')})."
         try:
             eth = int(bal.get("result", "0")) / 1e18
         except ValueError:
@@ -928,42 +1023,95 @@ class CryptoTraceSkill(Skill):
             lines.append("- No transactions found (or none returned).")
         return "\n".join(lines)
 
-    async def _blockchair(self, addr: str, chain: str, context: AgentContext) -> str:
+    async def _blockchair(self, addresses: list[str], chain: str, context: AgentContext) -> str:
         slug, decimals, symbol = _CHAINS.get(chain, _CHAINS["bitcoin"])
         params = {}
         if settings.blockchair_api_key:
             params["key"] = settings.blockchair_api_key
+        # Plural endpoint (dashboards/addresses) for a batch; singular otherwise.
+        endpoint = "addresses" if len(addresses) > 1 else "address"
+        joined = ",".join(urllib.parse.quote(a) for a in addresses)
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT, headers={"User-Agent": _UA}) as client:
                 resp = await client.get(
-                    f"https://api.blockchair.com/{slug}/dashboards/address/{urllib.parse.quote(addr)}",
+                    f"https://api.blockchair.com/{slug}/dashboards/{endpoint}/{joined}",
                     params=params,
                 )
                 if resp.status_code == 404:
-                    return f"crypto_trace: Blockchair has no data for {addr} on {chain}."
-                if resp.status_code == 430 or resp.status_code == 429:
-                    return "crypto_trace: Blockchair rate limit reached — try again shortly (or set BLOCKCHAIR_API_KEY)."
+                    return f"crypto_trace: Blockchair has no data for the given {chain} address(es)."
+                if resp.status_code in _BC_RATELIMIT:
+                    return (
+                        "crypto_trace: Blockchair rate limit reached (free tier is 30/min and "
+                        "5/sec). Retry in a moment, batch same-chain addresses into one call, or "
+                        "set a premium BLOCKCHAIR_API_KEY."
+                    )
+                if resp.status_code in _BC_IPBLOCK:
+                    return (
+                        "crypto_trace: Blockchair temporarily blocked this IP for exceeding its "
+                        "limits. Wait ~a minute and retry, or use a premium BLOCKCHAIR_API_KEY."
+                    )
                 resp.raise_for_status()
                 payload = resp.json()
         except Exception as exc:
             logger.warning("crypto_trace_failed", extra={"error": _exc_msg(exc), "request_id": context.request_id})
             return f"crypto_trace: Blockchair lookup failed ({_exc_msg(exc)})."
 
-        data = (payload.get("data") or {}).get(addr) or (payload.get("data") or {}).get(addr.lower())
-        if not data:
+        data = payload.get("data") or {}
+
+        # ── Batch (plural) response: data.set aggregate + data.addresses{addr} ──
+        if len(addresses) > 1:
+            addr_map = data.get("addresses") or {}
+            s = data.get("set") or {}
+            try:
+                total = int(s.get("balance", 0)) / (10 ** decimals)
+            except (ValueError, TypeError):
+                total = 0.0
+            lines = [
+                f"Blockchair batch trace — {s.get('address_count', len(addresses))} {symbol} address(es):",
+                f"- Combined balance: {total:.8f} {symbol}"
+                + (f"  (~${s.get('balance_usd'):,.2f})" if s.get("balance_usd") else ""),
+                f"- Combined transactions: {s.get('transaction_count', '?')}",
+                "",
+            ]
+            for a in addresses:
+                rec = addr_map.get(a) or addr_map.get(a.lower()) or {}
+                if not rec:
+                    lines.append(f"- {a}\n    (no record found)")
+                    continue
+                try:
+                    b = int(rec.get("balance", 0)) / (10 ** decimals)
+                except (ValueError, TypeError):
+                    b = 0.0
+                recv = int(rec.get("received", 0)) / (10 ** decimals)
+                lines.append(f"- {a}\n    {b:.8f} {symbol}  ·  received {recv:.8f} {symbol}")
+            return "\n".join(lines)
+
+        # ── Single (singular) response: data[addr].address ──
+        addr = addresses[0]
+        rec = data.get(addr) or data.get(addr.lower())
+        if not rec:
             return f"crypto_trace: {addr} not found on {chain} (Blockchair returned no address record)."
-        a = data.get("address") or {}
+        a = rec.get("address") or {}
+
+        def _amt(raw) -> str:
+            """Blockchair returns amounts in base units (sat/wei); render human-readable."""
+            try:
+                return f"{int(raw) / (10 ** decimals):.8f} {symbol}"
+            except (ValueError, TypeError):
+                return "?"
+
         try:
             bal = int(a.get("balance", 0)) / (10 ** decimals)
         except (ValueError, TypeError):
             bal = 0.0
+        recv = a.get("received", a.get("received_approximate"))
+        spent = a.get("spent", a.get("spent_approximate"))
         return (
             f"Blockchair trace for {addr} ({chain}):\n"
             f"- Balance: {bal:.8f} {symbol}"
             f"{'  (~$' + format(a.get('balance_usd', 0), ',.2f') + ')' if a.get('balance_usd') else ''}\n"
             f"- Transactions: {a.get('transaction_count', a.get('call_count', '?'))}\n"
-            f"- Received: {a.get('received') or a.get('received_approximate') or '?'}  ·  "
-            f"Spent: {a.get('spent') or a.get('spent_approximate') or '?'}\n"
+            f"- Received: {_amt(recv)}  ·  Spent: {_amt(spent)}\n"
             f"- First seen: {a.get('first_seen_receiving') or '?'}  ·  Last: {a.get('last_seen_spending') or a.get('last_seen_receiving') or '?'}"
         )
 
