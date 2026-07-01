@@ -146,6 +146,15 @@ export default function ChatMain({ config, onSelectSession }: Props) {
     regenerate?: boolean    // re-run without adding a new user message
   }
 
+  // Always-current mirrors of state and send, so the row action handlers
+  // (delete/regenerate/edit) can be given STABLE identities — they read the
+  // latest values through these refs instead of closing over `state`/`send`,
+  // which change every streamed chunk. Stable handlers are what keep the
+  // memoized message rows from re-rendering during streaming.
+  const stateRef = useRef(state)
+  stateRef.current = state
+  const sendRef = useRef<((text: string, opts?: SendOpts) => Promise<void>) | null>(null)
+
   const send = useCallback(async (text: string, opts: SendOpts = {}) => {
     if (state.isStreaming) return
 
@@ -172,6 +181,28 @@ export default function ChatMain({ config, onSelectSession }: Props) {
     const ctrl = new AbortController()
     abortRef.current = ctrl
     forceUpdate(n => n + 1)
+
+    // ── Chunk coalescing ─────────────────────────────────────────────────────
+    // Anthropic streams many small text deltas per second. Dispatching each one
+    // re-runs the reducer over the whole message list and re-renders every
+    // context consumer — the dominant streaming cost. Instead we accumulate
+    // deltas in a buffer and flush at most once per animation frame (~60/s cap,
+    // usually far fewer), collapsing N dispatches into one. This is invisible to
+    // the user: the per-message typewriter rAF still interpolates the reveal
+    // character-by-character from whatever content has landed.
+    let chunkBuf = ''
+    let flushHandle: number | null = null
+    const flushChunks = () => {
+      flushHandle = null
+      if (!chunkBuf) return
+      const chunk = chunkBuf
+      chunkBuf = ''
+      dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk } })
+    }
+    const finalizeFlush = () => {
+      if (flushHandle != null) { cancelAnimationFrame(flushHandle); flushHandle = null }
+      flushChunks()
+    }
 
     // ── Watchdog ────────────────────────────────────────────────────────────
     // Real status, not looped filler — and a hard stop if the backend goes
@@ -216,7 +247,8 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Thinking' } })
         } else if (event.type === 'chunk') {
           gotContent = true
-          dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk: event.data as string } })
+          chunkBuf += event.data as string
+          if (flushHandle == null) flushHandle = requestAnimationFrame(flushChunks)
         } else if (event.type === 'tool') {
           gotTool = true
           dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool: event.data as import('../lib/types').ToolBadge } })
@@ -226,6 +258,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         } else if (event.type === 'file') {
           dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
         } else if (event.type === 'done') {
+          finalizeFlush()  // drain any buffered text before finalizing
           settled = true
           dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: event.session_id } })
           fetchSessions(config).then(s => dispatch({ type: 'SET_SESSIONS', payload: s })).catch(() => {})
@@ -248,6 +281,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           }
           setTimeout(pollTitle, 1500)
         } else if (event.type === 'error') {
+          finalizeFlush()
           settled = true
           dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: event.data as string } })
         }
@@ -256,10 +290,12 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       // crashed mid-turn), finalize anyway so the message never stays stuck
       // "thinking" with no way out. Keep whatever text streamed.
       if (!settled) {
+        finalizeFlush()
         settled = true
         dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: state.activeSessionId ?? 0 } })
       }
     } catch (err: unknown) {
+      finalizeFlush()  // keep whatever text streamed before the failure/abort
       settled = true
       if (timedOut) {
         dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: "SPEDA isn't responding. Check that the backend is running, then try again." } })
@@ -270,11 +306,17 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: err.message } })
       }
     } finally {
+      finalizeFlush()  // safety: never leave buffered text undelivered
       clearInterval(watchdog)
       abortRef.current = null
       forceUpdate(n => n + 1)
     }
   }, [state.activeSessionId, state.isStreaming, config, settings.model, settings.systemPrompt, dispatch])
+
+  // Mirror the latest `send` into a ref so the stable row handlers below can call
+  // it without listing it as a dependency (which would make them change identity
+  // every chunk and defeat the memoized message rows).
+  sendRef.current = send
 
   const stop = useCallback(() => { abortRef.current?.abort() }, [])
 
@@ -285,26 +327,29 @@ export default function ChatMain({ config, onSelectSession }: Props) {
   // Regenerate: keep everything up to and including the user turn, drop the old
   // answer, and re-run on that clean history (keepMessages = the answer's index).
   // The backend truncates its DB rows to match, so the model sees the prompt
-  // fresh instead of being handed its previous reply.
+  // fresh instead of being handed its previous reply. Reads live state via
+  // stateRef so this handler keeps a STABLE identity across chunks.
   const handleRegenerate = useCallback((assistantId: string) => {
-    if (state.isStreaming) return
-    const idx = state.messages.findIndex(m => m.id === assistantId)
+    const st = stateRef.current
+    if (st.isStreaming) return
+    const idx = st.messages.findIndex(m => m.id === assistantId)
     if (idx <= 0) return
-    const userMsg = state.messages[idx - 1]
+    const userMsg = st.messages[idx - 1]
     if (!userMsg || userMsg.role !== 'user') return
     dispatch({ type: 'TRUNCATE_FROM', payload: { id: assistantId } })
-    send('', { keepMessages: idx, regenerate: true })
-  }, [state.messages, state.isStreaming, dispatch, send])
+    sendRef.current?.('', { keepMessages: idx, regenerate: true })
+  }, [dispatch])
 
   // Edit & resend: drop the old user turn + its answer (keepMessages = the
   // user turn's index), then send the edited prompt as a brand-new turn.
   const handleEditAndResend = useCallback((userId: string, newContent: string) => {
-    if (state.isStreaming) return
-    const idx = state.messages.findIndex(m => m.id === userId)
+    const st = stateRef.current
+    if (st.isStreaming) return
+    const idx = st.messages.findIndex(m => m.id === userId)
     if (idx < 0) return
     dispatch({ type: 'TRUNCATE_FROM', payload: { id: userId } })
-    send(newContent, { keepMessages: idx })
-  }, [state.messages, state.isStreaming, dispatch, send])
+    sendRef.current?.(newContent, { keepMessages: idx })
+  }, [dispatch])
 
   const isEmpty = state.messages.length === 0
 
