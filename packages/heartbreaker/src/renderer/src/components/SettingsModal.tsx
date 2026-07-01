@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
-import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
+import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 
@@ -112,6 +112,35 @@ export default function SettingsModal({ config, onClose }: Props) {
     await googleDisconnect(config)
     setGoogleConnected(false)
     setGoogleMsg('')
+    loadConns()
+  }
+
+  const [notionMsg, setNotionMsg] = useState('')
+  const [notionConnected, setNotionConnected] = useState(false)
+  useEffect(() => { notionStatus(config).then(setNotionConnected) }, [config])
+
+  const signInNotion = async () => {
+    setNotionMsg('Opening Notion sign-in…')
+    const r = await notionLoginUrl(config)
+    if (r.auth_url) {
+      window.api?.openExternal ? window.api.openExternal(r.auth_url) : window.open(r.auth_url, '_blank')
+      setNotionMsg('Complete sign-in in your browser, then come back — it connects automatically.')
+      let n = 0
+      const poll = setInterval(async () => {
+        n++
+        await loadConns()
+        if (await notionStatus(config)) { setNotionConnected(true); setNotionMsg(''); clearInterval(poll) }
+        else if (n > 20) clearInterval(poll)
+      }, 3000)
+    } else {
+      setNotionMsg(r.error || 'Could not start Notion sign-in.')
+    }
+  }
+
+  const disconnectNotion = async () => {
+    await notionDisconnect(config)
+    setNotionConnected(false)
+    setNotionMsg('')
     loadConns()
   }
 
@@ -398,6 +427,62 @@ export default function SettingsModal({ config, onClose }: Props) {
                   {googleMsg && (
                     <p style={{ marginTop: '0.6rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
                       {googleMsg}
+                    </p>
+                  )}
+                </div>
+
+                {/* Notion one-click auth */}
+                <div style={{
+                  padding: '1.2rem',
+                  borderRadius: '0.6rem',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-card)',
+                  marginBottom: '1rem',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <h4 style={{ margin: '0 0 0.3rem', fontSize: '0.85rem', color: 'var(--text-primary)' }}>Notion Workspace</h4>
+                      <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.4 }}>
+                        Connect your Notion workspace to enable powerful search, fetching, and page creation tools for your agents.
+                      </p>
+                    </div>
+                    {notionConnected ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--hb-green)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--hb-green)' }}></span>
+                          Connected
+                        </span>
+                        <button
+                          onClick={disconnectNotion}
+                          style={{
+                            padding: '0.45rem 0.8rem', border: '1px solid var(--border)',
+                            background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer',
+                            fontSize: '0.78rem', fontWeight: 500, borderRadius: '0.4rem',
+                          }}
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={signInNotion}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.5rem',
+                          padding: '0.5rem 0.9rem', border: '1px solid var(--border)',
+                          background: '#fff', color: '#1f2937', cursor: 'pointer',
+                          fontSize: '0.82rem', fontWeight: 600, borderRadius: '0.4rem',
+                        }}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                          <path d="M4.45877 4.54133L19.5397 5.25732V6.33128L18.8252 6.47466C18.2526 6.54632 17.8938 6.76132 17.8938 7.33465V18.1532C17.8938 18.5832 18.2526 18.7982 18.8252 18.8698L19.5397 19.0132V20.0872L12.3924 19.3712V18.2972L13.107 18.1539C13.6796 18.0822 14.0384 17.8672 14.0384 17.2939V8.83863L7.75338 18.6545H6.53612V8.04996C6.53612 7.47664 6.17737 7.26164 5.6047 7.18997L4.89018 7.04664V5.97268L12.0374 6.68867V7.76262L11.3229 7.90595C10.7503 7.97762 10.3915 8.19262 10.3915 8.76595V16.3626L15.932 7.90595C16.1466 7.61929 16.4328 7.40429 16.7196 7.33262L17.2917 7.18929L17.1486 6.11532L4.45877 4.54133Z" fill="currentColor"/>
+                        </svg>
+                        Sign in with Notion
+                      </button>
+                    )}
+                  </div>
+                  {notionMsg && (
+                    <p style={{ marginTop: '0.6rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                      {notionMsg}
                     </p>
                   )}
                 </div>

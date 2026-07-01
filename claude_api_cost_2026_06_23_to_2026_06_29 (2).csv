@@ -1,0 +1,11 @@
+usage_date_utc,model,workspace,api_key,usage_type,context_window,token_type,cost_usd,list_price_usd,cost_type,inference_geo,speed
+2026-06-29,Claude Haiku 4.5,Default,optimus,message,≤ 200k,input_no_cache,0.02,0.02,token,not_available,
+2026-06-29,Claude Haiku 4.5,Default,optimus,message,≤ 200k,input_cache_read,0.13,0.13,token,not_available,
+2026-06-29,Claude Haiku 4.5,Default,optimus,message,≤ 200k,input_cache_write_5m,0.07,0.07,token,not_available,
+2026-06-29,Claude Haiku 4.5,Default,optimus,message,≤ 200k,input_cache_write_1h,0.12,0.12,token,not_available,
+2026-06-29,Claude Haiku 4.5,Default,optimus,message,≤ 200k,output,0.07,0.07,token,not_available,
+2026-06-29,Claude Sonnet 4.6,Default,optimus,message,≤ 200k,input_cache_read,0.34,0.34,token,global,
+2026-06-29,Claude Sonnet 4.6,Default,optimus,message,≤ 200k,input_cache_write_1h,0.48,0.48,token,global,
+2026-06-29,Claude Sonnet 4.6,Default,optimus,message,≤ 200k,input_cache_write_5m,0.27,0.27,token,global,
+2026-06-29,Claude Sonnet 4.6,Default,optimus,message,≤ 200k,input_no_cache,0.00,0.00,token,global,
+2026-06-29,Claude Sonnet 4.6,Default,optimus,message,≤ 200k,output,0.10,0.10,token,global,

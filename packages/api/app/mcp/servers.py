@@ -80,34 +80,27 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
 
     # ── Tier 2: HTTP servers (auth via headers) ──────────────────────────────
 
-    # Notion — official stdio package (integration token auth).
-    # The hosted mcp.notion.com/mcp requires full OAuth; the npm package
-    # works with a standard Notion integration token (starts with ntn_ or secret_).
-    # Create an integration at https://www.notion.so/profile/integrations
-    # and connect it to the pages/databases you want SPEDA to access.
-    if settings.notion_api_key:
-        # @notionhq/notion-mcp-server passes OPENAPI_MCP_HEADERS straight to the
-        # Notion REST API, which REQUIRES a Notion-Version header on every call.
-        # Sending only Authorization makes Notion reject every request with a
-        # "Notion-Version header should be included" 400 — pages can't be
-        # listed/searched even though auth itself is valid. Pin the current
-        # stable API version alongside the token.
-        import json as _json
-
-        notion_headers = _json.dumps({
-            "Authorization": f"Bearer {settings.notion_api_key}",
-            "Notion-Version": settings.notion_version,
-        })
+    # Notion — official hosted MCP server (mcp.notion.com).
+    # Uses standard Notion OAuth access tokens (from the UI sign-in flow).
+    from app.core.runtime_state import get_notion_access_token
+    notion_access = get_notion_access_token()
+    notion_ready = all([
+        settings.notion_client_id,
+        settings.notion_client_secret,
+        notion_access,
+    ])
+    
+    if notion_ready:
         servers.append(
             MCPClient(
                 server_name="notion",
-                transport="stdio",
-                command=["npx", "-y", "@notionhq/notion-mcp-server"],
-                env={"OPENAPI_MCP_HEADERS": notion_headers},
+                transport="http",
+                url="https://mcp.notion.com/mcp",
+                headers={"Authorization": f"Bearer {notion_access}"},
             )
         )
     else:
-        logger.warning("mcp_skip", extra={"server": "notion", "reason": "NOTION_API_KEY not set"})
+        logger.warning("mcp_skip", extra={"server": "notion", "reason": "NOTION_CLIENT_ID, SECRET, or access token not set (needs OAuth)"})
 
     if settings.alpha_vantage_api_key:
         servers.append(

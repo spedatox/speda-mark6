@@ -191,3 +191,87 @@ async def google_callback(request: Request, code: str = "", error: str = ""):
         logger.error("google_live_connect_failed", extra={"error": str(e)})
         # Token is saved; a restart will pick it up even if live connect failed.
         return HTMLResponse(page("Google signed in (restart to activate).", True))
+
+
+# ── Notion one-click sign-in ────────────────────────────────────────────────
+
+@router.get("/connections/notion/login")
+async def notion_login():
+    """Return the Notion consent URL for the 'Sign in with Notion' button."""
+    if not settings.notion_client_id or not settings.notion_client_secret:
+        return {
+            "error": "Notion OAuth client not configured. Set NOTION_CLIENT_ID and "
+                     "NOTION_CLIENT_SECRET in the backend .env (one-time, in Notion "
+                     "My Integrations → Public Integration).",
+        }
+    params = {
+        "client_id": settings.notion_client_id,
+        "redirect_uri": settings.notion_oauth_redirect,
+        "response_type": "code",
+        "owner": "user",
+    }
+    return {"auth_url": "https://api.notion.com/v1/oauth/authorize?" + urllib.parse.urlencode(params)}
+
+
+@router.get("/connections/notion/status")
+async def notion_status():
+    """Whether Notion is connected (an access token is stored)."""
+    from app.core.runtime_state import get_notion_access_token
+    return {"connected": bool(get_notion_access_token())}
+
+
+@router.post("/connections/notion/disconnect")
+async def notion_disconnect():
+    from app.core.runtime_state import set_notion_access_token
+    set_notion_access_token("")
+    logger.info("notion_disconnected")
+    return {"connected": False}
+
+
+@router.get("/oauth/notion/callback", response_class=HTMLResponse)
+async def notion_callback(request: Request, code: str = "", error: str = ""):
+    def page(msg: str, ok: bool) -> str:
+        color = "#4fa377" if ok else "#c84a3a"
+        return f"""<!doctype html><html><body style="background:#06121a;color:#cadbe2;
+        font-family:system-ui;display:flex;align-items:center;justify-content:center;
+        height:100vh;margin:0"><div style="text-align:center">
+        <div style="font-size:2rem;color:{color}">{'✓' if ok else '✕'}</div>
+        <h2>{msg}</h2><p style="color:#7a96a1">You can close this tab and return to SPEDA.</p>
+        </div></body></html>"""
+
+    if error or not code:
+        return HTMLResponse(page(f"Notion sign-in failed: {error or 'no code'}", False), status_code=400)
+
+    try:
+        import base64
+        creds = f"{settings.notion_client_id}:{settings.notion_client_secret}"
+        encoded_creds = base64.b64encode(creds.encode("utf-8")).decode("utf-8")
+        
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://api.notion.com/v1/oauth/token",
+                headers={
+                    "Authorization": f"Basic {encoded_creds}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": settings.notion_oauth_redirect,
+                },
+                timeout=15.0,
+            )
+            resp.raise_for_status()
+            tok = resp.json()
+    except Exception as e:
+        logger.error("notion_oauth_exchange_failed", extra={"error": str(e)})
+        return HTMLResponse(page(f"Token exchange failed: {e}", False), status_code=400)
+
+    access = tok.get("access_token")
+    if not access:
+        return HTMLResponse(page("Notion returned no access token (try again).", False), status_code=400)
+
+    from app.core.runtime_state import set_notion_access_token
+    set_notion_access_token(access)
+
+    return HTMLResponse(page("Notion connected! (Restart SPEDA to activate new tools).", True))

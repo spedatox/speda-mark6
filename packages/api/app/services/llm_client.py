@@ -14,9 +14,14 @@ callers already consume (.content blocks, .stop_reason, .usage). Anthropic
 calls pass through the existing AnthropicClient untouched, including prompt
 caching — zero degradation on the primary path.
 
-OpenAI, Gemini and Ollama all share one adapter: OpenAI's own API, Gemini's
-official OpenAI-compatibility endpoint, and Ollama's /v1 endpoint speak the
-same chat-completions dialect, so a single translation layer covers all three.
+OpenAI, Gemini, z.ai (GLM), DeepSeek and Ollama all share one adapter: OpenAI's
+own API, Gemini's official OpenAI-compatibility endpoint, z.ai's paas/v4
+endpoint, DeepSeek's api.deepseek.com endpoint, and Ollama's /v1 endpoint all
+speak the same chat-completions dialect, so a single translation layer covers
+them. GLM and DeepSeek-V4 both default to "thinking" mode on and both disable it
+via the same extra_body toggle; DeepSeek additionally forces non-thinking
+whenever tools are present, because V4 thinking mode is incompatible with the
+tool loop (see _to_openai_params).
 
 Fallback: LLM_FALLBACK_CHAIN in .env lists "provider:model" refs tried in
 order when a provider call fails (auth, rate limit, connection, 5xx). For
@@ -42,6 +47,14 @@ _OPENAI_COMPAT = {
     "gemini": lambda: {
         "api_key": settings.gemini_api_key,
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+    },
+    "zai": lambda: {
+        "api_key": settings.zai_api_key,
+        "base_url": "https://api.z.ai/api/paas/v4/",
+    },
+    "deepseek": lambda: {
+        "api_key": settings.deepseek_api_key,
+        "base_url": "https://api.deepseek.com",
     },
     "ollama": lambda: {"api_key": "ollama", "base_url": settings.ollama_base_url},
 }
@@ -246,21 +259,83 @@ _CATALOG = {
             "tags": ["fast"],
         },
     ],
+    "zai": [
+        {
+            "id": "zai:glm-5.2",
+            "name": "GLM-5.2",
+            "description": "Zhipu flagship — long-horizon agentic coding, 256K context (glm-5.2[1m] for 1M)",
+            "tags": ["powerful", "default"],
+        },
+        {
+            "id": "zai:glm-4.6",
+            "name": "GLM-4.6",
+            "description": "Prior flagship — strong agentic coding & tool use, 200K context",
+            "tags": ["powerful"],
+        },
+        {
+            "id": "zai:glm-4.5-air",
+            "name": "GLM-4.5 Air",
+            "description": "Lightweight and inexpensive for everyday tasks",
+            "tags": ["fast"],
+        },
+    ],
+    "deepseek": [
+        {
+            "id": "deepseek:deepseek-v4-pro",
+            "name": "DeepSeek V4 Pro",
+            "description": "DeepSeek flagship — 1M context, agentic tool use (non-thinking for tools)",
+            "tags": ["powerful", "default"],
+        },
+        {
+            "id": "deepseek:deepseek-v4-flash",
+            "name": "DeepSeek V4 Flash",
+            "description": "Fast and very inexpensive — 1M context, aggressive context caching",
+            "tags": ["fast"],
+        },
+    ],
 }
 
 
 async def available_models() -> list[dict]:
     """Selectable models across all CONFIGURED providers, for the UI's model
-    picker. A provider appears only when usable: Anthropic/OpenAI/Gemini when
-    their API key is set, Ollama when the local daemon answers — its installed
-    models are listed live from /api/tags (dev/testing only)."""
+    picker. A provider appears only when usable: Anthropic/OpenAI/Gemini/z.ai/
+    DeepSeek when their API key is set, Ollama when the local daemon answers —
+    its installed models are listed live from /api/tags (dev/testing only)."""
     out: list[dict] = []
     if settings.anthropic_api_key not in ("", "not-set"):
         out += [{**m, "provider": "anthropic"} for m in _CATALOG["anthropic"]]
     if settings.openai_api_key:
-        out += [{**m, "provider": "openai"} for m in _CATALOG["openai"]]
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            models_res = await client.models.list()
+            openai_models = []
+            for m in models_res.data:
+                mid = m.id
+                # Filter for chat completion models (gpt-*, o1-*, o3-*, o4-*, etc.)
+                is_chat = mid.startswith(("gpt-", "o1-", "o3-", "o4-")) or mid in ("gpt-4", "gpt-3.5-turbo")
+                if is_chat and not any(x in mid for x in ("-moderation-", "-embedding-", "-realtime-", "-audio-")):
+                    tag = "powerful" if ("gpt-4" in mid or "o1" in mid or "pro" in mid) else "fast"
+                    openai_models.append({
+                        "id": f"openai:{mid}",
+                        "name": mid.replace("-", " ").title().replace("Gpt", "GPT"),
+                        "description": f"OpenAI chat model: {mid}",
+                        "tags": [tag],
+                        "provider": "openai"
+                    })
+            if openai_models:
+                out += sorted(openai_models, key=lambda x: x["name"])
+            else:
+                out += [{**m, "provider": "openai"} for m in _CATALOG["openai"]]
+        except Exception as exc:
+            logger.warning("failed_to_fetch_openai_models", extra={"error": str(exc)})
+            out += [{**m, "provider": "openai"} for m in _CATALOG["openai"]]
     if settings.gemini_api_key:
         out += [{**m, "provider": "gemini"} for m in _CATALOG["gemini"]]
+    if settings.zai_api_key:
+        out += [{**m, "provider": "zai"} for m in _CATALOG["zai"]]
+    if settings.deepseek_api_key:
+        out += [{**m, "provider": "deepseek"} for m in _CATALOG["deepseek"]]
 
     # Ollama daemon not running is the normal case outside dev — just omit it.
     base = settings.ollama_base_url.rstrip("/").removesuffix("/v1")
@@ -338,6 +413,38 @@ def _to_openai_params(provider: str, model: str, kwargs: dict) -> dict:
     if reasoning_effort and provider in ("openai", "gemini"):
         params["reasoning_effort"] = reasoning_effort
 
+    # z.ai GLM thinking control. GLM defaults thinking ON, so a short background
+    # task (title generation caps output at ~512 tokens) burns the whole budget
+    # on hidden reasoning and returns EMPTY visible content — the same failure
+    # mode the hint above fixes for GPT-5/Gemini. Every GLM generation (4.x and
+    # 5.2) accepts the explicit `thinking:{type}` toggle, so we route through it
+    # rather than `reasoning_effort`: GLM-4.x has no reasoning_effort param at
+    # all, and GLM-5.2's only accepts "high"/"max" (it would reject "minimal").
+    # Map a low/minimal effort hint to disabled thinking; leave it default
+    # otherwise so interactive chat keeps full reasoning quality. extra_body is
+    # how the OpenAI SDK forwards a non-OpenAI request field.
+    if provider == "zai" and reasoning_effort in ("minimal", "low", "none"):
+        params["extra_body"] = {"thinking": {"type": "disabled"}}
+
+    # DeepSeek-V4 thinking control. V4 enables thinking BY DEFAULT (effort
+    # "high", auto-escalating to "max" for agent requests), and thinking mode is
+    # fundamentally incompatible with our agentic tool loop: V4 rejects
+    # tool_choice in thinking mode and makes `reasoning_content` a REQUIRED
+    # protocol field once tool_use enters the history — which our multi-turn
+    # loop does not round-trip (we intentionally drop chain-of-thought). So
+    # whenever tools are in play — i.e. the entire main loop — force non-thinking
+    # via the same extra_body toggle GLM uses; there tool calls, tool_choice and
+    # JSON all work. Also force it for a low/minimal background hint so a short
+    # task isn't starved by hidden reasoning. Only a genuine high/max hint on a
+    # TOOL-FREE call (e.g. a pure reasoning sub-task) keeps thinking on; V4's
+    # reasoning_effort accepts only "high"/"max", so a lesser value is never
+    # forwarded as one.
+    if provider == "deepseek":
+        if tools or reasoning_effort in ("minimal", "low", "none"):
+            params["extra_body"] = {"thinking": {"type": "disabled"}}
+        elif reasoning_effort in ("high", "max"):
+            params["reasoning_effort"] = reasoning_effort
+
     return params
 
 
@@ -403,11 +510,16 @@ def _translate_message(message: dict) -> list[dict]:
 
     out: list[dict] = []
     if role == "assistant":
-        msg: dict = {"role": "assistant", "content": "\n".join(assistant_text) or None}
+        text = "\n".join(assistant_text)
         if tool_calls:
-            msg["tool_calls"] = tool_calls
-        if msg["content"] is not None or tool_calls:
-            out.append(msg)
+            # Assistant tool-call message. `content` must be a STRING here, never
+            # null: z.ai GLM rejects `content: null` with error 1214 ("messages
+            # parameter is illegal"), which breaks the agent loop the moment any
+            # tool is used. An empty string is valid for every OpenAI-compatible
+            # provider when tool_calls are present, so normalize to "" here.
+            out.append({"role": "assistant", "content": text, "tool_calls": tool_calls})
+        elif text:
+            out.append({"role": "assistant", "content": text})
     else:
         out.extend(tool_msgs)
         if user_parts:
@@ -441,10 +553,15 @@ def _usage_from(u) -> Usage:
     if u is None:
         return Usage()
     details = getattr(u, "prompt_tokens_details", None)
+    # OpenAI/Gemini report cache reads under prompt_tokens_details.cached_tokens;
+    # DeepSeek (whose cache is a headline cost feature) reports them directly on
+    # the usage object as prompt_cache_hit_tokens. Prefer whichever is present.
+    cached = getattr(details, "cached_tokens", 0) or 0
+    cached = cached or (getattr(u, "prompt_cache_hit_tokens", 0) or 0)
     return Usage(
         input_tokens=getattr(u, "prompt_tokens", 0) or 0,
         output_tokens=getattr(u, "completion_tokens", 0) or 0,
-        cache_read_input_tokens=getattr(details, "cached_tokens", 0) or 0,
+        cache_read_input_tokens=cached,
     )
 
 

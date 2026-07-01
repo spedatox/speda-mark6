@@ -22,12 +22,12 @@ export const DEFAULT_AGENT = 'speda'
 export const BRANDS: Record<string, Brand> = {
   speda: {
     agentId: 'speda', name: 'SPEDA', modelNumber: 'Mark VI', userName: 'Ahmet Erol',
-    tagline: 'Specialized Personal Executive Digital Assistant',
+    tagline: 'Main Assistant',
     avatarInitial: 'S', accent: '#36abca',
   },
   ultron: {
     agentId: 'ultron', name: 'Ultron', modelNumber: 'Mark III', userName: 'Ahmet Erol',
-    tagline: 'Unified Lecture Tracker Reminder & Organizer Network',
+    tagline: 'Academy and Work Operations',
     avatarInitial: 'U', accent: '#8a93a6',
   },
   centurion: {

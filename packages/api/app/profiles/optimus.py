@@ -1,4 +1,4 @@
-from app.profiles.base import AgentProfile
+from app.profiles.base import AgentProfile, DocTheme
 from app.prompts.loader import assemble, build_skills_manifest
 
 PROMPT_SECTIONS = [
@@ -25,25 +25,19 @@ class OptimusProfile(AgentProfile):
     agent_id = "optimus"
     name = "Optimus"
     domain = "systems, code & infrastructure"
+    doc_theme = DocTheme(accent="#2eb6ac")   # signature teal — matches the UI brand
 
-    # Engineering toolkit: code hosting + research + sandbox execution +
-    # document generation + watchers. Optimus is the one specialist that gets
-    # sandbox access (run_command / deliver_file) — it's the engineering agent.
-    tool_allowlist = [
-        "github",                                # repo / code / PR review
-        "tavily", "exa", "fetch",                # technical research
-        "run_command", "deliver_file",            # sandbox execution
-        "generate_document",                      # design docs, runbooks
-        "search_history",                         # recall prior engineering context
-        "manage_automations",                     # CI/deploy watchers
-        "Task",                                   # multi-source engineering research
-    ]
+    # Unrestricted — all tools available (same as SPEDA). Previously a narrow
+    # allowlist; broadened so every agent can use every registered capability.
+    tool_allowlist = None
 
     sonnet_model = "claude-sonnet-4-6"
     haiku_model = "claude-haiku-4-5-20251001"
     background_models = {
         "openai": "openai:gpt-5-mini",
         "gemini": "gemini:gemini-2.5-flash",
+        "zai": "zai:glm-4.5-air",
+        "deepseek": "deepseek:deepseek-v4-flash",
     }
 
     def build_system_prompt(self, context_vars: dict) -> str:

@@ -96,13 +96,17 @@ async def get_messages(
         return out
 
     def extract_meta(content) -> dict:
-        """Pull the SPEDA display-only meta block (tools + files) so the tool
-        disclosure and download cards survive a reload."""
+        """Pull the SPEDA display-only meta block so the tool disclosure,
+        download cards (assistant) and upload chips (user) survive a reload."""
         if not isinstance(content, list):
             return {}
         for block in content:
             if isinstance(block, dict) and block.get('type') == '_speda_meta':
-                return {'tools': block.get('tools', []), 'files': block.get('files', [])}
+                return {
+                    'tools': block.get('tools', []),
+                    'files': block.get('files', []),
+                    'uploads': block.get('uploads', []),
+                }
         return {}
 
     out = []
@@ -110,10 +114,17 @@ async def get_messages(
         if m.role not in ('user', 'assistant'):
             continue
         meta = extract_meta(m.content)
+        # For a user turn with document uploads, the real text blocks hold the
+        # extracted file contents; the bubble must show only the user's own
+        # message, which was stashed in the meta block at save time.
+        if m.role == 'user' and meta.get('uploads'):
+            content_text = meta.get('text', '')
+        else:
+            content_text = extract_text(m.content)
         row = {
             'id': str(m.id),
             'role': m.role,
-            'content': extract_text(m.content),
+            'content': content_text,
             'tools': meta.get('tools', []),
             'isStreaming': False,
             'isError': False,
@@ -122,6 +133,8 @@ async def get_messages(
             row['images'] = imgs
         if meta.get('files'):
             row['files'] = meta['files']
+        if meta.get('uploads'):
+            row['uploads'] = meta['uploads']
         out.append(row)
     return out
 
@@ -222,17 +235,37 @@ async def _run_chat(
         # which already ends with the user turn being regenerated.
         history = await session_manager.load_history(db, session.id)
     else:
-        # Build the user turn — plain text, or a content-block array when images are attached.
-        if body.attachments:
-            user_content: list | str = [
+        # Build the user turn. Images keep their native vision blocks (every
+        # provider's translation layer supports them). Non-image files are
+        # extracted to plain text server-side and embedded as text blocks, so a
+        # PDF/DOCX/XLSX/CSV reaches the model IDENTICALLY on every provider —
+        # including open-weight and local ones that have no document support.
+        if body.attachments or body.documents:
+            from app.services.attachments import extract_text
+
+            blocks: list = [
                 {
                     "type": "image",
                     "source": {"type": "base64", "media_type": att.media_type, "data": att.data},
                 }
                 for att in body.attachments
             ]
+            for doc in body.documents:
+                blocks.append({"type": "text", "text": extract_text(doc.name, doc.media_type, doc.data)})
             if body.message:
-                user_content.append({"type": "text", "text": body.message})
+                blocks.append({"type": "text", "text": body.message})
+            # Display-only meta: upload chips on the user bubble survive a reload.
+            # Stripped from the history sent to the model by SessionManager._clean.
+            if body.documents:
+                # `text` carries the user's own message so the reloaded bubble
+                # shows it — NOT the wall of extracted document text (which lives
+                # in real text blocks the model reads but the UI must not echo).
+                blocks.append({
+                    "type": "_speda_meta",
+                    "uploads": [{"name": d.name, "size": d.size or 0} for d in body.documents],
+                    "text": body.message or "",
+                })
+            user_content: list | str = blocks
         else:
             user_content = body.message
 
@@ -258,6 +291,11 @@ async def _run_chat(
         db=db,
         timezone="UTC",
     )
+
+    # Pre-populate active_servers from the session's loaded-toolset memory so
+    # tools loaded via use_toolset on a prior turn stay in the tool array — no
+    # repeated use_toolset calls, no cache-busting rewrites.
+    context.extra["active_servers"] = session_manager.get_loaded_servers(session.id)
 
     collected_chunks: list[str] = []
     collected_tools: list[dict] = []   # {id, name, input, result?}

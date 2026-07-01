@@ -1,4 +1,4 @@
-import type { AppConfig, SSEEvent, ModelInfo, ImageBlock } from './types'
+import type { AppConfig, SSEEvent, ModelInfo, ImageBlock, DocBlock } from './types'
 
 /** Auth header for every backend call — the service X-API-Key. */
 export function authHeaders(
@@ -49,10 +49,32 @@ export async function fileToImageBlock(file: File): Promise<ImageBlock> {
   return { media_type, data: out.slice(comma + 1) }
 }
 
+/**
+ * Read any file as a base64 document block for upload. No client-side parsing
+ * or downscaling — the backend extracts the text (PDF/DOCX/XLSX/CSV/TXT/…) and
+ * embeds it in the turn, so this works for every provider.
+ */
+export async function fileToDocBlock(file: File): Promise<DocBlock> {
+  const dataUrl: string = await new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result as string)
+    r.onerror = reject
+    r.readAsDataURL(file)
+  })
+  const comma = dataUrl.indexOf(',')
+  return {
+    name: file.name || 'file',
+    media_type: file.type || 'application/octet-stream',
+    data: dataUrl.slice(comma + 1),
+    size: file.size,
+  }
+}
+
 export interface StreamOpts {
   model?: string
   systemPrompt?: string
   images?: ImageBlock[]
+  documents?: DocBlock[]
   /** Regenerate/edit: delete all but the first N stored messages before running. */
   keepMessages?: number
   /** Re-run on existing history without appending a new user message. */
@@ -75,6 +97,7 @@ export async function* streamChat(
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.systemPrompt ? { system_prompt: opts.systemPrompt } : {}),
       ...(opts.images && opts.images.length ? { attachments: opts.images } : {}),
+      ...(opts.documents && opts.documents.length ? { documents: opts.documents } : {}),
       ...(opts.keepMessages != null ? { keep_messages: opts.keepMessages } : {}),
       ...(opts.regenerate ? { regenerate: true } : {}),
     }),
@@ -210,6 +233,27 @@ export async function googleStatus(config: AppConfig): Promise<boolean> {
 
 export async function googleDisconnect(config: AppConfig): Promise<void> {
   await fetch(`${config.apiBase}/connections/google/disconnect`, {
+    method: 'POST',
+    headers: authHeaders(config),
+  })
+}
+
+export async function notionLoginUrl(config: AppConfig): Promise<{ auth_url?: string; error?: string }> {
+  const res = await fetch(`${config.apiBase}/connections/notion/login`, { headers: authHeaders(config)})
+  if (!res.ok) return { error: `HTTP ${res.status}` }
+  return res.json()
+}
+
+export async function notionStatus(config: AppConfig): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/connections/notion/status`, { headers: authHeaders(config)})
+    if (!res.ok) return false
+    return (await res.json()).connected === true
+  } catch { return false }
+}
+
+export async function notionDisconnect(config: AppConfig): Promise<void> {
+  await fetch(`${config.apiBase}/connections/notion/disconnect`, {
     method: 'POST',
     headers: authHeaders(config),
   })

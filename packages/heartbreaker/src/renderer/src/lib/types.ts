@@ -12,6 +12,21 @@ export interface ImageBlock {
   data: string   // base64, no data: prefix
 }
 
+/** A non-image file upload (PDF, DOCX, XLSX, CSV, TXT, code, …). The backend
+ *  extracts its text server-side; no client-side parsing. */
+export interface DocBlock {
+  name: string
+  media_type: string
+  data: string   // base64, no data: prefix
+  size: number
+}
+
+/** Display chip for a file the user uploaded (not downloadable — just a marker). */
+export interface UploadedFile {
+  name: string
+  size: number
+}
+
 export interface FileMeta {
   name: string
   title: string
@@ -29,6 +44,7 @@ export interface ChatMessage {
   isError: boolean
   images?: string[]   // data: URLs for display in the user bubble
   files?: FileMeta[]  // downloadable files SPEDA produced
+  uploads?: UploadedFile[]  // non-image files the user attached (display chips)
   status?: string     // live status line while streaming (real phase, not looped filler)
 }
 
@@ -51,7 +67,7 @@ export interface ModelInfo {
   name: string
   description: string
   tags?: string[]
-  provider?: string // 'anthropic' | 'openai' | 'gemini' | 'ollama' — absent on old backends
+  provider?: string // 'anthropic' | 'openai' | 'gemini' | 'zai' | 'deepseek' | 'ollama' — absent on old backends
 }
 
 export interface SSEEvent {

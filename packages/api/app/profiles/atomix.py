@@ -1,4 +1,4 @@
-from app.profiles.base import AgentProfile
+from app.profiles.base import AgentProfile, DocTheme
 from app.prompts.loader import assemble, build_skills_manifest
 
 # Atomix-specific identity + shared policy sections. Only the identity differs
@@ -26,25 +26,19 @@ class AtomixProfile(AgentProfile):
     agent_id = "atomix"
     name = "Atomix"
     domain = "personal health & wellness (the owner's health)"
+    doc_theme = DocTheme(accent="#3fae74")   # signature green — matches the UI brand
 
-    # Narrow, declarative allowlist (Rules 5 + 10): research + synthesis +
-    # appointment awareness only. No finance, automations, sandbox/code, or
-    # academic paper search. google_calendar is listed for appointment context
-    # when Google is connected (it simply doesn't appear until then). Runtime
-    # skills (memory, read_skill, use_toolset) are always available regardless.
-    tool_allowlist = [
-        "tavily", "exa", "fetch",     # evidence-based health/nutrition/fitness research
-        "generate_document",           # training programs, protocols, summaries
-        "search_history",              # recall the owner's health context
-        "google_calendar",             # appointments / reminders (when connected)
-        "Task",                        # thorough multi-source health briefings
-    ]
+    # Unrestricted — all tools available (same as SPEDA). Previously a narrow
+    # allowlist; broadened so every agent can use every registered capability.
+    tool_allowlist = None
 
     sonnet_model = "claude-sonnet-4-6"
     haiku_model = "claude-haiku-4-5-20251001"
     background_models = {
         "openai": "openai:gpt-5-mini",
         "gemini": "gemini:gemini-2.5-flash",
+        "zai": "zai:glm-4.5-air",
+        "deepseek": "deepseek:deepseek-v4-flash",
     }
 
     def build_system_prompt(self, context_vars: dict) -> str:

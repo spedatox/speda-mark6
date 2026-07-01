@@ -1,5 +1,20 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Literal
+
+
+@dataclass(frozen=True)
+class DocTheme:
+    """
+    Per-agent document branding (Rule 10: identity lives in the profile, never
+    in core). One knob — the agent's signature ``accent`` hex, matching its UI
+    brand colour. The documents skill derives the whole PDF/DOCX/PPTX palette
+    (heading colour, table header tint, rules, zebra striping) from this single
+    value, so a profile only ever sets ``accent``.
+    """
+
+    accent: str = "#5b6472"   # neutral slate — the engine default for any agent
+                              # that does not declare its own brand colour.
 
 
 class AgentProfile(ABC):
@@ -27,11 +42,15 @@ class AgentProfile(ABC):
     sonnet_model: str = "claude-sonnet-4-6"
     haiku_model: str = "claude-haiku-4-5-20251001"
 
+    # Document branding for generate_document output. Neutral by default; each
+    # concrete profile overrides with its signature accent (Rule 10).
+    doc_theme: DocTheme = DocTheme()
+
     # Per-provider cheap models for background tasks (title generation, session
     # log, daily maintenance). Populated by the concrete profile — Rule 10:
     # model IDs live in the profile file, never in core. Keys are provider
-    # names ("openai", "gemini"); Anthropic uses haiku_model, Ollama reuses
-    # the active local model (it's the only one available in a dead zone).
+    # names ("openai", "gemini", "zai", "deepseek"); Anthropic uses haiku_model,
+    # Ollama reuses the active local model (it's the only one in a dead zone).
     background_models: dict[str, str] = {}
 
     @abstractmethod
@@ -49,7 +68,7 @@ class AgentProfile(ABC):
         from app.config import settings
 
         provider, sep, _ = active_model_ref.partition(":")
-        if not sep or provider not in ("openai", "gemini", "ollama"):
+        if not sep or provider not in ("openai", "gemini", "zai", "deepseek", "ollama"):
             # Anthropic path — keep honoring the .env override.
             return settings.llm_background_model or self.haiku_model
         if provider == "ollama":

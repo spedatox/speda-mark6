@@ -3,8 +3,8 @@ import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useIsMobile } from '../lib/useIsMobile'
-import { fetchModels, fileToImageBlock, getBudgetMode, setBudgetMode } from '../lib/api'
-import type { AppConfig, ModelInfo, ImageBlock } from '../lib/types'
+import { fetchModels, fileToImageBlock, fileToDocBlock, getBudgetMode, setBudgetMode } from '../lib/api'
+import type { AppConfig, ModelInfo, ImageBlock, DocBlock, UploadedFile } from '../lib/types'
 
 interface AttachedFile {
   id: string
@@ -16,19 +16,21 @@ interface AttachedFile {
 }
 
 interface Props {
-  onSend: (message: string, opts?: { images?: ImageBlock[] }) => void
+  onSend: (message: string, opts?: { images?: ImageBlock[]; documents?: DocBlock[]; uploads?: UploadedFile[] }) => void
   onStop?: () => void
   config: AppConfig
 }
 
 function shortModelName(name: string): string {
-  return name.replace(/^(anthropic|openai|gemini|ollama):/, '').replace(/^Claude\s+/i, '').toUpperCase()
+  return name.replace(/^(anthropic|openai|gemini|zai|deepseek|ollama):/, '').replace(/^Claude\s+/i, '').toUpperCase()
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: 'ANTHROPIC',
   openai: 'OPENAI',
   gemini: 'GOOGLE GEMINI',
+  zai: 'Z.AI · GLM',
+  deepseek: 'DEEPSEEK',
   ollama: 'DEAD ZONE PROTOCOL',
 }
 
@@ -577,12 +579,23 @@ export default function InputBar({ onSend, onStop, config }: Props) {
     const msg = value.trim()
     if ((!msg && attachments.length === 0) || state.isStreaming) return
     const imageFiles = attachments.filter(a => a.isImage).map(a => a.file)
+    const docFiles   = attachments.filter(a => !a.isImage).map(a => a.file)
     setValue(''); clearAttachments(); setTimeout(resize, 0)
-    let blocks: ImageBlock[] = []
+
+    let images: ImageBlock[] = []
     if (imageFiles.length) {
-      try { blocks = await Promise.all(imageFiles.map(fileToImageBlock)) } catch { blocks = [] }
+      try { images = await Promise.all(imageFiles.map(fileToImageBlock)) } catch { images = [] }
     }
-    onSend(msg, blocks.length ? { images: blocks } : undefined)
+    let documents: DocBlock[] = []
+    if (docFiles.length) {
+      try { documents = await Promise.all(docFiles.map(fileToDocBlock)) } catch { documents = [] }
+    }
+    const uploads: UploadedFile[] = docFiles.map(f => ({ name: f.name || 'file', size: f.size }))
+
+    const opts: { images?: ImageBlock[]; documents?: DocBlock[]; uploads?: UploadedFile[] } = {}
+    if (images.length) opts.images = images
+    if (documents.length) { opts.documents = documents; opts.uploads = uploads }
+    onSend(msg, Object.keys(opts).length ? opts : undefined)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

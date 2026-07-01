@@ -1,4 +1,4 @@
-from app.profiles.base import AgentProfile
+from app.profiles.base import AgentProfile, DocTheme
 from app.prompts.loader import assemble, build_skills_manifest
 
 PROMPT_SECTIONS = [
@@ -18,26 +18,19 @@ class NightCrawlerProfile(AgentProfile):
     agent_id = "nightcrawler"
     name = "NightCrawler"
     domain = "OSINT, web surveillance & research"
+    doc_theme = DocTheme(accent="#9165e6")   # signature violet — matches the UI brand
 
-    # Investigation toolkit: broad web search + browser automation for
-    # surveillance + watchers + synthesis. Playwright runs container-isolated
-    # (CVE-2025-9611, internal network only — see CLAUDE.md Security). No finance,
-    # no security CVE tooling, no sandbox/code. Runtime skills always available.
-    tool_allowlist = [
-        "tavily", "exa", "brave_search", "fetch",   # web search + retrieval
-        "playwright",                                 # browser surveillance (isolated)
-        "arxiv",                                      # research sources
-        "generate_document",                          # intelligence briefs
-        "search_history",                             # recall prior findings
-        "manage_automations",                         # web/feed surveillance watchers
-        "Task",                                       # multi-source investigations
-    ]
+    # Unrestricted — all tools available (same as SPEDA). Previously a narrow
+    # allowlist; broadened so every agent can use every registered capability.
+    tool_allowlist = None
 
     sonnet_model = "claude-sonnet-4-6"
     haiku_model = "claude-haiku-4-5-20251001"
     background_models = {
         "openai": "openai:gpt-5-mini",
         "gemini": "gemini:gemini-2.5-flash",
+        "zai": "zai:glm-4.5-air",
+        "deepseek": "deepseek:deepseek-v4-flash",
     }
 
     def build_system_prompt(self, context_vars: dict) -> str:

@@ -97,6 +97,11 @@ class AgentOrchestrator:
         )
         context.extra["tool_allowlist"] = allowlist
 
+        # Per-agent document branding — the accent the generate_document skill
+        # derives its PDF/DOCX/PPTX palette from. Profile-owned identity (Rule 10),
+        # threaded to the skill via the context exactly like the allowlist above.
+        context.extra["doc_accent"] = profile.doc_theme.accent
+
         # Budget mode — hard frugality directive (runtime-toggleable, persistent).
         from app.core.runtime_state import get_budget_mode
         if get_budget_mode():
@@ -388,7 +393,7 @@ class AgentOrchestrator:
                 break
 
         # Emit a `file` event for each downloadable file produced this turn
-        # (generate_document, sandbox file-saver) so the UI renders a card.
+        # (generate_document, save_file, sandbox deliver_file) so the UI renders a card.
         for meta in context.extra.get("produced_files", []):
             yield SSEEvent(
                 type=SSEEventType.FILE,
