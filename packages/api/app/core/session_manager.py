@@ -11,6 +11,21 @@ logger = logging.getLogger(__name__)
 
 
 class SessionManager:
+    # Per-session loaded-toolset memory: once a server is loaded via use_toolset
+    # in a session, it stays in the tool list for every subsequent turn — so the
+    # tool array (and therefore the cached prefix) is stable. Without this,
+    # active_servers resets to empty on each HTTP request, the model re-calls
+    # use_toolset, the tool list changes, and the entire prompt cache is rewritten
+    # at 2x cost. This dict is process-local (not persisted) — a server restart
+    # clears it, which is fine (one cache write to re-establish).
+    _session_servers: dict[int, set[str]] = {}
+
+    def get_loaded_servers(self, session_id: int) -> set[str]:
+        return set(self._session_servers.get(session_id, set()))
+
+    def mark_servers_loaded(self, session_id: int, servers: set[str]) -> None:
+        existing = self._session_servers.get(session_id, set())
+        self._session_servers[session_id] = existing | servers
     """
     Manages conversation session lifecycle and history loading.
     Lives at Phase 9.5 — AgentContext construction depends on it.

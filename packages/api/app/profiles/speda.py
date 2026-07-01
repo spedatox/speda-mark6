@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from app.profiles.base import AgentProfile
+from app.profiles.base import AgentProfile, DocTheme
 from app.prompts.loader import assemble, build_skills_manifest
 
 _IDENTITY_PATH = Path(__file__).parent.parent / "prompts" / "core" / "01_identity.md"
@@ -50,6 +50,7 @@ class SPEDAProfile(AgentProfile):
 
     agent_id = "speda"
     domain = "orchestration & general executive assistance"
+    doc_theme = DocTheme(accent="#36abca")   # signature cyan — matches the UI brand
     # None = full registry access. SPEDA is the orchestrator; it sees every
     # tool. The domain-specialised agents declare narrower allowlists.
     tool_allowlist = None
@@ -63,6 +64,8 @@ class SPEDAProfile(AgentProfile):
     background_models = {
         "openai": "openai:gpt-5-mini",
         "gemini": "gemini:gemini-2.5-flash",
+        "zai": "zai:glm-4.5-air",
+        "deepseek": "deepseek:deepseek-v4-flash",
     }
 
     def build_system_prompt(self, context_vars: dict) -> str:

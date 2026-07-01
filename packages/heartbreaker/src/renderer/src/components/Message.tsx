@@ -9,6 +9,7 @@ import { downloadFile } from '../lib/api'
 import CodeBlock from './CodeBlock'
 import WidgetFrame from './WidgetFrame'
 import ChartBlock from './ChartBlock'
+import CalendarBlock from './CalendarBlock'
 
 const RENDERABLE_LANGS = new Set(['html', 'svg'])
 
@@ -313,6 +314,9 @@ const mdComponents: any = {
       if (lang === 'chart') {
         return <ChartBlock>{code}</ChartBlock>
       }
+      if (lang === 'calendar') {
+        return <CalendarBlock>{code}</CalendarBlock>
+      }
       if (RENDERABLE_LANGS.has(lang)) {
         return <WidgetFrame language={lang}>{code}</WidgetFrame>
       }
@@ -504,6 +508,38 @@ function FileCard({ file }: { file: FileMeta }) {
   )
 }
 
+/* ── Upload chip — a non-downloadable marker for a file the user attached ─── */
+function UploadChip({ name, size }: { name: string; size: number }) {
+  return (
+    <div className="hb-glass-xs" style={{
+      display: 'flex', alignItems: 'center', gap: '0.45rem',
+      padding: '0.4rem 0.6rem 0.4rem 0.5rem',
+      border: '1px solid rgba(var(--hb-accent-rgb),0.28)',
+      background: 'rgba(var(--hb-accent-rgb),0.08)',
+      maxWidth: 240,
+    }}>
+      <span style={{ color: 'var(--hb-cyan-bright)', flexShrink: 0, display: 'flex' }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+      </span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{
+          fontFamily: "'SamsungOne','Inter',sans-serif", fontSize: '0.75rem',
+          color: 'var(--hb-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{name}</div>
+        {size > 0 && (
+          <div style={{
+            fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
+            color: 'var(--hb-icon-dim)', marginTop: '1px',
+          }}>{fmtBytes(size)}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── Props ───────────────────────────────────────────────────────────────── */
 interface Props {
   message: ChatMessage
@@ -588,8 +624,26 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
   const fullLen = message.content.length
   const isRevealing = displayLen < fullLen
 
+  // Debounce the markdown parse during streaming — the typewriter rAF fires at
+  // 60fps but ReactMarkdown + remark/rehype only needs ~12fps to look smooth.
+  // This cuts the #1 perf cost (full markdown re-parse on every frame).
+  const [renderLen, setRenderLen] = useState(displayLen)
+  const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!isRevealing) {
+      if (renderTimer.current) clearTimeout(renderTimer.current)
+      setRenderLen(displayLen)
+      return
+    }
+    if (renderTimer.current) return
+    renderTimer.current = setTimeout(() => {
+      renderTimer.current = null
+      setRenderLen(revealedRef.current)
+    }, 80)
+  }, [displayLen, isRevealing])
+
   const rawVisible = isRevealing
-    ? sanitizePartialMarkdown(message.content.slice(0, displayLen))
+    ? sanitizePartialMarkdown(message.content.slice(0, renderLen))
     : message.content
 
   // Normalize fence placement, then prepare math (currency-safe, code-safe).
@@ -682,6 +736,13 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                       onClick={() => setLightbox(src)}
                       style={{ maxWidth: 220, maxHeight: 220, objectFit: 'cover', border: '1px solid var(--border)', display: 'block', cursor: 'zoom-in' }}
                     />
+                  ))}
+                </div>
+              )}
+              {message.uploads && message.uploads.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', justifyContent: 'flex-end', marginBottom: message.content ? '0.4rem' : 0 }}>
+                  {message.uploads.map((u, i) => (
+                    <UploadChip key={i} name={u.name} size={u.size} />
                   ))}
                 </div>
               )}

@@ -26,7 +26,7 @@ const MONO = "'Share Tech Mono', monospace"
 const UI = "'Rajdhani', sans-serif"
 
 const PROVIDER_TAGS: Record<string, string> = {
-  anthropic: 'ANTHROPIC', openai: 'OPENAI', gemini: 'GEMINI', ollama: 'OLLAMA · LOCAL',
+  anthropic: 'ANTHROPIC', openai: 'OPENAI', gemini: 'GEMINI', zai: 'Z.AI · GLM', deepseek: 'DEEPSEEK', ollama: 'OLLAMA · LOCAL',
 }
 
 function symbolOf(name: string): string {

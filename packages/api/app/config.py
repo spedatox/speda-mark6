@@ -45,11 +45,17 @@ class Settings(BaseSettings):
 
     # ── Multi-provider LLM routing ──────────────────────────────────────────
     # Model refs everywhere are "provider:model" — e.g. "openai:gpt-4o",
-    # "gemini:gemini-2.5-flash", "ollama:llama3.1:8b" (Ollama is local,
-    # dev/testing only). A bare model name means Anthropic, so existing refs
-    # keep working. Routing lives in app/services/llm_client.py.
+    # "gemini:gemini-2.5-flash", "zai:glm-4.6", "ollama:llama3.1:8b" (Ollama is
+    # local, dev/testing only). A bare model name means Anthropic, so existing
+    # refs keep working. Routing lives in app/services/llm_client.py.
     openai_api_key: str = ""
     gemini_api_key: str = ""
+    # z.ai (Zhipu GLM) — OpenAI-compatible endpoint. Get a key from
+    # https://z.ai/manage-apikey/apikey-list. Enables refs like "zai:glm-4.6".
+    zai_api_key: str = ""
+    # DeepSeek — OpenAI-compatible endpoint (api.deepseek.com). Get a key from
+    # https://platform.deepseek.com. Enables refs like "deepseek:deepseek-v4-pro".
+    deepseek_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434/v1"
 
     # Optional model-ref overrides for the profile's defaults (per-agent
@@ -163,8 +169,11 @@ class Settings(BaseSettings):
     # Temp outputs
     temp_outputs_dir: str = str(_DATA_DIR / "outputs")
 
-    # MCP API keys (optional — servers degrade gracefully if missing)
+    # Notion MCP / API integration
     notion_api_key: str = ""
+    notion_client_id: str = ""
+    notion_client_secret: str = ""
+    notion_oauth_redirect: str = "http://localhost:8000/oauth/notion/callback"
     # Notion REST API version — required on every Notion request. Pinned here so
     # it can be bumped via .env without touching code when Notion ships a new one.
     notion_version: str = "2022-06-28"
@@ -173,6 +182,26 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     exa_api_key: str = ""
     github_token: str = ""
+
+    # ── OSINT / threat-intelligence skills (app/skills/osint.py) ─────────────
+    # Most run keyless. AbuseIPDB needs a free key (https://www.abuseipdb.com,
+    # 1,000 checks/day on the free tier). abuse.ch (URLhaus/ThreatFox/
+    # MalwareBazaar) now issues a free Auth-Key from https://auth.abuse.ch — the
+    # skills send it when set and still attempt keyless otherwise.
+    abuseipdb_api_key: str = ""
+    abuse_ch_api_key: str = ""
+    # AlienVault OTX (https://otx.alienvault.com — free), Shodan
+    # (https://account.shodan.io), SecurityTrails (https://securitytrails.com —
+    # 50/mo free), Hunter.io (https://hunter.io — 25/mo free), Etherscan
+    # (https://etherscan.io/apis — free), Intelligence X (https://intelx.io —
+    # free tier). Blockchair runs keyless; a key just raises the rate limit.
+    otx_api_key: str = ""
+    shodan_api_key: str = ""
+    securitytrails_api_key: str = ""
+    hunter_api_key: str = ""
+    etherscan_api_key: str = ""
+    intelx_api_key: str = ""
+    blockchair_api_key: str = ""
 
     # Google Workspace MCP — official remote servers (googleapis.com/mcp/v1)
     # Get these from Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client

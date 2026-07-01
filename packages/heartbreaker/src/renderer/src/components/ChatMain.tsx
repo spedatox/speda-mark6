@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { streamChat, fetchSessions } from '../lib/api'
 import { useProfile } from './Sidebar'
 import MessageList from './MessageList'
 import InputBar from './InputBar'
-import type { AppConfig, ImageBlock } from '../lib/types'
+import type { AppConfig, ImageBlock, DocBlock, UploadedFile } from '../lib/types'
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10)
@@ -141,6 +140,8 @@ export default function ChatMain({ config, onSelectSession }: Props) {
 
   interface SendOpts {
     images?: ImageBlock[]
+    documents?: DocBlock[]  // non-image files — backend extracts their text
+    uploads?: UploadedFile[]  // display chips for the attached documents
     keepMessages?: number   // regenerate/edit: keep the first N stored messages
     regenerate?: boolean    // re-run without adding a new user message
   }
@@ -157,6 +158,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           id: makeId(), role: 'user', content: text, tools: [],
           isStreaming: false, isError: false,
           ...(displayImages.length ? { images: displayImages } : {}),
+          ...(opts.uploads && opts.uploads.length ? { uploads: opts.uploads } : {}),
         },
       })
     }
@@ -204,6 +206,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           model: settings.model,
           systemPrompt: settings.systemPrompt || undefined,
           images: opts.images,
+          documents: opts.documents,
           keepMessages: opts.keepMessages,
           regenerate: opts.regenerate,
         },
@@ -213,9 +216,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Thinking' } })
         } else if (event.type === 'chunk') {
           gotContent = true
-          flushSync(() => {
-            dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk: event.data as string } })
-          })
+          dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk: event.data as string } })
         } else if (event.type === 'tool') {
           gotTool = true
           dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool: event.data as import('../lib/types').ToolBadge } })

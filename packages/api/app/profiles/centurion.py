@@ -1,4 +1,4 @@
-from app.profiles.base import AgentProfile
+from app.profiles.base import AgentProfile, DocTheme
 from app.prompts.loader import assemble, build_skills_manifest
 
 PROMPT_SECTIONS = [
@@ -18,26 +18,19 @@ class CenturionProfile(AgentProfile):
     agent_id = "centurion"
     name = "Centurion"
     domain = "cyber security"
+    doc_theme = DocTheme(accent="#d8483c")   # signature red — matches the UI brand
 
-    # Security domain: CVE/threat intelligence + advisory research + repo/dep
-    # review + security watchers + synthesis. cve_intelligence is Centurion's
-    # primary MCP server. No finance, no health, no sandbox/code execution.
-    # Runtime skills (memory/read_skill/use_toolset) are always available.
-    tool_allowlist = [
-        "cve_intelligence",             # CVE / vulnerability intelligence (primary)
-        "tavily", "exa", "fetch",       # advisories, security news, sources
-        "github",                       # repo / dependency security review
-        "generate_document",            # assessments, remediation plans
-        "search_history",               # recall prior security context
-        "manage_automations",           # advisory / CVE watchers
-        "Task",                         # multi-source threat research
-    ]
+    # Unrestricted — all tools available (same as SPEDA). Previously a narrow
+    # allowlist; broadened so every agent can use every registered capability.
+    tool_allowlist = None
 
     sonnet_model = "claude-sonnet-4-6"
     haiku_model = "claude-haiku-4-5-20251001"
     background_models = {
         "openai": "openai:gpt-5-mini",
         "gemini": "gemini:gemini-2.5-flash",
+        "zai": "zai:glm-4.5-air",
+        "deepseek": "deepseek:deepseek-v4-flash",
     }
 
     def build_system_prompt(self, context_vars: dict) -> str:

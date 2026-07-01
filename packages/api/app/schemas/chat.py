@@ -6,6 +6,16 @@ class ImageAttachment(BaseModel):
     data: str         # base64-encoded image bytes (no data: URI prefix)
 
 
+class DocumentAttachment(BaseModel):
+    """A non-image file upload (PDF, DOCX, XLSX, PPTX, CSV, TXT, code, …). The
+    backend extracts its text server-side and embeds it in the user turn as a
+    text block, so it reaches the model identically on every provider."""
+    name: str         # original filename, e.g. "q3_report.pdf"
+    media_type: str   # MIME type as reported by the browser (may be "")
+    data: str         # base64-encoded file bytes (no data: URI prefix)
+    size: int = 0     # byte size, for the display chip
+
+
 class ChatRequest(BaseModel):
     message: str
     session_id: int | None = None
@@ -13,6 +23,7 @@ class ChatRequest(BaseModel):
     system_prompt: str | None = None
     temperature: float | None = None
     attachments: list[ImageAttachment] = []
+    documents: list[DocumentAttachment] = []
 
     # Regenerate / edit support. The DB is the source of truth for history, so a
     # client editing or regenerating must tell the backend to truncate first —

@@ -45,8 +45,10 @@ async def lifespan(app: FastAPI):
     from app.skills.sandbox import RunCommandSkill, DeliverFileSkill
     from app.skills.toolsets import UseToolsetSkill
     from app.skills.documents import DocumentsSkill
+    from app.skills.save_file import SaveFileSkill
     from app.skills.memory import MemorySkill
     from app.skills.notifications import NotificationsSkill
+    from app.skills.osint import OSINT_SKILLS
     from app.skills.read_skill import ReadSkillSkill
     from app.skills.search_history import SearchHistorySkill
     from app.skills.stt import STTSkill
@@ -60,12 +62,19 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(STTSkill())
     await registry.register_skill(NotificationsSkill())
     await registry.register_skill(DocumentsSkill())
+    await registry.register_skill(SaveFileSkill())
     await registry.register_skill(SystemSkill())
     await registry.register_skill(BudgetModeSkill())
     await registry.register_skill(RunCommandSkill())
     await registry.register_skill(DeliverFileSkill())
     await registry.register_skill(UseToolsetSkill())
     await registry.register_skill(AutomationsSkill())
+
+    # OSINT / threat-intelligence suite (ip-api, AbuseIPDB, abuse.ch URLhaus/
+    # ThreatFox/MalwareBazaar, HIBP Pwned Passwords, Ahmia dark-web search).
+    # All read-only + network-gated (dropped in the Dead Zone).
+    for _osint_skill in OSINT_SKILLS:
+        await registry.register_skill(_osint_skill())
 
     # Tier 2 — MCP Servers
     from app.mcp.servers import register_all_mcp_servers

@@ -22,7 +22,7 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
 
 Write-Host "  > Starting backend (http://localhost:8000)" -ForegroundColor DarkCyan
 
-$apiCmd = "Set-Location `"$API_DIR`"; Write-Host `"  SPEDA API  -  http://localhost:8000`" -ForegroundColor Cyan; uv run uvicorn app.main:app --port 8000 --reload --log-level info"
+$apiCmd = "Set-Location '$API_DIR'; Write-Host '  SPEDA API  -  http://localhost:8000' -ForegroundColor Cyan; uv run uvicorn app.main:app --port 8000 --reload --log-level info"
 
 $apiProcess = Start-Process -FilePath "powershell" -ArgumentList @("-NoExit", "-Command", $apiCmd) -PassThru
 

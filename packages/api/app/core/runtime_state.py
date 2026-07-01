@@ -89,6 +89,21 @@ def set_google_refresh_token(token: str) -> None:
     logger.info("google_refresh_token_saved")
 
 
+def get_notion_access_token() -> str:
+    """OAuth access token captured via the in-app Notion connection flow.
+    Returns empty string if the user hasn't completed OAuth — does NOT fall
+    back to the legacy notion_api_key (internal integration tokens don't work
+    with the hosted MCP server)."""
+    return _load().get("notion_access_token", "")
+
+
+def set_notion_access_token(token: str) -> None:
+    state = _load()
+    state["notion_access_token"] = token
+    _save()
+    logger.info("notion_access_token_saved")
+
+
 def set_server_active(server: str, active: bool) -> bool:
     state = _load()
     disabled = set(state.get("disabled_servers", []))

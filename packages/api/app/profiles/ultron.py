@@ -1,4 +1,4 @@
-from app.profiles.base import AgentProfile
+from app.profiles.base import AgentProfile, DocTheme
 from app.prompts.loader import assemble, build_skills_manifest
 
 # Ultron-specific identity + shared policy sections. Only the identity differs
@@ -27,23 +27,19 @@ class UltronProfile(AgentProfile):
     agent_id = "ultron"
     name = "Ultron"
     domain = "academic research & knowledge synthesis"
+    doc_theme = DocTheme(accent="#8a93a6")   # signature slate — matches the UI brand
 
-    # Narrow, declarative allowlist (Rules 5 + 10): research + synthesis only —
-    # no finance, automations, sandbox/code, calendar, or notifications. The
-    # CapabilityRegistry enforces this; runtime-infrastructure skills (memory,
-    # read_skill, use_toolset) are always available regardless.
-    tool_allowlist = [
-        "tavily", "exa", "arxiv", "fetch",   # MCP research servers
-        "generate_document",                  # synthesis -> PDF / DOCX / PPTX
-        "search_history",                     # recall prior research
-        "Task",                               # parallel research sub-agents
-    ]
+    # Unrestricted — all tools available (same as SPEDA). Previously a narrow
+    # allowlist; broadened so every agent can use every registered capability.
+    tool_allowlist = None
 
     sonnet_model = "claude-sonnet-4-6"
     haiku_model = "claude-haiku-4-5-20251001"
     background_models = {
         "openai": "openai:gpt-5-mini",
         "gemini": "gemini:gemini-2.5-flash",
+        "zai": "zai:glm-4.5-air",
+        "deepseek": "deepseek:deepseek-v4-flash",
     }
 
     def build_system_prompt(self, context_vars: dict) -> str:
