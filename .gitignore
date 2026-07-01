@@ -3,6 +3,11 @@
 .env.*
 !.env.example
 
+# Local databases (may contain secrets — never commit)
+*.db
+*.sqlite
+*.sqlite3
+
 # Python
 __pycache__/
 *.py[cod]
