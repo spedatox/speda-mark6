@@ -1,91 +1,51 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
-  fetchAgentComms, fetchAgentModels, fetchModels, pinAgentModel, setHouseParty, streamChat,
+  deleteSession, fetchAgentComms, fetchAgentModels, fetchMessages, fetchModels,
+  fetchSessions, pinAgentModel, setHouseParty,
 } from '../lib/api'
 import type { AgentCommEntry, AgentModelInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
-import { ROSTER, agentColor, fmtCommTime } from '../lib/agents'
+import type { AppProfile } from '../profile/types'
+import { deriveAccents } from '../profile/theme'
+import { ROSTER, agentColor } from '../lib/agents'
 import { useIsMobile } from '../lib/useIsMobile'
+import { ChatContext, chatReducer, initialState } from '../store/chat'
+import { ProfileContext } from './Sidebar'
 import AgentModelPicker from './AgentModelPicker'
-import { Avatar, Bubble, CommMarkdown, CopyBtn } from './CommBubble'
+import ChatMain from './ChatMain'
+import { Avatar } from './CommBubble'
 
 /**
  * HOUSE PARTY PROTOCOL — the war room.
  *
- * Full-screen group chat that the UI transforms into while the protocol is
+ * A full command-center chat that the UI transforms into while the protocol is
  * engaged (owner-voice-activated through SPEDA; the Layout polls the flag and
- * mounts this automatically). Left rail = the roster with live WORKING/STANDBY
- * status; main = the agent network channel rendered as a group chat — SPEDA the
- * commander on the right, operatives on the left, every bubble in its agent's
- * signature color. Data source: GET /agents/comms (same log the tray reads).
+ * mounts this automatically). The main pane IS the real chat stack — ChatMain
+ * with streaming, tool badges, attachments, files, regenerate/edit/delete —
+ * addressed to the backend "warroom" profile (SPEDA's brain behind a separate
+ * agent_id), so the war room keeps its own conversation story exactly like any
+ * agent on the menu. Left rail = the roster with live WORKING/STANDBY status
+ * (from GET /agents/comms, house_party traffic only) plus the OPERATIONS log —
+ * the war room's own session history. Chrome colors loop through the whole
+ * roster's signature palette (hbPartyCycle).
  */
 
 const MONO = "'Share Tech Mono', monospace"
 const UI = "'Rajdhani', sans-serif"
 const POLL_MS = 2500
 
-/** Owner / SPEDA direct exchange in the war room (local to this view; the
- *  owner speaks from the right, everyone else from the left). */
-interface LocalMsg {
-  id: string
-  who: 'owner' | 'speda'
-  text: string
-  at: number
-  live?: boolean
+/** The war room's brand — NOT in BRANDS (it must never appear in the agent
+ *  menu; it exists only while the protocol is engaged). */
+const WARROOM_BRAND: AppProfile = {
+  agentId: 'warroom', name: 'WAR ROOM', modelNumber: 'HPP', userName: 'Ahmet Erol',
+  tagline: 'House Party Protocol — All Hands Command',
+  avatarInitial: 'W', accent: '#f2b75c',
+  accentHover: deriveAccents('#f2b75c').bright,
 }
 
-function LocalBubble({ m }: { m: LocalMsg }) {
-  const owner = m.who === 'owner'
-  const c = owner ? '#f2b75c' : agentColor('speda')
-  return (
-    <div style={{
-      display: 'flex', gap: 8, padding: '0.3rem 0',
-      flexDirection: owner ? 'row-reverse' : 'row',
-      animation: 'hbRise 0.3s ease both',
-    }}>
-      {owner ? (
-        <span style={{
-          width: 26, height: 26, flexShrink: 0, borderRadius: '50%',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: `1px solid ${c}88`, background: `${c}1f`, color: c,
-          fontFamily: UI, fontWeight: 700, fontSize: 10, letterSpacing: '0.06em',
-          boxShadow: `inset 0 1px 0 0 rgba(255,255,255,0.14), 0 0 8px ${c}33`,
-        }}>SIR</span>
-      ) : (
-        <Avatar id="speda" />
-      )}
-      <div className="hb-glass-sm" style={{
-        maxWidth: 'min(72%, 640px)', padding: '0.45rem 0.6rem 0.5rem',
-        border: `1px solid ${c}44`, background: `${c}0d`,
-        backdropFilter: 'var(--hb-holo-blur)', WebkitBackdropFilter: 'var(--hb-holo-blur)',
-        boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
-      }}>
-        <div style={{
-          display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 3,
-          fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.08em',
-        }}>
-          <span style={{ color: c, fontWeight: 700 }}>{owner ? 'OWNER' : 'SPEDA'}</span>
-          <span style={{ color: 'var(--hb-icon-dim)' }}>{fmtCommTime(new Date(m.at).toISOString())}</span>
-          <span style={{ flex: 1 }} />
-          {!m.live && m.text && <CopyBtn text={m.text} tint={c} />}
-        </div>
-        {m.live ? (
-          // Streaming: plain text (partial markdown renders broken); selectable.
-          <p style={{
-            margin: 0, fontFamily: "'SamsungOne','Inter',sans-serif",
-            fontSize: '0.76rem', lineHeight: 1.45, color: 'var(--hb-text-dim)',
-            whiteSpace: 'pre-wrap', userSelect: 'text',
-          }}>
-            {m.text}
-            <span style={{ animation: 'hbBlink 1.1s ease-in-out infinite', color: c }}>▌</span>
-          </p>
-        ) : (
-          <CommMarkdown text={m.text || '…'} size="0.76rem" />
-        )}
-      </div>
-    </div>
-  )
-}
+/** Survives minimize/reopen within the app session — reopening the war room
+ *  restores the operation that was on screen. Cleared on STAND DOWN. */
+let lastOpSession: number | null = null
 
 export default function HousePartyBoard({ config, onMinimize, onStoodDown }: {
   config: AppConfig
@@ -93,23 +53,50 @@ export default function HousePartyBoard({ config, onMinimize, onStoodDown }: {
   onStoodDown: () => void
 }) {
   const isMobile = useIsMobile()
+
+  // ── The war room's own chat store — a full ChatMain stack scoped to the
+  //    "warroom" agent, fully independent of the main chat's state. ──────────
+  const [chat, chatDispatch] = useReducer(chatReducer, initialState)
+  const warConfig = useMemo<AppConfig>(() => ({ ...config, agentId: 'warroom' }), [config])
+
+  const selectOp = useCallback(async (sessionId: number) => {
+    chatDispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages: [] } })
+    try {
+      const messages = await fetchMessages(warConfig, sessionId)
+      chatDispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages } })
+    } catch { /* keep empty state on error */ }
+  }, [warConfig])
+
+  const newOp = useCallback(() => {
+    lastOpSession = null
+    chatDispatch({ type: 'NEW_CHAT' })
+  }, [])
+
+  const deleteOp = useCallback(async (sessionId: number) => {
+    await deleteSession(warConfig, sessionId)
+    if (lastOpSession === sessionId) lastOpSession = null
+    chatDispatch({ type: 'DELETE_SESSION', payload: { id: sessionId } })
+  }, [warConfig])
+
+  useEffect(() => {
+    chatDispatch({ type: 'SET_CONFIG', payload: warConfig })
+    fetchSessions(warConfig).then(s => chatDispatch({ type: 'SET_SESSIONS', payload: s })).catch(() => {})
+    if (lastOpSession != null) selectOp(lastOpSession)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warConfig])
+
+  // Remember the on-screen operation so minimize → reopen restores it.
+  useEffect(() => {
+    if (chat.activeSessionId != null) lastOpSession = chat.activeSessionId
+  }, [chat.activeSessionId])
+
+  // ── Roster status — engagement traffic only ───────────────────────────────
   const [entries, setEntries] = useState<AgentCommEntry[]>([])
-  const feedRef = useRef<HTMLDivElement>(null)
-  const pinned = useRef(true)  // stick to the newest message unless the user scrolled up
-
-  // Owner composer: messages go straight to SPEDA (the commander), which plans
-  // and dispatches — its dispatches then stream into the feed via the comms poll.
-  const [localMsgs, setLocalMsgs] = useState<LocalMsg[]>([])
-  const [input, setInput] = useState('')
-  const [sending, setSending] = useState(false)
-  const warSession = useRef<number | null>(null)
-
-  // Per-agent model routing
   const [agentInfos, setAgentInfos] = useState<AgentModelInfo[]>([])
   const [models, setModels] = useState<ModelInfo[]>([])
 
   useEffect(() => {
-    const load = () => fetchAgentComms(config, 150).then(rows => setEntries(rows.slice().reverse()))
+    const load = () => fetchAgentComms(config, 150).then(setEntries)
     load()
     fetchAgentModels(config).then(setAgentInfos)
     fetchModels(config).then(setModels).catch(() => {})
@@ -117,62 +104,27 @@ export default function HousePartyBoard({ config, onMinimize, onStoodDown }: {
     return () => clearInterval(t)
   }, [config])
 
-  const send = async () => {
-    const text = input.trim()
-    if (!text || sending) return
-    setInput('')
-    setSending(true)
-    const at = Date.now()
-    const spedaId = `speda-${at}`
-    setLocalMsgs(ms => [
-      ...ms,
-      { id: `owner-${at}`, who: 'owner', text, at },
-      { id: spedaId, who: 'speda', text: '', at: at + 1, live: true },
-    ])
-    pinned.current = true
-    try {
-      const ctrl = new AbortController()
-      // Always address SPEDA here, whatever agent the main chat is set to.
-      for await (const ev of streamChat(text, warSession.current, { ...config, agentId: 'speda' }, ctrl.signal)) {
-        if (ev.session_id) warSession.current = ev.session_id
-        if (ev.type === 'chunk' && typeof ev.data === 'string') {
-          const delta = ev.data
-          setLocalMsgs(ms => ms.map(m => m.id === spedaId ? { ...m, text: m.text + delta } : m))
-        } else if (ev.type === 'error') {
-          const err = `\n[ERROR] ${ev.data}`
-          setLocalMsgs(ms => ms.map(m => m.id === spedaId ? { ...m, text: m.text + err } : m))
-        }
-      }
-    } catch (e) {
-      const err = `\n[LINK ERROR] ${e instanceof Error ? e.message : String(e)}`
-      setLocalMsgs(ms => ms.map(m => m.id === spedaId ? { ...m, text: m.text + err } : m))
-    } finally {
-      setLocalMsgs(ms => ms.map(m => m.id === spedaId ? { ...m, live: false } : m))
-      setSending(false)
-    }
-  }
+  const partyEntries = useMemo(
+    () => entries.filter(e => e.protocol === 'house_party'),
+    [entries],
+  )
+
+  const working = useMemo(() => {
+    const w = new Set<string>()
+    for (const e of partyEntries) if (e.status === 'running') w.add(e.to_agent)
+    return w
+  }, [partyEntries])
+
+  const doneCount = useMemo(() => {
+    const c: Record<string, number> = {}
+    for (const e of partyEntries) if (e.status === 'ok') c[e.to_agent] = (c[e.to_agent] ?? 0) + 1
+    return c
+  }, [partyEntries])
 
   const pin = async (agentId: string, model: string | null) => {
     const infos = await pinAgentModel(config, agentId, model)
     if (infos.length) setAgentInfos(infos)
   }
-
-  // Merge dispatch traffic and the local owner↔SPEDA exchange chronologically.
-  const feed = useMemo(() => {
-    const items: { at: number; node: React.ReactNode }[] = [
-      ...entries.map(e => ({
-        at: new Date(e.created_at.endsWith('Z') || e.created_at.includes('+') ? e.created_at : e.created_at + 'Z').getTime(),
-        node: <Bubble key={`c${e.id}`} e={e} mine={false} />,
-      })),
-      ...localMsgs.map(m => ({ at: m.at, node: <LocalBubble key={m.id} m={m} /> })),
-    ]
-    return items.sort((a, b) => a.at - b.at).map(i => i.node)
-  }, [entries, localMsgs])
-
-  useEffect(() => {
-    const el = feedRef.current
-    if (el && pinned.current) el.scrollTop = el.scrollHeight
-  }, [entries, localMsgs])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onMinimize() }
@@ -180,20 +132,9 @@ export default function HousePartyBoard({ config, onMinimize, onStoodDown }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [onMinimize])
 
-  const working = useMemo(() => {
-    const w = new Set<string>()
-    for (const e of entries) if (e.status === 'running') w.add(e.to_agent)
-    return w
-  }, [entries])
-
-  const doneCount = useMemo(() => {
-    const c: Record<string, number> = {}
-    for (const e of entries) if (e.status === 'ok') c[e.to_agent] = (c[e.to_agent] ?? 0) + 1
-    return c
-  }, [entries])
-
   const standDown = async () => {
     await setHouseParty(config, false)
+    lastOpSession = null
     onStoodDown()
   }
 
@@ -205,13 +146,13 @@ export default function HousePartyBoard({ config, onMinimize, onStoodDown }: {
       backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
       animation: 'fadeIn 0.2s ease',
     }}>
-      {/* Title plate */}
+      {/* Title plate — chrome loops through the roster's colors */}
       <div className="hb-head-light" style={{ minHeight: 0, gap: '0.7rem' }}>
-        <span style={{
-          width: 7, height: 7, borderRadius: '50%', background: 'var(--hb-amber)',
-          boxShadow: '0 0 8px rgba(242,183,92,0.9)', animation: 'hbBlink 1.6s ease-in-out infinite',
+        <span className="hb-party-cycle" style={{
+          width: 7, height: 7, borderRadius: '50%', background: 'currentColor',
+          boxShadow: '0 0 8px currentColor',
         }} />
-        <span style={{ fontSize: '0.82rem' }}>HOUSE PARTY PROTOCOL // WAR ROOM</span>
+        <span className="hb-party-cycle" style={{ fontSize: '0.82rem' }}>HOUSE PARTY PROTOCOL // WAR ROOM</span>
         <span className="hb-hide-sm" style={{
           fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.1em',
           color: 'var(--hb-icon)', textTransform: 'none',
@@ -219,6 +160,12 @@ export default function HousePartyBoard({ config, onMinimize, onStoodDown }: {
           ALL HANDS · FULL GRADE
         </span>
         <span style={{ flex: 1 }} />
+        <span style={{
+          fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.1em', textTransform: 'none',
+          color: working.size > 0 ? 'var(--hb-amber)' : 'var(--hb-icon)',
+        }}>
+          {working.size > 0 ? `${working.size} WORKING` : 'CHANNEL OPEN'}
+        </span>
         <button
           onClick={standDown}
           title="End the protocol — dispatches return to the background tier"
@@ -246,116 +193,155 @@ export default function HousePartyBoard({ config, onMinimize, onStoodDown }: {
         </button>
       </div>
 
+      {/* Mobile roster strip — the rail is desktop-only, but status must not vanish */}
+      {isMobile && (
+        <div className="hb-holo" style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+          padding: '0.35rem 0.6rem', overflowX: 'auto',
+        }}>
+          {ROSTER.map(id => {
+            const busy = working.has(id)
+            return (
+              <span
+                key={id}
+                title={`${id.toUpperCase()} — ${busy ? 'working' : 'standby'}${doneCount[id] ? ` · ${doneCount[id]} done` : ''}`}
+                style={{ position: 'relative', flexShrink: 0, opacity: busy ? 1 : 0.55 }}
+              >
+                <Avatar id={id} size={24} />
+                <span style={{
+                  position: 'absolute', right: -1, bottom: -1, width: 7, height: 7, borderRadius: '50%',
+                  background: busy ? 'var(--hb-amber)' : 'var(--hb-icon-dim)',
+                  boxShadow: busy ? '0 0 6px rgba(242,183,92,0.9)' : 'none',
+                  border: '1px solid rgba(4,9,12,0.8)',
+                  animation: busy ? 'hbBlink 1.6s ease-in-out infinite' : 'none',
+                }} />
+              </span>
+            )
+          })}
+        </div>
+      )}
+
       <div style={{ flex: 1, display: 'flex', gap: 8, minHeight: 0 }}>
-        {/* Roster rail */}
+        {/* Left rail: roster status + the war room's own conversation story */}
         {!isMobile && (
-          <section className="hb-holo" style={{ width: 196, flexShrink: 0, overflowY: 'auto' }}>
-            <header className="hb-head-glass" style={{ flexShrink: 0 }}>ROSTER</header>
-            {ROSTER.map(id => {
-              const busy = working.has(id)
-              const info = agentInfos.find(a => a.agent_id === id)
-              return (
-                <div key={id} style={{
-                  display: 'flex', flexDirection: 'column', gap: 4,
-                  padding: '0.4rem 0.55rem',
-                  borderLeft: `2px solid ${busy ? agentColor(id) : 'transparent'}`,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Avatar id={id} size={24} />
-                    <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                      <span style={{
-                        fontFamily: UI, fontSize: '0.68rem', fontWeight: 700,
-                        letterSpacing: '0.1em', color: 'var(--hb-text-dim)', textTransform: 'uppercase',
-                      }}>
-                        {id}
+          <div style={{ width: 208, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+            <section className="hb-holo" style={{ flexShrink: 0, maxHeight: '55%', overflowY: 'auto' }}>
+              <header className="hb-head-glass hb-party-cycle" style={{ flexShrink: 0 }}>ROSTER</header>
+              {ROSTER.map((id, i) => {
+                const busy = working.has(id)
+                const info = agentInfos.find(a => a.agent_id === id)
+                return (
+                  <div key={id} style={{
+                    display: 'flex', flexDirection: 'column', gap: 4,
+                    padding: '0.4rem 0.55rem',
+                    borderTop: i > 0 ? '1px solid var(--hb-edge)' : 'none',
+                    borderLeft: `2px solid ${busy ? agentColor(id) : 'transparent'}`,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Avatar id={id} size={24} />
+                      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                        <span style={{
+                          fontFamily: UI, fontSize: '0.68rem', fontWeight: 700,
+                          letterSpacing: '0.1em', color: 'var(--hb-text-dim)', textTransform: 'uppercase',
+                        }}>
+                          {id}
+                        </span>
+                        <span style={{
+                          fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.1em',
+                          color: busy ? 'var(--hb-amber)' : 'var(--hb-icon-dim)',
+                        }}>
+                          {busy ? 'WORKING…' : `STANDBY${doneCount[id] ? ` · ${doneCount[id]} DONE` : ''}`}
+                        </span>
                       </span>
-                      <span style={{
-                        fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.1em',
-                        color: busy ? 'var(--hb-amber)' : 'var(--hb-icon-dim)',
-                      }}>
-                        {busy ? 'WORKING…' : `STANDBY${doneCount[id] ? ` · ${doneCount[id]} DONE` : ''}`}
-                      </span>
-                    </span>
+                    </div>
+                    {info && (
+                      <AgentModelPicker info={info} models={models} onPin={m => pin(id, m)} />
+                    )}
                   </div>
-                  {info && (
-                    <AgentModelPicker info={info} models={models} onPin={m => pin(id, m)} />
-                  )}
-                </div>
-              )
-            })}
-          </section>
+                )
+              })}
+            </section>
+
+            {/* OPERATIONS — the war room's session history */}
+            <section className="hb-holo" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <header className="hb-head-glass hb-party-cycle" style={{ flexShrink: 0, justifyContent: 'space-between' }}>
+                <span>OPERATIONS</span>
+                <button
+                  onClick={newOp}
+                  title="Start a new operation"
+                  style={{
+                    border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
+                    fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.12em',
+                    color: 'inherit',
+                  }}
+                >
+                  NEW_
+                </button>
+              </header>
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                {chat.sessions.length === 0 ? (
+                  <p style={{
+                    margin: 0, padding: '0.55rem 0.6rem',
+                    fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.12em',
+                    color: 'var(--hb-icon-dim)',
+                  }}>
+                    // NO PRIOR OPS
+                  </p>
+                ) : chat.sessions.map(s => {
+                  const active = s.id === chat.activeSessionId
+                  return (
+                    <div key={s.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '0.3rem 0.55rem',
+                      borderLeft: `2px solid ${active ? 'var(--hb-amber)' : 'transparent'}`,
+                      background: active ? 'rgba(217,156,68,0.08)' : 'transparent',
+                    }}>
+                      <button
+                        onClick={() => selectOp(s.id)}
+                        title={s.title || 'Untitled operation'}
+                        style={{
+                          flex: 1, minWidth: 0, border: 'none', background: 'transparent',
+                          cursor: 'pointer', padding: 0, textAlign: 'left',
+                          fontFamily: UI, fontSize: '0.66rem', fontWeight: active ? 700 : 500,
+                          letterSpacing: '0.04em',
+                          color: active ? 'var(--hb-amber-bright)' : 'var(--hb-text-dim)',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          transition: 'color 0.12s',
+                        }}
+                      >
+                        {s.title || 'UNTITLED OP'}
+                      </button>
+                      <button
+                        onClick={() => deleteOp(s.id)}
+                        title="Delete this operation"
+                        style={{
+                          border: 'none', background: 'transparent', cursor: 'pointer',
+                          padding: 0, display: 'flex', alignItems: 'center', flexShrink: 0,
+                          color: 'var(--hb-icon-dim)',
+                        }}
+                      >
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          </div>
         )}
 
-        {/* Group chat feed */}
-        <section className="hb-holo" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <header className="hb-head-glass" style={{ flexShrink: 0, justifyContent: 'space-between' }}>
-            <span>AGENT NETWORK // GROUP CHANNEL</span>
-            <span style={{ fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.08em', textTransform: 'none', color: 'var(--hb-icon)' }}>
-              {working.size > 0 ? `${working.size} WORKING` : `${entries.length} MESSAGES`}
-            </span>
-          </header>
-          <div
-            ref={feedRef}
-            onScroll={() => {
-              const el = feedRef.current
-              if (el) pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
-            }}
-            style={{ flex: 1, overflowY: 'auto', padding: '0.5rem 0.75rem', minHeight: 0 }}
-          >
-            {feed.length === 0 ? (
-              <p style={{
-                fontFamily: MONO, fontSize: '0.6rem', letterSpacing: '0.14em',
-                color: 'var(--hb-icon-dim)', padding: '0.6rem 0',
-              }}>
-                // CHANNEL OPEN — GIVE SPEDA THE OBJECTIVE BELOW
-              </p>
-            ) : feed}
-          </div>
-
-          {/* Owner composer — straight line to the commander */}
-          <div style={{
-            flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center',
-            padding: '0.5rem 0.6rem',
-            borderTop: '1px solid var(--hb-edge)',
-          }}>
-            <span style={{
-              fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.12em',
-              color: sending ? 'var(--hb-amber)' : 'var(--hb-cyan)', flexShrink: 0,
+        {/* Command channel — the REAL chat stack, scoped to the warroom agent */}
+        <ChatContext.Provider value={{ state: chat, dispatch: chatDispatch }}>
+          <ProfileContext.Provider value={WARROOM_BRAND}>
+            <section className="hb-holo hb-party-rim" style={{
+              flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden',
             }}>
-              {sending ? 'SPEDA▸' : 'OWNER▸'}
-            </span>
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-              placeholder={sending ? 'SPEDA is commanding the roster…' : 'Give SPEDA the objective — it plans and dispatches the roster'}
-              disabled={sending}
-              autoFocus
-              style={{
-                flex: 1, height: 30, padding: '0 0.6rem',
-                border: '1px solid var(--hb-line)', background: 'rgba(8, 15, 23, 0.5)',
-                color: 'var(--hb-text-dim)', outline: 'none',
-                fontFamily: "'SamsungOne','Inter',sans-serif", fontSize: '0.78rem',
-              }}
-            />
-            <button
-              onClick={send}
-              disabled={sending || !input.trim()}
-              title="Send to SPEDA (Enter)"
-              style={{
-                height: 30, padding: '0 0.8rem', flexShrink: 0,
-                border: `1px solid ${sending || !input.trim() ? 'var(--hb-line)' : 'rgba(242,183,92,0.6)'}`,
-                background: sending || !input.trim() ? 'transparent' : 'rgba(217,156,68,0.14)',
-                color: sending || !input.trim() ? 'var(--hb-icon-dim)' : 'var(--hb-amber-bright)',
-                cursor: sending || !input.trim() ? 'default' : 'pointer',
-                fontFamily: UI, fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.16em',
-                transition: 'all 0.12s',
-              }}
-            >
-              DISPATCH
-            </button>
-          </div>
-        </section>
+              <ChatMain config={warConfig} onSelectSession={selectOp} />
+            </section>
+          </ProfileContext.Provider>
+        </ChatContext.Provider>
       </div>
     </div>
   )

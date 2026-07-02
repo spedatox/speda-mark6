@@ -401,6 +401,23 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes hbBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+/* House Party — the roster's signature colors on parade. Animates `color`
+   only; consumers point borders/fills/glows at currentColor so one keyframe
+   themes every piece of war-room chrome. Order = the ROSTER order. */
+@keyframes hbPartyCycle {
+  0%, 100% { color: #36abca; }  /* speda */
+  14%      { color: #d99c44; }  /* sentinel */
+  29%      { color: #9165e6; }  /* nightcrawler */
+  43%      { color: #8a93a6; }  /* ultron */
+  57%      { color: #d8483c; }  /* centurion */
+  71%      { color: #3fae74; }  /* atomix */
+  86%      { color: #2eb6ac; }  /* optimus */
+}
+.hb-party-cycle { animation: hbPartyCycle 21s linear infinite; }
+.hb-party-rim {
+  animation: hbPartyCycle 21s linear infinite;
+  border-color: currentColor !important;
+}
 @keyframes hbFlicker {
   0%,100% { opacity: 1; } 92% { opacity: 1; } 94% { opacity: 0.7; } 96% { opacity: 1; }
 }

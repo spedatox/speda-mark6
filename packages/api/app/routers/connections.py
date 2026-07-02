@@ -276,15 +276,9 @@ async def notion_callback(request: Request, code: str = "", error: str = ""):
 
     # Live-connect the Notion MCP server so tools work without a restart.
     try:
-        from app.mcp.client import MCPClient
+        from app.mcp.servers import build_notion_client
         registry = request.app.state.registry
-        notion_client = MCPClient(
-            server_name="notion",
-            transport="stdio",
-            command=["npx", "-y", "@notionhq/mcp-server"],
-            env={"NOTION_API_KEY": access},
-        )
-        n = await registry.reconnect_mcp_servers([notion_client])
+        n = await registry.reconnect_mcp_servers([build_notion_client(access)])
         logger.info("notion_connected_via_ui", extra={"tools": n})
         return HTMLResponse(page(f"Notion connected — tools are live!", True))
     except Exception as e:  # noqa: BLE001
