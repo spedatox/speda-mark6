@@ -297,6 +297,22 @@ async def _run_chat(
     # repeated use_toolset calls, no cache-busting rewrites.
     context.extra["active_servers"] = session_manager.get_loaded_servers(session.id)
 
+    # Engine selection: an agent backed by a connected standalone peer (Optimus)
+    # streams this turn through the external proxy instead of the in-process
+    # orchestrator. Both yield the same SSEEvents, so persistence, background
+    # tasks and the UI are identical either way; peer offline → normal path.
+    # user_model carries the owner's EXPLICIT model pick (None = peer's choice).
+    context.extra["user_model"] = body.model
+    use_external = (
+        profile.external_backend
+        and request.app.state.ws_manager.is_connected(profile.agent_id)
+    )
+    engine = (
+        request.app.state.agent_proxy.run(context)
+        if use_external
+        else orchestrator.run(context)
+    )
+
     collected_chunks: list[str] = []
     collected_tools: list[dict] = []   # {id, name, input, result?}
     collected_files: list[dict] = []
@@ -306,7 +322,7 @@ async def _run_chat(
         # the client as a terminal `error` event — never a silent stream close,
         # which would leave the UI stuck "thinking" with no way to cancel.
         try:
-            async for event in orchestrator.run(context):
+            async for event in engine:
                 et = event.type.value
                 if et == "chunk":
                     collected_chunks.append(str(event.data))

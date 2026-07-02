@@ -64,6 +64,15 @@ class DispatchAgentSkill(Skill):
                         "expected output format it needs."
                     ),
                 },
+                "working_directory": {
+                    "type": "string",
+                    "description": (
+                        "Optional absolute path for CODING tasks dispatched to "
+                        "Optimus — the directory on Optimus's own machine where the "
+                        "work should happen (a repo or project folder). Omit for "
+                        "non-coding tasks and for every other agent."
+                    ),
+                },
             },
             "required": ["agent", "task"],
         }
@@ -85,6 +94,7 @@ class DispatchAgentSkill(Skill):
             from_agent=context.agent_id, to_agent=agent, task=task,
             user_id=context.user_id, request_id=context.request_id,
             depth=depth,
+            cwd=(args.get("working_directory") or "").strip() or None,
         )
 
 
