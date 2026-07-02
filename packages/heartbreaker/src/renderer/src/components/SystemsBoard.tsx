@@ -347,7 +347,11 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         <span className="hb-hide-sm" style={{ fontFamily: MONO, fontSize: '0.56rem', color: 'var(--hb-icon)', textTransform: 'none' }}>
           ver 17 · MK VI
         </span>
-        <span style={{ width: 7, height: 14, background: 'linear-gradient(180deg, #e8a850, #c98a35)' }} />
+        <span style={{
+          width: 7, height: 14, background: 'rgba(217,156,68,0.5)',
+          border: '1px solid rgba(242,183,92,0.7)',
+          boxShadow: 'inset 0 1px 0 rgba(255,230,190,0.35)',
+        }} />
         <button
           onClick={onClose}
           title="Close (Esc)"

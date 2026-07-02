@@ -100,7 +100,10 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(UseToolsetSkill())
     await registry.register_skill(AutomationsSkill())
     await registry.register_skill(DispatchAgentSkill(
-        dispatcher, [(p.agent_id, p.domain) for p in profiles.roster()],
+        dispatcher,
+        # Session-scope aliases (warroom) are not dispatch targets — keep them
+        # out of the tool schema, matching AgentDispatcher.known_agents().
+        [(p.agent_id, p.domain) for p in profiles.roster() if p.dispatch_target],
     ))
     await registry.register_skill(AgentChannelSkill())
     await registry.register_skill(HousePartySkill())

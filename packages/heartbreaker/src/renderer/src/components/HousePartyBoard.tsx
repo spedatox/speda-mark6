@@ -47,8 +47,12 @@ const WARROOM_BRAND: AppProfile = {
  *  restores the operation that was on screen. Cleared on STAND DOWN. */
 let lastOpSession: number | null = null
 
-export default function HousePartyBoard({ config, onMinimize, onStoodDown }: {
+export default function HousePartyBoard({ config, engaged, onMinimize, onStoodDown }: {
   config: AppConfig
+  /** Whether the House Party Protocol is live. False = review/standby mode:
+   *  the full command-center chat and OPERATIONS history still work (it is
+   *  just the warroom agent), but there is nothing to stand down. */
+  engaged: boolean
   onMinimize: () => void
   onStoodDown: () => void
 }) {
@@ -148,40 +152,43 @@ export default function HousePartyBoard({ config, onMinimize, onStoodDown }: {
     }}>
       {/* Title plate — chrome loops through the roster's colors */}
       <div className="hb-head-light" style={{ minHeight: 0, gap: '0.7rem' }}>
-        <span className="hb-party-cycle" style={{
-          width: 7, height: 7, borderRadius: '50%', background: 'currentColor',
-          boxShadow: '0 0 8px currentColor',
+        <span className={engaged ? 'hb-party-cycle' : undefined} style={{
+          width: 7, height: 7, borderRadius: '50%',
+          background: engaged ? 'currentColor' : 'var(--hb-icon-dim)',
+          boxShadow: engaged ? '0 0 8px currentColor' : 'none',
         }} />
         <span className="hb-party-cycle" style={{ fontSize: '0.82rem' }}>HOUSE PARTY PROTOCOL // WAR ROOM</span>
         <span className="hb-hide-sm" style={{
           fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.1em',
           color: 'var(--hb-icon)', textTransform: 'none',
         }}>
-          ALL HANDS · FULL GRADE
+          {engaged ? 'ALL HANDS · FULL GRADE' : 'REVIEW // PROTOCOL OFFLINE'}
         </span>
         <span style={{ flex: 1 }} />
         <span style={{
           fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.1em', textTransform: 'none',
           color: working.size > 0 ? 'var(--hb-amber)' : 'var(--hb-icon)',
         }}>
-          {working.size > 0 ? `${working.size} WORKING` : 'CHANNEL OPEN'}
+          {working.size > 0
+            ? `${working.size} WORKING`
+            : engaged ? 'CHANNEL OPEN' : 'STANDBY'}
         </span>
-        <button
-          onClick={standDown}
-          title="End the protocol — dispatches return to the background tier"
-          style={{
-            height: 22, padding: '0 0.6rem',
-            border: '1px solid rgba(200,74,58,0.6)', background: 'rgba(120,40,32,0.18)',
-            color: '#e8a196', cursor: 'pointer',
-            fontFamily: UI, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.16em',
-            transition: 'all 0.12s',
-          }}
-        >
-          STAND DOWN
-        </button>
+        {engaged && (
+          <button
+            className="hb-btn hb-btn-tint"
+            onClick={standDown}
+            title="End the protocol — dispatches return to the background tier"
+            style={{
+              height: 22, padding: '0 0.6rem', color: '#e8a196',
+              fontFamily: UI, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.16em',
+            }}
+          >
+            STAND DOWN
+          </button>
+        )}
         <button
           onClick={onMinimize}
-          title="Minimize — the protocol stays engaged (Esc)"
+          title={engaged ? 'Minimize — the protocol stays engaged (Esc)' : 'Close the war room (Esc)'}
           style={{
             border: 'none', background: 'transparent', cursor: 'pointer',
             color: 'var(--hb-icon-dim)', display: 'flex', alignItems: 'center', padding: '0 2px',

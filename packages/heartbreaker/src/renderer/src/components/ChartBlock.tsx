@@ -90,8 +90,11 @@ function resolveColor(s: Series, idx: number): string {
 function StarkTooltip({ active, payload, label, unit }: any) {
   if (!active || !payload?.length) return null
   return (
-    <div style={{
-      background: 'rgba(3,8,12,0.97)',
+    <div className="hb-glass-xs" style={{
+      background: 'rgba(6,14,22,0.85)',
+      backdropFilter: 'var(--hb-holo-blur)',
+      WebkitBackdropFilter: 'var(--hb-holo-blur)',
+      boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
       border: '1px solid rgba(var(--hb-accent-rgb),0.5)',
       padding: '0.35rem 0.6rem',
       fontFamily: "'Share Tech Mono', monospace",
@@ -143,25 +146,24 @@ function ChartPanel({ title, children }: { title?: string; children: React.React
   const sub  = idx > -1 ? title!.slice(idx)    : ''
 
   return (
-    <div style={{
+    <div className="hb-glass-sm" style={{
       position: 'relative',
-      background: '#040c11',
-      border: '1px solid rgba(var(--hb-accent-rgb),0.24)',
+      background: 'rgba(6, 14, 22, 0.55)',
+      backdropFilter: 'var(--hb-holo-blur)',
+      WebkitBackdropFilter: 'var(--hb-holo-blur)',
+      border: '1px solid var(--hb-edge)',
+      boxShadow: 'var(--hb-holo-shadow)',
       margin: '0.75rem 0',
+      overflow: 'hidden',
       animation: 'widgetEntrance 0.35s ease both',
     }}>
-      {/* corner brackets */}
-      <span style={{ position:'absolute', top:-1, left:-1, width:11, height:11,
-        borderTop:'1px solid var(--hb-cyan)', borderLeft:'1px solid var(--hb-cyan)', pointerEvents:'none' }} />
-      <span style={{ position:'absolute', bottom:-1, right:-1, width:11, height:11,
-        borderBottom:'1px solid var(--hb-cyan)', borderRight:'1px solid var(--hb-cyan)', pointerEvents:'none' }} />
-
-      {/* panel header */}
+      {/* panel header — frosted accent glass */}
       {title && (
         <div style={{
           display: 'flex', alignItems: 'center',
           height: 28, padding: '0 0.75rem',
-          background: 'linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.85) 0%, rgba(var(--hb-cyan-dim-rgb),0.22) 55%, transparent 100%)',
+          background: 'rgba(var(--hb-accent-rgb),0.1)',
+          boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
           borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.22)',
           fontFamily: "'Rajdhani', sans-serif",
           fontSize: '0.82rem', fontWeight: 700,

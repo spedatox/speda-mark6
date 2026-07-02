@@ -277,7 +277,8 @@ function ModelPicker({ models, activeId, onSelect }: {
           <div style={{
             height: 22, padding: '0 0.6rem',
             display: 'flex', alignItems: 'center',
-            background: 'linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.7), rgba(var(--hb-cyan-dim-rgb),0.15) 60%, transparent)',
+            background: 'rgba(var(--hb-accent-rgb),0.12)',
+            boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
             borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.2)',
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '0.62rem', fontWeight: 700,
@@ -420,7 +421,8 @@ function MobileToolsMenu({ budget, listening, isStreaming, onAttach, onToggleBud
           <div style={{
             height: 22, padding: '0 0.6rem',
             display: 'flex', alignItems: 'center',
-            background: 'linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.7), rgba(var(--hb-cyan-dim-rgb),0.15) 60%, transparent)',
+            background: 'rgba(var(--hb-accent-rgb),0.12)',
+            boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
             borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.2)',
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '0.62rem', fontWeight: 700,
@@ -686,10 +688,15 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                     }}>{formatSize(a.size)}</span>
                   )}
                   <button onClick={() => removeAttachment(a.id)} title="Remove"
+                    className="hb-glass-xs"
                     style={{
                       position: 'absolute', top: -6, right: -6,
                       width: 16, height: 16,
-                      background: '#050d12', border: '1px solid rgba(var(--hb-accent-rgb),0.4)',
+                      background: 'rgba(10, 22, 30, 0.8)',
+                      backdropFilter: 'var(--hb-holo-blur)',
+                      WebkitBackdropFilter: 'var(--hb-holo-blur)',
+                      border: '1px solid rgba(var(--hb-accent-rgb),0.4)',
+                      boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
                       color: 'var(--hb-icon-bright)', cursor: 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: '0.65rem', lineHeight: 1,

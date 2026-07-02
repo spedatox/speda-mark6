@@ -94,17 +94,15 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
+            className={party ? 'hb-btn hb-btn-tint' : 'hb-btn'}
             onClick={standDown}
             title={party
               ? 'STAND DOWN — end the House Party Protocol'
               : "Engaged only by telling SPEDA: 'House Party Protocol'"}
             style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              height: 18, padding: '0 6px',
-              border: `1px solid ${party ? 'rgba(242,183,92,0.7)' : 'var(--hb-line)'}`,
-              background: party ? 'rgba(217,156,68,0.16)' : 'transparent',
-              color: party ? 'var(--hb-amber-bright)' : 'var(--hb-icon-dim)',
-              cursor: party ? 'pointer' : 'default', transition: 'all 0.15s',
+              gap: 5, height: 18, padding: '0 6px',
+              ...(party ? { color: 'var(--hb-amber-bright)' } : {}),
+              cursor: party ? 'pointer' : 'default',
               fontFamily: UI, fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.14em',
             }}
           >

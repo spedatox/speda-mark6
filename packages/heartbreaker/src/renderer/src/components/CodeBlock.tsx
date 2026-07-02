@@ -20,11 +20,12 @@ export default function CodeBlock({ language, children }: Props) {
   const lang = language || 'text'
 
   return (
-    <div style={{ overflow: 'hidden', margin: '0.75rem 0', border: '1px solid var(--hb-line)' }}>
-      {/* Header — teal tag bar, ".HMM document" style */}
+    <div className="hb-glass-sm" style={{ overflow: 'hidden', margin: '0.75rem 0', border: '1px solid var(--hb-edge)', boxShadow: 'var(--hb-holo-shadow)' }}>
+      {/* Header — frosted accent glass tag bar */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        background: 'linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.55), rgba(var(--hb-cyan-dim-rgb),0.18) 70%, transparent)',
+        background: 'rgba(var(--hb-accent-rgb),0.1)',
+        boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
         padding: '0.32rem 0.75rem',
         borderBottom: '1px solid var(--hb-line)',
       }}>
