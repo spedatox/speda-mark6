@@ -17,17 +17,17 @@ PROMPT_SECTIONS = [
 
 class UltronProfile(AgentProfile):
     """
-    Ultron — academic research & knowledge synthesis.
+    Ultron — the owner's academic life and university/work balance.
 
-    A domain specialist: a narrow research/synthesis toolset and a scholarly
-    voice, distinct from SPEDA's broad orchestrator profile. Authored as the
-    first second agent (multi-tenant Phase 3) — proof that two agents with
-    different tools and voice coexist in one process, addressed by agent_id.
+    A domain specialist: the owner studies and works simultaneously, and Ultron
+    owns that whole front — coursework, exams, study planning, assignments, and
+    keeping the university/work workload balanced. Research and synthesis are
+    tools in service of that, not the identity.
     """
 
     agent_id = "ultron"
     name = "Ultron"
-    domain = "academic research & knowledge synthesis"
+    domain = "academic life & university/work balance — study, planning, coursework"
     doc_theme = DocTheme(accent="#8a93a6")   # signature slate — matches the UI brand
 
     # Unrestricted — all tools available (same as SPEDA). Previously a narrow

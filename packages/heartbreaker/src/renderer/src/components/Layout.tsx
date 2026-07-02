@@ -36,7 +36,6 @@ export default function Layout({ profile, config, switchAgent }: LayoutProps) {
     const check = () => getHouseParty(config).then(engaged => {
       setParty(engaged)
       if (engaged && !partyWas.current) setWarRoomOpen(true)   // auto-transform on engage
-      if (!engaged) setWarRoomOpen(false)
       partyWas.current = engaged
     })
     check()
@@ -109,9 +108,10 @@ export default function Layout({ profile, config, switchAgent }: LayoutProps) {
 
       {boardOpen && <SystemsBoard config={config} onClose={() => setBoardOpen(false)} />}
       {commsOpen && <CommsTray config={config} onClose={() => setCommsOpen(false)} />}
-      {party && warRoomOpen && (
+      {warRoomOpen && (
         <HousePartyBoard
           config={config}
+          engaged={party}
           onMinimize={() => setWarRoomOpen(false)}
           onStoodDown={() => { setParty(false); setWarRoomOpen(false); partyWas.current = false }}
         />

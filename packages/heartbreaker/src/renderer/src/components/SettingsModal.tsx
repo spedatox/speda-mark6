@@ -281,19 +281,23 @@ export default function SettingsModal({ config, onClose }: Props) {
               <span style={{ flex: 1 }} />
               <span style={{
                 width: 7, height: 14, alignSelf: 'center',
-                background: 'linear-gradient(180deg, #e8a850, #c98a35)',
+                background: 'rgba(217,156,68,0.5)',
+                border: '1px solid rgba(242,183,92,0.7)',
+                boxShadow: 'inset 0 1px 0 rgba(255,230,190,0.35)',
               }} />
             </h2>
             <button
               onClick={onClose}
               style={{
                 width: 46, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                border: 'none', borderLeft: '1px solid rgba(10,24,32,0.4)',
-                background: 'var(--hb-bar-light)', color: 'var(--hb-icon-dim)',
-                cursor: 'pointer', transition: 'color 0.1s',
+                border: 'none', borderLeft: '1px solid var(--hb-edge)',
+                background: 'rgba(190, 215, 235, 0.1)',
+                boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.25)',
+                color: 'var(--hb-icon-bright)',
+                cursor: 'pointer', transition: 'color 0.1s, background 0.12s',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#0c1a22' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--hb-icon-dim)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#eaf6fa' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--hb-icon-bright)' }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -315,13 +319,17 @@ export default function SettingsModal({ config, onClose }: Props) {
                     Defines the AI's behavior and personality for all conversations.
                   </p>
                   <textarea
+                    className="hb-glass-xs"
                     value={localPrompt}
                     onChange={e => setLocalPrompt(e.target.value)}
                     placeholder="You are a helpful assistant…"
                     rows={5}
                     style={{
-                      width: '100%', background: 'rgba(8,20,26,0.6)',
-                      border: '1px solid var(--border)',
+                      // Dense translucent well — the modal's backdrop-filter is a
+                      // nested backdrop root, so the fill must occlude on its own.
+                      width: '100%', background: 'rgba(10, 22, 30, 0.55)',
+                      boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35), inset 0 -1px 0 0 rgba(255,255,255,0.05)',
+                      border: '1px solid var(--hb-edge)',
                       padding: '0.75rem',
                       color: 'var(--text-primary)', fontSize: '0.875rem',
                       lineHeight: 1.6, fontFamily: 'inherit', resize: 'vertical',
@@ -395,11 +403,8 @@ export default function SettingsModal({ config, onClose }: Props) {
                         </span>
                         <button
                           onClick={disconnectGoogle}
-                          style={{
-                            padding: '0.45rem 0.8rem', border: '1px solid var(--border)',
-                            background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer',
-                            fontSize: '0.78rem', fontWeight: 500, borderRadius: '0.4rem',
-                          }}
+                          className="hb-btn"
+                          style={{ padding: '0.45rem 0.8rem', fontSize: '0.78rem', fontWeight: 500 }}
                         >
                           Disconnect
                         </button>
@@ -407,11 +412,10 @@ export default function SettingsModal({ config, onClose }: Props) {
                     ) : (
                       <button
                         onClick={signInGoogle}
+                        className="hb-btn"
                         style={{
-                          display: 'flex', alignItems: 'center', gap: '0.5rem',
-                          padding: '0.5rem 0.9rem', border: '1px solid var(--border)',
-                          background: '#fff', color: '#1f2937', cursor: 'pointer',
-                          fontSize: '0.82rem', fontWeight: 600, borderRadius: '0.4rem',
+                          gap: '0.5rem', padding: '0.5rem 0.9rem',
+                          fontSize: '0.82rem', fontWeight: 600, color: 'var(--hb-text)',
                         }}
                       >
                         <svg width="15" height="15" viewBox="0 0 48 48">
@@ -436,7 +440,8 @@ export default function SettingsModal({ config, onClose }: Props) {
                   padding: '1.2rem',
                   borderRadius: '0.6rem',
                   border: '1px solid var(--border)',
-                  background: 'var(--bg-card)',
+                  background: 'rgba(190, 215, 235, 0.03)',
+                  boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.08)',
                   marginBottom: '1rem',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -454,11 +459,8 @@ export default function SettingsModal({ config, onClose }: Props) {
                         </span>
                         <button
                           onClick={disconnectNotion}
-                          style={{
-                            padding: '0.45rem 0.8rem', border: '1px solid var(--border)',
-                            background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer',
-                            fontSize: '0.78rem', fontWeight: 500, borderRadius: '0.4rem',
-                          }}
+                          className="hb-btn"
+                          style={{ padding: '0.45rem 0.8rem', fontSize: '0.78rem', fontWeight: 500 }}
                         >
                           Disconnect
                         </button>
@@ -466,11 +468,10 @@ export default function SettingsModal({ config, onClose }: Props) {
                     ) : (
                       <button
                         onClick={signInNotion}
+                        className="hb-btn"
                         style={{
-                          display: 'flex', alignItems: 'center', gap: '0.5rem',
-                          padding: '0.5rem 0.9rem', border: '1px solid var(--border)',
-                          background: '#fff', color: '#1f2937', cursor: 'pointer',
-                          fontSize: '0.82rem', fontWeight: 600, borderRadius: '0.4rem',
+                          gap: '0.5rem', padding: '0.5rem 0.9rem',
+                          fontSize: '0.82rem', fontWeight: 600, color: 'var(--hb-text)',
                         }}
                       >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
@@ -549,13 +550,16 @@ export default function SettingsModal({ config, onClose }: Props) {
                         style={{
                           width: 42, height: 24, flexShrink: 0, borderRadius: 999,
                           border: 'none', position: 'relative', cursor: c.connected ? 'pointer' : 'not-allowed',
-                          background: c.active && c.connected ? 'var(--accent)' : 'rgba(var(--hb-accent-rgb),0.2)',
+                          background: c.active && c.connected ? 'rgba(var(--hb-accent-rgb),0.55)' : 'rgba(var(--hb-accent-rgb),0.2)',
+                          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.3), inset 0 -1px 0 rgba(255,255,255,0.08)',
                           opacity: c.connected ? 1 : 0.4, transition: 'background 0.15s',
                         }}
                       >
                         <span style={{
                           position: 'absolute', top: 3, left: c.active && c.connected ? 21 : 3,
-                          width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                          width: 18, height: 18, borderRadius: '50%',
+                          background: 'rgba(255,255,255,0.85)',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.6)',
                           transition: 'left 0.15s',
                         }} />
                       </button>
@@ -675,13 +679,16 @@ export default function SettingsModal({ config, onClose }: Props) {
                         style={{
                           width: 42, height: 24, flexShrink: 0, borderRadius: 999,
                           border: 'none', position: 'relative', cursor: 'pointer',
-                          background: a.active ? 'var(--accent)' : 'rgba(var(--hb-accent-rgb),0.2)',
+                          background: a.active ? 'rgba(var(--hb-accent-rgb),0.55)' : 'rgba(var(--hb-accent-rgb),0.2)',
+                          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.3), inset 0 -1px 0 rgba(255,255,255,0.08)',
                           transition: 'background 0.15s',
                         }}
                       >
                         <span style={{
                           position: 'absolute', top: 3, left: a.active ? 21 : 3,
-                          width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                          width: 18, height: 18, borderRadius: '50%',
+                          background: 'rgba(255,255,255,0.85)',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.6)',
                           transition: 'left 0.15s',
                         }} />
                       </button>
@@ -725,14 +732,12 @@ export default function SettingsModal({ config, onClose }: Props) {
                     {['Dark', 'Light'].map(t => (
                       <button
                         key={t}
+                        className={t === 'Dark' ? 'hb-btn hb-btn-tint' : 'hb-btn'}
                         style={{
                           padding: '0.5rem 1.25rem',
-                          borderRadius: '0.5rem',
-                          border: `1px solid ${t === 'Dark' ? 'var(--accent)' : 'var(--border)'}`,
-                          background: t === 'Dark' ? 'rgba(59,130,246,0.1)' : 'transparent',
-                          color: t === 'Dark' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                          cursor: t === 'Dark' ? 'default' : 'not-allowed',
                           fontSize: '0.875rem',
+                          ...(t === 'Dark' ? { color: 'var(--hb-cyan-bright)' } : {}),
+                          cursor: t === 'Dark' ? 'default' : 'not-allowed',
                           opacity: t === 'Light' ? 0.5 : 1,
                         }}
                       >
@@ -782,12 +787,9 @@ export default function SettingsModal({ config, onClose }: Props) {
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
                     <button
+                      className="hb-btn"
                       onClick={() => fileRef.current?.click()}
-                      style={{
-                        padding: '0.5rem 0.875rem',
-                        border: '1px solid var(--border)', background: 'transparent',
-                        color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.84rem',
-                      }}
+                      style={{ padding: '0.5rem 0.875rem', fontSize: '0.84rem' }}
                     >
                       Choose .zip…
                     </button>
@@ -803,16 +805,12 @@ export default function SettingsModal({ config, onClose }: Props) {
                     <div style={{ flex: 1 }} />
 
                     <button
+                      className="hb-btn hb-btn-tint"
                       onClick={handleImport}
                       disabled={!importFile || importStatus === 'uploading'}
                       style={{
-                        padding: '0.5rem 1.1rem',
-                        border: '1px solid var(--accent)',
-                        background: (!importFile || importStatus === 'uploading') ? 'transparent' : 'rgba(var(--hb-accent-rgb),0.12)',
-                        color: (!importFile || importStatus === 'uploading') ? 'var(--text-muted)' : 'var(--accent)',
-                        cursor: (!importFile || importStatus === 'uploading') ? 'not-allowed' : 'pointer',
+                        padding: '0.5rem 1.1rem', color: 'var(--hb-cyan-bright)',
                         fontSize: '0.84rem', fontWeight: 600, letterSpacing: '0.04em',
-                        opacity: (!importFile || importStatus === 'uploading') ? 0.5 : 1,
                       }}
                     >
                       {importStatus === 'uploading' ? 'Importing…' : 'Import'}
@@ -845,16 +843,12 @@ export default function SettingsModal({ config, onClose }: Props) {
                     Runs in the background; ~a couple of minutes, ~$2 once.
                   </p>
                   <button
+                    className="hb-btn hb-btn-tint"
                     onClick={handleIndex}
                     disabled={indexStatus === 'running'}
                     style={{
-                      padding: '0.5rem 1.1rem',
-                      border: '1px solid var(--accent)',
-                      background: indexStatus === 'running' ? 'transparent' : 'rgba(var(--hb-accent-rgb),0.12)',
-                      color: indexStatus === 'running' ? 'var(--text-muted)' : 'var(--accent)',
-                      cursor: indexStatus === 'running' ? 'not-allowed' : 'pointer',
+                      padding: '0.5rem 1.1rem', color: 'var(--hb-cyan-bright)',
                       fontSize: '0.84rem', fontWeight: 600, letterSpacing: '0.04em',
-                      opacity: indexStatus === 'running' ? 0.5 : 1,
                     }}
                   >
                     {indexStatus === 'running' ? 'Indexing…' : 'Index history'}
@@ -906,6 +900,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                     Used in the greeting on the home screen.
                   </p>
                   <input
+                    className="hb-glass-xs"
                     type="text"
                     value={localUserName}
                     onChange={e => setLocalUserName(e.target.value)}
@@ -913,8 +908,11 @@ export default function SettingsModal({ config, onClose }: Props) {
                     onKeyDown={e => { if (e.key === 'Enter') { update({ userName: localUserName.trim() }); (e.currentTarget as HTMLInputElement).blur() } }}
                     placeholder="Enter your name…"
                     style={{
-                      width: '100%', background: 'rgba(8,20,26,0.6)',
-                      border: '1px solid var(--border)',
+                      // Dense translucent well — the modal's backdrop-filter is a
+                      // nested backdrop root, so the fill must occlude on its own.
+                      width: '100%', background: 'rgba(10, 22, 30, 0.55)',
+                      boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35), inset 0 -1px 0 0 rgba(255,255,255,0.05)',
+                      border: '1px solid var(--hb-edge)',
                       padding: '0.625rem 0.75rem',
                       color: 'var(--text-primary)', fontSize: '0.9375rem',
                       fontFamily: 'inherit', outline: 'none',

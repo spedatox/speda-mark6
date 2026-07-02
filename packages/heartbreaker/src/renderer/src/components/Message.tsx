@@ -719,8 +719,10 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                 onChange={e => setEditValue(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit() } if (e.key === 'Escape') { setEditing(false); setEditValue(message.content) } }}
                 rows={3}
+                className="hb-glass-xs"
                 style={{
-                  width: '100%', background: 'rgba(8,20,26,0.7)',
+                  width: '100%', background: 'rgba(10, 22, 30, 0.55)',
+                  boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35), inset 0 -1px 0 0 rgba(255,255,255,0.05)',
                   border: '1px solid var(--border-focus)',
                   padding: '0.625rem 1rem',
                   color: 'var(--text-primary)', fontSize: '0.9375rem',
@@ -730,21 +732,18 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
               />
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                 <button
+                  className="hb-btn"
                   onClick={() => { setEditing(false); setEditValue(message.content) }}
-                  style={{
-                    padding: '0.35rem 0.875rem', borderRadius: '0.5rem',
-                    border: '1px solid var(--border)', background: 'transparent',
-                    color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem',
-                  }}
+                  style={{ padding: '0.35rem 0.875rem', fontSize: '0.8rem' }}
                 >
                   Cancel
                 </button>
                 <button
+                  className="hb-btn hb-btn-tint"
                   onClick={saveEdit}
                   style={{
-                    padding: '0.35rem 0.875rem', borderRadius: '0.5rem',
-                    border: 'none', background: 'var(--accent)',
-                    color: '#fff', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500,
+                    padding: '0.35rem 0.875rem', color: 'var(--hb-cyan-bright)',
+                    fontSize: '0.8rem', fontWeight: 600,
                   }}
                 >
                   Save & Send

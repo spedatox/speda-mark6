@@ -1,22 +1,12 @@
-import { useState } from 'react'
 import { useChatContext } from '../store/chat'
 
 function IconBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
-  const [hover, setHover] = useState(false)
   return (
     <button
+      className="hb-btn"
       onClick={onClick}
       title={title}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        width: 30, height: 26,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: `1px solid ${hover ? 'var(--hb-cyan)' : 'var(--hb-line)'}`,
-        background: hover ? 'rgba(var(--hb-accent-rgb),0.1)' : 'transparent',
-        color: hover ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
-        cursor: 'pointer', transition: 'all 0.12s', flexShrink: 0,
-      }}
+      style={{ width: 30, height: 26, flexShrink: 0 }}
     >
       {children}
     </button>
@@ -114,43 +104,42 @@ export default function Header({
         </span>
       )}
 
-      {/* House Party Protocol — pulsing chip while engaged; click re-enters the war room */}
-      {partyEngaged && !warRoomOpen && onOpenWarRoom && (
+      {/* War room — always reachable. Amber pulsing chip while the protocol is
+          engaged; quiet WAR ROOM button otherwise (review/standby mode). */}
+      {!warRoomOpen && onOpenWarRoom && (
         <button
+          className={partyEngaged ? 'hb-btn hb-btn-tint' : 'hb-btn'}
           onClick={onOpenWarRoom}
-          title="House Party Protocol is ACTIVE — return to the war room"
+          title={partyEngaged
+            ? 'House Party Protocol is ACTIVE — return to the war room'
+            : 'Open the war room — review past operations or brief SPEDA (protocol stays offline)'}
           style={{
-            height: 24, padding: '0 0.55rem',
-            display: 'flex', alignItems: 'center', gap: '0.4rem',
-            border: '1px solid rgba(242,183,92,0.7)',
-            background: 'rgba(217,156,68,0.16)',
-            color: 'var(--hb-amber-bright)',
-            cursor: 'pointer', transition: 'all 0.12s', flexShrink: 0,
+            height: 24, padding: '0 0.55rem', gap: '0.4rem',
+            ...(partyEngaged ? { color: 'var(--hb-amber-bright)' } : {}),
+            flexShrink: 0,
             fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
             letterSpacing: '0.16em',
           }}
         >
           <span style={{
-            width: 6, height: 6, borderRadius: '50%', background: 'var(--hb-amber)',
-            boxShadow: '0 0 7px rgba(242,183,92,0.9)',
-            animation: 'hbBlink 1.6s ease-in-out infinite',
+            width: 6, height: 6, borderRadius: '50%',
+            background: partyEngaged ? 'var(--hb-amber)' : 'var(--hb-icon-dim)',
+            boxShadow: partyEngaged ? '0 0 7px rgba(242,183,92,0.9)' : 'none',
+            animation: partyEngaged ? 'hbBlink 1.6s ease-in-out infinite' : 'none',
           }} />
-          HPP ACTIVE
+          {partyEngaged ? 'HPP ACTIVE' : 'WAR ROOM'}
         </button>
       )}
 
       {/* Inter-agent comms tray toggle */}
       {onToggleComms && (
         <button
+          className={commsOpen ? 'hb-btn hb-btn-tint' : 'hb-btn'}
           onClick={onToggleComms}
           title={commsOpen ? 'Close agent comms' : 'Open inter-agent comms traffic'}
           style={{
-            height: 24, padding: '0 0.5rem',
-            display: 'flex', alignItems: 'center', gap: '0.35rem',
-            border: `1px solid ${commsOpen ? 'rgba(242,183,92,0.6)' : 'var(--hb-line)'}`,
-            background: commsOpen ? 'rgba(217,156,68,0.14)' : 'transparent',
-            color: commsOpen ? 'var(--hb-amber-bright)' : 'var(--hb-text-dim)',
-            cursor: 'pointer', transition: 'all 0.12s', flexShrink: 0,
+            height: 24, padding: '0 0.5rem', gap: '0.35rem', flexShrink: 0,
+            ...(commsOpen ? { color: 'var(--hb-amber-bright)' } : {}),
             fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
             letterSpacing: '0.16em',
           }}
@@ -166,15 +155,12 @@ export default function Header({
       {/* Systems board toggle */}
       {onToggleBoard && (
         <button
+          className={boardOpen ? 'hb-btn hb-btn-tint' : 'hb-btn'}
           onClick={onToggleBoard}
           title={boardOpen ? 'Close systems board' : 'Open systems board'}
           style={{
-            height: 24, padding: '0 0.5rem',
-            display: 'flex', alignItems: 'center', gap: '0.35rem',
-            border: `1px solid ${boardOpen ? 'rgba(242,183,92,0.6)' : 'var(--hb-line)'}`,
-            background: boardOpen ? 'rgba(217,156,68,0.14)' : 'transparent',
-            color: boardOpen ? 'var(--hb-amber-bright)' : 'var(--hb-text-dim)',
-            cursor: 'pointer', transition: 'all 0.12s', flexShrink: 0,
+            height: 24, padding: '0 0.5rem', gap: '0.35rem', flexShrink: 0,
+            ...(boardOpen ? { color: 'var(--hb-amber-bright)' } : {}),
             fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
             letterSpacing: '0.16em',
           }}

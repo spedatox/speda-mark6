@@ -274,13 +274,18 @@ body {
   box-shadow: var(--hb-holo-shadow);
 }
 
-/* Panel header bar — solid teal strip with caps title */
+/* Panel header bar — frosted accent glass strip with caps title */
 .hb-panel-head {
   display: flex; align-items: center; gap: 0.4rem;
   height: 22px;
   padding: 0 0.5rem;
-  background: linear-gradient(90deg, var(--hb-cyan-dim), rgba(var(--hb-cyan-dim-rgb), 0.4));
+  background:
+    linear-gradient(rgba(var(--hb-accent-rgb), 0.12), rgba(var(--hb-accent-rgb), 0.12)),
+    rgba(8, 16, 24, 0.55);
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
   border-bottom: 1px solid var(--hb-line);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.14);
   font-size: 0.64rem;
   font-weight: 600;
   letter-spacing: 0.16em;
@@ -294,30 +299,126 @@ body {
 .hb-warn { color: var(--hb-amber); }
 .hb-alert{ color: var(--hb-red); }
 
-/* White header bar — "IP ADDRESS BOOK" / "SEARCH CONFIGURATION" */
+/* Bright glass header plate — the former solid white bar, now a thick frosted
+   slab with a strong specular catch. Same layout contract, liquid material. */
 .hb-head-light {
   display: flex; align-items: center; gap: 0.45rem;
   min-height: 24px;
   padding: 0 0.6rem;
-  background: var(--hb-bar-light);
-  color: var(--hb-bar-light-text);
+  background:
+    linear-gradient(rgba(190, 215, 235, 0.14), rgba(190, 215, 235, 0.14)),
+    rgba(10, 18, 26, 0.78);
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
+  border: 1px solid var(--hb-edge);
+  border-radius: 11px !important;
+  color: #e9f5f9;
   font-family: 'Rajdhani', sans-serif;
   font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.14em; text-transform: uppercase;
-  box-shadow: inset 0 -1px 0 rgba(10, 24, 32, 0.45);
+  text-shadow: 0 0 10px rgba(var(--hb-cyan-bright-rgb), 0.25);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.32),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.08),
+    0 4px 18px rgba(0, 0, 0, 0.3);
 }
 
-/* Cyan filled header bar — "_FROM A DHCP SERVER" */
+/* Accent glass header bar — the former solid cyan strip, frosted + tinted */
 .hb-head-cyan {
   display: flex; align-items: center; gap: 0.45rem;
   min-height: 22px;
   padding: 0 0.6rem;
-  background: var(--hb-bar-cyan);
-  color: var(--hb-bar-cyan-text);
+  background:
+    linear-gradient(rgba(var(--hb-accent-rgb), 0.16), rgba(var(--hb-accent-rgb), 0.16)),
+    rgba(8, 16, 24, 0.7);
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
+  color: var(--hb-cyan-bright);
   font-family: 'Rajdhani', sans-serif;
   font-size: 0.68rem; font-weight: 700;
   letter-spacing: 0.16em; text-transform: uppercase;
-  text-shadow: 0 1px 0 rgba(8, 30, 40, 0.4);
+  text-shadow: 0 0 8px rgba(var(--hb-cyan-bright-rgb), 0.35);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.3),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ── Fluid-glass buttons — the ONLY button material in the app ─────────────
+   .hb-btn        frosted slab button (labels, actions)
+   .hb-btn-tint   tinted state — set `color` inline, rim/fill derive from it
+   .hb-btn-ghost  icon-glyph button — invisible slab, glass wash on hover
+   Consumers must NOT set inline border/background/box-shadow (they'd win the
+   cascade and break the material); tint via `color` only. */
+/* CRITICAL: glass fills must OCCLUDE on their own. Most of these controls sit
+   inside an ancestor that already has backdrop-filter (sidebar, composer,
+   modal, every .hb-holo slab) — a nested backdrop root, so the child's own
+   blur is cancelled by Chromium and a whisper fill turns into a see-through
+   mess. Every fill below is therefore a dark occluding base with the milky
+   tint layered on top; blur stays as progressive enhancement for the
+   top-level cases where it does work. */
+.hb-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  border: 1px solid var(--hb-edge);
+  border-radius: 9px !important;
+  background:
+    linear-gradient(rgba(190, 215, 235, 0.07), rgba(190, 215, 235, 0.07)),
+    rgba(8, 16, 24, 0.62);
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.16), 0 2px 10px rgba(0, 0, 0, 0.22);
+  color: var(--hb-icon-bright);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+.hb-btn:hover:not(:disabled) {
+  border-color: var(--hb-edge-bright);
+  background:
+    linear-gradient(rgba(190, 215, 235, 0.13), rgba(190, 215, 235, 0.13)),
+    rgba(8, 16, 24, 0.62);
+  color: var(--hb-text);
+  box-shadow: var(--hb-holo-shadow-active);
+}
+.hb-btn:disabled { opacity: 0.45; cursor: default; }
+.hb-btn-tint {
+  border-color: color-mix(in srgb, currentColor 55%, transparent);
+  background:
+    linear-gradient(color-mix(in srgb, currentColor 16%, transparent), color-mix(in srgb, currentColor 16%, transparent)),
+    rgba(8, 16, 24, 0.62);
+}
+.hb-btn-tint:hover:not(:disabled) {
+  border-color: color-mix(in srgb, currentColor 80%, transparent);
+  background:
+    linear-gradient(color-mix(in srgb, currentColor 24%, transparent), color-mix(in srgb, currentColor 24%, transparent)),
+    rgba(8, 16, 24, 0.62);
+  color: inherit;
+}
+.hb-btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; cursor: pointer;
+  border-radius: 8px !important;
+  color: var(--hb-icon-dim);
+  transition: background 0.12s, color 0.12s;
+}
+.hb-btn-ghost:hover { background: rgba(190, 215, 235, 0.08); color: var(--hb-text-dim); }
+
+/* Fluid-glass input / textarea field — frosted well with a lit focus rim */
+.hb-field {
+  border: 1px solid var(--hb-edge);
+  border-radius: 10px !important;
+  background:
+    linear-gradient(rgba(190, 215, 235, 0.04), rgba(190, 215, 235, 0.04)),
+    rgba(8, 16, 24, 0.55);
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 -1px 0 0 rgba(255, 255, 255, 0.05);
+  color: var(--hb-text);
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.hb-field:focus, .hb-field:focus-within {
+  border-color: var(--hb-edge-bright);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(var(--hb-accent-rgb), 0.18);
 }
 
 /* Comms-bubble markdown: the bubble glass hugs the content — no stray
@@ -346,25 +447,34 @@ body {
     inset 0 -1px 0 0 rgba(255, 255, 255, 0.07);
 }
 
-/* Amber data chip — "05.06.10" timestamp boxes */
+/* Amber data chip — "05.06.10" timestamp boxes, amber-tinted glass */
 .hb-chip-amber {
   display: inline-flex; align-items: center;
   padding: 1px 6px;
-  background: linear-gradient(180deg, #e8a850, #c98a35);
-  color: #1c1206;
+  background:
+    linear-gradient(rgba(217, 156, 68, 0.2), rgba(217, 156, 68, 0.2)),
+    rgba(10, 16, 22, 0.7);
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
+  border: 1px solid rgba(217, 156, 68, 0.45);
+  border-radius: 7px !important;
+  color: var(--hb-amber-bright);
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.6rem; letter-spacing: 0.08em;
-  box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.25);
 }
 
 /* Outlined query box — ":ANTON VANKO" search tag */
 .hb-query-box {
   display: inline-flex; align-items: center; gap: 0.35rem;
   padding: 1px 10px 1px 8px;
-  /* frosted glass pill — same material as .hb-holo buttons */
+  /* frosted glass pill — occluding fill (the header is a backdrop root,
+     so this pill's own blur is cancelled) */
   border-radius: 9999px !important;
   border: 1px solid var(--hb-edge);
-  background: var(--hb-holo-fill);
+  background:
+    linear-gradient(rgba(190, 215, 235, 0.06), rgba(190, 215, 235, 0.06)),
+    rgba(8, 16, 24, 0.55);
   backdrop-filter: var(--hb-holo-blur);
   -webkit-backdrop-filter: var(--hb-holo-blur);
   box-shadow: var(--hb-holo-shadow);
@@ -414,6 +524,9 @@ body {
   86%      { color: #2eb6ac; }  /* optimus */
 }
 .hb-party-cycle { animation: hbPartyCycle 21s linear infinite; }
+/* GlassSelect option rows — hover wash on the liquid-glass dropdown */
+.hb-glass-opt { transition: background 0.1s ease; }
+.hb-glass-opt:hover { background: rgba(190, 215, 235, 0.07) !important; }
 .hb-party-rim {
   animation: hbPartyCycle 21s linear infinite;
   border-color: currentColor !important;
@@ -471,16 +584,17 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 .prose p:first-child { margin-top: 0; }
 .prose p:last-child  { margin-bottom: 0; }
 
-/* ── H1 — full-width panel header bar (like "IP ADDRESS_BOOK" header) ──────── */
+/* ── H1 — full-width frosted glass header plate ─────────────────────────────── */
 .prose h1 {
   display: flex;
   align-items: center;
   min-height: 32px;
   padding: 0 0.75rem 0 0.65rem;
   margin: 1.6rem 0 0.6rem;
-  background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.7) 0%, rgba(var(--hb-cyan-dim-rgb),0.22) 55%, transparent 100%);
+  background: rgba(var(--hb-accent-rgb), 0.12);
+  border-radius: 10px !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 0 rgba(255, 255, 255, 0.06);
   border-left: 2px solid var(--hb-cyan);
-  border-bottom: 1px solid var(--hb-line);
   font-family: 'Rajdhani', sans-serif;
   font-size: 1.5rem;
   font-weight: 800;
@@ -488,14 +602,6 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   text-transform: uppercase;
   color: #ffffff;
   position: relative;
-}
-/* bottom-right corner tick */
-.prose h1::after {
-  content: '';
-  position: absolute;
-  bottom: -1px; right: 0;
-  width: 18px; height: 1px;
-  background: var(--hb-cyan);
 }
 .prose h1:first-child { margin-top: 0; }
 
@@ -511,9 +617,10 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   min-height: 30px;
   padding: 0 0.7rem 0 0.6rem;
   margin: 1.5rem 0 0.5rem;
-  background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.6) 0%, rgba(var(--hb-cyan-dim-rgb),0.18) 55%, transparent 100%);
+  background: rgba(var(--hb-accent-rgb), 0.1);
+  border-radius: 9px !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.17), inset 0 -1px 0 0 rgba(255, 255, 255, 0.05);
   border-left: 3px solid var(--hb-cyan);
-  border-bottom: 1px solid var(--hb-line);
   font-family: 'Rajdhani', sans-serif !important;
   font-size: 1.3rem !important;
   font-weight: 800 !important;
@@ -530,9 +637,10 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   min-height: 26px;
   padding: 0 0.65rem 0 0.6rem;
   margin: 1.2rem 0 0.4rem;
-  background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.42) 0%, rgba(var(--hb-cyan-dim-rgb),0.1) 55%, transparent 100%);
+  background: rgba(var(--hb-accent-rgb), 0.07);
+  border-radius: 8px !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.13);
   border-left: 2px solid rgba(var(--hb-accent-rgb),0.6);
-  border-bottom: 1px solid rgba(var(--hb-accent-rgb),0.14);
   font-family: 'Rajdhani', sans-serif !important;
   font-size: 1.12rem !important;
   font-weight: 800 !important;
@@ -546,7 +654,9 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   min-height: 24px;
   padding: 0 0.6rem 0 0.55rem;
   margin: 1rem 0 0.3rem;
-  background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.28) 0%, rgba(var(--hb-cyan-dim-rgb),0.06) 55%, transparent 100%);
+  background: rgba(var(--hb-accent-rgb), 0.05);
+  border-radius: 7px !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
   border-left: 2px solid rgba(var(--hb-accent-rgb),0.4);
   font-family: 'Rajdhani', sans-serif;
   font-size: 1.02rem; font-weight: 700; letter-spacing: 0.04em;
@@ -634,7 +744,8 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   border: 1px solid var(--hb-line);
 }
 .prose th {
-  background: linear-gradient(90deg, rgba(var(--hb-cyan-dim-rgb),0.7), rgba(var(--hb-cyan-dim-rgb),0.35));
+  background: rgba(var(--hb-accent-rgb), 0.12);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
   font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
   font-size: 0.64rem; color: #cfe7ee;
   border: 1px solid var(--hb-line); padding: 0.3rem 0.6rem;
@@ -652,17 +763,16 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   border: none;
   height: 1px;
   margin: 1.25rem 0;
-  background-image: repeating-linear-gradient(
-    90deg, var(--hb-line) 0 1px, transparent 1px 8px
-  );
+  /* etched glass seam — light catch fading toward both ends */
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16) 12%, rgba(255, 255, 255, 0.16) 88%, transparent);
   position: relative;
 }
 .prose hr::before {
   content: '';
   position: absolute;
-  left: 0; top: 0;
-  width: 32px; height: 1px;
-  background: var(--hb-cyan);
+  left: 0; top: 1px; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.35) 12%, rgba(0, 0, 0, 0.35) 88%, transparent);
 }
 
 /* ── Image ───────────────────────────────────────────────────────────────────── */

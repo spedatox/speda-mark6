@@ -322,7 +322,10 @@ function SettingsPopup({ onSettings, onClose }: { onSettings: () => void; onClos
   return (
     <div className="hb-glass" style={{
       position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, right: 0,
-      background: 'rgba(150, 190, 225, 0.07)',
+      // Occluding glass — the sidebar's backdrop-filter cancels ours (nested
+      // backdrop roots), so the fill itself has to keep the rows readable.
+      background:
+        'linear-gradient(rgba(190, 215, 235, 0.06), rgba(190, 215, 235, 0.06)), rgba(8, 14, 22, 0.92)',
       backdropFilter: 'var(--hb-holo-blur)',
       WebkitBackdropFilter: 'var(--hb-holo-blur)',
       border: '1px solid var(--hb-edge)',
@@ -386,7 +389,10 @@ function AgentDropdown({ current, onSelect, onClose }: {
       position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0,
       zIndex: 100, overflow: 'hidden',
       animation: 'dropDown 0.12s ease',
-      background: 'rgba(8, 12, 18, 0.82)',
+      // Occluding glass: the sidebar is a backdrop root, so this panel's own
+      // blur is cancelled (nested backdrop roots) — the fill must do the work.
+      background:
+        'linear-gradient(rgba(190, 215, 235, 0.06), rgba(190, 215, 235, 0.06)), rgba(8, 14, 22, 0.92)',
     }}>
       {agents.map(b => {
         const active = b.agentId === current
