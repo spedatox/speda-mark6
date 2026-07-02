@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.agent import AgentRecord
 from app.schemas.agent import AgentRegistration, AgentStatus
 from app.websocket.manager import WebSocketManager
-from app.websocket.protocol import AgentMessageType, TaskDispatch
 
 logger = logging.getLogger(__name__)
 
@@ -59,16 +58,11 @@ class AgentRegistry:
     def list_online(self) -> list[AgentStatus]:
         return list(self._online.values())
 
-    async def dispatch(self, agent_id: str, task: TaskDispatch) -> None:
-        """Push a task to a connected agent over WebSocket."""
-        if not self.is_online(agent_id):
-            logger.warning("agent_dispatch_offline", extra={"agent_id": agent_id})
-            return
-        await self._ws_manager.send(agent_id, task.model_dump())
-        logger.info(
-            "agent_task_dispatched",
-            extra={"agent_id": agent_id, "task_id": task.task_id},
-        )
+    def touch(self, agent_id: str) -> None:
+        """Refresh presence on heartbeat — keeps last_seen honest for the UI."""
+        status = self._online.get(agent_id)
+        if status is not None:
+            status.last_seen = datetime.utcnow()
 
     async def _persist(
         self,

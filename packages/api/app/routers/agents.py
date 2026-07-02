@@ -102,11 +102,24 @@ async def agent_websocket(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    WebSocket endpoint for Superior Six agent connections.
-    Agents send a registration handshake on connect, then receive task dispatches.
-    This is NOT the Flutter user WebSocket — see /ws for that.
+    WebSocket endpoint for external peer agent connections (Optimus).
+    Peers send a registration handshake on connect, then receive task dispatches
+    and proxied chat requests. This is NOT the Flutter user WebSocket — see /ws.
     """
+    # AuthMiddleware only covers http-scope requests — WebSocket handshakes
+    # bypass it entirely, so the API key MUST be checked here, before accept().
+    import hmac
+
+    from app.config import settings
+
+    key = websocket.headers.get("x-api-key", "")
+    if not (key and hmac.compare_digest(key, settings.speda_api_key)):
+        await websocket.close(code=1008)  # policy violation
+        logger.warning("agent_ws_auth_rejected", extra={"agent_id": agent_id})
+        return
+
     agent_registry = websocket.app.state.agent_registry
+    agent_proxy = websocket.app.state.agent_proxy
 
     await websocket.accept()
 
@@ -123,11 +136,14 @@ async def agent_websocket(
             msg_type = message.get("type")
 
             if msg_type == "heartbeat":
+                agent_registry.touch(agent_id)
                 await websocket.send_json({"type": "acknowledge", "agent_id": agent_id})
             elif msg_type == "task_result":
                 # Correlate back to a waiting dispatch (app/core/dispatch.py).
                 resolved = websocket.app.state.dispatcher.resolve_external_result(
-                    str(message.get("task_id", "")), str(message.get("result", ""))
+                    str(message.get("task_id", "")),
+                    str(message.get("result", "")),
+                    status=str(message.get("status", "ok")),
                 )
                 logger.info(
                     "agent_task_result",
@@ -137,6 +153,12 @@ async def agent_websocket(
                         "resolved": resolved,
                     },
                 )
+            elif msg_type == "chat_event":
+                # Streamed frame of a proxied chat — route to its waiting
+                # SSE stream (app/core/external_proxy.py).
+                agent_proxy.deliver(
+                    str(message.get("chat_id", "")), message.get("event") or {}
+                )
             else:
                 logger.warning(
                     "agent_unknown_message",
@@ -144,7 +166,9 @@ async def agent_websocket(
                 )
 
     except WebSocketDisconnect:
+        agent_proxy.fail_agent(agent_id)
         await agent_registry.deregister(agent_id, db)
     except Exception as e:
         logger.error("agent_ws_error", extra={"agent_id": agent_id, "error": str(e)})
+        agent_proxy.fail_agent(agent_id)
         await agent_registry.deregister(agent_id, db)

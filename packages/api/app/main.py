@@ -136,12 +136,14 @@ async def lifespan(app: FastAPI):
         extra={"tools": len(registry.list_tools()), "degraded": degraded},
     )
 
-    # ── 4. WebSocket Manager + Agent Registry ──────────────────────────────────
+    # ── 4. WebSocket Manager + Agent Registry + External Chat Proxy ────────────
     from app.core.agent_registry import AgentRegistry
+    from app.core.external_proxy import ExternalAgentProxy
     from app.websocket.manager import WebSocketManager
 
     ws_manager = WebSocketManager()
     agent_registry = AgentRegistry(ws_manager)
+    agent_proxy = ExternalAgentProxy(ws_manager)
 
     # ── 5. Session Manager ─────────────────────────────────────────────────────
     from app.core.session_manager import SessionManager
@@ -170,6 +172,7 @@ async def lifespan(app: FastAPI):
     # ── 8. Inject into app.state ───────────────────────────────────────────────
     app.state.registry = registry
     app.state.agent_registry = agent_registry
+    app.state.agent_proxy = agent_proxy
     app.state.orchestrator = orchestrator
     app.state.ws_manager = ws_manager
     app.state.session_manager = session_manager

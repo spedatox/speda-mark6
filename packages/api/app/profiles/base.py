@@ -44,6 +44,12 @@ class AgentProfile(ABC):
     # the dispatch tool schema.
     dispatch_target: bool = True
 
+    # True for agents whose real engine is a standalone peer reached over the
+    # agents WebSocket (Optimus). While the peer is connected, /chat turns are
+    # proxied to it (core/external_proxy.py) and dispatches route external-first;
+    # when it is offline, this in-process profile answers as the fallback.
+    external_backend: bool = False
+
     name: str
     sonnet_model: str = "claude-sonnet-4-6"
     haiku_model: str = "claude-haiku-4-5-20251001"

@@ -16,9 +16,11 @@ the owner from the UI (POST /agents/house-party) or by an agent via the
 house_party tool.
 
 External peers (Optimus deployed standalone) are reached over the WebSocket
-channel via WebSocketManager when no in-process profile exists for the target
-agent_id: the task is sent as a `task_dispatch` frame and the result awaited on
-a correlated `task_result` frame.
+channel via WebSocketManager. A CONNECTED peer always outranks its in-process
+profile — the profile remains as the identity layer and offline fallback. The
+task is sent as a `task_dispatch` frame (optionally carrying a working
+directory for coding work) and the result awaited on a correlated
+`task_result` frame.
 
 Every dispatch — and its result — is logged to the agent_messages table for the
 comms tray (GET /agents/comms). Telemetry writes are best-effort: a logging
@@ -48,8 +50,9 @@ logger = logging.getLogger(__name__)
 # An agent may dispatch, and the dispatched agent may dispatch once more —
 # beyond that the chain is refused (runaway-fan-out guard, mirrors Rule 4a).
 MAX_DISPATCH_DEPTH = 2
-EXTERNAL_TIMEOUT_S = 180.0     # WebSocket peers must answer within this window
-MAX_RESULT_CHARS = 12_000      # cap what flows back into the caller's context
+EXTERNAL_TIMEOUT_S = 180.0          # WebSocket peers must answer within this window
+EXTERNAL_CODING_TIMEOUT_S = 600.0   # coding peers (Optimus) get room for real work
+MAX_RESULT_CHARS = 12_000           # cap what flows back into the caller's context
 
 # The group channel: how much recent network traffic a dispatched agent sees,
 # and how hard each entry is truncated inside the transcript. Keeps the shared
@@ -134,6 +137,7 @@ class AgentDispatcher:
         user_id: int,
         request_id: str,
         depth: int = 0,
+        cwd: str | None = None,
     ) -> str:
         """
         Run `task` on `to_agent` and return its final text to the caller.
@@ -157,8 +161,25 @@ class AgentDispatcher:
         )
         started = time.monotonic()
 
+        # External-first: a connected standalone peer (Optimus) always outranks
+        # its in-process profile — the profile stays registered as the identity
+        # layer and the offline fallback, never as a competing engine.
         profile = self._profiles.get(to_agent) if self._profiles else None
-        if profile is not None:
+        external = self._ws_manager is not None and self._ws_manager.is_connected(to_agent)
+        session_id = None
+        if external:
+            result, status = await self._run_external(
+                to_agent=to_agent, from_agent=from_agent, task=task, cwd=cwd,
+            )
+            if status in ("offline", "error") and profile is not None:
+                # Peer vanished between the presence check and the send —
+                # degrade to the in-process profile rather than failing.
+                result, status, session_id = await self._run_in_process(
+                    profile=profile, from_agent=from_agent, task=task,
+                    user_id=user_id, request_id=request_id, depth=depth,
+                    house_party=(protocol == "house_party"), own_msg_id=msg_id,
+                )
+        elif profile is not None:
             result, status, session_id = await self._run_in_process(
                 profile=profile, from_agent=from_agent, task=task,
                 user_id=user_id, request_id=request_id, depth=depth,
@@ -166,9 +187,8 @@ class AgentDispatcher:
             )
         else:
             result, status = await self._run_external(
-                to_agent=to_agent, from_agent=from_agent, task=task,
+                to_agent=to_agent, from_agent=from_agent, task=task, cwd=cwd,
             )
-            session_id = None
 
         await self._log_finish(
             msg_id, status=status, result=result, session_id=session_id,
@@ -222,13 +242,13 @@ class AgentDispatcher:
         parts = [f"### {t.upper()}\n{r}" for t, r in zip(targets, results)]
         return "House Party broadcast complete. Responses:\n\n" + "\n\n".join(parts)
 
-    def resolve_external_result(self, task_id: str, result: str) -> bool:
+    def resolve_external_result(self, task_id: str, result: str, status: str = "ok") -> bool:
         """Called by the agents WebSocket router when a `task_result` frame
         arrives from an external peer. Returns True if a dispatch was waiting."""
         fut = self._pending_external.get(task_id)
         if fut is None or fut.done():
             return False
-        fut.set_result(result)
+        fut.set_result((result, status if status in ("ok", "error") else "ok"))
         return True
 
     # ── In-process path ──────────────────────────────────────────────────────
@@ -310,7 +330,7 @@ class AgentDispatcher:
     # ── External (WebSocket peer) path ───────────────────────────────────────
 
     async def _run_external(
-        self, *, to_agent: str, from_agent: str, task: str,
+        self, *, to_agent: str, from_agent: str, task: str, cwd: str | None = None,
     ) -> tuple[str, str]:
         """Dispatch to a standalone peer (Optimus) over its WebSocket connection."""
         if self._ws_manager is None or not self._ws_manager.is_connected(to_agent):
@@ -319,6 +339,9 @@ class AgentDispatcher:
                 "that name is connected. Do not retry until it comes online.",
                 "offline",
             )
+        # Coding peers need room for multi-step tool loops; everything else
+        # keeps the tight default so a dead peer can't stall its caller long.
+        timeout = EXTERNAL_CODING_TIMEOUT_S if to_agent == "optimus" else EXTERNAL_TIMEOUT_S
         task_id = str(uuid.uuid4())
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending_external[task_id] = fut
@@ -328,12 +351,14 @@ class AgentDispatcher:
                 "task_id": task_id,
                 "from": from_agent,
                 "task": task,
+                "cwd": cwd,
+                "permission_mode": None,
             })
-            result = await asyncio.wait_for(fut, EXTERNAL_TIMEOUT_S)
-            return str(result)[:MAX_RESULT_CHARS], "ok"
+            result, status = await asyncio.wait_for(fut, timeout)
+            return str(result)[:MAX_RESULT_CHARS], status
         except asyncio.TimeoutError:
             return (
-                f"{to_agent} did not answer within {int(EXTERNAL_TIMEOUT_S)}s. "
+                f"{to_agent} did not answer within {int(timeout)}s. "
                 "The task may still be running on the peer; do not blindly retry.",
                 "timeout",
             )

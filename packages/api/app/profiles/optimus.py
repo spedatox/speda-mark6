@@ -15,18 +15,20 @@ PROMPT_SECTIONS = [
 class OptimusProfile(AgentProfile):
     """Optimus — systems, code & infrastructure.
 
-    Optimus is architecturally unique: it will eventually communicate with its
-    own standalone backend (a separate, more powerful framework). This in-process
-    profile is the transitional presence — it lets the routing, sessions, and
-    the frontend agent switcher work NOW while the standalone backend is built.
-    Once the external Optimus backend is live, this profile stays as the
-    identity/voice layer and dispatches to it via WebSocketManager.
+    Optimus is architecturally unique: its real engine is the standalone
+    Optimus backend (the Claude Code-class coding framework), which connects to
+    this backend as a WebSocket peer. While that peer is online, /chat/optimus
+    turns are proxied to it and inter-agent dispatches route to it external-first
+    — full agentic coding on the peer's own filesystem. This in-process profile
+    is the identity/voice layer and the fallback engine whenever the peer is
+    offline.
     """
 
     agent_id = "optimus"
     name = "Optimus"
     domain = "systems, code & infrastructure"
     doc_theme = DocTheme(accent="#2eb6ac")   # signature teal — matches the UI brand
+    external_backend = True
 
     # Unrestricted — all tools available (same as SPEDA). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.
