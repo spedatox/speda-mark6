@@ -38,6 +38,7 @@ PROMPT_SECTIONS = [
     "core/06_visual_output.md",   # always-loaded — no tool backs this, must be in core
     "core/07_formatting.md",      # math/LaTeX + currency formatting guidance
     "core/08_memory.md",          # persistent memory protocol (Anthropic memory pattern)
+    "core/09_agent_network.md",   # inter-agent dispatch + House Party Protocol
 ]
 
 

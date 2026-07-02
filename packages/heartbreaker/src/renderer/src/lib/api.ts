@@ -417,3 +417,101 @@ export async function indexHistory(
   }
   return res.json()
 }
+
+/* ── Inter-agent comms (AGENT_COMMS tray) ─────────────────────────────────── */
+
+export interface AgentCommEntry {
+  id: number
+  request_id: string
+  from_agent: string
+  to_agent: string
+  kind: string          // dispatch | broadcast
+  protocol: string      // direct | house_party
+  task: string
+  result: string | null
+  status: string        // running | ok | error | timeout | offline | refused
+  duration_ms: number | null
+  created_at: string
+}
+
+/** Recent inter-agent traffic, newest first. after_id polls incrementally. */
+export async function fetchAgentComms(
+  config: AppConfig,
+  limit = 100,
+  afterId = 0,
+): Promise<AgentCommEntry[]> {
+  try {
+    const res = await fetch(
+      `${config.apiBase}/agents/comms?limit=${limit}&after_id=${afterId}`,
+      { headers: authHeaders(config) },
+    )
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
+export async function getHouseParty(config: AppConfig): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/house-party`, { headers: authHeaders(config) })
+    if (!res.ok) return false
+    return !!(await res.json()).engaged
+  } catch {
+    return false
+  }
+}
+
+export async function setHouseParty(config: AppConfig, engaged: boolean): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/house-party`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ engaged }),
+    })
+    if (!res.ok) return engaged
+    return !!(await res.json()).engaged
+  } catch {
+    return engaged
+  }
+}
+
+/* ── Per-agent model routing ──────────────────────────────────────────────── */
+
+export interface AgentModelInfo {
+  agent_id: string
+  name: string
+  domain: string
+  override: string | null
+  default_main: string
+  default_background: string
+}
+
+export async function fetchAgentModels(config: AppConfig): Promise<AgentModelInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/models`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
+/** Pin an agent to a model ref; null clears the pin (profile policy again). */
+export async function pinAgentModel(
+  config: AppConfig,
+  agentId: string,
+  model: string | null,
+): Promise<AgentModelInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/models`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ agent_id: agentId, model }),
+    })
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}

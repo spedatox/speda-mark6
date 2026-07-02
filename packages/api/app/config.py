@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # refs keep working. Routing lives in app/services/llm_client.py.
     openai_api_key: str = ""
     gemini_api_key: str = ""
+    # Embedding model for semantic recall (app/skills/semantic_search.py). Always
+    # OpenAI regardless of llm_main_model/llm_background_model — reuses openai_api_key.
+    embedding_model: str = "text-embedding-3-small"
     # z.ai (Zhipu GLM) — OpenAI-compatible endpoint. Get a key from
     # https://z.ai/manage-apikey/apikey-list. Enables refs like "zai:glm-4.6".
     zai_api_key: str = ""

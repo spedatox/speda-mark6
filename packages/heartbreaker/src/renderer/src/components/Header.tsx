@@ -28,9 +28,17 @@ interface Props {
   onToggleSidebar?: () => void
   boardOpen?: boolean
   onToggleBoard?: () => void
+  commsOpen?: boolean
+  onToggleComms?: () => void
+  partyEngaged?: boolean
+  warRoomOpen?: boolean
+  onOpenWarRoom?: () => void
 }
 
-export default function Header({ sidebarOpen, onToggleSidebar, boardOpen, onToggleBoard }: Props) {
+export default function Header({
+  sidebarOpen, onToggleSidebar, boardOpen, onToggleBoard,
+  commsOpen, onToggleComms, partyEngaged, warRoomOpen, onOpenWarRoom,
+}: Props) {
   const { state } = useChatContext()
   const activeSession = state.sessions.find(s => s.id === state.activeSessionId)
   const hasMessages = state.messages.length > 0
@@ -104,6 +112,55 @@ export default function Header({ sidebarOpen, onToggleSidebar, boardOpen, onTogg
         }}>
           {hasMessages ? 'QUERY COMPLETE' : 'STANDBY'}
         </span>
+      )}
+
+      {/* House Party Protocol — pulsing chip while engaged; click re-enters the war room */}
+      {partyEngaged && !warRoomOpen && onOpenWarRoom && (
+        <button
+          onClick={onOpenWarRoom}
+          title="House Party Protocol is ACTIVE — return to the war room"
+          style={{
+            height: 24, padding: '0 0.55rem',
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            border: '1px solid rgba(242,183,92,0.7)',
+            background: 'rgba(217,156,68,0.16)',
+            color: 'var(--hb-amber-bright)',
+            cursor: 'pointer', transition: 'all 0.12s', flexShrink: 0,
+            fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
+            letterSpacing: '0.16em',
+          }}
+        >
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%', background: 'var(--hb-amber)',
+            boxShadow: '0 0 7px rgba(242,183,92,0.9)',
+            animation: 'hbBlink 1.6s ease-in-out infinite',
+          }} />
+          HPP ACTIVE
+        </button>
+      )}
+
+      {/* Inter-agent comms tray toggle */}
+      {onToggleComms && (
+        <button
+          onClick={onToggleComms}
+          title={commsOpen ? 'Close agent comms' : 'Open inter-agent comms traffic'}
+          style={{
+            height: 24, padding: '0 0.5rem',
+            display: 'flex', alignItems: 'center', gap: '0.35rem',
+            border: `1px solid ${commsOpen ? 'rgba(242,183,92,0.6)' : 'var(--hb-line)'}`,
+            background: commsOpen ? 'rgba(217,156,68,0.14)' : 'transparent',
+            color: commsOpen ? 'var(--hb-amber-bright)' : 'var(--hb-text-dim)',
+            cursor: 'pointer', transition: 'all 0.12s', flexShrink: 0,
+            fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
+            letterSpacing: '0.16em',
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="5" cy="12" r="2.4"/><circle cx="19" cy="5" r="2.4"/><circle cx="19" cy="19" r="2.4"/>
+            <line x1="7.2" y1="11" x2="16.8" y2="5.9"/><line x1="7.2" y1="13" x2="16.8" y2="18.1"/>
+          </svg>
+          COMMS
+        </button>
       )}
 
       {/* Systems board toggle */}

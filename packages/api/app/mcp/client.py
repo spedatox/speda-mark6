@@ -88,6 +88,20 @@ class MCPClient:
             if task is not None:
                 while task.cancelling() > 0:
                     task.uncancel()
+            # Close the exit stack NOW so partially-entered context managers
+            # (e.g. streamablehttp_client's anyio task group) are cleaned up in
+            # the CURRENT task.  If we leave them dangling, Python's asyncio
+            # shutdown will GC the generators in a different task, triggering
+            # "Attempted to exit cancel scope in a different task".
+            try:
+                await self._exit_stack.aclose()
+            except BaseException:
+                pass
+            self._exit_stack = AsyncExitStack()
+            # Uncancel AGAIN — aclose() itself may re-poison the task.
+            if task is not None:
+                while task.cancelling() > 0:
+                    task.uncancel()
             logger.warning(
                 "mcp_connect_failed",
                 extra={"server": self.server_name, "error": str(e)},
@@ -110,9 +124,26 @@ class MCPClient:
 
         if not self.url:
             raise ValueError(f"http transport requires a url for server '{self.server_name}'")
-        read, write, _ = await self._exit_stack.enter_async_context(
-            streamablehttp_client(self.url, headers=self.headers)
-        )
+
+        # streamablehttp_client creates an internal anyio task group.  When the
+        # HTTP handshake fails (4xx, network error) the MCP SDK raises and
+        # leaves the current asyncio Task in a "cancelling" state.  We must
+        # catch *everything* (BaseException) and clear that state so the
+        # caller's startup loop can continue with the next server.
+        try:
+            read, write, _ = await self._exit_stack.enter_async_context(
+                streamablehttp_client(self.url, headers=self.headers)
+            )
+        except BaseException as exc:
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
+            # Reset the cancel scope pollution so later awaits don't explode.
+            task = asyncio.current_task()
+            if task is not None:
+                while task.cancelling() > 0:
+                    task.uncancel()
+            raise  # re-raise so the outer connect() handler logs & skips
+
         self._session = await self._exit_stack.enter_async_context(ClientSession(read, write))
         await self._session.initialize()
 
@@ -135,12 +166,14 @@ class MCPClient:
     async def disconnect(self) -> None:
         try:
             await self._exit_stack.aclose()
-        except Exception as e:
-            # MCP stdio servers are entered in the lifespan startup task and torn
+        except BaseException as e:
+            # MCP servers are entered in the lifespan startup task and torn
             # down in shutdown; anyio raises a "cancel scope in a different task"
             # RuntimeError when the task group is closed across that boundary
             # (very visible under --reload). The subprocess is killed regardless,
             # so swallow the cleanup noise instead of failing app shutdown.
+            if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                raise
             logger.debug(
                 "mcp_disconnect_cleanup_ignored",
                 extra={"server": self.server_name, "error": str(e)},
@@ -149,3 +182,4 @@ class MCPClient:
             self._connected = False
             self._session = None
         logger.info("mcp_disconnected", extra={"server": self.server_name})
+

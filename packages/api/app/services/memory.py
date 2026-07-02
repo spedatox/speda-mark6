@@ -479,11 +479,14 @@ def schedule_background_tasks(
       - daily maintenance: current brief + dossier (self-guards to once/day)
       - title generation (first turn only — idempotent)
       - conversation compaction (self-guards on the token threshold)
+      - semantic embedding of this turn's new messages (self-heals if it fails)
     All open their own DB sessions (never reuse the request session).
     """
     from app.services.compaction import maybe_compact_session
+    from app.services.embedding_indexer import embed_session_tail
 
     background_tasks.add_task(update_session_log, session_id, request_id, user_id, model)
     background_tasks.add_task(run_daily_maintenance, session_id, request_id, user_id, model)
     background_tasks.add_task(generate_title, session_id, request_id, model)
     background_tasks.add_task(maybe_compact_session, session_id, request_id, model)
+    background_tasks.add_task(embed_session_tail, session_id, request_id, user_id)

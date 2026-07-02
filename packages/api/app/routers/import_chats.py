@@ -38,6 +38,23 @@ async def index_history_endpoint(
     return JSONResponse({"accepted": True, "message": "History indexing started in background"})
 
 
+@router.post("/index-embeddings")
+async def index_embeddings_endpoint(
+    background_tasks: BackgroundTasks,
+):
+    """
+    Embed every past message that doesn't have a semantic-recall vector yet
+    (see app/skills/semantic_search.py). Idempotent and self-healing — safe to
+    call any time, including repeatedly; it only ever processes what's pending.
+    Runs in the background.
+    """
+    from app.services.embedding_indexer import backfill_embeddings
+
+    request_id = str(uuid.uuid4())
+    background_tasks.add_task(backfill_embeddings, 1, request_id)
+    return JSONResponse({"accepted": True, "message": "Embedding backfill started in background"})
+
+
 @router.post("/import-chats")
 async def import_chats(
     background_tasks: BackgroundTasks,

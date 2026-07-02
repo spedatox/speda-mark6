@@ -11,6 +11,7 @@ PROMPT_SECTIONS = [
     "core/06_visual_output.md",
     "core/07_formatting.md",
     "core/08_memory.md",
+    "core/09_agent_network.md",
 ]
 
 

@@ -3,9 +3,11 @@ import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useHealth } from '../lib/useHealth'
 import { useIsMobile } from '../lib/useIsMobile'
-import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles } from '../lib/api'
-import type { ConnectionInfo, MemoryFileInfo } from '../lib/api'
+import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, fetchAgentModels, pinAgentModel } from '../lib/api'
+import type { ConnectionInfo, MemoryFileInfo, AgentModelInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
+import { agentColor, monogram } from '../lib/agents'
+import AgentModelPicker from './AgentModelPicker'
 
 /**
  * SYSTEMS BOARD — the "PERIODIC 56A." tactical overlay, mapped onto real data.
@@ -262,6 +264,8 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const [rtt, setRtt] = useState<number[]>([])
   const [memFiles, setMemFiles] = useState<MemoryFileInfo[]>([])
   const [memPath, setMemPath] = useState<string | null>(null)
+  const [banksWide, setBanksWide] = useState(false)
+  const [agentInfos, setAgentInfos] = useState<AgentModelInfo[]>([])
 
   const loadConns = () => getConnections(config).then(r => {
     setServers(r.servers)
@@ -270,6 +274,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
   useEffect(() => {
     fetchModels(config).then(setModels).catch(() => {})
+    fetchAgentModels(config).then(setAgentInfos)
     getBudgetMode(config).then(setBudgetMode).catch(() => {})
     fetchMemoryFiles(config).then(files => {
       setMemFiles(files)
@@ -288,10 +293,15 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   }, [health.latencyMs])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    // Esc retracts the extended knowledge bank first; a second Esc closes the board.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (banksWide) setBanksWide(false)
+      else onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, banksWide])
 
   const toggleServer = async (c: ConnectionInfo) => {
     setServers(ss => ss.map(s => s.server === c.server ? { ...s, active: !c.active } : s))
@@ -312,7 +322,10 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
       // Mobile collapses the tactical grid into one scrollable column;
       // panel order follows source order (uplink → matrix → budget → banks).
       gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : '218px 1fr 232px',
-      gridTemplateRows: isMobile ? 'auto' : '34px 1fr 158px',
+      // Bottom track is fr-based so EXTEND can animate it: the knowledge bank
+      // rises to ~80% of the board while the tactical grid compresses upward.
+      gridTemplateRows: isMobile ? 'auto' : `34px 1fr ${banksWide ? '4.4fr' : '0.28fr'}`,
+      transition: 'grid-template-rows 0.5s cubic-bezier(0.22, 0.9, 0.3, 1)',
       overflowY: isMobile ? 'auto' : undefined,
       gap: 8, padding: 10,
       background: 'rgba(4, 9, 12, 0.5)',
@@ -350,7 +363,9 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
       </div>
 
       {/* ── Left column — uplink telemetry + network nodes ───────────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+      {/* overflow hidden: when the knowledge bank extends, the compressed row
+          clips these panels instead of letting them spill over the bank */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'hidden' }}>
         <Panel title="UPLINK_STATUS" style={{ flexShrink: 0, animation: 'hbRise 0.4s 0.05s ease both' }}>
           <KV k="LINK" v={health.online ? 'ONLINE' : 'DENY'}
               color={health.online ? 'var(--hb-green)' : 'var(--hb-red)'} />
@@ -456,11 +471,59 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               </div>
             </div>
           )}
+
+          {/* Per-agent model pins — which core each agent runs on */}
+          {agentInfos.length > 0 && (
+            <div style={{ marginTop: '0.85rem' }}>
+              <p style={{
+                fontFamily: MONO, fontSize: '0.55rem', letterSpacing: '0.22em',
+                color: 'var(--hb-cyan)', marginBottom: '0.35rem',
+              }}>
+                {'>>:'} AGENT CORES_ PER-AGENT MODEL ROUTING
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {agentInfos.map(info => (
+                  <div key={info.agent_id} className="hb-glass-xs" style={{
+                    width: 148, padding: '0.35rem 0.4rem',
+                    display: 'flex', flexDirection: 'column', gap: 4,
+                    border: `1px solid ${info.override ? `${agentColor(info.agent_id)}66` : 'rgba(var(--hb-accent-rgb),0.2)'}`,
+                    background: 'rgba(20, 42, 52, 0.15)',
+                    backdropFilter: 'var(--hb-holo-blur)',
+                    WebkitBackdropFilter: 'var(--hb-holo-blur)',
+                  }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{
+                        fontFamily: UI, fontWeight: 700, fontSize: '0.62rem',
+                        color: agentColor(info.agent_id), letterSpacing: '0.08em',
+                      }}>
+                        {monogram(info.agent_id)}
+                      </span>
+                      <span style={{
+                        fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.08em',
+                        color: 'var(--hb-text-dim)', textTransform: 'uppercase',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {info.agent_id}
+                      </span>
+                    </span>
+                    <AgentModelPicker
+                      info={info}
+                      models={models}
+                      onPin={async m => {
+                        const infos = await pinAgentModel(config, info.agent_id, m)
+                        if (infos.length) setAgentInfos(infos)
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </Panel>
 
       {/* ── Right column — token budget + response trace ─────────────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'hidden' }}>
         <Panel title="TOKEN_BUDGET" style={{ flexShrink: 0, animation: 'hbRise 0.4s 0.16s ease both' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '0.2rem 0.1rem 0.45rem' }}>
             <span className="hb-num-thin" style={{ fontSize: '2.6rem', color: gaugeColor }}>
@@ -519,9 +582,31 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
       {/* ── Bottom band — knowledge bank: what SPEDA knows about the owner ─ */}
       <Panel title="DATA_BANKS // KNOWLEDGE" light pad={false}
-        right={<span style={{ fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.08em', color: 'var(--hb-icon)', textTransform: 'none' }}>
-          {memFiles.length} FILES
-        </span>}
+        right={
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.08em', color: 'var(--hb-icon)', textTransform: 'none' }}>
+              {memFiles.length} FILES
+            </span>
+            <button
+              onClick={() => setBanksWide(w => !w)}
+              title={banksWide ? 'Retract (Esc)' : 'Extend the knowledge bank'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                border: 'none', background: 'transparent', cursor: 'pointer',
+                padding: '0 2px',
+                fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.14em',
+                color: banksWide ? 'var(--hb-amber)' : 'var(--hb-icon)',
+                transition: 'color 0.15s',
+              }}
+            >
+              {banksWide ? 'RETRACT_' : 'EXTEND_'}
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                style={{ transform: banksWide ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s cubic-bezier(0.22, 0.9, 0.3, 1)' }}>
+                <polyline points="6 14 12 8 18 14" />
+              </svg>
+            </button>
+          </span>
+        }
         style={{ gridColumn: '1 / -1', animation: 'hbRise 0.45s 0.26s ease both' }}
       >
         {memFiles.length === 0 ? (
@@ -534,7 +619,11 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
             NO RECORDS
           </div>
         ) : (
-          <div style={{ display: 'flex', height: isMobile ? 280 : '100%', minHeight: 0 }}>
+          <div style={{
+            display: 'flex', minHeight: 0,
+            height: isMobile ? (banksWide ? '68vh' : 280) : '100%',
+            transition: 'height 0.5s cubic-bezier(0.22, 0.9, 0.3, 1)',
+          }}>
             {/* File rail — one entry per memory file */}
             <div style={{
               width: 142, flexShrink: 0, overflowY: 'auto',
@@ -565,8 +654,16 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               })}
             </div>
 
-            {/* Fact readout — the selected file's extracted knowledge */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0.35rem 0.7rem 0.5rem' }}>
+            {/* Fact readout — the selected file's extracted knowledge.
+                Extended mode spreads the facts into a two-column dossier. */}
+            <div style={{
+              flex: 1, overflowY: 'auto', padding: '0.35rem 0.7rem 0.5rem',
+              ...(banksWide && !isMobile ? {
+                columnCount: 2,
+                columnGap: '2.4rem',
+                columnRule: '1px solid rgba(var(--hb-accent-rgb),0.14)',
+              } : {}),
+            }}>
               {(() => {
                 const file = memFiles.find(f => f.path === memPath)
                 if (!file) return null
@@ -579,7 +676,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                 return (
                   <>
                     {file.updated_at && (
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 2 }}>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 2, columnSpan: 'all' }}>
                         <span style={{ fontFamily: MONO, fontSize: '0.5rem', color: 'var(--hb-icon-dim)' }}>
                           LAST WRITE {fmtDate(file.updated_at)}
                         </span>
@@ -592,6 +689,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                             fontFamily: UI, fontSize: '0.66rem', fontWeight: 700,
                             letterSpacing: '0.18em', textTransform: 'uppercase',
                             color: 'var(--hb-cyan)', margin: '0.45rem 0 0.15rem',
+                            breakAfter: 'avoid',
                           }}>
                             {line.replace(/^#+\s*/, '')}
                           </div>
@@ -602,6 +700,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                       return (
                         <div key={i} style={{
                           display: 'flex', gap: 7, padding: '0.12rem 0',
+                          breakInside: 'avoid',
                           fontFamily: "'SamsungOne','Inter',sans-serif",
                           fontSize: '0.74rem', lineHeight: 1.45,
                           color: isNote ? 'var(--hb-icon)' : 'var(--hb-text-dim)',

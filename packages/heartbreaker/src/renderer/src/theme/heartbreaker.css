@@ -320,6 +320,32 @@ body {
   text-shadow: 0 1px 0 rgba(8, 30, 40, 0.4);
 }
 
+/* Comms-bubble markdown: the bubble glass hugs the content — no stray
+   first/last margins from the prose rules. */
+.hb-comm-md > :first-child { margin-top: 0; }
+.hb-comm-md > :last-child  { margin-bottom: 0; }
+
+/* Fluid-glass header — frosted plate for floating comms slabs. Liquid-glass
+   rules apply: the fill is a whisper, the frost comes from BLUR, the base is
+   an etched dual seam (light catch + grounding groove), never a solid bar. */
+.hb-head-glass {
+  display: flex; align-items: center; gap: 0.45rem;
+  min-height: 26px;
+  padding: 0 0.6rem;
+  background: rgba(190, 215, 235, 0.05);
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
+  color: var(--hb-cyan-bright);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(var(--hb-cyan-bright-rgb), 0.35);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.35),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.07);
+}
+
 /* Amber data chip — "05.06.10" timestamp boxes */
 .hb-chip-amber {
   display: inline-flex; align-items: center;

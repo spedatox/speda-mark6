@@ -4,9 +4,14 @@ from app.models.session import Session
 from app.models.message import Message
 from app.models.memory import Memory
 from app.models.memory_file import MemoryFile
+from app.models.message_embedding import MessageEmbedding
 from app.models.agent import AgentRecord
+from app.models.agent_message import AgentMessage
 from app.models.tool_call import ToolCall
 from app.models.notification import Notification
 from app.models.automation import Automation
 
-__all__ = ["User", "Session", "Message", "Memory", "AgentRecord", "ToolCall", "Notification", "Automation"]
+__all__ = [
+    "User", "Session", "Message", "Memory", "MemoryFile", "MessageEmbedding",
+    "AgentRecord", "AgentMessage", "ToolCall", "Notification", "Automation",
+]

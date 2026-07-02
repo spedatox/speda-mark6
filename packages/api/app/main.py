@@ -29,6 +29,31 @@ async def lifespan(app: FastAPI):
 
     llm_client = LLMClient()
 
+    # ── 2.5 Profiles (multi-tenant) + dispatch primitive ───────────────────────
+    # Profiles are constructed before the registry because the dispatch_agent
+    # skill's tool schema is built from the roster. The dispatcher itself is
+    # created empty here and late-bound to the orchestrator via wire() below.
+    from app.core.dispatch import AgentDispatcher
+    from app.profiles.registry import ProfileRegistry
+    from app.profiles.atomix import AtomixProfile
+    from app.profiles.centurion import CenturionProfile
+    from app.profiles.nightcrawler import NightCrawlerProfile
+    from app.profiles.optimus import OptimusProfile
+    from app.profiles.sentinel import SentinelProfile
+    from app.profiles.speda import SPEDAProfile
+    from app.profiles.ultron import UltronProfile
+
+    profiles = ProfileRegistry()
+    profiles.register(SPEDAProfile())       # orchestrator
+    profiles.register(UltronProfile())      # academic research
+    profiles.register(AtomixProfile())      # personal health
+    profiles.register(SentinelProfile())    # finance
+    profiles.register(NightCrawlerProfile())  # OSINT / web surveillance
+    profiles.register(CenturionProfile())   # cyber security
+    profiles.register(OptimusProfile())     # systems / code / infrastructure
+
+    dispatcher = AgentDispatcher()
+
     # ── 3. Capability Registry ─────────────────────────────────────────────────
     from app.core.registry import CapabilityRegistry
 
@@ -42,6 +67,7 @@ async def lifespan(app: FastAPI):
     # always available when Claude wants to load full SKILL.md instructions).
     from app.skills.automations import AutomationsSkill
     from app.skills.budget import BudgetModeSkill
+    from app.skills.dispatch import AgentChannelSkill, DispatchAgentSkill, HousePartySkill
     from app.skills.sandbox import RunCommandSkill, DeliverFileSkill
     from app.skills.toolsets import UseToolsetSkill
     from app.skills.documents import DocumentsSkill
@@ -51,6 +77,7 @@ async def lifespan(app: FastAPI):
     from app.skills.osint import OSINT_SKILLS
     from app.skills.read_skill import ReadSkillSkill
     from app.skills.search_history import SearchHistorySkill
+    from app.skills.semantic_search import SemanticSearchSkill
     from app.skills.stt import STTSkill
     from app.skills.system import SystemSkill
     from app.skills.tts import TTSSkill
@@ -58,6 +85,7 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(ReadSkillSkill())
     await registry.register_skill(MemorySkill())
     await registry.register_skill(SearchHistorySkill())
+    await registry.register_skill(SemanticSearchSkill())
     await registry.register_skill(TTSSkill())
     await registry.register_skill(STTSkill())
     await registry.register_skill(NotificationsSkill())
@@ -69,6 +97,11 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(DeliverFileSkill())
     await registry.register_skill(UseToolsetSkill())
     await registry.register_skill(AutomationsSkill())
+    await registry.register_skill(DispatchAgentSkill(
+        dispatcher, [(p.agent_id, p.domain) for p in profiles.roster()],
+    ))
+    await registry.register_skill(AgentChannelSkill())
+    await registry.register_skill(HousePartySkill())
 
     # OSINT / threat-intelligence suite (ip-api, AbuseIPDB, abuse.ch URLhaus/
     # ThreatFox/MalwareBazaar, HIBP Pwned Passwords, Ahmia dark-web search).
@@ -110,31 +143,19 @@ async def lifespan(app: FastAPI):
 
     session_manager = SessionManager()
 
-    # ── 6. Profiles (multi-tenant) ─────────────────────────────────────────────
-    # One ProfileRegistry holds every enabled in-process agent, addressed by
-    # agent_id. Phase 1: SPEDA only — the Superior Six profiles are authored in
-    from app.profiles.registry import ProfileRegistry
-    from app.profiles.atomix import AtomixProfile
-    from app.profiles.centurion import CenturionProfile
-    from app.profiles.nightcrawler import NightCrawlerProfile
-    from app.profiles.optimus import OptimusProfile
-    from app.profiles.sentinel import SentinelProfile
-    from app.profiles.speda import SPEDAProfile
-    from app.profiles.ultron import UltronProfile
-
-    profiles = ProfileRegistry()
-    profiles.register(SPEDAProfile())       # orchestrator
-    profiles.register(UltronProfile())      # academic research
-    profiles.register(AtomixProfile())      # personal health
-    profiles.register(SentinelProfile())    # finance
-    profiles.register(NightCrawlerProfile())  # OSINT / web surveillance
-    profiles.register(CenturionProfile())   # cyber security
-    profiles.register(OptimusProfile())     # systems / code / infrastructure
-
     # ── 7. Orchestrator (reuses the client already injected into the registry) ──
+    # Profiles were constructed at 2.5 — the dispatch skill's schema needed them.
     from app.core.orchestrator import AgentOrchestrator
 
     orchestrator = AgentOrchestrator(registry, llm_client, profiles)
+
+    # Late-bind the dispatch primitive now that the full engine exists.
+    dispatcher.wire(
+        orchestrator=orchestrator,
+        profiles=profiles,
+        session_manager=session_manager,
+        ws_manager=ws_manager,
+    )
 
     # ── 7.5 Proactive delivery + automation engine clients ─────────────────────
     from app.services.telegram import TelegramClient
@@ -148,6 +169,7 @@ async def lifespan(app: FastAPI):
     app.state.ws_manager = ws_manager
     app.state.session_manager = session_manager
     app.state.profiles = profiles
+    app.state.dispatcher = dispatcher
     app.state.telegram = telegram
 
     logger.info(
