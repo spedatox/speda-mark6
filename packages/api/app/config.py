@@ -142,7 +142,7 @@ class Settings(BaseSettings):
     # all tools stay available. Set False to load every connected tool eagerly.
     lazy_tools: bool = True
     # Servers whose tools are always in the prefix (no use_toolset needed).
-    always_on_servers: str = "tavily"
+    always_on_servers: str = "tavily,notion"
 
     # ── Conversation compaction ──────────────────────────────────────────────
     # On a long chat, older turns are summarized (background, Haiku) so the model

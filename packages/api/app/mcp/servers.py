@@ -75,14 +75,31 @@ async def _refresh_google_token(client_id: str, client_secret: str, refresh_toke
         return None
 
 
+def build_notion_client(access_token: str) -> MCPClient:
+    """Build the official Notion MCP server client (@notionhq/notion-mcp-server).
+
+    This is Notion's open-source server (v2.x — data-source era tools), run as a
+    local stdio subprocess. Auth goes in the NOTION_TOKEN env var, which accepts
+    any Notion bearer token — including the OAuth access token captured by the
+    in-app sign-in flow. Notion's hosted endpoint (mcp.notion.com/mcp) is
+    interactive-OAuth-only (no bearer/headless auth), so the local official
+    server IS the native connection for a backend like this.
+    """
+    return MCPClient(
+        server_name="notion",
+        transport="stdio",
+        command=["npx", "-y", "@notionhq/notion-mcp-server"],
+        env={"NOTION_TOKEN": access_token},
+    )
+
+
 async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
     servers: list[MCPClient] = []
 
     # ── Tier 2: HTTP servers (auth via headers) ──────────────────────────────
 
-    # Notion — local stdio MCP server (@notionhq/mcp-server).
-    # We pass the standard Notion OAuth access token (from the UI sign-in flow)
-    # as the NOTION_API_KEY env var so the local wrapper can talk to the Notion API.
+    # Notion — official local MCP server, authed with the OAuth access token
+    # from the UI sign-in flow. See build_notion_client().
     from app.core.runtime_state import get_notion_access_token
     notion_access = get_notion_access_token()
     notion_ready = all([
@@ -90,16 +107,9 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
         settings.notion_client_secret,
         notion_access,
     ])
-    
+
     if notion_ready:
-        servers.append(
-            MCPClient(
-                server_name="notion",
-                transport="stdio",
-                command=["npx", "-y", "@notionhq/mcp-server"],
-                env={"NOTION_API_KEY": notion_access},
-            )
-        )
+        servers.append(build_notion_client(notion_access))
     else:
         logger.warning("mcp_skip", extra={"server": "notion", "reason": "NOTION_CLIENT_ID, SECRET, or access token not set (needs OAuth)"})
 

@@ -118,10 +118,12 @@ class AgentDispatcher:
     # ── Public API ───────────────────────────────────────────────────────────
 
     def known_agents(self) -> list[str]:
-        """agent_ids of every in-process profile (for tool schemas / validation)."""
+        """agent_ids of every dispatchable in-process profile (for tool schemas /
+        validation). Session-scope aliases (dispatch_target=False) are excluded —
+        they take /chat requests but are never dispatch targets."""
         if self._profiles is None:
             return []
-        return [p.agent_id for p in self._profiles.roster()]
+        return [p.agent_id for p in self._profiles.roster() if p.dispatch_target]
 
     async def dispatch(
         self,

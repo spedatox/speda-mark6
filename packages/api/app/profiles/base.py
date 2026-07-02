@@ -38,6 +38,12 @@ class AgentProfile(ABC):
     # Filter wiring lands in Phase 3; declaring it now is harmless.
     tool_allowlist: list[str] | None = None
 
+    # Whether other agents may dispatch tasks TO this profile. False for
+    # aliases that exist only to scope sessions (e.g. the war-room command
+    # channel) — they answer /chat requests but never appear as a target in
+    # the dispatch tool schema.
+    dispatch_target: bool = True
+
     name: str
     sonnet_model: str = "claude-sonnet-4-6"
     haiku_model: str = "claude-haiku-4-5-20251001"

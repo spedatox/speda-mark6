@@ -42,9 +42,11 @@ async def lifespan(app: FastAPI):
     from app.profiles.sentinel import SentinelProfile
     from app.profiles.speda import SPEDAProfile
     from app.profiles.ultron import UltronProfile
+    from app.profiles.warroom import WarRoomProfile
 
     profiles = ProfileRegistry()
     profiles.register(SPEDAProfile())       # orchestrator
+    profiles.register(WarRoomProfile())     # House Party command channel (SPEDA alias)
     profiles.register(UltronProfile())      # academic research
     profiles.register(AtomixProfile())      # personal health
     profiles.register(SentinelProfile())    # finance

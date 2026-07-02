@@ -67,6 +67,9 @@ async def agent_models(request: Request):
             default_background=settings.llm_background_model or p.haiku_model,
         )
         for p in request.app.state.profiles.roster()
+        # Session-scope aliases (warroom) mirror their parent's brain — they are
+        # not separate cores, so keep them out of the model selector lists.
+        if p.dispatch_target
     ]
 
 
