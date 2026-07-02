@@ -20,3 +20,41 @@ class AgentStatus(BaseModel):
     status: str
     last_seen: datetime | None
     capabilities: list[str]
+
+
+class AgentCommEntry(BaseModel):
+    """One inter-agent exchange, as shown in the comms tray."""
+
+    id: int
+    request_id: str
+    from_agent: str
+    to_agent: str
+    kind: str
+    protocol: str
+    task: str
+    result: str | None
+    status: str
+    duration_ms: int | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class HousePartyState(BaseModel):
+    engaged: bool
+
+
+class AgentModelInfo(BaseModel):
+    """One agent's model allocation, as shown in the model routing UI."""
+
+    agent_id: str
+    name: str
+    domain: str
+    override: str | None      # owner's runtime pin; None = profile policy
+    default_main: str         # profile's interactive-grade model
+    default_background: str   # profile's background-tier model
+
+
+class AgentModelSet(BaseModel):
+    agent_id: str
+    model: str | None = None  # None/empty = clear the pin, back to profile policy

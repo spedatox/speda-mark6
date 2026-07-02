@@ -80,8 +80,9 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
 
     # ── Tier 2: HTTP servers (auth via headers) ──────────────────────────────
 
-    # Notion — official hosted MCP server (mcp.notion.com).
-    # Uses standard Notion OAuth access tokens (from the UI sign-in flow).
+    # Notion — local stdio MCP server (@notionhq/mcp-server).
+    # We pass the standard Notion OAuth access token (from the UI sign-in flow)
+    # as the NOTION_API_KEY env var so the local wrapper can talk to the Notion API.
     from app.core.runtime_state import get_notion_access_token
     notion_access = get_notion_access_token()
     notion_ready = all([
@@ -94,9 +95,9 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
         servers.append(
             MCPClient(
                 server_name="notion",
-                transport="http",
-                url="https://mcp.notion.com/mcp",
-                headers={"Authorization": f"Bearer {notion_access}"},
+                transport="stdio",
+                command=["npx", "-y", "@notionhq/mcp-server"],
+                env={"NOTION_API_KEY": notion_access},
             )
         )
     else:

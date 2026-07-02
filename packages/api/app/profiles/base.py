@@ -84,10 +84,17 @@ class AgentProfile(ABC):
         SPEDA governs model allocation — agents do not decide independently (D-C4).
         - User-facing interactive → Sonnet 4.6
         - Background / automated → Haiku 4.5
-        LLM_MAIN_MODEL / LLM_BACKGROUND_MODEL in .env override per deployment
-        (any "provider:model" ref — see app/services/llm_client.py).
+        Precedence: the owner's runtime per-agent override (set from the UI,
+        app/core/runtime_state.py) wins over everything; then the .env
+        LLM_MAIN_MODEL / LLM_BACKGROUND_MODEL deployment overrides; then this
+        profile's own models (any "provider:model" ref — see llm_client.py).
         """
         from app.config import settings
+        from app.core.runtime_state import get_agent_models
+
+        override = get_agent_models().get(self.agent_id)
+        if override:
+            return override
 
         if is_background or triggered_by in ("n8n", "agent"):
             return settings.llm_background_model or self.haiku_model

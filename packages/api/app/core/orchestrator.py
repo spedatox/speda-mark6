@@ -102,6 +102,47 @@ class AgentOrchestrator:
         # threaded to the skill via the context exactly like the allowlist above.
         context.extra["doc_accent"] = profile.doc_theme.accent
 
+        # House Party Protocol — high-stakes all-hands mode (owner-engaged only).
+        # SPEDA becomes mission commander; every other agent becomes an operative
+        # that accepts tasks outside its domain. Engaged/stood down via the
+        # house_party tool on the owner's explicit invocation.
+        from app.core.runtime_state import get_house_party
+        from app.profiles.registry import DEFAULT_AGENT_ID
+        if get_house_party():
+            if context.agent_id == DEFAULT_AGENT_ID:
+                stable_core += (
+                    "\n\n## HOUSE PARTY PROTOCOL — ACTIVE\n\n"
+                    "The owner has engaged the all-hands protocol: the situation is "
+                    "high-stakes and the entire agent roster is at your command. You "
+                    "are the MISSION COMMANDER. For the owner's objective:\n"
+                    "1. PLAN first — decompose the objective into concrete workstreams.\n"
+                    "2. DISPATCH in parallel — one tailored dispatch_agent call per "
+                    "agent in the same turn (prefer individually scoped tasks over a "
+                    "broadcast; use agent='all' only when everyone genuinely needs "
+                    "the identical brief). Assign by specialization where it fits, "
+                    "but ANY agent may take ANY task — domain is a preference here, "
+                    "not a rule. Every agent runs at full model grade.\n"
+                    "3. ITERATE — when results return, dispatch follow-up waves until "
+                    "the objective is genuinely done. Do not stop at one round if the "
+                    "mission needs more.\n"
+                    "4. DEBRIEF — synthesize everything into one decisive answer for "
+                    "the owner: what was done, by whom, what it means, what's next.\n"
+                    "Keep the owner informed of who is working on what. Stand the "
+                    "protocol down (house_party tool) when the owner says the "
+                    "situation is resolved."
+                )
+            else:
+                stable_core += (
+                    "\n\n## HOUSE PARTY PROTOCOL — ACTIVE\n\n"
+                    "The owner has engaged the all-hands protocol. You are an "
+                    "OPERATIVE on a high-stakes mission: tasks dispatched to you may "
+                    "fall outside your usual domain — take them anyway and deliver "
+                    "your best work; specialization is a preference here, not a "
+                    "boundary. Check the network channel in your briefing so you "
+                    "build on the other agents' results instead of duplicating them. "
+                    "Report substance, fast."
+                )
+
         # Budget mode — hard frugality directive (runtime-toggleable, persistent).
         from app.core.runtime_state import get_budget_mode
         if get_budget_mode():

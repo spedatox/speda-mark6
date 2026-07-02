@@ -44,7 +44,7 @@ _GOOGLE_SCOPES = [
 _INFO = {
     "tavily":           {"label": "Tavily — Web Search", "needs": "TAVILY_API_KEY"},
     "exa":              {"label": "Exa — Deep Search", "needs": "EXA_API_KEY"},
-    "notion":           {"label": "Notion", "needs": "NOTION_API_KEY"},
+    "notion":           {"label": "Notion", "needs": None},
     "alpha_vantage":    {"label": "Alpha Vantage — Finance", "needs": "ALPHA_VANTAGE_API_KEY"},
     "github":           {"label": "GitHub", "needs": "GITHUB_TOKEN"},
     "brave_search":     {"label": "Brave Search", "needs": "BRAVE_SEARCH_API_KEY"},
@@ -274,4 +274,20 @@ async def notion_callback(request: Request, code: str = "", error: str = ""):
     from app.core.runtime_state import set_notion_access_token
     set_notion_access_token(access)
 
-    return HTMLResponse(page("Notion connected! (Restart SPEDA to activate new tools).", True))
+    # Live-connect the Notion MCP server so tools work without a restart.
+    try:
+        from app.mcp.client import MCPClient
+        registry = request.app.state.registry
+        notion_client = MCPClient(
+            server_name="notion",
+            transport="stdio",
+            command=["npx", "-y", "@notionhq/mcp-server"],
+            env={"NOTION_API_KEY": access},
+        )
+        n = await registry.reconnect_mcp_servers([notion_client])
+        logger.info("notion_connected_via_ui", extra={"tools": n})
+        return HTMLResponse(page(f"Notion connected — tools are live!", True))
+    except Exception as e:  # noqa: BLE001
+        logger.error("notion_live_connect_failed", extra={"error": str(e)})
+        # Token is saved; a restart will pick it up even if live connect failed.
+        return HTMLResponse(page("Notion signed in (restart to activate).", True))

@@ -49,9 +49,13 @@ def _parse_date(value: str | None) -> datetime | None:
 class SearchHistorySkill(Skill):
     name = "search_history"
     description = (
-        "Search the owner's past conversations by keyword and/or date range. "
-        "Use this to recall what was discussed before, find a previous decision, or "
-        "check whether a topic has come up — beyond the current session's visible history. "
+        "Search the owner's past conversations by literal keyword and/or date range, "
+        "beyond the current session's visible history. Use this when you know the exact "
+        "word or phrase that would appear in the text (a name, a ticker, a specific term) "
+        "or when filtering by date. Do NOT use it for conceptual or fuzzy recall — "
+        "'have we discussed X', 'what did I decide about Y' — use recall_conversations "
+        "for that, since it matches by meaning rather than wording. Multi-word queries "
+        "match messages containing any of the words, ranked by how many words hit. "
         "Returns matching exchanges grouped by conversation, newest first."
     )
     read_only = True
@@ -60,7 +64,11 @@ class SearchHistorySkill(Skill):
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Keyword or phrase to match in message text. Omit to filter by date only.",
+                "description": (
+                    "Keyword or short phrase to match in message text. Prefer a single "
+                    "specific word; multi-word queries match any of the words. Omit to "
+                    "filter by date only."
+                ),
             },
             "after": {
                 "type": "string",
@@ -103,20 +111,34 @@ class SearchHistorySkill(Skill):
         result = await db.execute(stmt)
         rows = result.all()
 
-        # Keyword filter (Python-side, on extracted text — content is JSON)
+        # Keyword filter (Python-side, on extracted text — content is JSON).
+        # A message matches if it contains the whole phrase OR any individual
+        # word; ranked by phrase hit, then word-hit count, then recency — so a
+        # multi-word query degrades to best-effort instead of returning nothing.
         q_lower = query.lower()
-        matches: list[tuple[Message, str | None, int]] = []
+        q_words = [w for w in q_lower.split() if len(w) >= 2]
+        scored: list[tuple[int, Message, str | None, int]] = []
         for message, title, sid in rows:
             if message.role not in ("user", "assistant"):
                 continue
             text = _extract_text(message.content)
             if not text:
                 continue
-            if query and q_lower not in text.lower():
-                continue
-            matches.append((message, title, sid))
-            if len(matches) >= limit:
-                break
+            if query:
+                t_lower = text.lower()
+                if q_lower in t_lower:
+                    score = len(q_words) + 1  # whole phrase beats any word count
+                else:
+                    score = sum(1 for w in q_words if w in t_lower)
+                    if score == 0:
+                        continue
+            else:
+                score = 0
+            scored.append((score, message, title, sid))
+
+        # rows are newest-first, so a stable sort by score keeps recency within ties
+        scored.sort(key=lambda item: -item[0])
+        matches = [(m, t, s) for _, m, t, s in scored[:limit]]
 
         if not matches:
             scope = []

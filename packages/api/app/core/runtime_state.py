@@ -53,6 +53,47 @@ def set_budget_mode(value: bool) -> bool:
     return bool(value)
 
 
+# ── House Party Protocol ────────────────────────────────────────────────────
+# When engaged, inter-agent dispatch runs every agent at full interactive model
+# grade (instead of the background tier) and broadcast dispatch ("all") becomes
+# available. Toggled by the owner from the comms tray or by an agent via the
+# house_party tool. Default off — it burns Sonnet across the whole roster.
+
+def get_house_party() -> bool:
+    return bool(_load().get("house_party", False))
+
+
+def set_house_party(value: bool) -> bool:
+    state = _load()
+    state["house_party"] = bool(value)
+    _save()
+    logger.info("house_party_set", extra={"engaged": bool(value)})
+    return bool(value)
+
+
+# ── Per-agent model overrides ───────────────────────────────────────────────
+# The owner can pin any agent to a specific model ref ("provider:model", bare =
+# Anthropic) from the UI. An override replaces the profile's interactive AND
+# agent-dispatch allocation for that agent (checked first in
+# AgentProfile.allocate_model); tiny background tasks keep their cheap tier.
+# Empty/absent = the profile's own policy.
+
+def get_agent_models() -> dict[str, str]:
+    return dict(_load().get("agent_models", {}))
+
+
+def set_agent_model(agent_id: str, model: str | None) -> None:
+    state = _load()
+    models = dict(state.get("agent_models", {}))
+    if model:
+        models[agent_id] = model
+    else:
+        models.pop(agent_id, None)
+    state["agent_models"] = models
+    _save()
+    logger.info("agent_model_set", extra={"agent_id": agent_id, "model": model or "(default)"})
+
+
 # ── MCP connection toggles ──────────────────────────────────────────────────
 # Servers all connect at startup (per MCP_ENABLED), but their tools are only
 # shown to Claude if the server is "active". Toggling here hides/shows a server's

@@ -12,10 +12,11 @@ logger = logging.getLogger(__name__)
 # Paths that bypass authentication entirely.
 #   /health                 — liveness probe (no sensitive data)
 #   /oauth/google/callback  — Google's redirect can't carry our header
+#   /oauth/notion/callback  — Notion's redirect can't carry our header either
 # /docs, /redoc, /openapi.json are NOT here — they expose the full API schema.
 # They are disabled outside DEBUG (see main.create_app) and, when enabled in
 # DEBUG, are allowed through below for local convenience only.
-UNPROTECTED_PATHS = frozenset({"/health", "/oauth/google/callback"})
+UNPROTECTED_PATHS = frozenset({"/health", "/oauth/google/callback", "/oauth/notion/callback"})
 
 _DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
 
