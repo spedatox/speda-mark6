@@ -17,11 +17,11 @@ const UI = "'Rajdhani', sans-serif"
  * body is optional — a single line becomes the mission objective on the card.
  */
 export default function HousePartyWarning({ children }: { children?: string }) {
-  const objective = (children ?? '')
-    .replace(/^objective\s*:/i, '')
-    .trim()
-    .split('\n')[0]
-    ?.slice(0, 180) || ''
+  // Only an explicit `objective: …` line becomes the objective — the model
+  // often dumps the whole warning text in the body, and the card supplies all
+  // of its own wording, so free text in the block is ignored.
+  const objMatch = /(?:^|\n)\s*objective\s*:\s*(.+)/i.exec(children ?? '')
+  const objective = objMatch ? objMatch[1].trim().slice(0, 180) : ''
 
   return (
     <div
