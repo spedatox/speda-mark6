@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     speda_api_key: str = "dev-key"
     # Shared secret for the n8n webhook trigger — X-N8N-Secret.
     n8n_secret: str = "dev-n8n-secret"
+    # House Party Protocol authorization passphrase. The all-hands protocol is
+    # heavy, expensive and still a prototype, so engaging it requires the owner
+    # to speak this exact passphrase — the house_party tool validates the agent's
+    # supplied value against this in constant time and refuses otherwise. SPEDA
+    # never knows it; it must be given by the owner each time. Change it in .env.
+    house_party_passphrase: str = "wheels-up-24-karat"
 
     # ── CORS ─────────────────────────────────────────────────────────────────
     # Comma-separated allowed browser origins. Empty in production = no

@@ -14,6 +14,7 @@ built from the ProfileRegistry, never hardcoded (Rule 10).
 
 import logging
 
+from app.config import settings
 from app.core.context import AgentContext
 from app.core.runtime_state import get_house_party, set_house_party
 from app.skills.base import Skill
@@ -145,15 +146,22 @@ class HousePartySkill(Skill):
         "Engages or stands down the House Party Protocol — the all-hands mode for "
         "extremely high-stakes situations, where SPEDA becomes mission commander, "
         "plans the objective, and dispatches the ENTIRE roster in parallel with "
-        "every agent at full model grade and domain boundaries relaxed. Engage it "
-        "ONLY when the owner explicitly invokes it to you in their message (e.g. "
-        "'House Party Protocol', 'assemble the agents', 'all hands on deck') — "
-        "NEVER on your own judgement, never inferred from urgency alone, and a "
-        "dispatched agent must never engage it. Stand it down when the owner says "
-        "the situation is resolved ('stand down', 'party's over'). The state "
-        "persists across restarts, transforms the owner's UI into the war-room "
-        "group chat while active, and this tool returns a confirmation of the new "
-        "protocol state."
+        "every agent at full model grade and domain boundaries relaxed. This is a "
+        "HEAVY, EXPENSIVE, still-PROTOTYPE capability: it burns full-grade model "
+        "cost across all agents at once, so it is never the way to answer routine "
+        "questions (the time, a lookup, a single-agent task). Engaging REQUIRES an "
+        "authorization passphrase that only the owner holds — you do not know it "
+        "and must never invent, guess, or reuse one. When the owner asks to engage: "
+        "FIRST render a short, striking warning (heavy · expensive · prototype) and "
+        "ask them to speak the authorization passphrase; only once they give it in "
+        "their message do you call this tool with that exact passphrase. Engage "
+        "ONLY on the owner's explicit invocation (e.g. 'House Party Protocol', "
+        "'assemble the agents', 'all hands on deck') — NEVER on your own judgement, "
+        "never inferred from urgency, and a dispatched agent must never engage it. "
+        "Standing down needs no passphrase — do it whenever the owner says the "
+        "situation is resolved ('stand down', 'party's over'). State persists "
+        "across restarts and transforms the owner's UI into the war room while "
+        "active; this tool returns a confirmation of the new protocol state."
     )
     read_only = False
     input_schema = {
@@ -162,7 +170,16 @@ class HousePartySkill(Skill):
             "engaged": {
                 "type": "boolean",
                 "description": "True to engage the protocol, False to stand down.",
-            }
+            },
+            "passphrase": {
+                "type": "string",
+                "description": (
+                    "The owner's authorization passphrase, required to ENGAGE "
+                    "(ignored when standing down). Pass the exact phrase the owner "
+                    "spoke in their message this turn — never a guessed or "
+                    "remembered value. Omit it and the engage is refused."
+                ),
+            },
         },
         "required": ["engaged"],
     }
@@ -176,22 +193,60 @@ class HousePartySkill(Skill):
                 "down in a conversation with the owner, never from a dispatched "
                 "task or automation."
             )
+
         engaged = bool(args.get("engaged", False))
+
+        # Standing down is always safe and needs no passphrase.
+        if not engaged:
+            was = get_house_party()
+            set_house_party(False)
+            logger.info(
+                "house_party_toggled_by_agent",
+                extra={"request_id": context.request_id, "from": was, "to": False},
+            )
+            return (
+                "House Party Protocol stood down. Inter-agent dispatch is back on "
+                "the background tier, broadcast is disabled, and the war room closes."
+            )
+
+        # ── Engage: passphrase-gated ────────────────────────────────────────────
+        # The protocol is heavy/expensive/prototype, so it only arms on the
+        # owner's exact authorization passphrase. Constant-time compare; SPEDA
+        # never learns the secret — it must relay what the owner spoke.
+        import hmac
+
+        supplied = str(args.get("passphrase") or "").strip()
+        expected = (settings.house_party_passphrase or "").strip()
+        if not supplied or not expected or not hmac.compare_digest(supplied, expected):
+            logger.warning(
+                "house_party_engage_denied",
+                extra={
+                    "request_id": context.request_id,
+                    "reason": "missing_passphrase" if not supplied else "bad_passphrase",
+                },
+            )
+            return (
+                "REFUSED — House Party Protocol not engaged: "
+                + ("no authorization passphrase was supplied."
+                   if not supplied else "the authorization passphrase was incorrect.")
+                + " Do NOT retry with a guessed value. Instead, present the owner a "
+                "short, striking warning that the protocol is HEAVY, EXPENSIVE and "
+                "still a PROTOTYPE — it runs the entire roster at full model grade — "
+                "and ask them to speak the exact authorization passphrase. Only call "
+                "this tool again once the owner gives the passphrase in their next "
+                "message."
+            )
+
         was = get_house_party()
-        set_house_party(engaged)
+        set_house_party(True)
         logger.info(
             "house_party_toggled_by_agent",
-            extra={"request_id": context.request_id, "from": was, "to": engaged},
+            extra={"request_id": context.request_id, "from": was, "to": True, "authorized": True},
         )
-        if engaged:
-            return (
-                "House Party Protocol ENGAGED. The full roster is at your command "
-                "at full model grade; the owner's UI is switching to the war room. "
-                "Now: state the objective, decompose it, and dispatch the agents in "
-                "parallel this turn — then iterate on their results until the "
-                "mission is done and debrief the owner."
-            )
         return (
-            "House Party Protocol stood down. Inter-agent dispatch is back on the "
-            "background tier, broadcast is disabled, and the war room closes."
+            "House Party Protocol ENGAGED — authorization accepted. The full roster "
+            "is at your command at full model grade; the owner's UI is switching to "
+            "the war room. Now: state the objective, decompose it, and dispatch the "
+            "agents in parallel this turn — then iterate on their results until the "
+            "mission is done and debrief the owner."
         )
