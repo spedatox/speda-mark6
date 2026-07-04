@@ -2,7 +2,7 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AgentCommEntry } from '../lib/api'
-import { agentColor, fmtCommTime, monogram } from '../lib/agents'
+import { agentColor, fmtCommTime } from '../lib/agents'
 
 /**
  * Shared fluid-glass chat pieces for inter-agent traffic — used by both the
@@ -18,37 +18,20 @@ const UI = "'Rajdhani', sans-serif"
 
 export function Avatar({ id, size = 26 }: { id: string; size?: number }) {
   const c = agentColor(id)
+  // Placeholder identity: a single big first initial in the agent's colour.
+  // Clean and modern on purpose — swapped for the real logos once they land.
+  const initial = id.charAt(0).toUpperCase()
   return (
     <span style={{
-      position: 'relative',
       width: size, height: size, flexShrink: 0, borderRadius: '50%',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      border: `1px solid ${c}80`,
-      // Frosted glass dome — the agent's hue as a radial over an occluding
-      // base, so it reads as a lit convex slab, not a flat chip. Matches the
-      // Mark VI liquid-glass language (specular top, shadowed underside, soft
-      // coloured bloom) instead of the old single-alpha fill.
-      background: `radial-gradient(120% 120% at 50% 20%, ${c}5c 0%, ${c}24 46%, ${c}0d 100%), rgba(7, 14, 20, 0.55)`,
-      color: '#f2f8fb',
-      fontFamily: UI, fontWeight: 700, fontSize: size * 0.4,
-      letterSpacing: '0.04em',
-      textShadow: `0 0 7px ${c}, 0 1px 1px rgba(0,0,0,0.55)`,
-      boxShadow: [
-        'inset 0 1.5px 1px 0 rgba(255,255,255,0.5)',   // top specular catch
-        'inset 0 -2px 3px 0 rgba(0,0,0,0.45)',         // underside — dome thickness
-        '0 2px 7px rgba(0,0,0,0.4)',                    // soft drop
-        `0 0 12px ${c}4d`,                              // coloured bloom
-      ].join(', '),
-      overflow: 'hidden',
+      background: `${c}12`,
+      border: `1px solid ${c}59`,
+      color: c,
+      fontFamily: UI, fontWeight: 800, fontSize: size * 0.52,
+      letterSpacing: 0, lineHeight: 1,
     }}>
-      {/* Glass dome highlight — the bright oval catch across the top */}
-      <span aria-hidden style={{
-        position: 'absolute', top: '4%', left: '15%', right: '15%', height: '46%',
-        borderRadius: '50%',
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.06) 68%, transparent 100%)',
-        pointerEvents: 'none',
-      }} />
-      <span style={{ position: 'relative', lineHeight: 1 }}>{monogram(id)}</span>
+      {initial}
     </span>
   )
 }

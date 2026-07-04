@@ -11,10 +11,12 @@ import GlassSelect from './GlassSelect'
  * GlassSelect (liquid-glass popover + built-in background freeze) — never the
  * native OS dropdown.
  */
-export default function AgentModelPicker({ info, models, onPin }: {
+export default function AgentModelPicker({ info, models, onPin, large = false }: {
   info: AgentModelInfo
   models: ModelInfo[]
   onPin: (model: string | null) => void
+  /** Full liquid-glass trigger (ROSTER CORES window) vs the dense board bar. */
+  large?: boolean
 }) {
   const pinned = !!info.override
   const c = agentColor(info.agent_id)
@@ -29,6 +31,7 @@ export default function AgentModelPicker({ info, models, onPin }: {
       onChange={v => onPin(v || null)}
       tint={c}
       active={pinned}
+      large={large}
       title={pinned
         ? `${info.agent_id} pinned to ${info.override} — select PROFILE to restore its own policy`
         : `${info.agent_id} on profile policy: ${info.default_main} / ${info.default_background} (bg)`}
