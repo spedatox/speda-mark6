@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom'
  */
 
 const MONO = "'Share Tech Mono', monospace"
+const UI = "'Rajdhani', sans-serif"
 
 export interface GlassOption {
   value: string
@@ -28,7 +29,7 @@ interface Pos {
   bottom?: number
 }
 
-export default function GlassSelect({ value, options, onChange, tint, active = false, title }: {
+export default function GlassSelect({ value, options, onChange, tint, active = false, title, large = false }: {
   value: string
   options: GlassOption[]
   onChange: (value: string) => void
@@ -37,6 +38,9 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
   /** Whether the trigger renders in its tinted (pinned/engaged) state. */
   active?: boolean
   title?: string
+  /** Full-size liquid-glass trigger (the war-room ROSTER CORES window) rather
+   *  than the 18px compact bar used on dense boards. */
+  large?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<Pos | null>(null)
@@ -82,7 +86,21 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
         ref={btnRef}
         onClick={openMenu}
         title={title}
-        style={{
+        className={large ? 'hb-glass-xs' : undefined}
+        style={large ? {
+          width: '100%', height: 30, padding: '0 6px 0 11px',
+          display: 'flex', alignItems: 'center', gap: 6,
+          // Full liquid-glass trigger — occluding fill + specular catch, tinted
+          // rim when pinned. Reads as a proper control, not a flat mono bar.
+          border: `1px solid ${active ? `${tint}aa` : 'var(--hb-edge)'}`,
+          background: active
+            ? `linear-gradient(${tint}1f, ${tint}1f), rgba(8, 16, 24, 0.62)`
+            : 'linear-gradient(rgba(190, 215, 235, 0.07), rgba(190, 215, 235, 0.07)), rgba(8, 16, 24, 0.62)',
+          boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.16), 0 2px 10px rgba(0,0,0,0.22)',
+          color: active ? tint : 'var(--hb-text-dim)',
+          fontFamily: UI, fontSize: '0.74rem', fontWeight: 600, letterSpacing: '0.04em',
+          cursor: 'pointer', transition: 'border-color 0.12s, background 0.12s, color 0.12s',
+        } : {
           width: '100%', height: 18, padding: '0 4px',
           display: 'flex', alignItems: 'center', gap: 4,
           border: `1px solid ${active ? `${tint}88` : 'var(--hb-line)'}`,
@@ -95,8 +113,8 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
         <span style={{ flex: 1, minWidth: 0, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {current?.label ?? value}
         </span>
-        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-          style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+        <svg width={large ? 11 : 8} height={large ? 11 : 8} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+          style={{ flexShrink: 0, opacity: large ? 0.7 : 1, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
@@ -137,11 +155,14 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
                   onClick={() => { onChange(o.value); setOpen(false) }}
                   style={{
                     display: 'block', width: '100%', textAlign: 'left',
-                    padding: '0.32rem 0.6rem', border: 'none', cursor: 'pointer',
+                    padding: large ? '0.45rem 0.7rem' : '0.32rem 0.6rem', border: 'none', cursor: 'pointer',
                     background: selected ? `${tint}14` : 'transparent',
                     borderLeft: `2px solid ${selected ? tint : 'transparent'}`,
                     color: selected ? tint : 'var(--hb-text-dim)',
-                    fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.08em',
+                    fontFamily: large ? UI : MONO,
+                    fontSize: large ? '0.74rem' : '0.56rem',
+                    fontWeight: large ? 600 : 400,
+                    letterSpacing: large ? '0.03em' : '0.08em',
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   }}
                 >

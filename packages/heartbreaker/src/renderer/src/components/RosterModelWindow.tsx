@@ -140,9 +140,9 @@ export default function RosterModelWindow({ config, onClose }: {
                   {info ? info.domain : 'OFFLINE'}
                 </span>
               </span>
-              <div style={{ width: 168, flexShrink: 0 }}>
+              <div style={{ width: 184, flexShrink: 0 }}>
                 {info
-                  ? <AgentModelPicker info={info} models={models} onPin={m => pin(id, m)} />
+                  ? <AgentModelPicker info={info} models={models} onPin={m => pin(id, m)} large />
                   : <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)' }}>—</span>}
               </div>
             </div>
