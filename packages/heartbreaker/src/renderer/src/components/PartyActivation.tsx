@@ -134,6 +134,25 @@ export default function PartyActivation({ mode, onIgnite, onDone }: {
             </span>
           </div>
 
+          {/* Caution — the protocol is heavy/expensive/prototype. Engage only. */}
+          {mode === 'engage' && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+              padding: '0.28rem 0.8rem',
+              border: '1px solid rgba(242, 183, 92, 0.5)',
+              background: 'rgba(242, 183, 92, 0.08)',
+              borderRadius: 999,
+              fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.24em',
+              color: 'var(--hb-amber-bright)', textTransform: 'uppercase',
+              animation: 'hbHppSub 0.4s ease 0.95s both',
+            }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+              </svg>
+              Heavy · Expensive · Prototype
+            </span>
+          )}
+
           {/* The roster boots online, one by one */}
           <div style={{
             display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
