@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { AppProfile } from '../profile/types'
 import type { AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
@@ -11,7 +11,6 @@ import ChatMain from './ChatMain'
 import SettingsModal from './SettingsModal'
 import SystemsBoard from './SystemsBoard'
 import CommsTray from './CommsTray'
-import HousePartyBoard from './HousePartyBoard'
 import PartyRosterStrip from './PartyRosterStrip'
 
 interface LayoutProps {
@@ -32,11 +31,10 @@ export default function Layout({ profile, config, switchAgent, partyEngaged, onS
   const [boardOpen, setBoardOpen] = useState(false)
   const [commsOpen, setCommsOpen] = useState(false)
 
-  // The war-room review board (protocol OFFLINE) — past operations, roster
-  // model pins. While the protocol is engaged the app itself is the war room,
-  // so the board has nothing to add and closes.
-  const [warRoomOpen, setWarRoomOpen] = useState(false)
-  useEffect(() => { if (partyEngaged) setWarRoomOpen(false) }, [partyEngaged])
+  // The war room is a profile, not a window. The header button switches into
+  // the warroom agent (review mode — protocol offline); engaging the protocol
+  // is what lights the roster strip + color parade on top of it.
+  const inWarRoom = profile.agentId === 'warroom'
   const isMobile = useIsMobile()
   // Mobile drawer state is session-local and starts closed — the drawer only
   // ever opens from an explicit tap on the header menu button.
@@ -95,8 +93,9 @@ export default function Layout({ profile, config, switchAgent, partyEngaged, onS
           commsOpen={commsOpen}
           onToggleComms={() => setCommsOpen(v => !v)}
           partyEngaged={partyEngaged}
-          warRoomOpen={warRoomOpen}
-          onOpenWarRoom={() => setWarRoomOpen(true)}
+          inWarRoom={inWarRoom}
+          onOpenWarRoom={() => switchAgent('warroom')}
+          onLeaveWarRoom={() => switchAgent('speda')}
         />
         {partyEngaged && <PartyRosterStrip config={config} onStandDown={onStandDown} />}
         <ChatMain config={config} onSelectSession={handleSelectSession} />
@@ -104,14 +103,6 @@ export default function Layout({ profile, config, switchAgent, partyEngaged, onS
 
       {boardOpen && <SystemsBoard config={config} onClose={() => setBoardOpen(false)} />}
       {commsOpen && <CommsTray config={config} onClose={() => setCommsOpen(false)} />}
-      {warRoomOpen && !partyEngaged && (
-        <HousePartyBoard
-          config={config}
-          engaged={false}
-          onMinimize={() => setWarRoomOpen(false)}
-          onStoodDown={() => setWarRoomOpen(false)}
-        />
-      )}
       {settingsOpen && <SettingsModal config={config} onClose={() => setSettingsOpen(false)} />}
     </div>
   )
