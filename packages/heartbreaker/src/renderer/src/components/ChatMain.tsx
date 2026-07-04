@@ -17,7 +17,12 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
   const hour = new Date().getHours()
   const salutation = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
   const displayName = settings.userName.trim() || profile?.userName || ''
-  const fullGreeting = (displayName ? `${salutation}, ${displayName}` : salutation).toUpperCase()
+  // House Party takeover — the hero speaks protocol, not pleasantries.
+  const isWarroom = profile?.agentId === 'warroom'
+  const fullGreeting = (isWarroom
+    ? (displayName ? `All hands on deck, ${displayName}` : 'All hands on deck')
+    : (displayName ? `${salutation}, ${displayName}` : salutation)
+  ).toUpperCase()
 
   const [typed, setTyped] = useState('')
   const [done, setDone] = useState(false)
