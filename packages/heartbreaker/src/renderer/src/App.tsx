@@ -20,6 +20,10 @@ import 'katex/dist/katex.min.css'
 import './theme/heartbreaker.css'
 
 function buildProfile(agentId: string): AppProfile {
+  // The war room is a real profile, not an overlay — switching to it is a
+  // takeover exactly like any agent. It just never appears in BRANDS (so it
+  // stays out of the switcher menu).
+  if (agentId === 'warroom') return WARROOM_PROFILE
   const brand = BRANDS[agentId] || BRANDS['speda']
   return { ...brand, accentHover: deriveAccents(brand.accent).bright }
 }
