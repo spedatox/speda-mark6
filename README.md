@@ -15,9 +15,40 @@ SPEDA is not a chatbot product — it is the engine for a personal executive ass
 
 - **Single-user by design.** One owner, one API key, persistent memory of who that owner is. No tenancy, no accounts.
 - **Proactive, not reactive.** n8n acts as the system's senses: watchers poll pages, feeds, and schedules, and when one fires, SPEDA composes a message and delivers it to the owner's Telegram — unprompted.
-- **Rebrandable core.** Identity (name, persona, model policy, prompts) lives entirely in `app/profiles/` and `app/prompts/`. The engine contains zero identity strings, so the same codebase forks into the *Superior Six* — domain-specialized sibling agents (Sentinel, NightCrawler, Ultron, Optimus, Unicron, Ratchet) — by swapping two files.
+- **Rebrandable core.** Identity (name, persona, model policy, prompts) lives entirely in `app/profiles/` and `app/prompts/`. The engine contains zero identity strings, so the same codebase forks into the *Superior Six* — domain-specialized sibling agents — by swapping two files.
 
 The architectural contract for the entire system is codified in [`CLAUDE.md`](CLAUDE.md) and enforced in review.
+
+---
+
+## Multi-Tenant Agent Suite
+
+SPEDA hosts a multi-tenant suite of in-process agent profiles. Each agent has a dedicated `AgentProfile` subclass containing its unique personality, system prompt template, model policy, tool allowlist, and custom visual accent theme.
+
+| Agent | Signature Hex | Domain / Specialization | Role & Capabilities |
+|---|---|---|---|
+| **SPEDA** | `#5b6472` | Core Orchestrator | Central proactive companion, automation manager, and routing hub. |
+| **Sentinel** | `#5b6472` | Finance & Budget Intelligence | Analyzes markets, tracks portfolios, manages frugality states, and controls cost metrics. |
+| **NightCrawler** | `#9165e6` | OSINT, Web Surveillance & Research | Lawful public web search, threat intelligence tracking, onion surveillance, and web monitoring. |
+| **Ultron** | `#4a90e2` | Academic Research & Knowledge Synthesis | Synthesis of scientific papers, literature searches, and complex analytical overviews. |
+| **Centurion** | `#e25c5c` | Cyber Security | Vulnerability assessments, CVE analysis, port scanning, and threat intelligence. |
+| **Atomix** | `#2ecc71` | Personal Health & Wellness | Personal health tracking, wellness monitoring, and exercise/nutrition logging. |
+| **Optimus** | `#2eb6ac` | Systems, Code & Infrastructure | Connects to a standalone Claude Code-class peer via WebSockets for direct filesystem operations. Falls back to in-process profile when offline. |
+| **WarRoom** | `#e25c5c` | Mission Command Channel | Active only during House Party Protocol as the central command node. |
+
+---
+
+## Inter-Agent Communication & House Party Protocol
+
+Agents are not isolated; they communicate through a rich inter-agent dispatch framework:
+
+- **Dynamic Routing (`dispatch_agent`):** Any agent can delegate a task to another specialist agent in-turn. The target agent runs its own reasoning loop and tools, reporting the final text back. Multiple agents can be dispatched concurrently in a single turn.
+- **Shared Network Channel (`read_agent_channel`):** A shared, chronological transcript of all inter-agent traffic across the suite. Agents read this to maintain awareness and prevent redundant executions.
+- **House Party Protocol (`house_party`):** A passphrase-gated all-hands mode for critical operations. When engaged:
+  1. SPEDA becomes the mission commander, prompting the owner for confirmation.
+  2. The UI renders the custom authorization window via a fenced `hpp-warning` block and shifts the desktop client into the **War Room** dashboard.
+  3. SPEDA broadcasts tasks to the entire roster in parallel, relaxing domain boundaries and running all agents at full model grade (Sonnet-class).
+  4. The state persists across restarts until stood down.
 
 ---
 
@@ -56,15 +87,73 @@ The architectural contract for the entire system is codified in [`CLAUDE.md`](CL
 
 The model sees a single unified tools array; `CapabilityRegistry` is the only component that knows the difference. Registration order at startup is fixed: Tier 0 → 1 → 2 → 3.
 
-| Tier | Type | Examples |
-|---|---|---|
-| 0 | Task sub-agents | Parallel research workers on an isolated loop and a separate rate-limit pool |
-| 1 | Python skills | memory, document generation (PDF/DOCX/PPTX), TTS/STT, sandbox execution, history search, budget mode, **automation management** |
-| 2 | MCP servers | Tavily, Exa, Notion, GitHub, Brave, Alpha Vantage, arXiv, Fetch, Google Workspace (OAuth) |
-| 3 | OSS adapters | gpt-researcher, Shannon — wrapped over HTTP |
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                          Capability Registry                           │
+├───────────────┬──────────────────────┬──────────────────┬──────────────┤
+│ Tier 0: Task  │ Tier 1: Python       │ Tier 2: MCP      │ Tier 3: OSS  │
+│ Sub-Agents    │ Skills (16 + OSINT)  │ Servers (12)     │ Adapters (2) │
+└───────────────┴──────────────────────┴──────────────────┴──────────────┘
+```
 
-Two cost-control mechanisms are built into the registry:
+### Tier 0: Task Sub-Agents
+- **Task Tool (`Task`):** Spawns isolated, billed sub-agents for heavy research tasks. Operates on a separate rate-limit pool (Haiku-class by default) and limits recursion.
 
+### Tier 1: Core Python Skills
+SPEDA executes local Python logic for core operations:
+- **Automation Control (`manage_automations`):** Composition plane for n8n watchers (`web_watch`, `rss_watch`, `schedule`, `webhook`).
+- **Passphrase-Gated Roster Command (`house_party`):** Triggers House Party Protocol and shifts client UI to the War Room.
+- **Inter-Agent Routing (`dispatch_agent`):** Routes tasks to specialist profiles within a turn.
+- **Shared Transcript Logs (`read_agent_channel`):** Accesses chronological inter-agent dispatch records.
+- **Memory File Management (`memory`):** Multi-file Markdown virtual filesystem (`owner.md`, `current.md`, `dossier.md`, `preferences.md`, `log.md`, `projects.md`) using Anthropic's memory patterns.
+- **Progressive Manifest Reader (`read_skill`):** Lazily retrieves full `SKILL.md` markdown guides to optimize context size.
+- **Lazy-Load Trigger (`use_toolset`):** Dynamically mounts inactive MCP servers at runtime.
+- **Secure Sandbox Execution (`run_command`):** Runs shell commands in an isolated Linux container with Python 3.12, pip, git, and a persistent `/workspace`.
+- **Sandbox File Delivery (`deliver_file`):** Transfers files from the sandbox workspace to chat download cards.
+- **Branded File Creator (`save_file`):** Writes code or text files (.html, .py, .js, .css, .json, .yaml, .csv, .env) as download cards.
+- **Branded Document Generator (`generate_document`):** Compiles accent-branded A4 PDFs, DOCX, and PPTX slideshows. Includes custom DejaVu Sans family Unicode fonts for Turkish rendering.
+- **Literal History Search (`search_history`):** Scans database messages by keywords and date ranges.
+- **Semantic Vector Recall (`recall_conversations`):** Cosine similarity search over brute-force L2-normalized embeddings of history messages.
+- **FCM Push Notifications (`send_push_notification`):** Surfacing background watcher updates to Android Flutter client.
+- **Speech-to-Text (`speech_to_text`):** Audio transcription via Whisper STT.
+- **Text-to-Speech (`text_to_speech`):** Speech synthesis via Kokoro TTS.
+- **System Metrics Tracker (`system_info`):** Reports host server disk/memory usage and uptime.
+- **Budget Control (`set_budget_mode`):** Toggles runtime frugality state.
+
+### Tier 1: OSINT Intelligence Suite
+A dedicated security and open-source intelligence library:
+- `ip_geolocate`: IP geolocation queries using ip-api.
+- `ip_reputation`: Reputation checks via AbuseIPDB and VirusTotal.
+- `urlhaus_lookup`: Threat analysis on suspicious links via abuse.ch URLhaus.
+- `threatfox_lookup`: Threat IOC lookups via abuse.ch ThreatFox.
+- `malwarebazaar_lookup`: Malware file hash query via abuse.ch MalwareBazaar.
+- `pwned_password_check`: Password compromise checking via HaveIBeenPwned API.
+- `darkweb_search`: Search engine query over Onion resources via Ahmia.
+- `otx_lookup`: AlienVault OTX threat indicator check.
+- `shodan_lookup`: Direct query to Shodan API for port/service footprinting.
+- `email_discovery`: Discover compromised emails and breach origins.
+- `crypto_trace`: Track blockchain transaction flows.
+- `intelx_search`: Query Intelligence X for credentials, dumps, or darkweb archives.
+
+### Tier 2: Model Context Protocol (MCP) Servers
+- **Notion (`notion`):** Subprocess-based connection authed with dynamic OAuth bearer tokens.
+- **Google Workspace (`google_gmail`, `google_calendar`):** Custom standard Google REST API clients featuring automated OAuth token self-refreshing.
+- **Brave Search (`brave_search`):** Web search integration.
+- **Fetch (`fetch`):** Converts Web URLs directly to clean Markdown.
+- **Alpha Vantage (`alpha_vantage`):** Financial data and market analysis.
+- **Tavily (`tavily`):** High-quality web search engine.
+- **Exa (`exa`):** Neural search and document retrieval.
+- **GitHub (`github`):** Repository management, code browsing, and commits.
+- **Filesystem (`filesystem`):** Sandboxed directory access scoped to the outputs directory.
+- **arXiv (`arxiv`):** Academic literature and preprint search.
+- **CVE Intelligence (`cve_intelligence`):** Vulnerability database lookup.
+- **Playwright (`playwright`):** Isolated browser automation (Docker internal only).
+
+### Tier 3: OSS Adapters
+- **Deep Research (`deep_research`):** Multi-source web research engine powered by GPT-Researcher.
+- **Security Analysis (`security_analysis`):** Automated vulnerability scanning and reconnaissance tool via Shannon security toolkit.
+
+### Cost Control & Lazy Loading
 - **Lazy tool loading (progressive disclosure).** Only always-on servers occupy the prompt prefix; everything else is listed in a compact catalog and pulled in on demand via `use_toolset`. Combined with 1-hour prompt caching, the static prefix is effectively written once and read forever.
 - **Budget mode.** A hard, runtime-toggleable frugality switch: sub-agents unregistered, concise-output directive injected. Persists across restarts.
 
