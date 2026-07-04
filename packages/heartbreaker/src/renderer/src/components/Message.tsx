@@ -14,6 +14,18 @@ import HousePartyWarning from './HousePartyWarning'
 
 const RENDERABLE_LANGS = new Set(['html', 'svg'])
 
+// House Party warning card — the model's language tag is unreliable (it has
+// emitted `hpp`, `hpp-warning`, etc.), so match explicit aliases OR detect the
+// warning by content. Content-detection is gated to ambiguous tags so a real
+// C++ `.hpp` header is never mistaken for the card.
+const HPP_ALIASES = new Set(['hpp-warning', 'house_party', 'house-party', 'houseparty', 'party-warning'])
+const HPP_AMBIGUOUS = new Set(['', 'hpp', 'text', 'txt', 'plaintext', 'md', 'markdown'])
+function looksLikeHppWarning(code: string): boolean {
+  return /house\s*party\s*protocol/i.test(code)
+    || /passphrase\s+to\s+engage/i.test(code)
+    || (/authorization\s+required/i.test(code) && /prototype/i.test(code))
+}
+
 /* ── Icons ─────────────────────────────────────────────────────────────────── */
 function IconCopy()      { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> }
 function IconCheck()     { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg> }
@@ -325,7 +337,7 @@ const mdComponents: any = {
       if (lang === 'calendar') {
         return <CalendarBlock>{code}</CalendarBlock>
       }
-      if (lang === 'hpp-warning' || lang === 'house_party') {
+      if (HPP_ALIASES.has(lang) || (HPP_AMBIGUOUS.has(lang) && looksLikeHppWarning(code))) {
         return <HousePartyWarning>{code}</HousePartyWarning>
       }
       if (RENDERABLE_LANGS.has(lang)) {
