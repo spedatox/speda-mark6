@@ -214,21 +214,38 @@ export default function ChatMain({ config, onSelectSession }: Props) {
     // quiet. We track the last activity instant; the ticker escalates the
     // status line and finally aborts so the UI never spins forever.
     const STALL_MS = 9000    // no events this long → tell the user it's slow
-    const DEAD_MS = 45000    // no events this long → give up, surface an error
-    let lastActivity = Date.now()
+    const DEAD_MS = 60000    // no events this long → give up, surface a precise reason
+    const startedAt = Date.now()
+    let lastActivity = startedAt
+    let gotStart = false     // backend acknowledged the request (START event)
     let gotContent = false
     let gotTool = false
     let timedOut = false
+    let timeoutReason = ''   // filled at abort so the error says WHY, not filler
     let settled = false  // did we emit a terminal (done/error/abort) for this message?
+
+    // Which model the turn is running on — surfaced in the stall/timeout copy so
+    // the message names the actual thing that went quiet (e.g. GLM-5.2).
+    const modelName = settings.model ? (settings.model.split(':').pop() || settings.model).toUpperCase() : 'the model'
 
     const watchdog = setInterval(() => {
       const idle = Date.now() - lastActivity
       if (gotContent) return  // tokens are flowing — the cursor is the status now
       if (idle >= DEAD_MS) {
         timedOut = true
+        const waited = Math.round((Date.now() - startedAt) / 1000)
+        // Name the phase it died in — a diagnostic, not "isn't responding".
+        if (!gotStart) {
+          timeoutReason = `No response from the backend in ${waited}s — it never acknowledged the request. The API server may be down, unreachable, or stuck before the model started.`
+        } else if (gotTool) {
+          timeoutReason = `A tool call ran ${waited}s with no further output, so the turn was cancelled — the tool or a service it calls is likely stuck.`
+        } else {
+          timeoutReason = `${modelName} accepted the request but streamed nothing for ${waited}s — almost always rate-limited, overloaded, or queued upstream. Cancelled; try again in a moment.`
+        }
         ctrl.abort()
       } else if (idle >= STALL_MS && !gotTool) {
-        dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Still working — the backend is taking longer than usual' } })
+        const waited = Math.round((Date.now() - startedAt) / 1000)
+        dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: `Waiting on ${modelName} — ${waited}s, no tokens yet (may be rate-limited)` } })
       }
     }, 1000)
 
@@ -249,6 +266,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       )) {
         lastActivity = Date.now()
         if (event.type === 'start') {
+          gotStart = true
           dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Thinking' } })
         } else if (event.type === 'chunk') {
           gotContent = true
@@ -303,12 +321,19 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       finalizeFlush()  // keep whatever text streamed before the failure/abort
       settled = true
       if (timedOut) {
-        dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: "SPEDA isn't responding. Check that the backend is running, then try again." } })
+        // Precise, phase-specific reason built by the watchdog — never filler.
+        dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: timeoutReason || 'The backend went silent and the request timed out.' } })
       } else if (err instanceof Error && err.name === 'AbortError') {
         // User-initiated stop — keep whatever streamed so far.
         dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: state.activeSessionId ?? 0 } })
       } else if (err instanceof Error) {
-        dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: err.message } })
+        // Network failures throw a bare TypeError ("Failed to fetch") — name it
+        // as unreachable-backend rather than dumping the opaque string.
+        const net = /failed to fetch|networkerror|load failed|err_connection/i.test(err.message)
+        dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId,
+          error: net
+            ? "Couldn't reach the backend — network error. Is the API server running and reachable from this host?"
+            : err.message } })
       }
     } finally {
       finalizeFlush()  // safety: never leave buffered text undelivered
