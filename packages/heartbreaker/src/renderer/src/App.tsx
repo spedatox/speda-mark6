@@ -33,17 +33,24 @@ function AppInner() {
   const [profile, setProfile] = useState<AppProfile>(DEFAULT_PROFILE)
   const [config, setConfig] = useState<AppConfig | null>(null)
 
-  // ── House Party Protocol ──────────────────────────────────────────────────
-  // Engaged by the owner TELLING SPEDA, never by the UI; we watch the backend
-  // flag. When it flips on, the activation cinematic plays and the whole app
-  // transforms into the war-room profile — a takeover exactly like an agent
-  // switch, not an overlay — while the theme parades through the roster's
-  // colours. Stand down (or the flag dropping) reverses everything.
-  const [party, setParty] = useState(false)
-  const [activation, setActivation] = useState<'engage' | 'standdown' | null>(null)
-  const partyRef = useRef(false)
+  // ── House Party Protocol / War Room ───────────────────────────────────────
+  // Three states. off: a normal agent. standby: the owner opened the war room
+  // from the UI — full branded takeover (roster colour parade, warroom
+  // profile) but the protocol is NOT engaged. engaged: the owner told SPEDA to
+  // run the protocol (backend flag) — same takeover, plus live dispatch and
+  // STAND DOWN. Both war-room states parade the palette through the roster's
+  // colours, so the background is never a flat single hue. Entering either
+  // plays the activation cinematic; leaving plays the stand-down cinematic.
+  type WarMode = 'off' | 'standby' | 'engaged'
+  const [warMode, setWarMode] = useState<WarMode>('off')
+  const warModeRef = useRef<WarMode>('off')
+  const setWar = useCallback((m: WarMode) => { warModeRef.current = m; setWarMode(m) }, [])
+
+  const [activation, setActivation] = useState<'engage' | 'standby' | 'standdown' | null>(null)
   const activationRef = useRef(activation)
   activationRef.current = activation
+  /** Where an in-flight ENTER cinematic is heading (standby vs engaged). */
+  const pendingRef = useRef<WarMode>('standby')
   /** The agent to return to after stand down — the last non-warroom profile. */
   const prevAgentRef = useRef(DEFAULT_PROFILE.agentId)
   const profileRef = useRef(profile)
@@ -92,55 +99,78 @@ function AppInner() {
     fetchSessions(cfg).then(s => dispatch({ type: 'SET_SESSIONS', payload: s })).catch(() => {})
   }, [])
 
+  /** Open the war room from the UI — branded STANDBY (protocol offline). */
+  const enterWarRoom = useCallback(() => {
+    if (warModeRef.current !== 'off' || activationRef.current) return
+    pendingRef.current = 'standby'
+    setActivation('standby')
+  }, [])
+
+  /** Backend flag engaged from a cold start — full protocol boot. */
   const engageParty = useCallback(() => {
-    partyRef.current = true
-    setParty(true)
+    pendingRef.current = 'engaged'
     setActivation('engage')
   }, [])
 
-  const disengageParty = useCallback((userInitiated: boolean) => {
-    partyRef.current = false
-    if (userInitiated && configRef.current) setHouseParty(configRef.current, false).catch(() => {})
+  /** Leave the war room entirely (EXIT from standby, or STAND DOWN / flag drop
+   *  from engaged). userInitiated stand-downs also clear the backend flag. */
+  const exitWarRoom = useCallback((userInitiated: boolean) => {
+    if (warModeRef.current === 'off' || activationRef.current) return
+    if (userInitiated && warModeRef.current === 'engaged' && configRef.current) {
+      setHouseParty(configRef.current, false).catch(() => {})
+    }
     setActivation('standdown')
   }, [])
 
   // Mid-cinematic, screen fully covered: swap the world underneath.
   const igniteActivation = useCallback(() => {
-    if (activationRef.current === 'engage') {
+    if (activationRef.current === 'standdown') {
+      stopPartyCycle()
+      const prev = buildProfile(prevAgentRef.current)
+      setProfile(prev)   // applyTheme effect snaps the palette back under the veil
+      retarget(prev.agentId)
+    } else {
+      // Entering the war room (standby or engaged) — same takeover either way.
       const cur = profileRef.current
       if (cur.agentId !== 'warroom') prevAgentRef.current = cur.agentId
       startPartyCycle(cur.accent)
       setProfile(WARROOM_PROFILE)
       retarget('warroom')
-    } else {
-      stopPartyCycle()
-      const prev = buildProfile(prevAgentRef.current)
-      setProfile(prev)   // applyTheme effect snaps the palette back under the veil
-      retarget(prev.agentId)
     }
   }, [retarget])
 
   const activationDone = useCallback(() => {
+    const mode = activationRef.current
     setActivation(null)
-    if (!partyRef.current) setParty(false)
-  }, [])
+    if (mode === 'standdown') setWar('off')
+    else setWar(pendingRef.current)   // enter → 'standby' or 'engaged'
+  }, [setWar])
 
-  // Watch the backend flag.
+  // Watch the backend flag — the protocol is engaged by TELLING SPEDA.
   useEffect(() => {
     if (!config) return
     let live = true
     const check = async () => {
       const engaged = await getHouseParty(config)
       if (!live || activationRef.current) return   // never interrupt a running cinematic
-      if (engaged && !partyRef.current) engageParty()
-      else if (!engaged && partyRef.current) disengageParty(false)
+      const wm = warModeRef.current
+      if (engaged && wm === 'off') engageParty()
+      else if (engaged && wm === 'standby') setWar('engaged')   // escalate in place — parade already running
+      else if (!engaged && wm === 'engaged') exitWarRoom(false)
     }
     check()
     const t = setInterval(check, 4000)
     return () => { live = false; clearInterval(t) }
-  }, [config, engageParty, disengageParty])
+  }, [config, engageParty, exitWarRoom, setWar])
 
   const switchAgent = useCallback(async (agentId: string) => {
+    // Leaving the war room by picking a real agent from the switcher: route it
+    // through the stand-down cinematic, returning to the chosen agent.
+    if (agentId !== 'warroom' && warModeRef.current !== 'off') {
+      prevAgentRef.current = agentId
+      exitWarRoom(true)
+      return
+    }
     const next = buildProfile(agentId)
     const prevAccent = profile.accent
     const root = document.getElementById('root')
@@ -173,7 +203,7 @@ function AppInner() {
       const sessions = await fetchSessions(nextConfig)
       dispatch({ type: 'SET_SESSIONS', payload: sessions })
     } catch { /* backend not available */ }
-  }, [config, profile.accent])
+  }, [config, profile.accent, exitWarRoom])
 
   if (!config) {
     return (
@@ -198,8 +228,10 @@ function AppInner() {
           profile={profile}
           config={config}
           switchAgent={switchAgent}
-          partyEngaged={party}
-          onStandDown={() => disengageParty(true)}
+          partyEngaged={warMode === 'engaged'}
+          inWarRoom={warMode !== 'off'}
+          onEnterWarRoom={enterWarRoom}
+          onExitWarRoom={() => exitWarRoom(true)}
         />
         {activation && (
           <PartyActivation mode={activation} onIgnite={igniteActivation} onDone={activationDone} />

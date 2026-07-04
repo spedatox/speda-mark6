@@ -15,12 +15,18 @@ const UI = "'Rajdhani', sans-serif"
  * already-transformed console. Stand down: the roster winks out in reverse
  * and the veil lifts on the restored agent.
  *
+ * Three modes. `engage` — the full protocol boot ("TAKE 'EM TO CHURCH", ALL
+ * HANDS ONLINE). `standby` — the same boot cinematic with calmer copy, played
+ * when the owner opens the war room from the UI (protocol offline). `standdown`
+ * — the reverse wink-out on leaving. `engage` and `standby` are both ENTER
+ * cinematics and share timing/animation; only the copy differs.
+ *
  * `onIgnite` fires mid-sequence while the screen is fully covered — the app
  * swaps profile + theme under here so the reveal lands already transformed.
  * Timings below are the single source of truth; the keyframe delays in the
  * JSX are derived from them.
  */
-const ENGAGE = { ignite: 2600, done: 3650 }
+const ENTER = { ignite: 2600, done: 3650 }
 const STANDDOWN = { ignite: 850, done: 1750 }
 
 const KEYFRAMES = `
@@ -43,12 +49,14 @@ const KEYFRAMES = `
 `
 
 export default function PartyActivation({ mode, onIgnite, onDone }: {
-  mode: 'engage' | 'standdown'
+  mode: 'engage' | 'standby' | 'standdown'
   onIgnite: () => void
   onDone: () => void
 }) {
+  const entering = mode !== 'standdown'
+
   useEffect(() => {
-    const t = mode === 'engage' ? ENGAGE : STANDDOWN
+    const t = entering ? ENTER : STANDDOWN
     const a = setTimeout(onIgnite, t.ignite)
     const b = setTimeout(onDone, t.done)
     return () => { clearTimeout(a); clearTimeout(b) }
@@ -57,7 +65,16 @@ export default function PartyActivation({ mode, onIgnite, onDone }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
 
-  const engage = mode === 'engage'
+  // Copy differs by mode; the ENTER animation is identical for both entrances.
+  const directive = mode === 'engage'
+    ? '// DIRECTIVE CONFIRMED — "TAKE \'EM TO CHURCH"'
+    : '// WAR ROOM ONLINE — ROSTER ON STATION'
+  const subtitle = mode === 'engage' ? 'Protocol' : 'Standby'
+  const closer = mode === 'engage'
+    ? 'ALL HANDS ONLINE — CHANNEL OPEN'
+    : 'ROSTER ON STATION — STANDBY HELD'
+
+  const engage = entering
 
   return (
     <div style={{
@@ -92,7 +109,7 @@ export default function PartyActivation({ mode, onIgnite, onDone }: {
             color: 'var(--hb-amber)', textTransform: 'uppercase',
             animation: 'hbHppSub 0.35s ease 0.3s both',
           }}>
-            {'// DIRECTIVE CONFIRMED — "TAKE \'EM TO CHURCH"'}
+            {directive}
           </p>
 
           {/* Title slam */}
@@ -113,7 +130,7 @@ export default function PartyActivation({ mode, onIgnite, onDone }: {
               color: 'var(--hb-text-dim)', paddingLeft: '0.58em',
               animation: 'hbHppSub 0.4s ease 0.85s both',
             }}>
-              Protocol
+              {subtitle}
             </span>
           </div>
 
@@ -159,7 +176,7 @@ export default function PartyActivation({ mode, onIgnite, onDone }: {
             color: 'var(--hb-amber-bright)', textTransform: 'uppercase',
             animation: 'hbHppSub 0.35s ease 2.45s both',
           }}>
-            ALL HANDS ONLINE — CHANNEL OPEN
+            {closer}
           </p>
         </>
       ) : (

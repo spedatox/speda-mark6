@@ -20,16 +20,16 @@ interface Props {
   onToggleBoard?: () => void
   commsOpen?: boolean
   onToggleComms?: () => void
-  partyEngaged?: boolean
-  /** True when the current profile IS the war room (review takeover). */
+  /** True when the app IS the war room (standby or engaged takeover). While
+   *  true the strip under the header carries the exit control, so the header
+   *  WAR ROOM button hides. */
   inWarRoom?: boolean
   onOpenWarRoom?: () => void
-  onLeaveWarRoom?: () => void
 }
 
 export default function Header({
   sidebarOpen, onToggleSidebar, boardOpen, onToggleBoard,
-  commsOpen, onToggleComms, partyEngaged, inWarRoom, onOpenWarRoom, onLeaveWarRoom,
+  commsOpen, onToggleComms, inWarRoom, onOpenWarRoom,
 }: Props) {
   const { state } = useChatContext()
   const activeSession = state.sessions.find(s => s.id === state.activeSessionId)
@@ -106,52 +106,30 @@ export default function Header({
         </span>
       )}
 
-      {/* War room — a profile takeover, not a window. Offline: the button
-          switches INTO the warroom agent (review mode). Inside review: it
-          becomes EXIT, dropping back to SPEDA. While the protocol is ENGAGED
-          the roster strip under the header owns STAND DOWN, so this hides. */}
-      {!partyEngaged && (inWarRoom
-        ? onLeaveWarRoom && (
-          <button
-            className="hb-btn hb-btn-tint"
-            onClick={onLeaveWarRoom}
-            title="Leave the war room — return to SPEDA"
-            style={{
-              height: 24, padding: '0 0.55rem', gap: '0.4rem', flexShrink: 0,
-              color: 'var(--hb-amber-bright)',
-              fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
-              letterSpacing: '0.16em',
-            }}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            EXIT WAR ROOM
-          </button>
-        )
-        : onOpenWarRoom && (
-          <button
-            className="hb-btn"
-            onClick={onOpenWarRoom}
-            title="Enter the war room — review past operations or brief SPEDA (protocol stays offline)"
-            style={{
-              height: 24, padding: '0 0.55rem', gap: '0.4rem', flexShrink: 0,
-              fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
-              letterSpacing: '0.16em',
-            }}
-          >
-            {/* Command-table glyph — the roster converging on a center point */}
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3" />
-              <circle cx="12" cy="3.5" r="1.6" /><circle cx="19.5" cy="16.5" r="1.6" /><circle cx="4.5" cy="16.5" r="1.6" />
-              <line x1="12" y1="5.1" x2="12" y2="9" />
-              <line x1="18.1" y1="15.6" x2="14.6" y2="13.5" />
-              <line x1="5.9" y1="15.6" x2="9.4" y2="13.5" />
-            </svg>
-            WAR ROOM
-          </button>
-        )
+      {/* War room — a profile takeover, not a window. The button enters it
+          (branded STANDBY cinematic); once inside, the roster strip under the
+          header owns the exit/stand-down, so this hides in standby AND engaged. */}
+      {!inWarRoom && onOpenWarRoom && (
+        <button
+          className="hb-btn"
+          onClick={onOpenWarRoom}
+          title="Enter the war room — brief SPEDA and stage the roster (protocol stays offline until engaged)"
+          style={{
+            height: 24, padding: '0 0.55rem', gap: '0.4rem', flexShrink: 0,
+            fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
+            letterSpacing: '0.16em',
+          }}
+        >
+          {/* Command-table glyph — the roster converging on a center point */}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3" />
+            <circle cx="12" cy="3.5" r="1.6" /><circle cx="19.5" cy="16.5" r="1.6" /><circle cx="4.5" cy="16.5" r="1.6" />
+            <line x1="12" y1="5.1" x2="12" y2="9" />
+            <line x1="18.1" y1="15.6" x2="14.6" y2="13.5" />
+            <line x1="5.9" y1="15.6" x2="9.4" y2="13.5" />
+          </svg>
+          WAR ROOM
+        </button>
       )}
 
       {/* Inter-agent comms tray toggle */}

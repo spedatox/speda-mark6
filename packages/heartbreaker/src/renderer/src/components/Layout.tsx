@@ -12,29 +12,33 @@ import SettingsModal from './SettingsModal'
 import SystemsBoard from './SystemsBoard'
 import CommsTray from './CommsTray'
 import PartyRosterStrip from './PartyRosterStrip'
+import RosterModelWindow from './RosterModelWindow'
 
 interface LayoutProps {
   profile: AppProfile
   config: AppConfig
   switchAgent: (agentId: string) => void
-  /** House Party Protocol live — App.tsx owns the flag + the takeover. While
-   *  true, the whole app IS the war room (warroom profile); the Layout just
-   *  shows the roster strip and hides the review board. */
+  /** War room live — App.tsx owns the state + cinematic takeover. `inWarRoom`
+   *  is true in BOTH standby and engaged; `partyEngaged` narrows it to the
+   *  engaged protocol. The Layout just shows the roster strip + config window
+   *  and hands the enter/exit intents back up. */
   partyEngaged: boolean
-  onStandDown: () => void
+  inWarRoom: boolean
+  onEnterWarRoom: () => void
+  onExitWarRoom: () => void
 }
 
-export default function Layout({ profile, config, switchAgent, partyEngaged, onStandDown }: LayoutProps) {
+export default function Layout({
+  profile, config, switchAgent, partyEngaged, inWarRoom, onEnterWarRoom, onExitWarRoom,
+}: LayoutProps) {
   const { dispatch } = useChatContext()
   const { settings, update } = useSettings()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
   const [commsOpen, setCommsOpen] = useState(false)
+  // ROSTER CORES model-config window — only meaningful inside the war room.
+  const [coresOpen, setCoresOpen] = useState(false)
 
-  // The war room is a profile, not a window. The header button switches into
-  // the warroom agent (review mode — protocol offline); engaging the protocol
-  // is what lights the roster strip + color parade on top of it.
-  const inWarRoom = profile.agentId === 'warroom'
   const isMobile = useIsMobile()
   // Mobile drawer state is session-local and starts closed — the drawer only
   // ever opens from an explicit tap on the header menu button.
@@ -92,17 +96,23 @@ export default function Layout({ profile, config, switchAgent, partyEngaged, onS
           onToggleBoard={() => setBoardOpen(v => !v)}
           commsOpen={commsOpen}
           onToggleComms={() => setCommsOpen(v => !v)}
-          partyEngaged={partyEngaged}
           inWarRoom={inWarRoom}
-          onOpenWarRoom={() => switchAgent('warroom')}
-          onLeaveWarRoom={() => switchAgent('speda')}
+          onOpenWarRoom={onEnterWarRoom}
         />
-        {partyEngaged && <PartyRosterStrip config={config} onStandDown={onStandDown} />}
+        {inWarRoom && (
+          <PartyRosterStrip
+            config={config}
+            engaged={partyEngaged}
+            onExit={onExitWarRoom}
+            onOpenConfig={() => setCoresOpen(true)}
+          />
+        )}
         <ChatMain config={config} onSelectSession={handleSelectSession} />
       </div>
 
       {boardOpen && <SystemsBoard config={config} onClose={() => setBoardOpen(false)} />}
       {commsOpen && <CommsTray config={config} onClose={() => setCommsOpen(false)} />}
+      {coresOpen && inWarRoom && <RosterModelWindow config={config} onClose={() => setCoresOpen(false)} />}
       {settingsOpen && <SettingsModal config={config} onClose={() => setSettingsOpen(false)} />}
     </div>
   )
