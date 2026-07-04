@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { AppProfile } from '../profile/types'
 import type { AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useIsMobile } from '../lib/useIsMobile'
-import { fetchMessages, getHouseParty } from '../lib/api'
+import { fetchMessages } from '../lib/api'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import ChatMain from './ChatMain'
@@ -12,36 +12,31 @@ import SettingsModal from './SettingsModal'
 import SystemsBoard from './SystemsBoard'
 import CommsTray from './CommsTray'
 import HousePartyBoard from './HousePartyBoard'
+import PartyRosterStrip from './PartyRosterStrip'
 
 interface LayoutProps {
   profile: AppProfile
   config: AppConfig
   switchAgent: (agentId: string) => void
+  /** House Party Protocol live — App.tsx owns the flag + the takeover. While
+   *  true, the whole app IS the war room (warroom profile); the Layout just
+   *  shows the roster strip and hides the review board. */
+  partyEngaged: boolean
+  onStandDown: () => void
 }
 
-export default function Layout({ profile, config, switchAgent }: LayoutProps) {
+export default function Layout({ profile, config, switchAgent, partyEngaged, onStandDown }: LayoutProps) {
   const { dispatch } = useChatContext()
   const { settings, update } = useSettings()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
   const [commsOpen, setCommsOpen] = useState(false)
 
-  // House Party Protocol — engaged by the owner TELLING SPEDA, never by the UI.
-  // The Layout just watches the flag: when it flips on, the UI transforms into
-  // the war-room group chat; when it flips off, everything reverts.
-  const [party, setParty] = useState(false)
+  // The war-room review board (protocol OFFLINE) — past operations, roster
+  // model pins. While the protocol is engaged the app itself is the war room,
+  // so the board has nothing to add and closes.
   const [warRoomOpen, setWarRoomOpen] = useState(false)
-  const partyWas = useRef(false)
-  useEffect(() => {
-    const check = () => getHouseParty(config).then(engaged => {
-      setParty(engaged)
-      if (engaged && !partyWas.current) setWarRoomOpen(true)   // auto-transform on engage
-      partyWas.current = engaged
-    })
-    check()
-    const t = setInterval(check, 4000)
-    return () => clearInterval(t)
-  }, [config])
+  useEffect(() => { if (partyEngaged) setWarRoomOpen(false) }, [partyEngaged])
   const isMobile = useIsMobile()
   // Mobile drawer state is session-local and starts closed — the drawer only
   // ever opens from an explicit tap on the header menu button.
@@ -99,21 +94,22 @@ export default function Layout({ profile, config, switchAgent }: LayoutProps) {
           onToggleBoard={() => setBoardOpen(v => !v)}
           commsOpen={commsOpen}
           onToggleComms={() => setCommsOpen(v => !v)}
-          partyEngaged={party}
+          partyEngaged={partyEngaged}
           warRoomOpen={warRoomOpen}
           onOpenWarRoom={() => setWarRoomOpen(true)}
         />
+        {partyEngaged && <PartyRosterStrip config={config} onStandDown={onStandDown} />}
         <ChatMain config={config} onSelectSession={handleSelectSession} />
       </div>
 
       {boardOpen && <SystemsBoard config={config} onClose={() => setBoardOpen(false)} />}
       {commsOpen && <CommsTray config={config} onClose={() => setCommsOpen(false)} />}
-      {warRoomOpen && (
+      {warRoomOpen && !partyEngaged && (
         <HousePartyBoard
           config={config}
-          engaged={party}
+          engaged={false}
           onMinimize={() => setWarRoomOpen(false)}
-          onStoodDown={() => { setParty(false); setWarRoomOpen(false); partyWas.current = false }}
+          onStoodDown={() => setWarRoomOpen(false)}
         />
       )}
       {settingsOpen && <SettingsModal config={config} onClose={() => setSettingsOpen(false)} />}

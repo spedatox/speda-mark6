@@ -136,6 +136,60 @@ export function applyTheme(accent: string): void {
 
 let _morphRaf = 0
 
+/* ══════════════════════════════════════════════════════════════════════════
+   HOUSE PARTY PROTOCOL — the whole-app colour parade.
+
+   While the protocol is engaged the ENTIRE palette (backgrounds, glass rims,
+   text, icons — everything applyTheme touches) drifts continuously through
+   the full roster's signature colours, one agent at a time, in ROSTER order.
+   The message: they are ALL here. The cadence matches the hbPartyCycle CSS
+   keyframe (~3s per agent); updates are throttled to ~12Hz — the drift is
+   slow enough that finer steps are invisible, and a full :root palette
+   rebuild every frame would be wasted style recalc.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let _partyRaf = 0
+let _partyOn = false
+
+export function isPartyCycling(): boolean { return _partyOn }
+
+export function startPartyCycle(fromAccent: string, msPerStop = 3000): void {
+  stopPartyCycle()
+  cancelAnimationFrame(_morphRaf)
+  _partyOn = true
+  const colors = PARTY_COLORS
+  const n = colors.length
+  const LEAD_MS = 700   // ease out of the current brand into the parade
+  const TICK_MS = 80
+  const start = performance.now()
+  let last = 0
+  const ease = (t: number): number => t * t * (3 - 2 * t)  // smoothstep
+  const step = (now: number) => {
+    _partyRaf = requestAnimationFrame(step)
+    if (now - last < TICK_MS) return
+    last = now
+    const el = now - start
+    if (el < LEAD_MS) { applyTheme(mix(fromAccent, colors[0], ease(el / LEAD_MS))); return }
+    const t = (el - LEAD_MS) / msPerStop
+    const i = Math.floor(t) % n
+    applyTheme(mix(colors[i], colors[(i + 1) % n], ease(t - Math.floor(t))))
+  }
+  _partyRaf = requestAnimationFrame(step)
+}
+
+export function stopPartyCycle(): void {
+  _partyOn = false
+  cancelAnimationFrame(_partyRaf)
+}
+
+// ROSTER order, colours mirroring lib/agents AGENT_COLORS — inlined here so
+// the theme engine keeps zero imports from component-land.
+const PARTY_COLORS = [
+  '#36abca', /* speda */ '#d99c44', /* sentinel */ '#9165e6', /* nightcrawler */
+  '#8a93a6', /* ultron */ '#d8483c', /* centurion */ '#3fae74', /* atomix */
+  '#2eb6ac', /* optimus */
+]
+
 /**
  * Smoothly morph the entire UI from one accent to another over `ms` milliseconds.
  * Every frame, the accent is linearly interpolated and the full palette is

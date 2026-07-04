@@ -104,30 +104,29 @@ export default function Header({
         </span>
       )}
 
-      {/* War room — always reachable. Amber pulsing chip while the protocol is
-          engaged; quiet WAR ROOM button otherwise (review/standby mode). */}
-      {!warRoomOpen && onOpenWarRoom && (
+      {/* War room review board (protocol OFFLINE only) — while the protocol is
+          engaged the whole app IS the war room, so the button disappears and
+          the roster strip under the header carries the party chrome. */}
+      {!warRoomOpen && !partyEngaged && onOpenWarRoom && (
         <button
-          className={partyEngaged ? 'hb-btn hb-btn-tint' : 'hb-btn'}
+          className="hb-btn"
           onClick={onOpenWarRoom}
-          title={partyEngaged
-            ? 'House Party Protocol is ACTIVE — return to the war room'
-            : 'Open the war room — review past operations or brief SPEDA (protocol stays offline)'}
+          title="Open the war room — review past operations or brief SPEDA (protocol stays offline)"
           style={{
-            height: 24, padding: '0 0.55rem', gap: '0.4rem',
-            ...(partyEngaged ? { color: 'var(--hb-amber-bright)' } : {}),
-            flexShrink: 0,
+            height: 24, padding: '0 0.55rem', gap: '0.4rem', flexShrink: 0,
             fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
             letterSpacing: '0.16em',
           }}
         >
-          <span style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: partyEngaged ? 'var(--hb-amber)' : 'var(--hb-icon-dim)',
-            boxShadow: partyEngaged ? '0 0 7px rgba(242,183,92,0.9)' : 'none',
-            animation: partyEngaged ? 'hbBlink 1.6s ease-in-out infinite' : 'none',
-          }} />
-          {partyEngaged ? 'HPP ACTIVE' : 'WAR ROOM'}
+          {/* Command-table glyph — the roster converging on a center point */}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3" />
+            <circle cx="12" cy="3.5" r="1.6" /><circle cx="19.5" cy="16.5" r="1.6" /><circle cx="4.5" cy="16.5" r="1.6" />
+            <line x1="12" y1="5.1" x2="12" y2="9" />
+            <line x1="18.1" y1="15.6" x2="14.6" y2="13.5" />
+            <line x1="5.9" y1="15.6" x2="9.4" y2="13.5" />
+          </svg>
+          WAR ROOM
         </button>
       )}
 

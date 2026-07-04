@@ -5,8 +5,7 @@ import {
 } from '../lib/api'
 import type { AgentCommEntry, AgentModelInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
-import type { AppProfile } from '../profile/types'
-import { deriveAccents } from '../profile/theme'
+import { WARROOM_PROFILE } from '../profile/warroom'
 import { ROSTER, agentColor } from '../lib/agents'
 import { useIsMobile } from '../lib/useIsMobile'
 import { ChatContext, chatReducer, initialState } from '../store/chat'
@@ -16,11 +15,14 @@ import ChatMain from './ChatMain'
 import { Avatar } from './CommBubble'
 
 /**
- * HOUSE PARTY PROTOCOL — the war room.
+ * THE WAR ROOM — review board (protocol OFFLINE).
  *
- * A full command-center chat that the UI transforms into while the protocol is
- * engaged (owner-voice-activated through SPEDA; the Layout polls the flag and
- * mounts this automatically). The main pane IS the real chat stack — ChatMain
+ * Opened from the header's WAR ROOM button while the protocol is NOT engaged:
+ * past operations, roster model pins, and a command channel to the warroom
+ * agent. When the protocol IS engaged, the whole app transforms into the
+ * war-room profile instead (App.tsx takeover) and this board stays closed —
+ * the takeover, not this overlay, is the House Party experience.
+ * The main pane IS the real chat stack — ChatMain
  * with streaming, tool badges, attachments, files, regenerate/edit/delete —
  * addressed to the backend "warroom" profile (SPEDA's brain behind a separate
  * agent_id), so the war room keeps its own conversation story exactly like any
@@ -33,15 +35,6 @@ import { Avatar } from './CommBubble'
 const MONO = "'Share Tech Mono', monospace"
 const UI = "'Rajdhani', sans-serif"
 const POLL_MS = 2500
-
-/** The war room's brand — NOT in BRANDS (it must never appear in the agent
- *  menu; it exists only while the protocol is engaged). */
-const WARROOM_BRAND: AppProfile = {
-  agentId: 'warroom', name: 'WAR ROOM', modelNumber: 'HPP', userName: 'Ahmet Erol',
-  tagline: 'House Party Protocol — All Hands Command',
-  avatarInitial: 'W', accent: '#f2b75c',
-  accentHover: deriveAccents('#f2b75c').bright,
-}
 
 /** Survives minimize/reopen within the app session — reopening the war room
  *  restores the operation that was on screen. Cleared on STAND DOWN. */
@@ -341,7 +334,7 @@ export default function HousePartyBoard({ config, engaged, onMinimize, onStoodDo
 
         {/* Command channel — the REAL chat stack, scoped to the warroom agent */}
         <ChatContext.Provider value={{ state: chat, dispatch: chatDispatch }}>
-          <ProfileContext.Provider value={WARROOM_BRAND}>
+          <ProfileContext.Provider value={WARROOM_PROFILE}>
             <section className="hb-holo hb-party-rim" style={{
               flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden',
             }}>
