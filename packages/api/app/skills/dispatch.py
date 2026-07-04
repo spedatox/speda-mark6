@@ -152,9 +152,11 @@ class HousePartySkill(Skill):
         "questions (the time, a lookup, a single-agent task). Engaging REQUIRES an "
         "authorization passphrase that only the owner holds — you do not know it "
         "and must never invent, guess, or reuse one. When the owner asks to engage: "
-        "FIRST render a short, striking warning (heavy · expensive · prototype) and "
-        "ask them to speak the authorization passphrase; only once they give it in "
-        "their message do you call this tool with that exact passphrase. Engage "
+        "FIRST render the warning card by emitting a fenced code block with language "
+        "`hpp-warning` (the UI renders it as a striking heavy/expensive/prototype "
+        "authorization window; put a one-line objective inside the block if you have "
+        "one) and ask them to speak the authorization passphrase; only once they give "
+        "it in their message do you call this tool with that exact passphrase. Engage "
         "ONLY on the owner's explicit invocation (e.g. 'House Party Protocol', "
         "'assemble the agents', 'all hands on deck') — NEVER on your own judgement, "
         "never inferred from urgency, and a dispatched agent must never engage it. "
@@ -229,12 +231,12 @@ class HousePartySkill(Skill):
                 "REFUSED — House Party Protocol not engaged: "
                 + ("no authorization passphrase was supplied."
                    if not supplied else "the authorization passphrase was incorrect.")
-                + " Do NOT retry with a guessed value. Instead, present the owner a "
-                "short, striking warning that the protocol is HEAVY, EXPENSIVE and "
-                "still a PROTOTYPE — it runs the entire roster at full model grade — "
-                "and ask them to speak the exact authorization passphrase. Only call "
-                "this tool again once the owner gives the passphrase in their next "
-                "message."
+                + " Do NOT retry with a guessed value. Instead, present the owner the "
+                "warning card by emitting a fenced ```hpp-warning code block (the UI "
+                "renders it as a HEAVY/EXPENSIVE/PROTOTYPE authorization window that "
+                "notes the protocol runs the entire roster at full model grade), and "
+                "ask them to speak the exact authorization passphrase. Only call this "
+                "tool again once the owner gives the passphrase in their next message."
             )
 
         was = get_house_party()
