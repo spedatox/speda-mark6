@@ -221,6 +221,7 @@ class CapabilityRegistry:
         active_servers: set[str] | None = None,
         offline_only: bool = False,
         allowlist: set[str] | None = None,
+        agent_id: str | None = None,
     ) -> list[dict]:
         """
         Return tools across all tiers in Anthropic tool format.
@@ -254,6 +255,8 @@ class CapabilityRegistry:
         for skill in self._skills.values():
             if offline_only and getattr(skill, "requires_network", False):
                 continue
+            if not self._agent_may_use(skill, agent_id):
+                continue  # privileged skill, wrong agent (e.g. system_ops → orion only)
             tools.append(skill.to_tool_definition())
 
         if offline_only:
@@ -271,6 +274,16 @@ class CapabilityRegistry:
             tools.append(adapter.to_tool_definition())
 
         return self._apply_allowlist(tools, allowlist)
+
+    @staticmethod
+    def _agent_may_use(skill: "Skill", agent_id: str | None) -> bool:
+        """A skill with `restricted_to` set is visible/callable ONLY to those
+        agents. None agent_id (unscoped callers) never sees a restricted skill —
+        privilege is opt-in by agent, never by omission."""
+        restricted = getattr(skill, "restricted_to", None)
+        if restricted is None:
+            return True
+        return agent_id is not None and agent_id in restricted
 
     def _apply_allowlist(self, tools: list[dict], allowlist: set[str] | None) -> list[dict]:
         if allowlist is None:
@@ -367,7 +380,21 @@ class CapabilityRegistry:
                 return await self._execute_task(args, context)
 
             if tool_name in self._skills:
-                return await self._skills[tool_name].execute(args, context)
+                skill = self._skills[tool_name]
+                if not self._agent_may_use(skill, context.agent_id):
+                    logger.warning(
+                        "restricted_tool_blocked",
+                        extra={
+                            "tool": tool_name,
+                            "agent_id": context.agent_id,
+                            "request_id": context.request_id,
+                        },
+                    )
+                    return (
+                        f"Error: the tool '{tool_name}' is restricted and not available "
+                        f"to agent '{context.agent_id}'. Do not call it again."
+                    )
+                return await skill.execute(args, context)
 
             if tool_name in self._mcp_tool_map:
                 server_name = self._mcp_tool_map[tool_name]
@@ -441,7 +468,9 @@ class CapabilityRegistry:
         # Sub-agents get all tools except Task (prevent infinite recursion),
         # scoped to the spawning agent's allowlist (inherited via the context).
         tools = [
-            t for t in self.list_tools(allowlist=context.extra.get("tool_allowlist"))
+            t for t in self.list_tools(
+                allowlist=context.extra.get("tool_allowlist"), agent_id=context.agent_id
+            )
             if t["name"] != "Task"
         ]
 

@@ -161,7 +161,7 @@ class AgentOrchestrator:
         memory_block = ""
         if context.db is not None:
             try:
-                memory_block = await recall_for_context(context.user_id, context.db) or ""
+                memory_block = await recall_for_context(context.user_id, context.db, context.agent_id) or ""
                 if memory_block:
                     logger.info(
                         "memory_context_injected",
@@ -236,7 +236,8 @@ class AgentOrchestrator:
 
         messages = list(context.conversation_history)
         tools = self._registry.list_tools(
-            context.extra["active_servers"], offline_only=dead_zone, allowlist=allowlist
+            context.extra["active_servers"], offline_only=dead_zone,
+            allowlist=allowlist, agent_id=context.agent_id,
         )
         iterations = 0
         produced_text = False  # any text streamed yet this turn (for paragraph breaks)
@@ -392,7 +393,8 @@ class AgentOrchestrator:
                 # A use_toolset call may have loaded new toolsets — rebuild the
                 # tool list so they're available on the next iteration.
                 tools = self._registry.list_tools(
-                    context.extra["active_servers"], offline_only=dead_zone, allowlist=allowlist
+                    context.extra["active_servers"], offline_only=dead_zone,
+                    allowlist=allowlist, agent_id=context.agent_id,
                 )
 
             # ── max_tokens ──────────────────────────────────────────────────

@@ -22,6 +22,12 @@ class Skill(ABC):
     # Set True for skills that need an INTERNET uplink (not just a local
     # service) — they are filtered out under the Dead Zone Protocol.
     requires_network: bool = False
+    # Hard per-agent restriction: when set, ONLY these agent_ids may see or call
+    # this skill, regardless of their (inclusion) tool_allowlist. Use for
+    # privileged capabilities that must never leak to the general roster — e.g.
+    # system_ops is scoped to {"orion"} alone. None = available to every agent
+    # whose allowlist permits it (the normal case).
+    restricted_to: frozenset[str] | None = None
 
     @abstractmethod
     async def execute(self, args: dict, context: "AgentContext") -> str:
