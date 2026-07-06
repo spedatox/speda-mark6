@@ -229,6 +229,15 @@ class Settings(BaseSettings):
     # In Docker this is the sandbox service; empty disables the run_command tool.
     sandbox_url: str = "http://localhost:9000"
 
+    # ── Orion host operation (system_ops skill) ────────────────────────────────
+    # Orion's ability to operate the HOST Mark VI runs on (log rotation, disk
+    # checks, container inspection). OFF by default — a privileged capability
+    # that must be deliberately enabled on the deployment that wants it. The
+    # write jail confines any file write Orion makes to this root subtree.
+    system_ops_enabled: bool = False
+    system_ops_root: str = str(_DATA_DIR)     # write jail for system_ops file writes
+    system_ops_timeout: int = 60              # hard cap (seconds) per host command
+
 
 settings = Settings()
 

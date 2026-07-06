@@ -39,6 +39,7 @@ async def lifespan(app: FastAPI):
     from app.profiles.centurion import CenturionProfile
     from app.profiles.nightcrawler import NightCrawlerProfile
     from app.profiles.optimus import OptimusProfile
+    from app.profiles.orion import OrionProfile
     from app.profiles.sentinel import SentinelProfile
     from app.profiles.speda import SPEDAProfile
     from app.profiles.ultron import UltronProfile
@@ -53,6 +54,7 @@ async def lifespan(app: FastAPI):
     profiles.register(NightCrawlerProfile())  # OSINT / web surveillance
     profiles.register(CenturionProfile())   # cyber security
     profiles.register(OptimusProfile())     # systems / code / infrastructure
+    profiles.register(OrionProfile())       # Mark VI maintenance — memory custodian
 
     dispatcher = AgentDispatcher()
 
@@ -82,6 +84,7 @@ async def lifespan(app: FastAPI):
     from app.skills.semantic_search import SemanticSearchSkill
     from app.skills.stt import STTSkill
     from app.skills.system import SystemSkill
+    from app.skills.system_ops import SystemOpsSkill
     from app.skills.tts import TTSSkill
 
     await registry.register_skill(ReadSkillSkill())
@@ -94,6 +97,7 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(DocumentsSkill())
     await registry.register_skill(SaveFileSkill())
     await registry.register_skill(SystemSkill())
+    await registry.register_skill(SystemOpsSkill())   # Orion-only (restricted_to)
     await registry.register_skill(BudgetModeSkill())
     await registry.register_skill(RunCommandSkill())
     await registry.register_skill(DeliverFileSkill())
@@ -244,7 +248,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-N8N-Secret"],
     )
 

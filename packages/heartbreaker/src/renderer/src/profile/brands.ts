@@ -55,4 +55,9 @@ export const BRANDS: Record<string, Brand> = {
     tagline: 'Systems, Code & Infrastructure',
     avatarInitial: 'O', accent: '#2eb6ac',
   },
+  orion: {
+    agentId: 'orion', name: 'Orion', modelNumber: 'Mark I', userName: 'Ahmet Erol',
+    tagline: 'Mark VI Maintenance & Memory Custodian',
+    avatarInitial: 'O', accent: '#8a7fd6',
+  },
 }

@@ -3,8 +3,8 @@ import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useHealth } from '../lib/useHealth'
 import { useIsMobile } from '../lib/useIsMobile'
-import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, fetchAgentModels, pinAgentModel } from '../lib/api'
-import type { ConnectionInfo, MemoryFileInfo, AgentModelInfo } from '../lib/api'
+import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, fetchAgentModels, pinAgentModel, commitMemoryFile, fetchMemoryRevisions, restoreMemoryRevision } from '../lib/api'
+import type { ConnectionInfo, MemoryFileInfo, AgentModelInfo, MemoryRevisionInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
 import { agentColor, monogram } from '../lib/agents'
 import AgentModelPicker from './AgentModelPicker'
@@ -266,6 +266,12 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const [memPath, setMemPath] = useState<string | null>(null)
   const [banksWide, setBanksWide] = useState(false)
   const [agentInfos, setAgentInfos] = useState<AgentModelInfo[]>([])
+  // Owner-edit state for the knowledge bank.
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<string | null>(null)
+  const [revs, setRevs] = useState<MemoryRevisionInfo[] | null>(null)
 
   const loadConns = () => getConnections(config).then(r => {
     setServers(r.servers)
@@ -302,6 +308,61 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, banksWide])
+
+  // Switching files always drops out of edit / history mode.
+  useEffect(() => {
+    setEditing(false); setRevs(null); setSaveMsg(null)
+  }, [memPath])
+
+  const selFile = memFiles.find(f => f.path === memPath) || null
+
+  const applyFresh = (f: MemoryFileInfo) => {
+    setMemFiles(prev => prev.map(x => (x.path === f.path ? { ...x, ...f } : x)))
+  }
+
+  const startEdit = () => {
+    if (!selFile) return
+    setDraft(selFile.content)
+    setSaveMsg(null)
+    setEditing(true)
+  }
+
+  const commitEdit = async () => {
+    if (!selFile) return
+    setSaving(true); setSaveMsg(null)
+    try {
+      const res = await commitMemoryFile(config, selFile.path, draft, selFile.updated_at)
+      if ('conflict' in res) {
+        if (res.current) applyFresh(res.current)
+        setSaveMsg('This file changed since you opened it — reloaded the latest. Re-apply your edit.')
+        if (res.current) setDraft(res.current.content)
+      } else {
+        applyFresh(res)
+        setEditing(false)
+        setSaveMsg('Committed.')
+      }
+    } catch {
+      setSaveMsg('Commit failed.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const openHistory = async () => {
+    if (!selFile) return
+    setRevs(await fetchMemoryRevisions(config, selFile.path))
+  }
+
+  const doRestore = async (id: number) => {
+    try {
+      const f = await restoreMemoryRevision(config, id)
+      applyFresh(f)
+      setRevs(null); setEditing(false)
+      setSaveMsg('Restored.')
+    } catch {
+      setSaveMsg('Restore failed.')
+    }
+  }
 
   const toggleServer = async (c: ConnectionInfo) => {
     setServers(ss => ss.map(s => s.server === c.server ? { ...s, active: !c.active } : s))
@@ -669,23 +730,80 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               } : {}),
             }}>
               {(() => {
-                const file = memFiles.find(f => f.path === memPath)
+                const file = selFile
                 if (!file) return null
+                const btn = {
+                  fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.12em',
+                  padding: '0.15rem 0.5rem', cursor: 'pointer',
+                  background: 'transparent', color: 'var(--hb-icon)',
+                  border: '1px solid rgba(var(--hb-accent-rgb),0.28)', borderRadius: 3,
+                } as const
+                const toolbar = (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center', marginBottom: 4, columnSpan: 'all' }}>
+                    {saveMsg && <span style={{ fontFamily: MONO, fontSize: '0.5rem', color: 'var(--hb-amber)', marginRight: 'auto' }}>{saveMsg}</span>}
+                    {file.updated_at && !editing && !revs && (
+                      <span style={{ fontFamily: MONO, fontSize: '0.5rem', color: 'var(--hb-icon-dim)' }}>LAST WRITE {fmtDate(file.updated_at)}</span>
+                    )}
+                    {file.editable && !editing && !revs && (
+                      <>
+                        <button style={btn} onClick={openHistory}>HISTORY</button>
+                        <button style={btn} onClick={startEdit}>EDIT</button>
+                      </>
+                    )}
+                    {editing && (
+                      <>
+                        <button style={btn} onClick={() => setEditing(false)} disabled={saving}>CANCEL</button>
+                        <button style={{ ...btn, color: '#f2b75c', borderColor: 'var(--hb-amber)' }} onClick={commitEdit} disabled={saving}>{saving ? 'SAVING…' : 'COMMIT'}</button>
+                      </>
+                    )}
+                    {revs && <button style={btn} onClick={() => setRevs(null)}>CLOSE</button>}
+                  </div>
+                )
+
+                if (editing) return (
+                  <div style={{ columnSpan: 'all' }}>
+                    {toolbar}
+                    <textarea
+                      value={draft}
+                      onChange={e => setDraft(e.target.value)}
+                      spellCheck={false}
+                      style={{
+                        width: '100%', minHeight: banksWide ? '46vh' : 200, resize: 'vertical',
+                        background: 'rgba(0,0,0,0.28)', color: 'var(--hb-text-dim)',
+                        border: '1px solid rgba(var(--hb-accent-rgb),0.28)', borderRadius: 4,
+                        fontFamily: MONO, fontSize: '0.72rem', lineHeight: 1.5, padding: '0.5rem 0.6rem',
+                      }}
+                    />
+                  </div>
+                )
+
+                if (revs) return (
+                  <div style={{ columnSpan: 'all' }}>
+                    {toolbar}
+                    {revs.length === 0 && <p style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)' }}>// NO REVISIONS YET</p>}
+                    {revs.map(r => (
+                      <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.2rem 0', borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.08)' }}>
+                        <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)', minWidth: 118 }}>{fmtDate(r.created_at)}</span>
+                        <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: r.author === 'owner' ? '#f2b75c' : 'var(--hb-cyan)', minWidth: 64 }}>{r.author}</span>
+                        <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon)', flex: 1 }}>{r.action}</span>
+                        <button style={btn} onClick={() => doRestore(r.id)}>RESTORE</button>
+                      </div>
+                    ))}
+                  </div>
+                )
+
                 const lines = file.content.split('\n').map(l => l.trim()).filter(Boolean)
                 if (lines.length === 0) return (
-                  <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: 'var(--hb-icon-dim)', padding: '0.3rem 0' }}>
-                    // EMPTY — SPEDA HAS NOT WRITTEN HERE YET
-                  </p>
+                  <>
+                    {toolbar}
+                    <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: 'var(--hb-icon-dim)', padding: '0.3rem 0' }}>
+                      // EMPTY — SPEDA HAS NOT WRITTEN HERE YET
+                    </p>
+                  </>
                 )
                 return (
                   <>
-                    {file.updated_at && (
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 2, columnSpan: 'all' }}>
-                        <span style={{ fontFamily: MONO, fontSize: '0.5rem', color: 'var(--hb-icon-dim)' }}>
-                          LAST WRITE {fmtDate(file.updated_at)}
-                        </span>
-                      </div>
-                    )}
+                    {toolbar}
                     {lines.map((line, i) => {
                       if (line.startsWith('#')) {
                         return (

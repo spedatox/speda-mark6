@@ -26,6 +26,7 @@ from app.database import AsyncSessionLocal
 from app.models.memory_file import MemoryFile
 from app.models.message import Message
 from app.models.session import Session
+from app.services.memory_store import record_revision
 
 logger = logging.getLogger(__name__)
 
@@ -57,21 +58,27 @@ ACTIVE PROJECTS:
 {projects}"""
 
 _DOSSIER_PROMPT = """\
-You maintain a private behavioural dossier on the owner — a working model of how
-he likes to be treated, inferred from how he REACTS, not from facts he states.
+You maintain the dossier on the owner — a working model of his PREFERENCES: what he
+likes, dislikes, and wants, and in what manner. It captures observations made while
+talking to him — both preferences he STATED outright and patterns you INFER from
+how he reacts (corrections, pushback, frustration, praise, what he engages with vs.
+ignores).
 
-Below is the existing dossier and recent raw exchanges. Update the dossier based on
-observable signals: corrections, pushback, frustration, praise, repeated patterns,
-what he engages with vs. ignores.
+This is about his PREFERENCES only. Facts about his life, biography, or current
+situation do NOT belong here — leave those out.
+
+Below is the existing dossier and recent raw exchanges. Update it.
 
 Rules:
-- Only record well-supported inferences. Do not invent or over-read single messages.
+- Record both stated preferences and well-supported inferences. Do not invent or
+  over-read a single message.
 - Keep each section tight — a few sharp bullets, not paragraphs.
 - Carry forward still-valid prior observations; drop ones that no longer hold.
+- Preserve any existing `[YYYY-MM-DD, agent_id]` attribution tags on entries.
 - Return the dossier body with exactly these four sections and nothing else:
-  ## Appreciates
-  ## Friction / dislikes
-  ## Working style
+  ## Likes / responds well to
+  ## Dislikes / friction
+  ## Wants — and in what manner
   ## Open questions
 
 EXISTING DOSSIER:
@@ -306,11 +313,19 @@ async def run_daily_maintenance(
                         f"_Last updated: {today}_\n\n"
                         f"{bullets}\n"
                     )
+                    before = current.content if current else ""
                     if current:
                         current.content = new_current
                         current.updated_at = datetime.now(timezone.utc)
                     else:
                         db.add(MemoryFile(user_id=user_id, path=CURRENT_PATH, content=new_current))
+                    # Attributed to Orion — the custodian owns maintenance, so the
+                    # snapshot refresh is no longer an anonymous background write.
+                    await record_revision(
+                        db, user_id=user_id, path=CURRENT_PATH, author="orion",
+                        action="audit", before=before, after=new_current,
+                        request_id=request_id,
+                    )
                     await db.commit()
                     logger.info("current_brief_refreshed", extra={"request_id": request_id})
             except Exception as e:
@@ -334,18 +349,24 @@ async def run_daily_maintenance(
                     body = (resp.content[0].text.strip() if resp.content else "")
                     if body and "##" in body:
                         new_dossier = (
-                            "# Dossier — behavioural analysis\n\n"
-                            "_A private, inferred model of the owner — how he likes to be "
-                            "treated, read from how he reacts. Shared working knowledge; "
-                            "tailor behaviour to it silently._\n\n"
+                            "# Dossier — what we've observed about how he wants to be treated\n\n"
+                            "_The agents' working model of the owner's preferences — what he "
+                            "likes, dislikes, and wants, and in what manner. Stated and inferred. "
+                            "Agents learn from it and act on it silently; never cited to him._\n\n"
                             f"_Last updated: {today}_\n\n"
                             f"{body}\n"
                         )
+                        before_dossier = dossier.content if dossier else ""
                         if dossier:
                             dossier.content = new_dossier
                             dossier.updated_at = datetime.now(timezone.utc)
                         else:
                             db.add(MemoryFile(user_id=user_id, path=DOSSIER_PATH, content=new_dossier))
+                        await record_revision(
+                            db, user_id=user_id, path=DOSSIER_PATH, author="orion",
+                            action="audit", before=before_dossier, after=new_dossier,
+                            request_id=request_id,
+                        )
                         await db.commit()
                         logger.info("dossier_updated", extra={"request_id": request_id})
                 except Exception as e:

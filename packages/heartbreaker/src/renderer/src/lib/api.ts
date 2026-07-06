@@ -187,9 +187,11 @@ export interface MemoryFileInfo {
   path: string
   content: string
   updated_at: string | null
+  /** Canonical files are owner-editable from the board; system trails are not. */
+  editable?: boolean
 }
 
-/** SPEDA's knowledge bank — the /memories virtual filesystem (read-only). */
+/** SPEDA's knowledge bank — the /memories virtual filesystem. */
 export async function fetchMemoryFiles(config: AppConfig): Promise<MemoryFileInfo[]> {
   try {
     const res = await fetch(`${config.apiBase}/memory/files`, { headers: authHeaders(config)})
@@ -198,6 +200,66 @@ export async function fetchMemoryFiles(config: AppConfig): Promise<MemoryFileInf
   } catch {
     return []
   }
+}
+
+export interface MemoryConflict {
+  conflict: true
+  current: MemoryFileInfo
+}
+
+/** Commit an owner edit to a memory file. On a 409 (an agent wrote since the
+ *  board loaded it) returns { conflict: true, current } so the caller can
+ *  re-diff instead of clobbering. */
+export async function commitMemoryFile(
+  config: AppConfig,
+  path: string,
+  content: string,
+  expectedUpdatedAt: string | null
+): Promise<MemoryFileInfo | MemoryConflict> {
+  const res = await fetch(`${config.apiBase}/memory/files`, {
+    method: 'PUT',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ path, content, expected_updated_at: expectedUpdatedAt })
+  })
+  if (res.status === 409) {
+    const body = await res.json().catch(() => null)
+    return { conflict: true, current: body?.detail?.current }
+  }
+  if (!res.ok) throw new Error(`Commit failed (${res.status})`)
+  return res.json()
+}
+
+export interface MemoryRevisionInfo {
+  id: number
+  path: string
+  author: string
+  action: string
+  created_at: string | null
+  before: string
+  after: string
+}
+
+export async function fetchMemoryRevisions(config: AppConfig, path: string): Promise<MemoryRevisionInfo[]> {
+  try {
+    const res = await fetch(
+      `${config.apiBase}/memory/files/revisions?path=${encodeURIComponent(path)}`,
+      { headers: authHeaders(config) }
+    )
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
+export async function restoreMemoryRevision(config: AppConfig, revisionId: number): Promise<MemoryFileInfo> {
+  const res = await fetch(`${config.apiBase}/memory/files/restore`, {
+    method: 'POST',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ revision_id: revisionId })
+  })
+  if (!res.ok) throw new Error(`Restore failed (${res.status})`)
+  return res.json()
 }
 
 export interface ConnectionInfo {

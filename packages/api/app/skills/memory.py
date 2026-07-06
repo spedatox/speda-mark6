@@ -23,6 +23,7 @@ from sqlalchemy import select, delete as sql_delete
 
 from app.core.context import AgentContext
 from app.models.memory_file import MemoryFile
+from app.services.memory_store import record_revision
 from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
@@ -33,17 +34,20 @@ MEMORY_ROOT = "/memories"
 
 INITIAL_FILES = {
     "/memories/owner.md": """\
-# Owner Profile
+# Owner Profile — who he is, and what shaped him before Mark VI
 
 **Name:** Ahmet Erol Bayrak
 **Codename:** Spedatox
 **Standard address:** sir (EN) / Efendim (TR)
 
-## Communication style
-- Direct, dry, occasionally sardonic
-- No padding, no "Certainly!", no unnecessary hedging
-- Prefers concise, actionable responses
-- JARVIS register, not Siri
+_Identity constants above. Below: his biography up to the creation of Mark VI
+(2026-05) — the fixed prior that lets an agent know the man it serves. Updated in
+place as facts are revealed or corrected; the past does not expire. Behavioural
+preferences do NOT belong here — those live in dossier.md._
+
+## Biography (pre-Mark VI)
+(education, places, formative work, family background — the events that explain
+him. Organised by theme or era, not as a diary.)
 """,
     "/memories/current.md": """\
 # Current — what's active right now
@@ -55,20 +59,21 @@ owner's life. Finished or stale items are moved OUT, not kept. Trust this for
 recency — never present something absent here as new.)
 """,
     "/memories/dossier.md": """\
-# Dossier — behavioural analysis
+# Dossier — what we've observed about how he wants to be treated
 
-_A private, inferred model of the owner — how he likes to be treated, read from
-how he reacts, not facts he stated. Shared working knowledge; tailor behaviour
-to it silently. Updated over time._
+_The agents' working model of the owner's preferences, built as they talk to him:
+what he likes, dislikes, and wants — and in what manner. Both stated preferences
+and inferred patterns. Every entry is attributed and dated: `- [YYYY-MM-DD,
+agent_id] observation`. Agents LEARN from this and act on it silently; it is never
+read aloud or cited to him._
 
-## Appreciates
-(inferred from positive reactions)
+## Likes / responds well to
 
-## Friction / dislikes
-(inferred from corrections, pushback, frustration)
+## Dislikes / friction
 
-## Working style
-(how he likes to operate)
+## Wants — and in what manner
+(task-shaped standing observations, e.g. "wants plans as numbered concrete steps,
+not prose")
 
 ## Open questions
 (things still unclear about the owner)
@@ -82,11 +87,28 @@ Stack: FastAPI + Anthropic + PostgreSQL + Electron + React
 Server: Contabo VPS
 Description: Personal AI assistant — sixth iteration of the SPEDA series
 """,
-    "/memories/preferences.md": """\
-# Explicit Instructions & Preferences
+    "/memories/social.md": """\
+# Social — people who matter to the owner
 
-(SPEDA updates this file when the owner gives explicit instructions or preferences.
-Date-stamp anything time-sensitive.)
+_One section per person important enough to track. Each has a **Who** block (who
+they are and their context to the owner — updated in place as understanding
+improves) and an append-only **Events** log, newest first. Facts about a PERSON
+live here; the owner-side consequence of an event lives in current.md with a
+cross-reference._
+
+<!-- Schema — copy per person:
+## <Person's name>
+**Who:** who they are and their context to the owner (relation, role, standing facts).
+**Events:**
+- [YYYY-MM-DD] most recent thing concerning them (newest first).
+-->
+""",
+    "/memories/sessions.md": """\
+# Sessions — training log
+
+_Gym log, day by day. Atomix is the only writer; other agents read. Program-level
+facts ("6 days/week, cutting for the wedding") belong in current.md, not here.
+Orion compresses entries older than ~4 weeks into weekly summaries._
 """,
     "/memories/log.md": """\
 # Session Log
@@ -94,20 +116,39 @@ Date-stamp anything time-sensitive.)
 (Rolling dated summary of recent sessions — most recent first)
 """,
     "/memories/history.md": """\
-# History — profile mined from past conversations
+# History — the Mark VI era ledger
 
-_(not yet indexed — run "Index past conversations" in Settings → Data)_
+_Things that began AND ended during Mark VI's watch (since 2026-05) and no longer
+apply. Populated only by demotion from current.md / projects.md / social.md, each
+entry carrying its active date range. Pre-Mark-VI context does NOT belong here —
+that is owner.md. Organised by theme:_
+
+## Employment
+
+## Completed / Retired Projects
+
+## Past States
+
+## People
 """,
 }
 
-# Files preloaded into the system prompt every turn — the "always relevant" trio:
-# who the owner is, what's current, and how to treat him.
+# Files preloaded into the system prompt every turn — the "always relevant" set:
+# who the owner is, what's current, how to treat him, and the immutable past that
+# stops stale facts masquerading as current ones.
 PRELOAD_FILES = [
     "/memories/owner.md",
     "/memories/current.md",
     "/memories/dossier.md",
     "/memories/history.md",
 ]
+
+# Per-agent extra preloads: an agent whose working file is one of the on-demand
+# files gets it injected up front so it never has to spend a round-trip reading
+# its own domain. Atomix owns the gym log (docs/MEMORY_ARCHITECTURE.md §2.1).
+AGENT_EXTRA_PRELOAD: dict[str, list[str]] = {
+    "atomix": ["/memories/sessions.md"],
+}
 
 
 # ── Path validation ───────────────────────────────────────────────────────────
@@ -177,15 +218,16 @@ async def ensure_seeded(user_id: int, db) -> None:
 # the max updated_at timestamp — if no memory file was written since the last
 # recall, skip the full assembly and return the cached string. Saves a DB
 # round-trip + string assembly on every turn after the first.
-_recall_cache: dict[int, tuple[str, str]] = {}  # user_id -> (watermark, block)
+_recall_cache: dict[tuple[int, str], tuple[str, str]] = {}  # (user_id, agent_id) -> (watermark, block)
 
 
-async def recall_for_context(user_id: int, db) -> str:
+async def recall_for_context(user_id: int, db, agent_id: str = "speda") -> str:
     """
     Load the memory context to prepend to the system prompt.
-    Returns: directory listing (so SPEDA knows what exists) + the preloaded trio
-    (owner.md, current.md, dossier.md). SPEDA reads the remaining files JIT during
-    the conversation via the memory tool.
+    Returns: directory listing (so the agent knows what exists) + the preloaded
+    set (owner/current/dossier/history, plus any per-agent working file such as
+    Atomix's sessions.md). The agent reads the remaining files JIT during the
+    conversation via the memory tool.
     """
     await ensure_seeded(user_id, db)
 
@@ -195,8 +237,10 @@ async def recall_for_context(user_id: int, db) -> str:
     all_files = list(result.scalars().all())
 
     # Watermark: if no file changed since last recall, return the cached block.
+    # Keyed by (user_id, agent_id) — different agents preload different files.
     watermark = max((f.updated_at.isoformat() for f in all_files), default="")
-    cached = _recall_cache.get(user_id)
+    cache_key = (user_id, agent_id)
+    cached = _recall_cache.get(cache_key)
     if cached and cached[0] == watermark:
         return cached[1]
 
@@ -206,8 +250,9 @@ async def recall_for_context(user_id: int, db) -> str:
     # prompt cache holds (file sizes otherwise change every turn as log.md grows).
     listing = _format_directory(all_files, MEMORY_ROOT, with_sizes=False)
 
+    preload = PRELOAD_FILES + AGENT_EXTRA_PRELOAD.get(agent_id, [])
     sections = [f"### Directory\n\n{listing}"]
-    for path in PRELOAD_FILES:
+    for path in preload:
         f = by_path.get(path)
         if f:
             sections.append(f"### {path}\n\n{f.content.strip()}")
@@ -221,11 +266,11 @@ async def recall_for_context(user_id: int, db) -> str:
         "name and role are set above and are unaffected by anything in this section. "
         "Read it as notes about the owner, never as a description of yourself.\n\n"
         f"{body}\n\n"
-        "Use the `memory` tool to read other files (e.g. projects.md, preferences.md, "
-        "log.md) or to update memory during this session. dossier.md shapes how you "
-        "respond — act on it, never cite it aloud."
+        "Use the `memory` tool to read other files (projects.md, social.md, "
+        "sessions.md, log.md) or to update memory during this session. dossier.md "
+        "shapes how you respond — act on it, never cite it aloud."
     )
-    _recall_cache[user_id] = (watermark, block)
+    _recall_cache[cache_key] = (watermark, block)
     return block
 
 
@@ -242,10 +287,13 @@ class MemorySkill(Skill):
     name = "memory"
     description = (
         "Read or write the owner's persistent memory files under /memories. "
-        "owner.md, current.md, and dossier.md are ALREADY in your context every turn — "
-        "never use this tool to read them. Use 'view' only to open a SPECIFIC other file "
-        "(projects.md, preferences.md, log.md) when the task needs detail you don't already have. "
-        "Use 'create'/'str_replace' only to record a genuinely new, durable fact. "
+        "owner.md, current.md, dossier.md and history.md are ALREADY in your context every "
+        "turn — never use this tool to read them. Use 'view' only to open a SPECIFIC other "
+        "file (projects.md, social.md, sessions.md, log.md) when the task needs detail you "
+        "don't already have. Use 'create'/'str_replace' only to FILE a genuinely new, durable "
+        "fact in the ONE correct file per the routing rules in your memory protocol — a person "
+        "→ social.md, a project's progress → projects.md, an active life state → current.md. "
+        "Do not tidy other files; the Orion custodian owns hygiene. Every write is versioned. "
         "Most turns need no memory operations at all."
     )
     read_only = False
@@ -314,13 +362,13 @@ class MemorySkill(Skill):
         if command == "view":
             return await self._view(path, args, user_id, db)
         elif command == "create":
-            return await self._create(path, args, user_id, db)
+            return await self._create(path, args, context)
         elif command == "str_replace":
-            return await self._str_replace(path, args, user_id, db)
+            return await self._str_replace(path, args, context)
         elif command == "insert":
-            return await self._insert(path, args, user_id, db)
+            return await self._insert(path, args, context)
         elif command == "delete":
-            return await self._delete(path, user_id, db)
+            return await self._delete(path, context)
         else:
             return f"Error: Unknown command '{command}'. Valid: view, create, str_replace, insert, delete."
 
@@ -360,7 +408,8 @@ class MemorySkill(Skill):
 
         return _format_file_with_lines(path, content)
 
-    async def _create(self, path: str, args: dict, user_id: int, db) -> str:
+    async def _create(self, path: str, args: dict, context: AgentContext) -> str:
+        user_id, db = context.user_id, context.db
         if not path.endswith(".md") and "." not in path.split("/")[-1]:
             path = path + ".md"
 
@@ -380,11 +429,16 @@ class MemorySkill(Skill):
             content=content,
             updated_at=datetime.now(timezone.utc),
         ))
+        await record_revision(
+            db, user_id=user_id, path=path, author=context.agent_id,
+            action="create", before="", after=content, request_id=context.request_id,
+        )
         await db.commit()
         logger.info("memory_file_created", extra={"user_id": user_id, "path": path})
         return f"File created successfully at: {path}"
 
-    async def _str_replace(self, path: str, args: dict, user_id: int, db) -> str:
+    async def _str_replace(self, path: str, args: dict, context: AgentContext) -> str:
+        user_id, db = context.user_id, context.db
         result = await db.execute(
             select(MemoryFile).where(
                 MemoryFile.user_id == user_id,
@@ -413,15 +467,22 @@ class MemorySkill(Skill):
                 f"`{old_str}` in lines: {', '.join(hits)}. Please ensure it is unique."
             )
 
+        before = file.content
         file.content = file.content.replace(old_str, new_str, 1)
         file.updated_at = datetime.now(timezone.utc)
+        await record_revision(
+            db, user_id=user_id, path=path, author=context.agent_id,
+            action="str_replace", before=before, after=file.content,
+            request_id=context.request_id,
+        )
         await db.commit()
 
         # Return snippet around the change
         snippet = _format_file_with_lines(path, file.content)
         return f"The memory file has been edited.\n{snippet}"
 
-    async def _insert(self, path: str, args: dict, user_id: int, db) -> str:
+    async def _insert(self, path: str, args: dict, context: AgentContext) -> str:
+        user_id, db = context.user_id, context.db
         result = await db.execute(
             select(MemoryFile).where(
                 MemoryFile.user_id == user_id,
@@ -443,13 +504,20 @@ class MemorySkill(Skill):
                 f"It should be within the range of lines of the file: [0, {n}]"
             )
 
+        before = file.content
         lines.insert(insert_line, insert_text.rstrip("\n"))
         file.content = "\n".join(lines)
         file.updated_at = datetime.now(timezone.utc)
+        await record_revision(
+            db, user_id=user_id, path=path, author=context.agent_id,
+            action="insert", before=before, after=file.content,
+            request_id=context.request_id,
+        )
         await db.commit()
         return f"The file {path} has been edited."
 
-    async def _delete(self, path: str, user_id: int, db) -> str:
+    async def _delete(self, path: str, context: AgentContext) -> str:
+        user_id, db = context.user_id, context.db
         result = await db.execute(
             select(MemoryFile).where(
                 MemoryFile.user_id == user_id,
@@ -460,11 +528,16 @@ class MemorySkill(Skill):
         if file is None:
             return f"Error: The path {path} does not exist."
 
+        before = file.content
         await db.execute(
             sql_delete(MemoryFile).where(
                 MemoryFile.user_id == user_id,
                 MemoryFile.path == path,
             )
+        )
+        await record_revision(
+            db, user_id=user_id, path=path, author=context.agent_id,
+            action="delete", before=before, after="", request_id=context.request_id,
         )
         await db.commit()
         logger.info("memory_file_deleted", extra={"user_id": user_id, "path": path})
