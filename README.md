@@ -77,7 +77,7 @@ Agents are not isolated; they communicate through a rich inter-agent dispatch fr
 | Package | Role |
 |---|---|
 | `packages/api` | FastAPI backend — orchestrator, capability registry, skills, memory, automations |
-| `packages/heartbreaker` | Primary desktop UI (Electron + React) — liquid-glass HUD design language |
+|Heartbreaker: Mark VI UI `packages/heartbreaker` | Primary desktop UI (Electron + React) — liquid-glass HUD design language |
 | `packages/desktop` | Neutral UI template — the base that Superior Six forks re-skin |
 | `packages/sandbox` | Isolated command-execution container ("capable computer") — no host mounts, resource-capped |
 
