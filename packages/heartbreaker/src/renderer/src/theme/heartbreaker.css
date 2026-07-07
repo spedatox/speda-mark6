@@ -97,6 +97,33 @@
     inset 0 -1px 0 0 rgba(255, 255, 255, 0.1),
     0 8px 32px rgba(0, 0, 0, 0.4);
 
+  /* ── ONE unified glass material (the single .glass recipe) ─────────────────
+     Every glass component — buttons, dropdowns, panels, headers, chips, the
+     modal shell — draws from THESE tokens, so the whole app shares one material.
+     Dark-adapted from the reference glass-card: a rim-lit frosted slab with a
+     top specular streak, a left light edge, a bottom slab-thickness rim, a faint
+     inner glass glow, and a soft drop that lifts it off the void. The fill is a
+     dark occluding base (nested backdrop roots cancel a child's blur, so the
+     fill must occlude on its own) with a milky tint layered on top. Rounded
+     corners per the reference. Tint/active/amber are thin modifiers on top. */
+  --glass-r:        14px;                          /* unified rounded corner */
+  --glass-r-pill:   9999px;                        /* .glass-round opt-in */
+  --glass-fill:     rgba(8, 16, 24, 0.62);         /* occluding dark base */
+  --glass-tint:     rgba(190, 215, 235, 0.06);     /* milky cool-white wash */
+  --glass-tint-hi:  rgba(190, 215, 235, 0.13);     /* hover wash */
+  --glass-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.28),     /* top specular streak */
+    inset 1px 0 0 0 rgba(255, 255, 255, 0.10),     /* left light edge */
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.06),    /* bottom rim (slab body) */
+    inset 0 0 2px 1px rgba(255, 255, 255, 0.05),   /* inner glass glow */
+    0 8px 32px rgba(0, 0, 0, 0.35);                /* soft lift off the void */
+  --glass-shadow-active:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.42),
+    inset 1px 0 0 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 3px 1px rgba(255, 255, 255, 0.07),
+    0 10px 34px rgba(0, 0, 0, 0.42);
+
   /* ── Map the app's existing variables onto the FUI palette ───────────────
      The ported components reference these — redefining them reskins the whole
      app in one move, no component edits needed. */
@@ -190,16 +217,84 @@
     transparent, rgba(255, 255, 255, 0.08) 12%, rgba(255, 255, 255, 0.08) 88%, transparent);
 }
 
-/* The glass layer — frosted slab + lit rim + specular catches.
-   Components add state via inline borderColor / boxShadow overrides only. */
-.hb-holo {
-  border-radius: 16px !important;
-  background: var(--hb-holo-fill);
+/* ════════════════════════════════════════════════════════════════════════════
+   THE ONE GLASS MATERIAL
+   `.glass` is the single canonical class for every glass surface. The existing
+   design-system classes (.hb-holo, .hb-btn, .hb-field, .hb-panel, headers,
+   chips, the modal shell) are listed alongside it so the ENTIRE app renders one
+   identical material — no per-component glass recipes. State is expressed with
+   thin modifiers (.glass-tint / .glass-active / .glass-amber / .glass-ghost /
+   .glass-round), never by re-declaring the material.
+   ════════════════════════════════════════════════════════════════════════════ */
+.glass,
+.hb-holo,
+.hb-panel,
+.hb-btn,
+.hb-field,
+.hb-glass,
+.hb-glass-sm,
+.hb-glass-xs,
+.hb-glass-top,
+.hb-head-light,
+.hb-head-cyan,
+.hb-head-glass,
+.hb-panel-head,
+.hb-query-box,
+.hb-chip-amber {
+  border-radius: var(--glass-r) !important;
+  background:
+    linear-gradient(var(--glass-tint), var(--glass-tint)),
+    var(--glass-fill);
   backdrop-filter: var(--hb-holo-blur);
   -webkit-backdrop-filter: var(--hb-holo-blur);
   border: 1px solid var(--hb-edge);
-  box-shadow: var(--hb-holo-shadow);
+  box-shadow: var(--glass-shadow);
 }
+
+/* ── Glass modifiers — thin state layers on the single material ─────────────
+   Placed AFTER the base so they win the cascade for the same properties.
+   .glass-tint reads its accent from `color` (set inline / by the component). */
+.glass-round { border-radius: var(--glass-r-pill) !important; }
+.glass-sm    { border-radius: 9px !important; }
+
+.glass-tint, .hb-btn-tint {
+  border-color: color-mix(in srgb, currentColor 55%, transparent);
+  background:
+    linear-gradient(color-mix(in srgb, currentColor 16%, transparent),
+                    color-mix(in srgb, currentColor 16%, transparent)),
+    var(--glass-fill);
+}
+
+.glass-active,
+.glass-interactive:hover:not(:disabled) {
+  border-color: var(--hb-edge-bright);
+  box-shadow: var(--glass-shadow-active);
+}
+
+.glass-amber, .hb-chip-amber {
+  border-color: rgba(217, 156, 68, 0.45);
+  background:
+    linear-gradient(rgba(217, 156, 68, 0.20), rgba(217, 156, 68, 0.20)),
+    var(--glass-fill);
+  color: var(--hb-amber-bright);
+}
+
+/* Cyan-tinted header keeps its accent wash + text on the shared material. */
+.hb-head-cyan {
+  background:
+    linear-gradient(rgba(var(--hb-accent-rgb), 0.16), rgba(var(--hb-accent-rgb), 0.16)),
+    var(--glass-fill);
+  color: var(--hb-cyan-bright);
+}
+
+.glass-ghost {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.glass-ghost:hover { background: var(--glass-tint); }
 
 html, body, #root { height: 100%; overflow: hidden; }
 /* leave room for the fixed HUD top strip + bottom ruler */
@@ -266,26 +361,14 @@ body {
   color: var(--hb-cyan-bright);
 }
 
-/* Panel — translucent glass module on a clean light-edge (no prop geometry) */
-.hb-panel {
-  position: relative;
-  background: var(--hb-holo-fill);
-  border: 1px solid var(--hb-edge);
-  box-shadow: var(--hb-holo-shadow);
-}
+/* Panel — glass module. Material comes from the unified .glass base. */
+.hb-panel { position: relative; }
 
-/* Panel header bar — frosted accent glass strip with caps title */
+/* Panel header bar — caps title on the shared glass material (accent text). */
 .hb-panel-head {
   display: flex; align-items: center; gap: 0.4rem;
   height: 22px;
   padding: 0 0.5rem;
-  background:
-    linear-gradient(rgba(var(--hb-accent-rgb), 0.12), rgba(var(--hb-accent-rgb), 0.12)),
-    rgba(8, 16, 24, 0.55);
-  backdrop-filter: var(--hb-holo-blur);
-  -webkit-backdrop-filter: var(--hb-holo-blur);
-  border-bottom: 1px solid var(--hb-line);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.14);
   font-size: 0.64rem;
   font-weight: 600;
   letter-spacing: 0.16em;
@@ -299,49 +382,27 @@ body {
 .hb-warn { color: var(--hb-amber); }
 .hb-alert{ color: var(--hb-red); }
 
-/* Bright glass header plate — the former solid white bar, now a thick frosted
-   slab with a strong specular catch. Same layout contract, liquid material. */
+/* Bright glass header plate — caps title on the shared glass material. */
 .hb-head-light {
   display: flex; align-items: center; gap: 0.45rem;
   min-height: 24px;
   padding: 0 0.6rem;
-  background:
-    linear-gradient(rgba(190, 215, 235, 0.14), rgba(190, 215, 235, 0.14)),
-    rgba(10, 18, 26, 0.78);
-  backdrop-filter: var(--hb-holo-blur);
-  -webkit-backdrop-filter: var(--hb-holo-blur);
-  border: 1px solid var(--hb-edge);
-  border-radius: 11px !important;
   color: #e9f5f9;
   font-family: 'Rajdhani', sans-serif;
   font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.14em; text-transform: uppercase;
   text-shadow: 0 0 10px rgba(var(--hb-cyan-bright-rgb), 0.25);
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.32),
-    inset 0 -1px 0 0 rgba(255, 255, 255, 0.08),
-    0 4px 18px rgba(0, 0, 0, 0.3);
 }
 
-/* Accent glass header bar — the former solid cyan strip, frosted + tinted */
+/* Accent glass header bar — cyan text; accent wash comes from the modifier. */
 .hb-head-cyan {
   display: flex; align-items: center; gap: 0.45rem;
   min-height: 22px;
   padding: 0 0.6rem;
-  background:
-    linear-gradient(rgba(var(--hb-accent-rgb), 0.16), rgba(var(--hb-accent-rgb), 0.16)),
-    rgba(8, 16, 24, 0.7);
-  backdrop-filter: var(--hb-holo-blur);
-  -webkit-backdrop-filter: var(--hb-holo-blur);
-  color: var(--hb-cyan-bright);
   font-family: 'Rajdhani', sans-serif;
   font-size: 0.68rem; font-weight: 700;
   letter-spacing: 0.16em; text-transform: uppercase;
   text-shadow: 0 0 8px rgba(var(--hb-cyan-bright-rgb), 0.35);
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
-    inset 0 -2px 0 0 rgba(0, 0, 0, 0.3),
-    inset 0 -1px 0 0 rgba(255, 255, 255, 0.06);
 }
 
 /* ── Fluid-glass buttons — the ONLY button material in the app ─────────────
@@ -359,14 +420,6 @@ body {
    top-level cases where it does work. */
 .hb-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  border: 1px solid var(--hb-edge);
-  border-radius: 9px !important;
-  background:
-    linear-gradient(rgba(190, 215, 235, 0.07), rgba(190, 215, 235, 0.07)),
-    rgba(8, 16, 24, 0.62);
-  backdrop-filter: var(--hb-holo-blur);
-  -webkit-backdrop-filter: var(--hb-holo-blur);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.16), 0 2px 10px rgba(0, 0, 0, 0.22);
   color: var(--hb-icon-bright);
   cursor: pointer;
   transition: border-color 0.12s, background 0.12s, color 0.12s, box-shadow 0.12s;
@@ -374,23 +427,17 @@ body {
 .hb-btn:hover:not(:disabled) {
   border-color: var(--hb-edge-bright);
   background:
-    linear-gradient(rgba(190, 215, 235, 0.13), rgba(190, 215, 235, 0.13)),
-    rgba(8, 16, 24, 0.62);
+    linear-gradient(var(--glass-tint-hi), var(--glass-tint-hi)),
+    var(--glass-fill);
   color: var(--hb-text);
-  box-shadow: var(--hb-holo-shadow-active);
+  box-shadow: var(--glass-shadow-active);
 }
 .hb-btn:disabled { opacity: 0.45; cursor: default; }
-.hb-btn-tint {
-  border-color: color-mix(in srgb, currentColor 55%, transparent);
-  background:
-    linear-gradient(color-mix(in srgb, currentColor 16%, transparent), color-mix(in srgb, currentColor 16%, transparent)),
-    rgba(8, 16, 24, 0.62);
-}
 .hb-btn-tint:hover:not(:disabled) {
   border-color: color-mix(in srgb, currentColor 80%, transparent);
   background:
     linear-gradient(color-mix(in srgb, currentColor 24%, transparent), color-mix(in srgb, currentColor 24%, transparent)),
-    rgba(8, 16, 24, 0.62);
+    var(--glass-fill);
   color: inherit;
 }
 .hb-btn-ghost {
@@ -402,23 +449,15 @@ body {
 }
 .hb-btn-ghost:hover { background: rgba(190, 215, 235, 0.08); color: var(--hb-text-dim); }
 
-/* Fluid-glass input / textarea field — frosted well with a lit focus rim */
+/* Fluid-glass input / textarea field — shared glass material, lit focus rim */
 .hb-field {
-  border: 1px solid var(--hb-edge);
-  border-radius: 10px !important;
-  background:
-    linear-gradient(rgba(190, 215, 235, 0.04), rgba(190, 215, 235, 0.04)),
-    rgba(8, 16, 24, 0.55);
-  backdrop-filter: var(--hb-holo-blur);
-  -webkit-backdrop-filter: var(--hb-holo-blur);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 -1px 0 0 rgba(255, 255, 255, 0.05);
   color: var(--hb-text);
   outline: none;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
 .hb-field:focus, .hb-field:focus-within {
   border-color: var(--hb-edge-bright);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(var(--hb-accent-rgb), 0.18);
+  box-shadow: var(--glass-shadow-active), 0 0 0 1px rgba(var(--hb-accent-rgb), 0.18);
 }
 
 /* Comms-bubble markdown: the bubble glass hugs the content — no stray
@@ -433,51 +472,28 @@ body {
   display: flex; align-items: center; gap: 0.45rem;
   min-height: 26px;
   padding: 0 0.6rem;
-  background: rgba(190, 215, 235, 0.05);
-  backdrop-filter: var(--hb-holo-blur);
-  -webkit-backdrop-filter: var(--hb-holo-blur);
   color: var(--hb-cyan-bright);
   font-family: 'Rajdhani', sans-serif;
   font-size: 0.68rem; font-weight: 700;
   letter-spacing: 0.16em; text-transform: uppercase;
   text-shadow: 0 0 8px rgba(var(--hb-cyan-bright-rgb), 0.35);
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
-    inset 0 -2px 0 0 rgba(0, 0, 0, 0.35),
-    inset 0 -1px 0 0 rgba(255, 255, 255, 0.07);
 }
 
-/* Amber data chip — "05.06.10" timestamp boxes, amber-tinted glass */
+/* Amber data chip — "05.06.10" timestamp boxes. Amber wash via .glass-amber
+   sibling rule; this keeps only layout/type. */
 .hb-chip-amber {
   display: inline-flex; align-items: center;
   padding: 1px 6px;
-  background:
-    linear-gradient(rgba(217, 156, 68, 0.2), rgba(217, 156, 68, 0.2)),
-    rgba(10, 16, 22, 0.7);
-  backdrop-filter: var(--hb-holo-blur);
-  -webkit-backdrop-filter: var(--hb-holo-blur);
-  border: 1px solid rgba(217, 156, 68, 0.45);
-  border-radius: 7px !important;
-  color: var(--hb-amber-bright);
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.6rem; letter-spacing: 0.08em;
-  box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.25);
 }
 
-/* Outlined query box — ":ANTON VANKO" search tag */
+/* Outlined query box — ":ANTON VANKO" search tag. Shared glass material,
+   pill-shaped (opts into the round radius). */
 .hb-query-box {
   display: inline-flex; align-items: center; gap: 0.35rem;
   padding: 1px 10px 1px 8px;
-  /* frosted glass pill — occluding fill (the header is a backdrop root,
-     so this pill's own blur is cancelled) */
-  border-radius: 9999px !important;
-  border: 1px solid var(--hb-edge);
-  background:
-    linear-gradient(rgba(190, 215, 235, 0.06), rgba(190, 215, 235, 0.06)),
-    rgba(8, 16, 24, 0.55);
-  backdrop-filter: var(--hb-holo-blur);
-  -webkit-backdrop-filter: var(--hb-holo-blur);
-  box-shadow: var(--hb-holo-shadow);
+  border-radius: var(--glass-r-pill) !important;
   color: #eaf6fa;
   font-family: 'Rajdhani', sans-serif;
   font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
