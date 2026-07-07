@@ -296,14 +296,83 @@ _CATALOG = {
 }
 
 
+# Anthropic model families, in display order (most → least capable). Each entry:
+# (substring, tag, description). The live /v1/models list is mapped through this
+# so a brand-new Claude id the SDK returns still gets a sensible label/tag/order
+# without a code change — the catalog above is only the offline fallback.
+_ANTHRO_FAMILY: list[tuple[str, str, str]] = [
+    ("fable", "powerful", "Anthropic's most capable — deepest reasoning & long-horizon agentic work"),
+    ("opus", "powerful", "Most capable Opus tier — complex reasoning & deep analysis"),
+    ("sonnet", "fast", "Balanced speed and intelligence — great for most tasks"),
+    ("haiku", "fastest", "Fastest and cheapest — simple, quick tasks"),
+]
+
+
+def _anthropic_meta(model_id: str) -> tuple[list[str], str, int]:
+    """(tags, description, family_rank) for a Claude model id. Rank orders the
+    picker; unknown families sort last with a generic label."""
+    for rank, (key, tag, desc) in enumerate(_ANTHRO_FAMILY):
+        if key in model_id:
+            return [tag], desc, rank
+    return [], "Claude model", len(_ANTHRO_FAMILY)
+
+
+async def _anthropic_models() -> list[dict]:
+    """Live Claude catalog from the Anthropic /v1/models endpoint (SDK
+    client.models.list, auto-paginated). Ordered by family then newest-first,
+    with the top Sonnet flagged as the default. Raises on failure so the caller
+    can fall back to the static catalog."""
+    import anthropic
+
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    rows: list[dict] = []
+    async for m in client.models.list():
+        mid = m.id
+        if not mid.startswith("claude-"):
+            continue  # only Claude chat models belong in the picker
+        tags, desc, rank = _anthropic_meta(mid)
+        created = getattr(m, "created_at", None)
+        rows.append({
+            "id": mid,                                   # bare id → Anthropic routing
+            "name": getattr(m, "display_name", None) or mid,
+            "description": desc,
+            "tags": tags,
+            "provider": "anthropic",
+            "_rank": rank,
+            "_created": created.isoformat() if created else "",
+        })
+    # Family order, then newest first within a family.
+    rows.sort(key=lambda r: (r["_rank"], r["_created"]), reverse=False)
+    rows.sort(key=lambda r: r["_created"], reverse=True)
+    rows.sort(key=lambda r: r["_rank"])
+    # Mark the first Sonnet as the picker default (matches the profile policy).
+    for r in rows:
+        if "sonnet" in r["id"]:
+            r["tags"] = [*r["tags"], "default"]
+            break
+    for r in rows:
+        r.pop("_rank", None)
+        r.pop("_created", None)
+    return rows
+
+
 async def available_models() -> list[dict]:
     """Selectable models across all CONFIGURED providers, for the UI's model
     picker. A provider appears only when usable: Anthropic/OpenAI/Gemini/z.ai/
     DeepSeek when their API key is set, Ollama when the local daemon answers —
-    its installed models are listed live from /api/tags (dev/testing only)."""
+    its installed models are listed live from /api/tags (dev/testing only).
+
+    Anthropic and OpenAI are listed LIVE from each provider's models endpoint so
+    a newly released model appears without a code change; the static _CATALOG is
+    only the offline fallback when the endpoint can't be reached."""
     out: list[dict] = []
     if settings.anthropic_api_key not in ("", "not-set"):
-        out += [{**m, "provider": "anthropic"} for m in _CATALOG["anthropic"]]
+        try:
+            anthro = await _anthropic_models()
+            out += anthro or [{**m, "provider": "anthropic"} for m in _CATALOG["anthropic"]]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("failed_to_fetch_anthropic_models", extra={"error": str(exc)})
+            out += [{**m, "provider": "anthropic"} for m in _CATALOG["anthropic"]]
     if settings.openai_api_key:
         try:
             from openai import AsyncOpenAI
