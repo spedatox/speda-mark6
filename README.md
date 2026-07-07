@@ -1,4 +1,4 @@
-<img src="docs/images(1).png" alt="S.P.E.D.A. Mark VI" width="140" />
+<img src="docs/images (1).png" alt="S.P.E.D.A. Mark VI" width="140" />
 # S.P.E.D.A. Mark VI
 
 **Specialized Personal Executive Digital Assistant Mark VI** — a single-user, proactive, ambient AI system. FastAPI agentic backend, multi-provider LLM routing, n8n-driven automations with Telegram delivery, and an Electron desktop client.
