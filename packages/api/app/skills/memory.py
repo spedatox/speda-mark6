@@ -115,6 +115,26 @@ Orion compresses entries older than ~4 weeks into weekly summaries._
 
 (Rolling dated summary of recent sessions — most recent first)
 """,
+    "/memories/finance.md": """\
+# Finance — the owner's financial source of truth
+
+_Sentinel's domain file. The authoritative record of the owner's finances:
+accounts, balances, income, recurring expenses, budgets, holdings and financial
+goals. Sentinel READS this for every figure it reports and WRITES every update
+here (via the memory tool). Keep it current — supersede stale figures in place,
+date material changes. Program-level life context ("saving for the wedding")
+belongs in current.md with a cross-reference._
+
+## Accounts & balances
+
+## Income
+
+## Recurring expenses
+
+## Budgets & goals
+
+## Holdings / investments
+""",
     "/memories/history.md": """\
 # History — the Mark VI era ledger
 
@@ -143,12 +163,24 @@ PRELOAD_FILES = [
     "/memories/history.md",
 ]
 
-# Per-agent extra preloads: an agent whose working file is one of the on-demand
-# files gets it injected up front so it never has to spend a round-trip reading
-# its own domain. Atomix owns the gym log (docs/MEMORY_ARCHITECTURE.md §2.1).
-AGENT_EXTRA_PRELOAD: dict[str, list[str]] = {
-    "atomix": ["/memories/sessions.md"],
+# Per-agent SOURCE-OF-TRUTH file: the one domain file an agent both reads (it is
+# preloaded into the system prompt every turn) and writes (all of its domain data
+# goes there). These are the built-in defaults; the owner can reassign any agent's
+# source file from the desktop Configuration tab (runtime_state.get_agent_sources,
+# which overrides this map per agent). Atomix owns the gym log, Sentinel the
+# finance ledger (docs/MEMORY_ARCHITECTURE.md §2.1).
+AGENT_SOURCE_DEFAULTS: dict[str, str] = {
+    "atomix": "/memories/sessions.md",
+    "sentinel": "/memories/finance.md",
 }
+
+
+def source_file_for(agent_id: str) -> str | None:
+    """The agent's active source-of-truth file: the owner's runtime override if
+    set, else the built-in default, else None (no domain file for this agent)."""
+    from app.core.runtime_state import get_agent_sources
+
+    return get_agent_sources().get(agent_id) or AGENT_SOURCE_DEFAULTS.get(agent_id)
 
 
 # ── Path validation ───────────────────────────────────────────────────────────
@@ -236,9 +268,15 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda") -> str:
     )
     all_files = list(result.scalars().all())
 
+    # The agent's source-of-truth file (owner-configurable) is preloaded up front
+    # AND flagged as its read/write target below.
+    source_file = source_file_for(agent_id)
+
     # Watermark: if no file changed since last recall, return the cached block.
     # Keyed by (user_id, agent_id) — different agents preload different files.
-    watermark = max((f.updated_at.isoformat() for f in all_files), default="")
+    # The source-file assignment is part of the key/watermark so reassigning it
+    # from the UI (no file change) still refreshes the injected block.
+    watermark = max((f.updated_at.isoformat() for f in all_files), default="") + f"|{source_file or ''}"
     cache_key = (user_id, agent_id)
     cached = _recall_cache.get(cache_key)
     if cached and cached[0] == watermark:
@@ -250,7 +288,9 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda") -> str:
     # prompt cache holds (file sizes otherwise change every turn as log.md grows).
     listing = _format_directory(all_files, MEMORY_ROOT, with_sizes=False)
 
-    preload = PRELOAD_FILES + AGENT_EXTRA_PRELOAD.get(agent_id, [])
+    preload = list(PRELOAD_FILES)
+    if source_file and source_file not in preload:
+        preload.append(source_file)
     sections = [f"### Directory\n\n{listing}"]
     for path in preload:
         f = by_path.get(path)
@@ -258,6 +298,20 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda") -> str:
             sections.append(f"### {path}\n\n{f.content.strip()}")
 
     body = "\n\n".join(sections)
+
+    # Source-of-truth directive — the one file this agent owns for reading AND
+    # writing its domain data. Placed last so it's the strongest instruction.
+    source_directive = ""
+    if source_file:
+        source_directive = (
+            f"\n\n**Your source of truth is `{source_file}`.** It is preloaded above. "
+            f"Treat it as the AUTHORITATIVE record for your domain: read every figure "
+            f"and fact you report from it, and write EVERY update, change, or new entry "
+            f"back to it with the `memory` tool (str_replace/insert/create) in the same "
+            f"turn you learn it — never leave it stale and never keep your domain data "
+            f"only in the conversation."
+        )
+
     block = (
         "## Memory\n\n"
         "This is shared knowledge about your OWNER, maintained across all of your "
@@ -269,6 +323,7 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda") -> str:
         "Use the `memory` tool to read other files (projects.md, social.md, "
         "sessions.md, log.md) or to update memory during this session. dossier.md "
         "shapes how you respond — act on it, never cite it aloud."
+        f"{source_directive}"
     )
     _recall_cache[cache_key] = (watermark, block)
     return block

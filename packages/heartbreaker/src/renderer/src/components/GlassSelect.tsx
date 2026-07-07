@@ -95,7 +95,7 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
           border: `1px solid ${active ? `${tint}aa` : 'var(--hb-edge)'}`,
           background: active
             ? `linear-gradient(${tint}1f, ${tint}1f), var(--glass-fill)`
-            : 'linear-gradient(var(--glass-tint), var(--glass-tint)), var(--glass-fill)',
+            : 'linear-gradient(var(--glass-tint), var(--glass-tint)), var(--glass-menu)',
           boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.16), 0 2px 10px rgba(0,0,0,0.22)',
           color: active ? tint : 'var(--hb-text-dim)',
           fontFamily: UI, fontSize: '0.74rem', fontWeight: 600, letterSpacing: '0.04em',
@@ -141,7 +141,7 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
               // Occluding glass — never trust backdrop blur alone for
               // readability (nested backdrop roots cancel it).
               background:
-                'linear-gradient(var(--glass-tint), var(--glass-tint)), var(--glass-fill)',
+                'linear-gradient(var(--glass-tint), var(--glass-tint)), var(--glass-menu)',
               animation: 'dropDown 0.15s ease both',
             }}
           >

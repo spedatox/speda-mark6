@@ -109,6 +109,7 @@
      dark occluding base (nested backdrop roots cancel a child's blur, so the
      fill must occlude on its own) with a milky tint layered on top. Rounded
      corners per the reference. Tint/active/amber are thin modifiers on top. */
+  --glass-menu:     rgba(10, 20, 27, 0.94);        /* opaque fill for dropdowns/menus */
   --glass-r:        14px;                          /* unified rounded corner */
   --glass-r-pill:   9999px;                        /* .glass-round opt-in */
   --glass-fill:     rgba(8, 16, 24, 0.62);         /* occluding dark base */
