@@ -56,6 +56,10 @@ _OPENAI_COMPAT = {
         "api_key": settings.deepseek_api_key,
         "base_url": "https://api.deepseek.com",
     },
+    "nvidia": lambda: {
+        "api_key": settings.nvidia_api_key,
+        "base_url": "https://integrate.api.nvidia.com/v1",
+    },
     "ollama": lambda: {"api_key": "ollama", "base_url": settings.ollama_base_url},
 }
 _PROVIDERS = {"anthropic", *_OPENAI_COMPAT}
@@ -356,6 +360,40 @@ async def _anthropic_models() -> list[dict]:
     return rows
 
 
+async def _nvidia_models() -> list[dict]:
+    """Live NVIDIA NIM catalog from its OpenAI-compatible /v1/models endpoint.
+    Lists every model the key can reach (Llama, Nemotron, DeepSeek, Qwen, …),
+    dropping non-chat entries (embeddings / rerankers). Raises on failure so the
+    caller falls back to the static catalog. Model ids keep their vendor prefix
+    (e.g. meta/llama-3.1-405b-instruct); the "nvidia:" ref routes them here."""
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(**_OPENAI_COMPAT["nvidia"]())
+    rows: list[dict] = []
+    res = await client.models.list()
+    for m in res.data:
+        mid = m.id
+        low = mid.lower()
+        if any(x in low for x in ("embed", "rerank", "retriev")):
+            continue  # not chat-completion models
+        # Light heuristic: large / reasoning models read as "powerful", the small
+        # ones as "fast"; everything else stays untagged.
+        if any(x in low for x in ("405b", "253b", "70b", "-r1", "nemotron", "reason", "70b")):
+            tags = ["powerful"]
+        elif any(x in low for x in ("8b", "9b", "mini", "small", "nano", "4b", "2b")):
+            tags = ["fast"]
+        else:
+            tags = []
+        rows.append({
+            "id": f"nvidia:{mid}",
+            "name": mid.split("/")[-1].replace("-", " ").title(),
+            "description": f"NVIDIA NIM · {mid}",
+            "tags": tags,
+            "provider": "nvidia",
+        })
+    return sorted(rows, key=lambda r: r["name"])
+
+
 async def available_models() -> list[dict]:
     """Selectable models across all CONFIGURED providers, for the UI's model
     picker. A provider appears only when usable: Anthropic/OpenAI/Gemini/z.ai/
@@ -405,6 +443,11 @@ async def available_models() -> list[dict]:
         out += [{**m, "provider": "zai"} for m in _CATALOG["zai"]]
     if settings.deepseek_api_key:
         out += [{**m, "provider": "deepseek"} for m in _CATALOG["deepseek"]]
+    if settings.nvidia_api_key:
+        try:
+            out += await _nvidia_models()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("failed_to_fetch_nvidia_models", extra={"error": str(exc)})
 
     # Ollama daemon not running is the normal case outside dev — just omit it.
     base = settings.ollama_base_url.rstrip("/").removesuffix("/v1")

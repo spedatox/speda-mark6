@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     # DeepSeek — OpenAI-compatible endpoint (api.deepseek.com). Get a key from
     # https://platform.deepseek.com. Enables refs like "deepseek:deepseek-v4-pro".
     deepseek_api_key: str = ""
+    # NVIDIA NIM — OpenAI-compatible endpoint (integrate.api.nvidia.com/v1). Get a
+    # free key from https://build.nvidia.com (generous free credits across a large
+    # open-model catalog: Llama, Nemotron, DeepSeek, Qwen, Mistral, …). Enables
+    # refs like "nvidia:meta/llama-3.1-405b-instruct". The full live catalog is
+    # listed from /v1/models, so every model your key can reach shows in the picker.
+    nvidia_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434/v1"
 
     # Optional model-ref overrides for the profile's defaults (per-agent

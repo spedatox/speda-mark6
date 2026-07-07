@@ -86,7 +86,7 @@ class AgentProfile(ABC):
         from app.config import settings
 
         provider, sep, _ = active_model_ref.partition(":")
-        if not sep or provider not in ("openai", "gemini", "zai", "deepseek", "ollama"):
+        if not sep or provider not in ("openai", "gemini", "zai", "deepseek", "nvidia", "ollama"):
             # Anthropic path — keep honoring the .env override.
             return settings.llm_background_model or self.haiku_model
         if provider == "ollama":
