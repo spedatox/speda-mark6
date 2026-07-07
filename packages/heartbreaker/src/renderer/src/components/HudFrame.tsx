@@ -92,11 +92,11 @@ export default function HudFrame() {
     position: 'fixed', top: 0, left: 0, right: 0, height: 22,
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: isMobile ? '0 10px' : '0 26px', gap: 10, zIndex: 9998, pointerEvents: 'none',
-    fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
+    fontFamily: "var(--font-mono)", fontSize: '0.6rem',
     letterSpacing: '0.06em',
     // Top anchor of the glass HUD — whisper tint, gentle frost under the telemetry.
-    // Strictly square-cornered, anchored edge to edge.
-    background: 'rgba(10, 16, 26, 0.15)',
+    // Strictly square-cornered, anchored edge to edge. Re-hues with the agent.
+    background: 'var(--glass-tint)',
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
   }
@@ -140,7 +140,7 @@ export default function HudFrame() {
               border: `1px solid ${diagOpen ? 'var(--hb-edge-bright)' : 'var(--hb-edge)'}`,
               background: diagOpen ? 'rgba(var(--hb-accent-rgb),0.16)' : 'var(--hb-holo-fill)',
               color: diagOpen ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
-              fontFamily: "'Share Tech Mono', monospace", fontSize: '0.56rem',
+              fontFamily: "var(--font-mono)", fontSize: '0.56rem',
               letterSpacing: '0.1em', cursor: 'pointer',
               transition: 'border-color 0.12s, background 0.12s, color 0.12s',
             }}
@@ -158,12 +158,12 @@ export default function HudFrame() {
               minWidth: 180,
               padding: '0.55rem 0.7rem',
               display: 'flex', flexDirection: 'column', gap: 7,
-              background: 'rgba(150, 190, 225, 0.07)',
+              background: 'var(--glass-tint)',
               backdropFilter: 'var(--hb-holo-blur)',
               WebkitBackdropFilter: 'var(--hb-holo-blur)',
               border: '1px solid var(--hb-edge)',
               boxShadow: 'var(--hb-holo-shadow)',
-              fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
+              fontFamily: "var(--font-mono)", fontSize: '0.6rem',
               animation: 'dropDown 0.12s ease',
             }}>
               <DiagRow label="HOST" value={hostOf(apiBase)} />
@@ -204,7 +204,7 @@ export default function HudFrame() {
           letterSpacing: '0.42em', textTransform: 'uppercase',
           color: 'rgba(var(--hb-accent-rgb),0.55)', whiteSpace: 'nowrap',
         }}>
-          SPEDA OS<span style={{ color: 'rgba(var(--hb-accent-rgb),0.6)' }}> // </span>HEARTBREAKER
+          HEARTBREAKER
         </span>
 
         {/* Right — operating parameters */}

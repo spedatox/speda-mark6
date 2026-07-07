@@ -52,7 +52,7 @@ const PALETTE = ['var(--hb-cyan)', '#d39a3a', '#4fa377', 'var(--hb-cyan-bright)'
 const GRID    = 'rgba(var(--hb-accent-rgb),0.10)'
 const AXIS_C  = 'rgba(var(--hb-accent-rgb),0.30)'
 const TICK    = {
-  fontFamily: "'Share Tech Mono', monospace",
+  fontFamily: "var(--font-mono)",
   fontSize: 10,
   fill: 'var(--hb-text-faint)',
 }
@@ -97,7 +97,7 @@ function StarkTooltip({ active, payload, label, unit }: any) {
       boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
       border: '1px solid rgba(var(--hb-accent-rgb),0.5)',
       padding: '0.35rem 0.6rem',
-      fontFamily: "'Share Tech Mono', monospace",
+      fontFamily: "var(--font-mono)",
       fontSize: '0.69rem',
       letterSpacing: '0.05em',
       pointerEvents: 'none',
@@ -125,7 +125,7 @@ function StarkLegend({ payload }: any) {
     <div style={{
       display: 'flex', gap: '1.1rem', justifyContent: 'center',
       paddingTop: '0.35rem',
-      fontFamily: "'Share Tech Mono', monospace",
+      fontFamily: "var(--font-mono)",
       fontSize: '0.62rem', letterSpacing: '0.1em', color: 'var(--hb-text-faint)',
     }}>
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -310,7 +310,7 @@ function PieLabel({ cx, cy, midAngle, outerRadius, name, percent }: any) {
       x={x} y={y}
       textAnchor={x > cx ? 'start' : 'end'}
       dominantBaseline="central"
-      style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 10, fill: 'var(--hb-text-dim)', letterSpacing: '0.06em' }}
+      style={{ fontFamily: "var(--font-mono)", fontSize: 10, fill: 'var(--hb-text-dim)', letterSpacing: '0.06em' }}
     >
       {`${String(name).toUpperCase()} ${(percent * 100).toFixed(0)}%`}
     </text>
@@ -352,7 +352,7 @@ function ParseError({ raw }: { raw: string }) {
       padding: '0.5rem 0.75rem',
       background: 'rgba(200,74,58,0.09)',
       border: '1px solid rgba(200,74,58,0.35)',
-      fontFamily: "'Share Tech Mono', monospace",
+      fontFamily: "var(--font-mono)",
       fontSize: '0.71rem', color: '#c84a3a',
       margin: '0.5rem 0', letterSpacing: '0.05em',
     }}>

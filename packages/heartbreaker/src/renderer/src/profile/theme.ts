@@ -87,6 +87,11 @@ const BASE_RGBA: Record<string, [string, number]> = {
   '--hb-edge': ['#96cdf5', 0.22], '--hb-edge-bright': ['#aae1ff', 0.55],
   '--bg-sidebar': ['#081217', 0.72], '--bg-hover': ['#4696af', 0.12], '--bg-input': ['#08141a', 0.66],
   '--bg-user-bubble': ['#183844', 0.46], '--scrollbar-thumb': ['#468ca0', 0.32], '--scrollbar-thumb-hover': ['#5aafc8', 0.55],
+  // Unified glass material — the frost re-hues with the agent so glass reads in
+  // the brand colour (amber on Sentinel, red on Centurion), not a fixed blue.
+  // Tint = light milky wash (high L, re-hued); fill = dark occluding base.
+  '--glass-tint': ['#bed7eb', 0.06], '--glass-tint-hi': ['#bed7eb', 0.13],
+  '--glass-fill': ['#081018', 0.62],
 }
 
 /** Derive the bright (active) and dim shades from a single accent. */

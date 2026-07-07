@@ -86,7 +86,7 @@ export default function Header({
       {state.isStreaming ? (
         <span className="hb-hide-sm" style={{
           display: 'flex', alignItems: 'center', gap: 5,
-          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
+          fontFamily: "var(--font-mono)", fontSize: '0.62rem',
           letterSpacing: '0.1em', color: 'var(--hb-amber-bright)',
         }}>
           <span style={{
@@ -98,7 +98,7 @@ export default function Header({
         </span>
       ) : (
         <span className="hb-hide-sm" style={{
-          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
+          fontFamily: "var(--font-mono)", fontSize: '0.62rem',
           letterSpacing: '0.1em',
           color: hasMessages ? 'var(--hb-amber)' : 'var(--hb-text-faint)',
         }}>

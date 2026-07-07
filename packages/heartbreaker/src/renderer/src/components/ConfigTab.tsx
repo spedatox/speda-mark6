@@ -87,7 +87,7 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
         onChange={e => setQuery(e.target.value)}
         placeholder="Search settings (e.g. telegram, openai, n8n)…"
         style={{
-          width: '100%', background: 'rgba(10, 22, 30, 0.55)',
+          width: '100%', background: 'var(--glass-fill)',
           boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35)',
           border: '1px solid var(--hb-edge)', padding: '0.55rem 0.7rem',
           color: 'var(--text-primary)', fontSize: '0.84rem', fontFamily: 'inherit',
@@ -229,7 +229,7 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
   )
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', background: 'rgba(10, 22, 30, 0.55)',
+    width: '100%', background: 'var(--glass-fill)',
     boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35)',
     border: `1px solid ${dirty ? 'rgba(var(--hb-cyan-bright-rgb),0.5)' : 'var(--hb-edge)'}`,
     padding: '0.5rem 0.65rem', color: 'var(--text-primary)',

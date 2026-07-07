@@ -10,7 +10,7 @@
    - Glow is minimal and cold. Information density reads as instrumentation.
    ════════════════════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap');
 
 /* SamsungOne — the real Samsung UI font, for readable body copy */
 @font-face {
@@ -39,9 +39,12 @@
 :root {
   /* ── Fonts ────────────────────────────────────────────────────────────── */
   --font-ui:      'Rajdhani', 'Saira', -apple-system, 'Segoe UI', sans-serif;     /* HUD chrome */
-  --font-read:    'SamsungOne', 'Inter', -apple-system, 'Segoe UI', sans-serif;   /* chat reading */
+  --font-read:    'Inter', -apple-system, 'Segoe UI', sans-serif;                 /* chat reading */
   --font-display: 'SamsungSharpSans', 'SamsungOne', sans-serif;                   /* optional headings */
-  --font-mono:    'Share Tech Mono', monospace;                                    /* numerics */
+  /* Former data-mono was var(--font-mono) — replaced app-wide with Inter per
+     owner request (kill the display-monospace look). Actual code blocks keep
+     their own JetBrains/Fira monospace in CodeBlock.tsx. */
+  --font-mono:    'Inter', -apple-system, 'Segoe UI', sans-serif;                 /* labels/readouts */
 
   /* ── Core palette ─────────────────────────────────────────────────────── */
   --hb-void:        #04080a;   /* deepest background */
@@ -85,7 +88,7 @@
      soft drop that lifts it off the background. Still zero gradient fills. */
   --hb-edge:        rgba(var(--hb-accent-rgb), 0.22); /* lit glass rim */
   --hb-edge-bright: rgba(var(--hb-accent-rgb), 0.55); /* focused / hovered rim */
-  --hb-holo-fill:   rgba(190, 215, 235, 0.045); /* a whisper of white — void stays visible */
+  --hb-holo-fill:   var(--glass-tint);          /* re-hued frost (follows the agent) */
   --hb-holo-blur:   blur(28px) saturate(140%);  /* the frost itself */
   --hb-holo-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.25),   /* top specular catch */
@@ -356,7 +359,7 @@ body {
 
 /* Monospace data readout */
 .hb-readout {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   letter-spacing: 0.04em;
   color: var(--hb-cyan-bright);
 }
@@ -377,7 +380,7 @@ body {
 }
 
 /* Status cells */
-.hb-cell { font-family: 'Share Tech Mono', monospace; font-size: 0.66rem; padding: 0 0.3rem; }
+.hb-cell { font-family: var(--font-mono); font-size: 0.66rem; padding: 0 0.3rem; }
 .hb-ok   { color: var(--hb-green); }
 .hb-warn { color: var(--hb-amber); }
 .hb-alert{ color: var(--hb-red); }
@@ -484,7 +487,7 @@ body {
 .hb-chip-amber {
   display: inline-flex; align-items: center;
   padding: 1px 6px;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.6rem; letter-spacing: 0.08em;
 }
 
@@ -713,7 +716,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   line-height: 1;
 }
 .prose ol li { margin: 0.22rem 0; }
-.prose ol li::marker { color: var(--hb-cyan); font-family: 'Share Tech Mono', monospace; font-size: 0.82em; }
+.prose ol li::marker { color: var(--hb-cyan); font-family: var(--font-mono); font-size: 0.82em; }
 
 /* Nested lists — dim the marker */
 .prose ul ul li::before { color: var(--hb-cyan-dim); content: '·'; font-size: 1em; top: 0; }
@@ -756,7 +759,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 /* ── Table — data grid ───────────────────────────────────────────────────────── */
 .prose table {
   border-collapse: collapse; width: 100%; margin: 0.75rem 0;
-  font-size: 0.82rem; font-family: 'Share Tech Mono', monospace;
+  font-size: 0.82rem; font-family: var(--font-mono);
   border: 1px solid var(--hb-line);
 }
 .prose th {
@@ -813,7 +816,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   border: 1px solid rgba(var(--hb-accent-rgb),0.2);
   border-bottom: none;
   color: #46818f !important;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.68em;
   letter-spacing: 0.04em;
   text-decoration: none;

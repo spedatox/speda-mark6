@@ -16,7 +16,7 @@ import { Bubble } from './CommBubble'
  * Party Protocol stand-down control.
  */
 
-const MONO = "'Share Tech Mono', monospace"
+const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
 const POLL_MS = 3000
 

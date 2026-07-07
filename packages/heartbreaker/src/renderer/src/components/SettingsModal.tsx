@@ -221,7 +221,7 @@ export default function SettingsModal({ config, onClose }: Props) {
     >
       <div className="hb-glass" style={{
         width: 'min(720px, 95vw)', height: 'min(600px, 88vh)',
-        background: 'rgba(150, 190, 225, 0.06)',
+        background: 'var(--glass-tint)',
         backdropFilter: 'var(--hb-holo-blur)',
         WebkitBackdropFilter: 'var(--hb-holo-blur)',
         border: '1px solid var(--hb-edge)',
@@ -240,7 +240,7 @@ export default function SettingsModal({ config, onClose }: Props) {
           background: 'linear-gradient(180deg, rgba(10,24,32,0.5), transparent)',
         }}>
           <p style={{
-            fontFamily: "'Share Tech Mono', monospace",
+            fontFamily: "var(--font-mono)",
             fontSize: '0.6rem', color: 'var(--hb-cyan)',
             padding: '0 0.625rem 0.75rem', letterSpacing: '0.22em', textTransform: 'uppercase',
           }}>
@@ -293,7 +293,7 @@ export default function SettingsModal({ config, onClose }: Props) {
               style={{
                 width: 46, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 border: 'none', borderLeft: '1px solid var(--hb-edge)',
-                background: 'rgba(190, 215, 235, 0.1)',
+                background: 'var(--glass-tint-hi)',
                 boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.25)',
                 color: 'var(--hb-icon-bright)',
                 cursor: 'pointer', transition: 'color 0.1s, background 0.12s',
@@ -329,7 +329,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                     style={{
                       // Dense translucent well — the modal's backdrop-filter is a
                       // nested backdrop root, so the fill must occlude on its own.
-                      width: '100%', background: 'rgba(10, 22, 30, 0.55)',
+                      width: '100%', background: 'var(--glass-fill)',
                       boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35), inset 0 -1px 0 0 rgba(255,255,255,0.05)',
                       border: '1px solid var(--hb-edge)',
                       padding: '0.75rem',
@@ -445,7 +445,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                   padding: '1.2rem',
                   borderRadius: '0.6rem',
                   border: '1px solid var(--border)',
-                  background: 'rgba(190, 215, 235, 0.03)',
+                  background: 'var(--glass-tint)',
                   boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.08)',
                   marginBottom: '1rem',
                 }}>
@@ -915,7 +915,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                     style={{
                       // Dense translucent well — the modal's backdrop-filter is a
                       // nested backdrop root, so the fill must occlude on its own.
-                      width: '100%', background: 'rgba(10, 22, 30, 0.55)',
+                      width: '100%', background: 'var(--glass-fill)',
                       boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35), inset 0 -1px 0 0 rgba(255,255,255,0.05)',
                       border: '1px solid var(--hb-edge)',
                       padding: '0.625rem 0.75rem',

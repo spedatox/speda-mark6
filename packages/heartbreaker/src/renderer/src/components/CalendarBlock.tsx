@@ -96,7 +96,7 @@ function EventChip({ ev }: { ev: CalEvent }) {
     }}>
       {ev.time && (
         <div style={{
-          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
+          fontFamily: "var(--font-mono)", fontSize: '0.6rem',
           letterSpacing: '0.06em', color: 'var(--hb-cyan-bright)',
         }}>
           {ev.time}{ev.end ? `–${ev.end}` : ''}
@@ -110,7 +110,7 @@ function EventChip({ ev }: { ev: CalEvent }) {
       </div>
       {ev.location && (
         <div style={{
-          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.55rem',
+          fontFamily: "var(--font-mono)", fontSize: '0.55rem',
           color: 'var(--hb-text-faint)', letterSpacing: '0.04em', marginTop: 1,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
@@ -141,7 +141,7 @@ function DayColumn({ day, today }: { day: CalDay; today: Date }) {
       {/* day header */}
       <div style={{ textAlign: 'center', marginBottom: '0.45rem' }}>
         <div style={{
-          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.56rem',
+          fontFamily: "var(--font-mono)", fontSize: '0.56rem',
           letterSpacing: '0.18em',
           color: isToday ? 'var(--hb-cyan-bright)' : 'var(--hb-text-faint)',
         }}>
@@ -164,7 +164,7 @@ function DayColumn({ day, today }: { day: CalDay; today: Date }) {
         : (
           <div style={{
             textAlign: 'center', color: 'var(--hb-text-faint)', opacity: 0.4,
-            fontFamily: "'Share Tech Mono', monospace", fontSize: '0.7rem', marginTop: '0.3rem',
+            fontFamily: "var(--font-mono)", fontSize: '0.7rem', marginTop: '0.3rem',
           }}>
             ·
           </div>
@@ -181,7 +181,7 @@ function ParseError({ raw }: { raw: string }) {
       background: 'rgba(200,74,58,0.09)',
       border: '1px solid rgba(200,74,58,0.35)',
       borderRadius: 8,
-      fontFamily: "'Share Tech Mono', monospace",
+      fontFamily: "var(--font-mono)",
       fontSize: '0.71rem', color: '#c84a3a',
       margin: '0.5rem 0', letterSpacing: '0.05em',
     }}>
@@ -244,7 +244,7 @@ export default function CalendarBlock({ children }: { children: string }) {
             </div>
             {spec.range && (
               <div style={{
-                fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
+                fontFamily: "var(--font-mono)", fontSize: '0.62rem',
                 letterSpacing: '0.1em', color: 'var(--hb-text-faint)', marginTop: 2,
               }}>
                 {spec.range}
@@ -253,7 +253,7 @@ export default function CalendarBlock({ children }: { children: string }) {
           </div>
           {monthLabel && (
             <div style={{
-              fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
+              fontFamily: "var(--font-mono)", fontSize: '0.62rem',
               letterSpacing: '0.14em', color: 'var(--hb-cyan)', whiteSpace: 'nowrap',
             }}>
               {monthLabel}

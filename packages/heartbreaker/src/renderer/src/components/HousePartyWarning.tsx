@@ -1,7 +1,7 @@
 import { ROSTER } from '../lib/agents'
 import { Avatar } from './CommBubble'
 
-const MONO = "'Share Tech Mono', monospace"
+const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
 
 /**
