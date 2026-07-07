@@ -5,7 +5,7 @@ import type { AppConfig } from '../lib/types'
 import { ROSTER } from '../lib/agents'
 import { Avatar } from './CommBubble'
 
-const MONO = "'Share Tech Mono', monospace"
+const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
 const POLL_MS = 2500
 

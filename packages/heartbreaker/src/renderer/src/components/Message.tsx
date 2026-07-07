@@ -81,7 +81,7 @@ function ToolDetail({ tool }: { tool: ToolBadge }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: '0.4rem',
-        fontFamily: "'Share Tech Mono', monospace", fontSize: '0.68rem',
+        fontFamily: "var(--font-mono)", fontSize: '0.68rem',
         letterSpacing: '0.06em',
         color: isSearchTool(tool.name) ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
       }}>
@@ -91,7 +91,7 @@ function ToolDetail({ tool }: { tool: ToolBadge }) {
         <div style={{ paddingLeft: '0.9rem', display: 'flex', flexDirection: 'column', gap: '1px' }}>
           {inputRows.map(([k, v]) => (
             <div key={k} style={{
-              fontFamily: "'Share Tech Mono', monospace", fontSize: '0.63rem',
+              fontFamily: "var(--font-mono)", fontSize: '0.63rem',
               color: 'var(--hb-icon)', lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
             }}>
               <span style={{ color: 'var(--hb-icon-dim)' }}>{k}:</span> {v}
@@ -102,12 +102,12 @@ function ToolDetail({ tool }: { tool: ToolBadge }) {
       {tool.result && (
         <details style={{ paddingLeft: '0.9rem' }}>
           <summary style={{
-            cursor: 'pointer', fontFamily: "'Share Tech Mono', monospace",
+            cursor: 'pointer', fontFamily: "var(--font-mono)",
             fontSize: '0.6rem', letterSpacing: '0.08em', color: 'var(--hb-icon-dim)',
             textTransform: 'uppercase',
           }}>result</summary>
           <pre style={{
-            margin: '0.2rem 0 0', fontFamily: "'Share Tech Mono', monospace",
+            margin: '0.2rem 0 0', fontFamily: "var(--font-mono)",
             fontSize: '0.62rem', color: 'var(--hb-icon-bright)', lineHeight: 1.5,
             whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 180, overflow: 'auto',
           }}>{tool.result}</pre>
@@ -142,7 +142,7 @@ function ToolDisclosure({ tools }: { tools: ToolBadge[] }) {
           background: 'transparent', border: 'none',
           padding: '0.15rem 0',
           cursor: 'pointer',
-          fontFamily: "'Share Tech Mono', monospace",
+          fontFamily: "var(--font-mono)",
           fontSize: '0.68rem', letterSpacing: '0.08em',
           color: 'var(--hb-icon)',
           transition: 'color 0.12s',
@@ -497,7 +497,7 @@ function FileCard({ file }: { file: FileMeta }) {
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>{file.title}</div>
         <div style={{
-          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
+          fontFamily: "var(--font-mono)", fontSize: '0.62rem',
           letterSpacing: '0.06em', color: 'var(--text-muted)', marginTop: '2px',
         }}>{file.kind} · {fmtBytes(file.size)}</div>
       </div>
@@ -554,7 +554,7 @@ function UploadChip({ name, size }: { name: string; size: number }) {
         }}>{name}</div>
         {size > 0 && (
           <div style={{
-            fontFamily: "'Share Tech Mono', monospace", fontSize: '0.6rem',
+            fontFamily: "var(--font-mono)", fontSize: '0.6rem',
             color: 'var(--hb-icon-dim)', marginTop: '1px',
           }}>{fmtBytes(size)}</div>
         )}

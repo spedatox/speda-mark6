@@ -37,7 +37,7 @@ export default function CodeBlock({ language, children }: Props) {
         }}>
           {lang}
           <span style={{
-            fontFamily: "'Share Tech Mono', monospace", fontSize: '0.58rem',
+            fontFamily: "var(--font-mono)", fontSize: '0.58rem',
             letterSpacing: '0.08em', color: 'var(--hb-text-faint)', textTransform: 'none',
           }}>
             .{lang.slice(0, 3).toUpperCase()} document

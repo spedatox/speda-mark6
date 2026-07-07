@@ -102,7 +102,7 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
 
       {/* Domain tagline */}
       <p data-brand-text style={{
-        fontFamily: "'Share Tech Mono', monospace",
+        fontFamily: "var(--font-mono)",
         fontSize: '0.68rem', letterSpacing: '0.22em', textTransform: 'uppercase',
         color: 'var(--hb-text-faint)',
         marginBottom: '2.2rem',

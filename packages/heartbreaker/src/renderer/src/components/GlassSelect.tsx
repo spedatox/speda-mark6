@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom'
  * scrolls the selected option into view, closes on Esc / backdrop click.
  */
 
-const MONO = "'Share Tech Mono', monospace"
+const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
 
 export interface GlassOption {
@@ -94,8 +94,8 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
           // rim when pinned. Reads as a proper control, not a flat mono bar.
           border: `1px solid ${active ? `${tint}aa` : 'var(--hb-edge)'}`,
           background: active
-            ? `linear-gradient(${tint}1f, ${tint}1f), rgba(8, 16, 24, 0.62)`
-            : 'linear-gradient(rgba(190, 215, 235, 0.07), rgba(190, 215, 235, 0.07)), rgba(8, 16, 24, 0.62)',
+            ? `linear-gradient(${tint}1f, ${tint}1f), var(--glass-fill)`
+            : 'linear-gradient(var(--glass-tint), var(--glass-tint)), var(--glass-fill)',
           boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.16), 0 2px 10px rgba(0,0,0,0.22)',
           color: active ? tint : 'var(--hb-text-dim)',
           fontFamily: UI, fontSize: '0.74rem', fontWeight: 600, letterSpacing: '0.04em',
@@ -104,7 +104,7 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
           width: '100%', height: 18, padding: '0 4px',
           display: 'flex', alignItems: 'center', gap: 4,
           border: `1px solid ${active ? `${tint}88` : 'var(--hb-line)'}`,
-          background: active ? `${tint}14` : 'rgba(10, 18, 26, 0.55)',
+          background: active ? `${tint}14` : 'var(--glass-fill)',
           color: active ? tint : 'var(--hb-icon)',
           fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.05em',
           cursor: 'pointer', transition: 'border-color 0.12s, background 0.12s',
@@ -141,7 +141,7 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
               // Occluding glass — never trust backdrop blur alone for
               // readability (nested backdrop roots cancel it).
               background:
-                'linear-gradient(rgba(190, 215, 235, 0.06), rgba(190, 215, 235, 0.06)), rgba(8, 14, 22, 0.9)',
+                'linear-gradient(var(--glass-tint), var(--glass-tint)), var(--glass-fill)',
               animation: 'dropDown 0.15s ease both',
             }}
           >

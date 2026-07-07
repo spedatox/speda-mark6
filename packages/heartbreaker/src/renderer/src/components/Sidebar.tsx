@@ -33,7 +33,7 @@ function groupSessions(sessions: Session[]): { label: string; items: Session[] }
 
 /* ── Shared micro-styles ──────────────────────────────────────────────────── */
 const mono: React.CSSProperties = {
-  fontFamily: "'Share Tech Mono', monospace",
+  fontFamily: "var(--font-mono)",
 }
 
 /* ── Session item ─────────────────────────────────────────────────────────── */
@@ -208,7 +208,7 @@ function GroupLabel({ label }: { label: string }) {
       marginBottom: '1px',
     }}>
       <span style={{
-        fontFamily: "'Share Tech Mono', monospace",
+        fontFamily: "var(--font-mono)",
         fontSize: '0.6rem',
         color: 'rgba(var(--hb-accent-rgb),0.55)',
         whiteSpace: 'nowrap',
@@ -299,7 +299,7 @@ function SearchBar({ value, onChange, onClose }: {
           outline: 'none',
           color: 'var(--hb-text)',
           fontSize: '0.72rem',
-          fontFamily: "'Share Tech Mono', monospace",
+          fontFamily: "var(--font-mono)",
           letterSpacing: '0.1em',
           userSelect: 'text',
         }}
@@ -325,7 +325,7 @@ function SettingsPopup({ onSettings, onClose }: { onSettings: () => void; onClos
       // Occluding glass — the sidebar's backdrop-filter cancels ours (nested
       // backdrop roots), so the fill itself has to keep the rows readable.
       background:
-        'linear-gradient(rgba(190, 215, 235, 0.06), rgba(190, 215, 235, 0.06)), rgba(8, 14, 22, 0.92)',
+        'linear-gradient(var(--glass-tint), var(--glass-tint)), var(--glass-fill)',
       backdropFilter: 'var(--hb-holo-blur)',
       WebkitBackdropFilter: 'var(--hb-holo-blur)',
       border: '1px solid var(--hb-edge)',
@@ -392,7 +392,7 @@ function AgentDropdown({ current, onSelect, onClose }: {
       // Occluding glass: the sidebar is a backdrop root, so this panel's own
       // blur is cancelled (nested backdrop roots) — the fill must do the work.
       background:
-        'linear-gradient(rgba(190, 215, 235, 0.06), rgba(190, 215, 235, 0.06)), rgba(8, 14, 22, 0.92)',
+        'linear-gradient(var(--glass-tint), var(--glass-tint)), var(--glass-fill)',
     }}>
       {agents.map(b => {
         const active = b.agentId === current
@@ -438,7 +438,7 @@ function AgentRow({ brand, active, onClick }: {
           fontFamily: "'Rajdhani',sans-serif",
           fontSize: '0.72rem', fontWeight: 700,
           letterSpacing: '0.1em', textTransform: 'uppercase',
-          color: active ? '#fff' : hover ? '#cadbe2' : '#7a96a1',
+          color: active ? '#fff' : hover ? 'var(--hb-text)' : 'var(--hb-text-dim)',
         }}>
           {brand.name}
         </span>
@@ -446,7 +446,7 @@ function AgentRow({ brand, active, onClick }: {
           fontFamily: "'Rajdhani',sans-serif",
           fontSize: '0.62rem', fontWeight: 600,
           letterSpacing: '0.08em', textTransform: 'uppercase',
-          color: active ? brand.accent : '#46626d',
+          color: active ? brand.accent : 'var(--hb-text-faint)',
           marginLeft: '0.35rem',
         }}>
           {brand.modelNumber}
@@ -454,9 +454,9 @@ function AgentRow({ brand, active, onClick }: {
       </div>
       {/* Domain chip */}
       <span style={{
-        fontFamily: "'Share Tech Mono', monospace",
+        fontFamily: "var(--font-mono)",
         fontSize: '0.52rem', letterSpacing: '0.04em',
-        color: '#46626d',
+        color: 'var(--hb-text-faint)',
         whiteSpace: 'nowrap',
       }}>
         {brand.tagline.split(' ').slice(0, 2).join(' ')}

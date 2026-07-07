@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { ROSTER, agentColor } from '../lib/agents'
 import { Avatar } from './CommBubble'
 
-const MONO = "'Share Tech Mono', monospace"
+const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
 
 /**

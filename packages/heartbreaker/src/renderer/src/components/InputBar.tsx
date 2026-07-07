@@ -263,7 +263,7 @@ function ModelPicker({ models, activeId, onSelect }: {
           // Dense frost: this dropdown lives inside the composer, which has its
           // own backdrop-filter. Nested backdrop roots cancel the child's blur
           // (Chromium), so the fill itself must occlude what's behind it.
-          background: 'rgba(10, 20, 27, 0.94)',
+          background: 'var(--glass-fill)',
           backdropFilter: 'var(--hb-holo-blur)',
           WebkitBackdropFilter: 'var(--hb-holo-blur)',
           border: '1px solid var(--hb-edge)',
@@ -348,7 +348,7 @@ function MenuRow({ icon, label, value, valueColor, onClick }: {
       <span style={{ flex: 1 }}>{label}</span>
       {value && (
         <span style={{
-          fontFamily: "'Share Tech Mono', monospace", fontSize: '0.62rem',
+          fontFamily: "var(--font-mono)", fontSize: '0.62rem',
           letterSpacing: '0.1em', color: valueColor || 'var(--hb-text-faint)',
         }}>
           {value}
@@ -408,7 +408,7 @@ function MobileToolsMenu({ budget, listening, isStreaming, onAttach, onToggleBud
           // Dense frost: the composer's own backdrop-filter creates a nested
           // backdrop root, which stops this panel's blur from sampling the
           // textarea beneath it — so the fill itself must do the occluding.
-          background: 'rgba(10, 20, 27, 0.92)',
+          background: 'var(--glass-fill)',
           backdropFilter: 'var(--hb-holo-blur)',
           WebkitBackdropFilter: 'var(--hb-holo-blur)',
           border: '1px solid var(--hb-edge)',
@@ -673,7 +673,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>{a.name}</div>
                         <div style={{
-                          fontFamily: "'Share Tech Mono', monospace",
+                          fontFamily: "var(--font-mono)",
                           fontSize: '0.62rem', color: 'var(--hb-icon-dim)', marginTop: '1px',
                         }}>{formatSize(a.size)}</div>
                       </div>
@@ -683,7 +683,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                     <span style={{
                       position: 'absolute', bottom: 0, left: 0, right: 0,
                       padding: '1px 4px', fontSize: '0.56rem',
-                      fontFamily: "'Share Tech Mono', monospace",
+                      fontFamily: "var(--font-mono)",
                       color: 'var(--hb-text-dim)', background: 'rgba(4,8,12,0.75)', textAlign: 'right',
                     }}>{formatSize(a.size)}</span>
                   )}
@@ -692,7 +692,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                     style={{
                       position: 'absolute', top: -6, right: -6,
                       width: 16, height: 16,
-                      background: 'rgba(10, 22, 30, 0.8)',
+                      background: 'var(--glass-fill)',
                       backdropFilter: 'var(--hb-holo-blur)',
                       WebkitBackdropFilter: 'var(--hb-holo-blur)',
                       border: '1px solid rgba(var(--hb-accent-rgb),0.4)',
@@ -853,7 +853,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: '0',
           marginTop: '0.4rem',
-          fontFamily: "'Share Tech Mono', monospace",
+          fontFamily: "var(--font-mono)",
           fontSize: '0.62rem', letterSpacing: '0.06em',
           color: 'var(--hb-icon-dim)',
           userSelect: 'none',

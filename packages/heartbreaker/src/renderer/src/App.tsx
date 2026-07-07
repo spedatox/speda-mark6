@@ -211,7 +211,7 @@ function AppInner() {
         height: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem',
         alignItems: 'center', justifyContent: 'center',
         background: 'var(--bg-primary)',
-        fontFamily: "'Share Tech Mono', monospace", letterSpacing: '0.12em',
+        fontFamily: "var(--font-mono)", letterSpacing: '0.12em',
         fontSize: '0.72rem',
       }}>
         <span style={{ color: 'var(--hb-cyan)' }}>Loading configuration…</span>

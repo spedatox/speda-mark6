@@ -13,7 +13,7 @@ import { agentColor, fmtCommTime } from '../lib/agents'
  * re-enables text selection so messages can be copied.
  */
 
-const MONO = "'Share Tech Mono', monospace"
+const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
 
 export function Avatar({ id, size = 26 }: { id: string; size?: number }) {
