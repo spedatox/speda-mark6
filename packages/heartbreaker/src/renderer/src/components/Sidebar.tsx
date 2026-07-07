@@ -117,12 +117,12 @@ function SessionItem({ session, active, onSelect, config }: {
         />
       ) : (
         <button
-          className="hb-glass-xs"
           onClick={onSelect}
           style={{
             width: '100%',
             padding: '0.5rem 0.7rem',
-            // Selected row goes AMBER — the phone-book highlighted-entry look
+            // Flat, sharp list row (no glass slab/rounding) — the phone-book
+            // highlighted-entry look. Selected row goes AMBER.
             border: `1px solid ${active ? 'rgba(242,183,92,0.3)' : 'transparent'}`,
             borderLeft: active ? '2px solid var(--hb-amber)' : hover ? '2px solid rgba(var(--hb-accent-rgb),0.35)' : '2px solid transparent',
             background: active
