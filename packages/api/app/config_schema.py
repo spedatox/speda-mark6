@@ -58,6 +58,10 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                         help="OpenAI-compatible. Enables zai:* refs."),
             ConfigField("deepseek_api_key", "DeepSeek API Key", "password", secret=True,
                         help="OpenAI-compatible. Enables deepseek:* refs."),
+            ConfigField("nvidia_api_key", "NVIDIA NIM API Key", "password", secret=True,
+                        help="Free key from build.nvidia.com. Enables the full NIM open-model "
+                             "catalog (Llama, Nemotron, DeepSeek, Qwen…) as nvidia:* refs, "
+                             "listed live in the model picker."),
             ConfigField("ollama_base_url", "Ollama Base URL", "url",
                         help="Local models (dead-zone/offline). e.g. http://localhost:11434/v1"),
             ConfigField("embedding_model", "Embedding Model", "text", requires_restart=_LIVE,

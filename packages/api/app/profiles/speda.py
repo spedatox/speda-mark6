@@ -67,6 +67,7 @@ class SPEDAProfile(AgentProfile):
         "gemini": "gemini:gemini-2.5-flash",
         "zai": "zai:glm-4.5-air",
         "deepseek": "deepseek:deepseek-v4-flash",
+        "nvidia": "nvidia:meta/llama-3.1-8b-instruct",
     }
 
     def build_system_prompt(self, context_vars: dict) -> str:

@@ -22,7 +22,7 @@ interface Props {
 }
 
 function shortModelName(name: string): string {
-  return name.replace(/^(anthropic|openai|gemini|zai|deepseek|ollama):/, '').replace(/^Claude\s+/i, '').toUpperCase()
+  return name.replace(/^(anthropic|openai|gemini|zai|deepseek|nvidia|ollama):/, '').replace(/^Claude\s+/i, '').toUpperCase()
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -31,6 +31,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   gemini: 'GOOGLE GEMINI',
   zai: 'Z.AI · GLM',
   deepseek: 'DEEPSEEK',
+  nvidia: 'NVIDIA NIM',
   ollama: 'DEAD ZONE PROTOCOL',
 }
 
