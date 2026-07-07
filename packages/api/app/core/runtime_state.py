@@ -117,6 +117,58 @@ def set_telegram_chat_id(chat_id: str) -> None:
     logger.info("telegram_chat_id_saved")
 
 
+# ── Telegram multi-bot channel state ─────────────────────────────────────────
+# The owner's Telegram user id is the SAME number in every bot's private chat,
+# so it is captured once and shared across the fleet. `telegram_started` records
+# which bots the owner has tapped Start on (Telegram forbids a bot from messaging
+# a user who never started it — an unstarted bot falls back to SPEDA's). Update
+# watermarks dedupe webhook retries and polling overlap per bot.
+
+def get_telegram_owner_id() -> str:
+    """The owner's Telegram user id — the only sender the gateway will process.
+    Falls back to the legacy single-chat id captured by the old connect flow."""
+    return _load().get("telegram_owner_id", "") or get_telegram_chat_id()
+
+
+def set_telegram_owner_id(owner_id: str) -> None:
+    state = _load()
+    state["telegram_owner_id"] = str(owner_id)
+    # Keep the legacy key in lockstep so the old connect status/endpoints and the
+    # single-bot send path stay consistent (private-chat id == user id).
+    state["telegram_chat_id"] = str(owner_id)
+    _save()
+    logger.info("telegram_owner_id_saved")
+
+
+def get_telegram_started() -> set[str]:
+    """agent_ids whose bot the owner has started (tapped /start on)."""
+    return set(_load().get("telegram_started", []))
+
+
+def mark_telegram_started(agent_id: str) -> None:
+    state = _load()
+    started = set(state.get("telegram_started", []))
+    started.add(agent_id)
+    state["telegram_started"] = sorted(started)
+    _save()
+    logger.info("telegram_bot_started", extra={"agent_id": agent_id})
+
+
+def get_telegram_update_offset(agent_id: str) -> int:
+    """Last processed getUpdates offset / webhook update_id watermark for a bot."""
+    return int(_load().get("telegram_offsets", {}).get(agent_id, 0))
+
+
+def set_telegram_update_offset(agent_id: str, offset: int) -> None:
+    state = _load()
+    offsets = dict(state.get("telegram_offsets", {}))
+    # Monotonic — never move the watermark backwards (out-of-order retries).
+    if offset > offsets.get(agent_id, 0):
+        offsets[agent_id] = offset
+        state["telegram_offsets"] = offsets
+        _save()
+
+
 def get_google_refresh_token() -> str:
     """Refresh token captured via the in-app 'Sign in with Google' flow.
     Falls back to the .env value if the user hasn't signed in through the UI."""

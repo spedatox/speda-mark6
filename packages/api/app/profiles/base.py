@@ -50,6 +50,12 @@ class AgentProfile(ABC):
     # when it is offline, this in-process profile answers as the fallback.
     external_backend: bool = False
 
+    # Whether this agent has a Telegram presence (its own bot). Identity only —
+    # the token itself is a secret in config, keyed by agent_id (Rule 10 split).
+    # Session-scope aliases that never notify (e.g. the war-room command channel)
+    # set this False so no bot is built for them. See docs/TELEGRAM_ARCHITECTURE.md.
+    telegram_enabled: bool = True
+
     name: str
     sonnet_model: str = "claude-sonnet-4-6"
     haiku_model: str = "claude-haiku-4-5-20251001"

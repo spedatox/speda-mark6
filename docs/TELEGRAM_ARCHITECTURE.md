@@ -1,7 +1,9 @@
 # Telegram Channel Architecture — Mark VI
 
-**Status:** Design only. Nothing in this document is implemented yet.
-**Date:** 2026-07-06
+**Status:** Implemented — T1 (outbound) + T2 (inbound chat) live; T3 partial
+(inbound photo/document attachments wired; inbound voice is a graceful stub until
+Whisper STT lands; live edit-streaming and TTS voice replies remain parked).
+**Date:** 2026-07-06 (designed) · 2026-07-07 (implemented)
 
 Telegram becomes a **first-class conversation channel** and the **primary
 notification surface** for Mark VI. Three capabilities, one architecture:
@@ -259,11 +261,11 @@ prompt; Telegram adds no second identity layer.
 
 ## 5. Build Phases
 
-| Phase | Scope | Delivers |
-|---|---|---|
-| **T1 — Outbound** | `client.py`, `registry.py`, config, linking, skill, trigger-router rewire | Per-agent-bot notifications + "send this file to Telegram" skill. No inbound chat yet. Smallest useful slice. |
-| **T2 — Inbound chat** | webhook router + polling mode, `gateway.py`, `renderer.py`, `Session.channel`, `/new` command | Full two-way chat with every agent from Telegram. |
-| **T3 — Media & polish** | inbound voice (STT) and attachments, tool-status message, optional live edit-streaming, optional TTS voice replies | Feature parity with the desktop chat surface. |
+| Phase | Scope | Delivers | Status |
+|---|---|---|---|
+| **T1 — Outbound** | `client.py`, `registry.py`, config, linking, skill, trigger-router rewire | Per-agent-bot notifications + "send this file to Telegram" skill. | ✅ done |
+| **T2 — Inbound chat** | webhook router + polling mode, `gateway.py`, `renderer.py`, `Session.channel`, `/new` command | Full two-way chat with every agent from Telegram. | ✅ done |
+| **T3 — Media & polish** | inbound voice (STT) and attachments, tool-status message, optional live edit-streaming, optional TTS voice replies | Feature parity with the desktop chat surface. | 🟡 partial — photo/document attachments wired; voice is a graceful stub pending Whisper STT; tool-status message, live edit-streaming and TTS replies still parked |
 
 Deliberately parked (revisit later, do not build now):
 - **Group-chat war room** — all agent bots in one Telegram group. Collides

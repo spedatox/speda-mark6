@@ -103,11 +103,43 @@ class Settings(BaseSettings):
     # network by default; override with the public domain if n8n runs elsewhere.
     speda_callback_url: str = "http://app:8000"
 
-    # ── Telegram (proactive outbound delivery) ───────────────────────────────
-    # When an n8n watcher fires, SPEDA composes a message and pushes it here.
-    telegram_bot_token: str = ""   # from @BotFather
+    # ── Telegram (first-class chat channel + primary notification surface) ────
+    # ONE BOT PER AGENT. Each agent speaks from its own @BotFather bot so a
+    # Sentinel budget alert arrives from @SentinelBot and a NightCrawler hit
+    # from @NightCrawlerBot — attribution lives at the notification surface.
+    # Tokens are SECRETS (config, keyed by agent_id); the agent's *identity* is
+    # its profile (Rule 10). A leaked token burns one bot, never the fleet. A
+    # missing token degrades that one agent to SPEDA's bot (tagged), never the
+    # channel. See docs/TELEGRAM_ARCHITECTURE.md.
+    #
+    # telegram_bot_token is the legacy single-bot alias — treated as SPEDA's bot
+    # when telegram_bot_token_speda is unset, so existing setups keep working.
+    telegram_bot_token: str = ""            # from @BotFather — legacy alias for SPEDA
+    telegram_bot_token_speda: str = ""
+    telegram_bot_token_sentinel: str = ""
+    telegram_bot_token_nightcrawler: str = ""
+    telegram_bot_token_ultron: str = ""
+    telegram_bot_token_centurion: str = ""
+    telegram_bot_token_atomix: str = ""
+    telegram_bot_token_orion: str = ""
+    telegram_bot_token_optimus: str = ""
+
+    # Ingress mode for inbound chat/media:
+    #   webhook — production (Contabo, public HTTPS): setWebhook per bot.
+    #   polling — dev (no public URL): one getUpdates long-poll task per bot.
+    #   off     — channel disabled (no ingress; outbound-only if tokens exist).
+    telegram_mode: str = "off"              # off | polling | webhook
+    # Public base URL for webhook mode, e.g. https://speda.example.com. The per-
+    # bot webhook is {base}/telegram/webhook/{agent_id}.
+    telegram_webhook_base: str = ""
+    # Shared secret set as each bot's webhook secret_token and validated on every
+    # inbound webhook via the X-Telegram-Bot-Api-Secret-Token header (Telegram's
+    # own auth mechanism — we can't mint an X-API-Key on their redirect).
+    telegram_webhook_secret: str = ""
+
     # Captured at runtime via the in-app "Connect Telegram" flow (runtime_state);
-    # this is only a fallback for headless setups.
+    # this is only a fallback for headless setups. The owner's private-chat id is
+    # the SAME number for every bot (it is their Telegram user id).
     telegram_chat_id: str = ""
 
     # App
