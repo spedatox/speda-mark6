@@ -5,13 +5,14 @@ import { useChatContext } from '../store/chat'
 import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus } from '../lib/api'
 import type { AppConfig } from '../lib/types'
+import ConfigTab from './ConfigTab'
 
 interface Props {
   config: AppConfig
   onClose: () => void
 }
 
-type Tab = 'general' | 'connections' | 'automations' | 'interface' | 'data' | 'account'
+type Tab = 'general' | 'config' | 'connections' | 'automations' | 'interface' | 'data' | 'account'
 
 export default function SettingsModal({ config, onClose }: Props) {
   const { settings, update } = useSettings()
@@ -199,6 +200,7 @@ export default function SettingsModal({ config, onClose }: Props) {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'general', label: 'General' },
+    { id: 'config', label: 'Configuration' },
     { id: 'connections', label: 'Connections' },
     { id: 'automations', label: 'Automations' },
     { id: 'interface', label: 'Interface' },
@@ -367,6 +369,9 @@ export default function SettingsModal({ config, onClose }: Props) {
                 </div>
               </div>
             )}
+
+            {/* Configuration tab — every backend setting, API keys included */}
+            {tab === 'config' && <ConfigTab config={config} />}
 
             {/* Connections tab — toggle MCP servers live */}
             {tab === 'connections' && (

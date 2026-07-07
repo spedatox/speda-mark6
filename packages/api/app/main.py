@@ -293,7 +293,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections, memory, telegram
+    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections, memory, telegram, config as config_router
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -306,6 +306,7 @@ def create_app() -> FastAPI:
     app.include_router(automations.router)
     app.include_router(memory.router)
     app.include_router(telegram.router)
+    app.include_router(config_router.router)
 
     return app
 
