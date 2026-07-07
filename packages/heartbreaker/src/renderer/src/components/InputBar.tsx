@@ -263,7 +263,7 @@ function ModelPicker({ models, activeId, onSelect }: {
           // Dense frost: this dropdown lives inside the composer, which has its
           // own backdrop-filter. Nested backdrop roots cancel the child's blur
           // (Chromium), so the fill itself must occlude what's behind it.
-          background: 'var(--glass-fill)',
+          background: 'var(--glass-menu)',
           backdropFilter: 'var(--hb-holo-blur)',
           WebkitBackdropFilter: 'var(--hb-holo-blur)',
           border: '1px solid var(--hb-edge)',
@@ -408,7 +408,7 @@ function MobileToolsMenu({ budget, listening, isStreaming, onAttach, onToggleBud
           // Dense frost: the composer's own backdrop-filter creates a nested
           // backdrop root, which stops this panel's blur from sampling the
           // textarea beneath it — so the fill itself must do the occluding.
-          background: 'var(--glass-fill)',
+          background: 'var(--glass-menu)',
           backdropFilter: 'var(--hb-holo-blur)',
           WebkitBackdropFilter: 'var(--hb-holo-blur)',
           border: '1px solid var(--hb-edge)',

@@ -82,6 +82,27 @@ def get_agent_models() -> dict[str, str]:
     return dict(_load().get("agent_models", {}))
 
 
+def get_agent_sources() -> dict[str, str]:
+    """Per-agent 'source of truth' memory file: agent_id → /memories/…md. The
+    file is preloaded into that agent's system prompt every turn (read) and the
+    agent is told to write all of its domain data there (write). Set from the
+    desktop Configuration tab. Empty = fall back to the built-in default for that
+    agent (see app/skills/memory.AGENT_SOURCE_DEFAULTS)."""
+    return dict(_load().get("agent_sources", {}))
+
+
+def set_agent_source(agent_id: str, path: str | None) -> None:
+    state = _load()
+    sources = dict(state.get("agent_sources", {}))
+    if path:
+        sources[agent_id] = path
+    else:
+        sources.pop(agent_id, None)
+    state["agent_sources"] = sources
+    _save()
+    logger.info("agent_source_set", extra={"agent_id": agent_id, "path": path or "(default)"})
+
+
 def set_agent_model(agent_id: str, model: str | None) -> None:
     state = _load()
     models = dict(state.get("agent_models", {}))

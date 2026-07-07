@@ -59,8 +59,13 @@ class MemoryConflict(Exception):
 
 
 def is_owner_editable(path: str) -> bool:
-    """Only the canonical set is editable from the board — never system trails."""
-    return path in CANONICAL_FILES
+    """Any markdown file under /memories is owner-editable from the board — the
+    canonical set PLUS any file the owner or an agent adds later (e.g.
+    finance.md). The only exclusions are the dot-prefixed system trails
+    (`.audit/…`), which Orion writes and the owner does not touch."""
+    if path.startswith(AUDIT_ROOT) or "/." in path:
+        return False
+    return path.startswith(MEMORY_ROOT + "/") and path.endswith(".md")
 
 
 async def record_revision(

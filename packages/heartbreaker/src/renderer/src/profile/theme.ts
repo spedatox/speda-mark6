@@ -92,6 +92,10 @@ const BASE_RGBA: Record<string, [string, number]> = {
   // Tint = light milky wash (high L, re-hued); fill = dark occluding base.
   '--glass-tint': ['#bed7eb', 0.06], '--glass-tint-hi': ['#bed7eb', 0.13],
   '--glass-fill': ['#081018', 0.62],
+  // Floating menus/dropdowns sit inside backdrop roots (composer, sidebar) where
+  // their own blur is cancelled, so they need a near-opaque fill to occlude the
+  // content behind them. Re-hued like the rest.
+  '--glass-menu': ['#0a141b', 0.94],
 }
 
 /** Derive the bright (active) and dim shades from a single accent. */

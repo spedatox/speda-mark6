@@ -158,7 +158,7 @@ export default function HudFrame() {
               minWidth: 180,
               padding: '0.55rem 0.7rem',
               display: 'flex', flexDirection: 'column', gap: 7,
-              background: 'var(--glass-tint)',
+              background: 'var(--glass-menu)',
               backdropFilter: 'var(--hb-holo-blur)',
               WebkitBackdropFilter: 'var(--hb-holo-blur)',
               border: '1px solid var(--hb-edge)',

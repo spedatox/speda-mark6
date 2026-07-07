@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getConfig, saveConfig } from '../lib/api'
+import { getConfig, saveConfig, getMemorySources, setMemorySource } from '../lib/api'
 import type { AppConfig } from '../lib/types'
-import type { ConfigFieldInfo, ConfigGroupInfo, ConfigSaveResult } from '../lib/api'
+import type { ConfigFieldInfo, ConfigGroupInfo, ConfigSaveResult, MemorySources } from '../lib/api'
 import GlassSelect from './GlassSelect'
 
 /**
@@ -80,6 +80,8 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
         Values are stored in a managed override file that wins over the checked-in <code style={{ fontFamily: MONO }}>.env</code>.
         A <span style={{ color: 'var(--hb-amber)' }}>restart-required</span> field is saved now and takes effect on the next backend restart.
       </p>
+
+      <SourceOfTruthPanel config={config} />
 
       {/* Search */}
       <input
@@ -318,6 +320,75 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
           )}
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * SourceOfTruthPanel — per-agent source-of-truth memory file. Each agent's
+ * chosen /memories/*.md is preloaded into its prompt (read) and is where it
+ * writes its domain data. The owner picks an existing file per agent here.
+ */
+function SourceOfTruthPanel({ config }: { config: AppConfig }) {
+  const [data, setData] = useState<MemorySources | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const load = async () => setData(await getMemorySources(config))
+  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const assign = async (agentId: string, path: string) => {
+    setBusy(agentId)
+    try {
+      await setMemorySource(config, agentId, path || null)
+      await load()
+    } catch { /* surfaced by reload */ }
+    finally { setBusy(null) }
+  }
+
+  if (!data || data.agents.length === 0) return null
+  const fileName = (p: string) => p.replace('/memories/', '')
+
+  return (
+    <div style={{ border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
+      <div style={{ padding: '0.7rem 0.85rem 0.2rem' }}>
+        <span style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
+          Agent Source of Truth
+        </span>
+        <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>
+          The one <code style={{ fontFamily: MONO }}>/memories</code> file each agent reads its domain data from and writes every update back to.
+          Sentinel → finance, Atomix → sessions. Pick any existing memory file.
+        </span>
+      </div>
+      <div style={{ padding: '0.4rem 0.85rem 0.85rem', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+        {data.agents.map(a => {
+          const options = [
+            { value: '', label: a.default ? `— default (${fileName(a.default)}) —` : '— none —' },
+            ...data.files.map(f => ({ value: f, label: fileName(f) })),
+          ]
+          // Reflect the active file if it's one we can list; else the default/none option.
+          const current = a.source && data.files.includes(a.source) ? a.source : ''
+          return (
+            <div key={a.agent_id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <div style={{ width: 130, flexShrink: 0 }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{a.name}</div>
+                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontFamily: MONO }}>
+                  {a.source ? fileName(a.source) : '—'}
+                </div>
+              </div>
+              <div style={{ flex: 1, maxWidth: 260, opacity: busy === a.agent_id ? 0.5 : 1 }}>
+                <GlassSelect
+                  value={current}
+                  options={options}
+                  onChange={v => assign(a.agent_id, v)}
+                  tint="var(--hb-cyan-bright)"
+                  active={!!a.source}
+                  large
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

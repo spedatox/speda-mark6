@@ -538,6 +538,46 @@ export async function setHouseParty(config: AppConfig, engaged: boolean): Promis
   }
 }
 
+/* ── Per-agent source-of-truth memory files ───────────────────────────────── */
+
+export interface SourceAgentInfo {
+  agent_id: string
+  name: string
+  domain: string
+  source: string | null   // the /memories/*.md file this agent reads+writes
+  default: string | null
+}
+
+export interface MemorySources {
+  files: string[]          // editable /memories/*.md files to choose from
+  agents: SourceAgentInfo[]
+}
+
+export async function getMemorySources(config: AppConfig): Promise<MemorySources> {
+  try {
+    const res = await fetch(`${config.apiBase}/memory/sources`, { headers: authHeaders(config) })
+    if (!res.ok) return { files: [], agents: [] }
+    return res.json()
+  } catch {
+    return { files: [], agents: [] }
+  }
+}
+
+/** Assign (or clear, with null) an agent's source-of-truth file. */
+export async function setMemorySource(
+  config: AppConfig,
+  agentId: string,
+  path: string | null,
+): Promise<{ agent_id: string; source: string | null }> {
+  const res = await fetch(`${config.apiBase}/memory/sources`, {
+    method: 'PUT',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ agent_id: agentId, path }),
+  })
+  if (!res.ok) throw new Error(`Assign failed (${res.status})`)
+  return res.json()
+}
+
 /* ── Backend configuration (Settings → Configuration) ─────────────────────── */
 
 export interface ConfigFieldInfo {
