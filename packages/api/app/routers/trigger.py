@@ -31,7 +31,7 @@ async def trigger(
 
     orchestrator = request.app.state.orchestrator
     session_manager = request.app.state.session_manager
-    telegram = request.app.state.telegram
+    telegram_bots = request.app.state.telegram_bots
 
     # Resolve the addressed agent. n8n targets a specific agent by path; an
     # unknown agent_id is a routing error, not a silent fallback.
@@ -85,16 +85,17 @@ async def trigger(
     )
 
     # Run the orchestrator as a background task — push/silent modes don't stream.
-    asyncio.create_task(_run_trigger(orchestrator, telegram, context, body.payload))
+    asyncio.create_task(_run_trigger(orchestrator, telegram_bots, context, body.payload))
 
     return TriggerResponse(accepted=True, request_id=request_id)
 
 
-async def _run_trigger(orchestrator, telegram, context: AgentContext, payload: dict) -> None:
+async def _run_trigger(orchestrator, telegram_bots, context: AgentContext, payload: dict) -> None:
     """Run the orchestrator loop for a trigger request and deliver the result.
 
     Owns its DB session: the request-scoped session closes the moment the
-    HTTP response returns, so this task must not touch it. push → Telegram;
+    HTTP response returns, so this task must not touch it. push → the firing
+    agent's OWN Telegram bot (fallback chain: own bot → SPEDA tagged → DB row);
     silent → stored in the session transcript only.
     """
     try:
@@ -120,9 +121,14 @@ async def _run_trigger(orchestrator, telegram, context: AgentContext, payload: d
                 await mark_fired(str(automation_name), db)
 
             if context.output_mode == "push" and final_text:
-                delivered = await telegram.send_message(final_text)
+                # The sender bot is derived from the AgentContext, never passed by
+                # n8n — a Sentinel push speaks from Sentinel's bot. If every bot is
+                # unreachable, persist a Notification row so nothing is lost.
+                delivered = await telegram_bots.deliver_message(context.agent_id, final_text)
+                if not delivered:
+                    await _store_notification(db, context, final_text, payload)
                 logger.info(
-                    "trigger_push_delivered" if delivered else "trigger_push_failed",
+                    "trigger_push_delivered" if delivered else "trigger_push_stored",
                     extra={"request_id": context.request_id, "chars": len(final_text)},
                 )
             elif context.output_mode == "push":
@@ -133,5 +139,32 @@ async def _run_trigger(orchestrator, telegram, context: AgentContext, payload: d
     except Exception as e:  # noqa: BLE001
         logger.error(
             "trigger_run_error",
+            extra={"request_id": context.request_id, "error": str(e)},
+        )
+
+
+async def _store_notification(db, context: AgentContext, text: str, payload: dict) -> None:
+    """Fallback when no Telegram bot could deliver (unconfigured / unlinked):
+    persist the push as a Notification row so the desktop app surfaces it on next
+    open. Best-effort — a storage failure must not crash the task."""
+    try:
+        from app.models.notification import Notification
+
+        title = str(payload.get("event") or payload.get("job") or "Update")[:255]
+        db.add(
+            Notification(
+                user_id=context.user_id,
+                source_agent=context.agent_id,
+                triggered_by="n8n",
+                title=title,
+                body=text,
+                priority=str(payload.get("priority", "normal")),
+                delivered=False,
+            )
+        )
+        await db.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.error(
+            "trigger_notification_store_failed",
             extra={"request_id": context.request_id, "error": str(e)},
         )

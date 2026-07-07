@@ -18,6 +18,13 @@ logger = logging.getLogger(__name__)
 # DEBUG, are allowed through below for local convenience only.
 UNPROTECTED_PATHS = frozenset({"/health", "/oauth/google/callback", "/oauth/notion/callback"})
 
+# Prefix-matched exemptions (path parameters can't be enumerated).
+#   /telegram/webhook/{agent_id} — Telegram's callback can't carry our X-API-Key;
+#   it is instead authenticated by the X-Telegram-Bot-Api-Secret-Token header,
+#   validated in the router (constant time), plus an owner-id allowlist in the
+#   gateway. See docs/TELEGRAM_ARCHITECTURE.md TG-5.
+UNPROTECTED_PREFIXES: tuple[str, ...] = ("/telegram/webhook/",)
+
 _DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
 
 
@@ -32,6 +39,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         if path in UNPROTECTED_PATHS or request.method == "OPTIONS":
+            return await call_next(request)
+
+        if path.startswith(UNPROTECTED_PREFIXES):
             return await call_next(request)
 
         # In DEBUG only, let the interactive docs through for local development.

@@ -58,6 +58,18 @@ async def lifespan(app: FastAPI):
 
     dispatcher = AgentDispatcher()
 
+    # ── 2.6 Telegram bot fleet (one bot per agent with a presence) ─────────────
+    # Built here (after profiles, before Tier-1 skills) so the delivery skill can
+    # take the registry in its constructor — same pattern as the dispatch skill.
+    # Only profiles that declare telegram_enabled get a bot; only those with a
+    # configured token are actually constructed.
+    from app.telegram.registry import TelegramBotRegistry
+
+    telegram_agent_ids = {
+        p.agent_id for p in profiles.roster() if getattr(p, "telegram_enabled", False)
+    }
+    telegram_bots = TelegramBotRegistry.from_config(telegram_agent_ids)
+
     # ── 3. Capability Registry ─────────────────────────────────────────────────
     from app.core.registry import CapabilityRegistry
 
@@ -78,6 +90,7 @@ async def lifespan(app: FastAPI):
     from app.skills.save_file import SaveFileSkill
     from app.skills.memory import MemorySkill
     from app.skills.notifications import NotificationsSkill
+    from app.skills.telegram import SendTelegramFileSkill, SendTelegramMessageSkill
     from app.skills.osint import OSINT_SKILLS
     from app.skills.read_skill import ReadSkillSkill
     from app.skills.search_history import SearchHistorySkill
@@ -94,6 +107,8 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(TTSSkill())
     await registry.register_skill(STTSkill())
     await registry.register_skill(NotificationsSkill())
+    await registry.register_skill(SendTelegramMessageSkill(telegram_bots))
+    await registry.register_skill(SendTelegramFileSkill(telegram_bots))
     await registry.register_skill(DocumentsSkill())
     await registry.register_skill(SaveFileSkill())
     await registry.register_skill(SystemSkill())
@@ -168,10 +183,22 @@ async def lifespan(app: FastAPI):
         ws_manager=ws_manager,
     )
 
-    # ── 7.5 Proactive delivery + automation engine clients ─────────────────────
-    from app.services.telegram import TelegramClient
+    # ── 7.5 Telegram channel — gateway + ingress ───────────────────────────────
+    # The gateway turns an inbound update into a normal orchestrator run; it needs
+    # the full engine, so it is built here (after the orchestrator + proxy exist)
+    # and ingress is started per settings.telegram_mode (webhook sets per-bot
+    # webhooks; polling spawns one long-poll task per bot; off = outbound-only).
+    from app.telegram.gateway import TelegramGateway
 
-    telegram = TelegramClient()
+    telegram_gateway = TelegramGateway(
+        orchestrator=orchestrator,
+        session_manager=session_manager,
+        profiles=profiles,
+        bots=telegram_bots,
+        ws_manager=ws_manager,
+        agent_proxy=agent_proxy,
+    )
+    telegram_poll_tasks = await telegram_bots.start(telegram_gateway)
 
     # ── 8. Inject into app.state ───────────────────────────────────────────────
     app.state.registry = registry
@@ -182,7 +209,8 @@ async def lifespan(app: FastAPI):
     app.state.session_manager = session_manager
     app.state.profiles = profiles
     app.state.dispatcher = dispatcher
-    app.state.telegram = telegram
+    app.state.telegram_bots = telegram_bots
+    app.state.telegram_gateway = telegram_gateway
 
     logger.info(
         "startup_complete",
@@ -197,6 +225,9 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ───────────────────────────────────────────────────────────────
     logger.info("shutdown_begin")
+    for task in telegram_poll_tasks:
+        task.cancel()
+    await telegram_bots.aclose()
     await registry.shutdown_adapters()
     await close_db()
     logger.info("shutdown_complete")
@@ -262,7 +293,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections, memory
+    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections, memory, telegram
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -274,6 +305,7 @@ def create_app() -> FastAPI:
     app.include_router(connections.router)
     app.include_router(automations.router)
     app.include_router(memory.router)
+    app.include_router(telegram.router)
 
     return app
 

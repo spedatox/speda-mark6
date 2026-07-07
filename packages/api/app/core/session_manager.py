@@ -20,12 +20,47 @@ class SessionManager:
     # clears it, which is fine (one cache write to re-establish).
     _session_servers: dict[int, set[str]] = {}
 
+    # Sticky channel sessions: a non-"app" channel (Telegram) has no session_id
+    # to pass per turn, so we pin one open session per (user, agent, channel) and
+    # reuse it until /new. Process-local; a restart re-pins to the newest open DB
+    # session for that tuple (see get_or_create). Keyed by (user_id, agent_id,
+    # channel) → session_id.
+    _channel_sessions: dict[tuple[int, str, str], int] = {}
+
     def get_loaded_servers(self, session_id: int) -> set[str]:
         return set(self._session_servers.get(session_id, set()))
 
     def mark_servers_loaded(self, session_id: int, servers: set[str]) -> None:
         existing = self._session_servers.get(session_id, set())
         self._session_servers[session_id] = existing | servers
+
+    async def reset_channel_session(
+        self, db: AsyncSession, channel: str, agent_id: str, user_id: int = 1
+    ) -> None:
+        """Close the sticky session for a channel and drop its pin so the next
+        turn starts a fresh one (the /new command). Marks every still-open session
+        for the tuple ended so the DB-adoption path in get_or_create doesn't just
+        re-adopt it; the old messages are untouched (the transcript survives)."""
+        self._channel_sessions.pop((user_id, agent_id, channel), None)
+        result = await db.execute(
+            select(Session).where(
+                Session.user_id == user_id,
+                Session.agent_id == agent_id,
+                Session.channel == channel,
+                Session.ended_at.is_(None),
+            )
+        )
+        now = datetime.utcnow()
+        closed = 0
+        for sess in result.scalars().all():
+            sess.ended_at = now
+            closed += 1
+        if closed:
+            await db.commit()
+        logger.info(
+            "channel_session_reset",
+            extra={"agent_id": agent_id, "channel": channel, "closed": closed},
+        )
     """
     Manages conversation session lifecycle and history loading.
     Lives at Phase 9.5 — AgentContext construction depends on it.
@@ -40,10 +75,17 @@ class SessionManager:
         model_used: str,
         agent_id: str = "speda",
         session_id: int | None = None,
+        channel: str = "app",
     ) -> Session:
         """
-        Return an existing session by ID, or create a new one.
-        Always creates a new session if session_id is None.
+        Return an existing session by ID, the pinned sticky session for a
+        non-"app" channel, or create a new one.
+
+        - session_id given → that session (app chat passes it every turn).
+        - channel != "app" and no session_id → the STICKY session for
+          (user, agent, channel): the in-process pin, or the newest open session
+          in the DB for that tuple (re-pins across restarts), or a fresh one.
+        - otherwise → always a new session (app default, unchanged).
         """
         if session_id is not None:
             result = await db.execute(select(Session).where(Session.id == session_id))
@@ -51,9 +93,36 @@ class SessionManager:
             if existing:
                 return existing
 
+        if channel != "app":
+            key = (user_id, agent_id, channel)
+            pinned = self._channel_sessions.get(key)
+            if pinned is not None:
+                result = await db.execute(select(Session).where(Session.id == pinned))
+                existing = result.scalar_one_or_none()
+                if existing and existing.ended_at is None:
+                    return existing
+            # No live pin — adopt the newest open session for this tuple if one
+            # exists (survives a restart), else fall through to create.
+            result = await db.execute(
+                select(Session)
+                .where(
+                    Session.user_id == user_id,
+                    Session.agent_id == agent_id,
+                    Session.channel == channel,
+                    Session.ended_at.is_(None),
+                )
+                .order_by(Session.started_at.desc())
+                .limit(1)
+            )
+            adopted = result.scalar_one_or_none()
+            if adopted is not None:
+                self._channel_sessions[key] = adopted.id
+                return adopted
+
         session = Session(
             user_id=user_id,
             agent_id=agent_id,
+            channel=channel,
             triggered_by=triggered_by,
             model_used=model_used,
             started_at=datetime.utcnow(),
@@ -61,9 +130,11 @@ class SessionManager:
         db.add(session)
         await db.commit()
         await db.refresh(session)
+        if channel != "app":
+            self._channel_sessions[(user_id, agent_id, channel)] = session.id
         logger.info(
             "session_created",
-            extra={"session_id": session.id, "triggered_by": triggered_by},
+            extra={"session_id": session.id, "triggered_by": triggered_by, "channel": channel},
         )
         return session
 

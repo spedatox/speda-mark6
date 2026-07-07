@@ -70,6 +70,11 @@ def _apply_additive_migrations(sync_conn) -> None:
         if "summary_through_id" not in scols:
             sync_conn.execute(text("ALTER TABLE sessions ADD COLUMN summary_through_id INTEGER"))
             logger.info("schema_migrated", extra={"change": "sessions.summary_through_id"})
+        if "channel" not in scols:
+            sync_conn.execute(
+                text("ALTER TABLE sessions ADD COLUMN channel VARCHAR(16) DEFAULT 'app'")
+            )
+            logger.info("schema_migrated", extra={"change": "sessions.channel"})
         sync_conn.execute(
             text(
                 "CREATE INDEX IF NOT EXISTS ix_sessions_user_agent_started "

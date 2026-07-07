@@ -16,6 +16,12 @@ class Session(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     agent_id: Mapped[str] = mapped_column(String(64), default="speda")
+    # Which surface the conversation happened on. "app" (desktop/Flutter) or
+    # "telegram". Scopes the sticky-session lookup so the Telegram thread with an
+    # agent and the app thread with the same agent stay separate, and lets the UI
+    # badge Telegram-originated sessions. A Telegram turn is otherwise a normal
+    # orchestrator turn — same tables, same memory extraction.
+    channel: Mapped[str] = mapped_column(String(16), default="app")
     triggered_by: Mapped[str] = mapped_column(String(32))  # user | n8n | agent
     model_used: Mapped[str] = mapped_column(String(64))
     title: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)

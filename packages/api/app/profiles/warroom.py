@@ -22,3 +22,5 @@ class WarRoomProfile(SPEDAProfile):
     name = "War Room"
     doc_theme = DocTheme(accent="#f2b75c")   # engagement amber
     dispatch_target = False
+    # A session-scope alias, not a notifying agent — no Telegram bot of its own.
+    telegram_enabled = False
