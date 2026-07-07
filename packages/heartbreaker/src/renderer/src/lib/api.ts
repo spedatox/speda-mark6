@@ -538,6 +538,60 @@ export async function setHouseParty(config: AppConfig, engaged: boolean): Promis
   }
 }
 
+/* ── Backend configuration (Settings → Configuration) ─────────────────────── */
+
+export interface ConfigFieldInfo {
+  key: string
+  label: string
+  type: 'text' | 'password' | 'bool' | 'int' | 'select' | 'url'
+  secret: boolean
+  requires_restart: boolean
+  help: string
+  placeholder: string
+  options: string[]
+  is_set: boolean
+  value?: string | number | boolean   // present for non-secret fields
+  hint?: string                       // masked hint for secret fields
+}
+
+export interface ConfigGroupInfo {
+  id: string
+  label: string
+  blurb: string
+  fields: ConfigFieldInfo[]
+}
+
+export interface ConfigSaveResult {
+  applied_live: string[]
+  restart_required: string[]
+  rejected: string[]
+}
+
+export async function getConfig(config: AppConfig): Promise<ConfigGroupInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/config`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return (await res.json()).groups ?? []
+  } catch {
+    return []
+  }
+}
+
+/** Persist only the changed keys. Secrets left untouched must NOT be sent;
+ *  sending a secret as '' clears its override. */
+export async function saveConfig(
+  config: AppConfig,
+  values: Record<string, string | number | boolean>,
+): Promise<ConfigSaveResult> {
+  const res = await fetch(`${config.apiBase}/config`, {
+    method: 'PUT',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ values }),
+  })
+  if (!res.ok) throw new Error(`Save failed (${res.status})`)
+  return res.json()
+}
+
 /* ── Per-agent model routing ──────────────────────────────────────────────── */
 
 export interface AgentModelInfo {

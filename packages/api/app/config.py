@@ -6,6 +6,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DATA_DIR = Path.home() / ".speda"
 
+# Owner-editable overrides written from the desktop Settings → Configuration tab
+# (routers/config.py). Layered OVER the checked-in .env so a value set in the UI
+# wins, survives restarts, and never touches the repo. Real OS env vars still win
+# over both (pydantic precedence: init > os.environ > env_file[last] > .. > first).
+_MANAGED_ENV = _DATA_DIR / ".env"
+
 
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -35,7 +41,9 @@ class JSONFormatter(logging.Formatter):
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Tuple order = precedence low→high: the managed override file wins over
+        # the checked-in .env. Both are optional (missing file is ignored).
+        env_file=(".env", str(_MANAGED_ENV)),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -272,6 +280,61 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# ── Managed-env override store (desktop Configuration tab) ───────────────────
+# A tiny KEY=VALUE reader/writer over _MANAGED_ENV. Deliberately not a full
+# dotenv parser — we only ever write what we wrote (simple, quoted values) and
+# read it back. pydantic re-reads the file at startup, so writes here take full
+# effect on the next boot; the router also live-updates the in-memory `settings`
+# object for values that are read lazily (feature flags, thresholds, model refs).
+
+def _dq(value: str) -> str:
+    """Double-quote a value, escaping quotes/backslashes, so multi-word or
+    special-character secrets round-trip intact."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def read_managed_env() -> dict[str, str]:
+    """Parse the managed override file into a dict. Missing file → empty."""
+    out: dict[str, str] = {}
+    if not _MANAGED_ENV.exists():
+        return out
+    try:
+        for line in _MANAGED_ENV.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, raw = line.partition("=")
+            key = key.strip()
+            raw = raw.strip()
+            if len(raw) >= 2 and raw[0] == raw[-1] == '"':
+                raw = raw[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+            out[key] = raw
+    except Exception as e:  # noqa: BLE001
+        logging.getLogger(__name__).error("managed_env_read_failed", extra={"error": str(e)})
+    return out
+
+
+def write_managed_env(updates: dict[str, str | None]) -> None:
+    """Merge `updates` into the managed override file. A None value deletes the
+    key (falls back to the checked-in .env / default). Atomic-ish rewrite."""
+    current = read_managed_env()
+    for key, value in updates.items():
+        if value is None:
+            current.pop(key, None)
+        else:
+            current[key] = value
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# SPEDA managed overrides — written by the desktop Configuration tab.",
+        "# Edit in the app (Settings → Configuration). Values here win over .env.",
+        "",
+    ]
+    for key in sorted(current):
+        lines.append(f"{key}={_dq(current[key])}")
+    _MANAGED_ENV.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def configure_logging() -> None:
