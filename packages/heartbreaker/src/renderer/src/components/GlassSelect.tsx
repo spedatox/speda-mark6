@@ -125,7 +125,7 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
           <div
             onClick={() => setOpen(false)}
             style={{
-              position: 'fixed', inset: 0, zIndex: 950,
+              position: 'fixed', inset: 0, zIndex: 9950,
               background: 'rgba(4, 9, 12, 0.45)',
               backdropFilter: 'var(--hb-holo-blur)', WebkitBackdropFilter: 'var(--hb-holo-blur)',
               animation: 'fadeIn 0.15s ease both',
@@ -134,7 +134,7 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
           <div
             className="hb-holo"
             style={{
-              position: 'fixed', zIndex: 951,
+              position: 'fixed', zIndex: 9951,
               left: pos.left, top: pos.top, bottom: pos.bottom,
               width: pos.width, maxHeight: pos.maxHeight,
               overflowY: 'auto', padding: '0.25rem 0',
