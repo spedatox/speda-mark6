@@ -117,3 +117,13 @@ class AgentProfile(ABC):
         if is_background or triggered_by in ("n8n", "agent"):
             return settings.llm_background_model or self.haiku_model
         return settings.llm_main_model or self.sonnet_model
+
+    def allocate_telegram_model(self) -> str:
+        """Model for Telegram-channel turns. Checks the Telegram-specific pin
+        first; falls back to the normal allocate_model("user") chain."""
+        from app.core.runtime_state import get_telegram_models
+
+        tg_override = get_telegram_models().get(self.agent_id)
+        if tg_override:
+            return tg_override
+        return self.allocate_model("user")

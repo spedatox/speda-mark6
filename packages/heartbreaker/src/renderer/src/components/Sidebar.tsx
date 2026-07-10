@@ -4,7 +4,7 @@ import type { AppProfile } from '../profile/types'
 import type { Session, AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
-import { deleteSession, renameSession } from '../lib/api'
+import { deleteSession, renameSession, fetchActiveRuns } from '../lib/api'
 
 const ProfileContext = createContext<AppProfile | null>(null)
 export const useProfile = () => useContext(ProfileContext)!
@@ -37,8 +37,8 @@ const mono: React.CSSProperties = {
 }
 
 /* ── Session item ─────────────────────────────────────────────────────────── */
-function SessionItem({ session, active, onSelect, config }: {
-  session: Session; active: boolean; onSelect: () => void; config: AppConfig
+function SessionItem({ session, active, onSelect, config, running }: {
+  session: Session; active: boolean; onSelect: () => void; config: AppConfig; running?: boolean
 }) {
   const { dispatch } = useChatContext()
   const [hover, setHover]       = useState(false)
@@ -147,6 +147,23 @@ function SessionItem({ session, active, onSelect, config }: {
         >
           {displayTitle || 'New conversation'}
         </button>
+      )}
+
+      {/* Live-run jewel — a turn is still working in this session (it survives
+          navigation server-side). Hidden while the row is lit so it never
+          collides with the hover action icons. */}
+      {running && !lit && !renaming && (
+        <span
+          title="A turn is still running in this conversation"
+          style={{
+            position: 'absolute', right: '0.7rem', top: '50%', transform: 'translateY(-50%)',
+            width: 7, height: 7, borderRadius: '50%',
+            background: 'var(--hb-cyan-bright)',
+            boxShadow: '0 0 6px var(--hb-cyan-bright)',
+            animation: 'hbBlink 1.4s ease-in-out infinite',
+            pointerEvents: 'none',
+          }}
+        />
       )}
 
       {/* Action icons */}
@@ -695,6 +712,20 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
   const [search, setSearch]         = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
 
+  // Which sessions have a turn still running server-side (survives navigation).
+  // Light poll — presence changes on turn start/finish, not per second.
+  const [runningSessions, setRunningSessions] = useState<Set<number>>(new Set())
+  useEffect(() => {
+    let alive = true
+    const poll = async () => {
+      const runs = await fetchActiveRuns(config)
+      if (alive) setRunningSessions(new Set(runs.map(r => r.session_id)))
+    }
+    poll()
+    const id = setInterval(poll, 8000)
+    return () => { alive = false; clearInterval(id) }
+  }, [config])
+
   const filtered = useMemo(() => {
     if (!search.trim()) return state.sessions
     const q = search.toLowerCase()
@@ -782,6 +813,7 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
                     active={state.activeSessionId === session.id}
                     onSelect={() => onSelectSession(session.id)}
                     config={config}
+                    running={runningSessions.has(session.id)}
                   />
                 ))}
               </div>

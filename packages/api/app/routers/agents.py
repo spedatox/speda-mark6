@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.runtime_state import (
     get_agent_models,
     get_house_party,
+    get_telegram_models,
     set_agent_model,
     set_house_party,
+    set_telegram_model,
 )
 from app.database import get_db
 from app.models.agent_message import AgentMessage
@@ -18,6 +20,7 @@ from app.schemas.agent import (
     AgentModelSet,
     AgentRegistration,
     AgentStatus,
+    AgentTelegramModelSet,
     HousePartyState,
 )
 from fastapi import Depends, HTTPException
@@ -55,12 +58,14 @@ async def agent_models(request: Request):
     from app.config import settings
 
     overrides = get_agent_models()
+    tg_overrides = get_telegram_models()
     return [
         AgentModelInfo(
             agent_id=p.agent_id,
             name=p.name,
             domain=p.domain,
             override=overrides.get(p.agent_id),
+            telegram_override=tg_overrides.get(p.agent_id),
             # What allocate_model would pick WITHOUT the owner's pin — the .env
             # deployment override, else the profile's own models.
             default_main=settings.llm_main_model or p.sonnet_model,
@@ -80,6 +85,15 @@ async def agent_model_set(body: AgentModelSet, request: Request):
     if request.app.state.profiles.get(body.agent_id) is None:
         raise HTTPException(status_code=404, detail=f"Unknown agent '{body.agent_id}'")
     set_agent_model(body.agent_id, (body.model or "").strip() or None)
+    return await agent_models(request)
+
+
+@router.post("/agents/telegram-models", response_model=list[AgentModelInfo])
+async def agent_telegram_model_set(body: AgentTelegramModelSet, request: Request):
+    """Pin an agent to a Telegram-specific model (or clear with model=null)."""
+    if request.app.state.profiles.get(body.agent_id) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown agent '{body.agent_id}'")
+    set_telegram_model(body.agent_id, (body.model or "").strip() or None)
     return await agent_models(request)
 
 

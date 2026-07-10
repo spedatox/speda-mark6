@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
-import { streamChat, fetchSessions } from '../lib/api'
+import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, fetchWelcome } from '../lib/api'
 import { useProfile } from './Sidebar'
 import MessageList from './MessageList'
 import InputBar from './InputBar'
@@ -11,7 +11,7 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10)
 }
 
-function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
+function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppConfig }) {
   const profile = useProfile()
   const { settings } = useSettings()
   const hour = new Date().getHours()
@@ -38,6 +38,29 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
     }, 42)
     return () => clearInterval(id)
   }, [fullGreeting])
+
+  // JARVIS remark — a contextual one-liner from the cheapest model, drawn from
+  // memory. Fetched async so the greeting above never waits on it; it fades +
+  // types in beneath when it arrives. The war-room hero speaks protocol, not
+  // pleasantries, so it stays out of there.
+  const [remark, setRemark] = useState('')
+  const [remarkTyped, setRemarkTyped] = useState('')
+  useEffect(() => {
+    if (isWarroom || !profile?.agentId) return
+    let alive = true
+    fetchWelcome(config, profile.agentId).then(t => { if (alive) setRemark(t) })
+    return () => { alive = false }
+  }, [config, profile?.agentId, isWarroom])
+  useEffect(() => {
+    if (!remark) { setRemarkTyped(''); return }
+    let i = 0
+    const id = setInterval(() => {
+      i++
+      setRemarkTyped(remark.slice(0, i))
+      if (i >= remark.length) clearInterval(id)
+    }, 26)
+    return () => clearInterval(id)
+  }, [remark])
 
   const [now, setNow] = useState(new Date())
   useEffect(() => {
@@ -128,6 +151,20 @@ function WelcomeView({ onSend }: { onSend: (msg: string) => void }) {
           animation: done ? 'none' : 'blink 0.8s step-end infinite',
         }} />
       </h1>
+
+      {/* JARVIS remark — the contextual, memory-aware line under the greeting.
+          Reserves no space until it exists, so the layout never jumps. */}
+      {remarkTyped && (
+        <p style={{
+          fontFamily: "'Rajdhani', sans-serif",
+          fontSize: 'clamp(0.82rem, 2.6vw, 1.05rem)', fontWeight: 400,
+          letterSpacing: '0.08em', color: 'var(--hb-text-dim)',
+          textAlign: 'center', maxWidth: 640, marginTop: '0.6rem',
+          lineHeight: 1.5, animation: 'fadeIn 0.5s ease both',
+        }}>
+          {remarkTyped}
+        </p>
+      )}
     </div>
   )
 }
@@ -141,6 +178,13 @@ export default function ChatMain({ config, onSelectSession }: Props) {
   const { state, dispatch } = useChatContext()
   const { settings } = useSettings()
   const abortRef = useRef<AbortController | null>(null)
+  // request_id of the turn currently streaming into the visible session — the
+  // stop button cancels THIS run on the backend (dropping the socket no longer
+  // does, by design). Set from the `start` event, cleared on terminal.
+  const runIdRef = useRef<string | null>(null)
+  // request_ids we've already attached/handled, so the re-attach effect never
+  // double-attaches to the same live run.
+  const attachedRef = useRef<Set<string>>(new Set())
   const [, forceUpdate] = useState(0)
 
   interface SendOpts {
@@ -213,8 +257,8 @@ export default function ChatMain({ config, onSelectSession }: Props) {
     // Real status, not looped filler — and a hard stop if the backend goes
     // quiet. We track the last activity instant; the ticker escalates the
     // status line and finally aborts so the UI never spins forever.
-    const STALL_MS = 9000    // no events this long → tell the user it's slow
-    const DEAD_MS = 60000    // no events this long → give up, surface a precise reason
+    const STALL_MS = 15000    // no events this long → tell the user it's slow
+    const DEAD_MS = 300000    // no events this long → give up, surface a precise reason
     const startedAt = Date.now()
     let lastActivity = startedAt
     let gotStart = false     // backend acknowledged the request (START event)
@@ -262,11 +306,14 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           documents: opts.documents,
           keepMessages: opts.keepMessages,
           regenerate: opts.regenerate,
+          // Forge workspace for Optimus jobs; ignored by in-process agents.
+          cwd: config.agentId === 'optimus' ? (settings.forgeCwd || undefined) : undefined,
         },
       )) {
         lastActivity = Date.now()
         if (event.type === 'start') {
           gotStart = true
+          runIdRef.current = event.request_id ?? null
           dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Thinking' } })
         } else if (event.type === 'chunk') {
           gotContent = true
@@ -339,16 +386,88 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       finalizeFlush()  // safety: never leave buffered text undelivered
       clearInterval(watchdog)
       abortRef.current = null
+      runIdRef.current = null
       forceUpdate(n => n + 1)
     }
-  }, [state.activeSessionId, state.isStreaming, config, settings.model, settings.systemPrompt, dispatch])
+  }, [state.activeSessionId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd, dispatch])
 
   // Mirror the latest `send` into a ref so the stable row handlers below can call
   // it without listing it as a dependency (which would make them change identity
   // every chunk and defeat the memoized message rows).
   sendRef.current = send
 
-  const stop = useCallback(() => { abortRef.current?.abort() }, [])
+  // Stop: cancel the detached run on the backend (dropping the socket alone no
+  // longer stops it), then abort the local fetch. The backend persists whatever
+  // streamed so far, marked as cancelled.
+  const stop = useCallback(() => {
+    const rid = runIdRef.current
+    if (rid) cancelRun(config, rid).catch(() => {})
+    abortRef.current?.abort()
+  }, [config])
+
+  // ── Re-attach ─────────────────────────────────────────────────────────────
+  // On entering a session, ask the backend whether a turn is still running there
+  // (a job we switched away from, or one that survived an app reload). If so,
+  // append a streaming bubble and tail its live stream — the run kept going
+  // server-side the whole time, so this picks up mid-flight and finishes cleanly.
+  useEffect(() => {
+    const sid = state.activeSessionId
+    if (sid == null) return
+    if (abortRef.current) return  // a local send is already streaming this view
+    let cancelled = false
+    const ctrl = new AbortController()
+
+    ;(async () => {
+      const runs = await fetchActiveRuns(config, sid)
+      if (cancelled || runs.length === 0) return
+      const run = runs[0]
+      if (attachedRef.current.has(run.request_id)) return
+      attachedRef.current.add(run.request_id)
+
+      const assistantId = makeId()
+      dispatch({ type: 'ADD_ASSISTANT_MESSAGE', payload: {
+        id: assistantId, role: 'assistant', content: '', tools: [],
+        isStreaming: true, isError: false, status: 'Reconnecting',
+      } })
+      runIdRef.current = run.request_id
+
+      // Coalesce replayed chunks (they arrive in a burst) at one flush per frame.
+      let buf = ''
+      let handle: number | null = null
+      const flush = () => { handle = null; if (buf) { const c = buf; buf = ''; dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk: c } }) } }
+
+      try {
+        for await (const event of attachStream(config, run.request_id, ctrl.signal)) {
+          if (event.type === 'chunk') {
+            buf += event.data as string
+            if (handle == null) handle = requestAnimationFrame(flush)
+          } else if (event.type === 'tool') {
+            dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool: event.data as import('../lib/types').ToolBadge } })
+          } else if (event.type === 'tool_result') {
+            const d = event.data as { id: string; result: string }
+            dispatch({ type: 'SET_TOOL_RESULT', payload: { id: assistantId, toolId: d.id, result: d.result } })
+          } else if (event.type === 'file') {
+            dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
+          } else if (event.type === 'done') {
+            if (handle != null) cancelAnimationFrame(handle)
+            flush()
+            dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: event.session_id } })
+          } else if (event.type === 'error') {
+            if (handle != null) cancelAnimationFrame(handle)
+            flush()
+            dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: event.data as string } })
+          }
+        }
+      } catch { /* attach aborted on leaving the session — the run lives on */ }
+      finally {
+        if (handle != null) cancelAnimationFrame(handle)
+        flush()
+        if (runIdRef.current === run.request_id) runIdRef.current = null
+      }
+    })()
+
+    return () => { cancelled = true; ctrl.abort() }
+  }, [state.activeSessionId, config, dispatch])
 
   const handleDelete = useCallback((id: string) => {
     dispatch({ type: 'DELETE_MESSAGE', payload: { id } })
@@ -386,7 +505,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {isEmpty
-        ? <WelcomeView onSend={send} />
+        ? <WelcomeView onSend={send} config={config} />
         : (
           <MessageList
             onDelete={handleDelete}

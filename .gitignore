@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Claude Code — personal/local settings (the shared launch.json is committed)
+.claude/settings.local.json
+
 # Local databases (may contain secrets — never commit)
 *.db
 *.sqlite

@@ -79,6 +79,8 @@ export interface StreamOpts {
   keepMessages?: number
   /** Re-run on existing history without appending a new user message. */
   regenerate?: boolean
+  /** Working directory for an external-backend agent (the Forge / Optimus). */
+  cwd?: string
 }
 
 export async function* streamChat(
@@ -100,6 +102,7 @@ export async function* streamChat(
       ...(opts.documents && opts.documents.length ? { documents: opts.documents } : {}),
       ...(opts.keepMessages != null ? { keep_messages: opts.keepMessages } : {}),
       ...(opts.regenerate ? { regenerate: true } : {}),
+      ...(opts.cwd ? { cwd: opts.cwd } : {}),
     }),
     signal,
   })
@@ -130,6 +133,79 @@ export async function* streamChat(
       } catch { /* malformed line */ }
     }
   }
+}
+
+/** A short JARVIS-style welcome remark for the home screen (cached server-side,
+ *  cheapest model). Empty string on any failure — the UI keeps its greeting. */
+export async function fetchWelcome(config: AppConfig, agentId: string): Promise<string> {
+  try {
+    const res = await fetch(`${config.apiBase}/welcome/${agentId}`, { headers: authHeaders(config) })
+    if (!res.ok) return ''
+    const d = await res.json()
+    return typeof d.text === 'string' ? d.text : ''
+  } catch { return '' }
+}
+
+/** Re-attach to a detached, still-running (or just-finished) turn: replays the
+ *  buffered events then tails the live stream, exactly like streamChat's output.
+ *  Used when returning to a session whose turn kept running server-side. */
+export async function* attachStream(
+  config: AppConfig,
+  requestId: string,
+  signal: AbortSignal,
+): AsyncGenerator<SSEEvent> {
+  const res = await fetch(`${config.apiBase}/chat/attach/${requestId}`, {
+    headers: authHeaders(config),
+    signal,
+  })
+  if (!res.ok || !res.body) return
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const raw = line.slice(6).trim()
+      if (!raw) continue
+      try { yield JSON.parse(raw) as SSEEvent } catch { /* malformed */ }
+    }
+  }
+}
+
+export interface ActiveRun {
+  request_id: string
+  agent_id: string
+  session_id: number
+  running_s: number
+  idle_s: number
+}
+
+/** Detached turns the backend is currently running (optionally one session). */
+export async function fetchActiveRuns(config: AppConfig, sessionId?: number): Promise<ActiveRun[]> {
+  try {
+    const q = sessionId != null ? `?session_id=${sessionId}` : ''
+    const res = await fetch(`${config.apiBase}/chat/active${q}`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return res.json()
+  } catch { return [] }
+}
+
+/** Cancel a running turn (the stop button). Dropping the SSE socket no longer
+ *  cancels a run, so this is the only way to actually stop one. */
+export async function cancelRun(config: AppConfig, requestId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/chat/cancel/${requestId}`, {
+      method: 'POST', headers: authHeaders(config),
+    })
+    if (!res.ok) return false
+    const d = await res.json()
+    return !!d.cancelled
+  } catch { return false }
 }
 
 export async function fetchMessages(
@@ -639,6 +715,7 @@ export interface AgentModelInfo {
   name: string
   domain: string
   override: string | null
+  telegram_override: string | null
   default_main: string
   default_background: string
 }
@@ -665,6 +742,51 @@ export async function pinAgentModel(
       headers: authHeaders(config, { 'Content-Type': 'application/json' }),
       body: JSON.stringify({ agent_id: agentId, model }),
     })
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
+/** Pin an agent to a Telegram-specific model; null clears (falls back to desktop model). */
+export async function pinTelegramModel(
+  config: AppConfig,
+  agentId: string,
+  model: string | null,
+): Promise<AgentModelInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/telegram-models`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ agent_id: agentId, model }),
+    })
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
+/* ── Online external peers (the Forge link) ───────────────────────────────── */
+
+/** One external peer agent currently connected over WS /agents/ws/<id> — i.e.
+ *  an agent whose real engine is a standalone backend (the Forge, for Optimus).
+ *  An agent absent from this list is answering from its in-process profile. */
+export interface OnlineAgent {
+  agent_id: string
+  agent_name: string
+  domain: string
+  status: string
+  last_seen: string | null
+  capabilities: string[]
+}
+
+/** The list of external peers the backend currently sees as online. Feeds the
+ *  FORGE LINK status indicator; a fetch failure is treated as "none online". */
+export async function fetchOnlineAgents(config: AppConfig): Promise<OnlineAgent[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents`, { headers: authHeaders(config) })
     if (!res.ok) return []
     return res.json()
   } catch {

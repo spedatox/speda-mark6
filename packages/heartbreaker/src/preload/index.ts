@@ -8,7 +8,9 @@ const api = {
   windowMinimize: () => ipcRenderer.send('window-minimize'),
   windowMaximize: () => ipcRenderer.send('window-maximize'),
   windowClose: () => ipcRenderer.send('window-close'),
-  openExternal: (url: string) => ipcRenderer.send('open-external', url)
+  openExternal: (url: string) => ipcRenderer.send('open-external', url),
+  selectDirectory: (current?: string): Promise<string | null> =>
+    ipcRenderer.invoke('select-directory', current)
 }
 
 if (process.contextIsolated) {

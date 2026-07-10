@@ -53,6 +53,7 @@ MAX_DISPATCH_DEPTH = 2
 EXTERNAL_TIMEOUT_S = 180.0          # WebSocket peers must answer within this window
 EXTERNAL_CODING_TIMEOUT_S = 600.0   # coding peers (Optimus) get room for real work
 MAX_RESULT_CHARS = 12_000           # cap what flows back into the caller's context
+MAX_BACKGROUND = 5                  # concurrent background (spawned) dispatches
 
 # The group channel: how much recent network traffic a dispatched agent sees,
 # and how hard each entry is truncated inside the transcript. Keeps the shared
@@ -110,6 +111,9 @@ class AgentDispatcher:
         self._ws_manager = None
         # Correlation futures for external (WebSocket) dispatches, keyed by task_id.
         self._pending_external: dict[str, asyncio.Future] = {}
+        # Live background (spawned) dispatch tasks — tracked so they aren't GC'd
+        # mid-run and can be capped/cancelled on shutdown.
+        self._background: set[asyncio.Task] = set()
 
     def wire(self, *, orchestrator, profiles, session_manager, ws_manager) -> None:
         """Late-bind the engine refs (they are constructed after the registry)."""
@@ -144,6 +148,34 @@ class AgentDispatcher:
         Never raises — every failure path returns an explanatory string the
         calling model can reason over (same tolerance pattern as skills).
         """
+        precheck = self._precheck(from_agent, to_agent, depth)
+        if precheck is not None:
+            return precheck
+
+        protocol = "house_party" if get_house_party() else "direct"
+        msg_id = await self._log_start(
+            request_id=request_id, from_agent=from_agent, to_agent=to_agent,
+            kind="dispatch", protocol=protocol, task=task,
+        )
+        result, status, session_id, duration_ms = await self._execute(
+            from_agent=from_agent, to_agent=to_agent, task=task, user_id=user_id,
+            request_id=request_id, depth=depth, protocol=protocol, cwd=cwd, own_msg_id=msg_id,
+        )
+        await self._log_finish(
+            msg_id, status=status, result=result, session_id=session_id, duration_ms=duration_ms,
+        )
+        logger.info(
+            "agent_dispatch",
+            extra={
+                "request_id": request_id, "from": from_agent, "to": to_agent,
+                "status": status, "protocol": protocol, "depth": depth,
+            },
+        )
+        return result
+
+    def _precheck(self, from_agent: str, to_agent: str, depth: int) -> str | None:
+        """Shared guard for dispatch() and spawn(). Returns an error string to
+        relay, or None when the dispatch may proceed."""
         if self._orchestrator is None:
             return "Dispatch engine is not wired yet — backend still starting up."
         if to_agent == from_agent:
@@ -153,14 +185,16 @@ class AgentDispatcher:
                 f"Refused: dispatch depth limit ({MAX_DISPATCH_DEPTH}) reached. "
                 "Complete the task yourself instead of delegating further."
             )
+        return None
 
-        protocol = "house_party" if get_house_party() else "direct"
-        msg_id = await self._log_start(
-            request_id=request_id, from_agent=from_agent, to_agent=to_agent,
-            kind="dispatch", protocol=protocol, task=task,
-        )
+    async def _execute(
+        self, *, from_agent: str, to_agent: str, task: str, user_id: int,
+        request_id: str, depth: int, protocol: str, cwd: str | None, own_msg_id: int | None,
+    ) -> tuple[str, str, int | None, int]:
+        """The dispatch body: external-first routing with in-process fallback.
+        Returns (result, status, session_id, duration_ms). Shared by the
+        synchronous dispatch() and the background spawn() path."""
         started = time.monotonic()
-
         # External-first: a connected standalone peer (Optimus) always outranks
         # its in-process profile — the profile stays registered as the identity
         # layer and the offline fallback, never as a competing engine.
@@ -177,31 +211,83 @@ class AgentDispatcher:
                 result, status, session_id = await self._run_in_process(
                     profile=profile, from_agent=from_agent, task=task,
                     user_id=user_id, request_id=request_id, depth=depth,
-                    house_party=(protocol == "house_party"), own_msg_id=msg_id,
+                    house_party=(protocol == "house_party"), own_msg_id=own_msg_id,
                 )
         elif profile is not None:
             result, status, session_id = await self._run_in_process(
                 profile=profile, from_agent=from_agent, task=task,
                 user_id=user_id, request_id=request_id, depth=depth,
-                house_party=(protocol == "house_party"), own_msg_id=msg_id,
+                house_party=(protocol == "house_party"), own_msg_id=own_msg_id,
             )
         else:
             result, status = await self._run_external(
                 to_agent=to_agent, from_agent=from_agent, task=task, cwd=cwd,
             )
+        return result, status, session_id, int((time.monotonic() - started) * 1000)
 
+    async def spawn(
+        self,
+        *,
+        from_agent: str,
+        to_agent: str,
+        task: str,
+        user_id: int,
+        request_id: str,
+        depth: int = 0,
+        cwd: str | None = None,
+    ) -> str:
+        """Background dispatch: start `task` on `to_agent` in a detached task and
+        return a ticket IMMEDIATELY so the caller's own turn can finish. The
+        result lands in the agent channel / comms tray (status running → ok) and
+        is retrievable via dispatch_status. Never raises."""
+        precheck = self._precheck(from_agent, to_agent, depth)
+        if precheck is not None:
+            return precheck
+        live = sum(1 for t in self._background if not t.done())
+        if live >= MAX_BACKGROUND:
+            return (
+                f"Refused: already running {live} background dispatches (max "
+                f"{MAX_BACKGROUND}). Wait for one to finish, or run this one inline."
+            )
+
+        protocol = "house_party" if get_house_party() else "direct"
+        msg_id = await self._log_start(
+            request_id=request_id, from_agent=from_agent, to_agent=to_agent,
+            kind="dispatch", protocol=protocol, task=task,
+        )
+        task_obj = asyncio.create_task(self._run_and_finish(
+            msg_id=msg_id, from_agent=from_agent, to_agent=to_agent, task=task,
+            user_id=user_id, request_id=request_id, depth=depth, protocol=protocol, cwd=cwd,
+        ))
+        self._background.add(task_obj)
+        task_obj.add_done_callback(self._background.discard)
+        ticket = f"#{msg_id}" if msg_id is not None else "(untracked)"
+        return (
+            f"Background dispatch {ticket} → {to_agent.upper()} started. It keeps "
+            "working after this turn ends; check progress with dispatch_status "
+            f"(id={msg_id}) or read_agent_channel. Tell the owner it's running."
+        )
+
+    async def _run_and_finish(
+        self, *, msg_id: int | None, from_agent: str, to_agent: str, task: str,
+        user_id: int, request_id: str, depth: int, protocol: str, cwd: str | None,
+    ) -> None:
+        """Detached body of a background dispatch: execute, then log the result."""
+        try:
+            result, status, session_id, duration_ms = await self._execute(
+                from_agent=from_agent, to_agent=to_agent, task=task, user_id=user_id,
+                request_id=request_id, depth=depth, protocol=protocol, cwd=cwd, own_msg_id=msg_id,
+            )
+        except Exception as e:  # noqa: BLE001 — a background dispatch must never crash the loop
+            logger.error("agent_dispatch_bg_error", extra={"request_id": request_id, "to": to_agent, "error": str(e)})
+            result, status, session_id, duration_ms = f"Background dispatch failed: {e}", "error", None, 0
         await self._log_finish(
-            msg_id, status=status, result=result, session_id=session_id,
-            duration_ms=int((time.monotonic() - started) * 1000),
+            msg_id, status=status, result=result, session_id=session_id, duration_ms=duration_ms,
         )
         logger.info(
-            "agent_dispatch",
-            extra={
-                "request_id": request_id, "from": from_agent, "to": to_agent,
-                "status": status, "protocol": protocol, "depth": depth,
-            },
+            "agent_dispatch_bg_done",
+            extra={"request_id": request_id, "from": from_agent, "to": to_agent, "status": status},
         )
-        return result
 
     async def broadcast(
         self,
@@ -211,12 +297,14 @@ class AgentDispatcher:
         user_id: int,
         request_id: str,
         depth: int = 0,
+        background: bool = False,
     ) -> str:
         """
         House Party fan-out: run `task` on every in-process agent except the
         caller, in parallel, and return the combined transcripts. Only available
         while the House Party Protocol is engaged — direct one-to-one dispatch
-        needs no protocol.
+        needs no protocol. With background=True each target is spawned detached
+        and the method returns tickets immediately.
         """
         if not get_house_party():
             return (
@@ -227,6 +315,16 @@ class AgentDispatcher:
         targets = [a for a in self.known_agents() if a != from_agent]
         if not targets:
             return "No other agents are registered."
+
+        if background:
+            tickets = await asyncio.gather(*[
+                self.spawn(
+                    from_agent=from_agent, to_agent=t, task=task,
+                    user_id=user_id, request_id=request_id, depth=depth,
+                )
+                for t in targets
+            ])
+            return "House Party broadcast dispatched in the background:\n\n" + "\n".join(tickets)
 
         await self._log_start(
             request_id=request_id, from_agent=from_agent, to_agent="all",
@@ -241,6 +339,14 @@ class AgentDispatcher:
         ])
         parts = [f"### {t.upper()}\n{r}" for t, r in zip(targets, results)]
         return "House Party broadcast complete. Responses:\n\n" + "\n\n".join(parts)
+
+    async def shutdown(self) -> None:
+        """Cancel any in-flight background dispatches on app shutdown."""
+        tasks = [t for t in self._background if not t.done()]
+        for t in tasks:
+            t.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def resolve_external_result(self, task_id: str, result: str, status: str = "ok") -> bool:
         """Called by the agents WebSocket router when a `task_result` frame

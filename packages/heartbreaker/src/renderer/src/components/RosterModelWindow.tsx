@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchAgentModels, fetchModels, pinAgentModel } from '../lib/api'
+import { fetchAgentModels, fetchModels, pinAgentModel, pinTelegramModel } from '../lib/api'
 import type { AgentModelInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
 import { ROSTER } from '../lib/agents'
@@ -31,6 +31,11 @@ export default function RosterModelWindow({ config, onClose }: {
 
   const pin = async (agentId: string, model: string | null) => {
     const next = await pinAgentModel(config, agentId, model)
+    if (next.length) setInfos(next)
+  }
+
+  const pinTg = async (agentId: string, model: string | null) => {
+    const next = await pinTelegramModel(config, agentId, model)
     if (next.length) setInfos(next)
   }
 
@@ -70,7 +75,7 @@ export default function RosterModelWindow({ config, onClose }: {
       className="hb-holo"
       style={{
         position: 'fixed', zIndex: 640,
-        width: 430, maxWidth: '94vw',
+        width: 560, maxWidth: '94vw',
         display: 'flex', flexDirection: 'column', maxHeight: '72vh',
         ...(pos
           ? { left: pos.x, top: pos.y }
@@ -112,7 +117,7 @@ export default function RosterModelWindow({ config, onClose }: {
         fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.1em',
         color: 'var(--hb-icon)', borderBottom: '1px solid var(--hb-edge)',
       }}>
-        {'// PROFILE = AGENT\'S OWN POLICY · A PIN OVERRIDES INTERACTIVE + DISPATCH RUNS'}
+        {'// PROFILE = AGENT\'S OWN POLICY · DESKTOP PIN OVERRIDES INTERACTIVE + DISPATCH · TELEGRAM PIN OVERRIDES BOT CHANNEL'}
       </p>
 
       {/* Roster list */}
@@ -140,10 +145,19 @@ export default function RosterModelWindow({ config, onClose }: {
                   {info ? info.domain : 'OFFLINE'}
                 </span>
               </span>
-              <div style={{ width: 184, flexShrink: 0 }}>
-                {info
-                  ? <AgentModelPicker info={info} models={models} onPin={m => pin(id, m)} large />
-                  : <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)' }}>—</span>}
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <div style={{ width: 156 }}>
+                  <span style={{ fontFamily: MONO, fontSize: '0.42rem', letterSpacing: '0.08em', color: 'var(--hb-icon-dim)', display: 'block', marginBottom: 2 }}>DESKTOP</span>
+                  {info
+                    ? <AgentModelPicker info={info} models={models} onPin={m => pin(id, m)} large />
+                    : <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)' }}>—</span>}
+                </div>
+                <div style={{ width: 156 }}>
+                  <span style={{ fontFamily: MONO, fontSize: '0.42rem', letterSpacing: '0.08em', color: 'var(--hb-icon-dim)', display: 'block', marginBottom: 2 }}>TELEGRAM</span>
+                  {info
+                    ? <AgentModelPicker info={{ ...info, override: info.telegram_override }} models={models} onPin={m => pinTg(id, m)} large />
+                    : <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)' }}>—</span>}
+                </div>
               </div>
             </div>
           )

@@ -271,9 +271,54 @@ class Settings(BaseSettings):
     gpt_researcher_url: str = "http://localhost:8001"
     shannon_url: str = "http://localhost:9000"
 
-    # Sandbox — the isolated container SPEDA runs commands in ("capable computer").
-    # In Docker this is the sandbox service; empty disables the run_command tool.
-    sandbox_url: str = "http://localhost:9000"
+    # Sandbox — the isolated computer SPEDA runs commands in ("capable computer").
+    # In Docker this is the sandbox service (SANDBOX_URL=http://sandbox:9000);
+    # empty disables the run_command tool. The default port is 9100 to avoid a
+    # collision with Shannon (9000). In local dev the sandbox launcher spawns
+    # packages/sandbox/server.py here when nothing already answers /health.
+    sandbox_url: str = "http://localhost:9100"
+
+    # ── Local sandbox launcher (app/services/sandbox_launcher.py) ──────────────
+    # When there is no Docker (dev machines), the backend can run the stdlib exec
+    # server as a child process so run_command works with a single boot. It only
+    # spawns when sandbox_url points at localhost AND nothing already answers
+    # /health there (a running Docker sandbox or a manual instance wins). This is
+    # honestly reduced isolation — a workspace jail, not a container; Docker
+    # remains the production isolation on Contabo.
+    sandbox_autostart: bool = True
+    sandbox_local_port: int = 9100
+    sandbox_workspace: str = str(_DATA_DIR / "sandbox_workspace")
+
+    # ── The Forge peer (app/services/forge_peer.py) ────────────────────────────
+    # The Forge (Mark II) is the standalone execution engine for Optimus. SPEDA
+    # owns its lifecycle: the lifespan handler launches it as a child process,
+    # and it connects back to WS /agents/ws/<forge_agent> as an external peer.
+    # While online, /chat/optimus is proxied to it; offline, the in-process
+    # OptimusProfile answers instead (graceful fallback — the Forge is never a
+    # hard dependency). forge_dir empty disables autostart.
+    forge_autostart: bool = True
+    forge_dir: str = ""                       # absolute path to the forge-mk1 repo
+    forge_agent: str = "optimus"
+    forge_ws_url: str = "ws://127.0.0.1:8000/agents/ws/optimus"
+    forge_cell_backend: str = "auto"          # docker | subprocess | auto
+    forge_python: str = ""                    # override interpreter; empty → uv run
+
+    # ── News desk (two-tier RSS + NewsData.io) ─────────────────────────────────
+    # Tier 1 (RSS) is keyless and always on. Tier 2 (NewsData.io) needs a free
+    # key from https://newsdata.io — empty disables the news_deep_dive tool with
+    # a clear message (same pattern as other keyed skills). The collector runs on
+    # the n8n clock (POST /news/poll), never an internal timer.
+    newsdata_api_key: str = ""
+    news_poll_enabled: bool = True
+    news_extra_feeds: str = ""            # comma-separated extra RSS URLs (owner)
+    news_retention_days: int = 14         # prune news_items older than this
+    # Tier-2 daily quota ledger split (NewsData free tier = 200/day). Buckets are
+    # per-purpose so an owner deep-dive spree can't starve the auto-flag path.
+    news_quota_deep_dive: int = 50        # owner-initiated "tell me more" calls
+    news_quota_auto_flag: int = 50        # keyword-flagged corroboration calls
+    news_quota_digest: int = 50           # daily topic digests
+    # One escalation per keyword per this many minutes (developing-story guard).
+    news_flash_cooldown_min: int = 120
 
     # ── Orion host operation (system_ops skill) ────────────────────────────────
     # Orion's ability to operate the HOST Mark VI runs on (log rotation, disk

@@ -33,6 +33,12 @@ class ChatRequest(BaseModel):
     keep_messages: int | None = None  # delete all but the first N messages, then proceed
     regenerate: bool = False          # re-run on existing history; do NOT add a new user message
 
+    # Working directory for an external-backend agent (the Forge / Optimus). It
+    # lands in context.extra["cwd"] → the peer's chat_request.cwd → the Cell
+    # workspace + Graphify root. Ignored by in-process agents. None = the peer's
+    # own default workspace.
+    cwd: str | None = None
+
 
 class ChatResponse(BaseModel):
     session_id: int

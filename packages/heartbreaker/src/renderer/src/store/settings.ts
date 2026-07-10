@@ -8,6 +8,9 @@ export interface AppSettings {
   temperature: number
   sidebarOpen: boolean
   userName: string
+  /** Working directory sent to the Forge for Optimus jobs (Cell workspace +
+   *  Graphify root). Empty = the peer's own default workspace. */
+  forgeCwd: string
 }
 
 const DEFAULT: AppSettings = {
@@ -16,6 +19,7 @@ const DEFAULT: AppSettings = {
   temperature: 0.7,
   sidebarOpen: true,
   userName: '',
+  forgeCwd: '',
 }
 
 function load(): AppSettings {

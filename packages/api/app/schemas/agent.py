@@ -51,6 +51,7 @@ class AgentModelInfo(BaseModel):
     name: str
     domain: str
     override: str | None      # owner's runtime pin; None = profile policy
+    telegram_override: str | None = None
     default_main: str         # profile's interactive-grade model
     default_background: str   # profile's background-tier model
 
@@ -58,3 +59,8 @@ class AgentModelInfo(BaseModel):
 class AgentModelSet(BaseModel):
     agent_id: str
     model: str | None = None  # None/empty = clear the pin, back to profile policy
+
+
+class AgentTelegramModelSet(BaseModel):
+    agent_id: str
+    model: str | None = None  # None/empty = clear the pin, use desktop model

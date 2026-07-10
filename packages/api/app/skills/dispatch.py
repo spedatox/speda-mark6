@@ -32,19 +32,22 @@ class DispatchAgentSkill(Skill):
         self._dispatcher = dispatcher
         agent_lines = "; ".join(f"'{a}' ({d})" for a, d in roster)
         self.description = (
-            "Dispatches a task to another agent in the suite and returns that "
-            "agent's answer to you within this turn. The target runs its own full "
-            "reasoning loop with its own tools and domain expertise, so use this "
-            "when a task clearly belongs to a specialist's domain or when you need "
+            "Dispatches a task to another agent in the suite. By default the target "
+            "runs its full reasoning loop and returns its answer to you WITHIN this "
+            "turn (you wait). The target has its own tools and domain expertise, so "
+            "use this when a task clearly belongs to a specialist or when you need "
             "several domains worked in parallel (emit multiple dispatch_agent calls "
             "in one turn — they run concurrently). Available agents: "
-            f"{agent_lines}. Do NOT use it for anything you can do with your own "
-            "tools in a comparable effort — a dispatch costs a full model run — and "
-            "never dispatch to yourself. Set agent='all' to broadcast one task to "
-            "every other agent at once; that requires the House Party Protocol to "
-            "be engaged. Returns the target agent's final text (or a broadcast "
-            "digest, one section per agent). When you use another agent's answer, "
-            "tell the owner which agent ran, in one sentence."
+            f"{agent_lines}. Set background=true for long jobs (deep research, a "
+            "coding job on Optimus, anything the owner shouldn't wait on): the "
+            "dispatch keeps running after your turn ends, you get a ticket back "
+            "immediately, and the result appears in the agent channel / comms tray "
+            "— retrieve it later with dispatch_status. Do NOT use this for anything "
+            "you can do yourself in comparable effort (a dispatch costs a full model "
+            "run) and never dispatch to yourself. Set agent='all' to broadcast to "
+            "every other agent (House Party Protocol only). Returns the target's "
+            "final text, or a background ticket. Always tell the owner which agent "
+            "ran (or was launched), in one sentence."
         )
         self.input_schema = {
             "type": "object",
@@ -64,6 +67,16 @@ class DispatchAgentSkill(Skill):
                         "your conversation, so include every fact, constraint, and "
                         "expected output format it needs."
                     ),
+                },
+                "background": {
+                    "type": "boolean",
+                    "description": (
+                        "Run the dispatch in the background: return a ticket now and "
+                        "keep working after your turn ends. Use for long jobs the "
+                        "owner shouldn't wait on; check results later with "
+                        "dispatch_status. Default false (you wait for the answer)."
+                    ),
+                    "default": False,
                 },
                 "working_directory": {
                     "type": "string",
@@ -85,17 +98,25 @@ class DispatchAgentSkill(Skill):
             return "Both 'agent' and 'task' are required."
 
         depth = int(context.extra.get("dispatch_depth", 0))
+        background = bool(args.get("background", False))
+        cwd = (args.get("working_directory") or "").strip() or None
+
         if agent == "all":
             return await self._dispatcher.broadcast(
                 from_agent=context.agent_id, task=task,
                 user_id=context.user_id, request_id=context.request_id,
-                depth=depth,
+                depth=depth, background=background,
+            )
+        if background:
+            return await self._dispatcher.spawn(
+                from_agent=context.agent_id, to_agent=agent, task=task,
+                user_id=context.user_id, request_id=context.request_id,
+                depth=depth, cwd=cwd,
             )
         return await self._dispatcher.dispatch(
             from_agent=context.agent_id, to_agent=agent, task=task,
             user_id=context.user_id, request_id=context.request_id,
-            depth=depth,
-            cwd=(args.get("working_directory") or "").strip() or None,
+            depth=depth, cwd=cwd,
         )
 
 
@@ -138,6 +159,67 @@ class AgentChannelSkill(Skill):
         if not transcript:
             return "The agent network channel is empty — no inter-agent traffic yet."
         return f"AGENT NETWORK CHANNEL (oldest first):\n{transcript}"
+
+
+class DispatchStatusSkill(Skill):
+    name = "dispatch_status"
+    description = (
+        "Checks on background dispatches you launched with dispatch_agent "
+        "(background=true) — the long-running jobs that keep working after your "
+        "turn ends. Use it when the owner asks 'is X done yet?' or when you need a "
+        "background job's result to continue. Do NOT use it for a normal (blocking) "
+        "dispatch — those already returned their answer in-turn — or to browse "
+        "general inter-agent traffic (that is read_agent_channel). Pass a ticket "
+        "'id' to check one dispatch, or omit it to list your recent dispatches with "
+        "their state. Returns each dispatch's status (running / ok / error), how "
+        "long it ran, and the result text once finished."
+    )
+    read_only = True
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "integer", "description": "A dispatch ticket id (from a background dispatch). Omit to list recent ones."},
+        },
+        "required": [],
+    }
+
+    async def execute(self, args: dict, context: AgentContext) -> str:
+        from sqlalchemy import select
+
+        from app.database import AsyncSessionLocal
+        from app.models.agent_message import AgentMessage
+
+        ticket_id = args.get("id")
+        async with AsyncSessionLocal() as db:
+            if ticket_id is not None:
+                row = await db.get(AgentMessage, int(ticket_id))
+                if row is None or row.from_agent != context.agent_id:
+                    return f"No dispatch #{ticket_id} that you launched was found."
+                return _fmt_dispatch(row)
+            # No id → this agent's recent dispatches, newest first.
+            stmt = (
+                select(AgentMessage)
+                .where(AgentMessage.from_agent == context.agent_id)
+                .order_by(AgentMessage.id.desc())
+                .limit(10)
+            )
+            rows = list((await db.execute(stmt)).scalars().all())
+        if not rows:
+            return "You have not dispatched anything yet."
+        return "Your recent dispatches:\n" + "\n".join(_fmt_dispatch(r, brief=True) for r in rows)
+
+
+def _fmt_dispatch(row, brief: bool = False) -> str:
+    from app.core.dispatch import MAX_RESULT_CHARS
+
+    dur = f"{row.duration_ms}ms" if row.duration_ms is not None else "…"
+    head = f"#{row.id} → {row.to_agent.upper()} [{row.status}] ({dur})"
+    if row.status == "running":
+        return f"{head}: still working" + ("" if brief else f"\n  task: {row.task[:200]}")
+    if brief:
+        preview = (row.result or "")[:120].replace("\n", " ")
+        return f"{head}: {preview}"
+    return f"{head}\n  task: {row.task[:300]}\n  result: {(row.result or '(empty)')[:MAX_RESULT_CHARS]}"
 
 
 class HousePartySkill(Skill):
