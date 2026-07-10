@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import type { AppProfile } from '../profile/types'
 import type { AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
@@ -13,6 +13,7 @@ import SystemsBoard from './SystemsBoard'
 import CommsTray from './CommsTray'
 import PartyRosterStrip from './PartyRosterStrip'
 import RosterModelWindow from './RosterModelWindow'
+import AgentSwitcherOverlay from './AgentSwitcherOverlay'
 
 interface LayoutProps {
   profile: AppProfile
@@ -36,8 +37,20 @@ export default function Layout({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
   const [commsOpen, setCommsOpen] = useState(false)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
   // ROSTER CORES model-config window — only meaningful inside the war room.
   const [coresOpen, setCoresOpen] = useState(false)
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.altKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        setSwitcherOpen(v => !v)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const isMobile = useIsMobile()
   // Mobile drawer state is session-local and starts closed — the drawer only
@@ -90,6 +103,8 @@ export default function Layout({
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <Header
+          config={config}
+          agentId={profile.agentId}
           sidebarOpen={isMobile ? false : sidebarOpen}
           onToggleSidebar={() => (isMobile ? setDrawerOpen(true) : update({ sidebarOpen: !sidebarOpen }))}
           boardOpen={boardOpen}
@@ -114,6 +129,16 @@ export default function Layout({
       {commsOpen && <CommsTray config={config} onClose={() => setCommsOpen(false)} />}
       {coresOpen && inWarRoom && <RosterModelWindow config={config} onClose={() => setCoresOpen(false)} />}
       {settingsOpen && <SettingsModal config={config} onClose={() => setSettingsOpen(false)} />}
+      {switcherOpen && (
+        <AgentSwitcherOverlay
+          currentAgentId={profile.agentId}
+          onSelect={(id) => {
+            switchAgent(id)
+            setSwitcherOpen(false)
+          }}
+          onClose={() => setSwitcherOpen(false)}
+        />
+      )}
     </div>
   )
 }

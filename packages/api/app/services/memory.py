@@ -511,3 +511,26 @@ def schedule_background_tasks(
     background_tasks.add_task(generate_title, session_id, request_id, model)
     background_tasks.add_task(maybe_compact_session, session_id, request_id, model)
     background_tasks.add_task(embed_session_tail, session_id, request_id, user_id)
+
+
+async def run_post_turn_tasks(
+    session_id: int, request_id: str, user_id: int, model: str
+) -> None:
+    """Detached equivalent of schedule_background_tasks: runs the same post-turn
+    work as plain asyncio tasks (no FastAPI BackgroundTasks). Used by the turn
+    runner, whose completion happens AFTER the HTTP response has closed, so it
+    cannot rely on response-scoped BackgroundTasks. Each task opens its own DB
+    session and self-guards; failures are isolated via return_exceptions."""
+    import asyncio
+
+    from app.services.compaction import maybe_compact_session
+    from app.services.embedding_indexer import embed_session_tail
+
+    await asyncio.gather(
+        update_session_log(session_id, request_id, user_id, model),
+        run_daily_maintenance(session_id, request_id, user_id, model),
+        generate_title(session_id, request_id, model),
+        maybe_compact_session(session_id, request_id, model),
+        embed_session_tail(session_id, request_id, user_id),
+        return_exceptions=True,
+    )

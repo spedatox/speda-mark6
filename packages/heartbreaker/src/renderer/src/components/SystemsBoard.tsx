@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useHealth } from '../lib/useHealth'
+import { useOnlineAgents } from '../lib/useOnlineAgents'
 import { useIsMobile } from '../lib/useIsMobile'
 import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, fetchAgentModels, pinAgentModel, commitMemoryFile, fetchMemoryRevisions, restoreMemoryRevision } from '../lib/api'
 import type { ConnectionInfo, MemoryFileInfo, AgentModelInfo, MemoryRevisionInfo } from '../lib/api'
@@ -255,6 +256,8 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const { state } = useChatContext()
   const { settings, update } = useSettings()
   const health = useHealth(config.apiBase, config.apiKey, 4000)
+  const onlineAgents = useOnlineAgents(config, 8000)
+  const forgePeer = onlineAgents.find(a => a.agent_id === 'optimus')
   const isMobile = useIsMobile()
 
   const [models, setModels] = useState<ModelInfo[]>([])
@@ -443,6 +446,8 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               color={budgetMode ? 'var(--hb-amber)' : 'var(--hb-text-faint)'} alt />
           <KV k="OLLAMA NODE" v={ollamaUp ? 'LOCAL ACTIVE' : 'NOT DETECTED'}
               color={ollamaUp ? 'var(--hb-green)' : 'var(--hb-text-faint)'} />
+          <KV k="FORGE LINK" v={forgePeer ? 'OPTIMUS · MK II' : 'IN-PROCESS'}
+              color={forgePeer ? 'var(--hb-green)' : 'var(--hb-text-faint)'} alt />
         </Panel>
 
         <Panel title="NETWORK_NODES" style={{ flex: 1, animation: 'hbRise 0.4s 0.12s ease both' }}>

@@ -1,4 +1,100 @@
 import { useChatContext } from '../store/chat'
+import { useSettings } from '../store/settings'
+import { useIsPeerOnline } from '../lib/useOnlineAgents'
+import type { AppConfig } from '../lib/types'
+
+/**
+ * FORGE LINK — engine indicator for Optimus. When the standalone Forge peer is
+ * connected the chat is running on it (full agentic execution in the Cell);
+ * when it is offline Optimus answers from its in-process profile. A quiet jewel
+ * states which, with no layout shift between states. For Optimus it also carries
+ * a compact workspace field: the directory the Forge runs the job in (the Cell
+ * workspace + Graphify root), persisted in settings and sent as `cwd`.
+ */
+function ForgeLink({ config, agentId }: { config: AppConfig; agentId: string }) {
+  const online = useIsPeerOnline(config, 'optimus')
+  const { settings, update } = useSettings()
+  if (agentId !== 'optimus') return null
+
+  const color = online ? 'var(--hb-green)' : 'var(--hb-text-faint)'
+  const cwd = settings.forgeCwd
+  // Show the trailing folder name (the meaningful part) with the parent dimmed.
+  const folderName = cwd ? (cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || cwd) : ''
+
+  const pickWorkspace = async () => {
+    // Native folder picker in the Electron app; the browser dev build has no
+    // native dialog, so fall back to a manual prompt there.
+    if (window.api?.selectDirectory) {
+      const chosen = await window.api.selectDirectory(cwd || undefined)
+      if (chosen) update({ forgeCwd: chosen })
+    } else {
+      const entered = window.prompt('Forge workspace directory (absolute path):', cwd)
+      if (entered != null) update({ forgeCwd: entered.trim() })
+    }
+  }
+  return (
+    <span className="hb-hide-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <span
+        title={online
+          ? 'Optimus is running on the Forge (Mark II) — full agentic execution in an isolated Cell.'
+          : 'The Forge peer is offline — Optimus is answering from its in-process fallback engine.'}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+          letterSpacing: '0.12em', color,
+        }}
+      >
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%', background: color,
+          boxShadow: online ? '0 0 6px var(--hb-green)' : 'none',
+          animation: online ? 'hbBlink 1.6s ease-in-out infinite' : 'none',
+        }} />
+        {online ? 'FORGE LINK' : 'IN-PROCESS'}
+      </span>
+      <span className="hb-query-box" style={{
+        display: 'flex', alignItems: 'center', gap: 6, height: 22,
+        maxWidth: 200, padding: '0 0.2rem 0 0.45rem',
+      }}>
+        <button
+          onClick={pickWorkspace}
+          title={cwd
+            ? `Forge workspace: ${cwd}\nClick to choose another folder.`
+            : 'Choose the folder the Forge runs Optimus jobs in (the Cell workspace + codebase-graph root). Blank = the peer’s default.'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
+            border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
+            fontFamily: 'var(--font-mono)', fontSize: '0.66rem', letterSpacing: '0.02em',
+            color: cwd ? 'var(--hb-text-dim)' : 'var(--hb-text-faint)',
+          }}
+        >
+          {/* Folder glyph */}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          </svg>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {folderName || 'SET WORKSPACE'}
+          </span>
+        </button>
+        {cwd && (
+          <button
+            onClick={() => update({ forgeCwd: '' })}
+            title="Clear the workspace — use the peer’s default"
+            style={{
+              display: 'flex', alignItems: 'center', flexShrink: 0,
+              border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
+              color: 'var(--hb-text-faint)',
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
+      </span>
+    </span>
+  )
+}
 
 function IconBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
   return (
@@ -14,6 +110,8 @@ function IconBtn({ onClick, title, children }: { onClick: () => void; title: str
 }
 
 interface Props {
+  config: AppConfig
+  agentId: string
   sidebarOpen?: boolean
   onToggleSidebar?: () => void
   boardOpen?: boolean
@@ -28,6 +126,7 @@ interface Props {
 }
 
 export default function Header({
+  config, agentId,
   sidebarOpen, onToggleSidebar, boardOpen, onToggleBoard,
   commsOpen, onToggleComms, inWarRoom, onOpenWarRoom,
 }: Props) {
@@ -78,6 +177,9 @@ export default function Header({
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
+
+      {/* Forge link — Optimus engine state + workspace (Optimus only) */}
+      <ForgeLink config={config} agentId={agentId} />
 
       {/* Right readout cluster — real session state */}
       <span className="hb-readout hb-hide-sm" style={{ fontSize: '0.62rem', color: 'var(--hb-text-faint)' }}>

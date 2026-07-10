@@ -11,9 +11,13 @@ from app.models.agent_message import AgentMessage
 from app.models.tool_call import ToolCall
 from app.models.notification import Notification
 from app.models.automation import Automation
+from app.models.news_item import NewsItem
+from app.models.news_watch import NewsWatch
+from app.models.news_quota import NewsQuota
 
 __all__ = [
     "User", "Session", "Message", "Memory", "MemoryFile", "MemoryRevision",
     "MessageEmbedding",
     "AgentRecord", "AgentMessage", "ToolCall", "Notification", "Automation",
+    "NewsItem", "NewsWatch", "NewsQuota",
 ]

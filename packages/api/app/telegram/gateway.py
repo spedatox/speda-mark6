@@ -122,7 +122,7 @@ class TelegramGateway:
                 db=db,
                 user_id=_OWNER_USER_ID,
                 triggered_by="user",
-                model_used=profile.allocate_model("user"),
+                model_used=profile.allocate_telegram_model(),
                 agent_id=agent_id,
                 channel="telegram",
             )
@@ -137,7 +137,7 @@ class TelegramGateway:
                 triggered_by="user",
                 trigger_payload={"message": text, "channel": "telegram"},
                 output_mode="respond",
-                model=profile.allocate_model("user"),
+                model=profile.allocate_telegram_model(),
                 system_prompt="",
                 conversation_history=history,
                 db=db,
@@ -166,7 +166,7 @@ class TelegramGateway:
         # 7. Background tasks (title, session log, compaction) — same as chat.
         import asyncio
 
-        bg_model = profile.background_model(profile.allocate_model("user"))
+        bg_model = profile.background_model(profile.allocate_telegram_model())
         asyncio.create_task(
             _run_background(session.id, request_id, _OWNER_USER_ID, bg_model)
         )

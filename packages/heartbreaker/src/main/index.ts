@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
@@ -50,6 +50,20 @@ app.whenReady().then(() => {
   // Open a URL in the system browser (used by Sign in with Google)
   ipcMain.on('open-external', (_e, url: string) => {
     if (typeof url === 'string' && /^https?:\/\//.test(url)) shell.openExternal(url)
+  })
+
+  // Native folder picker — used to choose the Forge workspace for Optimus.
+  // Returns the absolute directory path, or null if the dialog was cancelled.
+  ipcMain.handle('select-directory', async (e, current?: string) => {
+    const w = BrowserWindow.fromWebContents(e.sender)
+    const opts = {
+      properties: ['openDirectory' as const],
+      ...(current ? { defaultPath: current } : {}),
+    }
+    const res = w
+      ? await dialog.showOpenDialog(w, opts)
+      : await dialog.showOpenDialog(opts)
+    return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0]
   })
 
   // Config IPC — renderer reads API base + key from the main process env.

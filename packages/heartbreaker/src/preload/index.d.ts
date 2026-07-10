@@ -10,6 +10,7 @@ declare global {
       windowMaximize: () => void
       windowClose: () => void
       openExternal: (url: string) => void
+      selectDirectory: (current?: string) => Promise<string | null>
     }
   }
 }

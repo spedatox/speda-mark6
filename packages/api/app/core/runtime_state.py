@@ -115,6 +115,23 @@ def set_agent_model(agent_id: str, model: str | None) -> None:
     logger.info("agent_model_set", extra={"agent_id": agent_id, "model": model or "(default)"})
 
 
+def get_telegram_models() -> dict[str, str]:
+    """Per-agent model override for Telegram channel only."""
+    return dict(_load().get("telegram_models", {}))
+
+
+def set_telegram_model(agent_id: str, model: str | None) -> None:
+    state = _load()
+    models = dict(state.get("telegram_models", {}))
+    if model:
+        models[agent_id] = model
+    else:
+        models.pop(agent_id, None)
+    state["telegram_models"] = models
+    _save()
+    logger.info("telegram_model_set", extra={"agent_id": agent_id, "model": model or "(default)"})
+
+
 # ── MCP connection toggles ──────────────────────────────────────────────────
 # Servers all connect at startup (per MCP_ENABLED), but their tools are only
 # shown to Claude if the server is "active". Toggling here hides/shows a server's

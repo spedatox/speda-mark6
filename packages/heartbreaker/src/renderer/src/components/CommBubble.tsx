@@ -1,8 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AgentCommEntry } from '../lib/api'
 import { agentColor, fmtCommTime } from '../lib/agents'
+
+/** Live-updating elapsed seconds since a dispatch started — makes a running
+ *  (background) dispatch visibly alive rather than a frozen "WORKING…". */
+function LiveElapsed({ since }: { since: string }) {
+  const start = new Date(since.endsWith('Z') || since.includes('+') ? since : since + 'Z').getTime()
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const s = Math.max(0, Math.round((now - start) / 1000))
+  return <span style={{ opacity: 0.75 }}>{s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${s % 60}s`}</span>
+}
 
 /**
  * Shared fluid-glass chat pieces for inter-agent traffic — used by both the
@@ -157,6 +170,7 @@ export function Bubble({ e, mine = false, compact = false }: {
             letterSpacing: '0.12em', color: 'var(--hb-amber)',
           }}>
             {e.to_agent.toUpperCase()} WORKING<span style={{ animation: 'hbBlink 1.1s ease-in-out infinite' }}>…</span>
+            {' '}<LiveElapsed since={e.created_at} />
           </p>
         ) : result && (
           <div style={{

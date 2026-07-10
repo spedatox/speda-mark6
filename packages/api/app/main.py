@@ -83,12 +83,18 @@ async def lifespan(app: FastAPI):
     # always available when Claude wants to load full SKILL.md instructions).
     from app.skills.automations import AutomationsSkill
     from app.skills.budget import BudgetModeSkill
-    from app.skills.dispatch import AgentChannelSkill, DispatchAgentSkill, HousePartySkill
+    from app.skills.dispatch import AgentChannelSkill, DispatchAgentSkill, DispatchStatusSkill, HousePartySkill
     from app.skills.sandbox import RunCommandSkill, DeliverFileSkill
     from app.skills.toolsets import UseToolsetSkill
     from app.skills.documents import DocumentsSkill
     from app.skills.save_file import SaveFileSkill
     from app.skills.memory import MemorySkill
+    from app.skills.news import (
+        NewsDeepDiveSkill,
+        NewsHeadlinesSkill,
+        NewsWatchSkill,
+        ReadArticleSkill,
+    )
     from app.skills.notifications import NotificationsSkill
     from app.skills.telegram import SendTelegramFileSkill, SendTelegramMessageSkill
     from app.skills.osint import OSINT_SKILLS
@@ -116,6 +122,12 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(BudgetModeSkill())
     await registry.register_skill(RunCommandSkill())
     await registry.register_skill(DeliverFileSkill())
+    # News desk — Tier 1 (RSS store + watchlist + free article read) and Tier 2
+    # (NewsData.io analyst, quota-budgeted).
+    await registry.register_skill(NewsHeadlinesSkill())
+    await registry.register_skill(NewsWatchSkill())
+    await registry.register_skill(NewsDeepDiveSkill())
+    await registry.register_skill(ReadArticleSkill())
     await registry.register_skill(UseToolsetSkill())
     await registry.register_skill(AutomationsSkill())
     await registry.register_skill(DispatchAgentSkill(
@@ -125,6 +137,7 @@ async def lifespan(app: FastAPI):
         [(p.agent_id, p.domain) for p in profiles.roster() if p.dispatch_target],
     ))
     await registry.register_skill(AgentChannelSkill())
+    await registry.register_skill(DispatchStatusSkill())
     await registry.register_skill(HousePartySkill())
 
     # OSINT / threat-intelligence suite (ip-api, AbuseIPDB, abuse.ch URLhaus/
@@ -212,6 +225,29 @@ async def lifespan(app: FastAPI):
     app.state.telegram_bots = telegram_bots
     app.state.telegram_gateway = telegram_gateway
 
+    # ── 8.5 Detached turn runner (BgOps) ───────────────────────────────────────
+    # Runs chat turns in their own asyncio tasks, decoupled from the HTTP request,
+    # so a client disconnect can never lose a turn and a client can re-attach to
+    # a live stream. One instance on app.state (Rule 6).
+    from app.core.turn_runner import TurnRegistry
+
+    app.state.turns = TurnRegistry(session_manager)
+
+    # ── 9. Child processes — the local sandbox + the Forge peer ────────────────
+    # Both are best-effort: a missing dependency logs a warning and SPEDA keeps
+    # running. The sandbox gives the run_command skill a computer without Docker;
+    # the Forge peer is the standalone Optimus engine that connects back over the
+    # agents WebSocket (in-process OptimusProfile is the fallback when offline).
+    from app.services.forge_peer import ForgePeerLauncher
+    from app.services.sandbox_launcher import SandboxLauncher
+
+    sandbox_launcher = SandboxLauncher()
+    forge_launcher = ForgePeerLauncher()
+    await sandbox_launcher.start()
+    await forge_launcher.start()
+    app.state.sandbox_launcher = sandbox_launcher
+    app.state.forge_launcher = forge_launcher
+
     logger.info(
         "startup_complete",
         extra={
@@ -225,6 +261,10 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ───────────────────────────────────────────────────────────────
     logger.info("shutdown_begin")
+    await app.state.turns.shutdown()
+    await dispatcher.shutdown()
+    await forge_launcher.stop()
+    await sandbox_launcher.stop()
     for task in telegram_poll_tasks:
         task.cancel()
     await telegram_bots.aclose()
@@ -293,7 +333,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections, memory, telegram, config as config_router
+    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections, memory, telegram, news, config as config_router
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -306,6 +346,7 @@ def create_app() -> FastAPI:
     app.include_router(automations.router)
     app.include_router(memory.router)
     app.include_router(telegram.router)
+    app.include_router(news.router)
     app.include_router(config_router.router)
 
     return app

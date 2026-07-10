@@ -608,8 +608,10 @@ class DocumentsSkill(Skill):
             meta = register_file(context, path, title=title)
             return (
                 f"Created {fmt.upper()} '{title}' ({meta['size']} bytes). "
+                f"The file is named '{meta['name']}'. "
                 f"Delivered to the user as a downloadable file — do NOT paste the "
-                f"path or a link, just tell them it's ready."
+                f"path or a link, just tell them it's ready. "
+                f"If sending via Telegram, use filename '{meta['name']}'."
             )
         except ImportError:
             lib = _REQUIRED_LIBS.get(fmt, "required library")

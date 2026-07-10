@@ -51,6 +51,14 @@ const TOOL_STATUS: Record<string, string> = {
   web_fetch:              'Reading the page',
   WebFetch:               'Reading the page',
   Task:                   'Spawning a sub-agent',
+  // Forge (Optimus) execution + codebase-graph tools.
+  run_command:            'Running a command',
+  read_file:              'Reading a file',
+  write_file:             'Writing a file',
+  edit_file:              'Editing a file',
+  graph_query:            'Searching the codebase graph',
+  graph_path:             'Tracing the codebase graph',
+  graph_overview:         'Mapping the codebase graph',
 }
 
 // Tool names that count as "web search" for the disclosure label
