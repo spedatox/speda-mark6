@@ -1,6 +1,5 @@
 <div align="center">
 
-<img src="docs/app_icon.png" alt="SPEDA Mark VI"/>
 
 # S.P.E.D.A. Mark VI
 
