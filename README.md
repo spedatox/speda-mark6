@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/app_icon.png" alt="SPEDA Mark VI"/>
+
 # S.P.E.D.A. Mark VI
 
 ### Specialized Personal Executive Digital Assistant Mark VI
@@ -71,7 +73,8 @@ to someone else's domain.
 The desktop client is a Stark-tech, holographic *fluid-glass* interface — the
 product's primary face, and unlike anything else in the assistant space.
 
-- **Agent Switcher** — hit `Alt+A` and select your agent, the room glows in the agent's colour, dual HUD rings
+- **Cinematic agent switcher** — hit `Alt+A` and select your agent like Tony
+  Stark picking an armour: the room glows in the agent's colour, dual HUD rings
   spin up around the chosen one, a live spec panel reads out its designation.
 - **Systems Board** — a live telemetry deck: model-routing matrix, active
   toolset shards, token budget, response-time trace, your memory data-banks, and

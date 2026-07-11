@@ -614,6 +614,27 @@ export async function setHouseParty(config: AppConfig, engaged: boolean): Promis
   }
 }
 
+/** Engage the House Party Protocol with the owner's authorization passphrase.
+ *  The passphrase is validated server-side (never stored in chat). Returns
+ *  {ok:false, error} on a wrong passphrase (403) or a network failure. */
+export async function engageHouseParty(
+  config: AppConfig,
+  passphrase: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/house-party`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ engaged: true, passphrase }),
+    })
+    if (res.status === 403) return { ok: false, error: 'Authorization denied — incorrect passphrase.' }
+    if (!res.ok) return { ok: false, error: `Engage failed (HTTP ${res.status}).` }
+    return { ok: !!(await res.json()).engaged }
+  } catch {
+    return { ok: false, error: "Couldn't reach the backend to engage." }
+  }
+}
+
 /* ── Per-agent source-of-truth memory files ───────────────────────────────── */
 
 export interface SourceAgentInfo {

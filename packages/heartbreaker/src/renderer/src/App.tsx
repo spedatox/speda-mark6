@@ -163,6 +163,20 @@ function AppInner() {
     return () => { live = false; clearInterval(t) }
   }, [config, engageParty, exitWarRoom, setWar])
 
+  // Instant trigger: the House Party authorization modal fires this the moment
+  // the backend accepts the passphrase, so the war room ignites without waiting
+  // for the 4s poll above (which stays as the fallback / stand-down watcher).
+  useEffect(() => {
+    const onEngaged = () => {
+      if (activationRef.current) return
+      const wm = warModeRef.current
+      if (wm === 'off') engageParty()
+      else if (wm === 'standby') setWar('engaged')
+    }
+    window.addEventListener('speda:hpp-engaged', onEngaged)
+    return () => window.removeEventListener('speda:hpp-engaged', onEngaged)
+  }, [engageParty, setWar])
+
   const switchAgent = useCallback(async (agentId: string) => {
     // Leaving the war room by picking a real agent from the switcher: route it
     // through the stand-down cinematic, returning to the chosen agent.
