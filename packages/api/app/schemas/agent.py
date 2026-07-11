@@ -44,6 +44,14 @@ class HousePartyState(BaseModel):
     engaged: bool
 
 
+class HousePartySet(BaseModel):
+    """Engage/stand-down request. Engaging requires the owner's authorization
+    passphrase (validated server-side); standing down needs none."""
+
+    engaged: bool
+    passphrase: str | None = None
+
+
 class AgentModelInfo(BaseModel):
     """One agent's model allocation, as shown in the model routing UI."""
 

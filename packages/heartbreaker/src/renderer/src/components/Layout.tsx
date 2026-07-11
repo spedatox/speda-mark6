@@ -14,6 +14,7 @@ import CommsTray from './CommsTray'
 import PartyRosterStrip from './PartyRosterStrip'
 import RosterModelWindow from './RosterModelWindow'
 import AgentSwitcherOverlay from './AgentSwitcherOverlay'
+import HousePartyModal from './HousePartyModal'
 
 interface LayoutProps {
   profile: AppProfile
@@ -40,6 +41,17 @@ export default function Layout({
   const [switcherOpen, setSwitcherOpen] = useState(false)
   // ROSTER CORES model-config window — only meaningful inside the war room.
   const [coresOpen, setCoresOpen] = useState(false)
+  // House Party authorization modal — opened when SPEDA emits the hpp-warning
+  // marker (via the in-chat trigger's `speda:hpp-authorize` event).
+  const [hppAuth, setHppAuth] = useState<{ objective?: string } | null>(null)
+  useEffect(() => {
+    const onAuth = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {}
+      setHppAuth({ objective: detail.objective || undefined })
+    }
+    window.addEventListener('speda:hpp-authorize', onAuth)
+    return () => window.removeEventListener('speda:hpp-authorize', onAuth)
+  }, [])
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -129,6 +141,14 @@ export default function Layout({
       {commsOpen && <CommsTray config={config} onClose={() => setCommsOpen(false)} />}
       {coresOpen && inWarRoom && <RosterModelWindow config={config} onClose={() => setCoresOpen(false)} />}
       {settingsOpen && <SettingsModal config={config} onClose={() => setSettingsOpen(false)} />}
+      {hppAuth && (
+        <HousePartyModal
+          config={config}
+          objective={hppAuth.objective}
+          onClose={() => setHppAuth(null)}
+          onEngaged={() => window.dispatchEvent(new CustomEvent('speda:hpp-engaged'))}
+        />
+      )}
       {switcherOpen && (
         <AgentSwitcherOverlay
           currentAgentId={profile.agentId}

@@ -21,6 +21,7 @@ from app.schemas.agent import (
     AgentRegistration,
     AgentStatus,
     AgentTelegramModelSet,
+    HousePartySet,
     HousePartyState,
 )
 from fastapi import Depends, HTTPException
@@ -104,8 +105,23 @@ async def house_party_state():
 
 
 @router.post("/agents/house-party", response_model=HousePartyState)
-async def house_party_toggle(body: HousePartyState):
-    """Engage or stand down the House Party Protocol (owner-driven, from the UI)."""
+async def house_party_toggle(body: HousePartySet):
+    """Engage or stand down the House Party Protocol (owner-driven, from the UI).
+
+    Engaging is passphrase-gated: the owner enters the authorization passphrase
+    in the app's authorization window, and it is validated here in constant time
+    against the configured secret. A missing or wrong passphrase is rejected with
+    403 and the protocol stays down. Standing down needs no passphrase."""
+    if body.engaged:
+        import hmac
+
+        from app.config import settings
+
+        supplied = (body.passphrase or "").strip()
+        expected = (settings.house_party_passphrase or "").strip()
+        if not supplied or not expected or not hmac.compare_digest(supplied, expected):
+            logger.warning("house_party_engage_denied_ui", extra={"reason": "missing" if not supplied else "bad"})
+            raise HTTPException(status_code=403, detail="Invalid authorization passphrase.")
     return HousePartyState(engaged=set_house_party(body.engaged))
 
 
