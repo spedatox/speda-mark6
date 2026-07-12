@@ -70,6 +70,12 @@ def _apply_additive_migrations(sync_conn) -> None:
         if "summary_through_id" not in scols:
             sync_conn.execute(text("ALTER TABLE sessions ADD COLUMN summary_through_id INTEGER"))
             logger.info("schema_migrated", extra={"change": "sessions.summary_through_id"})
+        if "recap" not in scols:
+            sync_conn.execute(text("ALTER TABLE sessions ADD COLUMN recap TEXT"))
+            logger.info("schema_migrated", extra={"change": "sessions.recap"})
+        if "recap_through_id" not in scols:
+            sync_conn.execute(text("ALTER TABLE sessions ADD COLUMN recap_through_id INTEGER"))
+            logger.info("schema_migrated", extra={"change": "sessions.recap_through_id"})
         if "channel" not in scols:
             sync_conn.execute(
                 text("ALTER TABLE sessions ADD COLUMN channel VARCHAR(16) DEFAULT 'app'")

@@ -6,7 +6,7 @@ from app.prompts.loader import assemble, build_skills_manifest
 # common to every agent and reused from prompts/core/.
 PROMPT_SECTIONS = [
     "agents/ultron/01_identity.md",
-    "core/04_decision_policy.md",   # Tavily->Exa search priority + sub-agent policy
+    "core/04_decision_policy.md",   # Tavily->Exa search priority + Legion policy
     "core/05_output_policy.md",
     "core/06_visual_output.md",
     "core/07_formatting.md",

@@ -196,10 +196,14 @@ class DispatchStatusSkill(Skill):
                 if row is None or row.from_agent != context.agent_id:
                     return f"No dispatch #{ticket_id} that you launched was found."
                 return _fmt_dispatch(row)
-            # No id → this agent's recent dispatches, newest first.
+            # No id → this agent's recent dispatches, newest first. Legion
+            # worker tickets are excluded — those belong to legion_status.
             stmt = (
                 select(AgentMessage)
-                .where(AgentMessage.from_agent == context.agent_id)
+                .where(
+                    AgentMessage.from_agent == context.agent_id,
+                    AgentMessage.kind != "legion",
+                )
                 .order_by(AgentMessage.id.desc())
                 .limit(10)
             )

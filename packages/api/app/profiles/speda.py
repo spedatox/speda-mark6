@@ -39,7 +39,7 @@ PROMPT_SECTIONS = [
     "core/07_formatting.md",      # math/LaTeX + currency formatting guidance
     "core/08_memory.md",          # persistent memory protocol (Anthropic memory pattern)
     "core/09_agent_network.md",   # inter-agent dispatch + House Party Protocol
-    "core/10_environment.md",   # Mark VI ecosystem glossary (Forge/Heartbreaker/sandbox/n8n)
+    "core/10_environment.md",   # Mark VI ecosystem glossary (Igor/Heartbreaker/Legion/Forge/sandbox/n8n)
 ]
 
 
@@ -56,6 +56,11 @@ class SPEDAProfile(AgentProfile):
     # None = full registry access. SPEDA is the orchestrator; it sees every
     # tool. The domain-specialised agents declare narrower allowlists.
     tool_allowlist = None
+    # Orchestrator privilege: a new SPEDA session is seeded with recent session
+    # recaps from EVERY agent (tagged by agent_id), not just its own — the
+    # executive needs cross-agent situational awareness. Specialists keep the
+    # base "own" scope.
+    episodic_recall_scope = "all"
 
     name = AGENT_NAME   # derived from 01_identity.md — never hardcode here
     sonnet_model = "claude-sonnet-4-6"

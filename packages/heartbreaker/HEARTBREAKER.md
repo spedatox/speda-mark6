@@ -16,10 +16,10 @@ app, not the old one.
 ## What it is
 
 An Electron app (main + preload + renderer, built with electron-vite) plus a
-standalone marketing teaser. The renderer is React, and it talks to the Mark VI
-backend (`packages/api`) over the same HTTP + SSE and WebSocket surface every
-client uses — Heartbreaker owns **zero** business logic. It renders the network;
-the backend runs it.
+standalone marketing teaser. The renderer is React, and it talks to **Igor** —
+the Mark VI backend (`packages/api`, see `packages/api/IGOR.md`) — over the same
+HTTP + SSE and WebSocket surface every client uses — Heartbreaker owns **zero**
+business logic. Heartbreaker renders the network; Igor runs it.
 
 The whole app speaks one visual language: **Iron Man / Stark fluid-glass
 holography** — volumetric frosted-glass panels, reactive depth, JARVIS-blue
@@ -61,7 +61,7 @@ The look is codified so it stays coherent. The recipe lives in
 
 ## Running
 
-`speda.ps1` at the repo root is the one-command launcher: it starts the backend,
+`speda.ps1` at the repo root is the one-command launcher: it starts Igor,
 waits for the API handshake, reports the Forge link, and opens this app. That is
 the normal way to run the whole system.
 
@@ -113,10 +113,10 @@ src/
 └── teaser/      standalone marketing scene (own vite config)
 ```
 
-The renderer never reaches the backend directly from components — everything
+The renderer never reaches Igor directly from components — everything
 goes through `src/renderer/src/lib/api.ts` (SSE chat, re-attach, active-run
 polling, cancel, models, memory, connections, welcome, agents). State is two
-reducers in `src/renderer/src/store` (chat, settings). Backend survivability
+reducers in `src/renderer/src/store` (chat, settings). Igor's survivability
 (detached turns that outlive navigation/reload) is honoured here: the client
 re-attaches to a live run on entering a session and cancels via the backend, not
 by dropping the socket.

@@ -1,6 +1,6 @@
 # SPEDA Mark VI — Complete Setup Guide
 
-Everything you need to deploy, configure, and operate the full system: the backend, the agent roster, Docker services, MCP integrations, the desktop client, and CI/CD.
+Everything you need to deploy, configure, and operate the full system: Igor (the backend), the agent roster, Docker services, MCP integrations, Heartbreaker (the desktop client), and CI/CD.
 
 ---
 
@@ -512,15 +512,15 @@ ssh -L 5678:127.0.0.1:5678 user@your-server-ip
 | `GEMINI_API_KEY` | *(empty)* | Enables `gemini:*` model refs |
 | `OLLAMA_BASE_URL` | `http://localhost:11434/v1` | Local Ollama endpoint |
 | `LLM_MAIN_MODEL` | *(empty, uses profile)* | Override the user-facing model globally |
-| `LLM_BACKGROUND_MODEL` | *(empty, uses profile)* | Override the background/sub-agent model |
+| `LLM_BACKGROUND_MODEL` | *(empty, uses profile)* | Override the background-task model |
 | `LLM_FALLBACK_CHAIN` | *(empty)* | Comma-separated fallback providers (e.g., `openai:gpt-4o,ollama:llama3.1:8b`) |
 
 ### Cost Control
 
 | Variable | Default | Description |
 |---|---|---|
-| `BUDGET_MODE` | `true` | Disables Task sub-agents + enforces concise output. Survives restarts. |
-| `SUB_AGENT_MODEL` | `claude-haiku-4-5-20251001` | Cheap model for sub-agent grunt work |
+| `BUDGET_MODE` | `true` | Disables the Legion + enforces concise output. Survives restarts. |
+| `LEGION_MODEL_OVERRIDE` | *(empty — automatic)* | Pin every Legion worker to one `provider:model`. Empty = provider-agnostic: cheap same-provider tier for low/medium-effort legionnaires, parent model for high. Legacy alias `SUB_AGENT_MODEL` still works. |
 | `COMPACTION_ENABLED` | `true` | Summarize old turns on long chats (background, Haiku) |
 | `COMPACTION_THRESHOLD_TOKENS` | `12000` | Token threshold to trigger compaction |
 | `COMPACTION_KEEP_TOKENS` | `4000` | Keep recent N tokens verbatim |
@@ -599,10 +599,10 @@ python -c "import secrets;print(secrets.token_urlsafe(32))"
 |---|---|---|
 | **Prompt caching** | 1h cache on system prompt + tools (0.1x read after first turn) | `PROMPT_CACHE_TTL` |
 | **Conversation compaction** | Summarizes old turns so long chats don't send the full transcript | `COMPACTION_*` |
-| **Budget mode** | Disables sub-agents + enforces concise output | `BUDGET_MODE=true` |
+| **Budget mode** | Disables the Legion + enforces concise output | `BUDGET_MODE=true` |
 | **Per-agent tool scoping** | Specialists have smaller tool blocks (fewer prompt tokens) | Profile allowlists |
 | **Lazy tool loading** | MCP tools only enter the prefix when needed | `LAZY_TOOLS=true` |
-| **Haiku for background** | Title gen, session log, compaction, sub-agents all use the cheap model | `SUB_AGENT_MODEL` |
+| **Cheap tier for grunt work** | Title gen, session log, compaction, and low/medium-effort legionnaires all use the provider's cheap model | automatic (`LEGION_MODEL_OVERRIDE` to pin) |
 
 ### Typical cost (Claude Sonnet 4.6)
 
@@ -662,7 +662,7 @@ ssh -L 5678:127.0.0.1:5678 user@your-server
 
 - Enable budget mode: `BUDGET_MODE=true`
 - Enable compaction: `COMPACTION_ENABLED=true`
-- Check `SUB_AGENT_MODEL` is set to Haiku (default)
+- Leave `LEGION_MODEL_OVERRIDE` empty (default) — low/medium legionnaires then use the cheap tier automatically
 - Use lazy tool loading: `LAZY_TOOLS=true`
 - Review session lengths — very long conversations are the biggest cost driver even with compaction
 

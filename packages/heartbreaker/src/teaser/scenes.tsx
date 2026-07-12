@@ -143,7 +143,7 @@ const FOCUS = [
   { key: 'calendar', label: 'HOLOGRAPHIC CALENDAR' },
   { key: 'files', label: 'FILE DELIVERY · PPTX · PDF · CODE' },
   { key: 'mcp', label: 'CONNECTED · MCP INTEGRATIONS' },
-  { key: 'subagents', label: 'SUB-AGENTS · PARALLEL WORKERS' },
+  { key: 'subagents', label: 'THE LEGION · PARALLEL WORKERS' },
   { key: 'memory', label: 'PERSISTENT MEMORY' },
   { key: 'voice', label: 'VOICE · SPEAK & LISTEN' },
 ] as const

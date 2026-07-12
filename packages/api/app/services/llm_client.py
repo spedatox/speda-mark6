@@ -86,8 +86,8 @@ def parse_model_ref(ref: str) -> tuple[str, str]:
 
 # ── Normalized response types ────────────────────────────────────────────────
 # Attribute-compatible with the Anthropic SDK objects callers already consume:
-# orchestrator/_blocks_to_dicts (block.type/.text/.id/.name/.input),
-# registry._execute_task, memory/history_indexer (response.content[0].text),
+# blocks_to_dicts (block.type/.text/.id/.name/.input), the Legion worker
+# loop, memory/history_indexer (response.content[0].text),
 # and the orchestrator's usage logging (getattr with defaults).
 
 
@@ -118,6 +118,32 @@ class LLMMessage:
     content: list
     stop_reason: str
     usage: Usage = field(default_factory=Usage)
+
+
+def blocks_to_dicts(content_blocks) -> list[dict]:
+    """Convert content blocks (Anthropic SDK objects or the dataclasses above —
+    both expose .type/.text/.id/.name/.input) to plain dicts for message
+    history. Shared by the orchestrator loop and the Legion worker loop."""
+    result = []
+    for block in content_blocks:
+        if block.type == "text":
+            result.append({"type": "text", "text": block.text})
+        elif block.type == "tool_use":
+            result.append(
+                {
+                    "type": "tool_use",
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                }
+            )
+        else:
+            # Pass through unknown block types as-is
+            try:
+                result.append(block.model_dump())
+            except Exception:
+                result.append({"type": block.type})
+    return result
 
 
 class LLMClient:

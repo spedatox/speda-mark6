@@ -40,3 +40,14 @@ class Session(Base):
     # still shows the full history; only the model's context is compacted.
     summary: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     summary_through_id: Mapped[int | None] = mapped_column(nullable=True, default=None)
+
+    # ── Episodic recap (cross-session carryover) ─────────────────────────────
+    # Unlike `summary` (in-session compaction, long chats only), `recap` is a
+    # short rolling digest of THIS session — subject, key decisions, open
+    # threads — maintained by a post-turn background task on every turn. It is
+    # never read back into its own session; it exists so the NEXT session with
+    # this agent can be seeded with recaps of recent past sessions ("what were
+    # we discussing last time?"). `recap_through_id` is the highest message.id
+    # the recap covers, exactly like summary_through_id.
+    recap: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    recap_through_id: Mapped[int | None] = mapped_column(nullable=True, default=None)

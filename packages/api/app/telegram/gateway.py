@@ -163,12 +163,16 @@ class TelegramGateway:
                     db, session.id, "assistant", [{"type": "text", "text": reply}],
                 )
 
-        # 7. Background tasks (title, session log, compaction) — same as chat.
+        # 7. Background tasks — the same canonical post-turn fan-out as the
+        # HTTP path (log, recap, daily maintenance, title, compaction,
+        # embedding), so Telegram sessions get episodic recaps too.
         import asyncio
+
+        from app.services.memory import run_post_turn_tasks
 
         bg_model = profile.background_model(profile.allocate_telegram_model())
         asyncio.create_task(
-            _run_background(session.id, request_id, _OWNER_USER_ID, bg_model)
+            run_post_turn_tasks(session.id, request_id, _OWNER_USER_ID, bg_model)
         )
 
     async def _build_user_content(self, bot, message: dict, text: str):
@@ -227,17 +231,3 @@ class TelegramGateway:
             "Talk to me right here, and I'll reach out when something you're "
             "watching for happens. Send /new to start a fresh conversation."
         )
-
-
-async def _run_background(session_id: int, request_id: str, user_id: int, model: str) -> None:
-    import asyncio
-
-    from app.services.memory import update_session_log, generate_title
-    from app.services.compaction import maybe_compact_session
-
-    await asyncio.gather(
-        update_session_log(session_id, request_id, user_id, model),
-        generate_title(session_id, request_id, model),
-        maybe_compact_session(session_id, request_id, model),
-        return_exceptions=True,
-    )

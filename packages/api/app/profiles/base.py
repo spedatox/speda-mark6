@@ -56,6 +56,13 @@ class AgentProfile(ABC):
     # set this False so no bot is built for them. See docs/TELEGRAM_ARCHITECTURE.md.
     telegram_enabled: bool = True
 
+    # Episodic session recall scope (Rule 10: identity decision lives here, not
+    # in the skill). "own" — a new session sees only THIS agent's recent session
+    # recaps (specialists stay in their lane). "all" — sees every agent's recaps,
+    # tagged by agent_id; the orchestrator profile (SPEDA) overrides to this so
+    # it has cross-agent situational awareness.
+    episodic_recall_scope: Literal["own", "all"] = "own"
+
     name: str
     sonnet_model: str = "claude-sonnet-4-6"
     haiku_model: str = "claude-haiku-4-5-20251001"

@@ -499,8 +499,12 @@ async def websocket_chat(websocket: WebSocket):
                         db, session.id, "assistant", full_response
                     )
 
+            # Same post-turn fan-out as the HTTP path (log, recap, daily
+            # maintenance, title, compaction, embedding) — one canonical set.
+            from app.services.memory import run_post_turn_tasks
+
             asyncio.create_task(
-                _run_background(
+                run_post_turn_tasks(
                     session.id, request_id, user_id,
                     profile.background_model(profile.allocate_model("user")),
                 )
@@ -514,17 +518,3 @@ async def websocket_chat(websocket: WebSocket):
             await websocket.send_text(json.dumps({"type": "error", "data": str(e)}))
         except Exception:
             pass
-
-
-async def _run_background(
-    session_id: int, request_id: str, user_id: int, model: str
-) -> None:
-    from app.services.memory import update_session_log, generate_title
-    from app.services.compaction import maybe_compact_session
-
-    await asyncio.gather(
-        update_session_log(session_id, request_id, user_id, model),
-        generate_title(session_id, request_id, model),
-        maybe_compact_session(session_id, request_id, model),
-        return_exceptions=True,
-    )

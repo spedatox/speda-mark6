@@ -49,9 +49,15 @@ The model sees one unified tools array; `CapabilityRegistry` is the only
 component that knows the tiers apart. Startup registration order is fixed:
 Tier 0 → 1 → 2 → 3.
 
-### Tier 0 — Task sub-agents
-`Task` spawns isolated, context-isolated sub-agents for heavy parallel research,
-on a separate (Haiku-class) rate pool with bounded recursion.
+### Tier 0 — The Legion
+`Task` deploys The Legion: isolated, context-isolated worker agents
+(legionnaires — scout / researcher / analyst / judge / general) for heavy
+parallel research, with bounded recursion. Worker models resolve
+provider-agnostically: low/medium-effort legionnaires run on the cheap tier of
+the PARENT chat model's provider (Anthropic → Haiku, keeping the separate rate
+pool; zai → glm-air; …), high-effort inherit the parent model. Pin all workers
+with `LEGION_MODEL_OVERRIDE` (legacy alias `SUB_AGENT_MODEL`). Background
+workers (`run_in_background`) return a ticket retrievable via `legion_status`.
 
 ### Tier 1 — Python skills
 
@@ -109,7 +115,7 @@ Playwright (Docker-internal only).
 ### Cost control
 Lazy progressive disclosure (only always-on servers occupy the prompt prefix) +
 1-hour prompt caching means the static prefix is written once and read forever.
-Budget mode unregisters sub-agents and injects a concise-output directive.
+Budget mode stands the Legion down and injects a concise-output directive.
 
 ---
 

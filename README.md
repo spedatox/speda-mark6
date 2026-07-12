@@ -86,6 +86,18 @@ product's primary face, and unlike anything else in the assistant space.
 - **Per-session pulse** — a running job keeps streaming even if you switch away;
   a glowing jewel marks any conversation that's still cooking.
 
+### 🛡️ The Legion — disposable workers on any model
+
+When a job genuinely needs deep research — six searches across six subtopics —
+an agent deploys **The Legion**: anonymous, single-purpose worker agents
+(*scout* pre-filters sources, *researchers* deep-dive one subtopic each in
+parallel, an *analyst* synthesises, a *judge* verifies the draft). Workers are
+provider-agnostic: they run on the cheap tier of **whatever model you're
+chatting on** — Claude, GPT, GLM, Gemini, even local Ollama — never locked to
+one vendor. Fire-and-forget background workers return a ticket and land their
+findings in the comms tray. Legionnaires have no identity and no memory; they
+are not the Superior Six — they're the grunts.
+
 ### ⚒️ The Forge — Optimus codes on real machines
 
 Optimus isn't a chatbot pretending to write code. When **The Forge** is online,
@@ -181,7 +193,7 @@ mode** clamps everything down when you want it lean.
 # 1. Configure
 cp .env.example packages/api/.env      # set ANTHROPIC_API_KEY + SPEDA_API_KEY
 
-# 2. Backend (SQLite by default — no services needed)
+# 2. Igor, the backend (SQLite by default — no services needed)
 cd packages/api && uv sync && uv run uvicorn app.main:app --port 8000 --reload
 
 # 3. The command deck (repo root, new terminal)
@@ -200,10 +212,11 @@ any agent with **`build-app.ps1 -Agent <name> -ApiBase <url> -ApiKey <key>`**.
 
 ## Under the hood
 
-SPEDA is a FastAPI agentic backend with a strict architectural spine: routers
-hold zero business logic, one orchestrator owns the system prompt and the agentic
-loop, everything is provider-agnostic behind one LLM client, and n8n is the only
-scheduler. The full contract is codified in **[`CLAUDE.md`](CLAUDE.md)**.
+**Igor** is the backend — a FastAPI agentic core with a strict architectural
+spine: routers hold zero business logic, one orchestrator owns the system prompt
+and the agentic loop, everything is provider-agnostic behind one LLM client, and
+n8n is the only scheduler. Heartbreaker is the face; Igor is the brain and
+hands. The full contract is codified in **[`CLAUDE.md`](CLAUDE.md)**.
 
 **Deeper docs** live in [`docs/`](docs/):
 
@@ -215,7 +228,7 @@ scheduler. The full contract is codified in **[`CLAUDE.md`](CLAUDE.md)**.
 | [TELEGRAM_ARCHITECTURE.md](docs/TELEGRAM_ARCHITECTURE.md) | The bot fleet |
 | [FORGE_INTEGRATION_PLAN.md](docs/FORGE_INTEGRATION_PLAN.md) · [NEWS_BRIEFING_PLAN.md](docs/NEWS_BRIEFING_PLAN.md) · [BACKGROUND_OPS_PLAN.md](docs/BACKGROUND_OPS_PLAN.md) | Design notes for the newest systems |
 
-**Monorepo:** `packages/api` (backend) · `packages/heartbreaker` (the app) ·
+**Monorepo:** `packages/api` (**Igor** — the backend) · `packages/heartbreaker` (the app) ·
 `packages/desktop` (neutral fork base) · `packages/sandbox` (the isolated
 computer). The Forge is a separate deployment that connects back as a peer.
 

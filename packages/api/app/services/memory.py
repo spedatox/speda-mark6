@@ -102,6 +102,25 @@ Return ONLY the line.
 USER: {user_message}
 ASSISTANT: {assistant_message}"""
 
+_RECAP_PROMPT = """\
+You maintain a short recap of ONE conversation session so a FUTURE session can
+pick up where this one left off. Merge the prior recap with the new turns into
+ONE updated recap, max 120 words:
+
+- First line: the subject of the conversation (one plain sentence).
+- Then bullets: key decisions/conclusions reached, and anything still open or
+  in progress.
+- Keep specific names, numbers, and identifiers that a follow-up would need.
+- No commentary, no pleasantries, no invention.
+
+PRIOR RECAP:
+{prior}
+
+NEW TURNS:
+{new_turns}
+
+Return only the updated recap."""
+
 
 # ── Shared helper ─────────────────────────────────────────────────────────────
 
@@ -214,6 +233,101 @@ async def update_session_log(
         logger.error(
             "session_log_error",
             extra={"request_id": request_id, "error": str(e)},
+        )
+
+
+# ── Episodic session recap (cross-session carryover) ─────────────────────────
+
+async def update_session_recap(
+    session_id: int,
+    request_id: str,
+    user_id: int,
+    model: str,
+) -> None:
+    """
+    Maintain the rolling episodic recap for this session (Session.recap).
+
+    Runs after every turn as a background task (Rule 7). Folds the turns since
+    `recap_through_id` into the prior recap with one cheap LLM call and advances
+    the watermark — the same rolling pattern as compaction, but always-on and
+    tiny (≤120 words). The recap is never read back into its OWN session; it is
+    what `recall_sessions_for_context` injects into the agent's NEXT session so
+    "what were we discussing last time?" is answerable without a tool call.
+    """
+    from app.config import settings
+    from app.services.compaction import _extract_text
+    from app.services.llm_client import LLMClient
+
+    if not settings.episodic_recap_enabled:
+        return
+
+    try:
+        async with AsyncSessionLocal() as db:
+            session = (
+                await db.execute(select(Session).where(Session.id == session_id))
+            ).scalar_one_or_none()
+            if session is None:
+                return
+
+            through = session.recap_through_id or 0
+            rows = (
+                await db.execute(
+                    select(Message)
+                    .where(Message.session_id == session_id, Message.id > through)
+                    .order_by(Message.id.asc())
+                )
+            ).scalars().all()
+            if not rows:
+                return
+
+            transcript = "\n\n".join(
+                f"{m.role.upper()}: {_extract_text(m.content)}".strip()
+                for m in rows
+                if _extract_text(m.content).strip()
+            )
+            if not transcript.strip():
+                return
+
+            client = LLMClient()
+            resp = await client.create_message(
+                model=model,
+                system="You maintain terse session recaps. Follow instructions exactly.",
+                messages=[{
+                    "role": "user",
+                    "content": _RECAP_PROMPT.format(
+                        prior=session.recap or "(none)",
+                        new_turns=transcript[:8000],
+                    ),
+                }],
+                max_tokens=settings.episodic_recap_max_tokens,
+            )
+            recap = (resp.content[0].text.strip() if resp.content else "")
+            if not recap:
+                return
+
+            session.recap = recap
+            session.recap_through_id = max(m.id for m in rows)
+            await db.commit()
+
+            # Deliberately NO reader-cache invalidation here: the injected
+            # "Previous sessions" block is frozen per session for byte-stability
+            # (prompt-cache), and a NEW session always misses that cache and
+            # reads fresh recaps. Invalidating would recompute a live session's
+            # block mid-conversation and bust its conversation cache.
+
+            logger.info(
+                "session_recap_updated",
+                extra={
+                    "request_id": request_id,
+                    "session_id": session_id,
+                    "recap_through_id": session.recap_through_id,
+                },
+            )
+
+    except Exception as e:  # noqa: BLE001
+        logger.error(
+            "session_recap_error",
+            extra={"request_id": request_id, "session_id": session_id, "error": str(e)},
         )
 
 
@@ -507,6 +621,7 @@ def schedule_background_tasks(
     from app.services.embedding_indexer import embed_session_tail
 
     background_tasks.add_task(update_session_log, session_id, request_id, user_id, model)
+    background_tasks.add_task(update_session_recap, session_id, request_id, user_id, model)
     background_tasks.add_task(run_daily_maintenance, session_id, request_id, user_id, model)
     background_tasks.add_task(generate_title, session_id, request_id, model)
     background_tasks.add_task(maybe_compact_session, session_id, request_id, model)
@@ -528,6 +643,7 @@ async def run_post_turn_tasks(
 
     await asyncio.gather(
         update_session_log(session_id, request_id, user_id, model),
+        update_session_recap(session_id, request_id, user_id, model),
         run_daily_maintenance(session_id, request_id, user_id, model),
         generate_title(session_id, request_id, model),
         maybe_compact_session(session_id, request_id, model),

@@ -762,7 +762,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
               <button
                 className="hb-glass-xs"
                 title={budget
-                  ? 'Budget mode ON — concise answers, no sub-agents. Click to unleash.'
+                  ? 'Budget mode ON — concise answers, the Legion stood down. Click to unleash.'
                   : 'Full power — deep research enabled. Click to go frugal.'}
                 onClick={toggleBudget}
                 style={{
