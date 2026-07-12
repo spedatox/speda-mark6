@@ -183,8 +183,13 @@ export default function ChatMain({ config, onSelectSession }: Props) {
   // does, by design). Set from the `start` event, cleared on terminal.
   const runIdRef = useRef<string | null>(null)
   // request_ids we've already attached/handled, so the re-attach effect never
-  // double-attaches to the same live run.
+  // double-attaches to the same live run. Entries are removed when an attach
+  // ends WITHOUT a terminal (we left the session) so a later return re-attaches.
   const attachedRef = useRef<Set<string>>(new Set())
+  // Which session the in-flight LOCAL send belongs to (from the start event).
+  // Turns are per-session but these refs are singletons — this is how the
+  // switch-abort effect and the reattach guard tell "ours" from "elsewhere".
+  const turnSessionRef = useRef<number | null>(null)
   const [, forceUpdate] = useState(0)
 
   interface SendOpts {
@@ -314,6 +319,13 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         if (event.type === 'start') {
           gotStart = true
           runIdRef.current = event.request_id ?? null
+          // Every SSE event carries session_id — tag this turn (and its bubble)
+          // with the session it belongs to, so switching views can tell whether
+          // the in-flight stream is ours and SELECT_SESSION can preserve it.
+          if (typeof event.session_id === 'number') {
+            turnSessionRef.current = event.session_id
+            dispatch({ type: 'TAG_MESSAGE_SESSION', payload: { id: assistantId, sessionId: event.session_id } })
+          }
           dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Thinking' } })
         } else if (event.type === 'chunk') {
           gotContent = true
@@ -385,8 +397,14 @@ export default function ChatMain({ config, onSelectSession }: Props) {
     } finally {
       finalizeFlush()  // safety: never leave buffered text undelivered
       clearInterval(watchdog)
-      abortRef.current = null
-      runIdRef.current = null
+      // Only clear the refs if this turn still owns them — the switch-abort
+      // effect (or a newer send) may have taken over; a stale finally must
+      // never null out a live turn's handles (that broke the Stop button).
+      if (abortRef.current === ctrl) {
+        abortRef.current = null
+        runIdRef.current = null
+        turnSessionRef.current = null
+      }
       forceUpdate(n => n + 1)
     }
   }, [state.activeSessionId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd, dispatch])
@@ -405,6 +423,27 @@ export default function ChatMain({ config, onSelectSession }: Props) {
     abortRef.current?.abort()
   }, [config])
 
+  // ── Abort on view switch ──────────────────────────────────────────────────
+  // Turns are per-session and DETACHED on the backend (dropping the socket
+  // never kills a run) — but the local fetch is a singleton. When the visible
+  // session (or agent, via NEW_CHAT) changes away from the streaming turn's
+  // session, abort the local fetch so the reattach path below becomes the
+  // single source of truth for that session's tail. Defined BEFORE the
+  // reattach effect so it runs first in the same commit.
+  useEffect(() => {
+    const sid = state.activeSessionId
+    if (
+      abortRef.current &&
+      turnSessionRef.current !== null &&
+      turnSessionRef.current !== sid
+    ) {
+      abortRef.current.abort()
+      abortRef.current = null
+      runIdRef.current = null
+      turnSessionRef.current = null
+    }
+  }, [state.activeSessionId, config.agentId])
+
   // ── Re-attach ─────────────────────────────────────────────────────────────
   // On entering a session, ask the backend whether a turn is still running there
   // (a job we switched away from, or one that survived an app reload). If so,
@@ -413,7 +452,10 @@ export default function ChatMain({ config, onSelectSession }: Props) {
   useEffect(() => {
     const sid = state.activeSessionId
     if (sid == null) return
-    if (abortRef.current) return  // a local send is already streaming this view
+    // Skip only when the local send streaming right now IS this session's turn;
+    // an orphaned fetch for another session no longer blocks reattach (it gets
+    // aborted by the effect above).
+    if (abortRef.current && turnSessionRef.current === sid) return
     let cancelled = false
     const ctrl = new AbortController()
 
@@ -427,7 +469,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       const assistantId = makeId()
       dispatch({ type: 'ADD_ASSISTANT_MESSAGE', payload: {
         id: assistantId, role: 'assistant', content: '', tools: [],
-        isStreaming: true, isError: false, status: 'Reconnecting',
+        isStreaming: true, isError: false, status: 'Reconnecting', sessionId: sid,
       } })
       runIdRef.current = run.request_id
 
@@ -435,6 +477,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       let buf = ''
       let handle: number | null = null
       const flush = () => { handle = null; if (buf) { const c = buf; buf = ''; dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk: c } }) } }
+      let settled = false  // saw a terminal (done/error) for this attach
 
       try {
         for await (const event of attachStream(config, run.request_id, ctrl.signal)) {
@@ -451,18 +494,31 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           } else if (event.type === 'done') {
             if (handle != null) cancelAnimationFrame(handle)
             flush()
+            settled = true
             dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: event.session_id } })
           } else if (event.type === 'error') {
             if (handle != null) cancelAnimationFrame(handle)
             flush()
+            settled = true
             dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: event.data as string } })
           }
+        }
+        // Stream closed without a terminal (run evicted after the grace window,
+        // or the backend died) — finalize like the send path does, so the
+        // bubble never sticks on "Reconnecting" forever.
+        if (!settled && !cancelled) {
+          flush()
+          settled = true
+          dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: sid } })
         }
       } catch { /* attach aborted on leaving the session — the run lives on */ }
       finally {
         if (handle != null) cancelAnimationFrame(handle)
         flush()
         if (runIdRef.current === run.request_id) runIdRef.current = null
+        // No terminal seen → we left mid-run; forget the request_id so coming
+        // back re-attaches (a sticky entry here made the SECOND return refuse).
+        if (!settled) attachedRef.current.delete(run.request_id)
       }
     })()
 

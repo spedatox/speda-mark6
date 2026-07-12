@@ -24,10 +24,10 @@ class AnthropicClient:
 
     async def create_message(self, **kwargs) -> anthropic.types.Message:
         """
-        Non-streaming message creation. Used by Task sub-agents and small
+        Non-streaming message creation. Used by Legion workers and small
         background tasks.
 
-        Caching IS applied here too: sub-agents carry the full tool prefix
+        Caching IS applied here too: Legion workers carry the full tool prefix
         (~38k tokens with all MCP servers) and run multiple iterations — without
         caching, each iteration re-sends the entire prefix uncached, which both
         explodes cost and blows the per-minute input-token rate limit (429s).

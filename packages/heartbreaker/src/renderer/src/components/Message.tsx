@@ -50,7 +50,8 @@ const TOOL_STATUS: Record<string, string> = {
   WebSearch:              'Searching the web',
   web_fetch:              'Reading the page',
   WebFetch:               'Reading the page',
-  Task:                   'Spawning a sub-agent',
+  Task:                   'Deploying the Legion',
+  legion_status:          'Checking on the Legion',
   // Forge (Optimus) execution + codebase-graph tools.
   run_command:            'Running a command',
   read_file:              'Reading a file',

@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("startup_db_ready")
 
-    # ── 2. LLM Client (created early — registry needs it for sub-agents) ────────
+    # ── 2. LLM Client (created early — registry needs it for the Legion) ────────
     from app.services.llm_client import LLMClient
 
     llm_client = LLMClient()
@@ -73,10 +73,12 @@ async def lifespan(app: FastAPI):
     # ── 3. Capability Registry ─────────────────────────────────────────────────
     from app.core.registry import CapabilityRegistry
 
-    registry = CapabilityRegistry(client=llm_client)
+    registry = CapabilityRegistry(client=llm_client, profiles=profiles)
 
-    # Tier 0 — Task tool (SDK built-in, MUST be registered first)
-    registry.register_task_tool()
+    # Tier 0 — The Legion (wire name "Task", MUST be registered first).
+    # Provider-agnostic workers: model resolution routes through the parent
+    # agent's profile, so the Legion runs on whatever provider the chat does.
+    registry.register_legion()
 
     # Tier 1 — Python Skills
     # read_skill is the progressive-disclosure meta-tool (registered first so it's
@@ -139,6 +141,9 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(AgentChannelSkill())
     await registry.register_skill(DispatchStatusSkill())
     await registry.register_skill(HousePartySkill())
+    # Legion background-ticket retrieval (Tier 0's async mode companion).
+    from app.skills.legion import LegionStatusSkill
+    await registry.register_skill(LegionStatusSkill())
 
     # OSINT / threat-intelligence suite (ip-api, AbuseIPDB, abuse.ch URLhaus/
     # ThreatFox/MalwareBazaar, HIBP Pwned Passwords, Ahmia dark-web search).
@@ -263,6 +268,7 @@ async def lifespan(app: FastAPI):
     logger.info("shutdown_begin")
     await app.state.turns.shutdown()
     await dispatcher.shutdown()
+    await registry.legion_shutdown()
     await forge_launcher.stop()
     await sandbox_launcher.stop()
     for task in telegram_poll_tasks:
@@ -279,8 +285,8 @@ def create_app() -> FastAPI:
     # never be public (CLAUDE.md / endpoint-leak hardening).
     docs_enabled = settings.debug
     app = FastAPI(
-        title=f"{AGENT_NAME} Backend",
-        description="Agent backend core — identity defined in prompts/core/01_identity.md",
+        title=f"Igor — {AGENT_NAME} Backend",
+        description="Igor, the agent backend core — identity defined in prompts/core/01_identity.md",
         version="0.1.0",
         lifespan=lifespan,
         docs_url="/docs" if docs_enabled else None,
@@ -312,12 +318,11 @@ def create_app() -> FastAPI:
     from fastapi.middleware.cors import CORSMiddleware
 
     origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
-    if settings.debug:
-        origins += ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$" if settings.debug else None,
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-N8N-Secret"],

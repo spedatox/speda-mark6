@@ -6,8 +6,8 @@ from app.core.context import AgentContext
 from app.core.registry import CapabilityRegistry
 from app.profiles.registry import ProfileRegistry
 from app.schemas.sse import SSEEvent, SSEEventType
-from app.services.llm_client import LLMClient
-from app.skills.memory import recall_for_context
+from app.services.llm_client import LLMClient, blocks_to_dicts
+from app.skills.memory import recall_for_context, recall_sessions_for_context
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ class AgentOrchestrator:
         # Per-agent tool scoping: the profile's declared allowlist (None = the
         # full registry, e.g. SPEDA the orchestrator) governs what this agent can
         # see and load. Resolved once here and stored on the context so the
-        # toolset catalog, the tool list, and Task sub-agents all share one scope.
+        # toolset catalog, the tool list, and Legion workers all share one scope.
         profile = self._profiles.require(context.agent_id)
         allowlist = (
             set(profile.tool_allowlist) if profile.tool_allowlist is not None else None
@@ -153,7 +153,7 @@ class AgentOrchestrator:
                 "A few sentences or bullets. No multi-section reports, no scenario "
                 "tables, unless the owner explicitly says 'deep dive' / 'full briefing'.\n"
                 "- Run as FEW web searches as possible (ideally 1, at most 2-3).\n"
-                "- Sub-agents are disabled. Do all work yourself in this turn.\n"
+                "- The Legion is disabled. Do all work yourself in this turn.\n"
                 "- If a request truly warrants depth, give a short answer first and "
                 "ask whether to expand — never assume."
             )
@@ -171,6 +171,32 @@ class AgentOrchestrator:
                 # Memory recall must never break a chat request
                 logger.warning(
                     "memory_recall_failed",
+                    extra={"request_id": context.request_id, "error": str(exc)},
+                )
+
+        # Episodic recall — recaps of the owner's recent PAST sessions, so a
+        # brand-new session knows what the last conversations were about.
+        # Scope is profile-owned (Rule 10): specialists see their own sessions,
+        # the orchestrator profile sees every agent's.
+        episodic_block = ""
+        if context.db is not None:
+            try:
+                episodic_block = await recall_sessions_for_context(
+                    context.user_id,
+                    context.db,
+                    context.agent_id,
+                    context.session_id,
+                    scope=profile.episodic_recall_scope,
+                ) or ""
+                if episodic_block:
+                    logger.info(
+                        "episodic_context_injected",
+                        extra={"request_id": context.request_id},
+                    )
+            except Exception as exc:
+                # Episodic recall must never break a chat request either
+                logger.warning(
+                    "episodic_recall_failed",
                     extra={"request_id": context.request_id, "error": str(exc)},
                 )
 
@@ -208,7 +234,7 @@ class AgentOrchestrator:
             stable_core += (
                 "\n\n## DEAD ZONE PROTOCOL — ACTIVE\n\n"
                 "No uplink. You are running on local compute only. Online "
-                "capabilities (web search, mail, calendar, sub-agents) are "
+                "capabilities (web search, mail, calendar, the Legion) are "
                 "unavailable and have been removed from your tools. Work from "
                 "local knowledge, memory and files; be direct about what cannot "
                 "be done until the link is restored."
@@ -227,6 +253,13 @@ class AgentOrchestrator:
         system_blocks: list[dict] = [{"type": "text", "text": stable_core, "_cache": True}]
         if memory_block:
             system_blocks.append({"type": "text", "text": memory_block, "_cache": True})
+        # Episodic block is deliberately NOT `_cache`-flagged: all four Anthropic
+        # cache breakpoints are already spent (tools + the two blocks above + the
+        # conversation tail). It doesn't need its own breakpoint — it is frozen
+        # per session (see _episodic_cache in skills/memory.py), so the 5m
+        # conversation breakpoint caches it as part of the stable prefix.
+        if episodic_block:
+            system_blocks.append({"type": "text", "text": episodic_block})
 
         # Keep a plain-string copy for any downstream logging/inspection.
         context.system_prompt = stable_core
@@ -327,7 +360,7 @@ class AgentOrchestrator:
             stop_reason = response.stop_reason
 
             # Convert content blocks to serialisable dicts for message history
-            assistant_content = _blocks_to_dicts(response.content)
+            assistant_content = blocks_to_dicts(response.content)
             messages.append({"role": "assistant", "content": assistant_content})
 
             # ── end_turn ────────────────────────────────────────────────────
@@ -451,27 +484,3 @@ class AgentOrchestrator:
             session_id=context.session_id,
             request_id=context.request_id,
         )
-
-
-def _blocks_to_dicts(content_blocks) -> list[dict]:
-    """Convert Anthropic SDK ContentBlock objects to plain dicts for message history."""
-    result = []
-    for block in content_blocks:
-        if block.type == "text":
-            result.append({"type": "text", "text": block.text})
-        elif block.type == "tool_use":
-            result.append(
-                {
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                }
-            )
-        else:
-            # Pass through unknown block types as-is
-            try:
-                result.append(block.model_dump())
-            except Exception:
-                result.append({"type": block.type})
-    return result

@@ -329,6 +329,105 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda") -> str:
     return block
 
 
+# ── Episodic recall: recent-session recaps (used by orchestrator) ─────────────
+
+# Frozen per-session block: computed on a session's FIRST turn and reused
+# verbatim for the session's whole lifetime ("" cached too). This guarantees
+# byte-stability of the injected system block within a session — the block is
+# deliberately UNCACHED at the API level (all 4 cache breakpoints are spent),
+# so it must never change mid-session or the 5m conversation cache would bust
+# every turn. New sessions always miss this cache and read fresh recaps.
+_episodic_cache: dict[int, str] = {}  # session_id -> frozen "## Previous sessions" block
+_EPISODIC_CACHE_MAX = 256  # bound process memory; oldest (insertion order) evicted
+
+# Legacy fallback: sessions that predate the recap feature may still have a
+# compaction summary — better than nothing, truncated hard.
+_FALLBACK_SUMMARY_CHARS = 600
+
+
+async def recall_sessions_for_context(
+    user_id: int,
+    db,
+    agent_id: str,
+    session_id: int,
+    scope: str = "own",
+) -> str:
+    """
+    Build the "## Previous sessions" episodic block for a session: recaps of the
+    owner's most recent OTHER sessions, newest first, so a brand-new session can
+    answer "what were we discussing last time?" without any tool call.
+
+    scope="own" (default) sees only this agent's sessions; scope="all" (the
+    orchestrator profile) sees every agent's, tagged by agent_id. Returns ""
+    when disabled or when there is nothing to recall.
+    """
+    from app.config import settings
+    from app.models.session import Session
+
+    if not settings.episodic_recap_enabled:
+        return ""
+
+    cached = _episodic_cache.get(session_id)
+    if cached is not None:
+        return cached
+
+    conditions = [
+        Session.user_id == user_id,
+        Session.id != session_id,
+        (Session.recap.isnot(None)) | (Session.summary.isnot(None)),
+    ]
+    if scope != "all":
+        conditions.append(Session.agent_id == agent_id)
+
+    result = await db.execute(
+        select(Session)
+        .where(*conditions)
+        .order_by(Session.started_at.desc())
+        .limit(settings.episodic_recall_sessions)
+    )
+    sessions = list(result.scalars().all())
+
+    entries: list[str] = []
+    for s in sessions:
+        body = (s.recap or "").strip()
+        if not body:
+            body = (s.summary or "").strip()[:_FALLBACK_SUMMARY_CHARS]
+        if not body:
+            continue
+        date = s.started_at.strftime("%Y-%m-%d") if s.started_at else "?"
+        title = (s.title or "Untitled").strip()
+        tag = f"[{s.agent_id}] " if scope == "all" else ""
+        entries.append(f"### {date} — {tag}{title}\n{body}")
+
+    block = ""
+    if entries:
+        # Newest-first; drop oldest entries to stay under the char budget.
+        budget = settings.episodic_recall_max_chars
+        kept: list[str] = []
+        used = 0
+        for e in entries:
+            if used + len(e) > budget and kept:
+                break
+            kept.append(e)
+            used += len(e)
+        block = (
+            "## Previous sessions\n\n"
+            "Recaps of your most recent separate conversations with the owner, "
+            "newest first. This is episodic background you two already share: "
+            "when he asks what you were discussing or where you left off, answer "
+            "from these directly — do not call a tool for what is already here. "
+            "These cover only the last few sessions in brief; for older material "
+            "or verbatim detail, use `recall_conversations`.\n\n"
+            + "\n\n".join(kept)
+        )
+
+    if len(_episodic_cache) >= _EPISODIC_CACHE_MAX:
+        # Evict oldest inserted (dict preserves insertion order) — dead sessions.
+        _episodic_cache.pop(next(iter(_episodic_cache)))
+    _episodic_cache[session_id] = block
+    return block
+
+
 # ── The skill ─────────────────────────────────────────────────────────────────
 
 class MemorySkill(Skill):

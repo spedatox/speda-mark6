@@ -46,6 +46,9 @@ export interface ChatMessage {
   files?: FileMeta[]  // downloadable files SPEDA produced
   uploads?: UploadedFile[]  // non-image files the user attached (display chips)
   status?: string     // live status line while streaming (real phase, not looped filler)
+  sessionId?: number  // which session a STREAMING bubble belongs to — lets
+                      // SELECT_SESSION preserve an in-flight tail instead of
+                      // wiping it in the history-load race
 }
 
 export interface Session {

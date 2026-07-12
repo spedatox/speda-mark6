@@ -26,6 +26,7 @@ export type ChatAction =
   | { type: 'ADD_ASSISTANT_MESSAGE'; payload: ChatMessage }
   | { type: 'APPEND_CHUNK'; payload: { id: string; chunk: string } }
   | { type: 'SET_STATUS'; payload: { id: string; status: string } }
+  | { type: 'TAG_MESSAGE_SESSION'; payload: { id: string; sessionId: number } }
   | { type: 'ADD_TOOL'; payload: { id: string; tool: import('../lib/types').ToolBadge } }
   | { type: 'SET_TOOL_RESULT'; payload: { id: string; toolId: string; result: string } }
   | { type: 'ADD_FILE'; payload: { id: string; file: import('../lib/types').FileMeta } }
@@ -44,12 +45,31 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SET_SESSIONS':
       return { ...state, sessions: action.payload }
 
-    case 'SELECT_SESSION':
+    case 'SELECT_SESSION': {
+      // Preserve any still-streaming bubble that belongs to the selected
+      // session and isn't in the loaded payload — the reattach effect and the
+      // history load race each other, and a wholesale replace here used to
+      // wipe the live tail (the in-flight assistant turn isn't in the DB yet).
+      const kept = state.messages.filter(
+        m =>
+          m.isStreaming &&
+          m.sessionId === action.payload.sessionId &&
+          !action.payload.messages.some(p => p.id === m.id)
+      )
       return {
         ...state,
         activeSessionId: action.payload.sessionId,
-        messages: action.payload.messages,
-        isStreaming: false,
+        messages: [...action.payload.messages, ...kept],
+        isStreaming: kept.length > 0,
+      }
+    }
+
+    case 'TAG_MESSAGE_SESSION':
+      return {
+        ...state,
+        messages: state.messages.map(m =>
+          m.id === action.payload.id ? { ...m, sessionId: action.payload.sessionId } : m
+        ),
       }
 
     case 'NEW_CHAT':

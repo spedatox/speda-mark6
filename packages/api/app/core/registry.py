@@ -1,79 +1,23 @@
-import asyncio
 import logging
 from typing import TYPE_CHECKING
+
+from app.legion.roster import TASK_TOOL_DEFINITION
 
 if TYPE_CHECKING:
     from app.adapters.base import OSSAdapter
     from app.core.context import AgentContext
     from app.mcp.client import MCPClient
+    from app.profiles.registry import ProfileRegistry
     from app.services.llm_client import LLMClient
     from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
-
-_SUB_AGENT_MAX_ITERATIONS = 15  # Sub-agents are focused tasks; lower than the main loop's 30
 
 # Runtime-infrastructure skills every agent gets regardless of its tool
 # allowlist: memory, the progressive-disclosure loader, and the lazy-load
 # meta-tool are part of the engine, not domain capabilities. A scoped agent
 # still needs them to function.
 _ALWAYS_AVAILABLE: frozenset = frozenset({"memory", "read_skill", "use_toolset"})
-
-# The Task tool definition (Tier 0 — Anthropic Agent SDK built-in).
-# Registered first at startup, before all other tiers.
-_TASK_TOOL_DEFINITION: dict = {
-    "name": "Task",
-    "description": (
-        "Spawns an isolated, billed sub-agent for a heavy research task. This is "
-        "EXPENSIVE and RARE — avoid it unless clearly necessary. "
-        "Spawn ONLY when the user explicitly asked for a deep/thorough research "
-        "report AND it genuinely needs 6+ independent searches across distinct "
-        "subtopics. "
-        "Do NOT use it for news, current events, 'what's happening' queries, quick "
-        "facts, lookups, writes, reminders, or anything completable with a handful "
-        "of direct tool calls — handle those yourself in the main loop by calling "
-        "search tools directly. Running several searches yourself is preferred over "
-        "spawning a sub-agent. When in doubt, do NOT spawn. "
-        "Returns the sub-agent's synthesised result as a string."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "description": {
-                "type": "string",
-                "description": "Clear, scoped task description for the sub-agent.",
-            },
-            "prompt": {
-                "type": "string",
-                "description": "Full prompt to send to the sub-agent.",
-            },
-        },
-        "required": ["description", "prompt"],
-    },
-}
-
-
-def _blocks_to_dicts(content_blocks) -> list[dict]:
-    """Convert Anthropic SDK ContentBlock objects to plain dicts for message history."""
-    result = []
-    for block in content_blocks:
-        if block.type == "text":
-            result.append({"type": "text", "text": block.text})
-        elif block.type == "tool_use":
-            result.append(
-                {
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                }
-            )
-        else:
-            try:
-                result.append(block.model_dump())
-            except Exception:
-                result.append({"type": block.type})
-    return result
 
 
 class CapabilityRegistry:
@@ -86,8 +30,14 @@ class CapabilityRegistry:
       Tier 0 (Task) → Tier 1 (Skills) → Tier 2 (MCP) → Tier 3 (Adapters)
     """
 
-    def __init__(self, client: "LLMClient | None" = None) -> None:
-        self._client = client            # Injected at startup — required for Task sub-agents
+    def __init__(
+        self,
+        client: "LLMClient | None" = None,
+        profiles: "ProfileRegistry | None" = None,
+    ) -> None:
+        self._client = client            # Injected at startup — required for the Legion
+        self._profiles = profiles        # Drives provider-agnostic worker model resolution
+        self._legion = None              # LegionRunner, built in register_legion()
         self._task_tool_registered = False
         self._skills: dict[str, "Skill"] = {}
         self._mcp_clients: dict[str, "MCPClient"] = {}
@@ -141,15 +91,26 @@ class CapabilityRegistry:
             )
         return self._dz_offline
 
-    # ── Tier 0 ────────────────────────────────────────────────────────────────
+    # ── Tier 0 — The Legion ───────────────────────────────────────────────────
 
-    def register_task_tool(self) -> None:
-        """Register the SDK built-in Task tool. Must be called FIRST.
+    def register_legion(self) -> None:
+        """Register The Legion (wire name "Task"). Must be called FIRST.
 
         Always registered, but hidden at runtime when budget mode is on (see
         list_tools) — so budget mode can be toggled live without a restart."""
+        from app.legion.runner import LegionRunner
+
+        self._legion = LegionRunner(self._client, self, self._profiles)
         self._task_tool_registered = True
-        logger.info("registry_register", extra={"tier": 0, "capability": "Task"})
+        logger.info(
+            "registry_register",
+            extra={"tier": 0, "capability": "Task", "brand": "legion"},
+        )
+
+    async def legion_shutdown(self) -> None:
+        """Cancel in-flight background legionnaires (lifespan teardown)."""
+        if self._legion is not None:
+            await self._legion.shutdown()
 
     # ── Tier 1 ────────────────────────────────────────────────────────────────
 
@@ -232,7 +193,7 @@ class CapabilityRegistry:
         pulled in on demand by the use_toolset tool.
 
         offline_only (Dead Zone Protocol): only Tier-1 skills that work without
-        an uplink survive — MCP servers, adapters and Task sub-agents (which
+        an uplink survive — MCP servers, adapters and the Legion (whose workers
         spawn LLM calls of their own) are all dropped.
 
         allowlist (per-agent scoping): when set, only tools whose owning
@@ -250,7 +211,7 @@ class CapabilityRegistry:
         tools: list[dict] = []
 
         if self._task_tool_registered and not get_budget_mode() and not offline_only:
-            tools.append(_TASK_TOOL_DEFINITION)
+            tools.append(TASK_TOOL_DEFINITION)
 
         for skill in self._skills.values():
             if offline_only and getattr(skill, "requires_network", False):
@@ -377,7 +338,9 @@ class CapabilityRegistry:
         """Route a tool call to the correct tier handler."""
         try:
             if tool_name == "Task":
-                return await self._execute_task(args, context)
+                if self._legion is None:
+                    return "The Legion is not registered on this deployment."
+                return await self._legion.run_worker(args, context)
 
             if tool_name in self._skills:
                 skill = self._skills[tool_name]
@@ -434,141 +397,26 @@ class CapabilityRegistry:
             )
             return f"Error executing {tool_name}: {str(e)}"
 
-    async def _execute_task(self, args: dict, context: "AgentContext") -> str:
-        """
-        Tier 0 — Task sub-agent execution.
+    # ── Ownership lookups (used by the Legion's tool scoping) ─────────────────
 
-        Runs an isolated agentic loop using the same LLMClient and registry tools
-        as the parent. The Task tool is excluded from the sub-agent's tool list to
-        prevent recursive spawning. Safety guard fires at _SUB_AGENT_MAX_ITERATIONS.
-        """
-        if self._client is None:
-            logger.error("task_tool_no_client", extra={"request_id": context.request_id})
-            return "Task sub-agent unavailable: LLMClient was not injected into the registry."
+    def tool_owner(self, tool_name: str) -> tuple[str, str]:
+        """Which capability owns a tool: ("skill"|"mcp"|"adapter"|"task"|"unknown",
+        owner name). The Legion uses this to scope read-only workers to
+        read-only skills + research MCP servers."""
+        if tool_name == "Task":
+            return ("task", "Task")
+        if tool_name in self._skills:
+            return ("skill", tool_name)
+        srv = self._mcp_tool_map.get(tool_name)
+        if srv is not None:
+            return ("mcp", srv)
+        if tool_name in self._adapters:
+            return ("adapter", tool_name)
+        return ("unknown", tool_name)
 
-        description = args.get("description", "")
-        prompt = args.get("prompt", "")
-
-        # Sub-agents run on a cheaper model with a SEPARATE rate-limit pool
-        # (Haiku by default), so their burst of tool-loop calls doesn't stack
-        # against the main loop's per-minute token limit. Falls back to the
-        # parent model if sub_agent_model is unset.
-        from app.config import settings
-        sub_model = settings.sub_agent_model or context.model
-
-        logger.info(
-            "task_sub_agent_start",
-            extra={
-                "request_id": context.request_id,
-                "description": description,
-                "model": sub_model,
-            },
-        )
-
-        # Sub-agents get all tools except Task (prevent infinite recursion),
-        # scoped to the spawning agent's allowlist (inherited via the context).
-        tools = [
-            t for t in self.list_tools(
-                allowlist=context.extra.get("tool_allowlist"), agent_id=context.agent_id
-            )
-            if t["name"] != "Task"
-        ]
-
-        messages: list[dict] = [{"role": "user", "content": prompt}]
-        system = (
-            "You are a focused sub-agent. Complete the following specific task and return "
-            "your findings in full. Do not ask for clarification — act on what you have.\n\n"
-            f"Task: {description}"
-        )
-
-        iterations = 0
-
-        while True:
-            if iterations >= _SUB_AGENT_MAX_ITERATIONS:
-                logger.error(
-                    "sub_agent_safety_guard",
-                    extra={
-                        "request_id": context.request_id,
-                        "iterations": iterations,
-                        "description": description,
-                    },
-                )
-                return (
-                    f"Sub-agent safety guard triggered after {iterations} tool iterations. "
-                    "Task may be incomplete."
-                )
-
-            response = await self._client.create_message(
-                model=sub_model,
-                system=system,
-                messages=messages,
-                tools=tools,
-                max_tokens=8096,
-            )
-
-            stop_reason = response.stop_reason
-            messages.append({"role": "assistant", "content": _blocks_to_dicts(response.content)})
-
-            if stop_reason == "end_turn":
-                text_parts = [
-                    b.text for b in response.content if hasattr(b, "text") and b.text
-                ]
-                result = "\n".join(text_parts) or "(sub-agent returned no text)"
-                logger.info(
-                    "task_sub_agent_done",
-                    extra={
-                        "request_id": context.request_id,
-                        "iterations": iterations,
-                        "result_length": len(result),
-                    },
-                )
-                return result
-
-            if stop_reason == "tool_use":
-                iterations += 1
-                tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-                
-                # Log all tool calls first
-                for block in tool_use_blocks:
-                    logger.info(
-                        "sub_agent_tool_call",
-                        extra={
-                            "request_id": context.request_id,
-                            "tool": block.name,
-                            "tool_id": block.id,
-                        },
-                    )
-                    
-                # Execute all tools in parallel
-                exec_tasks = [
-                    self.execute(block.name, block.input, context)
-                    for block in tool_use_blocks
-                ]
-                results = await asyncio.gather(*exec_tasks)
-                
-                # Format results and zip them back
-                tool_results = [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": res,
-                    }
-                    for block, res in zip(tool_use_blocks, results)
-                ]
-                
-                messages.append({"role": "user", "content": tool_results})
-
-            elif stop_reason in ("max_tokens", "pause_turn"):
-                messages.append(
-                    {"role": "user", "content": [{"type": "text", "text": "Continue."}]}
-                )
-
-            else:
-                logger.warning(
-                    "sub_agent_unknown_stop",
-                    extra={"request_id": context.request_id, "stop_reason": stop_reason},
-                )
-                return f"Sub-agent stopped unexpectedly (reason: {stop_reason})."
+    def skill_is_read_only(self, skill_name: str) -> bool:
+        skill = self._skills.get(skill_name)
+        return bool(skill is not None and getattr(skill, "read_only", False))
 
     async def health_check_all(self) -> dict:
         """Check health of all Tier 3 adapters. Called at startup and by Ratchet."""

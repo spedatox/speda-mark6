@@ -1,8 +1,8 @@
 # Forge Mark II × Mark VI × Heartbreaker — Integration Plan
 
-**Goal:** One command (`speda.ps1`) boots the whole network: Mark VI backend, Mark VI's
-sandbox, the Forge peer (Optimus Mark II engine) with its own Cell sandbox, and the
-Heartbreaker UI — with Heartbreaker natively aware of the Forge link.
+**Goal:** One command (`speda.ps1`) boots the whole network: Igor (the Mark VI
+backend), Igor's sandbox, the Forge peer (Optimus Mark II engine) with its own Cell
+sandbox, and the Heartbreaker UI — with Heartbreaker natively aware of the Forge link.
 
 **Repos:**
 - Mark VI backend + Heartbreaker: `C:\Users\AREL TARIM\speda-mark6`

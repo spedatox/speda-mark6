@@ -109,6 +109,7 @@ class TurnRegistry:
         tools: list[dict] = []
         files: list[dict] = []
         cancelled = False
+        terminal_seen = False  # engine emitted a DONE/ERROR of its own
         try:
             # Own DB session — the request's session is long gone once the HTTP
             # response returns; the engine and persistence must use this one.
@@ -118,6 +119,8 @@ class TurnRegistry:
                     async for event in engine_factory(context):
                         self._emit(turn, event)
                         et = event.type
+                        if et in (SSEEventType.DONE, SSEEventType.ERROR):
+                            terminal_seen = True
                         if et == SSEEventType.CHUNK and isinstance(event.data, str):
                             chunks.append(event.data)
                         elif et == SSEEventType.TOOL:
@@ -149,6 +152,20 @@ class TurnRegistry:
                     ))
                     await self._finish(turn)
                     return
+
+                # Guaranteed terminal: if the engine generator completed without
+                # ever emitting DONE/ERROR (the external-proxy path can), inject
+                # a synthetic DONE so any subscriber — live or reattaching —
+                # always settles instead of hanging on "Reconnecting".
+                if not terminal_seen and not cancelled:
+                    logger.warning(
+                        "turn_missing_terminal",
+                        extra={"request_id": turn.request_id},
+                    )
+                    self._emit(turn, SSEEvent(
+                        type=SSEEventType.DONE, data={},
+                        session_id=turn.session_id, request_id=turn.request_id,
+                    ))
 
                 # Persist the assistant turn (moved verbatim out of the router's
                 # SSE generator — it now runs regardless of who is listening).

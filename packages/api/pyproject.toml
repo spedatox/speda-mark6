@@ -1,7 +1,7 @@
 [project]
 name = "speda-mark-vi"
 version = "0.1.0"
-description = "SPEDA Mark VI — backend core of the Specialized Personal Executive Digital Assistant"
+description = "Igor — backend core of SPEDA Mark VI, the Specialized Personal Executive Digital Assistant"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",

@@ -73,8 +73,9 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                         help="Override the model for n8n/agent/background tasks."),
             ConfigField("llm_fallback_chain", "Fallback Chain", "text", requires_restart=_LIVE,
                         help="Comma-separated provider:model refs tried when the primary fails."),
-            ConfigField("sub_agent_model", "Sub-agent Model", "text", requires_restart=_LIVE,
-                        help="Model for Task sub-agents. Cheap by default (Haiku)."),
+            ConfigField("legion_model_override", "Legion Worker Model Override", "text", requires_restart=_LIVE,
+                        help="Pin all Legion workers to one 'provider:model'. Empty = automatic: "
+                             "cheap same-provider model for low/medium-effort workers, parent model for high."),
         ],
     ),
     ConfigGroup(
@@ -82,7 +83,7 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         "Spend controls, offline mode, conversation compaction, and prompt caching.",
         [
             ConfigField("budget_mode", "Budget Mode", "bool", requires_restart=_LIVE,
-                        help="Hard frugality: no Task sub-agents + concise output. (Runtime toggle.)"),
+                        help="Hard frugality: the Legion disabled + concise output. (Runtime toggle.)"),
             ConfigField("dead_zone_mode", "Dead Zone Mode", "select", requires_restart=_LIVE,
                         options=["auto", "on", "off"],
                         help="Offline operation. auto probes connectivity; on forces local-only."),

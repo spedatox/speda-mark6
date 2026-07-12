@@ -2,6 +2,7 @@ import logging
 import logging.config
 import json
 from pathlib import Path
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DATA_DIR = Path.home() / ".speda"
@@ -207,16 +208,38 @@ class Settings(BaseSettings):
     compaction_threshold_tokens: int = 12000
     compaction_keep_tokens: int = 4000
 
-    # Model for Task sub-agents. Defaults to Haiku — research/synthesis grunt work
-    # doesn't need Sonnet, Haiku is ~5x cheaper, and crucially it uses a SEPARATE
-    # rate-limit pool, so a sub-agent's burst of calls doesn't stack against the
-    # main Sonnet loop's tokens-per-minute limit (the tier-0 429 cause). The
-    # user-facing answer is still composed by the main loop on the chosen model.
-    # Set empty to run sub-agents on the same model as the parent.
-    sub_agent_model: str = "claude-haiku-4-5-20251001"
+    # ── Episodic session recall ──────────────────────────────────────────────
+    # The cross-session memory tier. A short recap of every session (subject,
+    # decisions, open threads) is maintained by a post-turn background task;
+    # when a NEW session starts, the last few recaps for that agent are injected
+    # into the system prompt so "what were we discussing last time?" is
+    # answerable without any tool call. Distinct from compaction (in-session)
+    # and from semantic recall (recall_conversations, on-demand).
+    episodic_recap_enabled: bool = True
+    # How many recent sessions' recaps are injected into a new session.
+    episodic_recall_sessions: int = 5
+    # Hard cap on the injected block (~1.5k tokens) — oldest entries drop first.
+    episodic_recall_max_chars: int = 6000
+    # max_tokens for the per-turn recap generation call.
+    episodic_recap_max_tokens: int = 300
+
+    # The Legion — worker model override. EMPTY by default (the provider-agnostic
+    # fix): legionnaire models resolve from the parent chat model's provider —
+    # low/medium-effort workers run on the profile's cheap tier for that provider
+    # (Anthropic parent → Haiku, which keeps the old separate-rate-pool benefit;
+    # zai parent → glm-air; …), high-effort workers inherit the parent model.
+    # Set a "provider:model" ref here to pin EVERY worker to one model instead.
+    # Legacy env name SUB_AGENT_MODEL still works via the validation alias.
+    legion_model_override: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "legion_model_override", "LEGION_MODEL_OVERRIDE",
+            "sub_agent_model", "SUB_AGENT_MODEL",
+        ),
+    )
 
     # Budget mode — a HARD, enforced frugality switch (not a prompt suggestion):
-    #   - the Task sub-agent tool is not registered at all (impossible to spawn)
+    #   - the Legion (Task tool) is not listed at all (impossible to deploy)
     #   - a strict concise-output directive is injected into the system prompt
     # Toggle with BUDGET_MODE=true in .env. Survives restarts. Default ON.
     budget_mode: bool = True

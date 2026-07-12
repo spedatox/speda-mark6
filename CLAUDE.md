@@ -6,7 +6,7 @@ Read this file in full before touching a single file. This is not optional.
 
 ## What This Repo Is
 
-This is `speda-mark-vi` — the backend core of SPEDA (Specialized Personal Executive Digital Assistant). It is a single-user, proactive ambient AI assistant.
+This is `speda-mark-vi` — **Igor**, the backend core of SPEDA (Specialized Personal Executive Digital Assistant). It is a single-user, proactive ambient AI assistant. Component names: **Igor** = this backend; **Heartbreaker** = the desktop client (packages/heartbreaker); **The Legion** = the sub-agent worker system (wire name `Task`).
 
 **Multi-tenant architecture.** SPEDA and five of the Superior Six — Sentinel, NightCrawler, Ultron, Centurion, Atomix — are **in-process agent profiles** inside this single backend. Each is an `AgentProfile` subclass with its own identity, model policy, tool allowlist, and prompt directory. They share one event loop, one database, one `CapabilityRegistry`, and one owner's memory. They are addressed by `agent_id` on every request.
 
@@ -238,7 +238,7 @@ class AgentContext:
 
 `triggered_by` has exactly three values: `"user"`, `"n8n"`, `"agent"`. There is no `"schedule"` value — n8n is the catch-all for everything automated including scheduled jobs.
 
-`request_id` propagates through every log statement, every tool call record, and every SSE event. It is the only way to trace a request through a multi-tool, multi-sub-agent execution.
+`request_id` propagates through every log statement, every tool call record, and every SSE event. It is the only way to trace a request through a multi-tool, multi-worker execution.
 
 ---
 
@@ -281,15 +281,18 @@ Do not implement any internal scheduler. Do not add cron logic to the backend. E
 
 ---
 
-## Sub-Agent Policy (D-SA1 through D-SA5)
+## The Legion (D-SA1 through D-SA5)
 
-- `Task` tool is registered at startup as Tier 0, before all other tiers. It is a Core MVP feature, not a later addition.
-- SPEDA decides when to spawn sub-agents. The user does not configure this.
+The Legion is the sub-agent worker system (`app/legion/`). Wire name of the tool stays `Task` — "The Legion" is the branding carried by descriptions, prompts, docs, and logs.
+
+- The Legion is registered at startup as Tier 0, before all other tiers. It is a Core MVP feature, not a later addition.
+- SPEDA decides when to deploy legionnaires. The user does not configure this.
 - Single loop for: lookups, reminders, calendar actions, short questions, any task completable in 1–3 tool calls.
-- Sub-agents for: research, briefings, multi-source synthesis, any task requiring 3+ independent sources.
-- Effort levels: research workers `"medium"` · synthesis `"high"` · pre-filter `"low"` · judge `"low"`
-- Verification sub-agent runs on briefings and reports only. Not on routine actions.
-- When sub-agents are spawned, SPEDA informs the user which workers ran. One sentence per worker.
+- The Legion for: research, briefings, multi-source synthesis, any task requiring 3+ independent sources.
+- Legionnaires ↔ effort: `scout` (pre-filter) `"low"` · `researcher` `"medium"` · `analyst` (synthesis) `"high"` · `judge` `"low"` · `general` `"inherit"`.
+- Worker models resolve provider-agnostically: low/medium effort → `profile.background_model(parent_model)` (cheap tier, same provider); high/inherit → the parent model. Never hardcode worker model IDs in core (Rule 10). `LEGION_MODEL_OVERRIDE` (legacy alias `SUB_AGENT_MODEL`) pins all workers when set.
+- The judge legionnaire runs on briefings and reports only. Not on routine actions.
+- When legionnaires are deployed, SPEDA informs the user which workers ran. One sentence per worker.
 
 ---
 
