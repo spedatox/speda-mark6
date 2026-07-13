@@ -61,6 +61,13 @@ async def migrate(source: str, dest: str, dry_run: bool) -> None:
                 continue
 
             async with dst_engine.begin() as dst:
+                # SQLite does not enforce foreign keys by default, so the source
+                # can hold orphaned rows (e.g. embeddings whose message was
+                # deleted). Postgres enforces FKs, which would reject them. Defer
+                # FK checks for this transaction so the copy is faithful; orphans
+                # load harmlessly. Requires superuser (the postgres-image role is).
+                if dest.startswith("postgresql"):
+                    await dst.execute(text("SET LOCAL session_replication_role = replica"))
                 # Insert in chunks to stay well under parameter limits.
                 CHUNK = 500
                 for i in range(0, len(rows), CHUNK):
