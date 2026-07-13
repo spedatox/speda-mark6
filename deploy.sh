@@ -73,9 +73,12 @@ if [[ -n "${MIGRATE_DB}" ]]; then
   [[ -f "${MIGRATE_DB}" ]] || { echo "Migration source not found: ${MIGRATE_DB}"; exit 1; }
   say "Importing memory from ${MIGRATE_DB} (sessions, messages, memory files)…"
   docker compose cp "${MIGRATE_DB}" app:/tmp/import.db
+  # --dest is intentionally omitted: the script falls back to the container's
+  # DATABASE_URL, which compose builds from POSTGRES_PASSWORD. Hardcoding a URL
+  # here would use the wrong password on any server with a real (non-default) DB
+  # password and fail with InvalidPasswordError.
   docker compose exec -T app python scripts/migrate_sqlite_to_postgres.py \
-    --source /tmp/import.db \
-    --dest "postgresql+asyncpg://speda:speda@postgres:5432/speda"
+    --source /tmp/import.db
 fi
 
 # ── Done ─────────────────────────────────────────────────────────────────────
