@@ -239,6 +239,40 @@ def test_deepseek_forces_non_thinking_when_tools_present():
     assert "reasoning_effort" not in p_reason_tools
 
 
+def test_openai_reasoning_effort_rides_extra_body():
+    # reasoning_effort must go through extra_body, never as a top-level param —
+    # the pinned openai SDK rejects the typed kwarg (TypeError before the request
+    # even leaves the process).
+    tool = {"name": "get_time", "description": "x", "input_schema": {"type": "object"}}
+    kwargs = {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 512}
+
+    # Tool-free reasoning call passes the requested effort via extra_body.
+    p_reason = _to_openai_params("openai", "gpt-5.1", {**kwargs, "reasoning_effort": "high"})
+    assert "reasoning_effort" not in p_reason  # never top-level
+    assert p_reason.get("extra_body", {}).get("reasoning_effort") == "high"
+
+
+def test_gpt56_forces_reasoning_none_with_tools():
+    # gpt-5.6 blocks function tools on /v1/chat/completions unless reasoning is
+    # off — force "none" (via extra_body) for the whole 5.6 family.
+    tool = {"name": "get_time", "description": "x", "input_schema": {"type": "object"}}
+    kwargs = {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 512, "tools": [tool]}
+    for model in ("gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.7"):
+        p = _to_openai_params("openai", model, kwargs)
+        assert p.get("extra_body", {}).get("reasoning_effort") == "none", model
+
+
+def test_older_gpt5_never_forced_to_none_with_tools():
+    # gpt-5 / mini / nano REJECT the value "none" and don't block tools, so no
+    # reasoning_effort must be injected when tools are present.
+    tool = {"name": "get_time", "description": "x", "input_schema": {"type": "object"}}
+    kwargs = {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 512, "tools": [tool]}
+    for model in ("gpt-5", "gpt-5-mini", "gpt-5-nano"):
+        p = _to_openai_params("openai", model, kwargs)
+        assert "none" != p.get("extra_body", {}).get("reasoning_effort"), model
+        assert "reasoning_effort" not in p, model  # not top-level either
+
+
 def test_finish_reason_mapping():
     assert _FINISH_TO_STOP["stop"] == "end_turn"
     assert _FINISH_TO_STOP["tool_calls"] == "tool_use"

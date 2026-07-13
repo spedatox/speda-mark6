@@ -84,6 +84,31 @@ def parse_model_ref(ref: str) -> tuple[str, str]:
     return "anthropic", ref
 
 
+# OpenAI codenames of the gpt-5.6 reasoning family (gpt-5.6-luna/sol/terra).
+_GPT56_CODENAMES = ("luna", "sol", "terra")
+
+
+def _openai_blocks_tool_reasoning(model_l: str) -> bool:
+    """True for OpenAI reasoning models (gpt-5.6 and newer) that REJECT function
+    tools on /v1/chat/completions unless reasoning_effort is forced to 'none'.
+
+    The older gpt-5 generation (gpt-5 / mini / nano) both accepts tools without
+    the flag AND rejects the value 'none', so it must be excluded — this returns
+    True only for gpt-5.6+ (and their luna/sol/terra codenames). Matched by the
+    version number so future releases (5.7, 6.x, …) are covered automatically."""
+    import re
+
+    if any(c in model_l for c in _GPT56_CODENAMES):
+        return True
+    m = re.search(r"gpt-(\d+(?:\.\d+)?)", model_l)
+    if m:
+        try:
+            return float(m.group(1)) >= 5.6
+        except ValueError:
+            return False
+    return False
+
+
 # ── Normalized response types ────────────────────────────────────────────────
 # Attribute-compatible with the Anthropic SDK objects callers already consume:
 # blocks_to_dicts (block.type/.text/.id/.name/.input), the Legion worker
@@ -547,9 +572,33 @@ def _to_openai_params(provider: str, model: str, kwargs: dict) -> dict:
     # which silently broke conversation titles on every non-Anthropic provider.
     # Only openai and gemini document this param; Ollama (local, non-reasoning)
     # is left alone.
+    # Passed via extra_body, NOT as a top-level kwarg: the pinned openai SDK
+    # rejects `reasoning_effort` as a typed argument, but forwards extra_body
+    # straight into the request JSON on every SDK version (same mechanism the
+    # zai/deepseek thinking toggles below use).
     reasoning_effort = kwargs.get("reasoning_effort")
-    if reasoning_effort and provider in ("openai", "gemini"):
-        params["reasoning_effort"] = reasoning_effort
+    if provider == "openai":
+        model_l = model.lower()
+        is_reasoning_model = any(x in model_l for x in ("o1", "o3", "o4", "gpt-5", "terra"))
+        effort = None
+        if tools and _openai_blocks_tool_reasoning(model_l):
+            # gpt-5.6+ reason by default and REJECT function tools on
+            # /v1/chat/completions unless reasoning is explicitly OFF. OpenAI's
+            # error says verbatim: "To use function tools, use /v1/responses or
+            # set reasoning_effort to 'none'." (gpt-5.6-luna misreports this as a
+            # 401 "insufficient permissions"; sol/terra as a clean 400.) NOTE the
+            # OLDER gpt-5 generation (gpt-5 / mini / nano) REJECTS the value
+            # 'none' AND doesn't block tools — so we force 'none' ONLY for 5.6+.
+            effort = "none"
+        elif reasoning_effort and is_reasoning_model and not tools:
+            # Tool-free reasoning call (e.g. background title/recap generation):
+            # pass the caller's hint so the model doesn't burn its whole budget
+            # on hidden reasoning and return empty content.
+            effort = reasoning_effort
+        if effort:
+            params.setdefault("extra_body", {})["reasoning_effort"] = effort
+    elif provider == "gemini" and reasoning_effort:
+        params.setdefault("extra_body", {})["reasoning_effort"] = reasoning_effort
 
     # z.ai GLM thinking control. GLM defaults thinking ON, so a short background
     # task (title generation caps output at ~512 tokens) burns the whole budget
