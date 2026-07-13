@@ -72,9 +72,8 @@ to someone else's domain.
 The desktop client is a Stark-tech, holographic *fluid-glass* interface — the
 product's primary face, and unlike anything else in the assistant space.
 
-- **Cinematic agent switcher** — hit `Alt+A` and select your agent like Tony
-  Stark picking an armour: the room glows in the agent's colour, dual HUD rings
-  spin up around the chosen one, a live spec panel reads out its designation.
+- **Agent switcher** — `Alt+A` to switch agents; the UI recolours to the
+  selected agent and shows its current model and domain.
 - **Systems Board** — a live telemetry deck: model-routing matrix, active
   toolset shards, token budget, response-time trace, your memory data-banks, and
   the Forge-link status — all real data, nothing decorative.
@@ -83,8 +82,8 @@ product's primary face, and unlike anything else in the assistant space.
 - **JARVIS welcome** — every home screen opens with a contextual, memory-aware
   one-liner in the current agent's voice ("Friday's workout complete, ready for
   weekend recharge") — generated fresh, cached so it's instant.
-- **Per-session pulse** — a running job keeps streaming even if you switch away;
-  a glowing jewel marks any conversation that's still cooking.
+- **Live session indicator** — a job keeps streaming even if you switch away, and
+  a marker shows which conversations are still running.
 
 ### 🛡️ The Legion — disposable workers on any model
 
