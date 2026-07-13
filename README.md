@@ -136,9 +136,17 @@ the free one can't answer.
 SPEDA keeps a structured, Markdown-based memory of you — who you are, what's
 current, a behavioural dossier, your projects, a rolling log — readable and
 editable by the agents themselves and refreshed by background tasks after every
-exchange. **Orion** is the dedicated custodian that keeps it clean. The result:
-an assistant that remembers your last conversation, your ongoing work, and your
-preferences without you repeating yourself.
+exchange. **Orion** is the dedicated custodian that keeps it clean.
+
+On top of that sits a tiered recall stack, so agents genuinely pick up where you
+left off. Every session grows a short **episodic recap** (subject, decisions,
+open threads) in the background; when you open a *new* chat, the last few recaps
+for that agent are already in context — ask "what were we discussing?" and it
+answers without a search. Semantic recall over every past conversation covers
+the deep cuts, and it's all scoped per agent (Ultron remembers Ultron's threads;
+SPEDA, the orchestrator, sees across all of them). The result: an assistant that
+remembers your last conversation, your ongoing work, and your preferences
+without you repeating yourself.
 
 ### ♾️ Nothing gets lost — survivable turns & background work
 
