@@ -22,6 +22,17 @@ def _friendly_error(model: str, exc: Exception) -> str:
     across every provider so the user sees WHY instead of a frozen spinner."""
     provider = model.partition(":")[0] if ":" in model else "anthropic"
     text = str(exc).lower()
+    # NVIDIA NIM's signature failure: the key lists models fine (GET /v1/models
+    # → 200) but EVERY chat call 404s with "Function … not found for account".
+    # It's an account-side permission ("Public API Endpoints"), not our request —
+    # so say that instead of a raw 404 the owner can't act on.
+    if provider == "nvidia" and ("not found for account" in text or "function" in text or "404" in text):
+        return (
+            "NVIDIA can list models but can't run them for this account — it's missing the "
+            "'Public API Endpoints' permission (a known NVIDIA account issue, not a model or "
+            "key problem). Fix it at build.nvidia.com / email help@build.nvidia.com, or just "
+            "use another provider (OpenAI, Gemini, z.ai, DeepSeek, Anthropic)."
+        )
     if "401" in text or "unauthorized" in text or "api key" in text or "authentication" in text:
         key = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}.get(provider, "ANTHROPIC_API_KEY")
         return f"{provider.title()} rejected the request — check that {key} is set and valid."
