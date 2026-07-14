@@ -21,9 +21,17 @@ const RENDERABLE_LANGS = new Set(['html', 'svg'])
 const HPP_ALIASES = new Set(['hpp-warning', 'house_party', 'house-party', 'houseparty', 'party-warning'])
 const HPP_AMBIGUOUS = new Set(['', 'hpp', 'text', 'txt', 'plaintext', 'md', 'markdown'])
 function looksLikeHppWarning(code: string): boolean {
+  const trimmed = code.trim()
   return /house\s*party\s*protocol/i.test(code)
     || /passphrase\s+to\s+engage/i.test(code)
     || (/authorization\s+required/i.test(code) && /prototype/i.test(code))
+    // The tool's own instructions tell a compliant model to leave the body
+    // near-empty — no warning prose, just an optional `objective: ...` line —
+    // so the phrase-matching rules above can never fire for a well-behaved
+    // response. A real C++ .hpp header never looks like this shape, so it's
+    // a safe positive signal on an already-ambiguous tag.
+    || trimmed === ''
+    || /^objective\s*:\s*.+$/i.test(trimmed)
 }
 
 /* ── Icons ─────────────────────────────────────────────────────────────────── */
