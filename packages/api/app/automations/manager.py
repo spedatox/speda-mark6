@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.automations import composer
+from app.config import settings
 from app.models.automation import Automation
 from app.services.n8n_api import N8nClient
 
@@ -27,21 +28,36 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _webhook_url(spec: dict) -> str | None:
+    """The callable URL of a webhook watcher. n8n serves an ACTIVE workflow's
+    webhook at {n8n}/webhook/{path}. n8n_api_url is the internal compose address,
+    so this is the in-network URL — reachable publicly only if the deployment
+    routes n8n's /webhook through its public domain."""
+    path = spec.get("webhook_path")
+    if not path:
+        return None
+    return f"{settings.n8n_api_url.rstrip('/')}/webhook/{path}"
+
+
 def _as_dict(a: Automation) -> dict:
-    return {
+    spec = json.loads(a.spec or "{}")
+    d = {
         "id": a.id,
         "agent_id": a.agent_id,
         "n8n_workflow_id": a.n8n_workflow_id,
         "name": a.name,
         "kind": a.kind,
         "intent": a.intent,
-        "spec": json.loads(a.spec or "{}"),
+        "spec": spec,
         "active": a.active,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "expires_at": a.expires_at.isoformat() if a.expires_at else None,
         "last_fired_at": a.last_fired_at.isoformat() if a.last_fired_at else None,
-        "summary": composer.describe(json.loads(a.spec or "{}")),
+        "summary": composer.describe(spec),
     }
+    if a.kind == "webhook":
+        d["webhook_url"] = _webhook_url(spec)
+    return d
 
 
 async def create_automation(spec: dict, db: AsyncSession, agent_id: str = "speda") -> dict:
