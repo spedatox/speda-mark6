@@ -11,24 +11,33 @@ logger = logging.getLogger(__name__)
 class AutomationsSkill(Skill):
     name = "manage_automations"
     description = (
-        "Creates, lists, pauses/resumes, and deletes SPEDA's proactive watchers — "
-        "n8n workflows that monitor things for the owner and ping them on Telegram "
-        "when something happens (a page changes, exam results appear, a feed posts, "
-        "a schedule fires). Use it when the owner asks you to watch/track/monitor "
-        "something, remind them on a schedule, or asks what you're currently "
-        "watching ('what are you tracking for me?', 'stop watching X'). Do NOT use "
-        "it for one-off questions you can answer right now, or for in-conversation "
-        "reminders that don't need future execution. For action='create' you compose "
-        "a spec: kind 'web_watch' (url, optional look_for keyword, interval_minutes, "
-        "default 360) fires when the page changes or the keyword first appears; "
-        "'rss_watch' (feed_url) fires on new feed items; 'schedule' (cron, 5-field) "
-        "fires on the cron — phrase intent as the briefing you should deliver; "
-        "'webhook' creates an inbound URL other systems can call. Add duration_days "
-        "for time-boxed tracking ('for a month' → 30) and always write intent as a "
-        "clear instruction to your future self about what to tell the owner and why "
-        "it matters. Returns the created/affected automation as JSON, the full list "
-        "for 'list', or an error message you should fix and retry (e.g. missing "
-        "url, n8n not configured)."
+        "Your CONTROL PLANE over n8n — the engine that runs every proactive watcher "
+        "(a page changes, exam results appear, a feed posts, a schedule fires). You "
+        "do NOT write n8n JSON, hit n8n endpoints, or manage webhooks yourself: you "
+        "hand this tool a structured `spec` and it composes the correct n8n workflow, "
+        "POSTs it, and activates it. n8n is the sole scheduler — never promise an "
+        "internal timer or a one-off delay; if it must happen later, it is a watcher. "
+        "Use this when the owner asks you to watch/track/monitor something, remind "
+        "them on a schedule, or asks what you're watching ('what are you tracking?', "
+        "'stop watching X'). Do NOT use it for one-off questions you can answer now, "
+        "or in-conversation reminders that don't outlive the chat. "
+        "HOW A WATCHER WORKS: when it fires, n8n calls back into POST /trigger/<your "
+        "agent_id> with output_mode='push' carrying your `intent` and the event data, "
+        "and YOU (this same agent) compose the notification in your own voice — so "
+        "write `intent` as a precise instruction to your future self: what to tell the "
+        "owner and why it matters. "
+        "KINDS for action='create': 'schedule' (cron, 5-field e.g. '0 8 * * *' = 08:00 "
+        "daily) fires on the clock; 'web_watch' (url, optional look_for keyword, "
+        "interval_minutes default 360) fires when the page changes or the keyword first "
+        "appears; 'rss_watch' (feed_url, optional interval_minutes) fires on new items; "
+        "'webhook' creates an INBOUND URL an external system POSTs to — the result "
+        "includes 'webhook_url'; relay it to the owner (note: it lives on n8n's network, "
+        "so it's callable externally only if the deployment exposes n8n's /webhook). "
+        "Add duration_days for time-boxed tracking ('for a month' → 30). "
+        "LIFECYCLE: action='list' returns every watcher with its id; pause/resume/delete "
+        "take that automation_id. Returns the created/affected automation as JSON (with "
+        "webhook_url for webhooks), the full list for 'list', or an actionable error to "
+        "fix and retry (missing url, n8n not configured, etc.)."
     )
     read_only = False
     input_schema = {
@@ -83,10 +92,19 @@ class AutomationsSkill(Skill):
                     "automation_created_by_agent",
                     extra={"request_id": context.request_id, "automation_id": result["id"]},
                 )
+                tail = (
+                    "\nConfirm to the owner in one sentence what you're now watching and until when."
+                )
+                if result.get("webhook_url"):
+                    tail = (
+                        f"\nGive the owner this inbound webhook URL so their system can POST to it: "
+                        f"{result['webhook_url']} — it fires the watcher on each call. (It's on n8n's "
+                        f"network; it's reachable from outside only if n8n's /webhook is exposed publicly.)"
+                    )
                 return (
                     "Automation created and live in n8n:\n"
                     + json.dumps(result, indent=2)
-                    + "\nConfirm to the owner in one sentence what you're now watching and until when."
+                    + tail
                 )
 
             if action == "list":
