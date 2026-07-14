@@ -3,6 +3,12 @@
 # docker-compose sets context: . and dockerfile: packages/api/Dockerfile.
 FROM python:3.11-slim
 
+# openssh-client: the system_ops host bridge — the containerized backend SSHes
+# to the real host (host.docker.internal) for Orion/Optimus server maintenance.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # uv

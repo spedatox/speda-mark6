@@ -359,6 +359,16 @@ class Settings(BaseSettings):
     system_ops_enabled: bool = False
     system_ops_root: str = str(_DATA_DIR)     # write jail for system_ops file writes
     system_ops_timeout: int = 60              # hard cap (seconds) per host command
+    # HOST BRIDGE — in prod the backend runs INSIDE a container, so local exec
+    # would only ever see the container. When system_ops_host is set (e.g.
+    # "root@host.docker.internal"), every system_ops action runs over SSH on the
+    # actual host instead: same deny-list, jail, and audit trail — different
+    # namespace. Empty = execute locally (dev / bare-metal deployments). The
+    # private key lives in the data dir (bind-mounted from the host in prod) so
+    # it never enters the repo or the image.
+    system_ops_host: str = ""
+    system_ops_ssh_port: int = 22
+    system_ops_ssh_key: str = str(_DATA_DIR / "host_ops_key")
 
 
 settings = Settings()
