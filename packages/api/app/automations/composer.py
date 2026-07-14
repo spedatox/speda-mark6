@@ -33,6 +33,10 @@ _T_WEBHOOK = ("n8n-nodes-base.webhook", 2)
 def _node(name: str, type_ver: tuple, x: int, params: dict) -> dict:
     type_, ver = type_ver
     return {
+        # n8n's public-API workflow schema REQUIRES a per-node id (a UUID) and
+        # rejects the whole POST /workflows body without it. Connections still
+        # reference nodes by name (below), so this id only satisfies the schema.
+        "id": str(uuid.uuid4()),
         "name": name,
         "type": type_,
         "typeVersion": ver,

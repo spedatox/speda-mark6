@@ -24,6 +24,9 @@ class N8nClient:
     def __init__(self) -> None:
         self._base = settings.n8n_api_url.rstrip("/") + "/api/v1"
         self._key = settings.n8n_api_key
+        # Last upstream failure detail (status + response body) so callers can
+        # surface n8n's actual validation message instead of a blind "failed".
+        self.last_error: str | None = None
 
     @property
     def configured(self) -> bool:
@@ -42,8 +45,21 @@ class N8nClient:
                     method, f"{self._base}{path}", headers=self._headers(), **kwargs
                 )
                 resp.raise_for_status()
+                self.last_error = None
                 return resp.json() if resp.content else {}
+        except httpx.HTTPStatusError as exc:
+            # n8n puts the real reason in the response body (e.g. schema
+            # validation: "request/body/nodes/0 must have required property 'id'").
+            body = (exc.response.text or "")[:600]
+            self.last_error = f"HTTP {exc.response.status_code}: {body}"
+            logger.error(
+                "n8n_request_failed",
+                extra={"method": method, "path": path,
+                       "status": exc.response.status_code, "body": body},
+            )
+            return None
         except Exception as exc:  # noqa: BLE001
+            self.last_error = str(exc)
             logger.error("n8n_request_failed", extra={"method": method, "path": path, "error": str(exc)})
             return None
 
