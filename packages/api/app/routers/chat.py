@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal, get_db
 from app.schemas.chat import ChatRequest
@@ -300,7 +301,7 @@ async def _run_chat(
         system_prompt=system_prompt,
         conversation_history=history,
         db=db,
-        timezone="UTC",
+        timezone=settings.owner_timezone,
     )
 
     # Pre-populate active_servers from the session's loaded-toolset memory so
@@ -483,7 +484,7 @@ async def websocket_chat(websocket: WebSocket):
                     system_prompt="",
                     conversation_history=history,
                     db=db,
-                    timezone="UTC",
+                    timezone=settings.owner_timezone,
                 )
 
                 collected_chunks: list[str] = []

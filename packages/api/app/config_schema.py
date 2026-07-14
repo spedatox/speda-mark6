@@ -194,6 +194,10 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         "system", "System & Ops",
         "Sandbox, OSS adapters, temp outputs, and Orion's privileged host operations.",
         [
+            ConfigField("owner_timezone", "Owner Timezone", "text", requires_restart=_LIVE,
+                        help="IANA name the app presents time in (server stays UTC). "
+                             "e.g. Europe/Istanbul, America/New_York. Takes effect immediately.",
+                        placeholder="Europe/Istanbul"),
             ConfigField("sandbox_url", "Sandbox URL", "url",
                         help="Isolated container for run_command. Empty disables the tool."),
             ConfigField("gpt_researcher_url", "GPT-Researcher URL", "url"),

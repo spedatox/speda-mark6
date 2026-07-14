@@ -14,6 +14,7 @@ import hmac
 import logging
 import uuid
 
+from app.config import settings
 from app.core.context import AgentContext
 from app.core.runtime_state import get_telegram_owner_id
 from app.database import AsyncSessionLocal
@@ -141,7 +142,7 @@ class TelegramGateway:
                 system_prompt="",
                 conversation_history=history,
                 db=db,
-                timezone="UTC",
+                timezone=settings.owner_timezone,
             )
             context.extra["active_servers"] = self._sessions.get_loaded_servers(session.id)
 

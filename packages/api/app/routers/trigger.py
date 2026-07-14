@@ -5,6 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal, get_db
 from app.schemas.sse import SSEEventType
@@ -71,7 +72,7 @@ async def trigger(
             }
         ],
         db=db,  # replaced with a task-owned session in _run_trigger
-        timezone="UTC",
+        timezone=settings.owner_timezone,
     )
 
     logger.info(

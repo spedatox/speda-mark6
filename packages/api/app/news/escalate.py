@@ -15,6 +15,7 @@ must never disturb the poll that spawned it.
 import asyncio
 import logging
 
+from app.config import settings
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal
 from app.models.news_item import NewsItem
@@ -90,7 +91,7 @@ async def _run_flash(orchestrator, profiles, telegram_bots, profile, payload: di
                     ),
                 }],
                 db=db,
-                timezone="UTC",
+                timezone=settings.owner_timezone,
             )
             chunks: list[str] = []
             async for event in orchestrator.run(context):

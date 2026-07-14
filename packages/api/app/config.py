@@ -90,6 +90,14 @@ class Settings(BaseSettings):
     # Database — SQLite by default (no server needed); override with postgresql+asyncpg:// for prod
     database_url: str = f"sqlite+aiosqlite:///{_DATA_DIR / 'speda.db'}"
 
+    # Owner's IANA timezone (e.g. "Europe/Istanbul", "America/New_York"). The
+    # server clock and every stored timestamp stay UTC — correct for a server —
+    # but the owner is a single human in ONE place, so the app PRESENTS time and
+    # interprets "9am" in this zone. It is injected into every AgentContext and
+    # user-message stamps render in it. Default "UTC" = no localization. Read
+    # lazily at request time, so a change via the Configuration tab is live.
+    owner_timezone: str = "UTC"
+
     # Auth — single service credential (X-API-Key) for the desktop app + scripts.
     speda_api_key: str = "dev-key"
     # Shared secret for the n8n webhook trigger — X-N8N-Secret.

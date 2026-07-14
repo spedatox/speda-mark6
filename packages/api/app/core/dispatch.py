@@ -39,6 +39,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 
+from app.config import settings
 from app.core.context import AgentContext
 from app.core.runtime_state import get_house_party
 from app.database import AsyncSessionLocal
@@ -408,7 +409,7 @@ class AgentDispatcher:
                         ),
                     }],
                     db=db,
-                    timezone="UTC",
+                    timezone=settings.owner_timezone,
                     extra={"dispatch_depth": depth + 1},
                 )
 

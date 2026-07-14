@@ -205,9 +205,12 @@ class AgentOrchestrator:
         # model, and provider caches are model-scoped anyway.
         stable_core += (
             "\n\n## Time\n\n"
-            "Every user message is prefixed with its UTC timestamp, formatted "
-            "[YYYY-MM-DD HH:MM UTC]. The newest user message's stamp IS the "
-            "current date and time — trust it over any internal sense of time.\n"
+            "Every user message is prefixed with its timestamp in the owner's "
+            "local timezone, formatted [YYYY-MM-DD HH:MM TZ] (TZ is the zone "
+            "abbreviation or UTC offset). The newest user message's stamp IS the "
+            "current date and time — trust it over any internal sense of time, "
+            "and speak in this local time unless asked otherwise.\n"
+            f"Owner timezone: {context.timezone}\n"
             f"Active model: {context.model}"
         )
 

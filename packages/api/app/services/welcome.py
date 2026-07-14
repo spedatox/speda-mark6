@@ -17,9 +17,11 @@ invisible. Every failure path degrades to "" — the UI just keeps the greeting.
 import logging
 import time as _time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
+from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.memory_file import MemoryFile
 
@@ -76,7 +78,10 @@ async def get_welcome(agent_id: str, profiles, *, user_id: int = 1) -> str:
     if profile is None:
         return ""
 
-    now_dt = datetime.now()
+    try:
+        now_dt = datetime.now(ZoneInfo(settings.owner_timezone))
+    except Exception:  # unknown IANA name → server clock (UTC)
+        now_dt = datetime.now()
     pod = _part_of_day(now_dt.hour)
     key = (agent_id, pod)
     hit = _cache.get(key)
