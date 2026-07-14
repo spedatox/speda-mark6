@@ -5,6 +5,12 @@ export interface ToolBadge {
   name: string
   input?: unknown    // arguments the model passed (what it searched/added/ran)
   result?: string    // truncated tool output
+  // How many characters of `content` had streamed when this tool fired — lets
+  // the renderer interleave it at the point it actually happened instead of
+  // always stacking every tool before the text. Undefined (older stored
+  // messages, pre-dating this field) is treated as 0 — i.e. before all text,
+  // reproducing the old stacked-on-top behavior with zero data migration.
+  afterChars?: number
 }
 
 export interface ImageBlock {

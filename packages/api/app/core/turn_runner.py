@@ -110,6 +110,11 @@ class TurnRegistry:
         files: list[dict] = []
         cancelled = False
         terminal_seen = False  # engine emitted a DONE/ERROR of its own
+        running_len = 0  # chars streamed so far — stamped onto each tool as
+        # afterChars so a reloaded/historical message can interleave tools at
+        # the point they actually fired instead of always stacking them before
+        # the text (Heartbreaker's Message.tsx reads this). Mirrors the same
+        # counter the live SSE client keeps independently.
         try:
             # Own DB session — the request's session is long gone once the HTTP
             # response returns; the engine and persistence must use this one.
@@ -123,9 +128,13 @@ class TurnRegistry:
                             terminal_seen = True
                         if et == SSEEventType.CHUNK and isinstance(event.data, str):
                             chunks.append(event.data)
+                            running_len += len(event.data)
                         elif et == SSEEventType.TOOL:
                             d = event.data if isinstance(event.data, dict) else {}
-                            tools.append({"id": d.get("id"), "name": d.get("name"), "input": d.get("input")})
+                            tools.append({
+                                "id": d.get("id"), "name": d.get("name"), "input": d.get("input"),
+                                "afterChars": running_len,
+                            })
                         elif et == SSEEventType.TOOL_RESULT:
                             d = event.data if isinstance(event.data, dict) else {}
                             for t in tools:

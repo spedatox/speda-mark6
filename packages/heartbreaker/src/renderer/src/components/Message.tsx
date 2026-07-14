@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -298,6 +298,46 @@ function ToolFeed({ tools, streaming }: { tools: ToolBadge[]; streaming: boolean
   )
 }
 
+/* ── Segment builder — interleave tools into the text at the point they fired ─
+ * A message stores flat text + a tool list stamped with afterChars (how many
+ * characters had streamed when each tool fired). This turns that back into an
+ * ordered sequence of {text} / {tools} segments so the renderer can show tool
+ * activity AT the point it happened — "as they speak and execute" — instead of
+ * always stacking every tool before the text. `revealedLen` clips to how far
+ * the typewriter has revealed, so tools unlock progressively during a live
+ * stream exactly in step with the text reaching them. Tools sharing the exact
+ * same afterChars (parallel calls, or several fired back-to-back with no text
+ * between) group into one feed block instead of one each. */
+type Segment = { kind: 'text'; text: string } | { kind: 'tools'; tools: ToolBadge[] }
+
+function buildSegments(fullText: string, tools: ToolBadge[], revealedLen: number): Segment[] {
+  const visible = tools
+    .filter(t => (t.afterChars ?? 0) <= revealedLen)
+    .slice()
+    .sort((a, b) => (a.afterChars ?? 0) - (b.afterChars ?? 0))
+
+  const segments: Segment[] = []
+  let cursor = 0
+  let i = 0
+  while (i < visible.length) {
+    const pos = Math.min(visible[i].afterChars ?? 0, revealedLen)
+    if (pos > cursor) {
+      segments.push({ kind: 'text', text: fullText.slice(cursor, pos) })
+      cursor = pos
+    }
+    const group: ToolBadge[] = []
+    while (i < visible.length && Math.min(visible[i].afterChars ?? 0, revealedLen) === pos) {
+      group.push(visible[i])
+      i++
+    }
+    segments.push({ kind: 'tools', tools: group })
+  }
+  if (cursor < revealedLen) {
+    segments.push({ kind: 'text', text: fullText.slice(cursor, revealedLen) })
+  }
+  return segments
+}
+
 function statusLabel(toolName: string): string {
   return TOOL_STATUS[toolName] ?? `Using ${toolName.replace(/_/g, ' ')}`
 }
@@ -521,6 +561,28 @@ function sanitizePartialMarkdown(text: string): string {
   const ticks = (stripped.match(/(?<!`)`(?!`)/g) ?? []).length
   if (ticks % 2 !== 0) text += '`'
   return text
+}
+
+/** One interleaved text segment (see buildSegments). Its own component so the
+ *  markdown parse — the single most expensive thing here — is memoized PER
+ *  SEGMENT: a settled earlier segment's `text` prop stays value-equal across
+ *  renders and skips re-parsing, while only the live tail segment re-parses as
+ *  the typewriter advances. Applies the same partial-markdown-safe pipeline
+ *  each individual segment gets (sanitize → normalize fences → math) that the
+ *  whole message used to get once, since a tool can in principle fire mid-fence. */
+function TextSegment({ text }: { text: string }) {
+  const visible = useMemo(
+    () => prepareMath(normalizeCodeFences(sanitizePartialMarkdown(text))),
+    [text],
+  )
+  return useMemo(
+    () => (
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={mdComponents}>
+        {visible}
+      </ReactMarkdown>
+    ),
+    [visible],
+  )
 }
 
 /* ── Lightbox — full-screen image viewer (click an attachment to open) ───── */
@@ -782,29 +844,18 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
     }, 80)
   }, [displayLen, isRevealing])
 
-  const rawVisible = isRevealing
-    ? sanitizePartialMarkdown(message.content.slice(0, renderLen))
-    : message.content
+  // How far the typewriter has revealed — same debounced cadence the markdown
+  // parse always used, now also gating which tools have "unlocked" into the
+  // segment list (buildSegments) so they interleave in step with the text
+  // actually reaching them, live or on reload.
+  const revealedLen = isRevealing ? renderLen : fullLen
 
-  // Normalize fence placement, then prepare math (currency-safe, code-safe).
-  const visibleContent = prepareMath(normalizeCodeFences(rawVisible))
-
-  // Memoize the parsed markdown subtree on the visible content ALONE. The full
-  // remark→rehype→react pass is the single most expensive thing this component
-  // does; keying it here means interaction state (hover, copy, thumbs, edit)
-  // never triggers a re-parse — only genuinely new text does. Quality is
-  // untouched: same plugins, same components, same partial-markdown sanitation.
-  const rendered = useMemo(
-    () => (
-      <ReactMarkdown
-        remarkPlugins={REMARK_PLUGINS}
-        rehypePlugins={REHYPE_PLUGINS}
-        components={mdComponents}
-      >
-        {visibleContent}
-      </ReactMarkdown>
-    ),
-    [visibleContent],
+  // Ordered text/tools segments — see buildSegments. Each text segment is its
+  // own memoized TextSegment, so a settled earlier segment never re-parses;
+  // only the live tail segment re-parses as the typewriter advances.
+  const segments = useMemo(
+    () => buildSegments(message.content, message.tools, revealedLen),
+    [message.content, message.tools, revealedLen],
   )
 
   const copy = () => {
@@ -947,22 +998,30 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
       style={{ display: 'flex', marginBottom: '1.5rem', alignItems: 'flex-start', animation: 'fadeSlideIn 0.2s ease' }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Live tool feed — visible per-tool activity (diffs, command output),
-            streams in as tools fire and stays after the turn ends */}
-        {message.tools.length > 0 && (
-          <ToolFeed tools={message.tools} streaming={!!message.isStreaming} />
-        )}
-
-        {/* Content, then (if the turn errored) a banner BENEATH it — the streamed
-            text and tools stay on screen; the error never replaces them. */}
-        {message.content ? (
+        {/* Text and tool activity INTERLEAVED in the order they actually
+            happened (see buildSegments) — a tool fired mid-answer shows up
+            between the sentences around it, not stacked above the whole
+            response. The cursor rides on the last segment only if it's text;
+            a still-running tool's own spinner covers the "something's
+            happening" signal otherwise. (If the turn errored, a banner sits
+            BENEATH all of this — the streamed text and tools stay on screen.) */}
+        {message.content || message.tools.length > 0 ? (
           <div className="prose" style={{ userSelect: 'text', overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth: 0, maxWidth: '100%' }}>
-            {rendered}
-            {/* Cursor: visible while streaming, or while typewriter is still catching up */}
-            {(message.isStreaming || (!hasCodeBlock && isRevealing)) && <StreamingCursor />}
+            {segments.map((seg, i) => {
+              const isLast = i === segments.length - 1
+              if (seg.kind === 'tools') {
+                return <ToolFeed key={`t${i}`} tools={seg.tools} streaming={!!message.isStreaming} />
+              }
+              return (
+                <Fragment key={`x${i}`}>
+                  <TextSegment text={seg.text} />
+                  {isLast && (message.isStreaming || (!hasCodeBlock && isRevealing)) && <StreamingCursor />}
+                </Fragment>
+              )
+            })}
           </div>
         ) : message.isStreaming ? (
-          // No content yet — show the natural-language working indicator
+          // Nothing at all has streamed yet — show the natural-language working indicator
           <WorkingStatus tools={message.tools} status={message.status} />
         ) : null}
 

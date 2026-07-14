@@ -246,11 +246,18 @@ export default function ChatMain({ config, onSelectSession }: Props) {
     // character-by-character from whatever content has landed.
     let chunkBuf = ''
     let flushHandle: number | null = null
+    // Running count of characters actually dispatched into `content` so far —
+    // stamped onto each tool as afterChars (see types.ts) so Message.tsx can
+    // interleave tools at the point they really fired instead of stacking them
+    // all before the text. Tracked here, not read back from React state, so a
+    // stale closure can never desync it from what's about to be flushed.
+    let charsSoFar = 0
     const flushChunks = () => {
       flushHandle = null
       if (!chunkBuf) return
       const chunk = chunkBuf
       chunkBuf = ''
+      charsSoFar += chunk.length
       dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk } })
     }
     const finalizeFlush = () => {
@@ -333,7 +340,13 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           if (flushHandle == null) flushHandle = requestAnimationFrame(flushChunks)
         } else if (event.type === 'tool') {
           gotTool = true
-          dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool: event.data as import('../lib/types').ToolBadge } })
+          // Flush any buffered-but-undispatched text FIRST so charsSoFar reflects
+          // everything the owner actually saw before this tool fired — otherwise
+          // the tool would appear to fire slightly too early (before text still
+          // sitting in the rAF-coalesced buffer).
+          finalizeFlush()
+          const tool = { ...(event.data as import('../lib/types').ToolBadge), afterChars: charsSoFar }
+          dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool } })
         } else if (event.type === 'tool_result') {
           const d = event.data as { id: string; result: string }
           dispatch({ type: 'SET_TOOL_RESULT', payload: { id: assistantId, toolId: d.id, result: d.result } })
@@ -476,7 +489,15 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       // Coalesce replayed chunks (they arrive in a burst) at one flush per frame.
       let buf = ''
       let handle: number | null = null
-      const flush = () => { handle = null; if (buf) { const c = buf; buf = ''; dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk: c } }) } }
+      let charsSoFar = 0  // see the live-stream loop above for why this exists
+      const flush = () => {
+        handle = null
+        if (!buf) return
+        const c = buf
+        buf = ''
+        charsSoFar += c.length
+        dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk: c } })
+      }
       let settled = false  // saw a terminal (done/error) for this attach
 
       try {
@@ -485,7 +506,10 @@ export default function ChatMain({ config, onSelectSession }: Props) {
             buf += event.data as string
             if (handle == null) handle = requestAnimationFrame(flush)
           } else if (event.type === 'tool') {
-            dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool: event.data as import('../lib/types').ToolBadge } })
+            if (handle != null) { cancelAnimationFrame(handle); handle = null }
+            flush()
+            const tool = { ...(event.data as import('../lib/types').ToolBadge), afterChars: charsSoFar }
+            dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool } })
           } else if (event.type === 'tool_result') {
             const d = event.data as { id: string; result: string }
             dispatch({ type: 'SET_TOOL_RESULT', payload: { id: assistantId, toolId: d.id, result: d.result } })
