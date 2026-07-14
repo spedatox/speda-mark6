@@ -28,14 +28,17 @@ services:
       # Single source of secrets — same file the dev backend (uvicorn) reads.
       - packages/api/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-speda}:${POSTGRES_PASSWORD:-speda}@postgres:5432/${POSTGRES_DB:-speda}
+      # SQLite in production (single-user workload). No DATABASE_URL override —
+      # config.py's default resolves to /root/.speda/speda.db, which the bind
+      # mount below maps to the server's /opt/speda. The postgres service is left
+      # dormant (app no longer depends on it); remove it once you're confident.
       PLAYWRIGHT_MCP_URL: http://playwright-mcp:3000
       SANDBOX_URL: http://sandbox:9000
-    depends_on:
-      postgres:
-        condition: service_healthy
     volumes:
       - /tmp/speda_outputs:/tmp/speda_outputs
+      # Host dir holding speda.db → container's data dir. A directory (not the
+      # bare file) so WAL's speda.db-wal / speda.db-shm sidecars persist too.
+      - /opt/speda:/root/.speda
 
   # The automation organ — n8n owns ALL scheduling and polling (CLAUDE.md).
   # SPEDA composes workflows over its REST API; fired watchers call back into

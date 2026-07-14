@@ -1,5 +1,6 @@
 import logging
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -22,6 +23,25 @@ engine = create_async_engine(
     echo=settings.debug,
     **{"poolclass": NullPool} if _is_sqlite else {"pool_pre_ping": True},
 )
+
+if _is_sqlite:
+    # SQLite is the production store (single-user workload), so it must be
+    # configured for concurrent access — the default rollback journal + no busy
+    # timeout throws "database is locked" the moment a background task (memory
+    # extraction, history indexing, news poll, an n8n trigger) writes while the
+    # chat loop is writing. Set once per DBAPI connection:
+    #   WAL          — readers never block the writer and vice versa
+    #   busy_timeout — a second writer waits/retries (5s) instead of erroring
+    #   synchronous=NORMAL — safe under WAL, far fewer fsyncs
+    #   foreign_keys=ON    — SQLite leaves FK enforcement OFF by default
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragmas(dbapi_conn, _record):  # noqa: ANN001
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 AsyncSessionLocal = async_sessionmaker(
     engine,
