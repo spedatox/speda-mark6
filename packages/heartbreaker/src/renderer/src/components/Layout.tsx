@@ -5,6 +5,7 @@ import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useIsMobile } from '../lib/useIsMobile'
 import { fetchMessages } from '../lib/api'
+import { loadMessages, saveMessages } from '../store/messageCache'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import ChatMain from './ChatMain'
@@ -73,11 +74,20 @@ export default function Layout({
 
   const handleSelectSession = useCallback(async (sessionId: number) => {
     setDrawerOpen(false)
-    dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages: [] } })
+    // Show the cached transcript instantly (also the offline fallback), then let
+    // the server refresh it. If the fetch fails (no network), the cache stays.
+    const cached = loadMessages(config.agentId, sessionId)
+    dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages: cached ?? [] } })
     try {
       const messages = await fetchMessages(config, sessionId)
-      dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages } })
-    } catch { /* keep empty state on error */ }
+      // Server is authoritative when it actually returned the turn; if it came
+      // back empty but we have a cached copy (e.g. an answer lost to a mid-turn
+      // restart), keep showing the cache rather than blanking the view.
+      if (messages.length || !cached) {
+        dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages } })
+        if (messages.length) saveMessages(config.agentId, sessionId, messages)
+      }
+    } catch { /* offline — keep the cached transcript already shown */ }
   }, [config, dispatch])
 
   const handleNewChat = useCallback(() => {
