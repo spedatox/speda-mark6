@@ -37,6 +37,7 @@
  */
 
 import { useMemo } from 'react'
+import { looksIncomplete } from '../lib/partialJson'
 import {
   LineChart, Line,
   BarChart, Bar,
@@ -362,6 +363,26 @@ function ParseError({ raw }: { raw: string }) {
   )
 }
 
+/* ── Materializing — quiet placeholder while the JSON is still streaming ──── */
+function Materializing() {
+  return (
+    <ChartPanel>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.3rem 0' }}>
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+          background: 'var(--hb-cyan-bright)', animation: 'skeletonPulse 1.4s ease-in-out infinite',
+        }} />
+        <span style={{
+          fontFamily: "var(--font-mono)", fontSize: '0.68rem',
+          letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--hb-text-faint)',
+        }}>
+          CHART // MATERIALIZING
+        </span>
+      </div>
+    </ChartPanel>
+  )
+}
+
 /* ── Main export ──────────────────────────────────────────────────────────── */
 export default function ChartBlock({ children }: { children: string }) {
   const spec = useMemo<ChartSpec | null>(() => {
@@ -369,7 +390,9 @@ export default function ChartBlock({ children }: { children: string }) {
     catch { return null }
   }, [children])
 
-  if (!spec) return <ParseError raw={children} />
+  // Unbalanced JSON means it's still streaming, not actually malformed — a
+  // quiet placeholder beats a scary error that vanishes a second later.
+  if (!spec) return looksIncomplete(children) ? <Materializing /> : <ParseError raw={children} />
 
   return (
     <ChartPanel title={spec.title}>

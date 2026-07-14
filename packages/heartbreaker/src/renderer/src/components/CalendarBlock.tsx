@@ -27,6 +27,7 @@
  */
 
 import { useMemo } from 'react'
+import { looksIncomplete } from '../lib/partialJson'
 
 /* ── Types ────────────────────────────────────────────────────────────────── */
 interface CalEvent {
@@ -191,6 +192,28 @@ function ParseError({ raw }: { raw: string }) {
   )
 }
 
+/* ── Materializing — quiet placeholder while the JSON is still streaming ──── */
+function Materializing() {
+  return (
+    <div className="hb-holo" style={{
+      position: 'relative', overflow: 'hidden', margin: '0.85rem 0',
+      padding: '1.1rem 0.95rem', display: 'flex', alignItems: 'center',
+      gap: '0.55rem', animation: 'widgetEntrance 0.3s ease both',
+    }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+        background: 'var(--hb-cyan-bright)', animation: 'skeletonPulse 1.4s ease-in-out infinite',
+      }} />
+      <span style={{
+        fontFamily: "var(--font-mono)", fontSize: '0.68rem',
+        letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--hb-text-faint)',
+      }}>
+        CALENDAR // MATERIALIZING
+      </span>
+    </div>
+  )
+}
+
 /* ── Main export ──────────────────────────────────────────────────────────── */
 export default function CalendarBlock({ children }: { children: string }) {
   const spec = useMemo<CalendarSpec | null>(() => {
@@ -204,7 +227,9 @@ export default function CalendarBlock({ children }: { children: string }) {
 
   const today = useMemo(() => new Date(), [])
 
-  if (!spec) return <ParseError raw={children} />
+  // Unbalanced JSON means it's still streaming, not actually malformed — a
+  // quiet placeholder beats a scary error that vanishes a second later.
+  if (!spec) return looksIncomplete(children) ? <Materializing /> : <ParseError raw={children} />
 
   const title = spec.title ?? 'CALENDAR'
   // Header focus cluster: month of the first day (Jarvis "JANUARY 2012" feel).
