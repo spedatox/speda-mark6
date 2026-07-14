@@ -196,7 +196,7 @@ export function stopPartyCycle(): void {
 const PARTY_COLORS = [
   '#36abca', /* speda */ '#d99c44', /* sentinel */ '#9165e6', /* nightcrawler */
   '#8a93a6', /* ultron */ '#d8483c', /* centurion */ '#3fae74', /* atomix */
-  '#2eb6ac', /* optimus */ '#8a7fd6', /* orion */
+  '#2f4f8f', /* optimus */ '#e0703a', /* orion */
 ]
 
 /**

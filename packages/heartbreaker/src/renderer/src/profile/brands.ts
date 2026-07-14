@@ -53,11 +53,11 @@ export const BRANDS: Record<string, Brand> = {
   optimus: {
     agentId: 'optimus', name: 'Optimus', modelNumber: 'Mark II', userName: 'Ahmet Erol',
     tagline: 'Systems, Code & Infrastructure',
-    avatarInitial: 'O', accent: '#2eb6ac',
+    avatarInitial: 'O', accent: '#2f4f8f',
   },
   orion: {
     agentId: 'orion', name: 'Orion', modelNumber: 'Mark I', userName: 'Ahmet Erol',
     tagline: 'Mark VI Maintenance & Memory Custodian',
-    avatarInitial: 'O', accent: '#8a7fd6',
+    avatarInitial: 'O', accent: '#e0703a',
   },
 }
