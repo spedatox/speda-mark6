@@ -7,6 +7,7 @@ from app.prompts.loader import assemble, build_skills_manifest
 PROMPT_SECTIONS = [
     "agents/orion/01_identity.md",
     "agents/orion/02_audit.md",
+    "agents/orion/03_operations.md",   # server ops runbook (system_ops host bridge)
     "core/05_output_policy.md",
     "core/07_formatting.md",
     "core/08_memory.md",
@@ -22,10 +23,12 @@ class OrionProfile(AgentProfile):
     docs/MEMORY_ARCHITECTURE.md), the nightly audit, and host maintenance via the
     Orion-only system_ops skill. Terse, procedural, reports in changelogs.
 
-    tool_allowlist is None (full registry, matching the rest of the roster). His
-    exclusive host capability is guarded at the SKILL level — system_ops declares
-    restricted_to={"orion"}, so no other agent can see or call it regardless of
-    their allowlist. He is a dispatch target: other agents may hand him cleanup.
+    tool_allowlist is None (full registry, matching the rest of the roster). The
+    host capability is guarded at the SKILL level — system_ops declares
+    restricted_to={"orion", "optimus"}, so no other agent can see or call it
+    regardless of their allowlist. Orion is the primary custodian; Optimus shares
+    it for infrastructure work. He is a dispatch target: other agents may hand him
+    cleanup.
     """
 
     agent_id = "orion"
