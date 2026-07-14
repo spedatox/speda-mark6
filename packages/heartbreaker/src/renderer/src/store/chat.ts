@@ -156,7 +156,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         isStreaming: false,
         messages: state.messages.map(m =>
           m.id === action.payload.id
-            ? { ...m, isStreaming: false, isError: true, content: action.payload.error, status: undefined }
+            // Preserve everything already streamed (text + tools); attach the
+            // error as a SEPARATE banner. A mid-turn host restart or dropped
+            // connection must never vaporize the response the owner was reading.
+            ? { ...m, isStreaming: false, isError: true, errorNote: action.payload.error, status: undefined }
             : m
         ),
       }

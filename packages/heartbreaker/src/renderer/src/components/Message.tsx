@@ -950,17 +950,9 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
           <ToolFeed tools={message.tools} streaming={!!message.isStreaming} />
         )}
 
-        {/* Content, error, or live working status */}
-        {message.isError ? (
-          <div style={{
-            color: '#f87171', userSelect: 'text',
-            background: 'rgba(248,113,113,0.07)',
-            border: '1px solid rgba(248,113,113,0.2)',
-            borderRadius: '0.625rem', padding: '0.625rem 0.875rem', fontSize: '0.9rem',
-          }}>
-            {message.content}
-          </div>
-        ) : message.content ? (
+        {/* Content, then (if the turn errored) a banner BENEATH it — the streamed
+            text and tools stay on screen; the error never replaces them. */}
+        {message.content ? (
           <div className="prose" style={{ userSelect: 'text' }}>
             {rendered}
             {/* Cursor: visible while streaming, or while typewriter is still catching up */}
@@ -970,6 +962,18 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
           // No content yet — show the natural-language working indicator
           <WorkingStatus tools={message.tools} status={message.status} />
         ) : null}
+
+        {message.isError && (
+          <div style={{
+            color: '#f87171', userSelect: 'text',
+            background: 'rgba(248,113,113,0.07)',
+            border: '1px solid rgba(248,113,113,0.2)',
+            borderRadius: '0.625rem', padding: '0.625rem 0.875rem', fontSize: '0.9rem',
+            marginTop: message.content || message.tools.length ? '0.5rem' : 0,
+          }}>
+            {message.errorNote || message.content || 'Something went wrong.'}
+          </div>
+        )}
 
         {/* Downloadable files SPEDA produced this turn */}
         {message.files && message.files.length > 0 && (

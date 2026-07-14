@@ -42,6 +42,9 @@ export interface ChatMessage {
   tools: ToolBadge[]
   isStreaming: boolean
   isError: boolean
+  errorNote?: string  // error banner text — kept SEPARATE from content so an
+                      // error (network drop, host restart) never erases what
+                      // already streamed
   images?: string[]   // data: URLs for display in the user bubble
   files?: FileMeta[]  // downloadable files SPEDA produced
   uploads?: UploadedFile[]  // non-image files the user attached (display chips)

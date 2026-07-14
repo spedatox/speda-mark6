@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { ChatContext, chatReducer, initialState } from './store/chat'
+import { saveMessages } from './store/messageCache'
 import { SettingsContext, useSettingsProvider } from './store/settings'
 import { ProfileContext } from './components/Sidebar'
 import DEFAULT_PROFILE from './profile'
@@ -61,6 +62,18 @@ function AppInner() {
   // While the party cycle owns the palette, a profile change must not snap
   // the theme back to a single accent.
   useEffect(() => { if (!isPartyCycling()) applyTheme(profile.accent) }, [profile.accent])
+
+  // Mirror each session's transcript to local storage as turns SETTLE (not on
+  // every streamed chunk — cheap, and the point is durability, not liveness). A
+  // finished OR errored turn flips isStreaming off, so this captures the answer
+  // even when the connection dropped mid-turn and the server never saved it.
+  // Read back offline by the session loader (store/messageCache).
+  useEffect(() => {
+    if (state.isStreaming) return
+    const sid = state.activeSessionId
+    if (sid == null || !state.messages.length) return
+    saveMessages(configRef.current?.agentId ?? profile.agentId, sid, state.messages)
+  }, [state.isStreaming, state.messages, state.activeSessionId, profile.agentId])
 
   useEffect(() => {
     const load = async () => {
