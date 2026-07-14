@@ -72,6 +72,12 @@ def _denied(command: str) -> str | None:
     return None
 
 
+# Restarting one of these restarts the container the backend (and therefore the
+# calling agent) runs inside — it MUST be deferred, or the agent kills its own
+# turn mid-reply. Everything else is safe to restart synchronously.
+_SELF_SERVICES = {"app", "igor", "speda-app-1", "speda"}
+
+
 def _remote() -> bool:
     """True when actions must run on the real host over SSH (prod-in-container)."""
     return bool((settings.system_ops_host or "").strip())
@@ -125,15 +131,32 @@ class SystemOpsSkill(Skill):
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["exec", "read_file", "write_file"],
-                "description": "exec: run a shell command. read_file: read a host file. write_file: write a file under the ops root.",
+                "enum": ["exec", "read_file", "write_file", "restart_service"],
+                "description": (
+                    "exec: run a shell command. read_file: read a host file. "
+                    "write_file: write a file under the ops root. restart_service: "
+                    "safely restart a container — ALWAYS use this to restart Igor "
+                    "(never a raw 'docker restart' on your own container)."
+                ),
             },
             "command": {"type": "string", "description": "Shell command for action=exec."},
             "path": {"type": "string", "description": "Absolute host path for read_file/write_file."},
             "content": {"type": "string", "description": "File content for write_file."},
+            "service": {
+                "type": "string",
+                "description": (
+                    "For restart_service: which compose service — 'app' (= Igor, "
+                    "yourself; scheduled detached so your reply survives), or "
+                    "'n8n' / 'sandbox' / 'caddy' (restarted synchronously). Default 'app'."
+                ),
+            },
             "timeout": {
                 "type": "integer",
                 "description": f"Max seconds for exec (default 30, hard cap {settings.system_ops_timeout}).",
+            },
+            "delay": {
+                "type": "integer",
+                "description": "For a SELF restart_service (app/Igor): seconds to wait so your reply finishes first (default 10, max 60).",
             },
         },
         "required": ["action"],
@@ -157,7 +180,9 @@ class SystemOpsSkill(Skill):
             return await self._read_file(args, context)
         if action == "write_file":
             return await self._write_file(args, context)
-        return f"Error: unknown action '{action}'. Valid: exec, read_file, write_file."
+        if action == "restart_service":
+            return await self._restart_service(args, context)
+        return f"Error: unknown action '{action}'. Valid: exec, read_file, write_file, restart_service."
 
     # ── Actions ────────────────────────────────────────────────────────────────
 
@@ -215,6 +240,47 @@ class SystemOpsSkill(Skill):
         if not out and not err:
             parts.append("(no output)")
         return "\n\n".join(parts)
+
+    async def _restart_service(self, args: dict, context: AgentContext) -> str:
+        """Restart a container safely. For the SELF service (Igor/app) this is the
+        one operation an in-process agent cannot do inline — restarting your own
+        container mid-turn severs the reply ("pulls a Kurt Cobain"). So a self
+        restart is DETACHED on the host and DELAYED: the shell backgrounds
+        immediately (this call returns at once, letting the turn finish and
+        persist), then the container recycles `delay` seconds later, well after
+        the reply has flushed. Other services carry no such hazard and restart
+        synchronously with a status read-back."""
+        service = (args.get("service") or "app").strip().lower()
+        # Resolve the live container by its compose-service label — robust to the
+        # project name (speda-app-1 etc.) without hardcoding it.
+        svc = "app" if service in _SELF_SERVICES else service
+        resolve = f"docker ps -q -f label=com.docker.compose.service={shlex.quote(svc)}"
+
+        if service in _SELF_SERVICES:
+            delay = max(3, min(int(args.get("delay", 10) or 10), 60))
+            # setsid + & → survives this container dying; sleep → reply flushes first.
+            cmd = (
+                f"setsid sh -c 'sleep {delay} && docker restart $({resolve})' "
+                f">/tmp/speda_restart.log 2>&1 </dev/null &"
+            )
+            result = await self._exec({"command": cmd, "timeout": 15}, context)
+            await self._log_op(context, f"restart_service SELF ({svc}) scheduled +{delay}s")
+            return (
+                f"Igor ({svc}) restart SCHEDULED in {delay}s — detached on the host, so "
+                f"it fires AFTER this turn. Do NOT run any further commands. Write your "
+                f"closing report to the owner now; this process recycles once the delay "
+                f"elapses. Confirm health on your NEXT message with "
+                f"`curl -fsS http://localhost:8000/health`.\n\n{result}"
+            )
+
+        # Non-self: safe to do synchronously and read back status in the same turn.
+        cmd = (
+            f"docker restart $({resolve}) ; sleep 2 ; "
+            f"docker ps --filter label=com.docker.compose.service={shlex.quote(svc)}"
+        )
+        result = await self._exec({"command": cmd, "timeout": 30}, context)
+        await self._log_op(context, f"restart_service ({svc})")
+        return result
 
     async def _read_file(self, args: dict, context: AgentContext) -> str:
         raw = (args.get("path") or "").strip()
