@@ -21,36 +21,46 @@ Everything runs as Docker containers on the host. `docker ps` is your ground tru
 
 Verify names before acting — `docker ps --format '{{.Names}}\t{{.Status}}'`.
 
-## Restarting Igor — THE SELF-RESTART RULE
+## Restarting Igor — THE SELF-RESTART RULE (read this twice)
 
-Igor is the container you run inside. If you restart it synchronously, you kill
-your own process mid-reply and the owner sees nothing. So:
+Igor is the container you run inside. Restarting it **synchronously kills your own
+process mid-reply** — the owner sees a "network error" and your entire response
+vanishes. This has already happened once. Never let it happen again.
 
-1. **Report first, in the same reply** — tell the owner you're restarting Igor and
-   to give it ~15s, then confirm. This text must go out BEFORE the container dies.
-2. **Issue the restart detached, with a delay**, so it outlives your process and
-   fires only after your reply has flushed:
-   ```
-   setsid sh -c 'sleep 5 && docker restart speda-app-1' >/tmp/igor_restart.log 2>&1 </dev/null &
-   ```
-   The `&`/`setsid` returns control immediately (your `exec` succeeds and you can
-   finish the reply); `sleep 5` lets that reply reach the owner; then Igor recycles.
-3. **You cannot confirm health in the same turn** — you'll be gone. The owner pings
-   you next turn ("is Igor up?") and fresh-you verifies:
-   `curl -fsS http://localhost:8000/health` on the host → expect `{"status":"ok",...}`.
+**NEVER run `docker restart`, `docker compose restart`, `docker compose up
+--force-recreate`, `docker stop/kill`, or ANY raw command against the `app` /
+`speda-app-1` container yourself.** There is exactly one correct way to restart
+Igor:
 
-Which config needs a restart at all: settings changed in the desktop **Configuration
-tab** are written to the managed env and most apply live — only ones marked
-restart-required need the recycle above, and `docker restart` re-reads that managed
-env file on boot. Changes to the checked-in deploy `.env` arrive through a git
-deploy (which recreates the container itself) — you don't restart for those.
+```
+system_ops(action="restart_service", service="app")
+```
+
+This SCHEDULES the restart, detached on the host, to fire ~10s later — after your
+turn has finished and been saved. The tool returns immediately. Your job when you
+see that confirmation:
+
+1. **Stop issuing commands.** The restart is already queued; anything more just
+   races the clock.
+2. **Write your closing report to the owner in this same reply** — what you
+   changed, that Igor is restarting now, and to check back in ~15s. Let that reply
+   finish; that is the whole point of the delay.
+3. **Do not try to confirm health this turn** — you'll be gone before it's back.
+   Next message, fresh-you verifies: `system_ops(action="exec", command="curl -fsS
+   http://localhost:8000/health")` → expect `{"status":"ok",...}`.
+
+When a restart is even needed: settings changed in the desktop **Configuration
+tab** land in the managed env; most apply live, and a restart re-reads that file on
+boot for the few that don't. Do NOT hand-edit `packages/api/.env` on the box to
+change config — that is a deploy concern; tell the owner to change it in the
+Configuration tab (or via a git deploy) instead of editing files on the server.
 
 ## Restarting anything else
 
-For n8n, sandbox, Caddy — no self-destruction problem. Do it synchronously, then
-verify and report in one turn:
+For n8n, sandbox, Caddy — no self-destruction problem, so `restart_service`
+restarts them synchronously and hands back the status in the same turn:
 ```
-docker restart speda-n8n-1 && sleep 2 && docker ps --format '{{.Names}}\t{{.Status}}' | grep n8n
+system_ops(action="restart_service", service="n8n")
 ```
 
 ## Diagnosing before you act
