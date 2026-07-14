@@ -126,66 +126,174 @@ function ToolDetail({ tool }: { tool: ToolBadge }) {
   )
 }
 
-function ToolDisclosure({ tools }: { tools: ToolBadge[] }) {
-  const [open, setOpen] = useState(false)
-  if (!tools.length) return null
+/* ── Live tool feed — visible per-tool activity, with diffs & command output ─ */
 
-  const searchTools  = tools.filter(t => isSearchTool(t.name))
-  const otherTools   = tools.filter(t => !isSearchTool(t.name))
-  const hasSearch    = searchTools.length > 0
+// Keep the last two path segments so long paths stay readable without noise.
+function shortPath(p: string): string {
+  const parts = p.split(/[/\\]/).filter(Boolean)
+  return parts.length <= 2 ? p : '…/' + parts.slice(-2).join('/')
+}
 
-  // Friendly label for the collapsed row
-  const label = hasSearch
-    ? `Searched the web${searchTools.length > 1 ? ` (${searchTools.length}×)` : ''}`
-    : `Used ${tools.length} tool${tools.length !== 1 ? 's' : ''}`
+// One-line "what it did", Claude-Code style: a verb + a target.
+function toolSummary(tool: ToolBadge): { verb: string; target?: string } {
+  const inp = (tool.input && typeof tool.input === 'object')
+    ? tool.input as Record<string, unknown> : {}
+  const str = (k: string) => (typeof inp[k] === 'string' ? inp[k] as string : undefined)
+  const path = str('path')
+  switch (tool.name) {
+    case 'edit_file':   return { verb: 'Edited', target: path && shortPath(path) }
+    case 'write_file':  return { verb: 'Wrote', target: path && shortPath(path) }
+    case 'read_file':   return { verb: 'Read', target: path && shortPath(path) }
+    case 'run_command': return { verb: 'Ran', target: str('command') }
+    case 'system_ops': {
+      const action = str('action')
+      if (action === 'read_file')  return { verb: 'Read', target: path && shortPath(path) }
+      if (action === 'write_file') return { verb: 'Wrote', target: path && shortPath(path) }
+      return { verb: 'Ran', target: str('command') }   // exec (default)
+    }
+    case 'graph_query':    return { verb: 'Searched graph', target: str('question') }
+    case 'graph_path':     return { verb: 'Traced the codebase graph' }
+    case 'graph_overview': return { verb: 'Mapped the codebase graph' }
+    default:
+      if (isSearchTool(tool.name)) return { verb: 'Searched', target: str('query') || str('question') }
+      return { verb: tool.name.replace(/_/g, ' ').replace(/-/g, ' ') }
+  }
+}
 
-  const friendlyName = (raw: string) =>
-    raw.replace(/_/g, ' ').replace(/-/g, ' ').toLowerCase()
-
+// Red/green line diff. edit_file passes old→new; write_file passes new only.
+function DiffBlock({ removed, added }: { removed?: string; added?: string }) {
+  const rows: { sign: '+' | '-'; text: string }[] = []
+  if (removed != null) for (const l of removed.split('\n')) rows.push({ sign: '-', text: l })
+  if (added != null)   for (const l of added.split('\n'))   rows.push({ sign: '+', text: l })
+  if (!rows.length) return null
   return (
-    <div style={{ marginBottom: '0.6rem' }}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-          background: 'transparent', border: 'none',
-          padding: '0.15rem 0',
-          cursor: 'pointer',
-          fontFamily: "var(--font-mono)",
-          fontSize: '0.68rem', letterSpacing: '0.08em',
-          color: 'var(--hb-icon)',
-          transition: 'color 0.12s',
-        }}
-        onMouseEnter={e => (e.currentTarget.style.color = 'var(--hb-cyan-bright)')}
-        onMouseLeave={e => (e.currentTarget.style.color = 'var(--hb-icon)')}
-      >
-        {/* globe for search, wrench for other */}
-        {hasSearch
-          ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-          : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-        }
-        {label}
-        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </button>
-
-      {open && (
-        <div style={{
-          marginTop: '0.25rem',
-          padding: '0.55rem 0.7rem',
-          background: 'rgba(6,14,20,0.7)',
-          border: '1px solid rgba(var(--hb-accent-rgb),0.15)',
-          borderLeft: '2px solid rgba(var(--hb-accent-rgb),0.3)',
-          animation: 'fadeSlideIn 0.15s ease',
-          display: 'flex', flexDirection: 'column', gap: '0.6rem',
+    <div style={{
+      fontFamily: 'var(--font-mono)', fontSize: '0.63rem', lineHeight: 1.55,
+      borderRadius: '0.4rem', overflow: 'hidden', maxHeight: 340, overflowY: 'auto',
+      border: '1px solid rgba(var(--hb-accent-rgb),0.14)',
+    }}>
+      {rows.map((r, i) => (
+        <div key={i} style={{
+          display: 'flex', gap: '0.5rem', padding: '0 0.5rem',
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          background: r.sign === '+' ? 'rgba(74,222,128,0.09)' : 'rgba(248,113,113,0.09)',
+          color:      r.sign === '+' ? 'rgba(134,239,172,0.95)' : 'rgba(252,165,165,0.92)',
         }}>
-          {[...searchTools, ...otherTools].map(t => (
-            <ToolDetail key={t.id} tool={t} />
-          ))}
+          <span style={{ opacity: 0.55, userSelect: 'none' }}>{r.sign}</span>
+          <span style={{ flex: 1 }}>{r.text || ' '}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Command + its output (exit code / stdout live in the result string).
+function CommandBlock({ command, result }: { command?: string; result?: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+      {command && (
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: '0.64rem', color: 'var(--hb-cyan-bright)',
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        }}>
+          <span style={{ color: 'var(--hb-icon-dim)' }}>$ </span>{command}
         </div>
       )}
+      {result && (
+        <pre style={{
+          margin: 0, fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+          color: 'var(--hb-icon-bright)', lineHeight: 1.5, whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word', maxHeight: 260, overflow: 'auto',
+        }}>{result}</pre>
+      )}
+    </div>
+  )
+}
+
+// One row in the feed: always-visible summary; click to expand diff/output/detail.
+function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
+  const [open, setOpen] = useState(false)
+  const { verb, target } = toolSummary(tool)
+  const inp = (tool.input && typeof tool.input === 'object')
+    ? tool.input as Record<string, unknown> : {}
+  const action = typeof inp.action === 'string' ? inp.action : undefined
+  const isEdit  = tool.name === 'edit_file'
+  const isWrite = tool.name === 'write_file' || (tool.name === 'system_ops' && action === 'write_file')
+  const isCmd   = tool.name === 'run_command'
+    || (tool.name === 'system_ops' && action !== 'read_file' && action !== 'write_file')
+  const hasDetail = isEdit || isWrite || isCmd || !!tool.result || Object.keys(inp).length > 0
+  const pending = live && !tool.result
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <button
+        onClick={() => hasDetail && setOpen(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%',
+          background: 'transparent', border: 'none', padding: '0.22rem 0',
+          cursor: hasDetail ? 'pointer' : 'default', textAlign: 'left',
+          fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--hb-text-dim)',
+        }}
+      >
+        {pending
+          ? <Spinner />
+          : <span style={{
+              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+              background: 'var(--hb-cyan-dim)',
+            }} />}
+        <span style={{ color: 'var(--hb-icon-bright)', flexShrink: 0 }}>{verb}</span>
+        {target && (
+          <span style={{
+            color: 'var(--hb-text-dim)', overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap', flex: 1, minWidth: 0,
+          }}>{target}</span>
+        )}
+        {hasDetail && (
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            style={{
+              flexShrink: 0, opacity: 0.5, marginLeft: target ? 0 : 'auto',
+              transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s',
+            }}>
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        )}
+      </button>
+      {open && hasDetail && (
+        <div style={{ padding: '0.35rem 0 0.55rem 1rem', animation: 'fadeIn 0.15s ease' }}>
+          {isEdit ? (
+            <DiffBlock
+              removed={typeof inp.old_string === 'string' ? inp.old_string : undefined}
+              added={typeof inp.new_string === 'string' ? inp.new_string : undefined}
+            />
+          ) : isWrite ? (
+            <DiffBlock added={typeof inp.content === 'string' ? inp.content : undefined} />
+          ) : isCmd ? (
+            <CommandBlock
+              command={typeof inp.command === 'string' ? inp.command : undefined}
+              result={tool.result}
+            />
+          ) : (
+            <ToolDetail tool={tool} />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ToolFeed({ tools, streaming }: { tools: ToolBadge[]; streaming: boolean }) {
+  if (!tools.length) return null
+  return (
+    <div style={{
+      marginBottom: '0.7rem', padding: '0.45rem 0.75rem',
+      borderLeft: '2px solid rgba(var(--hb-accent-rgb),0.28)',
+      background: 'rgba(6,14,20,0.4)', borderRadius: '0 0.4rem 0.4rem 0',
+      display: 'flex', flexDirection: 'column', gap: '0.05rem',
+      animation: 'fadeSlideIn 0.15s ease',
+    }}>
+      {tools.map((t, i) => (
+        <ToolRow key={t.id} tool={t} live={streaming && i === tools.length - 1} />
+      ))}
     </div>
   )
 }
@@ -836,9 +944,10 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
       style={{ display: 'flex', marginBottom: '1.5rem', alignItems: 'flex-start', animation: 'fadeSlideIn 0.2s ease' }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Tool disclosure — appears as soon as first tool fires, stays permanently */}
+        {/* Live tool feed — visible per-tool activity (diffs, command output),
+            streams in as tools fire and stays after the turn ends */}
         {message.tools.length > 0 && (
-          <ToolDisclosure tools={message.tools} />
+          <ToolFeed tools={message.tools} streaming={!!message.isStreaming} />
         )}
 
         {/* Content, error, or live working status */}
