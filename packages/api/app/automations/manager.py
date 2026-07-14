@@ -65,9 +65,10 @@ async def create_automation(spec: dict, db: AsyncSession, agent_id: str = "speda
 
     created = await n8n.create_workflow(workflow)
     if not created or not created.get("id"):
+        detail = n8n.last_error
         raise ValueError(
-            "n8n rejected the composed workflow or is unreachable — check the "
-            "backend logs (n8n_request_failed) for the exact API error."
+            "n8n rejected the composed workflow or is unreachable"
+            + (f": {detail}" if detail else " — check the backend logs (n8n_request_failed).")
         )
     workflow_id = str(created["id"])
 
