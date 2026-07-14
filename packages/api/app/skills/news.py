@@ -207,19 +207,39 @@ async def _quota_refund(purpose: str) -> None:
             await db.commit()
 
 
+def _newsdata_q(query: str) -> str:
+    """Shape a natural-language query for NewsData's `q`.
+
+    NewsData treats space-separated words as AND, so a phrase like "Türkiye
+    gündem bugün önemli" requires ALL words in one article and matches ~nothing
+    (empirically 0). Unless the caller already used NewsData's boolean syntax
+    (quotes / OR / AND / NOT), OR-join the words so ANY of them matches — broad
+    but non-empty, which is what a digest wants. A single word is passed as-is.
+    """
+    q = query.strip()
+    up = f" {q.upper()} "
+    if '"' in q or " OR " in up or " AND " in up or " NOT " in up:
+        return q  # caller knows NewsData query syntax — respect it verbatim
+    words = q.split()
+    return " OR ".join(words) if len(words) > 1 else q
+
+
 class NewsDeepDiveSkill(Skill):
     name = "news_deep_dive"
     description = (
         "Tier-2 news analyst — queries NewsData.io for structured cross-outlet "
         "coverage that free RSS can't give: corroboration (how many outlets, "
-        "which angle), related-story timelines, historical search beyond the "
-        "local window, and category/topic filters. Use it sparingly and ONLY when "
-        "news_headlines and read_article can't answer — it draws from a strict "
-        "daily quota (NewsData free tier, 200/day, split into buckets). Do NOT use "
-        "it to fetch a single article's text (use read_article) or for anything "
-        "already in the RSS store (use news_headlines). Returns structured results "
-        "(title, source, date, description, link); when the day's quota bucket is "
-        "spent it says so and falls back to what Tier 1 already holds."
+        "which angle), related-story timelines, historical search, and "
+        "category/topic filters. Use it sparingly and ONLY when news_headlines and "
+        "read_article can't answer — it draws from a strict daily quota (NewsData "
+        "free tier, 200/day). Do NOT use it to fetch a single article's text (use "
+        "read_article) or for anything already in the RSS store (use "
+        "news_headlines). CORRECT USAGE: for a country's general agenda/digest set "
+        "'country' (e.g. 'tr') and optionally 'category' with a SHORT or empty "
+        "'query' — do NOT pass long sentences. For a specific topic use one or two "
+        "keywords (e.g. 'enflasyon'). Multiple words are matched as OR "
+        "automatically, so keep queries tight. Returns structured results (title, "
+        "source, date, description, link)."
     )
     read_only = True
     requires_network = True
@@ -233,7 +253,8 @@ class NewsDeepDiveSkill(Skill):
                 "description": "Which quota bucket: 'deep_dive' (owner ad-hoc), 'auto_flag' (flagged-story corroboration), 'digest' (daily topic digest). Default 'deep_dive'.",
                 "default": "deep_dive",
             },
-            "category": {"type": "string", "description": "Optional NewsData category, e.g. 'business', 'politics', 'technology', 'world'."},
+            "category": {"type": "string", "description": "Optional NewsData category, e.g. 'top', 'business', 'politics', 'technology', 'world'."},
+            "country": {"type": "string", "description": "Optional 2-letter country code, e.g. 'tr' for Turkey, 'us'. Strongly improves relevance for a country's news; use it for broad/agenda queries."},
             "language": {"type": "string", "description": "Language code (default 'tr'; use 'en' for English).", "default": "tr"},
             "from_date": {"type": "string", "description": "Optional YYYY-MM-DD lower bound (uses the archive endpoint)."},
             "to_date": {"type": "string", "description": "Optional YYYY-MM-DD upper bound (archive endpoint)."},
@@ -264,21 +285,30 @@ class NewsDeepDiveSkill(Skill):
 
         archive = bool(args.get("from_date") or args.get("to_date"))
         endpoint = "archive" if archive else "latest"
-        params = {
-            "apikey": settings.newsdata_api_key,
-            "q": query,
-            "language": (args.get("language") or "tr").strip(),
-        }
-        if args.get("category"):
-            params["category"] = str(args["category"]).strip()
-        if args.get("from_date"):
-            params["from_date"] = str(args["from_date"]).strip()
-        if args.get("to_date"):
-            params["to_date"] = str(args["to_date"]).strip()
+        language = (args.get("language") or "tr").strip()
+        country = (args.get("country") or "").strip().lower()
+        category = (args.get("category") or "").strip()
+
+        def _params(q: str | None) -> dict:
+            p = {"apikey": settings.newsdata_api_key, "language": language}
+            if q:
+                p["q"] = q                       # OR-shaped by _newsdata_q
+            if country:
+                p["country"] = country
+            if category:
+                p["category"] = category
+            if args.get("from_date"):
+                p["from_date"] = str(args["from_date"]).strip()
+            if args.get("to_date"):
+                p["to_date"] = str(args["to_date"]).strip()
+            return p
+
+        async def _fetch(p: dict):
+            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+                return await client.get(f"{_NEWSDATA_BASE}/{endpoint}", params=p)
 
         try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                resp = await client.get(f"{_NEWSDATA_BASE}/{endpoint}", params=params)
+            resp = await _fetch(_params(_newsdata_q(query)))
         except (httpx.ConnectError, httpx.ConnectTimeout) as e:
             await _quota_refund(purpose)   # never left the client — refund the reservation
             return f"news_deep_dive: could not reach NewsData.io ({type(e).__name__}). Quota not charged."
@@ -290,12 +320,31 @@ class NewsDeepDiveSkill(Skill):
         if resp.status_code != 200:
             return f"news_deep_dive: NewsData.io returned HTTP {resp.status_code}."
 
-        data = resp.json()
-        results = data.get("results") or []
-        if not results:
-            return f"news_deep_dive: no NewsData results for '{query}'. ({used}/{budget} of the '{purpose}' budget used today.)"
+        results = resp.json().get("results") or []
 
-        lines = [f"NewsData.io — {len(results)} results for '{query}' ({used}/{budget} '{purpose}' budget used today):"]
+        # Broad fallback: a keyword query with a country/category context but no
+        # hits → drop the query and return that country/topic stream, so the agent
+        # gets real material instead of nothing. One extra call, only on empty.
+        broadened = False
+        if not results and (country or category):
+            try:
+                resp2 = await _fetch(_params(None))
+                if resp2.status_code == 200:
+                    results = resp2.json().get("results") or []
+                    broadened = bool(results)
+            except Exception:  # noqa: BLE001 — fallback is best-effort
+                pass
+
+        if not results:
+            hint = "" if (country or category) else " (tip: pass country=tr for Turkish news)"
+            return (
+                f"news_deep_dive: no NewsData results for '{query}'{hint}. "
+                f"({used}/{budget} of the '{purpose}' budget used today.)"
+            )
+
+        scope = f"{country or category} stream" if broadened else f"'{query}'"
+        note = f" — no exact match for '{query}', showing the {scope}" if broadened else ""
+        lines = [f"NewsData.io — {len(results)} results for {scope}{note} ({used}/{budget} '{purpose}' budget used today):"]
         for a in results[:12]:
             src = a.get("source_id") or a.get("source_name") or "?"
             date = a.get("pubDate") or ""
