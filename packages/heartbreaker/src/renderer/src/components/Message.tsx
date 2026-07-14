@@ -843,7 +843,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
         onMouseLeave={() => setHovered(false)}
         style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem', animation: 'fadeSlideIn 0.2s ease' }}
       >
-        <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem' }}>
+        <div style={{ maxWidth: '75%', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem' }}>
           {editing ? (
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <textarea
@@ -909,6 +909,9 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                   color: '#dfeef4', fontSize: '0.9375rem',
                   fontFamily: 'var(--font-read)',
                   lineHeight: 1.65, whiteSpace: 'pre-wrap', userSelect: 'text',
+                  // Break long unbroken strings (URLs, tokens, JSON) so they wrap
+                  // inside the bubble instead of stretching it past its max-width.
+                  overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%',
                 }}>
                   {message.content}
                 </div>
@@ -953,7 +956,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
         {/* Content, then (if the turn errored) a banner BENEATH it — the streamed
             text and tools stay on screen; the error never replaces them. */}
         {message.content ? (
-          <div className="prose" style={{ userSelect: 'text' }}>
+          <div className="prose" style={{ userSelect: 'text', overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth: 0, maxWidth: '100%' }}>
             {rendered}
             {/* Cursor: visible while streaming, or while typewriter is still catching up */}
             {(message.isStreaming || (!hasCodeBlock && isRevealing)) && <StreamingCursor />}
