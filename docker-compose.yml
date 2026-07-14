@@ -41,7 +41,14 @@ services:
       - /tmp/speda_outputs:/tmp/speda_outputs
       # Host dir holding speda.db → container's data dir. A directory (not the
       # bare file) so WAL's speda.db-wal / speda.db-shm sidecars persist too.
+      # Also carries the system_ops SSH key (host_ops_key) + known_hosts.
       - /opt/speda:/root/.speda
+    # system_ops host bridge: lets the container resolve the real host as
+    # host.docker.internal so Orion/Optimus can SSH out for server maintenance.
+    # On Linux this needs the explicit host-gateway mapping (it is automatic only
+    # on Docker Desktop). Harmless when system_ops_host is unset.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # The automation organ — n8n owns ALL scheduling and polling (CLAUDE.md).
   # SPEDA composes workflows over its REST API; fired watchers call back into
