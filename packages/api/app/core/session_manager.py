@@ -1,9 +1,11 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.session import Session
 from app.models.message import Message
 
@@ -169,7 +171,7 @@ class SessionManager:
     def stamp_user_content(content: list | str, created_at: datetime) -> list | str:
         """
         Prefix a user message with its timestamp, derived from the message's DB
-        created_at — minute precision, always UTC.
+        created_at — minute precision, rendered in the owner's timezone.
 
         This is how SPEDA knows the current time: the newest user message's
         stamp IS "now". The clock used to live in the system prompt, where its
@@ -179,8 +181,19 @@ class SessionManager:
         cache are all byte-exact prefix matches). Stamps derived from stored
         created_at are byte-stable forever, so history reconstructed next turn
         is identical to what was cached this turn.
+
+        created_at is stored UTC; we render it in settings.owner_timezone so the
+        model reads local wall-clock time directly (no per-turn UTC→local math
+        to slip on). The conversion is deterministic — fixed created_at + fixed
+        zone — so the stamp stays byte-stable and the cache still holds. Changing
+        the owner timezone re-renders history once; that is the only churn.
         """
-        ts = created_at.strftime("[%Y-%m-%d %H:%M UTC]")
+        aware = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+        try:
+            aware = aware.astimezone(ZoneInfo(settings.owner_timezone))
+        except Exception:  # unknown/invalid IANA name → leave as UTC
+            pass
+        ts = aware.strftime("[%Y-%m-%d %H:%M %Z]")
         if isinstance(content, str):
             return f"{ts} {content}" if content else ts
         return [{"type": "text", "text": ts}, *content]
