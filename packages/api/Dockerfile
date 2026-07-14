@@ -1,6 +1,8 @@
 # Build from the REPO ROOT context (uv workspace lives there):
 #   docker build -f packages/api/Dockerfile .
 # docker-compose sets context: . and dockerfile: packages/api/Dockerfile.
+FROM node:20-slim AS node_bin
+
 FROM python:3.11-slim
 
 # openssh-client: the system_ops host bridge — the containerized backend SSHes
@@ -8,6 +10,17 @@ FROM python:3.11-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends openssh-client \
     && rm -rf /var/lib/apt/lists/*
+
+# Node.js + npm/npx — every Tier-2 stdio MCP server (tavily, exa, notion,
+# brave_search, fetch, github, cve_intelligence — see app/mcp/servers.py) is an
+# npm package launched via `npx -y <pkg>`. Without this, every one of those
+# fails silently at registration with "No such file or directory" REGARDLESS
+# of whether its API key is configured — copied from the official node image
+# rather than apt/NodeSource, so no extra GPG key management.
+COPY --from=node_bin /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_bin /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 WORKDIR /app
 
