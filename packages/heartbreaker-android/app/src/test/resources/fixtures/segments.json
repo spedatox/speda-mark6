@@ -1,0 +1,242 @@
+[
+  {
+    "name": "no tools partial reveal",
+    "fullText": "hello world",
+    "tools": [],
+    "revealedLen": 5,
+    "segments": [
+      {
+        "kind": "text",
+        "text": "hello"
+      }
+    ]
+  },
+  {
+    "name": "no tools full reveal",
+    "fullText": "hello world",
+    "tools": [],
+    "revealedLen": 11,
+    "segments": [
+      {
+        "kind": "text",
+        "text": "hello world"
+      }
+    ]
+  },
+  {
+    "name": "one tool mid-text",
+    "fullText": "hello world",
+    "tools": [
+      {
+        "id": "t1",
+        "afterChars": 5
+      }
+    ],
+    "revealedLen": 11,
+    "segments": [
+      {
+        "kind": "text",
+        "text": "hello"
+      },
+      {
+        "kind": "tools",
+        "toolIds": [
+          "t1"
+        ]
+      },
+      {
+        "kind": "text",
+        "text": " world"
+      }
+    ]
+  },
+  {
+    "name": "tool not yet revealed",
+    "fullText": "hello world",
+    "tools": [
+      {
+        "id": "t1",
+        "afterChars": 20
+      }
+    ],
+    "revealedLen": 5,
+    "segments": [
+      {
+        "kind": "text",
+        "text": "hello"
+      }
+    ]
+  },
+  {
+    "name": "two tools grouped same offset",
+    "fullText": "hello world",
+    "tools": [
+      {
+        "id": "t1",
+        "afterChars": 5
+      },
+      {
+        "id": "t2",
+        "afterChars": 5
+      }
+    ],
+    "revealedLen": 11,
+    "segments": [
+      {
+        "kind": "text",
+        "text": "hello"
+      },
+      {
+        "kind": "tools",
+        "toolIds": [
+          "t1",
+          "t2"
+        ]
+      },
+      {
+        "kind": "text",
+        "text": " world"
+      }
+    ]
+  },
+  {
+    "name": "tool at zero",
+    "fullText": "abc",
+    "tools": [
+      {
+        "id": "t1",
+        "afterChars": 0
+      }
+    ],
+    "revealedLen": 3,
+    "segments": [
+      {
+        "kind": "tools",
+        "toolIds": [
+          "t1"
+        ]
+      },
+      {
+        "kind": "text",
+        "text": "abc"
+      }
+    ]
+  },
+  {
+    "name": "reveal exactly at tool offset",
+    "fullText": "hello world",
+    "tools": [
+      {
+        "id": "t1",
+        "afterChars": 5
+      }
+    ],
+    "revealedLen": 5,
+    "segments": [
+      {
+        "kind": "text",
+        "text": "hello"
+      },
+      {
+        "kind": "tools",
+        "toolIds": [
+          "t1"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "undefined afterChars treated as zero",
+    "fullText": "abc",
+    "tools": [
+      {
+        "id": "t1"
+      }
+    ],
+    "revealedLen": 2,
+    "segments": [
+      {
+        "kind": "tools",
+        "toolIds": [
+          "t1"
+        ]
+      },
+      {
+        "kind": "text",
+        "text": "ab"
+      }
+    ]
+  },
+  {
+    "name": "tools out of order sorted",
+    "fullText": "abcdef",
+    "tools": [
+      {
+        "id": "t2",
+        "afterChars": 4
+      },
+      {
+        "id": "t1",
+        "afterChars": 2
+      }
+    ],
+    "revealedLen": 6,
+    "segments": [
+      {
+        "kind": "text",
+        "text": "ab"
+      },
+      {
+        "kind": "tools",
+        "toolIds": [
+          "t1"
+        ]
+      },
+      {
+        "kind": "text",
+        "text": "cd"
+      },
+      {
+        "kind": "tools",
+        "toolIds": [
+          "t2"
+        ]
+      },
+      {
+        "kind": "text",
+        "text": "ef"
+      }
+    ]
+  },
+  {
+    "name": "clipped tool offset past reveal groups at revealedLen",
+    "fullText": "abcdef",
+    "tools": [
+      {
+        "id": "t1",
+        "afterChars": 2
+      },
+      {
+        "id": "t2",
+        "afterChars": 10
+      }
+    ],
+    "revealedLen": 4,
+    "segments": [
+      {
+        "kind": "text",
+        "text": "ab"
+      },
+      {
+        "kind": "tools",
+        "toolIds": [
+          "t1"
+        ]
+      },
+      {
+        "kind": "text",
+        "text": "cd"
+      }
+    ]
+  }
+]

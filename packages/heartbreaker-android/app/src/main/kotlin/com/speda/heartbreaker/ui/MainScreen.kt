@@ -15,7 +15,7 @@ import com.speda.heartbreaker.data.Uplink
 import com.speda.heartbreaker.designsystem.background.AmbientBackground
 import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.designsystem.glass.rememberHbHazeState
-import com.speda.heartbreaker.ui.gallery.TokenGalleryScreen
+import com.speda.heartbreaker.ui.chat.ChatScreen
 
 /**
  * The configured shell: ambient void (the single Haze source) → HUD strip → body.
@@ -44,14 +44,15 @@ fun MainScreen(
 
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             HudStrip(health)
-            TokenGalleryScreen(
-                modifier = Modifier.fillMaxSize(),
-                haze = haze,
+            ChatScreen(
+                graph = graph,
+                uplink = uplink,
                 agentId = agentId,
                 partyEngaged = partyEngaged,
                 onAgentChange = onAgentChange,
                 onPartyToggle = onPartyToggle,
                 onResetUplink = onResetUplink,
+                modifier = Modifier.fillMaxSize(),
             )
         }
     }
