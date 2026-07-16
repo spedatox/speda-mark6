@@ -1,0 +1,16 @@
+# Android / Gradle build artifacts — this package is inert to the GitOps deploy.
+.gradle/
+build/
+*/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Release signing material never gets committed.
+*.jks
+*.keystore
+keystore.properties
