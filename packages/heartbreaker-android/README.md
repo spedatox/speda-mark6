@@ -8,6 +8,28 @@ and the parity contract.
 This package is **inert to the GitOps prod deploy** — the server never runs
 Gradle, so nothing here is built or shipped by the backend.
 
+## Status — M0 (Foundation) + M1 (Chat core)
+
+### M1 — Chat core
+
+| Area | Where | Source of truth |
+|---|---|---|
+| Chat models + 19-action reducer | `app/.../domain/ChatModels.kt`, `ChatState.kt` | `store/chat.ts` |
+| Segment interleaving (buildSegments) | `app/.../domain/Segmenter.kt` | `Message.tsx` |
+| Tool status / summary / typewriter / watchdog | `app/.../domain/{ToolStatus,Watchdog}.kt` | `Message.tsx`, `ChatMain.tsx` |
+| SSE client + endpoints | `app/.../data/IgorApi.kt`, `SseEvent.kt` | `lib/api.ts` |
+| Offline transcript cache | `app/.../data/MessageCache.kt`, `MessageJson.kt` | `store/messageCache.ts` |
+| Streaming engine (coalesce / watchdog / reattach / abort-on-switch / title poll) | `app/.../ui/chat/ChatViewModel.kt` | `ChatMain.tsx` |
+| Chat UI (list, typewriter, tool feed, working status, composer, sessions) | `app/.../ui/chat/*` | `Message.tsx`, `InputBar.tsx` |
+
+M1 renders text as plain prose; the full markdown/prose renderer, rich fences,
+files/images and the real sidebar/header land in M2/M3. The token gallery
+(`ui/gallery`) remains as the design-system reference surface.
+
+**Parity verification done here:** `buildSegments` fixtures generated from a
+verbatim copy (`scripts/gen-chat-fixtures.ts` → `segments.json`), asserted by
+`SegmenterTest`; the 19-action reducer's subtle rules covered by `ReducerTest`.
+
 ## Status — M0 (Foundation)
 
 Implemented, grounded value-for-value in `packages/heartbreaker/src/renderer/src`
@@ -64,5 +86,6 @@ M0, in Android Studio (Ladybug+ / JDK 17):
 
 ## Next
 
-M1 (Chat core) per the plan: SSE client, chat reducer + ViewModel, composer,
-message list, typewriter, watchdog, transcript cache, reattach.
+M2 (Rich content) per the plan: markdown renderer + prose styles, code blocks,
+math, chart/calendar fences, WebView widgets, file cards + downloads, image
+attachments + lightbox, doc uploads, voice input + read-aloud.

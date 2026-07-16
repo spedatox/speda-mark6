@@ -2,6 +2,8 @@ package com.speda.heartbreaker
 
 import android.content.Context
 import com.speda.heartbreaker.data.HealthPoller
+import com.speda.heartbreaker.data.IgorApi
+import com.speda.heartbreaker.data.MessageCache
 import com.speda.heartbreaker.data.UplinkStore
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -9,19 +11,29 @@ import java.util.concurrent.TimeUnit
 /**
  * Manual dependency graph (plan §2 — Hilt is ceremony a solo, single-activity app
  * doesn't need). Constructed once in [HeartbreakerApp] and read from the Activity.
- *
- * The SSE streaming client (readTimeout = 0) arrives in M1; M0 only needs the
- * short-lived /health client, which uses ordinary timeouts.
  */
 class AppGraph(context: Context) {
 
-    val uplink: UplinkStore = UplinkStore(context.applicationContext)
+    private val appContext = context.applicationContext
 
-    private val healthClient: OkHttpClient = OkHttpClient.Builder()
+    val uplink: UplinkStore = UplinkStore(appContext)
+
+    // Short-lived REST + /health client (ordinary timeouts).
+    private val restClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .callTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    val health: HealthPoller = HealthPoller(healthClient)
+    // Streaming client — reads idle for the length of a turn; the watchdog owns
+    // liveness, so read/call timeouts are disabled (plan §4.1).
+    private val streamClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.MILLISECONDS)
+        .callTimeout(0, TimeUnit.MILLISECONDS)
+        .build()
+
+    val health: HealthPoller = HealthPoller(restClient)
+    val api: IgorApi = IgorApi(streamClient = streamClient, restClient = restClient)
+    val messageCache: MessageCache = MessageCache(appContext.cacheDir)
 }
