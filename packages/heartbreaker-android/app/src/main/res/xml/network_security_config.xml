@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TLS is preferred (the prod box already terminates wss for the Forge). Cleartext
+  is blocked by default. If the prod apiBase is plain http://, add its host as a
+  <domain> under the cleartext-permitted config below. Emulator loopback
+  (10.0.2.2) and localhost are permitted for local dev only.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <!-- <domain includeSubdomains="true">prod-host.example</domain> -->
+    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

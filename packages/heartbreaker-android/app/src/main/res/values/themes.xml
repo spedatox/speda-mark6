@@ -1,0 +1,12 @@
+<resources>
+    <!-- Base app theme. The UI is drawn entirely in Compose over the petrol void;
+         this Android theme only sets the window background + transparent system
+         bars so there is no flash of a light surface before Compose paints. -->
+    <style name="Theme.Heartbreaker" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/hb_void</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>

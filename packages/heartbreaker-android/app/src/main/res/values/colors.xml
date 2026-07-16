@@ -1,0 +1,5 @@
+<resources>
+    <!-- Only the window background needs a native colour; everything else is the
+         Compose palette. Matches --hb-void in heartbreaker.css. -->
+    <color name="hb_void">#04080A</color>
+</resources>
