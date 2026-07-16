@@ -905,3 +905,135 @@ input[type=range]::-webkit-slider-thumb {
     transform: translate(-50%, -50%);
   }
 }
+
+/* ── DATA_BANKS // KNOWLEDGE — memory file markdown readout ──────────────────
+   The panel renders each canonical /memories file through react-markdown.
+   These rules dress the standard markdown element tree in the board's
+   holographic dossier voice: cyan uppercase headers, ▸ fact bullets, italic
+   notes — while now honouring the full syntax (bold, links, code, tables,
+   blockquotes, nested + task lists, rules) instead of a 3-case line parser. */
+.hb-mem-md {
+  font-family: 'SamsungOne', 'Inter', sans-serif;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--hb-text-dim);
+  overflow-wrap: anywhere;
+}
+.hb-mem-md > :first-child { margin-top: 0; }
+.hb-mem-md > :last-child  { margin-bottom: 0; }
+
+.hb-mem-md h1, .hb-mem-md h2, .hb-mem-md h3,
+.hb-mem-md h4, .hb-mem-md h5, .hb-mem-md h6 {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hb-cyan);
+  margin: 0.55rem 0 0.2rem;
+  break-after: avoid;
+}
+.hb-mem-md h1 { font-size: 0.74rem; }
+.hb-mem-md h2 { font-size: 0.66rem; }
+.hb-mem-md h3, .hb-mem-md h4, .hb-mem-md h5, .hb-mem-md h6 {
+  font-size: 0.62rem;
+  color: var(--hb-cyan-dim);
+  letter-spacing: 0.16em;
+}
+
+.hb-mem-md p { margin: 0.14rem 0; break-inside: avoid; }
+.hb-mem-md strong { color: var(--hb-text); font-weight: 700; }
+.hb-mem-md em { color: var(--hb-icon); font-style: italic; }
+.hb-mem-md a { color: var(--hb-cyan-bright); text-decoration: underline; text-underline-offset: 2px; }
+
+.hb-mem-md ul, .hb-mem-md ol { margin: 0.1rem 0; padding-left: 0; list-style: none; }
+.hb-mem-md li {
+  position: relative;
+  padding-left: 0.95rem;
+  margin: 0.1rem 0;
+  break-inside: avoid;
+}
+.hb-mem-md ul > li::before {
+  content: '▸';
+  position: absolute;
+  left: 0;
+  top: -0.02em;
+  color: var(--hb-cyan);
+  font-size: 0.78em;
+}
+.hb-mem-md ol { counter-reset: hb-mem-li; }
+.hb-mem-md ol > li { counter-increment: hb-mem-li; }
+.hb-mem-md ol > li::before {
+  content: counter(hb-mem-li) '.';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--hb-cyan);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+}
+.hb-mem-md li > ul, .hb-mem-md li > ol { margin: 0.05rem 0; }
+/* GFM task lists: drop the counter/▸, keep the checkbox. */
+.hb-mem-md li.task-list-item { padding-left: 0.2rem; }
+.hb-mem-md li.task-list-item::before { content: none; }
+.hb-mem-md li.task-list-item input { margin-right: 0.35rem; accent-color: var(--hb-cyan); }
+
+.hb-mem-md code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: rgba(var(--hb-accent-rgb), 0.1);
+  border: 1px solid rgba(var(--hb-accent-rgb), 0.18);
+  border-radius: 3px;
+  padding: 0.03em 0.35em;
+  color: var(--hb-cyan-bright);
+}
+.hb-mem-md pre {
+  margin: 0.3rem 0;
+  padding: 0.5rem 0.6rem;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(var(--hb-accent-rgb), 0.22);
+  border-radius: 4px;
+  overflow-x: auto;
+  break-inside: avoid;
+}
+.hb-mem-md pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--hb-text-dim);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.hb-mem-md blockquote {
+  margin: 0.3rem 0;
+  padding: 0.1rem 0 0.1rem 0.6rem;
+  border-left: 2px solid rgba(var(--hb-accent-rgb), 0.4);
+  color: var(--hb-icon);
+  font-style: italic;
+}
+
+.hb-mem-md hr {
+  border: none;
+  border-top: 1px solid rgba(var(--hb-accent-rgb), 0.2);
+  margin: 0.5rem 0;
+}
+
+.hb-mem-md table {
+  border-collapse: collapse;
+  margin: 0.3rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  break-inside: avoid;
+}
+.hb-mem-md th, .hb-mem-md td {
+  border: 1px solid rgba(var(--hb-accent-rgb), 0.2);
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+}
+.hb-mem-md th {
+  color: var(--hb-cyan);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(var(--hb-accent-rgb), 0.08);
+}
+.hb-mem-md img { max-width: 100%; }
