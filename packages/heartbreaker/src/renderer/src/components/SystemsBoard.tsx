@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useHealth } from '../lib/useHealth'
@@ -27,6 +29,9 @@ import AgentModelPicker from './AgentModelPicker'
 
 const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
+
+// Hoisted so react-markdown doesn't rebuild its processor on every render.
+const MEM_REMARK_PLUGINS = [remarkGfm]
 
 const PROVIDER_TAGS: Record<string, string> = {
   anthropic: 'ANTHROPIC', openai: 'OPENAI', gemini: 'GEMINI', zai: 'Z.AI · GLM', deepseek: 'DEEPSEEK', ollama: 'OLLAMA · LOCAL',
@@ -725,14 +730,10 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
             </div>
 
             {/* Fact readout — the selected file's extracted knowledge.
-                Extended mode spreads the facts into a two-column dossier. */}
+                Flows as a single vertical column; extending just gives it
+                more height, never a side-by-side split. */}
             <div style={{
               flex: 1, overflowY: 'auto', padding: '0.35rem 0.7rem 0.5rem',
-              ...(banksWide && !isMobile ? {
-                columnCount: 2,
-                columnGap: '2.4rem',
-                columnRule: '1px solid rgba(var(--hb-accent-rgb),0.14)',
-              } : {}),
             }}>
               {(() => {
                 const file = selFile
@@ -797,8 +798,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                   </div>
                 )
 
-                const lines = file.content.split('\n').map(l => l.trim()).filter(Boolean)
-                if (lines.length === 0) return (
+                if (!file.content.trim()) return (
                   <>
                     {toolbar}
                     <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: 'var(--hb-icon-dim)', padding: '0.3rem 0' }}>
@@ -806,38 +806,18 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                     </p>
                   </>
                 )
+                // Render the file as real markdown — bold, links, code, tables,
+                // blockquotes, nested + task lists and rules all honoured. The
+                // .hb-mem-md rules in heartbreaker.css keep the dossier voice
+                // (cyan uppercase headers, ▸ fact bullets, italic notes).
                 return (
                   <>
                     {toolbar}
-                    {lines.map((line, i) => {
-                      if (line.startsWith('#')) {
-                        return (
-                          <div key={i} style={{
-                            fontFamily: UI, fontSize: '0.66rem', fontWeight: 700,
-                            letterSpacing: '0.18em', textTransform: 'uppercase',
-                            color: 'var(--hb-cyan)', margin: '0.45rem 0 0.15rem',
-                            breakAfter: 'avoid',
-                          }}>
-                            {line.replace(/^#+\s*/, '')}
-                          </div>
-                        )
-                      }
-                      const isFact = /^[-*]\s/.test(line)
-                      const isNote = /^_.*_$/.test(line)
-                      return (
-                        <div key={i} style={{
-                          display: 'flex', gap: 7, padding: '0.12rem 0',
-                          breakInside: 'avoid',
-                          fontFamily: "'SamsungOne','Inter',sans-serif",
-                          fontSize: '0.74rem', lineHeight: 1.45,
-                          color: isNote ? 'var(--hb-icon)' : 'var(--hb-text-dim)',
-                          fontStyle: isNote ? 'italic' : 'normal',
-                        }}>
-                          {isFact && <span style={{ color: 'var(--hb-cyan)', fontSize: '0.62em', lineHeight: 2 }}>▸</span>}
-                          <span>{line.replace(/^[-*]\s+/, '').replace(/^_|_$/g, '')}</span>
-                        </div>
-                      )
-                    })}
+                    <div className="hb-mem-md">
+                      <ReactMarkdown remarkPlugins={MEM_REMARK_PLUGINS}>
+                        {file.content}
+                      </ReactMarkdown>
+                    </div>
                   </>
                 )
               })()}
