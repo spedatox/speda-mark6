@@ -1,11 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Solid petrol void — the app's deepest background (the hb-void token). -->
+<!--
+  The launcher tile's blue, rebuilt as the adaptive BACKGROUND layer so the
+  system mask (circle / squircle / whatever the launcher uses) cuts a clean edge.
+  Stops are sampled from mark6_icon.png at 8% / 50% / 92% height.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#04080A"
-        android:pathData="M0,0h108v108h-108z" />
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="0"
+                android:endX="54"
+                android:endY="108"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF5CB6EB" />
+                <item android:offset="0.5" android:color="#FF3F92E8" />
+                <item android:offset="1.0" android:color="#FF2572F0" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>
