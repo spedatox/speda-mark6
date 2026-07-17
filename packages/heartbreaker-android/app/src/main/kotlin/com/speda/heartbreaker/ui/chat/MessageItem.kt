@@ -5,7 +5,9 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,8 +30,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.speda.heartbreaker.designsystem.glass.HbGlassShape
 import com.speda.heartbreaker.designsystem.glass.HbGlassState
 import com.speda.heartbreaker.designsystem.glass.hbGlass
@@ -71,7 +75,44 @@ fun MessageItem(
 @Composable
 private fun UserRow(message: ChatMessage) {
     val palette = LocalHbPalette.current
-    Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.End) {
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        horizontalAlignment = Alignment.End,
+    ) {
+        // Attached images — thumbnails, tap to open full screen.
+        val images = message.images
+        if (!images.isNullOrEmpty()) {
+            Row(
+                Modifier.padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                images.forEach { src ->
+                    val bmp = rememberDataUrlImage(src)
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(150.dp)
+                                .clip(RoundedCornerShape(10.dp)),
+                        )
+                    }
+                }
+            }
+        }
+
+        // Non-image uploads — display chips, not downloadable (just a marker).
+        val uploads = message.uploads
+        if (!uploads.isNullOrEmpty()) {
+            Row(
+                Modifier.padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                uploads.forEach { u -> UploadChip(u.name, u.size) }
+            }
+        }
+
         if (message.content.isNotEmpty()) {
             Box(
                 Modifier
@@ -82,6 +123,29 @@ private fun UserRow(message: ChatMessage) {
             ) {
                 HbText(message.content, style = HbType.read, color = palette.text)
             }
+        }
+    }
+}
+
+/** A file the owner attached — a marker chip, not a download (Message.tsx). */
+@Composable
+private fun UploadChip(name: String, size: Long) {
+    val palette = LocalHbPalette.current
+    Column(
+        Modifier
+            .widthIn(max = 240.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(palette.accent.copy(alpha = 0.08f))
+            .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(9.dp))
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+    ) {
+        HbText(name, style = HbType.read.copy(fontSize = 12.sp), color = palette.text, maxLines = 1)
+        if (size > 0) {
+            HbText(
+                fmtBytes(size),
+                style = HbType.readout.copy(fontSize = 9.5.sp),
+                color = palette.iconDim,
+            )
         }
     }
 }

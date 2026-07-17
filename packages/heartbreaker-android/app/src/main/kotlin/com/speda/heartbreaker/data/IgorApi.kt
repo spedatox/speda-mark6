@@ -16,6 +16,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -43,10 +45,12 @@ class IgorApi(
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
-    /** Options for a chat turn (lib/api StreamOpts; images/documents land in M2). */
+    /** Options for a chat turn (lib/api StreamOpts). */
     data class StreamOpts(
         val model: String? = null,
         val systemPrompt: String? = null,
+        val images: List<ImageBlock> = emptyList(),
+        val documents: List<DocBlock> = emptyList(),
         val keepMessages: Int? = null,
         val regenerate: Boolean = false,
         val cwd: String? = null,
@@ -65,6 +69,39 @@ class IgorApi(
             put("session_id", sessionId) // Int? → JsonNull when null
             opts.model?.let { put("model", it) }
             opts.systemPrompt?.let { put("system_prompt", it) }
+            // Only send the keys that have content — the web omits them entirely.
+            if (opts.images.isNotEmpty()) {
+                put(
+                    "attachments",
+                    buildJsonArray {
+                        opts.images.forEach { img ->
+                            add(
+                                buildJsonObject {
+                                    put("media_type", img.mediaType)
+                                    put("data", img.data)
+                                },
+                            )
+                        }
+                    },
+                )
+            }
+            if (opts.documents.isNotEmpty()) {
+                put(
+                    "documents",
+                    buildJsonArray {
+                        opts.documents.forEach { doc ->
+                            add(
+                                buildJsonObject {
+                                    put("name", doc.name)
+                                    put("media_type", doc.mediaType)
+                                    put("data", doc.data)
+                                    put("size", doc.size)
+                                },
+                            )
+                        }
+                    },
+                )
+            }
             opts.keepMessages?.let { put("keep_messages", it) }
             if (opts.regenerate) put("regenerate", true)
             opts.cwd?.let { put("cwd", it) }
