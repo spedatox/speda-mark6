@@ -60,27 +60,51 @@ Implemented, grounded value-for-value in `packages/heartbreaker/src/renderer/src
   agents, all matching) — see the port notes. Rounding uses `floor(x+0.5)` to
   match JS `Math.round`, **not** Kotlin's banker's `round`.
 
-### NOT verifiable in the authoring sandbox
+## Build status
 
-This Windows box has **no Android Studio / JDK-17 Gradle / Android SDK**, so the
-project was **not compiled, run, or screenshot-diffed here**. Before relying on
-M0, in Android Studio (Ladybug+ / JDK 17):
+**Green.** The whole project compiles, the unit tests pass, and `assembleDebug`
+produces an installable APK. Verified on this box with Android Studio's bundled
+JBR (JDK 21) + Gradle 8.11.1 + AGP 8.9.0:
 
-1. `gradle wrapper --gradle-version 8.11.1` (materialises `gradle-wrapper.jar`;
-   only the `.properties` is committed).
-2. Gradle sync — resolve the version catalog (`gradle/libs.versions.toml`). If a
-   pinned artifact version (Compose BOM, Haze `1.5.4`, OkHttp alpha) needs a bump,
-   do it in the catalog only.
-3. `./gradlew :designsystem:testDebugUnitTest` — the theme fixture parity gate.
-4. Run `:app` on an API 31+ device; drive the §7 ritual on the token gallery
-   (switch agents → watch the morph + ambient re-hue; HOUSE PARTY → parade).
+| Module | Test | Tests | Failures |
+|---|---|---|---|
+| designsystem | `ThemeEngineTest` (theme parity, 9 agents) | 3 | 0 |
+| app | `SegmenterTest` (buildSegments fixtures) | 1 | 0 |
+| app | `ReducerTest` (the 19-action store) | 8 | 0 |
 
-### Known M0 seams to close on real hardware
+Android Studio syncs straight from `gradle/wrapper/gradle-wrapper.properties`
+(Gradle 8.11.1). To build from this shell without the IDE:
 
-- **Haze API/version** (`HbHaze.kt`) — isolated from the core material on purpose;
-  reconcile the `hazeSource`/`hazeEffect` surface with the resolved Haze version.
-- **Fonts** — `res/font/README.md`: bundle the OFL TTFs; until then system
-  fallbacks render (metrics already ported).
+```bash
+export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
+export ANDROID_HOME="$LOCALAPPDATA/Android/Sdk"
+GRADLE=~/.gradle/wrapper/dists/gradle-8.11.1-bin/*/gradle-8.11.1/bin/gradle
+$GRADLE :designsystem:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
+```
+
+Note: `gradlew`/`gradle-wrapper.jar` are **not** committed (only the
+`.properties`), so there is no `./gradlew`. Android Studio doesn't need it; run
+`gradle wrapper` once if you want the CLI script.
+
+### Gotcha that already bit once
+
+A batch of jars in `~/.gradle/caches/modules-2` downloaded **corrupt**
+(right byte-count, zero-padded tail, no ZIP end header). Symptom was a very
+misleading `Could not apply requested plugin [id: 'com.android.application'] …
+does not provide a plugin with id` — nothing to do with the AGP/Gradle versions.
+Gradle names each cache folder after the artifact's SHA-1, so the cache is
+self-verifying; compare `sha1sum <jar>` to its parent folder name (Gradle strips
+leading zeros), delete the mismatching module dirs, and re-resolve. Afterwards
+clear the stale script caches (`.gradle/`, `~/.gradle/caches/8.11.1/kotlin-dsl`),
+or the build scripts stay compiled against the missing `android {}` DSL.
+
+### Still open
+
+- **Not run on a device**, and the §7 **visual-parity ritual has not been done** —
+  no screenshot diff against the web yet. Correctness is asserted only by the
+  unit tests above.
+- **Fonts** — `docs/FONTS.md`: bundle the OFL TTFs into `app/src/main/res/font`;
+  until then system fallbacks render (metrics already ported).
 - **Cleartext** — `res/xml/network_security_config.xml`: add the prod host only if
   its `apiBase` is plain `http://`.
 

@@ -16,8 +16,9 @@ import androidx.compose.ui.unit.sp
  *  + JetBrains Mono (code) — all OFL, bundleable in res/font. Those TTF binaries
  *  are not in this repo yet (the web pulls Rajdhani/Inter from the Google CDN;
  *  SamsungOne is separately flagged missing). [HbFonts] is the single swap-point:
- *  drop the TTFs into res/font per its README and point these three families at
- *  the R.font resources. Until then they fall back to the platform families so
+ *  drop the TTFs into app/src/main/res/font per docs/FONTS.md and point these
+ *  three families at the R.font resources. Until then they fall back to the
+ *  platform families so
  *  the app compiles and runs; the visual-parity pass (§7) swaps in the real
  *  faces. No metric changes when they land — only the FontFamily.
  * ════════════════════════════════════════════════════════════════════════════
