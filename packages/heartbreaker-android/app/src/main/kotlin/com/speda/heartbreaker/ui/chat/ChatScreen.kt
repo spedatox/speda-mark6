@@ -112,7 +112,9 @@ fun ChatScreen(
                         modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
                         contentPadding = PaddingValues(vertical = 12.dp),
                     ) {
-                        items(state.messages, key = { it.id }) { message -> MessageItem(message) }
+                        items(state.messages, key = { it.id }) { message ->
+                            MessageItem(message, config = config, downloader = graph.downloader)
+                        }
                     }
                 }
             }
