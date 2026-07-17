@@ -1,0 +1,106 @@
+[
+  {
+    "name": "fence needs its own line",
+    "input": "see this.```html\n<b>x</b>```",
+    "normalizeCodeFences": "see this.\n```html\n<b>x</b>\n```",
+    "prepareMath": "see this.```html\n<b>x</b>```",
+    "sanitizePartialMarkdown": "see this.```html\n<b>x</b>```",
+    "prepare": "see this.\n```html\n<b>x</b>\n```"
+  },
+  {
+    "name": "fence already on its own line",
+    "input": "see this.\n```html\n<b>x</b>```",
+    "normalizeCodeFences": "see this.\n```html\n<b>x</b>\n```",
+    "prepareMath": "see this.\n```html\n<b>x</b>```",
+    "sanitizePartialMarkdown": "see this.\n```html\n<b>x</b>```",
+    "prepare": "see this.\n```html\n<b>x</b>\n```"
+  },
+  {
+    "name": "currency before digit is escaped",
+    "input": "It costs $5 today and $10.50 tomorrow.",
+    "normalizeCodeFences": "It costs $5 today and $10.50 tomorrow.",
+    "prepareMath": "It costs \\$5 today and \\$10.50 tomorrow.",
+    "sanitizePartialMarkdown": "It costs $5 today and $10.50 tomorrow.",
+    "prepare": "It costs \\$5 today and \\$10.50 tomorrow."
+  },
+  {
+    "name": "currency inside inline code untouched",
+    "input": "Outside $5 but `inside $6` stays.",
+    "normalizeCodeFences": "Outside $5 but `inside $6` stays.",
+    "prepareMath": "Outside \\$5 but `inside $6` stays.",
+    "sanitizePartialMarkdown": "Outside $5 but `inside $6` stays.",
+    "prepare": "Outside \\$5 but `inside $6` stays."
+  },
+  {
+    "name": "currency inside a fence untouched",
+    "input": "```js\nconst a = $5\n```\nafter $7",
+    "normalizeCodeFences": "```js\nconst a = $5\n```\nafter $7",
+    "prepareMath": "```js\nconst a = $5\n```\nafter \\$7",
+    "sanitizePartialMarkdown": "```js\nconst a = $5\n```\nafter $7",
+    "prepare": "```js\nconst a = $5\n```\nafter \\$7"
+  },
+  {
+    "name": "display math delimiters",
+    "input": "math \\[x^2 + y^2\\] end",
+    "normalizeCodeFences": "math \\[x^2 + y^2\\] end",
+    "prepareMath": "math $$x^2 + y^2$$ end",
+    "sanitizePartialMarkdown": "math \\[x^2 + y^2\\] end",
+    "prepare": "math $$x^2 + y^2$$ end"
+  },
+  {
+    "name": "inline math delimiters",
+    "input": "inline \\(a+b\\) end",
+    "normalizeCodeFences": "inline \\(a+b\\) end",
+    "prepareMath": "inline $a+b$ end",
+    "sanitizePartialMarkdown": "inline \\(a+b\\) end",
+    "prepare": "inline $a+b$ end"
+  },
+  {
+    "name": "dollar not before digit is left alone",
+    "input": "costs $ ten and US$ x",
+    "normalizeCodeFences": "costs $ ten and US$ x",
+    "prepareMath": "costs $ ten and US$ x",
+    "sanitizePartialMarkdown": "costs $ ten and US$ x",
+    "prepare": "costs $ ten and US$ x"
+  },
+  {
+    "name": "unclosed fence gets closed",
+    "input": "```js\nconst a = 1",
+    "normalizeCodeFences": "```js\nconst a = 1",
+    "prepareMath": "```js\nconst a = 1",
+    "sanitizePartialMarkdown": "```js\nconst a = 1\n```",
+    "prepare": "```js\nconst a = 1\n```"
+  },
+  {
+    "name": "unclosed inline tick gets closed",
+    "input": "this is `partial",
+    "normalizeCodeFences": "this is `partial",
+    "prepareMath": "this is `partial",
+    "sanitizePartialMarkdown": "this is `partial`",
+    "prepare": "this is `partial`"
+  },
+  {
+    "name": "complete fence untouched",
+    "input": "a ```js\nx\n``` b",
+    "normalizeCodeFences": "a \n```js\nx\n``` b",
+    "prepareMath": "a ```js\nx\n``` b",
+    "sanitizePartialMarkdown": "a ```js\nx\n``` b",
+    "prepare": "a \n```js\nx\n``` b"
+  },
+  {
+    "name": "complete inline code untouched",
+    "input": "a `code` b",
+    "normalizeCodeFences": "a `code` b",
+    "prepareMath": "a `code` b",
+    "sanitizePartialMarkdown": "a `code` b",
+    "prepare": "a `code` b"
+  },
+  {
+    "name": "tick inside a fence is not counted",
+    "input": "```js\nconst s = `tpl`\n```",
+    "normalizeCodeFences": "```js\nconst s = `tpl`\n```",
+    "prepareMath": "```js\nconst s = `tpl`\n```",
+    "sanitizePartialMarkdown": "```js\nconst s = `tpl`\n```",
+    "prepare": "```js\nconst s = `tpl`\n```"
+  }
+]

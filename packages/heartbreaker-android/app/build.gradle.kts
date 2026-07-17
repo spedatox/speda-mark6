@@ -86,6 +86,14 @@ dependencies {
     implementation(libs.kotlinx.collections.immutable)
     implementation(libs.okhttp)
 
+    // Markdown: commonmark gives us the AST only — the Compose rendering is ours,
+    // because the Stark prose (heading plates, _SUB splits, source chips, fence
+    // interception) can't be expressed through an off-the-shelf renderer.
+    implementation(libs.commonmark)
+    implementation(libs.commonmark.ext.gfm.tables)
+    implementation(libs.commonmark.ext.gfm.strikethrough)
+    implementation(libs.commonmark.ext.autolink)
+
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.compose.ui.tooling.preview)
 
