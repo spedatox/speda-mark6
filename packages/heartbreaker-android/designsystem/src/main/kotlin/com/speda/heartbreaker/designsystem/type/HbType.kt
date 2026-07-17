@@ -1,10 +1,12 @@
 package com.speda.heartbreaker.designsystem.type
 
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.speda.heartbreaker.designsystem.R
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -12,24 +14,42 @@ import androidx.compose.ui.unit.sp
  *  weight, tracking and line-height traces back to a CSS rule; `1rem = 16sp`,
  *  the CSS rem values are kept, not re-derived.
  *
- *  FONTS: the shipping web stack is Rajdhani (HUD chrome) + Inter (body/readouts)
- *  + JetBrains Mono (code) — all OFL, bundleable in res/font. Those TTF binaries
- *  are not in this repo yet (the web pulls Rajdhani/Inter from the Google CDN;
- *  SamsungOne is separately flagged missing). [HbFonts] is the single swap-point:
- *  drop the TTFs into app/src/main/res/font per docs/FONTS.md and point these
- *  three families at the R.font resources. Until then they fall back to the
- *  platform families so
- *  the app compiles and runs; the visual-parity pass (§7) swaps in the real
- *  faces. No metric changes when they land — only the FontFamily.
+ *  FONTS: the real web stack, bundled here from Google Fonts (all OFL). The
+ *  renderer's SamsungOne/SamsungSharpSans @font-face rules point at TTFs that do
+ *  not exist in the repo, so the web actually renders Rajdhani + Inter — which is
+ *  exactly what ships here.
+ *
+ *  Inter and JetBrains Mono are published only as VARIABLE fonts; Compose drives
+ *  their `wght` axis from the requested FontWeight (Font()'s default
+ *  variationSettings derive from it), so one file covers every weight.
  * ════════════════════════════════════════════════════════════════════════════
  */
 object HbFonts {
     /** Rajdhani — HUD chrome, all-caps letter-spaced labels (`--font-ui`). */
-    val Ui: FontFamily = FontFamily.SansSerif
+    val Ui: FontFamily = FontFamily(
+        Font(R.font.rajdhani_light, FontWeight.Light),        // 300 — .hb-num-thin
+        Font(R.font.rajdhani_regular, FontWeight.Normal),     // 400
+        Font(R.font.rajdhani_medium, FontWeight.Medium),      // 500 — the greeting
+        Font(R.font.rajdhani_semibold, FontWeight.SemiBold),  // 600 — .hb-label
+        Font(R.font.rajdhani_bold, FontWeight.Bold),          // 700 — header plates
+        // Rajdhani ships no 800; the CSS asks for it and the browser clamps to 700
+        // anyway, so the hero maps to Bold rather than synthesising a fake weight.
+        Font(R.font.rajdhani_bold, FontWeight.ExtraBold),
+    )
+
     /** Inter — chat reading + "mono" readouts (`--font-read` / `--font-mono`). */
-    val Read: FontFamily = FontFamily.SansSerif
+    val Read: FontFamily = FontFamily(
+        Font(R.font.inter_variable, FontWeight.Normal),
+        Font(R.font.inter_variable, FontWeight.Medium),
+        Font(R.font.inter_variable, FontWeight.SemiBold),
+        Font(R.font.inter_variable, FontWeight.Bold),
+    )
+
     /** JetBrains Mono — code blocks only (CodeBlock.tsx). */
-    val Mono: FontFamily = FontFamily.Monospace
+    val Mono: FontFamily = FontFamily(
+        Font(R.font.jetbrains_mono_variable, FontWeight.Normal),
+        Font(R.font.jetbrains_mono_variable, FontWeight.Bold),
+    )
 }
 
 object HbType {

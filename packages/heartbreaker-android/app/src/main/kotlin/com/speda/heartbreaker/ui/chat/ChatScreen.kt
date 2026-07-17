@@ -87,6 +87,7 @@ fun ChatScreen(
         Column(Modifier.fillMaxSize().imePadding()) {
             HudStrip(
                 health = health,
+                agentName = brand.name,
                 model = settings.model,
                 sessionCount = state.sessions.size,
                 apiBase = config.apiBase,
@@ -95,11 +96,6 @@ fun ChatScreen(
                 haze = haze,
                 sessionTitle = activeTitle,
                 onToggleSidebar = { drawerOpen = true },
-                onOpenWarRoom = onPartyToggle,
-                onToggleComms = { /* comms tray — M4 */ },
-                onToggleBoard = { /* systems board — M4 */ },
-                commsOpen = false,
-                boardOpen = partyEngaged,
             )
 
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -146,6 +142,10 @@ fun ChatScreen(
             onClose = { drawerOpen = false },
             onAgentChange = onAgentChange,
             onResetUplink = onResetUplink,
+            // Moved off the header (note #3) — these live in the profile menu now.
+            onOpenWarRoom = onPartyToggle,
+            onToggleComms = { /* comms tray — M4 */ },
+            onToggleBoard = { /* systems board — M4 */ },
         )
     }
 }

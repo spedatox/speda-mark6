@@ -33,20 +33,17 @@ import dev.chrisbanes.haze.HazeState
 /**
  * The 40dp frosted header plate with a bottom seam — a port of Header.tsx at the
  * mobile breakpoint. Everything tagged `hb-hide-sm` in the web (MONITOR No.1, the
- * magnifier, MSGS, PROCESSING/STANDBY, FORGE LINK) is correctly absent here; what
- * remains is the panel toggle, the `:TITLE` query box and the WAR ROOM / COMMS /
- * SYS controls.
+ * magnifier, MSGS, PROCESSING/STANDBY, FORGE LINK) is correctly absent.
+ *
+ * Mobile-specific: WAR ROOM / COMMS / SYS moved to the sidebar's profile menu, so
+ * the session title gets the whole plate to breathe in — titles are long and a
+ * phone header can't carry three labelled buttons and a title at once.
  */
 @Composable
 fun AppHeader(
     haze: HazeState,
     sessionTitle: String?,
     onToggleSidebar: () -> Unit,
-    onOpenWarRoom: () -> Unit,
-    onToggleComms: () -> Unit,
-    onToggleBoard: () -> Unit,
-    commsOpen: Boolean = false,
-    boardOpen: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
@@ -58,7 +55,7 @@ fun AppHeader(
             .hbSeamBottom()
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         // Panel toggle
         Box(
@@ -69,14 +66,12 @@ fun AppHeader(
             contentAlignment = Alignment.Center,
         ) { HbGlyphs.Menu(palette.iconBright) }
 
-        // Active session title — the ":ANTON VANKO" query box
-        QueryBox(title = sessionTitle?.ifBlank { null } ?: "NEW LINK")
-
-        Spacer(Modifier.weight(1f))
-
-        HeaderBtn("WAR ROOM", onOpenWarRoom) { HbGlyphs.WarRoom(it) }
-        HeaderBtn("COMMS", onToggleComms, active = commsOpen) { HbGlyphs.Comms(it) }
-        HeaderBtn("SYS", onToggleBoard, active = boardOpen) { HbGlyphs.Sys(it) }
+        // Active session title — the ":ANTON VANKO" query box, now free to run
+        // the width of the plate.
+        QueryBox(
+            title = sessionTitle?.ifBlank { null } ?: "NEW LINK",
+            modifier = Modifier.weight(1f, fill = false),
+        )
     }
 }
 
@@ -87,7 +82,6 @@ private fun QueryBox(title: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .heightIn(min = 22.dp)
-            .widthIn(max = 190.dp)
             .hbGlass(shape = HbGlassShape.Pill)
             .padding(start = 8.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -104,31 +98,3 @@ private fun QueryBox(title: String, modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun HeaderBtn(
-    label: String,
-    onClick: () -> Unit,
-    active: Boolean = false,
-    glyph: @Composable (Color) -> Unit,
-) {
-    val palette = LocalHbPalette.current
-    val tint = if (active) palette.amberBright else palette.iconBright
-    Row(
-        modifier = Modifier
-            .height(24.dp)
-            .hbGlass(shape = HbGlassShape.R12, state = if (active) HbGlassState.Tint(palette.amberBright) else HbGlassState.Default)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        glyph(tint)
-        HbText(
-            label,
-            style = HbType.headerBar.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.16.em),
-            color = tint,
-            caps = true,
-            maxLines = 1,
-        )
-    }
-}

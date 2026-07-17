@@ -50,6 +50,7 @@ import java.util.Locale
 @Composable
 fun HudStrip(
     health: Health,
+    agentName: String,
     model: String,
     sessionCount: Int,
     apiBase: String,
@@ -74,30 +75,31 @@ fun HudStrip(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Left — link state (blinks red when offline)
+            // Left — the wordmark, with a link jewel (no label: the state reads
+            // from the colour, and the strip stays uncluttered on a phone).
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 LinkDot(online = health.online, color = linkColor)
                 HbText(
-                    if (health.online) "ONLINE" else "OFFLINE",
-                    style = HbType.hud.copy(fontSize = 9.5.sp),
-                    color = linkColor,
+                    "HEARTBREAKER",
+                    style = HbType.hud.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.2.em),
+                    color = palette.accent.copy(alpha = 0.55f),
+                    maxLines = 1,
                 )
             }
 
-            // Centre — system designation. Shares space with the clusters and
-            // ellipsizes instead of colliding on narrow screens (the web's
-            // `flex: 0 1 auto; min-width: 0` behaviour).
+            // Centre — the current agent. Shares space with the clusters and
+            // ellipsizes rather than colliding on narrow screens.
             HbText(
-                "HEARTBREAKER",
-                style = HbType.hud.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.2.em),
-                color = palette.accent.copy(alpha = 0.55f),
+                agentName,
+                style = HbType.hud.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.16.em),
+                color = palette.accentBright,
+                caps = true,
                 maxLines = 1,
-                modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
             )
 
-            // Right — model + DIAG
+            // Right — everything else collapses into DIAG.
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Stat("MODEL", shortModel(model), palette.accentBright, valueMaxWidth = 104.dp)
                 Row(
                     Modifier
                         .height(16.dp)
@@ -127,6 +129,8 @@ fun HudStrip(
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
+                DiagRow("LINK", if (health.online) "ONLINE" else "OFFLINE", linkColor)
+                DiagRow("MODEL", shortModel(model), palette.accentBright)
                 DiagRow("HOST", hostOf(apiBase), palette.textDim)
                 DiagRow("TOOLS", health.tools?.toString() ?: "--", palette.textDim)
                 DiagRow(
@@ -152,28 +156,6 @@ private fun LinkDot(online: Boolean, color: Color) {
         label = "linkBlink",
     )
     Box(Modifier.size(6.dp).background(color.copy(alpha = if (online) 1f else alpha)))
-}
-
-@Composable
-private fun Stat(
-    label: String,
-    value: String,
-    valueColor: Color,
-    valueMaxWidth: androidx.compose.ui.unit.Dp? = null,
-) {
-    val palette = LocalHbPalette.current
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        HbText(label, style = HbType.hud.copy(fontSize = 9.sp, letterSpacing = 0.12.em), color = palette.textFaint)
-        HbText(
-            value,
-            style = HbType.hud.copy(fontSize = 9.sp),
-            color = valueColor,
-            maxLines = 1,
-            // A long non-Claude id (e.g. nvidia:moonshotai/kimi-k2.6) must not
-            // eat the strip and shove the wordmark off centre.
-            modifier = if (valueMaxWidth != null) Modifier.widthIn(max = valueMaxWidth) else Modifier,
-        )
-    }
 }
 
 @Composable
