@@ -81,6 +81,9 @@ fun SidebarDrawer(
     onClose: () -> Unit,
     onAgentChange: (String) -> Unit,
     onResetUplink: () -> Unit,
+    onOpenWarRoom: () -> Unit,
+    onToggleComms: () -> Unit,
+    onToggleBoard: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
@@ -266,22 +269,15 @@ fun SidebarDrawer(
                 }
             }
 
-            // ── Footer profile row (tap → the settings popup) ────────────────
+            // ── Footer profile row (tap → the profile menu) ──────────────────
+            // Mobile-specific: the header can't carry WAR ROOM / COMMS / SYS and
+            // a session title, so they live here — the slot the web gives Settings.
             if (footerMenuOpen) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(palette.glassMenu)
-                        .clickable { footerMenuOpen = false; onResetUplink() }
-                        .padding(horizontal = 12.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    HbText(
-                        "Reset uplink",
-                        style = HbType.headerBar.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.12.em),
-                        color = palette.iconBright,
-                        caps = true,
-                    )
+                Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Menu)) {
+                    MenuItem("War room", { footerMenuOpen = false; onOpenWarRoom() }) { HbGlyphs.WarRoom(it, size = 13.dp) }
+                    MenuItem("Comms", { footerMenuOpen = false; onToggleComms() }) { HbGlyphs.Comms(it, size = 13.dp) }
+                    MenuItem("Systems board", { footerMenuOpen = false; onToggleBoard() }) { HbGlyphs.Sys(it, size = 13.dp) }
+                    MenuItem("Reset uplink", { footerMenuOpen = false; onResetUplink() }) { HbGlyphs.Close(it, size = 13.dp) }
                 }
             }
             Row(
@@ -322,6 +318,28 @@ fun SidebarDrawer(
                 HbGlyphs.ChevronUp(palette.iconDim)
             }
         }
+    }
+}
+
+/** One row of the footer profile menu (the web's PopupItem). */
+@Composable
+private fun MenuItem(label: String, onClick: () -> Unit, glyph: @Composable (Color) -> Unit) {
+    val palette = LocalHbPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        glyph(palette.iconDim)
+        HbText(
+            label,
+            style = HbType.headerBar.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.12.em),
+            color = palette.iconBright,
+            caps = true,
+        )
     }
 }
 

@@ -103,8 +103,8 @@ or the build scripts stay compiled against the missing `android {}` DSL.
 - **Not run on a device**, and the §7 **visual-parity ritual has not been done** —
   no screenshot diff against the web yet. Correctness is asserted only by the
   unit tests above.
-- **Fonts** — `docs/FONTS.md`: bundle the OFL TTFs into `app/src/main/res/font`;
-  until then system fallbacks render (metrics already ported).
+- ~~Fonts~~ — **done**: Rajdhani + Inter + JetBrains Mono are bundled in
+  `designsystem/src/main/res/font` and wired in `HbFonts`. See `docs/FONTS.md`.
 - **Cleartext** — `res/xml/network_security_config.xml`: add the prod host only if
   its `apiBase` is plain `http://`.
 

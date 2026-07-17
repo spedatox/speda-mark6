@@ -73,6 +73,12 @@ object HbGlyphs {
         line(5f, 12f, 12f, 5f, color); line(12f, 5f, 19f, 12f, color)
     }
 
+    /** Close / clear. */
+    @Composable
+    fun Close(color: Color, size: Dp = 13.dp, modifier: Modifier = Modifier) = Glyph(size, modifier, stroke = 2.5f) {
+        line(18f, 6f, 6f, 18f, color); line(6f, 6f, 18f, 18f, color)
+    }
+
     /** Chevron — dropdown affordances. */
     @Composable
     fun ChevronDown(color: Color, size: Dp = 8.dp, modifier: Modifier = Modifier) = Glyph(size, modifier, stroke = 3f) {

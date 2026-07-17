@@ -163,13 +163,19 @@ fun Composer(
             }
         }
 
-        // Status strip
-        HbText(
-            "$agentName can make mistakes",
-            style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.04.em),
-            color = palette.textFaint,
-            modifier = Modifier.padding(top = 6.dp, start = 4.dp),
-        )
+        // Status strip — centred, as InputBar.tsx does (justifyContent: center).
+        // The web's other segments (Enter to send / Shift+Enter / paste or drop)
+        // are keyboard-and-pointer affordances that don't apply on a phone.
+        Row(
+            Modifier.fillMaxWidth().padding(top = 6.dp),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            HbText(
+                "$agentName can make mistakes",
+                style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.06.em),
+                color = palette.iconDim,
+            )
+        }
     }
 }
 

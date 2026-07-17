@@ -144,9 +144,12 @@ private fun DrawScope.drawBlob(
     val cy = k.top * size.height + bh / 2f
     val radius = max(bw, bh) / 2f
     drawCircle(
+        // `radial-gradient(circle, rgba(accent, A), transparent 68%)` fades
+        // LINEARLY from the centre to nothing at the stop — it does not hold A
+        // out to 68%. Holding it made the blob far too bright and too large.
         brush = Brush.radialGradient(
             0f to accent.copy(alpha = baseAlpha * k.opacity),
-            transparentStop to accent.copy(alpha = baseAlpha * k.opacity),
+            transparentStop to Color.Transparent,
             1f to Color.Transparent,
             center = Offset(cx, cy),
             radius = radius,
