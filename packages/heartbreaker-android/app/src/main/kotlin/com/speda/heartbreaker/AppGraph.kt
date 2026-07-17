@@ -1,6 +1,7 @@
 package com.speda.heartbreaker
 
 import android.content.Context
+import com.speda.heartbreaker.data.Downloader
 import com.speda.heartbreaker.data.HealthPoller
 import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.data.MessageCache
@@ -38,4 +39,5 @@ class AppGraph(context: Context) {
     val health: HealthPoller = HealthPoller(restClient)
     val api: IgorApi = IgorApi(streamClient = streamClient, restClient = restClient)
     val messageCache: MessageCache = MessageCache(appContext.cacheDir)
+    val downloader: Downloader = Downloader(appContext, restClient)
 }

@@ -35,6 +35,8 @@ import com.speda.heartbreaker.designsystem.glass.HbGlassState
 import com.speda.heartbreaker.designsystem.glass.hbGlass
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.data.Downloader
+import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.ChatMessage
 import com.speda.heartbreaker.domain.MarkdownPrep
 import com.speda.heartbreaker.domain.Role
@@ -58,8 +60,12 @@ private fun targetLenOf(content: String): Int = content.length
  * markdown/prose renderer lands in M2).
  */
 @Composable
-fun MessageItem(message: ChatMessage) {
-    if (message.role == Role.User) UserRow(message) else AssistantRow(message)
+fun MessageItem(
+    message: ChatMessage,
+    config: AppConfig? = null,
+    downloader: Downloader? = null,
+) {
+    if (message.role == Role.User) UserRow(message) else AssistantRow(message, config, downloader)
 }
 
 @Composable
@@ -81,7 +87,7 @@ private fun UserRow(message: ChatMessage) {
 }
 
 @Composable
-private fun AssistantRow(message: ChatMessage) {
+private fun AssistantRow(message: ChatMessage, config: AppConfig?, downloader: Downloader?) {
     val palette = LocalHbPalette.current
     val hasCodeBlock = message.content.contains("```")
 
@@ -147,6 +153,12 @@ private fun AssistantRow(message: ChatMessage) {
                 }
             } else if (message.isStreaming) {
                 WorkingStatus(lastToolName = message.tools.lastOrNull()?.name, status = message.status)
+            }
+
+            // Downloadable files the agent produced this turn.
+            val files = message.files
+            if (!files.isNullOrEmpty() && config != null && downloader != null) {
+                files.forEach { f -> FileCard(file = f, config = config, downloader = downloader) }
             }
 
             if (message.isError) {
