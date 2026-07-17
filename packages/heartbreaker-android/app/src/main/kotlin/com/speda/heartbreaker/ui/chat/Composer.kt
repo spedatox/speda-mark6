@@ -77,16 +77,24 @@ fun Composer(
                     textStyle = HbType.read.merge(TextStyle(color = palette.text)),
                     cursorBrush = SolidColor(palette.accentBright),
                     maxLines = 6,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     decorationBox = { inner ->
-                        if (text.isEmpty()) {
-                            HbText(
-                                "How can I help you today?",
-                                style = HbType.read.copy(fontSize = 16.sp),
-                                color = palette.textFaint,
-                            )
+                        // The text sits VERTICALLY CENTRED in the field, as it does
+                        // in the web. Pinning it to the top of the min-height box
+                        // left it riding high with dead space underneath.
+                        Box(
+                            Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            if (text.isEmpty()) {
+                                HbText(
+                                    "How can I help you today?",
+                                    style = HbType.read.copy(fontSize = 16.sp),
+                                    color = palette.textFaint,
+                                )
+                            }
+                            inner()
                         }
-                        inner()
                     },
                 )
 

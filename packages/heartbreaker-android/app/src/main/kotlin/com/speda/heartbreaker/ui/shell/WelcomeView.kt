@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,8 +25,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -126,27 +131,11 @@ fun WelcomeView(
             style = HbType.label.copy(fontSize = 9.5.sp, letterSpacing = 0.18.em),
             color = palette.textFaint,
         )
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(18.dp))
 
-        // Agent hero — name + mark
-        Row(verticalAlignment = Alignment.Bottom) {
-            HbText(
-                brand.name.uppercase(Locale.ENGLISH),
-                style = HbType.headerBar.copy(
-                    fontSize = 40.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.3.em, lineHeight = 1.0.em,
-                ),
-                color = palette.accent,
-            )
-            Spacer(Modifier.size(10.dp))
-            HbText(
-                brand.modelNumber.uppercase(Locale.ENGLISH),
-                style = HbType.headerBar.copy(
-                    fontSize = 18.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.24.em, lineHeight = 1.0.em,
-                ),
-                color = palette.accentDim,
-            )
-        }
-        Spacer(Modifier.height(10.dp))
+        // Agent hero — the brand, as large as the screen allows.
+        AgentHero(brand)
+        Spacer(Modifier.height(8.dp))
 
         // Domain tagline
         HbText(
@@ -154,7 +143,7 @@ fun WelcomeView(
             style = HbType.readout.copy(fontSize = 11.sp, letterSpacing = 0.22.em),
             color = palette.textFaint,
         )
-        Spacer(Modifier.height(34.dp))
+        Spacer(Modifier.height(20.dp))
 
         // Greeting typewriter + blinking block caret
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.Center) {
@@ -183,6 +172,60 @@ fun WelcomeView(
         }
     }
 }
+
+/**
+ * The agent hero — "SPEDA MARK VI".
+ *
+ * Mobile-specific: the brand is the loudest thing on the home screen, so it is
+ * sized to fill the width (shrink-to-fit, since a long name like NIGHTCRAWLER
+ * MARK III needs far less than SPEDA MARK VI).
+ *
+ * Name and mark are ONE line of styled text rather than two composables in a Row:
+ * that gives them a shared baseline for free — Row's Alignment.Bottom lines up the
+ * boxes, not the baselines, which is what made the mark sit low.
+ */
+@Composable
+private fun AgentHero(brand: Brand) {
+    val palette = LocalHbPalette.current
+    // Reset per agent — name lengths differ, so the fitted size does too.
+    var heroSize by remember(brand.agentId) { mutableStateOf(HERO_START) }
+
+    val text = buildAnnotatedString {
+        withStyle(
+            SpanStyle(
+                color = palette.accent,
+                fontSize = heroSize,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.3.em,
+            ),
+        ) { append(brand.name.uppercase(Locale.ENGLISH)) }
+        append("  ")
+        withStyle(
+            SpanStyle(
+                color = palette.accentDim,
+                fontSize = heroSize * MARK_RATIO,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.24.em,
+            ),
+        ) { append(brand.modelNumber.uppercase(Locale.ENGLISH)) }
+    }
+
+    BasicText(
+        text = text,
+        style = TextStyle(fontFamily = HbFonts.Ui, lineHeight = 1.0.em),
+        maxLines = 1,
+        softWrap = false,
+        onTextLayout = { result ->
+            if (result.didOverflowWidth && heroSize > HERO_MIN) heroSize *= 0.94f
+        },
+    )
+}
+
+/** Start big and shrink to fit; the web's clamp() tops out around here anyway. */
+private val HERO_START = 58.sp
+private val HERO_MIN = 18.sp
+/** The web's mark is half the name (clamp 1.2rem vs 2.4rem at the mobile floor). */
+private const val MARK_RATIO = 0.5f
 
 /** The greeting's blinking block caret (CSS `blink 0.8s step-end`). */
 @Composable
