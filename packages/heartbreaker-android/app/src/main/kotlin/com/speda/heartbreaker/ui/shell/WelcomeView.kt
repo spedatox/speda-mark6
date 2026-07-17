@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,10 +22,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -137,25 +140,43 @@ fun WelcomeView(
         AgentHero(brand)
         Spacer(Modifier.height(8.dp))
 
-        // Domain tagline
+        // Domain tagline — centred, since a long one (Centurion's) wraps.
         HbText(
             brand.tagline.uppercase(Locale.ENGLISH),
-            style = HbType.readout.copy(fontSize = 11.sp, letterSpacing = 0.22.em),
+            style = HbType.readout.copy(
+                fontSize = 11.sp, letterSpacing = 0.22.em, lineHeight = 1.5.em, textAlign = TextAlign.Center,
+            ),
             color = palette.textFaint,
         )
         Spacer(Modifier.height(20.dp))
 
-        // Greeting typewriter + blinking block caret
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.Center) {
-            HbText(
-                typed,
-                style = HbType.headerBar.copy(
-                    fontSize = 18.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.22.em,
-                ),
-                color = androidx.compose.ui.graphics.Color(0xFFECF6F9),
-            )
-            if (!greetingDone) BlinkCaret()
+        // Greeting typewriter. The caret is an inline glyph rather than a Box in a
+        // Row: a Row can only centre the block, so a wrapped greeting ("GOOD
+        // AFTERNOON, AHMET EROL") left-aligned its second line. Inline, it flows
+        // with the text and every line centres.
+        val caretOn by produceState(true, greetingDone) {
+            while (!greetingDone) { delay(400); value = !value }
+            value = false
         }
+        BasicText(
+            text = buildAnnotatedString {
+                append(typed)
+                if (!greetingDone) {
+                    withStyle(SpanStyle(color = palette.accentBright.copy(alpha = if (caretOn) 0.55f else 0f))) {
+                        append("▌")
+                    }
+                }
+            },
+            style = HbType.headerBar.copy(
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.22.em,
+                lineHeight = 1.45.em,
+                textAlign = TextAlign.Center,
+                color = Color(0xFFECF6F9),
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
 
         // JARVIS remark — reserves no space until it exists, so nothing jumps
         if (remarkTyped.isNotEmpty()) {
@@ -226,25 +247,6 @@ private val HERO_START = 58.sp
 private val HERO_MIN = 18.sp
 /** The web's mark is half the name (clamp 1.2rem vs 2.4rem at the mobile floor). */
 private const val MARK_RATIO = 0.5f
-
-/** The greeting's blinking block caret (CSS `blink 0.8s step-end`). */
-@Composable
-private fun BlinkCaret() {
-    val palette = LocalHbPalette.current
-    val transition = rememberInfiniteTransition(label = "greetCaret")
-    val alpha by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(tween(800, easing = { if (it < 0.5f) 0f else 1f }), RepeatMode.Restart),
-        label = "blink",
-    )
-    Box(
-        Modifier
-            .padding(start = 3.dp, bottom = 2.dp)
-            .size(width = 9.dp, height = 17.dp)
-            .background(palette.accentBright.copy(alpha = 0.55f * alpha)),
-    )
-}
 
 private val CLOCK_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ENGLISH)
 private val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy", Locale.ENGLISH)
