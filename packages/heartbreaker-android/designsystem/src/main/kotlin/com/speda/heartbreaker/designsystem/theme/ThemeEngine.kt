@@ -109,7 +109,8 @@ object ThemeEngine {
 
     // ── string → Color parsers (the token map is the single computation) ──────
 
-    internal fun parseHex(hex: String): Color {
+    /** `#rrggbb` → Color. Public so callers can resolve a raw brand accent. */
+    fun parseHex(hex: String): Color {
         val h = hex.removePrefix("#")
         return Color(
             red = h.substring(0, 2).toInt(16),

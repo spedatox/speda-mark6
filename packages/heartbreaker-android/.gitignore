@@ -1,5 +1,6 @@
 # Android / Gradle build artifacts — this package is inert to the GitOps deploy.
 .gradle/
+.kotlin/
 build/
 */build/
 local.properties
