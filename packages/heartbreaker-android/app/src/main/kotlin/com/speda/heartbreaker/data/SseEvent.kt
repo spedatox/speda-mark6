@@ -18,6 +18,15 @@ data class SseEvent(
     @SerialName("request_id") val requestId: String = "",
 )
 
+/** A routable model (lib/api ModelInfo). `provider` is absent on old backends. */
+@Serializable
+data class ModelInfo(
+    val id: String,
+    val name: String = "",
+    val description: String = "",
+    val provider: String? = null,
+)
+
 /** Detached turns the backend is currently running (lib/api ActiveRun). */
 @Serializable
 data class ActiveRun(

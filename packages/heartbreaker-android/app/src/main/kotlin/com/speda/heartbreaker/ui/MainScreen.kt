@@ -1,16 +1,11 @@
 package com.speda.heartbreaker.ui
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.speda.heartbreaker.AppGraph
-import com.speda.heartbreaker.data.Health
 import com.speda.heartbreaker.data.Uplink
 import com.speda.heartbreaker.designsystem.background.AmbientBackground
 import com.speda.heartbreaker.designsystem.glass.hbHazeSource
@@ -18,12 +13,9 @@ import com.speda.heartbreaker.designsystem.glass.rememberHbHazeState
 import com.speda.heartbreaker.ui.chat.ChatScreen
 
 /**
- * The configured shell: ambient void (the single Haze source) → HUD strip → body.
- * For M0 the body is the token gallery, the visual-parity reference surface.
- * M1+ replaces it with the real chat/welcome surface.
- *
- * Health polling is collected via collectAsStateWithLifecycle, so it pauses in
- * the background and resumes with an immediate tick (plan §4.2 lifecycle rule).
+ * The configured shell root: the ambient void is the single Haze source that all
+ * top-level glass blurs over; [ChatScreen] lays out the HUD strip, header,
+ * transcript/welcome, composer and the sidebar drawer over it.
  */
 @Composable
 fun MainScreen(
@@ -36,24 +28,20 @@ fun MainScreen(
     onResetUplink: () -> Unit,
 ) {
     val haze = rememberHbHazeState()
-    val health by remember(uplink) { graph.health.poll(uplink.apiBase, uplink.apiKey) }
-        .collectAsStateWithLifecycle(initialValue = Health.Offline)
 
     Box(Modifier.fillMaxSize().hbHazeSource(haze)) {
         AmbientBackground(Modifier.matchParentSize())
 
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            HudStrip(health)
-            ChatScreen(
-                graph = graph,
-                uplink = uplink,
-                agentId = agentId,
-                partyEngaged = partyEngaged,
-                onAgentChange = onAgentChange,
-                onPartyToggle = onPartyToggle,
-                onResetUplink = onResetUplink,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+        ChatScreen(
+            graph = graph,
+            uplink = uplink,
+            agentId = agentId,
+            partyEngaged = partyEngaged,
+            onAgentChange = onAgentChange,
+            onPartyToggle = onPartyToggle,
+            onResetUplink = onResetUplink,
+            haze = haze,
+            modifier = Modifier.fillMaxSize().statusBarsPadding(),
+        )
     }
 }

@@ -1,22 +1,23 @@
 package com.speda.heartbreaker.ui.chat
 
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -24,20 +25,27 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.speda.heartbreaker.AppGraph
+import com.speda.heartbreaker.data.Health
+import com.speda.heartbreaker.data.HbSettings
+import com.speda.heartbreaker.data.IgorApi
+import com.speda.heartbreaker.data.ModelInfo
 import com.speda.heartbreaker.data.Uplink
 import com.speda.heartbreaker.designsystem.brand.Brands
-import com.speda.heartbreaker.designsystem.glass.HbGlassShape
-import com.speda.heartbreaker.designsystem.glass.HbGlassState
-import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
-import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
-import com.speda.heartbreaker.ui.HbGlassButton
-import com.speda.heartbreaker.ui.HbText
+import com.speda.heartbreaker.ui.HudStrip
+import com.speda.heartbreaker.ui.shell.AppHeader
+import com.speda.heartbreaker.ui.shell.SidebarDrawer
+import com.speda.heartbreaker.ui.shell.WelcomeView
+import kotlinx.coroutines.launch
 
 /**
- * The chat surface (M1) — the shell body. It carries a temporary control row
- * (agent switch / House Party / reset) and a session strip until the real
- * sidebar + header land in M3.
+ * The shell: HUD strip → header → welcome/transcript → composer, with the
+ * off-canvas sidebar drawer overlaid (Layout.tsx's slot arrangement at the
+ * mobile breakpoint).
+ *
+ * COMMS and SYS render as header chrome but their surfaces (comms tray, systems
+ * board) land in M4; WAR ROOM currently drives the House Party palette parade,
+ * which is the takeover's colour behaviour — the full cinematic is M4.
  */
 @Composable
 fun ChatScreen(
@@ -48,9 +56,10 @@ fun ChatScreen(
     onAgentChange: (String) -> Unit,
     onPartyToggle: () -> Unit,
     onResetUplink: () -> Unit,
+    haze: dev.chrisbanes.haze.HazeState,
     modifier: Modifier = Modifier,
 ) {
-    val palette = LocalHbPalette.current
+    val scope = rememberCoroutineScope()
     val vm: ChatViewModel = viewModel(
         factory = viewModelFactory { initializer { ChatViewModel(graph.api, graph.messageCache) } },
     )
@@ -58,91 +67,85 @@ fun ChatScreen(
     LaunchedEffect(config) { vm.onConfig(config) }
 
     val state by vm.state.collectAsStateWithLifecycle()
+    val settings by graph.settings.settings.collectAsStateWithLifecycle(initialValue = HbSettings())
+    val health by remember(config) { graph.health.poll(config.apiBase, config.apiKey) }
+        .collectAsStateWithLifecycle(initialValue = Health.Offline)
+
+    var models by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
+    LaunchedEffect(config) { models = graph.api.fetchModels(config) }
+
+    var drawerOpen by remember { mutableStateOf(false) }
+    val brand = Brands.BRANDS[agentId] ?: Brands.WARROOM
+    val activeTitle = state.sessions.firstOrNull { it.id == state.activeSessionId }?.title
+
     val listState = rememberLazyListState()
     LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.content?.length) {
         if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.lastIndex)
     }
 
-    Column(modifier.fillMaxSize()) {
-        // ── Temporary controls (agent switch / party / reset) — replaced by the
-        //    real sidebar + header in M3. ─────────────────────────────────────
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            for ((id, brand) in Brands.BRANDS) {
-                val selected = id == agentId && !partyEngaged
-                HbGlassButton(
-                    label = brand.name,
-                    onClick = { onAgentChange(id) },
-                    state = if (selected) HbGlassState.Active else HbGlassState.Default,
-                    shape = HbGlassShape.Pill,
-                    contentColor = if (selected) palette.accentBright else palette.iconBright,
-                )
-            }
-            HbGlassButton(
-                label = if (partyEngaged) "STAND DOWN" else "HOUSE PARTY",
-                onClick = onPartyToggle,
-                state = if (partyEngaged) HbGlassState.Amber else HbGlassState.Default,
-                shape = HbGlassShape.Pill,
-                contentColor = if (partyEngaged) palette.amberBright else palette.iconBright,
+    Box(modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().imePadding()) {
+            HudStrip(
+                health = health,
+                model = settings.model,
+                sessionCount = state.sessions.size,
+                apiBase = config.apiBase,
             )
-            HbGlassButton("RESET", onResetUplink, shape = HbGlassShape.Pill, contentColor = palette.textFaint)
-        }
+            AppHeader(
+                haze = haze,
+                sessionTitle = activeTitle,
+                onToggleSidebar = { drawerOpen = true },
+                onOpenWarRoom = onPartyToggle,
+                onToggleComms = { /* comms tray — M4 */ },
+                onToggleBoard = { /* systems board — M4 */ },
+                commsOpen = false,
+                boardOpen = partyEngaged,
+            )
 
-        // ── Session strip ─────────────────────────────────────────────────────
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            HbGlassButton("+ NEW", { vm.newChat() }, shape = HbGlassShape.Pill, contentColor = palette.accentBright)
-            for (session in state.sessions) {
-                val selected = session.id == state.activeSessionId
-                HbGlassButton(
-                    label = session.title ?: "SESSION ${session.id}",
-                    onClick = { vm.selectSession(session.id) },
-                    state = if (selected) HbGlassState.Amber else HbGlassState.Default,
-                    shape = HbGlassShape.Pill,
-                    contentColor = if (selected) palette.amberBright else palette.textDim,
-                )
-            }
-        }
-
-        // ── Messages / empty state ────────────────────────────────────────────
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (state.messages.isEmpty()) {
-                Column(
-                    Modifier.fillMaxSize().padding(24.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    HbText(
-                        (Brands.BRANDS[agentId]?.name ?: "SPEDA").uppercase(),
-                        style = HbType.headerBar,
-                        color = palette.accent,
-                        caps = true,
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                if (state.messages.isEmpty()) {
+                    WelcomeView(
+                        brand = brand,
+                        config = config,
+                        api = graph.api,
+                        userName = settings.userName,
                     )
-                    HbText("Ask anything.", style = HbType.read, color = palette.textDim)
-                }
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp),
-                ) {
-                    items(state.messages, key = { it.id }) { message ->
-                        MessageItem(message)
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp),
+                    ) {
+                        items(state.messages, key = { it.id }) { message -> MessageItem(message) }
                     }
                 }
             }
+
+            Composer(
+                isStreaming = state.isStreaming,
+                agentName = brand.name,
+                models = models,
+                model = settings.model,
+                onModelChange = { scope.launch { graph.settings.setModel(it) } },
+                onSend = { vm.send(it, IgorApi.StreamOpts(model = settings.model.ifEmpty { null })) },
+                onStop = { vm.stop() },
+                modifier = Modifier.navigationBarsPadding(),
+            )
         }
 
-        Composer(
-            isStreaming = state.isStreaming,
-            onSend = { vm.send(it) },
-            onStop = { vm.stop() },
+        SidebarDrawer(
+            open = drawerOpen,
+            brand = brand,
+            config = config,
+            api = graph.api,
+            sessions = state.sessions,
+            activeSessionId = state.activeSessionId,
+            userName = settings.userName,
+            onSelectSession = { vm.selectSession(it) },
+            onNewChat = { vm.newChat() },
+            onClose = { drawerOpen = false },
+            onAgentChange = onAgentChange,
+            onResetUplink = onResetUplink,
         )
     }
 }

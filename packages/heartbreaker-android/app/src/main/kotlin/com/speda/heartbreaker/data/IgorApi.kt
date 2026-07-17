@@ -153,6 +153,12 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
+    suspend fun fetchModels(config: AppConfig): List<ModelInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/models")?.let { json.decodeFromString<List<ModelInfo>>(it) }
+        }.getOrNull() ?: emptyList()
+    }
+
     suspend fun fetchWelcome(config: AppConfig, agentId: String): String = withContext(Dispatchers.IO) {
         runCatching {
             getString(config, "/welcome/$agentId")?.let {

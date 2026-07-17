@@ -4,6 +4,7 @@ import android.content.Context
 import com.speda.heartbreaker.data.HealthPoller
 import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.data.MessageCache
+import com.speda.heartbreaker.data.SettingsStore
 import com.speda.heartbreaker.data.UplinkStore
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -17,6 +18,7 @@ class AppGraph(context: Context) {
     private val appContext = context.applicationContext
 
     val uplink: UplinkStore = UplinkStore(appContext)
+    val settings: SettingsStore = SettingsStore(appContext)
 
     // Short-lived REST + /health client (ordinary timeouts).
     private val restClient: OkHttpClient = OkHttpClient.Builder()

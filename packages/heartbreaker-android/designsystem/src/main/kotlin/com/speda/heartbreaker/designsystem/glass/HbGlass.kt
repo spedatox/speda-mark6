@@ -55,6 +55,11 @@ sealed interface HbGlassState {
     data object Default : HbGlassState
     data object Active : HbGlassState
     data object Amber : HbGlassState
+    /**
+     * Floating menus/dropdowns (`--glass-menu`). They sit inside a backdrop root,
+     * where their own blur is cancelled, so the fill must occlude on its own.
+     */
+    data object Menu : HbGlassState
     /** `.glass-tint` — rim + fill derive from [color] (the CSS `currentColor`). */
     data class Tint(val color: Color) : HbGlassState
     /** `.glass-ghost` — invisible slab; a glass wash appears only on hover. */
@@ -114,7 +119,8 @@ private fun Modifier.hbGlassInternal(
     val cs = shape.toShape()
     val active = state is HbGlassState.Active
 
-    val fill: Color = palette.glassFill
+    // Menus occlude on their own (nested backdrop roots cancel their blur).
+    val fill: Color = if (state is HbGlassState.Menu) palette.glassMenu else palette.glassFill
     val tint: Color = when (state) {
         is HbGlassState.Amber -> Color(red = 217, green = 156, blue = 68).copy(alpha = 0.20f)
         is HbGlassState.Tint -> state.color.copy(alpha = 0.16f)

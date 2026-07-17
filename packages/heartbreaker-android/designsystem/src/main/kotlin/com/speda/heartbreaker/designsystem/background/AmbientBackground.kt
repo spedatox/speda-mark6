@@ -8,10 +8,14 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -105,15 +109,24 @@ fun AmbientBackground(
     val sweep1 by transition.pingPong(28_000, "sweep1")
     val sweep2 by transition.pingPong(20_000, "sweep2")
 
-    Canvas(modifier = modifier.fillMaxSize().background(bodyBrush)) {
-        // Blobs — sizes are (vw, vh) fractions like the CSS.
-        drawBlob(sample(t1, ORBIT1), 0.55f, 0.55f, accent, baseAlpha = 0.24f, transparentStop = 0.68f)
-        drawBlob(sample(t2, ORBIT2), 0.42f, 0.42f, accent, baseAlpha = 0.16f, transparentStop = 0.65f)
-        drawBlob(sample(t3, ORBIT3), 0.28f, 0.28f, accent, baseAlpha = 0.12f, transparentStop = 0.60f)
-
-        // Volumetric sweeps — soft accent bands rotating slowly across the scene.
-        drawSweep(angleDeg = -15f + 30f * sweep1, heightFrac = 0.35f, peakAlpha = 0.07f, accent = accent)
-        drawSweep(angleDeg = 20f - 30f * sweep2, heightFrac = 0.25f, peakAlpha = 0.05f, accent = accent)
+    Box(modifier.fillMaxSize().background(bodyBrush)) {
+        // Blobs — sizes are (vw, vh) fractions like the CSS. The radial falloff
+        // already reads soft, so these need no extra blur pass.
+        Canvas(Modifier.fillMaxSize()) {
+            drawBlob(sample(t1, ORBIT1), 0.55f, 0.55f, accent, baseAlpha = 0.24f, transparentStop = 0.68f)
+            drawBlob(sample(t2, ORBIT2), 0.42f, 0.42f, accent, baseAlpha = 0.16f, transparentStop = 0.65f)
+            drawBlob(sample(t3, ORBIT3), 0.28f, 0.28f, accent, baseAlpha = 0.12f, transparentStop = 0.60f)
+        }
+        // Volumetric sweeps — the CSS blurs these 40px; without it the rotated
+        // band's top/bottom edges read as hard diagonal streaks.
+        Canvas(
+            Modifier
+                .fillMaxSize()
+                .blur(radius = 40.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded),
+        ) {
+            drawSweep(angleDeg = -15f + 30f * sweep1, heightFrac = 0.35f, peakAlpha = 0.07f, accent = accent)
+            drawSweep(angleDeg = 20f - 30f * sweep2, heightFrac = 0.25f, peakAlpha = 0.05f, accent = accent)
+        }
     }
 }
 
