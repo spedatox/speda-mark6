@@ -36,13 +36,19 @@ import com.speda.heartbreaker.designsystem.glass.hbGlass
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.ChatMessage
+import com.speda.heartbreaker.domain.MarkdownPrep
 import com.speda.heartbreaker.domain.Role
 import com.speda.heartbreaker.domain.Segment
 import com.speda.heartbreaker.domain.ToolStatus
 import com.speda.heartbreaker.domain.Typewriter
 import com.speda.heartbreaker.domain.buildSegments
 import com.speda.heartbreaker.ui.HbText
+import com.speda.heartbreaker.ui.prose.ProseText
+import kotlinx.coroutines.delay
 import kotlin.math.floor
+
+/** The reveal target — content length; extracted so the throttle reads it cheaply. */
+private fun targetLenOf(content: String): Int = content.length
 
 /**
  * One chat row. Assistant rows interleave text + tool activity at the char offset
@@ -99,7 +105,22 @@ private fun AssistantRow(message: ChatMessage) {
 
     val fullLen = message.content.length
     val isRevealing = displayLen < fullLen
-    val revealedLen = if (isRevealing) displayLen else fullLen
+
+    // Throttle the markdown parse during streaming — the typewriter runs at 60fps
+    // but the prose only needs ~12fps to look smooth. This is the #1 streaming
+    // cost in the web too (Message.tsx debounces it at 80ms).
+    var renderLen by remember { mutableIntStateOf(displayLen) }
+    LaunchedEffect(isRevealing) {
+        if (!isRevealing) {
+            renderLen = targetLenOf(message.content)
+            return@LaunchedEffect
+        }
+        while (true) {
+            delay(80)
+            renderLen = floor(revealed).toInt()
+        }
+    }
+    val revealedLen = if (isRevealing) renderLen.coerceIn(0, fullLen) else fullLen
 
     val segments = remember(message.content, message.tools, revealedLen) {
         buildSegments(message.content, message.tools, revealedLen)
@@ -112,8 +133,12 @@ private fun AssistantRow(message: ChatMessage) {
                     val isLast = i == segments.lastIndex
                     when (seg) {
                         is Segment.Tools -> ToolFeed(seg.tools, streaming = message.isStreaming)
-                        is Segment.Text -> Row(verticalAlignment = Alignment.Bottom) {
-                            HbText(seg.text, style = HbType.read, color = palette.text)
+                        is Segment.Text -> {
+                            // Each settled segment's prepared text is remembered by
+                            // value, so only the live tail re-parses as the
+                            // typewriter advances (the web's per-segment memo).
+                            val prepared = remember(seg.text) { MarkdownPrep.prepare(seg.text) }
+                            ProseText(prepared)
                             if (isLast && (message.isStreaming || (!hasCodeBlock && isRevealing))) {
                                 StreamingCursor()
                             }

@@ -24,6 +24,7 @@ okhttp = "5.0.0-alpha.14"
 coil = "3.0.4"
 haze = "1.5.4"
 highlights = "1.0.0"
+commonmark = "0.24.0"
 
 junit = "4.13.2"
 androidxTestJunit = "1.2.1"
@@ -63,6 +64,12 @@ coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp"
 # --- Glass / syntax highlight (M0 uses haze; highlights is M2) ---
 haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
 highlights = { group = "dev.snipme", name = "highlights", version.ref = "highlights" }
+
+# --- Markdown (M2 prose renderer) — the AST; the Compose rendering is ours ---
+commonmark = { group = "org.commonmark", name = "commonmark", version.ref = "commonmark" }
+commonmark-ext-gfm-tables = { group = "org.commonmark", name = "commonmark-ext-gfm-tables", version.ref = "commonmark" }
+commonmark-ext-gfm-strikethrough = { group = "org.commonmark", name = "commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
+commonmark-ext-autolink = { group = "org.commonmark", name = "commonmark-ext-autolink", version.ref = "commonmark" }
 
 # --- Test ---
 junit = { group = "junit", name = "junit", version.ref = "junit" }
