@@ -21,6 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.composed
 import com.speda.heartbreaker.designsystem.theme.HbPalette
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -99,7 +102,7 @@ fun Modifier.hbGlass(
     state: HbGlassState = HbGlassState.Default,
 ): Modifier = composed {
     val palette = LocalHbPalette.current
-    hbGlassInternal(palette, shape, state)
+    hbGlassInternal(palette, shape, state, LocalHazeState.current)
 }
 
 /** Palette-explicit form for previews / static composition (no CompositionLocal). */
@@ -107,12 +110,13 @@ fun Modifier.hbGlass(
     palette: HbPalette,
     shape: HbGlassShape = HbGlassShape.R14,
     state: HbGlassState = HbGlassState.Default,
-): Modifier = hbGlassInternal(palette, shape, state)
+): Modifier = hbGlassInternal(palette, shape, state, null)
 
 private fun Modifier.hbGlassInternal(
     palette: HbPalette,
     shape: HbGlassShape,
     state: HbGlassState,
+    haze: HazeState?,
 ): Modifier {
     if (state is HbGlassState.Ghost) return this // invisible slab; hover wash handled by caller
 
@@ -141,11 +145,27 @@ private fun Modifier.hbGlassInternal(
         // Soft drop that lifts the slab off the void (`0 8px 32px black`).
         .drawBehind { drawDropShadow(cs, dropAlpha, GlassLight.DROP_OFFSET, dropBlur) }
         .clip(cs)
-        // Occluding dark fill, then the milky cool-white tint on top.
-        .drawBehind {
-            drawRect(color = fill)
-            drawRect(color = tint)
-        }
+        // THE REFRACTION. With a backdrop present this is real frosted glass:
+        // blur(28px) with the CSS fill + milky tint composited ON TOP of the
+        // blurred backdrop, which is what makes it read as glass rather than a
+        // flat translucent panel. Without one (previews, nested surfaces) it
+        // falls back to the occluding fill — the degradation the CSS itself
+        // sanctions, since nested backdrop roots cancel a child's blur anyway.
+        .then(
+            if (haze != null) {
+                Modifier.hazeEffect(state = haze) {
+                    blurRadius = BLUR_RADIUS
+                    backgroundColor = palette.void
+                    tints = listOf(HazeTint(fill), HazeTint(tint))
+                    noiseFactor = 0f
+                }
+            } else {
+                Modifier.drawBehind {
+                    drawRect(color = fill)
+                    drawRect(color = tint)
+                }
+            },
+        )
         // Rim + light stack drawn over the content, inside the clip.
         .drawWithContent {
             drawContent()

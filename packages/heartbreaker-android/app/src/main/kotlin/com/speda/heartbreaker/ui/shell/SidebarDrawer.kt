@@ -47,9 +47,12 @@ import com.speda.heartbreaker.designsystem.brand.Brand
 import com.speda.heartbreaker.designsystem.brand.Brands
 import com.speda.heartbreaker.designsystem.glass.HbGlassShape
 import com.speda.heartbreaker.designsystem.glass.HbGlassState
+import com.speda.heartbreaker.designsystem.glass.LocalHazeState
 import com.speda.heartbreaker.designsystem.glass.hbGlass
 import com.speda.heartbreaker.designsystem.glass.hbSeamBottom
 import com.speda.heartbreaker.designsystem.glass.hbSeamTop
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
 import com.speda.heartbreaker.designsystem.motion.Motion
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.theme.ThemeEngine
@@ -60,6 +63,11 @@ import com.speda.heartbreaker.domain.Session
 import com.speda.heartbreaker.domain.groupSessions
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.delay
+
+/** The mobile drawer sheet fill — `rgba(8, 14, 20, 0.55)` over its own blur. */
+private val DRAWER_FILL = Color(0xFF080E14).copy(alpha = 0.55f)
+/** No backdrop available (previews): occlude instead, since nothing will frost. */
+private val DRAWER_FILL_OPAQUE = Color(0xFF080E14).copy(alpha = 0.94f)
 
 /**
  * The off-canvas sidebar drawer — port of Sidebar.tsx in mobile mode:
@@ -88,6 +96,8 @@ fun SidebarDrawer(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
+    // The drawer sits OVER the transcript (outside its backdrop), so it refracts it.
+    val haze = LocalHazeState.current
     var footerMenuOpen by remember { mutableStateOf(false) }
 
     // Which sessions still have a turn running server-side (light 8s poll).
@@ -142,8 +152,23 @@ fun SidebarDrawer(
                 .offset(x = offsetX)
                 .width(drawerWidth)
                 .fillMaxHeight()
-                .background(Color(0xFF080E14).copy(alpha = 0.94f))
-                // AFTER the background, so the glass still runs to the screen edge
+                // A frosted SHEET, not an opaque panel: rgba(8,14,20,0.55) over a
+                // blur(28px) of the chat behind it, as the web has it. Without the
+                // blur the only way to stop the transcript ghosting through was to
+                // crank the fill to ~94% — which reads as a tinted panel, not glass.
+                .then(
+                    if (haze != null) {
+                        Modifier.hazeEffect(state = haze) {
+                            blurRadius = 28.dp
+                            backgroundColor = palette.void
+                            tints = listOf(HazeTint(DRAWER_FILL))
+                            noiseFactor = 0f
+                        }
+                    } else {
+                        Modifier.background(DRAWER_FILL_OPAQUE)
+                    },
+                )
+                // AFTER the fill, so the glass still runs to the screen edge
                 // while the footer profile row clears the system nav bar.
                 .navigationBarsPadding()
                 .clickable(

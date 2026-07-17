@@ -1,7 +1,9 @@
 package com.speda.heartbreaker.designsystem.glass
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -31,7 +33,15 @@ import dev.chrisbanes.haze.hazeSource
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-private val BLUR_RADIUS = 28.dp   // --hb-holo-blur: blur(28px)
+internal val BLUR_RADIUS = 28.dp   // --hb-holo-blur: blur(28px)
+
+/**
+ * The backdrop every glass surface refracts. Provided once at the shell root over
+ * the ambient void; [hbGlass] picks it up automatically, so a surface is real
+ * glass without the call site knowing anything about Haze. Null (previews, tests)
+ * simply falls back to the occluding-fill material.
+ */
+val LocalHazeState: ProvidableCompositionLocal<HazeState?> = staticCompositionLocalOf { null }
 
 @Composable
 fun rememberHbHazeState(): HazeState = remember { HazeState() }
