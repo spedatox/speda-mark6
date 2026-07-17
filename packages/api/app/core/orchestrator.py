@@ -214,6 +214,32 @@ class AgentOrchestrator:
             f"Active model: {context.model}"
         )
 
+        # ── Automated-run discipline ────────────────────────────────────────
+        # A trigger fires with no human in the loop. Weaker non-Anthropic models
+        # (SPEDA runs on open models in prod) will happily write a plausible
+        # briefing WITHOUT calling any tool if left to their own devices — the
+        # daily-brief "pure hallucination" bug. This standing directive is
+        # model-agnostic (the ollama block below is greeting-discipline, not
+        # this) and forces execute-over-narrate + a hard no-fabrication rule.
+        if context.triggered_by != "user":
+            stable_core += (
+                "\n\n## AUTOMATED RUN — EXECUTE, DON'T NARRATE\n\n"
+                "This turn was fired by an automation, not a person. No one is "
+                "waiting to answer questions and there is nothing to preview. Carry "
+                "out the requested workflow end to end with REAL tool calls, then "
+                "report only what actually happened.\n"
+                "- Get every fact by CALLING the relevant tool. Load a toolset with "
+                "use_toolset first when the tool isn't available yet (Gmail, "
+                "Calendar, Notion). Do not answer from memory or assumption when a "
+                "tool can give you the real value.\n"
+                "- NEVER fabricate results. If a tool errors or returns nothing, say "
+                "that in the output. An honest 'no new mail' or 'server metrics "
+                "unavailable' is correct; an invented summary or made-up numbers is "
+                "the worst possible outcome and defeats the entire automation.\n"
+                "- Keep the final message concise and concrete, led by what actually "
+                "happened."
+            )
+
         # ── Dead Zone Protocol ──────────────────────────────────────────────
         # Offline mode: only offline-capable tools are exposed, and the model
         # is told the uplink is gone. Outside the dead zone, every provider —
