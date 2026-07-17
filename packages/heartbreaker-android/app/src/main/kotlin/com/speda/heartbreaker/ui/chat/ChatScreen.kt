@@ -138,7 +138,16 @@ fun ChatScreen(
                 models = models,
                 model = settings.model,
                 onModelChange = { scope.launch { graph.settings.setModel(it) } },
-                onSend = { vm.send(it, IgorApi.StreamOpts(model = settings.model.ifEmpty { null })) },
+                onSend = { text, images, docs ->
+                    vm.send(
+                        text,
+                        IgorApi.StreamOpts(
+                            model = settings.model.ifEmpty { null },
+                            images = images,
+                            documents = docs,
+                        ),
+                    )
+                },
                 onStop = { vm.stop() },
                 modifier = Modifier.navigationBarsPadding(),
             )

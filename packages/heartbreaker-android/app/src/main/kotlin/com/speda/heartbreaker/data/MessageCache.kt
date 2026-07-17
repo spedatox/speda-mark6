@@ -1,10 +1,19 @@
 package com.speda.heartbreaker.data
 
 import com.speda.heartbreaker.domain.ChatMessage
+import com.speda.heartbreaker.domain.Session
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import java.io.File
 
 /**
@@ -38,5 +47,45 @@ class MessageCache(cacheRoot: File) {
             val parsed = MessageJson.parseArray(json.parseToJsonElement(f.readText()) as JsonArray)
             parsed.ifEmpty { null }
         }.getOrNull()
+    }
+
+    // ── Session list ─────────────────────────────────────────────────────────
+    // Cached too, otherwise an offline launch shows "// NO SESSIONS" and there's
+    // no way to reach the transcripts that ARE on disk.
+
+    private fun sessionsFile(agentId: String) = File(dir, "sessions_$agentId.json")
+
+    suspend fun saveSessions(agentId: String, sessions: List<Session>) = withContext(Dispatchers.IO) {
+        if (agentId.isEmpty() || sessions.isEmpty()) return@withContext
+        runCatching {
+            val array = buildJsonArray {
+                sessions.forEach { s ->
+                    add(
+                        buildJsonObject {
+                            put("id", s.id)
+                            s.title?.let { put("title", it) }
+                            put("started_at", s.startedAt)
+                        },
+                    )
+                }
+            }
+            sessionsFile(agentId).writeText(array.toString())
+        }
+    }
+
+    suspend fun loadSessions(agentId: String): List<Session> = withContext(Dispatchers.IO) {
+        if (agentId.isEmpty()) return@withContext emptyList()
+        runCatching {
+            val f = sessionsFile(agentId)
+            if (!f.exists()) return@runCatching emptyList()
+            (json.parseToJsonElement(f.readText()) as JsonArray).mapNotNull { el ->
+                val o = el as? JsonObject ?: return@mapNotNull null
+                Session(
+                    id = o["id"]?.jsonPrimitive?.int ?: return@mapNotNull null,
+                    title = o["title"]?.jsonPrimitive?.content,
+                    startedAt = o["started_at"]?.jsonPrimitive?.content.orEmpty(),
+                )
+            }
+        }.getOrDefault(emptyList())
     }
 }

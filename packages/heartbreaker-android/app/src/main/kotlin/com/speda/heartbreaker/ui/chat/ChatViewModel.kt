@@ -11,8 +11,10 @@ import com.speda.heartbreaker.domain.ChatAction
 import com.speda.heartbreaker.domain.ChatMessage
 import com.speda.heartbreaker.domain.ChatState
 import com.speda.heartbreaker.domain.Role
+import com.speda.heartbreaker.domain.UploadedFile
 import com.speda.heartbreaker.domain.Watchdog
 import com.speda.heartbreaker.domain.reduce
+import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -77,9 +79,24 @@ class ChatViewModel(
         dispatch(ChatAction.NewChat)
     }
 
+    /**
+     * Server wins; the cache covers an offline launch. Without this the drawer
+     * reads "// NO SESSIONS" with no network and the transcripts already on disk
+     * become unreachable.
+     */
     private fun refreshSessions() {
         val cfg = state.value.config ?: return
-        viewModelScope.launch { dispatch(ChatAction.SetSessions(api.fetchSessions(cfg))) }
+        viewModelScope.launch {
+            val cached = cache.loadSessions(cfg.agentId)
+            if (cached.isNotEmpty() && state.value.sessions.isEmpty()) {
+                dispatch(ChatAction.SetSessions(cached))
+            }
+            val server = api.fetchSessions(cfg)
+            if (server.isNotEmpty()) {
+                dispatch(ChatAction.SetSessions(server))
+                cache.saveSessions(cfg.agentId, server)
+            }
+        }
     }
 
     fun selectSession(sessionId: Int) {
@@ -110,7 +127,21 @@ class ChatViewModel(
         if (state.value.isStreaming) return
 
         if (!opts.regenerate) {
-            dispatch(ChatAction.AddUserMessage(ChatMessage(id = makeId(), role = Role.User, content = text)))
+            // The bubble carries what the owner attached: images as data: URLs for
+            // display, non-images as chips (the web does exactly this).
+            val displayImages = opts.images.map { it.asDataUrl() }.toPersistentList()
+            val uploads = opts.documents.map { UploadedFile(it.name, it.size) }.toPersistentList()
+            dispatch(
+                ChatAction.AddUserMessage(
+                    ChatMessage(
+                        id = makeId(),
+                        role = Role.User,
+                        content = text,
+                        images = displayImages.takeIf { it.isNotEmpty() },
+                        uploads = uploads.takeIf { it.isNotEmpty() },
+                    ),
+                ),
+            )
         }
         val assistantId = makeId()
         dispatch(
