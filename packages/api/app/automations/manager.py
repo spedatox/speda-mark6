@@ -65,6 +65,28 @@ async def create_automation(spec: dict, db: AsyncSession, agent_id: str = "speda
     or raises ValueError with a actionable message (bad spec / n8n unreachable)
     that SPEDA can read and repair. agent_id is the creating agent — the watcher
     fires back through that agent's /trigger and is voiced by it."""
+    # Idempotency guard — the daily-brief bug spawned FIVE identical "morning
+    # briefing" workflows because nothing stopped a re-create. Refuse to stack a
+    # second active automation with the same name; tell the agent to reuse or
+    # delete+replace the existing one instead. Actionable ValueError so the
+    # agent can self-correct in the same turn.
+    name = (spec.get("name") or "").strip()
+    if name:
+        existing = (
+            await db.execute(
+                select(Automation).where(
+                    Automation.name == name, Automation.active.is_(True)
+                )
+            )
+        ).scalars().first()
+        if existing is not None:
+            raise ValueError(
+                f"An active automation named '{name}' already exists "
+                f"(id {existing.id}). Don't create a duplicate — either reuse it, "
+                f"or delete it (action='delete', automation_id={existing.id}) and "
+                f"create the replacement. Call action='list' to review first."
+            )
+
     # "track this for a month" → concrete expiry the gate node enforces.
     duration_days = spec.pop("duration_days", None)
     if duration_days and not spec.get("expires_at"):

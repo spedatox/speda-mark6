@@ -16,6 +16,49 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["trigger"])
 
 
+def _trigger_seed(payload: dict, output_mode: str) -> str:
+    """The single user turn that kicks off an automated run.
+
+    An automation fires with no human in the loop, so the seed must push the
+    agent to EXECUTE its stored workflow with real tools — not to narrate or
+    fabricate. The old wording ("compose the message the owner should see") let
+    weaker models write a plausible-looking briefing without ever calling Gmail,
+    the calendar, news_headlines or system_info. This says the opposite,
+    explicitly, and tells the agent how its output is delivered so it doesn't
+    double-send via send_telegram_message on a push.
+    """
+    intent = payload.get("intent") or ""
+    delivery = {
+        "respond": "Your reply streams straight back to the owner.",
+        "push": (
+            "Whatever you write as your reply IS delivered to the owner as a push "
+            "notification — so do NOT also call send_telegram_message; that would "
+            "double-send. Your composed text is the delivery."
+        ),
+        "silent": (
+            "This is a silent run: your reply is stored, not shown to anyone right "
+            "now. Still do the real work; keep the write-up brief."
+        ),
+    }.get(output_mode, "")
+    return (
+        "AUTOMATED TRIGGER — no human is waiting on this turn, so you must ACT, "
+        "not narrate.\n\n"
+        "The `intent` below is a workflow you wrote earlier for your future self. "
+        "Execute it now, step by step, with your real tools:\n"
+        "- Actually CALL each tool the intent implies. If a tool isn't loaded yet "
+        "(Gmail, Calendar, Notion, …), load it with use_toolset first, then call "
+        "it. news_headlines and system_info are always available.\n"
+        "- Build every part of your message ONLY from what the tools actually "
+        "return. If a tool errors or a section has nothing, SAY SO plainly — "
+        "'no new important mail', 'calendar unavailable'. Never invent mail, "
+        "events, headlines, or numbers. Fabricated data is a failure, not a "
+        "fallback.\n"
+        f"- {delivery}\n\n"
+        f"intent: {intent}\n\n"
+        f"full payload: {payload}"
+    )
+
+
 @router.post("/trigger/{agent_id}", response_model=TriggerResponse)
 async def trigger(
     agent_id: str,
@@ -64,11 +107,7 @@ async def trigger(
         conversation_history=[
             {
                 "role": "user",
-                "content": (
-                    "Automated trigger received. Compose the message the owner should "
-                    "see — short, concrete, leading with what happened. The 'intent' "
-                    f"field is your past instruction to yourself. Payload: {body.payload}"
-                ),
+                "content": _trigger_seed(body.payload, body.output_mode),
             }
         ],
         db=db,  # replaced with a task-owned session in _run_trigger
