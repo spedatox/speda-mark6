@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,8 @@ import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.data.ModelInfo
 import com.speda.heartbreaker.data.Uplink
 import com.speda.heartbreaker.designsystem.brand.Brands
+import com.speda.heartbreaker.designsystem.glass.LocalHazeState
+import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.ui.HudStrip
 import com.speda.heartbreaker.ui.shell.AppHeader
@@ -98,22 +101,32 @@ fun ChatScreen(
                 onToggleSidebar = { drawerOpen = true },
             )
 
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (state.messages.isEmpty()) {
-                    WelcomeView(
-                        brand = brand,
-                        config = config,
-                        api = graph.api,
-                        userName = settings.userName,
-                    )
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
-                        contentPadding = PaddingValues(vertical = 12.dp),
-                    ) {
-                        items(state.messages, key = { it.id }) { message ->
-                            MessageItem(message, config = config, downloader = graph.downloader)
+            // The transcript is ALSO a backdrop: the header, composer and drawer
+            // sit over it, so they must refract the text behind them — that's
+            // what makes them read as glass rather than tinted panels. (Blurring
+            // only the ambient shows nothing: a smooth gradient blurs to itself.)
+            Box(Modifier.weight(1f).fillMaxWidth().hbHazeSource(haze)) {
+                // Glass INSIDE the backdrop must not blur — it would sample the
+                // source it lives in, itself included. It falls back to the
+                // occluding fill, which is exactly the CSS's nested-backdrop-root
+                // rule: a nested surface's own blur is cancelled anyway.
+                CompositionLocalProvider(LocalHazeState provides null) {
+                    if (state.messages.isEmpty()) {
+                        WelcomeView(
+                            brand = brand,
+                            config = config,
+                            api = graph.api,
+                            userName = settings.userName,
+                        )
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                            contentPadding = PaddingValues(vertical = 12.dp),
+                        ) {
+                            items(state.messages, key = { it.id }) { message ->
+                                MessageItem(message, config = config, downloader = graph.downloader)
+                            }
                         }
                     }
                 }

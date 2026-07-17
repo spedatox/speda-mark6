@@ -1,5 +1,6 @@
 <resources>
     <!-- Only the window background needs a native colour; everything else is the
-         Compose palette. Matches the hb-void token in heartbreaker.css. -->
-    <color name="hb_void">#04080A</color>
+         Compose palette. True black so the OLED panel keeps these pixels off and
+         there's no flash of a lighter surface before Compose paints. -->
+    <color name="hb_void">#000000</color>
 </resources>

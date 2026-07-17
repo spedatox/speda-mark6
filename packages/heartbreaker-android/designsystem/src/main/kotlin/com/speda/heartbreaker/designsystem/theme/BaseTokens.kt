@@ -59,12 +59,19 @@ internal object BaseTokens {
     const val RED = "#c84a3a"
     const val GREEN = "#4fa377"
 
-    /** Body background — the static 160° 4-stop gradient (heartbreaker.css body). */
+    /**
+     * Body background.
+     *
+     * MOBILE DEVIATION (deliberate): the web's static 160° gradient runs
+     * #03070a → #060d14 → #08131d → #040a10 — very dark, but every pixel is lit.
+     * On the OLED panels this ships to, a true-black pixel is switched OFF, so a
+     * flat #000000 base costs no power across the ~90% of the screen that is
+     * background. The colour and depth come from the ambient blobs on top, which
+     * is where the design's interest lives anyway.
+     */
     val BODY_GRADIENT_STOPS = listOf(
-        0.0f to "#03070a",
-        0.38f to "#060d14",
-        0.62f to "#08131d",
-        1.0f to "#040a10",
+        0.0f to "#000000",
+        1.0f to "#000000",
     )
     const val BODY_GRADIENT_ANGLE_DEG = 160.0f
 }
