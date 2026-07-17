@@ -122,11 +122,26 @@ private fun Block(node: Node, palette: HbPalette) {
         is BulletList -> ListBlock(node, palette, ordered = false)
         is OrderedList -> ListBlock(node, palette, ordered = true)
         is BlockQuote -> Quote(node, palette)
-        is FencedCodeBlock -> CodeBlockView(language = node.info.orEmpty().trim(), code = node.literal.trimEnd('\n'))
+        is FencedCodeBlock -> Fence(language = node.info.orEmpty().trim(), code = node.literal.trimEnd('\n'))
         is IndentedCodeBlock -> CodeBlockView(language = "", code = node.literal.trimEnd('\n'))
         is ThematicBreak -> Hr()
         is TableBlock -> TableView(node, palette)
         else -> Blocks(node, palette) // containers we don't style directly
+    }
+}
+
+/* ── Fence dispatch ──────────────────────────────────────────────────────── */
+
+/**
+ * Which renderer a ``` fence gets, mirroring the `code()` branch in Message.tsx.
+ * Anything unclaimed falls through to the glass code block.
+ */
+@Composable
+private fun Fence(language: String, code: String) {
+    when (language.lowercase()) {
+        "chart" -> ChartBlock(code)
+        "calendar" -> CalendarBlock(code)
+        else -> CodeBlockView(language = language, code = code)
     }
 }
 
