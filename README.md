@@ -5,6 +5,9 @@
 
 ### Specialized Personal Executive Digital Assistant Mark VI
 
+<img width="1920" height="995" alt="image" src="https://github.com/user-attachments/assets/ab1d67df-ae91-42ea-baf2-15b3dd94ebab" />
+
+
 **A private, proactive, multi-agent executive assistant** — a suite of eight
 domain specialists that watch the world for you, act while you sleep, remember
 who you are, and answer through a holographic command deck straight out of a
@@ -47,6 +50,9 @@ carries its own identity, model policy, toolset and signature colour. Address
 any of them directly; they quietly hand work to each other when a task belongs
 to someone else's domain.
 
+<img width="1919" height="1013" alt="image" src="https://github.com/user-attachments/assets/25206040-24de-4fc2-8290-374bd983da0e" />
+
+
 | Agent | Mark | Domain | What they do |
 |---|---|---|---|
 | 🟦 **SPEDA** | Mark VI | Chief of Staff | Your main assistant — plans, routes, runs automations, commands the others. |
@@ -63,6 +69,9 @@ to someone else's domain.
 > a fully branded standalone app — by flipping one build flag.
 
 ---
+
+<img width="1920" height="994" alt="image" src="https://github.com/user-attachments/assets/fbfbfdd7-dba2-4af5-8f0a-db49e80751d1" />
+
 
 ## The features
 
