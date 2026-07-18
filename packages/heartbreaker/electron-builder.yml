@@ -15,7 +15,10 @@ win:
   target:
     - nsis
   artifactName: ${productName}-${version}-setup.${ext}
-  icon: ../../docs/app_icon.png
+  # Multi-size .ico (16→256) generated from mark6_icon.png at the repo root.
+  # A real .ico beats handing electron-builder a 4096px PNG: Windows picks the
+  # right size for the taskbar, Explorer, and the installer instead of rescaling.
+  icon: build/icon.ico
 
 nsis:
   oneClick: false
