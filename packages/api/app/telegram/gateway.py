@@ -17,6 +17,7 @@ import uuid
 from app.config import settings
 from app.core.context import AgentContext
 from app.core.runtime_state import get_telegram_owner_id
+from app.core.surface import annotate_last_user, telegram_context
 from app.database import AsyncSessionLocal
 from app.telegram import linking
 from app.telegram.renderer import render_stream
@@ -129,6 +130,11 @@ class TelegramGateway:
             )
             await self._sessions.save_message(db, session.id, "user", user_content)
             history = await self._sessions.load_history(db, session.id)
+
+            # Surface awareness — SPEDA must know this turn arrived over Telegram
+            # (not the phone or desktop). Stamped onto the live tail only, never
+            # persisted; same discipline as the chat router.
+            annotate_last_user(history, telegram_context())
 
             context = AgentContext(
                 agent_id=agent_id,
