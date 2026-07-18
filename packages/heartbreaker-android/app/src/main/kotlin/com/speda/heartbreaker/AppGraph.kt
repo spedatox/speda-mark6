@@ -5,6 +5,7 @@ import com.speda.heartbreaker.data.Downloader
 import com.speda.heartbreaker.data.HealthPoller
 import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.data.MessageCache
+import com.speda.heartbreaker.data.PlatformContextProvider
 import com.speda.heartbreaker.data.SettingsStore
 import com.speda.heartbreaker.data.UplinkStore
 import okhttp3.OkHttpClient
@@ -20,6 +21,7 @@ class AppGraph(context: Context) {
 
     val uplink: UplinkStore = UplinkStore(appContext)
     val settings: SettingsStore = SettingsStore(appContext)
+    val platform: PlatformContextProvider = PlatformContextProvider(appContext)
 
     // Short-lived REST + /health client (ordinary timeouts).
     private val restClient: OkHttpClient = OkHttpClient.Builder()

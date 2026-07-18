@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -94,6 +95,7 @@ internal fun GlassField(
     minHeight: Dp = 44.dp,
     dirty: Boolean = false,
     mono: Boolean = false,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     val palette = LocalHbPalette.current
     val base = if (mono) HbType.code.copy(fontSize = 13.sp) else HbType.read.copy(fontSize = 15.sp)
@@ -101,6 +103,7 @@ internal fun GlassField(
         value = value,
         onValueChange = onValueChange,
         singleLine = singleLine,
+        visualTransformation = visualTransformation,
         textStyle = base.merge(TextStyle(color = palette.text)),
         cursorBrush = SolidColor(palette.accentBright),
         modifier = Modifier.fillMaxWidth(),

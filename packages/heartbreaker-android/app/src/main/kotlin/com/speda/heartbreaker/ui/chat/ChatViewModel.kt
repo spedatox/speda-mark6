@@ -50,6 +50,13 @@ class ChatViewModel(
     private val _state = MutableStateFlow(ChatState())
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
+    /**
+     * Supplies the ambient client/platform/location context for a turn, resolved
+     * fresh at send time (so location is current and the toggle is honoured). Set
+     * by the shell; applied to every send, including regenerate/edit-and-resend.
+     */
+    var clientContextProvider: (suspend () -> com.speda.heartbreaker.data.ClientContext?)? = null
+
     fun dispatch(action: ChatAction) = _state.update { reduce(it, action) }
 
     // Singleton handles mirroring the ChatMain refs.
@@ -154,8 +161,11 @@ class ChatViewModel(
         var myJob: Job? = null
         myJob = viewModelScope.launch {
             try {
+                // Resolve ambient context (platform + opt-in location) for THIS turn.
+                val cc = runCatching { clientContextProvider?.invoke() }.getOrNull()
+                val sendOpts = if (cc != null) opts.copy(clientContext = cc) else opts
                 collectStream(
-                    flow = api.streamChat(if (opts.regenerate) "" else text, sessionAtSend, cfg, opts),
+                    flow = api.streamChat(if (opts.regenerate) "" else text, sessionAtSend, cfg, sendOpts),
                     assistantId = assistantId,
                     fallbackSessionId = sessionAtSend ?: 0,
                     watchdogModel = opts.model ?: "",
@@ -173,6 +183,42 @@ class ChatViewModel(
             }
         }
         sendJob = myJob
+    }
+
+    // ── Message actions (delete / regenerate / edit-and-resend) ─────────────────
+
+    /** Drop a single message from the transcript (DELETE_MESSAGE). */
+    fun deleteMessage(id: String) = dispatch(ChatAction.DeleteMessage(id))
+
+    /**
+     * Regenerate: keep everything up to and including the user turn, drop the old
+     * answer, and re-run on that clean history (keepMessages = the answer's index).
+     * The backend truncates its DB rows to match so the model sees the prompt
+     * fresh. (ChatMain.handleRegenerate.)
+     */
+    fun regenerate(assistantId: String, defaultOpts: IgorApi.StreamOpts) {
+        val st = state.value
+        if (st.isStreaming) return
+        val idx = st.messages.indexOfFirst { it.id == assistantId }
+        if (idx <= 0) return
+        val userMsg = st.messages.getOrNull(idx - 1) ?: return
+        if (userMsg.role != Role.User) return
+        dispatch(ChatAction.TruncateFrom(assistantId))
+        send("", defaultOpts.copy(keepMessages = idx, regenerate = true))
+    }
+
+    /**
+     * Edit & resend: drop the old user turn + its answer (keepMessages = the user
+     * turn's index), then send the edited prompt as a brand-new turn.
+     * (ChatMain.handleEditAndResend.)
+     */
+    fun editAndResend(userId: String, newContent: String, defaultOpts: IgorApi.StreamOpts) {
+        val st = state.value
+        if (st.isStreaming) return
+        val idx = st.messages.indexOfFirst { it.id == userId }
+        if (idx < 0) return
+        dispatch(ChatAction.TruncateFrom(userId))
+        send(newContent, defaultOpts.copy(keepMessages = idx))
     }
 
     /** Cancel the detached run on the backend, then abort the local fetch. */
