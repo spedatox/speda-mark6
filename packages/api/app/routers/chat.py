@@ -10,10 +10,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal, get_db
-from app.schemas.chat import ChatRequest
+from app.schemas.chat import ChatRequest, ClientContext
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
+
+
+def _render_client_context(cc: ClientContext) -> str:
+    """Compact one-liner describing where/what the owner is speaking from, for the
+    live turn. Only the fields the client actually sent appear. Self-labelled so
+    the model reads it as ambient context, not owner instruction."""
+    bits: list[str] = []
+    device = " ".join(x for x in [cc.os_version, cc.device] if x) or cc.platform
+    if device:
+        bits.append(f"on {device}")
+    if cc.location is not None:
+        loc = cc.location
+        where = loc.place or f"{loc.lat:.4f},{loc.lng:.4f}"
+        acc = f" ±{round(loc.accuracy_m)}m" if loc.accuracy_m else ""
+        # Exact coordinates too, so distance/direction questions are answerable.
+        bits.append(f"location: {where}{acc} [{loc.lat:.5f},{loc.lng:.5f}]")
+    if cc.locale:
+        bits.append(f"locale {cc.locale}")
+    if cc.app_version:
+        bits.append(f"app {cc.app_version}")
+    if not bits:
+        return ""
+    return "[client context — " + " · ".join(bits) + "]"
 
 
 def _friendly_error(model: str, exc: Exception) -> str:
@@ -299,6 +322,19 @@ async def _run_chat(
         # SessionManager.stamp_user_content).
         await session_manager.save_message(db, session.id, "user", user_content)
         history = await session_manager.load_history(db, session.id)
+
+    # Ambient client context (platform + opt-in location) — stamped onto the live
+    # turn's newest user message ONLY, never persisted. Mirrors how the timestamp
+    # reaches the model (stamp_user_content): it decorates the uncached tail, so
+    # the stored+reloaded history stays byte-stable and the prompt cache holds.
+    if body.client_context is not None and history and history[-1].get("role") == "user":
+        line = _render_client_context(body.client_context)
+        if line:
+            c = history[-1]["content"]
+            if isinstance(c, list):
+                history[-1] = {**history[-1], "content": [*c, {"type": "text", "text": line}]}
+            else:
+                history[-1] = {**history[-1], "content": (f"{c}\n{line}" if c else line)}
 
     context = AgentContext(
         agent_id=profile.agent_id,
