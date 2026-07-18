@@ -54,6 +54,7 @@ fun HudStrip(
     model: String,
     sessionCount: Int,
     apiBase: String,
+    onAgentClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
@@ -73,11 +74,17 @@ fun HudStrip(
                 .hbSeamBottom()
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Left — the wordmark, with a link jewel (no label: the state reads
-            // from the colour, and the strip stays uncluttered on a phone).
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            // Left — the wordmark, then the CURRENT AGENT right beside it (not
+            // centred: a centred label overran on narrow screens). Tapping the
+            // agent name opens the armoury; the caret hints it. The cluster takes
+            // the free width and the name ellipsizes, so it can't reach the DIAG chip.
+            Row(
+                Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
                 LinkDot(online = health.online, color = linkColor)
                 HbText(
                     "HEARTBREAKER",
@@ -85,18 +92,24 @@ fun HudStrip(
                     color = palette.accent.copy(alpha = 0.55f),
                     maxLines = 1,
                 )
+                HbText("//", style = HbType.hud.copy(fontSize = 9.sp), color = palette.textFaint)
+                Row(
+                    Modifier
+                        .weight(1f, fill = false)
+                        .then(if (onAgentClick != null) Modifier.clickable(onClick = onAgentClick) else Modifier),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    HbText(
+                        agentName,
+                        style = HbType.hud.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.16.em),
+                        color = palette.accentBright,
+                        caps = true,
+                        maxLines = 1,
+                    )
+                    if (onAgentClick != null) HbGlyphs.ChevronDown(palette.accent.copy(alpha = 0.7f), size = 7.dp)
+                }
             }
-
-            // Centre — the current agent. Shares space with the clusters and
-            // ellipsizes rather than colliding on narrow screens.
-            HbText(
-                agentName,
-                style = HbType.hud.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.16.em),
-                color = palette.accentBright,
-                caps = true,
-                maxLines = 1,
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-            )
 
             // Right — everything else collapses into DIAG.
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

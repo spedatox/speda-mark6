@@ -16,6 +16,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -25,6 +27,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -204,6 +207,168 @@ class IgorApi(
         }.getOrNull().orEmpty()
     }
 
+    // ── Budget mode (GET/POST /budget-mode) ────────────────────────────────────
+
+    suspend fun getBudgetMode(config: AppConfig): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/budget-mode")?.let {
+                json.parseToJsonElement(it).jsonObject["budget_mode"]?.jsonPrimitive?.booleanOrNull
+            }
+        }.getOrNull() ?: true
+    }
+
+    suspend fun setBudgetMode(config: AppConfig, enabled: Boolean): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            postJson(config, "/budget-mode", buildJsonObject { put("enabled", enabled) })?.let {
+                json.parseToJsonElement(it).jsonObject["budget_mode"]?.jsonPrimitive?.booleanOrNull
+            }
+        }.getOrNull() ?: enabled
+    }
+
+    // ── Connections / toolsets (GET/POST /connections, OAuth) ───────────────────
+
+    suspend fun getConnections(config: AppConfig): ConnectionsResult = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/connections")?.let { json.decodeFromString<ConnectionsResult>(it) }
+        }.getOrNull() ?: ConnectionsResult()
+    }
+
+    suspend fun setConnection(config: AppConfig, server: String, active: Boolean) {
+        withContext(Dispatchers.IO) {
+            runCatching {
+                postJson(config, "/connections", buildJsonObject { put("server", server); put("active", active) })
+            }
+            Unit
+        }
+    }
+
+    suspend fun oauthStatus(config: AppConfig, provider: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/connections/$provider/status")?.let {
+                json.parseToJsonElement(it).jsonObject["connected"]?.jsonPrimitive?.booleanOrNull
+            }
+        }.getOrNull() ?: false
+    }
+
+    suspend fun oauthLoginUrl(config: AppConfig, provider: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/connections/$provider/login")?.let {
+                json.parseToJsonElement(it).jsonObject["auth_url"]?.jsonPrimitive?.contentOrNull
+            }
+        }.getOrNull()
+    }
+
+    suspend fun oauthDisconnect(config: AppConfig, provider: String) {
+        withContext(Dispatchers.IO) {
+            runCatching { postEmpty(config, "/connections/$provider/disconnect") }
+            Unit
+        }
+    }
+
+    // ── Backend configuration (GET/PUT /config, /memory/sources) ────────────────
+
+    suspend fun getConfig(config: AppConfig): List<ConfigGroupInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/config")?.let { json.decodeFromString<ConfigGroupsDto>(it).groups }
+        }.getOrNull() ?: emptyList()
+    }
+
+    suspend fun saveConfig(config: AppConfig, values: Map<String, JsonElement>): ConfigSaveResult = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = buildJsonObject { put("values", JsonObject(values)) }
+            putJson(config, "/config", body)?.let { json.decodeFromString<ConfigSaveResult>(it) }
+        }.getOrNull() ?: ConfigSaveResult(rejected = listOf("Save failed — the backend didn't accept the change."))
+    }
+
+    suspend fun getMemorySources(config: AppConfig): MemorySources = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/memory/sources")?.let { json.decodeFromString<MemorySources>(it) }
+        }.getOrNull() ?: MemorySources()
+    }
+
+    suspend fun setMemorySource(config: AppConfig, agentId: String, path: String?) {
+        withContext(Dispatchers.IO) {
+            runCatching {
+                putJson(config, "/memory/sources", buildJsonObject { put("agent_id", agentId); put("path", path) })
+            }
+            Unit
+        }
+    }
+
+    // ── Automations (n8n watchers + Telegram) ──────────────────────────────────
+
+    suspend fun getAutomations(config: AppConfig): List<AutomationInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/automations")?.let { json.decodeFromString<AutomationsDto>(it).automations }
+        }.getOrNull() ?: emptyList()
+    }
+
+    suspend fun getAutomationsStatus(config: AppConfig): AutomationsStatus? = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/automations/status")?.let { json.decodeFromString<AutomationsStatus>(it) }
+        }.getOrNull()
+    }
+
+    suspend fun toggleAutomation(config: AppConfig, id: Int, active: Boolean) {
+        withContext(Dispatchers.IO) {
+            runCatching { postJson(config, "/automations/$id/toggle", buildJsonObject { put("active", active) }) }
+            Unit
+        }
+    }
+
+    suspend fun deleteAutomation(config: AppConfig, id: Int) {
+        withContext(Dispatchers.IO) {
+            runCatching { deleteRequest(config, "/automations/$id") }
+            Unit
+        }
+    }
+
+    suspend fun telegramConnect(config: AppConfig): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            postEmpty(config, "/automations/telegram/connect")?.let {
+                json.parseToJsonElement(it).jsonObject["link"]?.jsonPrimitive?.contentOrNull
+            }
+        }.getOrNull()
+    }
+
+    suspend fun telegramConnected(config: AppConfig): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/automations/telegram/status")?.let {
+                json.parseToJsonElement(it).jsonObject["connected"]?.jsonPrimitive?.booleanOrNull
+            }
+        }.getOrNull() ?: false
+    }
+
+    // ── Data (import chats, index history) ──────────────────────────────────────
+
+    suspend fun importChats(config: AppConfig, fileName: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
+        runCatching {
+            val part = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("file", fileName, bytes.toRequestBody("application/zip".toMediaType()))
+                .build()
+            val request = Request.Builder()
+                .url("${config.apiBase}/admin/import-chats")
+                .header("X-API-Key", config.apiKey)
+                .post(part)
+                .build()
+            restClient.newCall(request).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                if (!res.isSuccessful) return@use "Import failed (HTTP ${res.code})."
+                json.parseToJsonElement(body).jsonObject["message"]?.jsonPrimitive?.contentOrNull
+                    ?: "Import started in the background."
+            }
+        }.getOrElse { "Import failed: ${it.message}" }
+    }
+
+    suspend fun indexHistory(config: AppConfig): String = withContext(Dispatchers.IO) {
+        runCatching {
+            postEmpty(config, "/admin/index-history")?.let {
+                json.parseToJsonElement(it).jsonObject["message"]?.jsonPrimitive?.contentOrNull
+            } ?: "Indexing started in the background."
+        }.getOrElse { "Indexing failed: ${it.message}" }
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private fun getString(config: AppConfig, path: String): String? {
@@ -217,6 +382,60 @@ class IgorApi(
             return res.body?.string()
         }
     }
+
+    private fun postJson(config: AppConfig, path: String, body: JsonObject): String? {
+        val request = Request.Builder()
+            .url("${config.apiBase}$path")
+            .header("X-API-Key", config.apiKey)
+            .post(body.toString().toRequestBody(jsonMedia))
+            .build()
+        restClient.newCall(request).execute().use { res ->
+            if (!res.isSuccessful) return null
+            return res.body?.string()
+        }
+    }
+
+    private fun postEmpty(config: AppConfig, path: String): String? {
+        val request = Request.Builder()
+            .url("${config.apiBase}$path")
+            .header("X-API-Key", config.apiKey)
+            .post(ByteArray(0).toRequestBody(null))
+            .build()
+        restClient.newCall(request).execute().use { res ->
+            if (!res.isSuccessful) return null
+            return res.body?.string()
+        }
+    }
+
+    private fun putJson(config: AppConfig, path: String, body: JsonObject): String? {
+        val request = Request.Builder()
+            .url("${config.apiBase}$path")
+            .header("X-API-Key", config.apiKey)
+            .put(body.toString().toRequestBody(jsonMedia))
+            .build()
+        restClient.newCall(request).execute().use { res ->
+            if (!res.isSuccessful) return null
+            return res.body?.string()
+        }
+    }
+
+    private fun deleteRequest(config: AppConfig, path: String): String? {
+        val request = Request.Builder()
+            .url("${config.apiBase}$path")
+            .header("X-API-Key", config.apiKey)
+            .delete()
+            .build()
+        restClient.newCall(request).execute().use { res ->
+            if (!res.isSuccessful) return null
+            return res.body?.string()
+        }
+    }
+
+    @Serializable
+    private data class AutomationsDto(val automations: List<AutomationInfo> = emptyList())
+
+    @Serializable
+    private data class ConfigGroupsDto(val groups: List<ConfigGroupInfo> = emptyList())
 
     @Serializable
     private data class SessionDto(
