@@ -83,6 +83,19 @@ export interface StreamOpts {
   cwd?: string
 }
 
+/**
+ * Surface + locale for this client, so SPEDA knows the owner is on the desktop
+ * app (or the dev web build) rather than the phone or Telegram. The backend
+ * stamps it onto the live turn only — never stored (see app/core/surface.py).
+ */
+function desktopClientContext(): { platform: string; locale?: string } {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  return {
+    platform: /Electron/i.test(ua) ? 'desktop' : 'web',
+    locale: typeof navigator !== 'undefined' ? navigator.language || undefined : undefined,
+  }
+}
+
 export async function* streamChat(
   message: string,
   sessionId: number | null,
@@ -103,6 +116,9 @@ export async function* streamChat(
       ...(opts.keepMessages != null ? { keep_messages: opts.keepMessages } : {}),
       ...(opts.regenerate ? { regenerate: true } : {}),
       ...(opts.cwd ? { cwd: opts.cwd } : {}),
+      // Surface awareness — tell SPEDA whether this turn came from the desktop
+      // app or the web build. (The Android app and Telegram set their own.)
+      client_context: desktopClientContext(),
     }),
     signal,
   })
