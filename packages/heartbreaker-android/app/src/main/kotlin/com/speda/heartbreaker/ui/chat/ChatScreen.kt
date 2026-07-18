@@ -1,6 +1,8 @@
 package com.speda.heartbreaker.ui.chat
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -42,6 +44,7 @@ import com.speda.heartbreaker.ui.switcher.AgentSwitcherOverlay
 import com.speda.heartbreaker.ui.shell.AppHeader
 import com.speda.heartbreaker.ui.shell.SidebarDrawer
 import com.speda.heartbreaker.ui.shell.WelcomeView
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -79,6 +82,30 @@ fun ChatScreen(
 
     var models by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
     LaunchedEffect(config) { models = graph.api.fetchModels(config) }
+
+    // Ambient client context (platform + opt-in location) resolved fresh per turn.
+    val locationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        scope.launch {
+            graph.settings.setLocationPrompted(true)
+            if (granted) graph.settings.setLocationEnabled(true)
+        }
+    }
+    LaunchedEffect(Unit) {
+        vm.clientContextProvider = {
+            graph.platform.snapshot(includeLocation = graph.settings.settings.first().locationEnabled)
+        }
+        // Prompt for location once on first launch (the owner's chosen default).
+        val s = graph.settings.settings.first()
+        if (!s.locationPrompted) {
+            if (graph.platform.hasLocationPermission()) {
+                graph.settings.setLocationPrompted(true); graph.settings.setLocationEnabled(true)
+            } else {
+                locationPermission.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            }
+        }
+    }
 
     var drawerOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
@@ -131,7 +158,18 @@ fun ChatScreen(
                             contentPadding = PaddingValues(vertical = 12.dp),
                         ) {
                             items(state.messages, key = { it.id }) { message ->
-                                MessageItem(message, config = config, downloader = graph.downloader)
+                                MessageItem(
+                                    message,
+                                    config = config,
+                                    downloader = graph.downloader,
+                                    onDelete = { vm.deleteMessage(message.id) },
+                                    onRegenerate = if (message.role == com.speda.heartbreaker.domain.Role.Assistant) {
+                                        { vm.regenerate(message.id, turnOpts(settings)) }
+                                    } else null,
+                                    onEditAndResend = if (message.role == com.speda.heartbreaker.domain.Role.User) {
+                                        { newText -> vm.editAndResend(message.id, newText, turnOpts(settings)) }
+                                    } else null,
+                                )
                             }
                         }
                     }
@@ -205,3 +243,12 @@ fun ChatScreen(
         }
     }
 }
+
+/**
+ * The model/prompt options a fresh turn carries — mirrors the composer's onSend,
+ * minus attachments (regenerate/edit-and-resend re-run the text turn only).
+ */
+private fun turnOpts(settings: HbSettings) = IgorApi.StreamOpts(
+    model = settings.model.ifEmpty { null },
+    systemPrompt = settings.systemPrompt.ifBlank { null },
+)

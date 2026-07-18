@@ -7,9 +7,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -98,6 +101,66 @@ object HbGlyphs {
         line(18f, 15f, 12f, 9f, color); line(12f, 9f, 6f, 15f, color)
     }
 
+    // ── Message action bar (Message.tsx icons — path data copied verbatim) ────
+
+    /** Copy — two overlapping sheets. */
+    @Composable
+    fun Copy(color: Color, size: Dp = 15.dp, modifier: Modifier = Modifier) = Glyph(size, modifier) {
+        pathString("M9 9h13v13H9z", color) // rect x9 y9 w13 h13 (rx≈2 reads square at this size)
+        pathString("M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1", color)
+    }
+
+    /** Check — copied/confirmed. */
+    @Composable
+    fun Check(color: Color, size: Dp = 15.dp, modifier: Modifier = Modifier) = Glyph(size, modifier, stroke = 2.5f) {
+        line(20f, 6f, 9f, 17f, color); line(9f, 17f, 4f, 12f, color)
+    }
+
+    /** Thumbs up — good response. */
+    @Composable
+    fun ThumbUp(color: Color, size: Dp = 15.dp, modifier: Modifier = Modifier) = Glyph(size, modifier) {
+        pathString("M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z", color)
+        pathString("M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3", color)
+    }
+
+    /** Thumbs down — bad response. */
+    @Composable
+    fun ThumbDown(color: Color, size: Dp = 15.dp, modifier: Modifier = Modifier) = Glyph(size, modifier) {
+        pathString("M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z", color)
+        pathString("M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17", color)
+    }
+
+    /** Refresh — regenerate response. */
+    @Composable
+    fun Refresh(color: Color, size: Dp = 15.dp, modifier: Modifier = Modifier) = Glyph(size, modifier) {
+        line(23f, 4f, 23f, 10f, color); line(23f, 10f, 17f, 10f, color)
+        pathString("M20.49 15a9 9 0 1 1-2.12-9.36L23 10", color)
+    }
+
+    /** Speaker — read aloud. */
+    @Composable
+    fun Speaker(color: Color, size: Dp = 15.dp, modifier: Modifier = Modifier) = Glyph(size, modifier) {
+        pathString("M11 5 6 9H2v6h4l5 4z", color)
+        pathString("M19.07 4.93a10 10 0 0 1 0 14.14", color)
+        pathString("M15.54 8.46a5 5 0 0 1 0 7.07", color)
+    }
+
+    /** Pencil — edit message. */
+    @Composable
+    fun Edit(color: Color, size: Dp = 14.dp, modifier: Modifier = Modifier) = Glyph(size, modifier) {
+        pathString("M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7", color)
+        pathString("M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z", color)
+    }
+
+    /** Trash — delete message. */
+    @Composable
+    fun Trash(color: Color, size: Dp = 14.dp, modifier: Modifier = Modifier) = Glyph(size, modifier) {
+        line(3f, 6f, 21f, 6f, color)
+        pathString("M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6", color)
+        line(10f, 11f, 10f, 17f, color); line(14f, 11f, 14f, 17f, color)
+        pathString("M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2", color)
+    }
+
     // ── drawing plumbing (24-viewBox → px) ──────────────────────────────────
 
     @Composable
@@ -130,5 +193,16 @@ object HbGlyphs {
             size = Size(w * k, h * k),
             style = Stroke(width = sw),
         )
+
+        /**
+         * Stroke an arbitrary SVG path — the `d` string is copied VERBATIM from
+         * the source SVG (arcs/curves the line/circle helpers can't express),
+         * parsed in 24-viewBox space and scaled by [k]. Round cap+join to match.
+         */
+        fun pathString(d: String, color: Color) {
+            val p = PathParser().parsePathString(d).toPath()
+            p.transform(Matrix().apply { scale(k, k) })
+            ds.drawPath(p, color, style = Stroke(width = sw, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
     }
 }

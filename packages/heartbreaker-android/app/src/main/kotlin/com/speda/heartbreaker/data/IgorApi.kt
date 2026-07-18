@@ -57,6 +57,8 @@ class IgorApi(
         val keepMessages: Int? = null,
         val regenerate: Boolean = false,
         val cwd: String? = null,
+        /** Ambient platform + (opt-in) location context for this turn. */
+        val clientContext: ClientContext? = null,
     )
 
     // ── Streaming ────────────────────────────────────────────────────────────
@@ -108,6 +110,29 @@ class IgorApi(
             opts.keepMessages?.let { put("keep_messages", it) }
             if (opts.regenerate) put("regenerate", true)
             opts.cwd?.let { put("cwd", it) }
+            opts.clientContext?.let { cc ->
+                put(
+                    "client_context",
+                    buildJsonObject {
+                        put("platform", cc.platform)
+                        put("device", cc.device)
+                        put("os_version", cc.osVersion)
+                        put("app_version", cc.appVersion)
+                        put("locale", cc.locale)
+                        cc.location?.let { loc ->
+                            put(
+                                "location",
+                                buildJsonObject {
+                                    put("lat", loc.lat)
+                                    put("lng", loc.lng)
+                                    loc.accuracyM?.let { put("accuracy_m", it) }
+                                    loc.place?.let { put("place", it) }
+                                },
+                            )
+                        }
+                    },
+                )
+            }
         }
         val request = Request.Builder()
             .url("${config.apiBase}/chat/${config.agentId}")
