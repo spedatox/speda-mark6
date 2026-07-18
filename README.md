@@ -16,7 +16,6 @@ Stark lab.
 ![Agents](https://img.shields.io/badge/agents-8-2eb6ac)
 ![Providers](https://img.shields.io/badge/LLM%20providers-6-8a7fd6)
 
-*Not a chatbot. Not multi-tenant SaaS. One owner, one key, one assistant that is actually **yours**.*
 
 </div>
 
