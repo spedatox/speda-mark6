@@ -66,6 +66,13 @@ object HbGlyphs {
         line(12f, 5f, 12f, 19f, color); line(5f, 12f, 19f, 12f, color)
     }
 
+    /** Sliders — settings / controls (three tracks with offset knobs). */
+    @Composable
+    fun Sliders(color: Color, size: Dp = 13.dp, modifier: Modifier = Modifier) = Glyph(size, modifier) {
+        line(4f, 7f, 20f, 7f, color); line(4f, 12f, 20f, 12f, color); line(4f, 17f, 20f, 17f, color)
+        circle(9f, 7f, 2f, color); circle(15f, 12f, 2f, color); circle(8f, 17f, 2f, color)
+    }
+
     /** Send arrow (composer). */
     @Composable
     fun ArrowUp(color: Color, size: Dp = 14.dp, modifier: Modifier = Modifier) = Glyph(size, modifier) {

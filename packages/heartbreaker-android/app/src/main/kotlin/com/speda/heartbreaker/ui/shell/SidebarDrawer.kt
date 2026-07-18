@@ -90,6 +90,7 @@ fun SidebarDrawer(
     onClose: () -> Unit,
     onAgentChange: (String) -> Unit,
     onResetUplink: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenWarRoom: () -> Unit,
     onToggleComms: () -> Unit,
     onToggleBoard: () -> Unit,
@@ -303,6 +304,7 @@ fun SidebarDrawer(
             // a session title, so they live here — the slot the web gives Settings.
             if (footerMenuOpen) {
                 Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Menu)) {
+                    MenuItem("Settings", { footerMenuOpen = false; onOpenSettings() }) { HbGlyphs.Sliders(it, size = 13.dp) }
                     MenuItem("War room", { footerMenuOpen = false; onOpenWarRoom() }) { HbGlyphs.WarRoom(it, size = 13.dp) }
                     MenuItem("Comms", { footerMenuOpen = false; onToggleComms() }) { HbGlyphs.Comms(it, size = 13.dp) }
                     MenuItem("Systems board", { footerMenuOpen = false; onToggleBoard() }) { HbGlyphs.Sys(it, size = 13.dp) }

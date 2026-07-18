@@ -1,5 +1,6 @@
 package com.speda.heartbreaker.ui.chat
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -36,6 +37,8 @@ import com.speda.heartbreaker.designsystem.glass.LocalHazeState
 import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.ui.HudStrip
+import com.speda.heartbreaker.ui.settings.SettingsScreen
+import com.speda.heartbreaker.ui.switcher.AgentSwitcherOverlay
 import com.speda.heartbreaker.ui.shell.AppHeader
 import com.speda.heartbreaker.ui.shell.SidebarDrawer
 import com.speda.heartbreaker.ui.shell.WelcomeView
@@ -78,6 +81,8 @@ fun ChatScreen(
     LaunchedEffect(config) { models = graph.api.fetchModels(config) }
 
     var drawerOpen by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(false) }
+    var switcherOpen by remember { mutableStateOf(false) }
     val brand = Brands.BRANDS[agentId] ?: Brands.WARROOM
     val activeTitle = state.sessions.firstOrNull { it.id == state.activeSessionId }?.title
 
@@ -94,6 +99,7 @@ fun ChatScreen(
                 model = settings.model,
                 sessionCount = state.sessions.size,
                 apiBase = config.apiBase,
+                onAgentClick = { switcherOpen = true },
             )
             AppHeader(
                 haze = haze,
@@ -143,6 +149,7 @@ fun ChatScreen(
                         text,
                         IgorApi.StreamOpts(
                             model = settings.model.ifEmpty { null },
+                            systemPrompt = settings.systemPrompt.ifBlank { null },
                             images = images,
                             documents = docs,
                         ),
@@ -166,10 +173,35 @@ fun ChatScreen(
             onClose = { drawerOpen = false },
             onAgentChange = onAgentChange,
             onResetUplink = onResetUplink,
+            onOpenSettings = { drawerOpen = false; settingsOpen = true },
             // Moved off the header (note #3) — these live in the profile menu now.
             onOpenWarRoom = onPartyToggle,
             onToggleComms = { /* comms tray — M4 */ },
             onToggleBoard = { /* systems board — M4 */ },
         )
+
+        // Full-screen settings sheet over everything; back closes it.
+        if (settingsOpen) {
+            BackHandler { settingsOpen = false }
+            SettingsScreen(
+                config = config,
+                graph = graph,
+                settings = settings,
+                models = models,
+                brand = brand,
+                onResetUplink = { settingsOpen = false; onResetUplink() },
+                onClose = { settingsOpen = false },
+            )
+        }
+
+        // The armoury — cinematic agent switcher, opened from the HUD agent name.
+        if (switcherOpen) {
+            BackHandler { switcherOpen = false }
+            AgentSwitcherOverlay(
+                currentAgentId = agentId,
+                onSelect = { switcherOpen = false; onAgentChange(it) },
+                onClose = { switcherOpen = false },
+            )
+        }
     }
 }

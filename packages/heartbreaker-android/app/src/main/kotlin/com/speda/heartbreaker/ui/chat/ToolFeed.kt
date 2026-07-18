@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -120,6 +121,11 @@ private fun DiffBlock(removed: String? = null, added: String? = null) {
     Column(
         Modifier
             .clip(RoundedCornerShape(6.dp))
+            // Bounded height BEFORE verticalScroll: this block lives inside the
+            // transcript LazyColumn, which measures children with an infinite max
+            // height — an unbounded vertical scroller under that constraint throws
+            // and crashes the app the moment the detail expands (web: max-height 180).
+            .heightIn(max = 240.dp)
             .verticalScroll(rememberScrollState()),
     ) {
         rows.forEach { (sign, text) ->
@@ -151,7 +157,9 @@ private fun CommandBlock(command: String?, result: String?) {
                 result,
                 style = HbType.code,
                 color = palette.iconBright,
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier
+                    .heightIn(max = 200.dp)
+                    .verticalScroll(rememberScrollState()),
             )
         }
     }
@@ -168,7 +176,14 @@ private fun GenericDetail(tool: ToolBadge) {
             }
         }
         tool.result?.let {
-            HbText(it, style = HbType.code, color = palette.iconBright, modifier = Modifier.verticalScroll(rememberScrollState()), maxLines = 10)
+            HbText(
+                it,
+                style = HbType.code,
+                color = palette.iconBright,
+                modifier = Modifier
+                    .heightIn(max = 200.dp)
+                    .verticalScroll(rememberScrollState()),
+            )
         }
     }
 }
