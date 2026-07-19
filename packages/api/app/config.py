@@ -298,6 +298,17 @@ class Settings(BaseSettings):
     # OAuth client, loopback redirects are allowed automatically.
     google_oauth_redirect: str = "http://localhost:8000/oauth/google/callback"
 
+    # ── Maps & navigation (app/skills/navigation.py) ───────────────────────────
+    # One Google Cloud key with Routes API v2, Places API (New) and Geocoding API
+    # enabled. Backend-side ONLY — the watch/phone never holds it; clients receive
+    # finished route geometry inside the ```map fence. Empty disables get_route /
+    # find_places with a clear "not configured" message (same pattern as the other
+    # keyed skills). owner_home_* is the fallback origin when the client sends no
+    # live location (e.g. a Telegram turn) and the model needs a "from home" route.
+    google_maps_api_key: str = ""
+    owner_home_lat: float | None = None
+    owner_home_lng: float | None = None
+
     # OSS Adapter URLs
     gpt_researcher_url: str = "http://localhost:8001"
     shannon_url: str = "http://localhost:9000"

@@ -25,6 +25,8 @@ coil = "3.0.4"
 haze = "1.5.4"
 highlights = "1.0.0"
 commonmark = "0.24.0"
+androidsvg = "1.4"
+maplibre = "11.8.0"
 
 junit = "4.13.2"
 androidxTestJunit = "1.2.1"
@@ -64,6 +66,12 @@ coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp"
 # --- Glass / syntax highlight (M0 uses haze; highlights is M2) ---
 haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
 highlights = { group = "dev.snipme", name = "highlights", version.ref = "highlights" }
+
+# --- Inline SVG rendering (```svg fences → native vector, not a WebView) ---
+androidsvg = { group = "com.caverock", name = "androidsvg-aar", version.ref = "androidsvg" }
+
+# --- Maps (```map fences) — MapLibre GL Native, no Google Play Services ---
+maplibre = { group = "org.maplibre.gl", name = "android-sdk", version.ref = "maplibre" }
 
 # --- Markdown (M2 prose renderer) — the AST; the Compose rendering is ours ---
 commonmark = { group = "org.commonmark", name = "commonmark", version.ref = "commonmark" }

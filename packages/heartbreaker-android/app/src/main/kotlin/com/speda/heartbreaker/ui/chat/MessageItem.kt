@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -63,6 +64,7 @@ import com.speda.heartbreaker.domain.ToolStatus
 import com.speda.heartbreaker.domain.Typewriter
 import com.speda.heartbreaker.domain.buildSegments
 import com.speda.heartbreaker.ui.HbText
+import com.speda.heartbreaker.ui.prose.LocalMessageStreaming
 import com.speda.heartbreaker.ui.prose.ProseText
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -264,6 +266,7 @@ private fun AssistantRow(
     }
 
     Row(Modifier.fillMaxWidth().padding(bottom = 18.dp)) {
+      CompositionLocalProvider(LocalMessageStreaming provides message.isStreaming) {
         Column(Modifier.fillMaxWidth().noRippleClick { if (!message.isStreaming) showActions = !showActions }) {
             if (message.content.isNotEmpty() || message.tools.isNotEmpty()) {
                 segments.forEachIndexed { i, seg ->
@@ -322,6 +325,7 @@ private fun AssistantRow(
                 }
             }
         }
+      }
     }
 }
 

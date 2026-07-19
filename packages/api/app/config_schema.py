@@ -177,6 +177,25 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         ],
     ),
     ConfigGroup(
+        "maps", "Maps & Navigation",
+        "Powers get_route (live-traffic directions) and find_places, rendered as "
+        "inline Stark maps. One Google Cloud key with Routes API, Places API (New) "
+        "and Geocoding API enabled (billing account required). Server-side only — "
+        "the phone never holds this key.",
+        [
+            ConfigField("google_maps_api_key", "Google Maps API Key", "password", secret=True,
+                        requires_restart=_LIVE,
+                        help="Enables the get_route / find_places tools. Read live on every "
+                             "call — takes effect immediately, no restart. Empty disables both."),
+            ConfigField("owner_home_lat", "Home Latitude", "text", requires_restart=_LIVE,
+                        help="Fallback route origin when no live location is shared (e.g. a "
+                             "Telegram turn). Decimal degrees.", placeholder="41.0082"),
+            ConfigField("owner_home_lng", "Home Longitude", "text", requires_restart=_LIVE,
+                        help="Fallback route origin longitude. Decimal degrees.",
+                        placeholder="28.9784"),
+        ],
+    ),
+    ConfigGroup(
         "osint", "OSINT / Threat Intelligence",
         "Optional keys for NightCrawler/Centurion. Most tools also run keyless.",
         [

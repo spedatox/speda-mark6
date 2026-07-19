@@ -141,6 +141,8 @@ private fun Fence(language: String, code: String) {
     when (language.lowercase()) {
         "chart" -> ChartBlock(code)
         "calendar" -> CalendarBlock(code)
+        "map" -> MapBlock(code)
+        "svg" -> SvgBlock(code)
         else -> CodeBlockView(language = language, code = code)
     }
 }
