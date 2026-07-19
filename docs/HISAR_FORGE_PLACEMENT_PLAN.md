@@ -190,7 +190,7 @@ If Forge runs in Docker later, bind-mount `/opt/hisar/vault/Forge` into it.
 
 ## 4. Phase H3 — Agents commit work to Hisar (`hisar_deposit` skill)
 
-New Tier-1 skill in `packages/api/app/skills/hisar.py`, registered like every
+New Tier-1 skill in `packages/igor/app/skills/hisar.py`, registered like every
 other skill (Rule 5 — drop a file in `skills/`, the orchestrator never changes):
 
 - **`hisar_deposit`** — *"Deposits a file into H.İ.S.A.R., the owner's
@@ -277,7 +277,7 @@ whatever machine they're on.
 |---|---|---|
 | **H1** Hisar backend | `hisar-mk1` | Path-sandbox unit tests green; client runs CRUD against it locally end-to-end (login, upload w/ progress, download, rename, trash) |
 | **H2** Deploy | `speda-mark6` (compose/Caddy) + DNS | `https://hisar.spedatox.systems` serves the desktop with TLS; upload from a phone works; vault survives container recreation |
-| **H3** `hisar_deposit` | `speda-mark6` `packages/api` | Owner asks SPEDA to save a generated file → appears in the web desktop; skill absent when `hisar_url` unset |
+| **H3** `hisar_deposit` | `speda-mark6` `packages/igor` | Owner asks SPEDA to save a generated file → appears in the web desktop; skill absent when `hisar_url` unset |
 | **H4** Forge archive | `forge-mark1` | A dispatched scaffold job ends with the project under `Forge/projects/`, visible in Hisar |
 | **H5** Polish | `hisar-mk1` | Share link opened from a device that has never logged in |
 

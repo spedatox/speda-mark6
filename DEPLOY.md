@@ -37,8 +37,8 @@ messages, and memory (migrated from your current SQLite — no re-indexing).
 
 ```bash
 git clone <your-repo> speda && cd speda
-# Compose reads packages/api/.env — copy the template and fill it in:
-cp packages/api/.env.example packages/api/.env
+# Compose reads packages/igor/.env — copy the template and fill it in:
+cp packages/igor/.env.example packages/igor/.env
 # Required: ANTHROPIC_API_KEY, SPEDA_API_KEY (the desktop app must send the same).
 # Optional: TAVILY_API_KEY, NOTION_API_KEY, GOOGLE_* etc. See the file's comments.
 ```
@@ -55,7 +55,7 @@ Copy your local `~/.speda/speda.db` to the server, then run the migrator from
 inside a temporary app container (or locally pointing at the server's Postgres):
 
 ```bash
-# from packages/api, with the venv:
+# from packages/igor, with the venv:
 python scripts/migrate_sqlite_to_postgres.py \
   --source /path/to/speda.db \
   --dest "postgresql+asyncpg://speda:speda@localhost:5432/speda"

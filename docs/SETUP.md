@@ -73,7 +73,7 @@ git clone https://github.com/spedatox/speda-mark6.git
 cd speda-mark6
 
 # Create the secret file (gitignored — never committed)
-cp packages/api/.env.example packages/api/.env
+cp packages/igor/.env.example packages/igor/.env
 ```
 
 Point your domain's DNS A record at the server's IP address. Ports 80 and 443 must be open for Caddy's automatic HTTPS.
@@ -82,7 +82,7 @@ Point your domain's DNS A record at the server's IP address. Ports 80 and 443 mu
 
 ## 3. Environment Configuration
 
-Edit `packages/api/.env` — this is the **single source of secrets** for the entire system.
+Edit `packages/igor/.env` — this is the **single source of secrets** for the entire system.
 
 ### Minimum viable (gets you running)
 
@@ -175,7 +175,7 @@ Then open `http://localhost:5678` in your browser:
 
 1. Create your n8n owner account (first-time only)
 2. Go to **Settings** → **n8n API** → **Create an API Key**
-3. Copy the key and add it to `packages/api/.env`:
+3. Copy the key and add it to `packages/igor/.env`:
    ```
    N8N_API_KEY=your-n8n-api-key
    ```
@@ -355,7 +355,7 @@ ssh-copy-id -i ~/.ssh/speda_deploy.pub user@your-server-ip
 1. **Validate** (Ubuntu runner): `uv sync --frozen --no-dev` → byte-compile → import smoke test
 2. **Deploy** (SSH to your server): `git reset --hard origin/main` → `./deploy.sh` → health gate
 
-The workflow only triggers on pushes that touch: `packages/api/**`, `packages/sandbox/**`, `docker-compose.yml`, `deploy.sh`, `Caddyfile`, or the workflow itself. Concurrency control ensures only one deploy runs at a time.
+The workflow only triggers on pushes that touch: `packages/igor/**`, `packages/sandbox/**`, `docker-compose.yml`, `deploy.sh`, `Caddyfile`, or the workflow itself. Concurrency control ensures only one deploy runs at a time.
 
 ---
 
@@ -364,7 +364,7 @@ The workflow only triggers on pushes that touch: `packages/api/**`, `packages/sa
 | Service | Image | Port | Exposed to internet? | Purpose |
 |---|---|---|---|---|
 | **postgres** | `postgres:16-alpine` | `127.0.0.1:5432` | No (SSH tunnel) | Database |
-| **app** | Built from `packages/api/Dockerfile` | `8000` | Yes (via Caddy) | API backend |
+| **app** | Built from `packages/igor/Dockerfile` | `8000` | Yes (via Caddy) | API backend |
 | **n8n** | `docker.n8n.io/n8nio/n8n:latest` | `127.0.0.1:5678` | No (SSH tunnel) | Automation engine |
 | **sandbox** | Built from `packages/sandbox/Dockerfile` | internal `9000` | No | Isolated command execution |
 | **caddy** | `caddy:2-alpine` | `80`, `443` | Yes | Reverse proxy + auto-HTTPS |

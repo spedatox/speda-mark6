@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 $PROJECT_ROOT = $PSScriptRoot
-$API_DIR = Join-Path $PROJECT_ROOT "packages\api"
+$API_DIR = Join-Path $PROJECT_ROOT "packages\igor"
 
 # Set a custom window title
 $Host.UI.RawUI.WindowTitle = "SPEDA Mark VI - Terminal"

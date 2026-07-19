@@ -4,7 +4,7 @@ One-time Google OAuth flow to obtain a refresh token for SPEDA's Google Workspac
 Run once:
     python scripts/google_oauth.py
 
-Then copy the printed GOOGLE_REFRESH_TOKEN value into packages/api/.env.
+Then copy the printed GOOGLE_REFRESH_TOKEN value into packages/igor/.env.
 
 Requirements:
 - Google Cloud project with Gmail, Calendar, Drive, Chat, People APIs enabled
@@ -113,7 +113,7 @@ async def main() -> None:
         return
 
     print("\n" + "=" * 60)
-    print("  SUCCESS — add these to packages/api/.env:")
+    print("  SUCCESS — add these to packages/igor/.env:")
     print("=" * 60)
     print(f"\nGOOGLE_CLIENT_ID={client_id}")
     print(f"GOOGLE_CLIENT_SECRET={client_secret}")

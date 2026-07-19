@@ -1888,7 +1888,7 @@ wheels = [
 [[package]]
 name = "speda-mark-vi"
 version = "0.1.0"
-source = { editable = "packages/api" }
+source = { editable = "packages/igor" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "alembic" },

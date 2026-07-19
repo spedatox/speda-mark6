@@ -11,14 +11,14 @@ name: deploy-backend
 #   DEPLOY_PATH    absolute path of the cloned repo on the server
 #
 # Server prerequisites (one-time): git + Docker + Docker Compose v2 installed,
-# the repo cloned at DEPLOY_PATH, and packages/api/.env present (gitignored,
+# the repo cloned at DEPLOY_PATH, and packages/igor/.env present (gitignored,
 # never committed).
 
 on:
   push:
     branches: [main]
     paths:
-      - "packages/api/**"
+      - "packages/igor/**"
       - "packages/sandbox/**"
       - "docker-compose.yml"
       - "deploy.sh"
@@ -45,9 +45,9 @@ jobs:
       - name: Install dependencies (frozen)
         run: uv sync --frozen --no-dev
       - name: Byte-compile
-        run: uv run python -m compileall -q packages/api/app
+        run: uv run python -m compileall -q packages/igor/app
       - name: Import smoke (catches broken wiring before deploy)
-        working-directory: packages/api
+        working-directory: packages/igor
         run: uv run python -c "from app.main import create_app; create_app()"
 
   deploy:

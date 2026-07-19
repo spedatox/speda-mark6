@@ -100,7 +100,7 @@ no `restricted_to` — nothing privileged about directions.
 
 ---
 
-## 1. Backend — `packages/api`
+## 1. Backend — `packages/igor`
 
 ### 1.1 Config (`app/config.py`)
 

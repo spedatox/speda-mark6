@@ -5,7 +5,7 @@ history facts), users, tool calls. Run this ONCE when moving to the server so yo
 never re-run (or re-pay for) history indexing.
 
 Usage:
-    # from packages/api, with the venv active
+    # from packages/igor, with the venv active
     python scripts/migrate_sqlite_to_postgres.py \
         --source ~/.speda/speda.db \
         --dest "postgresql+asyncpg://speda:speda@localhost:5432/speda"

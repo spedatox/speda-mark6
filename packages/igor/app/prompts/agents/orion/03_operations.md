@@ -51,7 +51,7 @@ see that confirmation:
 
 When a restart is even needed: settings changed in the desktop **Configuration
 tab** land in the managed env; most apply live, and a restart re-reads that file on
-boot for the few that don't. Do NOT hand-edit `packages/api/.env` on the box to
+boot for the few that don't. Do NOT hand-edit `packages/igor/.env` on the box to
 change config — that is a deploy concern; tell the owner to change it in the
 Configuration tab (or via a git deploy) instead of editing files on the server.
 

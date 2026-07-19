@@ -21,15 +21,15 @@ services:
   app:
     build:
       context: .                            # repo root — uv workspace + lock live here
-      dockerfile: packages/api/Dockerfile
+      dockerfile: packages/igor/Dockerfile
     ports:
       - "8000:8000"
     env_file:
       # Single source of secrets — same file the dev backend (uvicorn) reads.
-      - packages/api/.env
+      - packages/igor/.env
     environment:
       # SQLite in production (single-user workload). This MUST be an explicit
-      # override, not a removal: the server's packages/api/.env still defines a
+      # override, not a removal: the server's packages/igor/.env still defines a
       # Postgres DATABASE_URL, and compose's `environment:` is the only layer that
       # outranks `env_file:`. Four slashes = absolute path; it maps through the
       # bind mount below to the server's /opt/speda/speda.db. The postgres service

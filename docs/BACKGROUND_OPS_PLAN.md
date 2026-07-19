@@ -11,7 +11,7 @@
    result is always persisted, and returning to the session re-attaches to the
    live stream or shows the finished answer.
 
-**Repo:** `C:\Users\AREL TARIM\speda-mark6` (backend `packages/api`, UI
+**Repo:** `C:\Users\AREL TARIM\speda-mark6` (backend `packages/igor`, UI
 `packages/heartbreaker`). CLAUDE.md rules apply throughout — especially Rule 1
 (no logic in routers), Rule 6 (everything on `app.state` via lifespan), Rule 7
 (background work never blocks the stream).
@@ -234,7 +234,7 @@ session's run.
 
 ## Phase 5 — Verification (all must pass)
 
-1. `pytest` green in `packages/api`; new registry unit tests: replay ordering,
+1. `pytest` green in `packages/igor`; new registry unit tests: replay ordering,
    subscriber isolation, cancel-persists-partial, eviction, concurrency cap.
 2. Client-disconnect test (curl, kill mid-stream) → answer still saved.
 3. The Phase 2 and Phase 3 acceptance scenarios, driven end-to-end in the
