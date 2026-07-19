@@ -5,7 +5,7 @@
 #
 # The API base + key are baked into the build (electron-vite MAIN_VITE_*), so the
 # installed app talks to your server out of the box. ApiKey must match the
-# SPEDA_API_KEY in the server's packages/api/.env.
+# SPEDA_API_KEY in the server's packages/igor/.env.
 #
 # -Agent picks the brand (name, model number, colour) AND the backend agent the
 # app talks to (/chat/{agent}). One of: speda (default), ultron, centurion,

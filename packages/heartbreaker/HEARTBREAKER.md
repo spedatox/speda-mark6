@@ -17,7 +17,7 @@ app, not the old one.
 
 An Electron app (main + preload + renderer, built with electron-vite) plus a
 standalone marketing teaser. The renderer is React, and it talks to **Igor** —
-the Mark VI backend (`packages/api`, see `packages/api/IGOR.md`) — over the same
+the Mark VI backend (`packages/igor`, see `packages/igor/IGOR.md`) — over the same
 HTTP + SSE and WebSocket surface every client uses — Heartbreaker owns **zero**
 business logic. Heartbreaker renders the network; Igor runs it.
 

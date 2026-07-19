@@ -52,7 +52,7 @@ sandbox, and the Heartbreaker UI — with Heartbreaker natively aware of the For
    the in-process `OptimusProfile` (`external_backend = True`) when offline.
    `context.extra["cwd"]` is already plumbed through the external proxy.
 
-7. **`speda.ps1`** currently: starts uvicorn (`packages/api`) in a new window, waits
+7. **`speda.ps1`** currently: starts uvicorn (`packages/igor`) in a new window, waits
    for port 8000, then runs `npm run heartbreaker:dev`, and on exit kills the API +
    orphaned uvicorn workers.
 
@@ -177,7 +177,7 @@ lifespan children, not ps1 jobs). `speda.ps1` changes are cosmetic + cleanup onl
    restores FORGE LINK without a backend restart. (If the launcher child died, it is
    acceptable that relink requires backend restart — but prefer a supervised
    restart-on-exit with capped backoff in the launcher.)
-6. Test suites green: forge-mk1 pytest (13 tests) and `packages/api` tests.
+6. Test suites green: forge-mk1 pytest (13 tests) and `packages/igor` tests.
 7. Closing the ps1 window leaves zero orphaned uvicorn / forge / sandbox processes.
 
 ---

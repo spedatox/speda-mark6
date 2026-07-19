@@ -25,7 +25,7 @@ capability tier — the brain and hands of the whole system. Heartbreaker
 ## Running Igor
 
 ```bash
-cd packages/api && uv sync && uv run uvicorn app.main:app --port 8000 --reload
+cd packages/igor && uv sync && uv run uvicorn app.main:app --port 8000 --reload
 ```
 
 Or `speda.ps1` at the repo root to boot the whole system. Local test runs:

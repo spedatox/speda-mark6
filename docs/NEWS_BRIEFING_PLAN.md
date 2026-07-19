@@ -7,7 +7,7 @@ the analyst — corroboration, related-article timelines, historical/category
 queries — behind a strict 200-req/day quota ledger. RSS degradation-proof on the
 bottom, targeted deep-dive on top.
 
-**Repo:** `C:\Users\AREL TARIM\speda-mark6` (`packages/api`). CLAUDE.md rules
+**Repo:** `C:\Users\AREL TARIM\speda-mark6` (`packages/igor`). CLAUDE.md rules
 apply — especially: **n8n is the sole scheduler** (no internal cron, ever),
 Rule 1 (no logic in routers), Rule 9 (retrieval skills read-only annotated),
 Rule 11 (3–4 sentence tool descriptions).
@@ -39,7 +39,7 @@ Rule 11 (3–4 sentence tool descriptions).
    `main.py` Tier 1 block. API keys live in `app/config.py` settings +
    `.env.example` + optionally `config_schema.py` for the Settings UI.
 
-4. **Dependencies:** `packages/api/pyproject.toml` has `httpx` but **no**
+4. **Dependencies:** `packages/igor/pyproject.toml` has `httpx` but **no**
    `feedparser` / `trafilatura` — both must be added (`feedparser>=6.0`,
    `trafilatura>=1.12`; both pure-python-friendly, Windows-safe).
 

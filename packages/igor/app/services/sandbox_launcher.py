@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 _STOP_GRACE_S = 5.0
 # packages/sandbox/server.py, resolved from this file:
-# app/services/sandbox_launcher.py → parents[3] == packages/api ; the sandbox is
+# app/services/sandbox_launcher.py → parents[3] == packages/igor ; the sandbox is
 # a sibling package under packages/.
 _SANDBOX_SERVER = (
     Path(__file__).resolve().parents[3] / "sandbox" / "server.py"

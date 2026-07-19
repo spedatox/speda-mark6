@@ -35,7 +35,7 @@ agentic loop handles every stop reason explicitly (`end_turn`, `tool_use`,
 
 | Package | Role |
 |---|---|
-| `packages/api` | FastAPI backend — orchestrator, capability registry, skills, memory, automations, news desk, turn runner |
+| `packages/igor` | FastAPI backend — orchestrator, capability registry, skills, memory, automations, news desk, turn runner |
 | `packages/heartbreaker` | **Primary UI** (Electron + React) — the fluid-glass HUD |
 | `packages/desktop` | Neutral UI template — the base forks re-skin (never themed) |
 | `packages/sandbox` | Isolated command-execution container ("capable computer") |
@@ -174,7 +174,7 @@ All endpoints require `X-API-Key` (middleware) unless noted.
 
 ## Configuration
 
-Settings load from `packages/api/.env` via pydantic-settings, layered over
+Settings load from `packages/igor/.env` via pydantic-settings, layered over
 `~/.speda/.env` (managed overrides from the Settings UI). See
 [`.env.example`](../.env.example) for the full annotated list.
 
@@ -239,5 +239,5 @@ Build a standalone branded installer with
 ```bash
 npm run heartbreaker:typecheck   # UI type safety
 npm run heartbreaker:build       # production build
-uv run pytest                    # backend tests (packages/api)
+uv run pytest                    # backend tests (packages/igor)
 ```

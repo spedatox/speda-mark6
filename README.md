@@ -206,10 +206,10 @@ mode** clamps everything down when you want it lean.
 
 ```bash
 # 1. Configure
-cp .env.example packages/api/.env      # set ANTHROPIC_API_KEY + SPEDA_API_KEY
+cp .env.example packages/igor/.env      # set ANTHROPIC_API_KEY + SPEDA_API_KEY
 
 # 2. Igor, the backend (SQLite by default — no services needed)
-cd packages/api && uv sync && uv run uvicorn app.main:app --port 8000 --reload
+cd packages/igor && uv sync && uv run uvicorn app.main:app --port 8000 --reload
 
 # 3. The command deck (repo root, new terminal)
 npm install && npm run heartbreaker:dev
@@ -243,7 +243,7 @@ hands. The full contract is codified in **[`CLAUDE.md`](CLAUDE.md)**.
 | [TELEGRAM_ARCHITECTURE.md](docs/TELEGRAM_ARCHITECTURE.md) | The bot fleet |
 | [FORGE_INTEGRATION_PLAN.md](docs/FORGE_INTEGRATION_PLAN.md) · [NEWS_BRIEFING_PLAN.md](docs/NEWS_BRIEFING_PLAN.md) · [BACKGROUND_OPS_PLAN.md](docs/BACKGROUND_OPS_PLAN.md) | Design notes for the newest systems |
 
-**Monorepo:** `packages/api` (**Igor** — the backend) · `packages/heartbreaker` (the app) ·
+**Monorepo:** `packages/igor` (**Igor** — the backend) · `packages/heartbreaker` (the app) ·
 `packages/desktop` (neutral fork base) · `packages/sandbox` (the isolated
 computer). The Forge is a separate deployment that connects back as a peer.
 

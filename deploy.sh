@@ -5,7 +5,7 @@
 #   ./deploy.sh                      # build + start the whole stack
 #   ./deploy.sh --migrate speda.db   # ...and import your existing SQLite memory
 #
-# Reads packages/api/.env. If DOMAIN is set there, it also starts Caddy with
+# Reads packages/igor/.env. If DOMAIN is set there, it also starts Caddy with
 # automatic HTTPS for that domain. Run this on the server (Ubuntu + Docker).
 #
 set -euo pipefail
@@ -22,16 +22,25 @@ done
 
 say() { printf "\n\033[36m▸ %s\033[0m\n" "$*"; }
 
+# ── One-time rename migration (packages/api → packages/igor) ─────────────────
+# The gitignored .env can't ride across the folder rename via git, so move it the
+# first time this runs after the rename. Idempotent — a no-op once migrated.
+if [[ -f packages/api/.env && ! -f packages/igor/.env ]]; then
+  printf "\n\033[36m▸ Migrating packages/api/.env → packages/igor/.env (folder renamed)\033[0m\n"
+  mv packages/api/.env packages/igor/.env
+  rmdir packages/api 2>/dev/null || true
+fi
+
 # ── Preflight ────────────────────────────────────────────────────────────────
 command -v docker >/dev/null || { echo "Docker is not installed."; exit 1; }
 docker compose version >/dev/null 2>&1 || { echo "Docker Compose v2 required."; exit 1; }
-[[ -f packages/api/.env ]] || {
-  echo "Missing packages/api/.env — run: cp packages/api/.env.example packages/api/.env  (then fill it in)"
+[[ -f packages/igor/.env ]] || {
+  echo "Missing packages/igor/.env — run: cp packages/igor/.env.example packages/igor/.env  (then fill it in)"
   exit 1
 }
 
 # ── Domain? ──────────────────────────────────────────────────────────────────
-DOMAIN="$(grep -E '^DOMAIN=' packages/api/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' || true)"
+DOMAIN="$(grep -E '^DOMAIN=' packages/igor/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' || true)"
 PROFILE=()
 if [[ -n "${DOMAIN}" ]]; then
   say "Domain: ${DOMAIN} — Caddy will provision HTTPS (DNS must point here, ports 80/443 open)"
@@ -48,7 +57,7 @@ fi
 # FRESH database volume; to rotate it on an existing volume, change it in
 # postgres directly (ALTER ROLE) or recreate the volume.
 for var in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB; do
-  val="$(grep -E "^${var}=" packages/api/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' || true)"
+  val="$(grep -E "^${var}=" packages/igor/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' || true)"
   [[ -n "${val}" ]] && export "${var}=${val}"
 done
 

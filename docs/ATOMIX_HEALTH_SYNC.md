@@ -170,7 +170,7 @@ New package: `app/src/main/kotlin/com/speda/heartbreaker/health/`
 
 ---
 
-## 3. Backend implementation (`packages/api`)
+## 3. Backend implementation (`packages/igor`)
 
 ### 3.1 Ingestion — `POST /health/ingest`
 

@@ -1,2 +1,2 @@
 [tool.uv.workspace]
-members = ["packages/api"]
+members = ["packages/igor"]
