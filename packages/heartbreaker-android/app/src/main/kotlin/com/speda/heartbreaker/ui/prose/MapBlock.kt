@@ -2,7 +2,9 @@ package com.speda.heartbreaker.ui.prose
 
 import android.content.Context
 import android.content.Intent
+import android.location.Geocoder
 import android.net.Uri
+import android.view.MotionEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -70,6 +72,8 @@ import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng as MlLatLng
 
 /**
@@ -125,6 +129,10 @@ private fun MapCard(spec: MapSpec, modifier: Modifier) {
             MapSurface(spec, palette)
         }
 
+        // Coordinates + reverse-geocoded address of the focus point (the nav
+        // target, else the destination marker, else the centre).
+        focusPoint(spec)?.let { (lat, lng) -> CoordinateFooter(lat, lng, palette) }
+
         // Traffic readout for the primary route.
         primary?.let { TrafficReadout(it, palette) }
 
@@ -149,8 +157,19 @@ private fun MapSurface(spec: MapSpec, palette: HbPalette) {
         // The factory receives a Context and must RETURN the view; we return the
         // lifecycle-managed MapView and kick off style loading once.
         factory = {
+            // Pan/zoom/rotate are ON. While a touch is on the map, stop the chat
+            // list from stealing it (otherwise a pan-drag scrolls the conversation).
+            mapView.setOnTouchListener { v, e ->
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE ->
+                        v.parent?.requestDisallowInterceptTouchEvent(true)
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                        v.parent?.requestDisallowInterceptTouchEvent(false)
+                }
+                false  // don't consume — let the MapView handle the gesture
+            }
             mapView.getMapAsync { map ->
-                map.uiSettings.setAllGesturesEnabled(false)  // glance-only; handoff to Maps
+                map.uiSettings.setAllGesturesEnabled(true)   // zoom, pan, rotate, tilt
                 map.uiSettings.isAttributionEnabled = true    // OSM/OpenMapTiles attribution stays
                 map.uiSettings.isLogoEnabled = false
                 map.setStyle(Style.Builder().fromUri("asset://map_style_stark.json")) { style ->
@@ -436,6 +455,64 @@ private fun AutoNavigateCountdown(nav: MapNavigate, context: Context, palette: H
         )
         ActionChip("CANCEL", filled = false, palette = palette) { consumed = true }
     }
+}
+
+/* ── Coordinate + address footer ──────────────────────────────────────────────── */
+
+/** The point the footer describes: nav target → destination marker → centre → any marker. */
+private fun focusPoint(spec: MapSpec): Pair<Double, Double>? =
+    spec.navigate?.let { it.lat to it.lng }
+        ?: spec.markers.firstOrNull { it.kind == "destination" }?.let { it.lat to it.lng }
+        ?: spec.center?.let { it.lat to it.lng }
+        ?: spec.markers.firstOrNull()?.let { it.lat to it.lng }
+
+@Composable
+private fun CoordinateFooter(lat: Double, lng: Double, palette: HbPalette) {
+    val address = rememberAddress(lat, lng)
+    Row(
+        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        BasicText(AnnotatedString("◎"), style = HbType.readout.copy(fontSize = 12.sp, color = palette.accentBright))
+        Column(Modifier.weight(1f)) {
+            BasicText(
+                AnnotatedString(String.format(Locale.US, "%.5f, %.5f", lat, lng)),
+                style = HbType.readout.copy(fontSize = 11.sp, letterSpacing = 0.06.em, color = palette.accentBright),
+            )
+            if (!address.isNullOrBlank()) {
+                BasicText(
+                    AnnotatedString(address),
+                    style = HbType.readout.copy(fontSize = 10.5.sp, letterSpacing = 0.02.em, color = palette.textDim),
+                )
+            }
+        }
+    }
+}
+
+/** Reverse-geocodes on the platform Geocoder (no Play Services), off the main
+ * thread. Null until resolved, or when the device has no geocoder backend. */
+@Composable
+private fun rememberAddress(lat: Double, lng: Double): String? {
+    val context = LocalContext.current
+    var address by remember(lat, lng) { mutableStateOf<String?>(null) }
+    LaunchedEffect(lat, lng) {
+        address = withContext(Dispatchers.IO) {
+            runCatching {
+                if (!Geocoder.isPresent()) return@runCatching null
+                val geocoder = Geocoder(context, Locale.getDefault())
+                @Suppress("DEPRECATION") // async overload is API 33+; this covers 31/32
+                val results = geocoder.getFromLocation(lat, lng, 1)
+                val a = results?.firstOrNull() ?: return@runCatching null
+                listOfNotNull(
+                    a.thoroughfare ?: a.subLocality ?: a.featureName,
+                    a.locality ?: a.subAdminArea,
+                    a.adminArea,
+                ).distinct().take(2).joinToString(", ").ifBlank { null }
+            }.getOrNull()
+        }
+    }
+    return address
 }
 
 /* ── Wireframe fallback + intents ─────────────────────────────────────────────── */

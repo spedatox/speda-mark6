@@ -19,7 +19,7 @@
  * }
  */
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { looksIncomplete } from '../lib/partialJson'
@@ -116,6 +116,34 @@ function primaryRoute(spec: MapSpec): MapRoute | undefined {
   return spec.routes?.find(r => r.primary) ?? spec.routes?.[0]
 }
 
+/** The point the footer describes: nav target → destination marker → centre → any marker. */
+function focusPoint(spec: MapSpec): LatLng | undefined {
+  return spec.navigate
+    ?? spec.markers?.find(m => m.kind === 'destination')
+    ?? spec.center
+    ?? spec.markers?.[0]
+}
+
+/** Reverse-geocode via OpenStreetMap Nominatim (Electron has no CSP block).
+ * Best-effort — returns null on any failure; short-address form. */
+async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&lat=${lat}&lon=${lng}`,
+    )
+    if (!r.ok) return null
+    const a = (await r.json())?.address ?? {}
+    const parts = [
+      a.road ?? a.neighbourhood ?? a.suburb,
+      a.city ?? a.town ?? a.village ?? a.county,
+      a.state,
+    ].filter(Boolean)
+    return [...new Set(parts)].slice(0, 2).join(', ') || null
+  } catch {
+    return null
+  }
+}
+
 /* ── Component ───────────────────────────────────────────────────────────────── */
 
 export default function MapBlock({ children }: { children: string }): React.ReactElement {
@@ -132,12 +160,39 @@ export default function MapBlock({ children }: { children: string }): React.Reac
   if (!spec) return looksIncomplete(children) ? <Materializing /> : <ParseError raw={children} />
 
   const primary = primaryRoute(spec)
+  const focus = focusPoint(spec)
   return (
     <MapPanel title={spec.title} primary={primary}>
       <MapCanvas spec={spec} />
+      {focus && <CoordinateFooter lat={focus.lat} lng={focus.lng} />}
       {primary && <TrafficReadout route={primary} />}
       <MapActions spec={spec} />
     </MapPanel>
+  )
+}
+
+function CoordinateFooter({ lat, lng }: { lat: number; lng: number }): React.ReactElement {
+  const [address, setAddress] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    reverseGeocode(lat, lng).then(a => { if (alive) setAddress(a) })
+    return () => { alive = false }
+  }, [lat, lng])
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '0.5rem 0.75rem 0', fontFamily: "'Rajdhani', sans-serif",
+    }}>
+      <span style={{ color: 'var(--hb-cyan-bright)', fontSize: '0.8rem' }}>◎</span>
+      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.35 }}>
+        <span style={{ color: 'var(--hb-cyan-bright)', fontSize: '0.72rem', letterSpacing: '0.06em' }}>
+          {lat.toFixed(5)}, {lng.toFixed(5)}
+        </span>
+        {address && (
+          <span style={{ color: 'var(--hb-text-dim)', fontSize: '0.7rem' }}>{address}</span>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -154,11 +209,12 @@ function MapCanvas({ spec }: { spec: MapSpec }): React.ReactElement {
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: STARK_STYLE,
-      interactive: false, // glance-only; real interaction hands off to Google Maps
+      interactive: true, // zoom / pan / rotate
       attributionControl: { compact: true },
       center: spec.center ? [spec.center.lng, spec.center.lat] : [0, 0],
       zoom: spec.zoom ?? 12,
     })
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
 
     map.on('load', () => {
       const bounds = new maplibregl.LngLatBounds()
