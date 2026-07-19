@@ -39,7 +39,9 @@ import com.speda.heartbreaker.designsystem.glass.LocalHazeState
 import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.ui.HudStrip
+import com.speda.heartbreaker.ui.comms.AgentCommsScreen
 import com.speda.heartbreaker.ui.settings.SettingsScreen
+import com.speda.heartbreaker.ui.systems.SystemsBoardScreen
 import com.speda.heartbreaker.ui.switcher.AgentSwitcherOverlay
 import com.speda.heartbreaker.ui.shell.AppHeader
 import com.speda.heartbreaker.ui.shell.SidebarDrawer
@@ -52,9 +54,9 @@ import kotlinx.coroutines.launch
  * off-canvas sidebar drawer overlaid (Layout.tsx's slot arrangement at the
  * mobile breakpoint).
  *
- * COMMS and SYS render as header chrome but their surfaces (comms tray, systems
- * board) land in M4; WAR ROOM currently drives the House Party palette parade,
- * which is the takeover's colour behaviour — the full cinematic is M4.
+ * COMMS and SYS open the agent comms tray and systems board (M4 surfaces).
+ * WAR ROOM currently drives the House Party palette parade, which is the
+ * takeover's colour behaviour — the full cinematic is still M4 work.
  */
 @Composable
 fun ChatScreen(
@@ -109,6 +111,8 @@ fun ChatScreen(
 
     var drawerOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
+    var commsOpen by remember { mutableStateOf(false) }
+    var boardOpen by remember { mutableStateOf(false) }
     var switcherOpen by remember { mutableStateOf(false) }
     val brand = Brands.BRANDS[agentId] ?: Brands.WARROOM
     val activeTitle = state.sessions.firstOrNull { it.id == state.activeSessionId }?.title
@@ -208,14 +212,16 @@ fun ChatScreen(
             userName = settings.userName,
             onSelectSession = { vm.selectSession(it) },
             onNewChat = { vm.newChat() },
+            onRenameSession = { id, title -> vm.renameSession(id, title) },
+            onDeleteSession = { vm.deleteSession(it) },
             onClose = { drawerOpen = false },
             onAgentChange = onAgentChange,
             onResetUplink = onResetUplink,
             onOpenSettings = { drawerOpen = false; settingsOpen = true },
             // Moved off the header (note #3) — these live in the profile menu now.
             onOpenWarRoom = onPartyToggle,
-            onToggleComms = { /* comms tray — M4 */ },
-            onToggleBoard = { /* systems board — M4 */ },
+            onToggleComms = { drawerOpen = false; commsOpen = true },
+            onToggleBoard = { drawerOpen = false; boardOpen = true },
         )
 
         // Full-screen settings sheet over everything; back closes it.
@@ -229,6 +235,23 @@ fun ChatScreen(
                 brand = brand,
                 onResetUplink = { settingsOpen = false; onResetUplink() },
                 onClose = { settingsOpen = false },
+            )
+        }
+
+        // AGENT_COMMS — the inter-agent traffic tray, a full-width bottom slab.
+        if (commsOpen) {
+            AgentCommsScreen(config = config, api = graph.api, onClose = { commsOpen = false })
+        }
+
+        // SYSTEMS 56A. — uplink, routing matrix, budget, RTT trace, knowledge bank.
+        if (boardOpen) {
+            BackHandler { boardOpen = false }
+            SystemsBoardScreen(
+                config = config,
+                graph = graph,
+                settings = settings,
+                sessionCount = state.sessions.size,
+                onClose = { boardOpen = false },
             )
         }
 

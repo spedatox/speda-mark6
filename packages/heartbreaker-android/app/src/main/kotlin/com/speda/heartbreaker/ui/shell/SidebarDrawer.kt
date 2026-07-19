@@ -3,9 +3,13 @@ package com.speda.heartbreaker.ui.shell
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -34,11 +38,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -87,6 +95,8 @@ fun SidebarDrawer(
     userName: String,
     onSelectSession: (Int) -> Unit,
     onNewChat: () -> Unit,
+    onRenameSession: (Int, String) -> Unit,
+    onDeleteSession: (Int) -> Unit,
     onClose: () -> Unit,
     onAgentChange: (String) -> Unit,
     onResetUplink: () -> Unit,
@@ -293,6 +303,8 @@ fun SidebarDrawer(
                                 active = s.id == activeSessionId,
                                 running = s.id in running,
                                 onClick = { onSelectSession(s.id); onClose() },
+                                onRename = { title -> onRenameSession(s.id, title) },
+                                onDelete = { onDeleteSession(s.id) },
                             )
                         }
                     }
@@ -403,37 +415,112 @@ private fun GroupLabel(label: String) {
     }
 }
 
-/** A session row — flat and sharp; the selected row goes AMBER. */
+/**
+ * A session row — flat and sharp; the selected row goes AMBER. Long-press opens
+ * a menu: Rename (inline edit, commit on ⏎) or Delete (with a confirm step).
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SessionRow(session: Session, active: Boolean, running: Boolean, onClick: () -> Unit) {
+private fun SessionRow(
+    session: Session,
+    active: Boolean,
+    running: Boolean,
+    onClick: () -> Unit,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+) {
     val palette = LocalHbPalette.current
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .background(if (active) Color(0xFFD99C44).copy(alpha = 0.12f) else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 9.dp),
+    var menuOpen by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    var draft by remember(session.title) { mutableStateOf(session.title ?: "") }
+    val focus = remember { FocusRequester() }
+
+    fun commitRename() {
+        editing = false
+        val t = draft.trim()
+        if (t.isNotBlank() && t != session.title) onRename(t)
+    }
+
+    Column {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(if (active) Color(0xFFD99C44).copy(alpha = 0.12f) else Color.Transparent)
+                .combinedClickable(
+                    onClick = { if (!editing) onClick() },
+                    onLongClick = { if (!editing) { menuOpen = true; confirmDelete = false } },
+                )
+                .padding(horizontal = 10.dp, vertical = 9.dp),
+        ) {
+            if (active) {
+                Box(Modifier.width(2.dp).height(20.dp).background(palette.amber).align(Alignment.CenterStart))
+            }
+            if (editing) {
+                LaunchedEffect(Unit) { focus.requestFocus() }
+                BasicTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    textStyle = HbType.read.copy(fontSize = 13.5.sp).merge(TextStyle(color = palette.text)),
+                    cursorBrush = SolidColor(palette.accentBright),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { commitRename() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = if (active) 8.dp else 0.dp, end = 8.dp)
+                        .focusRequester(focus)
+                        .onFocusChanged { if (!it.isFocused && editing) commitRename() },
+                )
+            } else {
+                HbText(
+                    session.title ?: "New conversation",
+                    style = HbType.read.copy(fontSize = 13.5.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal),
+                    color = if (active) Color(0xFFF3E2C4) else palette.textDim,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = if (active) 8.dp else 0.dp, end = 16.dp),
+                )
+                if (running) {
+                    Box(
+                        Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(palette.accentBright),
+                    )
+                }
+            }
+        }
+
+        if (menuOpen) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp).hbGlass(shape = HbGlassShape.R9, state = HbGlassState.Menu)) {
+                if (!confirmDelete) {
+                    SessionMenuRow("Rename", palette.iconBright) {
+                        menuOpen = false; draft = session.title ?: ""; editing = true
+                    }
+                    SessionMenuRow("Delete", palette.red) { confirmDelete = true }
+                } else {
+                    SessionMenuRow("Confirm delete", palette.red) { menuOpen = false; confirmDelete = false; onDelete() }
+                    SessionMenuRow("Cancel", palette.iconDim) { menuOpen = false; confirmDelete = false }
+                }
+            }
+        }
+    }
+}
+
+/** One action row inside a session's long-press menu. */
+@Composable
+private fun SessionMenuRow(label: String, color: Color, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Amber left rule on the active row.
-        if (active) {
-            Box(Modifier.width(2.dp).height(20.dp).background(palette.amber).align(Alignment.CenterStart))
-        }
         HbText(
-            session.title ?: "New conversation",
-            style = HbType.read.copy(fontSize = 13.5.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal),
-            color = if (active) Color(0xFFF3E2C4) else palette.textDim,
-            maxLines = 1,
-            modifier = Modifier.padding(start = if (active) 8.dp else 0.dp, end = 16.dp),
+            label,
+            style = HbType.headerBar.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.12.em),
+            color = color,
+            caps = true,
         )
-        if (running) {
-            Box(
-                Modifier
-                    .align(Alignment.CenterEnd)
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(palette.accentBright),
-            )
-        }
     }
 }
 

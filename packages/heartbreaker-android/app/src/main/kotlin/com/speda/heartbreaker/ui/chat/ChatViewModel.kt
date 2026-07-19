@@ -127,6 +127,30 @@ class ChatViewModel(
         }
     }
 
+    /** Rename a session — optimistic: the title updates locally, then persists.
+     * Blank titles are ignored. On failure the next refreshSessions reconciles. */
+    fun renameSession(sessionId: Int, title: String) {
+        val cfg = state.value.config ?: return
+        val trimmed = title.trim()
+        if (trimmed.isBlank()) return
+        dispatch(ChatAction.UpdateSessionTitle(sessionId, trimmed))
+        viewModelScope.launch {
+            api.renameSession(cfg, sessionId, trimmed)
+            cache.saveSessions(cfg.agentId, state.value.sessions)
+        }
+    }
+
+    /** Delete a session — optimistic: removed locally (and from the active view if
+     * it was open), then deleted server-side and evicted from the cache. */
+    fun deleteSession(sessionId: Int) {
+        val cfg = state.value.config ?: return
+        dispatch(ChatAction.DeleteSession(sessionId))
+        viewModelScope.launch {
+            api.deleteSession(cfg, sessionId)
+            cache.saveSessions(cfg.agentId, state.value.sessions)
+        }
+    }
+
     // ── Send / stop ────────────────────────────────────────────────────────────
 
     fun send(text: String, opts: IgorApi.StreamOpts = IgorApi.StreamOpts()) {
