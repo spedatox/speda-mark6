@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -218,6 +219,20 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
+    /** Rename a session (PATCH /sessions/{id} {title}). Returns success. */
+    suspend fun renameSession(config: AppConfig, sessionId: Int, title: String): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                patchJson(config, "/sessions/$sessionId", buildJsonObject { put("title", title) }) != null
+            }.getOrDefault(false)
+        }
+
+    /** Delete a session and its messages (DELETE /sessions/{id}). Returns success. */
+    suspend fun deleteSession(config: AppConfig, sessionId: Int): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching { deleteRequest(config, "/sessions/$sessionId") != null }.getOrDefault(false)
+        }
+
     suspend fun fetchModels(config: AppConfig): List<ModelInfo> = withContext(Dispatchers.IO) {
         runCatching {
             getString(config, "/models")?.let { json.decodeFromString<List<ModelInfo>>(it) }
@@ -364,6 +379,119 @@ class IgorApi(
         }.getOrNull() ?: false
     }
 
+    // ── Inter-agent comms (GET /agents/comms, House Party GET/POST) ─────────────
+
+    /** Recent inter-agent traffic, newest first. after_id polls incrementally. */
+    suspend fun fetchAgentComms(config: AppConfig, limit: Int = 100, afterId: Int = 0): List<AgentCommEntry> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/agents/comms?limit=$limit&after_id=$afterId")?.let {
+                json.decodeFromString<List<AgentCommEntry>>(it)
+            }
+        }.getOrNull() ?: emptyList()
+    }
+
+    suspend fun getHouseParty(config: AppConfig): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/agents/house-party")?.let {
+                json.parseToJsonElement(it).jsonObject["engaged"]?.jsonPrimitive?.booleanOrNull
+            }
+        }.getOrNull() ?: false
+    }
+
+    /** UI-side control is STAND DOWN only (engaged=false) — engaging is voice-only,
+     *  passphrase-gated through SPEDA in chat. */
+    suspend fun setHouseParty(config: AppConfig, engaged: Boolean): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            postJson(config, "/agents/house-party", buildJsonObject { put("engaged", engaged) })?.let {
+                json.parseToJsonElement(it).jsonObject["engaged"]?.jsonPrimitive?.booleanOrNull
+            }
+        }.getOrNull() ?: engaged
+    }
+
+    // ── Online external peers (the Forge link) ───────────────────────────────────
+
+    suspend fun fetchOnlineAgents(config: AppConfig): List<OnlineAgent> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/agents")?.let { json.decodeFromString<List<OnlineAgent>>(it) }
+        }.getOrNull() ?: emptyList()
+    }
+
+    // ── Per-agent model routing (GET/POST /agents/models) ────────────────────────
+
+    suspend fun fetchAgentModels(config: AppConfig): List<AgentModelInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/agents/models")?.let { json.decodeFromString<List<AgentModelInfo>>(it) }
+        }.getOrNull() ?: emptyList()
+    }
+
+    /** Pin an agent to a model ref; null clears the pin (back to profile policy). */
+    suspend fun pinAgentModel(config: AppConfig, agentId: String, model: String?): List<AgentModelInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = buildJsonObject { put("agent_id", agentId); put("model", model) }
+            postJson(config, "/agents/models", body)?.let { json.decodeFromString<List<AgentModelInfo>>(it) }
+        }.getOrNull() ?: emptyList()
+    }
+
+    // ── Knowledge bank / source-of-truth memory files (GET/PUT /memory/files) ────
+
+    suspend fun fetchMemoryFiles(config: AppConfig): List<MemoryFileInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/memory/files")?.let { json.decodeFromString<List<MemoryFileInfo>>(it) }
+        }.getOrNull() ?: emptyList()
+    }
+
+    /** Commit an owner edit. On a 409 (an agent wrote since the board loaded it)
+     *  returns [MemoryCommitResult.Conflict] with the fresh file so the caller can
+     *  reload instead of clobbering. */
+    suspend fun commitMemoryFile(
+        config: AppConfig,
+        path: String,
+        content: String,
+        expectedUpdatedAt: String?,
+    ): MemoryCommitResult = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = buildJsonObject {
+                put("path", path)
+                put("content", content)
+                put("expected_updated_at", expectedUpdatedAt)
+            }
+            val request = Request.Builder()
+                .url("${config.apiBase}/memory/files")
+                .header("X-API-Key", config.apiKey)
+                .put(body.toString().toRequestBody(jsonMedia))
+                .build()
+            restClient.newCall(request).execute().use { res ->
+                val text = res.body?.string().orEmpty()
+                when {
+                    res.code == 409 -> {
+                        val current = runCatching {
+                            val detail = json.parseToJsonElement(text).jsonObject["detail"]?.jsonObject
+                            detail?.get("current")?.let { json.decodeFromJsonElement<MemoryFileInfo>(it) }
+                        }.getOrNull()
+                        MemoryCommitResult.Conflict(current)
+                    }
+                    res.isSuccessful -> MemoryCommitResult.Ok(json.decodeFromString(text))
+                    else -> MemoryCommitResult.Failed
+                }
+            }
+        }.getOrDefault(MemoryCommitResult.Failed)
+    }
+
+    suspend fun fetchMemoryRevisions(config: AppConfig, path: String): List<MemoryRevisionInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            val q = java.net.URLEncoder.encode(path, "UTF-8")
+            getString(config, "/memory/files/revisions?path=$q")?.let { json.decodeFromString<List<MemoryRevisionInfo>>(it) }
+        }.getOrNull() ?: emptyList()
+    }
+
+    suspend fun restoreMemoryRevision(config: AppConfig, revisionId: Int): MemoryFileInfo? = withContext(Dispatchers.IO) {
+        runCatching {
+            postJson(config, "/memory/files/restore", buildJsonObject { put("revision_id", revisionId) })?.let {
+                json.decodeFromString<MemoryFileInfo>(it)
+            }
+        }.getOrNull()
+    }
+
     // ── Data (import chats, index history) ──────────────────────────────────────
 
     suspend fun importChats(config: AppConfig, fileName: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
@@ -437,6 +565,18 @@ class IgorApi(
             .url("${config.apiBase}$path")
             .header("X-API-Key", config.apiKey)
             .put(body.toString().toRequestBody(jsonMedia))
+            .build()
+        restClient.newCall(request).execute().use { res ->
+            if (!res.isSuccessful) return null
+            return res.body?.string()
+        }
+    }
+
+    private fun patchJson(config: AppConfig, path: String, body: JsonObject): String? {
+        val request = Request.Builder()
+            .url("${config.apiBase}$path")
+            .header("X-API-Key", config.apiKey)
+            .patch(body.toString().toRequestBody(jsonMedia))
             .build()
         restClient.newCall(request).execute().use { res ->
             if (!res.isSuccessful) return null

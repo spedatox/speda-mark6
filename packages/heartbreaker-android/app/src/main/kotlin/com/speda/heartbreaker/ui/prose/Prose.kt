@@ -26,9 +26,12 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -427,9 +430,20 @@ private fun AnnotatedString.Builder.appendInlines(parent: Node, palette: HbPalet
                     fontSize = 13.sp,
                 ),
             ) { append(n.literal) }
-            is Link -> withStyle(
-                SpanStyle(color = palette.accentBright, textDecoration = TextDecoration.Underline),
-            ) { appendInlines(n, palette) }
+            is Link -> {
+                // A real, tappable link: LinkAnnotation.Url is opened by the
+                // platform UriHandler when the span is clicked (BasicText handles
+                // the hit-testing). Autolinked bare URLs land here too.
+                val href = n.destination.orEmpty()
+                val linkStyle = SpanStyle(color = palette.accentBright, textDecoration = TextDecoration.Underline)
+                if (href.isNotBlank()) {
+                    withLink(LinkAnnotation.Url(href, TextLinkStyles(style = linkStyle))) {
+                        appendInlines(n, palette)
+                    }
+                } else {
+                    withStyle(linkStyle) { appendInlines(n, palette) }
+                }
+            }
             is Strikethrough -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
                 appendInlines(n, palette)
             }
