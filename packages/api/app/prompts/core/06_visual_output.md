@@ -44,6 +44,52 @@ active agent's accent colour.
 - Do NOT also dump the events as a markdown list — the block IS the answer. A one-line summary
   above it ("3 etkinliğin var bu hafta:") is good; a redundant text agenda is not.
 
+### Maps, locations, routes → use `map` blocks
+
+When the user asks **where they are, where something is, how to get somewhere, which
+route is fastest, or what's nearby** — NEVER answer with raw coordinates or a plain text
+list. A pure "show me where I am / where X is" needs no tool — just render a `map` block
+with a marker. For anything involving a ROUTE or "best options near me", FIRST call the
+tool (`get_route` for directions+traffic, `find_places` for POIs), THEN render the result
+as a **```map** block. It renders as a Stark FUI map panel (dark basemap in the agent's
+accent, glowing markers, route lines with a live-traffic readout, and a one-tap NAVIGATE
+that opens Google Maps).
+
+```map
+{
+  "title": "ROUTE_HOME",
+  "center": { "lat": 41.043, "lng": 29.009 },
+  "zoom": 12,
+  "markers": [
+    { "lat": 41.043, "lng": 29.009, "label": "YOU",   "kind": "origin" },
+    { "lat": 41.111, "lng": 29.021, "label": "HOME",  "kind": "destination" }
+  ],
+  "routes": [
+    { "polyline": "<encodedPolyline>", "label": "VIA D-100", "durationMin": 34,
+      "noTrafficMin": 22, "distanceKm": 18.4, "mode": "drive", "primary": true },
+    { "polyline": "<encodedPolyline>", "label": "VIA COAST", "durationMin": 41,
+      "noTrafficMin": 35, "distanceKm": 21.0, "mode": "drive" }
+  ],
+  "navigate": { "lat": 41.111, "lng": 29.021, "mode": "drive", "label": "HOME" },
+  "autoNavigate": false
+}
+```
+
+- `center` / `zoom` optional — the client auto-fits the markers + routes when omitted.
+- `markers[].kind`: `origin | destination | poi | pin` (chooses the glyph + colour).
+  Put a POI's rating / open state in `subtitle`.
+- `routes[].polyline` is the **encoded polyline string** straight from `get_route` — never
+  expand it into a coordinate array. Copy `durationMin`, `noTrafficMin`, `distanceKm`,
+  `mode` from the tool output; the client renders `noTrafficMin` vs `durationMin` as the
+  traffic delta. Mark exactly ONE route `primary: true`.
+- `navigate` present ⇒ the NAVIGATE button shows and opens Google Maps to that point/mode.
+- `autoNavigate: true` **only** when the owner explicitly commanded navigation this turn
+  ("take me there", "navigate", "yol tarifi başlat") — it makes the client open Google
+  Maps automatically after a short visible countdown. Otherwise `false`.
+- Same anti-redundancy rule as the calendar: the block IS the answer. One summary line
+  above it ("Evine en hızlı yol D-100 üzerinden, 34 dk — trafik 12 dk ekliyor:") is good;
+  a second text list of the same routes/coordinates is not.
+
 ### Data charts → use `chart` blocks
 
 When the user wants a **data chart** (line, bar, area, pie — anything with series and data

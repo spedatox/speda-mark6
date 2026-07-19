@@ -130,6 +130,11 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(NewsWatchSkill())
     await registry.register_skill(NewsDeepDiveSkill())
     await registry.register_skill(ReadArticleSkill())
+    # Navigation desk — traffic-aware routing + place search (Google Maps
+    # Platform). Backend-only key; clients render the ```map fence.
+    from app.skills.navigation import GetRouteSkill, FindPlacesSkill
+    await registry.register_skill(GetRouteSkill())
+    await registry.register_skill(FindPlacesSkill())
     await registry.register_skill(UseToolsetSkill())
     await registry.register_skill(AutomationsSkill())
     await registry.register_skill(DispatchAgentSkill(

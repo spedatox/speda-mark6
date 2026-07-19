@@ -94,6 +94,15 @@ dependencies {
     implementation(libs.commonmark.ext.gfm.strikethrough)
     implementation(libs.commonmark.ext.autolink)
 
+    // Inline ```svg fences → native vector rendering (diagrams/flowcharts the
+    // model emits per prompts/core/06_visual_output). AndroidSVG renders to a
+    // Picture we draw on a Compose Canvas — crisp at any size, no WebView.
+    implementation(libs.androidsvg)
+
+    // Inline ```map fences → MapLibre GL Native. Vector tiles + a style JSON we
+    // own (Stark dark basemap), no Google Play Services dependency.
+    implementation(libs.maplibre)
+
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.compose.ui.tooling.preview)
 

@@ -337,6 +337,14 @@ async def _run_chat(
     # proxy forwards it as chat_request.cwd; in-process agents ignore it.
     if body.cwd:
         context.extra["cwd"] = body.cwd
+    # Exact live coordinates for the navigation skills (get_route / find_places),
+    # so they can default the origin without parsing the prose location line.
+    # Not persisted — lives only on this turn's context, like the surface line.
+    if body.client_context and body.client_context.location is not None:
+        _loc = body.client_context.location
+        context.extra["client_location"] = {
+            "lat": _loc.lat, "lng": _loc.lng, "place": _loc.place,
+        }
     use_external = (
         profile.external_backend
         and request.app.state.ws_manager.is_connected(profile.agent_id)

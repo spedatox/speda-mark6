@@ -10,6 +10,7 @@ import CodeBlock from './CodeBlock'
 import WidgetFrame from './WidgetFrame'
 import ChartBlock from './ChartBlock'
 import CalendarBlock from './CalendarBlock'
+import MapBlock from './MapBlock'
 import HousePartyWarning from './HousePartyWarning'
 
 const RENDERABLE_LANGS = new Set(['html', 'svg'])
@@ -501,6 +502,9 @@ const mdComponents: any = {
       }
       if (lang === 'calendar') {
         return <CalendarBlock>{code}</CalendarBlock>
+      }
+      if (lang === 'map') {
+        return <MapBlock>{code}</MapBlock>
       }
       if (HPP_ALIASES.has(lang) || (HPP_AMBIGUOUS.has(lang) && looksLikeHppWarning(code))) {
         return <HousePartyWarning>{code}</HousePartyWarning>
