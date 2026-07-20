@@ -2,6 +2,12 @@
 # Caddy provisions and renews the certificate for $DOMAIN automatically,
 # as long as the domain's DNS A record points at this server and ports
 # 80/443 are open.
+# Site blocks for optional peers (H.İ.S.A.R.) are dropped into ./caddy-sites by
+# deploy.sh, which builds them from that peer's own .env — so their hostnames
+# stay out of this public repo, exactly like $DOMAIN. A glob matching no files
+# is not an error, so this line is a no-op on a server running SPEDA alone.
+import /etc/caddy/sites/*.caddy
+
 {$DOMAIN} {
 	reverse_proxy app:8000
 }

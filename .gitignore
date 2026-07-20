@@ -60,3 +60,7 @@ packages/*/*.tsbuildinfo
 # Proprietary fonts — kept local, not redistributed in this public repo
 Samsung*.ttf
 references/
+
+# Generated Caddy site blocks for optional peers (contain real hostnames).
+caddy-sites/*
+!caddy-sites/.gitkeep
