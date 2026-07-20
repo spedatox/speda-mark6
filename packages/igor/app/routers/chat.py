@@ -34,6 +34,16 @@ def _friendly_error(model: str, exc: Exception) -> str:
             "key problem). Fix it at build.nvidia.com / email help@build.nvidia.com, or just "
             "use another provider (OpenAI, Gemini, z.ai, DeepSeek, Anthropic)."
         )
+    # A tool-call rejection is NOT an auth failure, but OpenAI's 5.6 family
+    # reports one as a 401 "insufficient permissions" — which used to surface as
+    # "check your key" and sent the owner hunting a perfectly good key. Match the
+    # payload wording first so the real cause is named.
+    if "function tools" in text or "/v1/responses" in text or "reasoning_effort" in text:
+        return (
+            f"{provider.title()} rejected the tool definitions for this model — it's the "
+            "request payload, not your API key. This model needs its tool calls on the "
+            "Responses API; pick another model if it persists."
+        )
     if "401" in text or "unauthorized" in text or "api key" in text or "authentication" in text:
         key = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}.get(provider, "ANTHROPIC_API_KEY")
         return f"{provider.title()} rejected the request — check that {key} is set and valid."

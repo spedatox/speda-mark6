@@ -9,6 +9,7 @@ Covers the token-optimization architecture:
   - Dead Zone Protocol tool filtering + hallucinated-tool feedback
 """
 
+import json
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -21,8 +22,12 @@ from app.profiles.speda import SPEDAProfile
 from app.services.anthropic_client import _apply_prompt_caching
 from app.services.llm_client import (
     _FINISH_TO_STOP,
+    _responses_to_message,
     _to_openai_params,
+    _to_responses_params,
     _translate_message,
+    _translate_message_responses,
+    _use_responses_api,
     parse_model_ref,
 )
 from app.skills.base import Skill
@@ -252,14 +257,126 @@ def test_openai_reasoning_effort_rides_extra_body():
     assert p_reason.get("extra_body", {}).get("reasoning_effort") == "high"
 
 
-def test_gpt56_forces_reasoning_none_with_tools():
-    # gpt-5.6 blocks function tools on /v1/chat/completions unless reasoning is
-    # off — force "none" (via extra_body) for the whole 5.6 family.
+def test_gpt56_tool_calls_route_to_responses_api():
+    # gpt-5.6+ cannot carry function tools on /v1/chat/completions — post-GA the
+    # old reasoning_effort:"none" workaround was honoured only intermittently,
+    # which produced the every-other-message 401 "insufficient permissions".
+    # Tool calls must go to /v1/responses instead.
     tool = {"name": "get_time", "description": "x", "input_schema": {"type": "object"}}
     kwargs = {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 512, "tools": [tool]}
     for model in ("gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.7"):
-        p = _to_openai_params("openai", model, kwargs)
-        assert p.get("extra_body", {}).get("reasoning_effort") == "none", model
+        assert _use_responses_api("openai", model, kwargs), model
+        # …and the dead workaround must never come back.
+        assert "none" != _to_openai_params("openai", model, kwargs).get(
+            "extra_body", {}
+        ).get("reasoning_effort"), model
+    # Tool-FREE 5.6 calls (title/recap generation) stay on chat-completions.
+    assert not _use_responses_api("openai", "gpt-5.6-terra", {"messages": []})
+    # Other providers are never routed to OpenAI's endpoint.
+    assert not _use_responses_api("gemini", "gemini-2.5-pro", kwargs)
+    assert not _use_responses_api("openai", "gpt-5-mini", kwargs)
+
+
+def test_responses_params_shape():
+    # Flat tool declarations, instructions instead of a system message, and
+    # max_output_tokens instead of max_tokens.
+    tool = {"name": "get_time", "description": "x", "input_schema": {"type": "object"}}
+    p = _to_responses_params(
+        "gpt-5.6-terra",
+        {
+            "system": [{"type": "text", "text": "you are igor", "_cache": True}],
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 512,
+            "tools": [tool],
+        },
+    )
+    assert p["instructions"] == "you are igor"
+    assert p["max_output_tokens"] == 512
+    assert "max_tokens" not in p and "messages" not in p
+    assert p["tools"] == [
+        {"type": "function", "name": "get_time", "description": "x", "parameters": {"type": "object"}}
+    ]
+    assert p["input"] == [{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}]
+    # reasoning_effort "none" is not a valid Responses effort — never forwarded.
+    p_none = _to_responses_params("gpt-5.6-terra", {"messages": [], "reasoning_effort": "none"})
+    assert "reasoning" not in p_none
+
+
+def test_responses_tool_roundtrip_pairs_on_call_id():
+    # tool_use → function_call and tool_result → function_call_output, paired by
+    # call_id and emitted as TOP-LEVEL items (not nested in role messages).
+    assistant = _translate_message_responses(
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "checking"},
+                {"type": "tool_use", "id": "call_1", "name": "get_time", "input": {"tz": "UTC"}},
+            ],
+        }
+    )
+    assert assistant[0] == {
+        "role": "assistant",
+        "content": [{"type": "output_text", "text": "checking"}],
+    }
+    assert assistant[1]["type"] == "function_call"
+    assert assistant[1]["call_id"] == "call_1"
+    assert json.loads(assistant[1]["arguments"]) == {"tz": "UTC"}
+
+    user = _translate_message_responses(
+        {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "call_1", "content": "19:00"},
+                {"type": "text", "text": "thanks"},
+            ],
+        }
+    )
+    # Result first, so it stays adjacent to the call it answers.
+    assert user[0] == {"type": "function_call_output", "call_id": "call_1", "output": "19:00"}
+    assert user[1]["content"] == [{"type": "input_text", "text": "thanks"}]
+
+
+def test_responses_output_parsing():
+    resp = SimpleNamespace(
+        output=[
+            SimpleNamespace(
+                type="message",
+                content=[SimpleNamespace(type="output_text", text="on it")],
+            ),
+            SimpleNamespace(
+                type="reasoning", summary=[]  # hidden reasoning items must be ignored
+            ),
+            SimpleNamespace(
+                type="function_call",
+                id="fc_abc",
+                call_id="call_9",
+                name="get_time",
+                arguments='{"tz":"UTC"}',
+            ),
+        ],
+        incomplete_details=None,
+        usage=SimpleNamespace(
+            input_tokens=100,
+            output_tokens=20,
+            input_tokens_details=SimpleNamespace(cached_tokens=64),
+        ),
+    )
+    msg = _responses_to_message(resp)
+    assert msg.stop_reason == "tool_use"
+    assert [b.type for b in msg.content] == ["text", "tool_use"]
+    assert msg.content[0].text == "on it"
+    # The id must be call_id — item.id cannot be paired against by the API.
+    assert msg.content[1].id == "call_9"
+    assert msg.content[1].input == {"tz": "UTC"}
+    assert msg.usage.input_tokens == 100
+    assert msg.usage.cache_read_input_tokens == 64
+
+    truncated = SimpleNamespace(
+        output=[SimpleNamespace(type="message", content=[SimpleNamespace(type="output_text", text="par")])],
+        incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+        usage=None,
+    )
+    assert _responses_to_message(truncated).stop_reason == "max_tokens"
 
 
 def test_older_gpt5_never_forced_to_none_with_tools():
