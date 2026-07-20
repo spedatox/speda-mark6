@@ -86,6 +86,31 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
 
+  # H.İ.S.A.R. — the owner's file vault, served at hisar.$DOMAIN.
+  # Deployed from a sibling clone of spedatox/hisar-mk1 (option (b) of the
+  # placement plan). Only starts with `--profile hisar`, which deploy.sh enables
+  # when ../hisar-mk1/.env exists — so a server without Hisar is unaffected.
+  hisar:
+    build: ../hisar-mk1
+    profiles: ["hisar"]
+    restart: unless-stopped
+    expose:
+      - "8600"
+    # Hisar's own secrets live with Hisar, never in Igor's .env.
+    env_file:
+      - ../hisar-mk1/.env
+    environment:
+      # Container-side paths — these MUST outrank the .env, whose
+      # HISAR_SANDBOX_ROOT is the *host* path of the same directory.
+      HISAR_SANDBOX_ROOT: /vault
+      HISAR_STATIC_DIR: /app/dist
+    volumes:
+      # The vault is the only writable mount. Forge writes into
+      # Forge/workspaces of this same host directory, directly.
+      - /opt/hisar/vault:/vault
+    security_opt:
+      - no-new-privileges:true
+
   # Reverse proxy + automatic HTTPS for your domain. Only starts when you run
   # with `--profile domain` and DOMAIN is set (deploy.sh does this for you).
   caddy:
@@ -99,6 +124,9 @@ services:
       DOMAIN: ${DOMAIN:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Generated site blocks for optional peers (see Caddyfile's import).
+      # Gitignored — deploy.sh writes them from each peer's own .env.
+      - ./caddy-sites:/etc/caddy/sites:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

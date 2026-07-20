@@ -50,6 +50,47 @@ else
   say "No DOMAIN set — API will be on http://<server-ip>:8000 (no TLS)"
 fi
 
+# ── H.İ.S.A.R. (optional peer) ───────────────────────────────────────────────
+# Hisar deploys from a sibling clone with its own gitignored .env. If that clone
+# is present and configured, mirror it to main and bring it up in the same
+# stack; otherwise the profile stays off and nothing about this server changes.
+HISAR_DIR="../hisar-mk1"
+if [[ -d "${HISAR_DIR}/.git" ]]; then
+  say "Updating H.İ.S.A.R. clone (${HISAR_DIR})…"
+  git -C "${HISAR_DIR}" fetch --prune origin main
+  git -C "${HISAR_DIR}" reset --hard origin/main
+fi
+HISAR_ON=false
+if [[ -f "${HISAR_DIR}/.env" ]]; then
+  HISAR_ON=true
+  PROFILE+=(--profile hisar)
+
+  # Its public hostname is a sibling of $DOMAIN, not a subdomain of it, so it
+  # comes from Hisar's own .env. Caddy imports whatever lands in caddy-sites/;
+  # the file is gitignored, keeping the hostname out of this public repo.
+  HISAR_DOMAIN="$(grep -E '^HISAR_PUBLIC_DOMAIN=' "${HISAR_DIR}/.env" | cut -d= -f2- | tr -d '[:space:]' || true)"
+  mkdir -p caddy-sites
+  if [[ -n "${HISAR_DOMAIN}" ]]; then
+    say "H.İ.S.A.R. configured — ${HISAR_DOMAIN}"
+    # max_size must be >= HISAR_MAX_UPLOAD_BYTES or Caddy truncates large
+    # uploads before the API ever sees them.
+    cat > caddy-sites/hisar.caddy <<EOF
+${HISAR_DOMAIN} {
+	reverse_proxy hisar:8600
+
+	request_body {
+		max_size 2GB
+	}
+}
+EOF
+  else
+    say "H.İ.S.A.R. configured, but HISAR_PUBLIC_DOMAIN is unset — no TLS site block written"
+    rm -f caddy-sites/hisar.caddy
+  fi
+else
+  say "No ${HISAR_DIR}/.env — skipping H.İ.S.A.R. (see hisar-mk1/deploy/README.md)"
+fi
+
 # ── Postgres credentials ───────────────────────────────────────────────────--
 # Exported (from the one secret file) so compose interpolates them into the
 # postgres service AND the app's DATABASE_URL — they stay in sync, and nothing
@@ -65,6 +106,15 @@ done
 say "Building and starting the stack (postgres + sandbox + api${DOMAIN:+ + caddy})…"
 docker compose "${PROFILE[@]}" up -d --build
 
+# Editing a mounted Caddyfile does not recreate the container, so a config
+# change (a new peer site block) needs an explicit reload. Harmless no-op when
+# nothing changed; skipped when Caddy isn't running at all.
+if [[ -n "${DOMAIN}" ]]; then
+  docker compose "${PROFILE[@]}" exec -T caddy \
+    caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>/dev/null \
+    && echo "  Caddy config reloaded." || true
+fi
+
 # ── Wait for API health ──────────────────────────────────────────────────────
 say "Waiting for the API to come up…"
 ok=false
@@ -76,6 +126,20 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 $ok && echo "  API is healthy." || echo "  ⚠ API did not report healthy in 120s — check: docker compose logs app"
+
+# ── Wait for Hisar health (only when it is part of this deploy) ──────────────
+if $HISAR_ON; then
+  say "Waiting for H.İ.S.A.R. to come up…"
+  hok=false
+  for _ in $(seq 1 30); do
+    if docker compose "${PROFILE[@]}" exec -T hisar python -c \
+       "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/health')" 2>/dev/null; then
+      hok=true; break
+    fi
+    sleep 2
+  done
+  $hok && echo "  H.İ.S.A.R. is healthy." || echo "  ⚠ H.İ.S.A.R. did not report healthy in 60s — check: docker compose logs hisar"
+fi
 
 # ── Import memory (optional, one time) ───────────────────────────────────────
 if [[ -n "${MIGRATE_DB}" ]]; then
@@ -96,6 +160,7 @@ if [[ -n "${DOMAIN}" ]]; then
   echo "  Live at: https://${DOMAIN}"
   echo "  Build the desktop app pointed here:"
   echo "    powershell -File build-app.ps1 -ApiBase https://${DOMAIN} -ApiKey <SPEDA_API_KEY>"
+  if $HISAR_ON && [[ -n "${HISAR_DOMAIN:-}" ]]; then echo "  H.İ.S.A.R.: https://${HISAR_DOMAIN}"; fi
 else
   echo "  Live at: http://<server-ip>:8000"
 fi
