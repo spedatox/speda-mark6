@@ -23,6 +23,11 @@ via the same extra_body toggle; DeepSeek additionally forces non-thinking
 whenever tools are present, because V4 thinking mode is incompatible with the
 tool loop (see _to_openai_params).
 
+One exception to that shared path: OpenAI's gpt-5.6+ family cannot carry
+function tools on chat-completions at all, so those calls (and only those) are
+translated to the Responses API dialect instead — see
+_openai_tools_need_responses_api and _to_responses_params.
+
 Fallback: LLM_FALLBACK_CHAIN in .env lists "provider:model" refs tried in
 order when a provider call fails (auth, rate limit, connection, 5xx). For
 streaming, fallback applies while opening the stream — once tokens are
@@ -88,14 +93,22 @@ def parse_model_ref(ref: str) -> tuple[str, str]:
 _GPT56_CODENAMES = ("luna", "sol", "terra")
 
 
-def _openai_blocks_tool_reasoning(model_l: str) -> bool:
-    """True for OpenAI reasoning models (gpt-5.6 and newer) that REJECT function
-    tools on /v1/chat/completions unless reasoning_effort is forced to 'none'.
+def _openai_tools_need_responses_api(model_l: str) -> bool:
+    """True for OpenAI reasoning models (gpt-5.6 and newer) whose function tools
+    must be sent to /v1/responses instead of /v1/chat/completions.
 
-    The older gpt-5 generation (gpt-5 / mini / nano) both accepts tools without
-    the flag AND rejects the value 'none', so it must be excluded — this returns
-    True only for gpt-5.6+ (and their luna/sol/terra codenames). Matched by the
-    version number so future releases (5.7, 6.x, …) are covered automatically."""
+    History: during the 5.6 preview, chat-completions accepted tools as long as
+    reasoning_effort was forced to 'none'. After the July 9 2026 GA that stopped
+    being reliable — the same key/model/payload fails roughly every other call
+    with a MISLEADING 401 "insufficient permissions" (luna) or a clean 400
+    (sol/terra), then succeeds on retry. OpenAI's own error text names the fix:
+    "To use function tools, use /v1/responses". So we route there and drop the
+    reasoning_effort hack entirely — the Responses API carries tool definitions
+    natively with no reasoning constraint.
+
+    The older gpt-5 generation (gpt-5 / mini / nano) is unaffected and stays on
+    chat-completions. Matched by version number so future releases (5.7, 6.x, …)
+    are covered automatically."""
     import re
 
     if any(c in model_l for c in _GPT56_CODENAMES):
@@ -107,6 +120,18 @@ def _openai_blocks_tool_reasoning(model_l: str) -> bool:
         except ValueError:
             return False
     return False
+
+
+def _use_responses_api(provider: str, model: str, kwargs: dict) -> bool:
+    """Whether this specific call must go to OpenAI's /v1/responses endpoint.
+    Only ever true for OpenAI + a 5.6-family model + tools in the request;
+    tool-free calls (title/recap generation) work fine on chat-completions and
+    stay there so the rest of the stack is untouched."""
+    return (
+        provider == "openai"
+        and bool(kwargs.get("tools"))
+        and _openai_tools_need_responses_api(model.lower())
+    )
 
 
 # ── Normalized response types ────────────────────────────────────────────────
@@ -239,6 +264,9 @@ class LLMClient:
 
     async def _openai_create(self, provider: str, model: str, kwargs: dict) -> LLMMessage:
         client = self._compat_client(provider)
+        if _use_responses_api(provider, model, kwargs):
+            resp = await client.responses.create(**_to_responses_params(model, kwargs))
+            return _responses_to_message(resp)
         params = _to_openai_params(provider, model, kwargs)
         resp = await client.chat.completions.create(**params)
         choice = resp.choices[0]
@@ -581,16 +609,13 @@ def _to_openai_params(provider: str, model: str, kwargs: dict) -> dict:
         model_l = model.lower()
         is_reasoning_model = any(x in model_l for x in ("o1", "o3", "o4", "gpt-5", "terra"))
         effort = None
-        if tools and _openai_blocks_tool_reasoning(model_l):
-            # gpt-5.6+ reason by default and REJECT function tools on
-            # /v1/chat/completions unless reasoning is explicitly OFF. OpenAI's
-            # error says verbatim: "To use function tools, use /v1/responses or
-            # set reasoning_effort to 'none'." (gpt-5.6-luna misreports this as a
-            # 401 "insufficient permissions"; sol/terra as a clean 400.) NOTE the
-            # OLDER gpt-5 generation (gpt-5 / mini / nano) REJECTS the value
-            # 'none' AND doesn't block tools — so we force 'none' ONLY for 5.6+.
-            effort = "none"
-        elif reasoning_effort and is_reasoning_model and not tools:
+        # NOTE: gpt-5.6+ tool calls never reach this function — _use_responses_api
+        # routes them to /v1/responses, where tools need no reasoning override.
+        # The old `reasoning_effort: "none"` workaround lived here and is gone:
+        # post-GA it was honoured intermittently, which is exactly what produced
+        # the every-other-message 401. Do not reintroduce it — the OLDER gpt-5
+        # generation (gpt-5 / mini / nano) outright REJECTS the value 'none'.
+        if reasoning_effort and is_reasoning_model and not tools:
             # Tool-free reasoning call (e.g. background title/recap generation):
             # pass the caller's hint so the model doesn't burn its whole budget
             # on hidden reasoning and return empty content.
@@ -719,6 +744,174 @@ def _translate_message(message: dict) -> list[dict]:
     return out
 
 
+# ── Anthropic-format → Responses API translation (OpenAI gpt-5.6+ tools) ─────
+# Same job as _to_openai_params above, different dialect. The Responses API is a
+# flat list of typed `input` items rather than chat messages: tool calls are
+# `function_call` items and tool results are `function_call_output` items paired
+# by `call_id` (NOT nested inside role messages), tools are declared flat
+# (no {"type":"function","function":{…}} envelope), the system prompt rides
+# `instructions`, and the budget parameter is `max_output_tokens`.
+
+
+def _to_responses_params(model: str, kwargs: dict) -> dict:
+    items: list[dict] = []
+    for m in kwargs.get("messages", []):
+        items.extend(_translate_message_responses(m))
+
+    params: dict = {"model": model, "input": items}
+
+    system = kwargs.get("system")
+    if isinstance(system, list):
+        # `_cache` markers are Anthropic prompt-cache hints — meaningless here.
+        system = "\n\n".join(b.get("text", "") for b in system)
+    if system:
+        params["instructions"] = system
+
+    tools = kwargs.get("tools")
+    if tools:
+        params["tools"] = [
+            {
+                "type": "function",
+                "name": t["name"],
+                "description": t.get("description", ""),
+                "parameters": t.get("input_schema", {"type": "object"}),
+            }
+            for t in tools
+        ]
+
+    max_tokens = kwargs.get("max_tokens")
+    if max_tokens:
+        params["max_output_tokens"] = max_tokens
+
+    # Reasoning is native here and needs no override for tools to work. Only a
+    # caller's explicit hint is forwarded, and never "none" — on this endpoint
+    # the field is an enum of minimal/low/medium/high.
+    effort = kwargs.get("reasoning_effort")
+    if effort and effort != "none":
+        params["reasoning"] = {"effort": effort}
+
+    return params
+
+
+def _translate_message_responses(message: dict) -> list[dict]:
+    """One Anthropic-format message → one or more Responses API input items.
+    tool_result blocks become standalone `function_call_output` items, emitted
+    before the user text they arrive with — mirroring _translate_message's
+    ordering so the call/output pairing stays adjacent."""
+    role = message["role"]
+    content = message.get("content")
+    if isinstance(content, str):
+        ctype = "output_text" if role == "assistant" else "input_text"
+        return [{"role": role, "content": [{"type": ctype, "text": content}]}]
+
+    outputs: list[dict] = []
+    calls: list[dict] = []
+    parts: list[dict] = []
+
+    for block in content or []:
+        btype = block.get("type")
+        if btype == "text":
+            parts.append(
+                {
+                    "type": "output_text" if role == "assistant" else "input_text",
+                    "text": block.get("text", ""),
+                }
+            )
+        elif btype == "image":
+            src = block.get("source", {})
+            if src.get("type") == "base64" and src.get("data"):
+                parts.append(
+                    {
+                        "type": "input_image",
+                        "image_url": f"data:{src.get('media_type', 'image/png')};"
+                        f"base64,{src['data']}",
+                    }
+                )
+        elif btype == "tool_use":
+            calls.append(
+                {
+                    "type": "function_call",
+                    "call_id": block["id"],
+                    "name": block["name"],
+                    "arguments": json.dumps(block.get("input") or {}),
+                }
+            )
+        elif btype == "tool_result":
+            rc = block.get("content", "")
+            if isinstance(rc, list):
+                rc = "\n".join(p.get("text", "") for p in rc if isinstance(p, dict))
+            outputs.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": block.get("tool_use_id", ""),
+                    "output": rc if isinstance(rc, str) else str(rc),
+                }
+            )
+
+    out: list[dict] = []
+    if role == "assistant":
+        if parts:
+            out.append({"role": "assistant", "content": parts})
+        out.extend(calls)
+    else:
+        out.extend(outputs)
+        if parts:
+            out.append({"role": role, "content": parts})
+    return out
+
+
+def _responses_to_message(resp) -> LLMMessage:
+    """Responses API result → the Anthropic-shaped LLMMessage callers expect."""
+    texts: list[str] = []
+    tool_blocks: list[ToolUseBlock] = []
+    for item in getattr(resp, "output", None) or []:
+        itype = getattr(item, "type", None)
+        if itype == "message":
+            for c in getattr(item, "content", None) or []:
+                if getattr(c, "type", None) == "output_text" and getattr(c, "text", None):
+                    texts.append(c.text)
+        elif itype == "function_call":
+            tool_blocks.append(
+                ToolUseBlock(
+                    # call_id is the handle the API pairs function_call_output
+                    # against — item.id is a different, unusable identifier.
+                    id=getattr(item, "call_id", None) or _gen_tool_id(),
+                    name=getattr(item, "name", "") or "",
+                    input=_parse_tool_args(
+                        getattr(item, "arguments", None), getattr(item, "name", "") or ""
+                    ),
+                )
+            )
+
+    blocks: list = []
+    text = "".join(texts)
+    if text:
+        blocks.append(TextBlock(text=text))
+    blocks.extend(tool_blocks)
+
+    if tool_blocks:
+        stop_reason = "tool_use"
+    elif getattr(getattr(resp, "incomplete_details", None), "reason", None) == "max_output_tokens":
+        stop_reason = "max_tokens"
+    else:
+        stop_reason = "end_turn"
+
+    return LLMMessage(
+        content=blocks, stop_reason=stop_reason, usage=_usage_from_responses(resp.usage)
+    )
+
+
+def _usage_from_responses(u) -> Usage:
+    if u is None:
+        return Usage()
+    details = getattr(u, "input_tokens_details", None)
+    return Usage(
+        input_tokens=getattr(u, "input_tokens", 0) or 0,
+        output_tokens=getattr(u, "output_tokens", 0) or 0,
+        cache_read_input_tokens=getattr(details, "cached_tokens", 0) or 0,
+    )
+
+
 def _parse_tool_args(raw: str | None, tool_name: str) -> dict:
     # The Anthropic SDK hands tool input pre-parsed; chat-completions providers
     # send a JSON string, which open-weight models occasionally truncate.
@@ -836,6 +1029,93 @@ class _OpenAICompatStream:
             await self._raw.close()
 
 
+class _OpenAIResponsesStream:
+    """/v1/responses stream exposing the same surface as _OpenAICompatStream
+    (.text_stream and get_final_message()), so the orchestrator can't tell the
+    two endpoints apart. Used for gpt-5.6+ tool calls only."""
+
+    def __init__(self, client, params: dict) -> None:
+        self._client = client
+        self._params = params
+        self._raw = None
+        self._text: list[str] = []
+        # output_index → accumulating function call. The API streams a
+        # function_call item first (with its call_id and name), then its
+        # arguments JSON in deltas keyed by the same index.
+        self._calls: dict[int, dict] = {}
+        self._final = None
+        self._incomplete: str | None = None
+        self._usage = Usage()
+        self._consumed = False
+
+    async def open(self) -> None:
+        self._raw = await self._client.responses.create(**dict(self._params, stream=True))
+
+    @property
+    def text_stream(self) -> AsyncIterator[str]:
+        return self._consume()
+
+    async def _consume(self) -> AsyncIterator[str]:
+        async for event in self._raw:
+            etype = getattr(event, "type", "")
+            if etype == "response.output_text.delta":
+                delta = getattr(event, "delta", "") or ""
+                if delta:
+                    self._text.append(delta)
+                    yield delta
+            elif etype == "response.output_item.added":
+                item = getattr(event, "item", None)
+                if item is not None and getattr(item, "type", None) == "function_call":
+                    self._calls[getattr(event, "output_index", len(self._calls))] = {
+                        "id": getattr(item, "call_id", "") or "",
+                        "name": getattr(item, "name", "") or "",
+                        "arguments": getattr(item, "arguments", "") or "",
+                    }
+            elif etype == "response.function_call_arguments.delta":
+                acc = self._calls.setdefault(
+                    getattr(event, "output_index", 0), {"id": "", "name": "", "arguments": ""}
+                )
+                acc["arguments"] += getattr(event, "delta", "") or ""
+            elif etype in ("response.completed", "response.incomplete", "response.failed"):
+                # The terminal event carries the fully assembled response —
+                # authoritative for usage, and a fallback if any delta was missed.
+                self._final = getattr(event, "response", None)
+        self._consumed = True
+
+    async def get_final_message(self) -> LLMMessage:
+        if not self._consumed:  # drain remainder if text_stream wasn't finished
+            async for _ in self._consume():
+                pass
+        if self._final is not None:
+            final = _responses_to_message(self._final)
+            if final.content:
+                return final
+            self._usage = final.usage  # empty output: keep the real usage numbers
+
+        blocks: list = []
+        text = "".join(self._text)
+        if text:
+            blocks.append(TextBlock(text=text))
+        for idx in sorted(self._calls):
+            acc = self._calls[idx]
+            blocks.append(
+                ToolUseBlock(
+                    id=acc["id"] or _gen_tool_id(),
+                    name=acc["name"],
+                    input=_parse_tool_args(acc["arguments"], acc["name"]),
+                )
+            )
+        return LLMMessage(
+            content=blocks,
+            stop_reason="tool_use" if self._calls else "end_turn",
+            usage=self._usage,
+        )
+
+    async def aclose(self) -> None:
+        if self._raw is not None:
+            await self._raw.close()
+
+
 class _StreamHandle:
     """Async context manager returned by LLMClient.stream_message().
 
@@ -862,11 +1142,17 @@ class _StreamHandle:
                     stream = await cm.__aenter__()
                     self._anthropic_cm = cm
                     return stream
-                stream = _OpenAICompatStream(
-                    self._owner._compat_client(provider),
-                    _to_openai_params(provider, model, self._kwargs),
-                    provider,
-                )
+                client = self._owner._compat_client(provider)
+                if _use_responses_api(provider, model, self._kwargs):
+                    stream = _OpenAIResponsesStream(
+                        client, _to_responses_params(model, self._kwargs)
+                    )
+                else:
+                    stream = _OpenAICompatStream(
+                        client,
+                        _to_openai_params(provider, model, self._kwargs),
+                        provider,
+                    )
                 await stream.open()
                 self._compat_stream = stream
                 return stream
