@@ -135,6 +135,10 @@ async def lifespan(app: FastAPI):
     from app.skills.navigation import GetRouteSkill, FindPlacesSkill
     await registry.register_skill(GetRouteSkill())
     await registry.register_skill(FindPlacesSkill())
+    # Health desk — the owner's biometrics, synced from the phone via Health
+    # Connect. Read-only; unrestricted so SPEDA can relay without a dispatch.
+    from app.skills.health_data import HealthDataSkill
+    await registry.register_skill(HealthDataSkill())
     await registry.register_skill(UseToolsetSkill())
     await registry.register_skill(AutomationsSkill())
     await registry.register_skill(DispatchAgentSkill(

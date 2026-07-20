@@ -6,9 +6,11 @@ Samsung Health on the owner's phone/watch, synced to Igor, and exposed as a
 Tier 1 Skill. Ambient, automatic, opt-in per data type, and invisible after the
 one-time setup.
 
-**Status:** design approved, not yet implemented. Builds on the Heartbreaker
-Droid client (`packages/heartbreaker-android`) and the existing skill/registry
-architecture. Nothing here changes the orchestrator (CLAUDE.md Rule 5).
+**Status:** **steps 1–2 implemented** (backend: model, service, endpoints,
+`health_data` skill — see §4). Steps 3–6 (the Android courier, the n8n digest)
+are still design-only. Builds on the Heartbreaker Core client
+(`packages/heartbreaker-android`) and the existing skill/registry architecture.
+Nothing here changes the orchestrator (CLAUDE.md Rule 5).
 
 ---
 
@@ -194,6 +196,15 @@ Router stays logic-free (Rule 1): validate schema → hand to
 - **Model** `app/models/health_sample.py`: `id, metric, start_ts, end_ts, value
   (float), unit, detail (JSON), origin, device, created_at`. Unique index
   `(metric, start_ts, origin)` → idempotent upserts.
+  - *As built, one addition:* a `day` column holding the owner's **local**
+    calendar date, derived from the offset the phone sends and stored alongside
+    the UTC-naive timestamps. UTC alone cannot recover it — a 00:30 +03:00
+    bedtime is 21:30 UTC the *previous* day, which would file a late-night walk
+    or a sleep session under the wrong date in every rollup.
+  - *As built:* metrics roll up by family (`cumulative` sums, `duration` sums +
+    longest, `instant` min/max/avg/last). An **unrecognised metric defaults to
+    `instant`**, never to a sum — inventing a total for a metric we don't
+    understand would read as authoritative and be meaningless.
 - **Service** `app/services/health.py`: upsert batch; maintain a `health_daily`
   rollup table (`date, metric, agg json`) updated on ingest — the skill answers
   90% of questions from dailies without scanning raw samples.
@@ -261,8 +272,8 @@ class HealthDataSkill(Skill):
 
 | Step | Piece | Depends on |
 |---|---|---|
-| 1 | Model + service + `/health/ingest`,`/status`,`/data` endpoints | nothing |
-| 2 | `health_data` skill + registry entry | 1 |
+| ✅ 1 | Model + service + `/health/ingest`,`/status`,`/data` endpoints | nothing |
+| ✅ 2 | `health_data` skill + registry entry | 1 |
 | 3 | Android `HealthConnectSource` + `HealthSyncManager` + backfill | 1 |
 | 4 | `HealthSyncWorker` + Settings ▸ HEALTH tab | 3 |
 | 5 | n8n nightly digest workflow + memory-baseline prompt | 2 |

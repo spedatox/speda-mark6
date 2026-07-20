@@ -14,10 +14,12 @@ from app.models.automation import Automation
 from app.models.news_item import NewsItem
 from app.models.news_watch import NewsWatch
 from app.models.news_quota import NewsQuota
+from app.models.health_sample import HealthSample, HealthDaily
 
 __all__ = [
     "User", "Session", "Message", "Memory", "MemoryFile", "MemoryRevision",
     "MessageEmbedding",
     "AgentRecord", "AgentMessage", "ToolCall", "Notification", "Automation",
     "NewsItem", "NewsWatch", "NewsQuota",
+    "HealthSample", "HealthDaily",
 ]

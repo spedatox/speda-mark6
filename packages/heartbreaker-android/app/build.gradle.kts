@@ -76,6 +76,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.datastore.preferences)
 
+    // Atomix health sync: read Samsung Health's data out of Health Connect and
+    // trickle it to Igor on a WorkManager cadence (docs/ATOMIX_HEALTH_SYNC.md).
+    implementation(libs.androidx.health.connect)
+    implementation(libs.androidx.work.runtime)
+
     implementation(libs.compose.foundation)
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)

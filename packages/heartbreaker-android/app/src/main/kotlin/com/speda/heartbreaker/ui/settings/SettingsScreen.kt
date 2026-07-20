@@ -46,6 +46,7 @@ private enum class SettingsTab(val label: String) {
     Config("Configuration"),
     Connections("Connections"),
     Automations("Automations"),
+    Health("Health"),
     Interface("Interface"),
     Data("Data"),
     Account("Account"),
@@ -112,6 +113,7 @@ fun SettingsScreen(
                 SettingsTab.Config -> ConfigTabView(config, graph)
                 SettingsTab.Connections -> ConnectionsTab(config, graph)
                 SettingsTab.Automations -> AutomationsTab(config, graph)
+                SettingsTab.Health -> HealthTab(config, graph)
                 SettingsTab.Interface -> InterfaceTab(config, graph)
                 SettingsTab.Data -> DataTab(config, graph)
                 SettingsTab.Account -> AccountTab(config, graph, settings, brand, onResetUplink)
