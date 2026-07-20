@@ -8,6 +8,7 @@ import com.speda.heartbreaker.data.MessageCache
 import com.speda.heartbreaker.data.PlatformContextProvider
 import com.speda.heartbreaker.data.SettingsStore
 import com.speda.heartbreaker.data.UplinkStore
+import com.speda.heartbreaker.health.HealthSyncManager
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -42,4 +43,7 @@ class AppGraph(context: Context) {
     val api: IgorApi = IgorApi(streamClient = streamClient, restClient = restClient)
     val messageCache: MessageCache = MessageCache(appContext.cacheDir)
     val downloader: Downloader = Downloader(appContext, restClient)
+
+    /** Atomix health sync — Health Connect → Igor (docs/ATOMIX_HEALTH_SYNC.md). */
+    val healthSync: HealthSyncManager = HealthSyncManager(appContext, settings, api)
 }

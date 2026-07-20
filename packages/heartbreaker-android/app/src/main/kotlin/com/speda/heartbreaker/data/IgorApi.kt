@@ -3,6 +3,10 @@ package com.speda.heartbreaker.data
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.ChatMessage
 import com.speda.heartbreaker.domain.Session
+import com.speda.heartbreaker.health.HealthIngestRequest
+import com.speda.heartbreaker.health.HealthIngestResult
+import com.speda.heartbreaker.health.HealthSampleDto
+import com.speda.heartbreaker.health.HealthStatusDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -520,6 +524,39 @@ class IgorApi(
                 json.parseToJsonElement(it).jsonObject["message"]?.jsonPrimitive?.contentOrNull
             } ?: "Indexing started in the background."
         }.getOrElse { "Indexing failed: ${it.message}" }
+    }
+
+    // ── Atomix health sync (docs/ATOMIX_HEALTH_SYNC.md §3.1) ───────────────────
+
+    /** POST a batch of biometrics. Returns null on any failure so the caller
+     *  leaves its changes token un-advanced and retries the same window. */
+    suspend fun ingestHealth(
+        config: AppConfig,
+        device: String,
+        samples: List<HealthSampleDto>,
+    ): HealthIngestResult? = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = json.encodeToString(HealthIngestRequest(device = device, samples = samples))
+            val request = Request.Builder()
+                .url("${config.apiBase}/health/ingest")
+                .header("X-API-Key", config.apiKey)
+                .post(body.toRequestBody(jsonMedia))
+                .build()
+            restClient.newCall(request).execute().use { res ->
+                if (!res.isSuccessful) return@runCatching null
+                res.body?.string()?.let { json.decodeFromString<HealthIngestResult>(it) }
+            }
+        }.getOrNull()
+    }
+
+    suspend fun healthStatus(config: AppConfig): HealthStatusDto? = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/health/status")?.let { json.decodeFromString<HealthStatusDto>(it) }
+        }.getOrNull()
+    }
+
+    suspend fun wipeHealth(config: AppConfig): Boolean = withContext(Dispatchers.IO) {
+        runCatching { deleteRequest(config, "/health/data") != null }.getOrDefault(false)
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
