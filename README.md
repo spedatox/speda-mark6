@@ -102,6 +102,9 @@ design, not two.
 
 ### 📱 Heartbreaker Core — the deck in your pocket
 
+<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/704053d8-74b8-4a44-8d75-138c55dde3f9" />
+
+
 A **native Android client** (Kotlin + Jetpack Compose), not a wrapped web view.
 The Stark glass, the palette morph on agent switch, the ambient background and
 the House Party colour parade are all re-implemented natively — the theme engine
@@ -114,6 +117,9 @@ agent switcher, a Configuration tab, and rename/delete on any chat. AMOLED-black
 fullscreen, built for one thumb.
 
 ### 🗺️ Maps & navigation — Stark cartography, inline
+
+<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/f0b092e3-eb41-4ef8-bbdd-2fe3da8e1cde" />
+
 
 Ask for directions and you get a **live map in the conversation**, not a wall of
 coordinates. Traffic-aware routing over the Google Routes API with alternatives
