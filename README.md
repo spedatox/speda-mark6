@@ -11,13 +11,14 @@
 **A private, proactive, multi-agent executive assistant** — a suite of eight
 domain specialists that watch the world for you, act while you sleep, remember
 who you are, and answer through a holographic command deck straight out of a
-Stark lab.
+Stark lab — on your desktop, in your pocket, or over Telegram.
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
 ![Electron](https://img.shields.io/badge/Heartbreaker-Electron%20%2B%20React-47848F?logo=electron&logoColor=white)
+![Android](https://img.shields.io/badge/Heartbreaker%20Core-Kotlin%20%2B%20Compose-3DDC84?logo=android&logoColor=white)
 ![Agents](https://img.shields.io/badge/agents-8-2eb6ac)
-![Providers](https://img.shields.io/badge/LLM%20providers-6-8a7fd6)
+![Providers](https://img.shields.io/badge/LLM%20providers-7-8a7fd6)
 
 
 </div>
@@ -36,8 +37,12 @@ staff** of specialists, and **senses of its own** that fire without being asked.
   and ping your Telegram the moment something matters — no prompt required.
 - 👥 **It's a team, not a bot.** Eight agents with distinct domains, voices and
   colours, dispatching work to each other behind the scenes.
-- 🎛️ **It looks incredible.** *Heartbreaker*, the desktop client, is a
-  fluid-glass holographic HUD — a genuine command deck, not a chat window.
+- 🎛️ **It looks incredible.** *Heartbreaker*, the client, is a fluid-glass
+  holographic HUD — a genuine command deck, not a chat window — on desktop and
+  now natively on Android.
+- 📍 **It knows where you are.** It can tell the phone from the desktop from
+  Telegram, and answers "how do I get home from here?" with a live,
+  traffic-aware map rendered right in the conversation.
 - 🔒 **It's private.** Self-hosted, single-key, no accounts, no tenancy. Your
   data stays on your server.
 
@@ -78,7 +83,9 @@ to someone else's domain.
 ### 🎛️ Heartbreaker — a command deck, not a chat box
 
 The desktop client is a Stark-tech, holographic *fluid-glass* interface — the
-product's primary face, and unlike anything else in the assistant space.
+product's primary face, and unlike anything else in the assistant space. Its
+sub-768px layout doubles as the spec for the Android app, so the two are one
+design, not two.
 
 - **Agent switcher** — `Alt+A` to switch agents; the UI recolours to the
   selected agent and shows its current model and domain.
@@ -92,6 +99,30 @@ product's primary face, and unlike anything else in the assistant space.
   weekend recharge") — generated fresh, cached so it's instant.
 - **Live session indicator** — a job keeps streaming even if you switch away, and
   a marker shows which conversations are still running.
+
+### 📱 Heartbreaker Core — the deck in your pocket
+
+A **native Android client** (Kotlin + Jetpack Compose), not a wrapped web view.
+The Stark glass, the palette morph on agent switch, the ambient background and
+the House Party colour parade are all re-implemented natively — the theme engine
+is verified against the desktop one by fixture tests, agent for agent. It carries
+the full chat core (SSE streaming, the tool feed, typewriter, reattach), the
+markdown prose renderer with inline chart, calendar and map fences, attachments
+and image upload, download cards that file everything Igor makes under
+*Documents/Speda Mark VI*, an offline transcript cache and session list, the
+agent switcher, a Configuration tab, and rename/delete on any chat. AMOLED-black,
+fullscreen, built for one thumb.
+
+### 🗺️ Maps & navigation — Stark cartography, inline
+
+Ask for directions and you get a **live map in the conversation**, not a wall of
+coordinates. Traffic-aware routing over the Google Routes API with alternatives
+and real geometry, place search for "where can I go near here", pan/zoom
+gestures, a coordinate + address footer, and a one-tap handoff to Google Maps
+when you actually leave. Because SPEDA knows the surface you're on and — if you
+allow it — your live position, *"how do I get home?"* just works from the phone
+without it asking where "here" is. Your location is stamped onto the live turn
+only; it is never written into stored history.
 
 ### 🛡️ The Legion — disposable workers on any model
 
@@ -216,7 +247,10 @@ npm install && npm run heartbreaker:dev
 ```
 
 On Windows, **`speda.ps1`** boots the whole system — backend, sandbox, the Forge
-link, and the app — with a single command.
+link, and the app — with a single command. **Heartbreaker Core** opens straight
+in Android Studio from `packages/heartbreaker-android` (Gradle 8.11 + JDK 21);
+point it at your backend on first launch and the key is kept in the Android
+Keystore.
 
 **Full stack** (`docker compose up -d`) brings up Postgres, the app, the sandbox,
 and n8n together. **`./deploy.sh`** is the one-shot production runbook (server,
@@ -241,10 +275,12 @@ hands. The full contract is codified in **[`CLAUDE.md`](CLAUDE.md)**.
 | [SETUP.md](docs/SETUP.md) · [DEPLOY.md](DEPLOY.md) | Install & production runbook |
 | [MEMORY_ARCHITECTURE.md](docs/MEMORY_ARCHITECTURE.md) | How memory works |
 | [TELEGRAM_ARCHITECTURE.md](docs/TELEGRAM_ARCHITECTURE.md) | The bot fleet |
-| [FORGE_INTEGRATION_PLAN.md](docs/FORGE_INTEGRATION_PLAN.md) · [NEWS_BRIEFING_PLAN.md](docs/NEWS_BRIEFING_PLAN.md) · [BACKGROUND_OPS_PLAN.md](docs/BACKGROUND_OPS_PLAN.md) | Design notes for the newest systems |
+| [ANDROID_PORT_PLAN.md](docs/ANDROID_PORT_PLAN.md) | Heartbreaker Core — the parity contract with the desktop client |
+| [FORGE_INTEGRATION_PLAN.md](docs/FORGE_INTEGRATION_PLAN.md) · [NEWS_BRIEFING_PLAN.md](docs/NEWS_BRIEFING_PLAN.md) · [BACKGROUND_OPS_PLAN.md](docs/BACKGROUND_OPS_PLAN.md) · [STARK_MAPS_PLAN.md](docs/STARK_MAPS_PLAN.md) | Design notes for the newest systems |
 
-**Monorepo:** `packages/igor` (**Igor** — the backend) · `packages/heartbreaker` (the app) ·
-`packages/desktop` (neutral fork base) · `packages/sandbox` (the isolated
+**Monorepo:** `packages/igor` (**Igor** — the backend) · `packages/heartbreaker`
+(the desktop/web app) · `packages/heartbreaker-android` (**Heartbreaker Core**)
+· `packages/desktop` (neutral fork base) · `packages/sandbox` (the isolated
 computer). The Forge is a separate deployment that connects back as a peer.
 
 ---
