@@ -8,6 +8,7 @@ class SSEEventType(str, Enum):
     TOOL = "tool"
     TOOL_RESULT = "tool_result"   # what a tool returned (for the disclosure panel)
     FILE = "file"     # a downloadable file SPEDA produced this turn
+    PERMISSION_REQUEST = "permission_request"  # a peer's gate is asking the owner
     DONE = "done"
     ERROR = "error"
 
