@@ -72,3 +72,30 @@ class AgentModelSet(BaseModel):
 class AgentTelegramModelSet(BaseModel):
     agent_id: str
     model: str | None = None  # None/empty = clear the pin, use desktop model
+
+
+class PendingAskEntry(BaseModel):
+    """One irreversible operation an external peer is waiting to be told about.
+
+    `action_key` is the exact command or path the peer's gate stopped. It is
+    shown verbatim and never truncated — an owner approving a force-push needs
+    to see which branch."""
+
+    ask_id: str
+    agent_id: str
+    tool: str
+    action_key: str
+    reason: str
+    job_id: str = ""
+    chat_id: str | None = None
+    seconds_left: float
+
+
+class AskAnswer(BaseModel):
+    """The owner's decision. `remember` records this exact action on the peer's
+    allow-list so the same command stops asking; it never generalises to a
+    pattern."""
+
+    approved: bool
+    remember: bool = False
+    note: str = ""

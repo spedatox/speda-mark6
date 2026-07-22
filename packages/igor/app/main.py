@@ -185,11 +185,13 @@ async def lifespan(app: FastAPI):
     # ── 4. WebSocket Manager + Agent Registry + External Chat Proxy ────────────
     from app.core.agent_registry import AgentRegistry
     from app.core.external_proxy import ExternalAgentProxy
+    from app.services.pending_asks import PendingAsks
     from app.websocket.manager import WebSocketManager
 
     ws_manager = WebSocketManager()
     agent_registry = AgentRegistry(ws_manager)
     agent_proxy = ExternalAgentProxy(ws_manager)
+    pending_asks = PendingAsks(ws_manager)
 
     # ── 5. Session Manager ─────────────────────────────────────────────────────
     from app.core.session_manager import SessionManager
@@ -231,6 +233,8 @@ async def lifespan(app: FastAPI):
     app.state.registry = registry
     app.state.agent_registry = agent_registry
     app.state.agent_proxy = agent_proxy
+    # Permission asks relayed from external peers (the Forge's safety gate).
+    app.state.pending_asks = pending_asks
     app.state.orchestrator = orchestrator
     app.state.ws_manager = ws_manager
     app.state.session_manager = session_manager

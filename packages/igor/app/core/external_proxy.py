@@ -42,6 +42,7 @@ _EVENT_MAP = {
     "chunk": SSEEventType.CHUNK,
     "tool": SSEEventType.TOOL,
     "tool_result": SSEEventType.TOOL_RESULT,
+    "permission_request": SSEEventType.PERMISSION_REQUEST,
     "done": SSEEventType.DONE,
     "error": SSEEventType.ERROR,
 }

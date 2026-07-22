@@ -21,8 +21,10 @@ from app.schemas.agent import (
     AgentRegistration,
     AgentStatus,
     AgentTelegramModelSet,
+    AskAnswer,
     HousePartySet,
     HousePartyState,
+    PendingAskEntry,
 )
 from fastapi import Depends, HTTPException
 
@@ -125,6 +127,35 @@ async def house_party_toggle(body: HousePartySet):
     return HousePartyState(engaged=set_house_party(body.engaged))
 
 
+@router.get("/agents/asks", response_model=list[PendingAskEntry])
+async def list_pending_asks(request: Request):
+    """Irreversible operations an external peer is waiting on the owner for.
+
+    The guaranteed path: a chat job's card also arrives inline on its own SSE
+    stream, but a dispatched background job has no stream to arrive on, and a
+    client that was closed when the ask was raised has no card either. Polling
+    this is what makes those reachable."""
+    return [ask.to_dict() for ask in request.app.state.pending_asks.list_open()]
+
+
+@router.post("/agents/asks/{ask_id}")
+async def answer_pending_ask(ask_id: str, body: AskAnswer, request: Request):
+    """Send the owner's decision down to the peer.
+
+    404 when nothing is waiting — the ask expired, the peer disconnected, or it
+    was already answered. That is not an error condition to retry: the peer runs
+    its own timeout and has already denied locally, so the operation did not
+    happen either way."""
+    sent = await request.app.state.pending_asks.answer(
+        ask_id, approved=body.approved, remember=body.remember, note=body.note)
+    if not sent:
+        raise HTTPException(
+            status_code=404,
+            detail="No pending ask with that id — it expired, was already "
+                   "answered, or its agent disconnected. The operation was denied.")
+    return {"ask_id": ask_id, "approved": body.approved}
+
+
 @router.websocket("/agents/ws/{agent_id}")
 async def agent_websocket(
     agent_id: str,
@@ -150,6 +181,7 @@ async def agent_websocket(
 
     agent_registry = websocket.app.state.agent_registry
     agent_proxy = websocket.app.state.agent_proxy
+    pending_asks = websocket.app.state.pending_asks
 
     await websocket.accept()
 
@@ -189,6 +221,17 @@ async def agent_websocket(
                 agent_proxy.deliver(
                     str(message.get("chat_id", "")), message.get("event") or {}
                 )
+            elif msg_type == "permission_request":
+                # The peer's safety gate stopped an irreversible operation and
+                # wants the owner's decision (app/services/pending_asks.py).
+                ask = pending_asks.record(agent_id, message)
+                if ask is not None and ask.chat_id:
+                    # On a chat job the owner is already watching this stream, so
+                    # the card belongs inline. Dispatched jobs have no stream to
+                    # arrive on and are picked up from GET /agents/asks instead.
+                    agent_proxy.deliver(ask.chat_id, {
+                        "type": "permission_request", "data": ask.to_dict(),
+                    })
             else:
                 logger.warning(
                     "agent_unknown_message",
@@ -197,8 +240,10 @@ async def agent_websocket(
 
     except WebSocketDisconnect:
         agent_proxy.fail_agent(agent_id)
+        pending_asks.drop_agent(agent_id)
         await agent_registry.deregister(agent_id, db)
     except Exception as e:
         logger.error("agent_ws_error", extra={"agent_id": agent_id, "error": str(e)})
         agent_proxy.fail_agent(agent_id)
+        pending_asks.drop_agent(agent_id)
         await agent_registry.deregister(agent_id, db)
