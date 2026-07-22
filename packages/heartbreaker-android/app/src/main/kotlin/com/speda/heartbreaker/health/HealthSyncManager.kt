@@ -122,14 +122,21 @@ class HealthSyncManager(
             return Result.NothingNew
         }
 
-        val result = api.ingestHealth(config, deviceName(), samples)
-            ?: return Result.Failed("Igor didn't accept the batch — will retry.")
+        var totalAccepted = 0
+        var totalDuplicates = 0
+
+        for (chunk in samples.chunked(4000)) {
+            val result = api.ingestHealth(config, deviceName(), chunk)
+                ?: return Result.Failed("Igor didn't accept the batch — will retry.")
+            totalAccepted += result.accepted
+            totalDuplicates += result.duplicates
+        }
 
         nextToken?.let { settings.setHealthChangesToken(it) }
         settings.setHealthBackfillDone(true)
         settings.setHealthLastSync(System.currentTimeMillis())
-        Log.i(TAG, "health sync: read=${samples.size} accepted=${result.accepted} dup=${result.duplicates}")
-        return Result.Synced(samples.size, result.accepted, result.duplicates)
+        Log.i(TAG, "health sync: read=${samples.size} accepted=$totalAccepted dup=$totalDuplicates")
+        return Result.Synced(samples.size, totalAccepted, totalDuplicates)
     }
 
     /** DISCONNECT + WIPE — clears the server, then the local sync state. */
