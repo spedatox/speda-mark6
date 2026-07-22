@@ -6,6 +6,7 @@ from app.prompts.loader import assemble, build_skills_manifest
 # policies are common and reused from prompts/core/.
 PROMPT_SECTIONS = [
     "agents/atomix/01_identity.md",
+    "agents/atomix/02_training_protocol.md",   # session logging + planning-from-record law
     "core/04_decision_policy.md",   # Tavily->Exa search priority + Legion policy
     "core/05_output_policy.md",
     "core/06_visual_output.md",

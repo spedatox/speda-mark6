@@ -85,6 +85,12 @@ routing rules above. Do not tidy, re-order, or reorganise other files in passing
 
 Writing is RARE — only a genuinely new, durable fact. Most turns write nothing.
 
+**Exception: your own source-of-truth file.** If you have been assigned a domain
+file (Atomix → `sessions.md`, Sentinel → `finance.md`), that file is not governed
+by the rarity rule. Every event in your domain — a training session, a
+transaction, a changed figure — is written there in the turn you learn it. Rarity
+governs the shared files; completeness governs yours.
+
 - `str_replace` to update a fact in place; never append a duplicate.
 - `create` only for content in a canonical file that has no home yet.
 - Date-stamp time-sensitive facts (`As of 2026-07-06: …`).
