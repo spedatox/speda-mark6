@@ -110,10 +110,12 @@ class Settings(BaseSettings):
     house_party_passphrase: str = "wheels-up-24-karat"
 
     # ── CORS ─────────────────────────────────────────────────────────────────
-    # Comma-separated allowed browser origins. Empty in production = no
-    # cross-origin browser access (the API is header-authenticated and the
-    # desktop client is not a browser origin). In DEBUG, localhost dev origins
-    # are allowed automatically. NEVER ship "*" to an internet-facing server.
+    # Comma-separated *extra* allowed browser origins. The desktop client's
+    # `app://bundle` origin is always allowed by main.py and does not need to be
+    # listed here. Empty in production = desktop only, no other cross-origin
+    # browser access (the API is header-authenticated). In DEBUG, localhost dev
+    # origins are allowed automatically. NEVER ship "*" to an internet-facing
+    # server.
     cors_allowed_origins: str = ""
 
     # ── n8n automation engine ────────────────────────────────────────────────

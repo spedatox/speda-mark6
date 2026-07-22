@@ -322,11 +322,20 @@ def create_app() -> FastAPI:
     # The API is header-authenticated (Bearer / X-API-Key), which browsers never
     # attach cross-origin automatically, so CSRF risk is low — but we still refuse
     # to advertise "*". Origins come from config; DEBUG additionally allows local
-    # dev servers. The packaged desktop client is not a browser origin and is
-    # unaffected by CORS.
+    # dev servers.
+    #
+    # The packaged desktop client IS a browser origin: the renderer is served
+    # over the `app://bundle` custom scheme, registered `standard: true` in
+    # packages/heartbreaker/src/main/index.ts precisely so it gets a real
+    # (non-opaque) origin. That means its fetches are ordinary cross-origin
+    # requests and are preflighted, so `app://bundle` must be allowed here or the
+    # desktop app cannot talk to the server at all.
     from fastapi.middleware.cors import CORSMiddleware
 
+    DESKTOP_ORIGIN = "app://bundle"
     origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+    if DESKTOP_ORIGIN not in origins:
+        origins.append(DESKTOP_ORIGIN)
 
     app.add_middleware(
         CORSMiddleware,
