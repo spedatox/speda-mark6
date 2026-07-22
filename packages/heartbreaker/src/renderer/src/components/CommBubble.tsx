@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AgentCommEntry } from '../lib/api'
 import { agentColor, fmtCommTime } from '../lib/agents'
+import { hasMark } from '../lib/agentMarks'
+import AgentMark from './AgentMark'
 
 /** Live-updating elapsed seconds since a dispatch started — makes a running
  *  (background) dispatch visibly alive rather than a frozen "WORKING…". */
@@ -31,9 +33,16 @@ const UI = "'Rajdhani', sans-serif"
 
 export function Avatar({ id, size = 26 }: { id: string; size?: number }) {
   const c = agentColor(id)
-  // Placeholder identity: a single big first initial in the agent's colour.
-  // Clean and modern on purpose — swapped for the real logos once they land.
-  const initial = id.charAt(0).toUpperCase()
+  // The agent's own mark, bare — it fills the box with no ring or plate around
+  // it. Below ~28px the glass finish's bloom swallows the geometry, so small
+  // chips get the flat cut. Agents with no art yet (orion, warroom, all) fall
+  // back to the initial, which does need a ring to read as an avatar.
+  if (hasMark(id)) {
+    return (
+      <AgentMark agentId={id} size={size} finish={size >= 28 ? 'glass' : 'flat'}
+                 style={{ flexShrink: 0 }} />
+    )
+  }
   return (
     <span style={{
       width: size, height: size, flexShrink: 0, borderRadius: '50%',
@@ -44,7 +53,7 @@ export function Avatar({ id, size = 26 }: { id: string; size?: number }) {
       fontFamily: UI, fontWeight: 800, fontSize: size * 0.52,
       letterSpacing: 0, lineHeight: 1,
     }}>
-      {initial}
+      {id.charAt(0).toUpperCase()}
     </span>
   )
 }

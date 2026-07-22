@@ -1,4 +1,4 @@
-# Heartbreaker Droid
+# Heartbreaker Core
 
 Native Android (Kotlin + Jetpack Compose) port of the Heartbreaker desktop client,
 targeting a 1:1 visual/UX parity with the sub-768px web layout. See

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<!-- ATOMIX · TRAINING PROGRAM ─ fork per program. Layout: sidenote grid.
+     .row > .side (34mm margin column) + .main. Never widen .side. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Training Program</title>
+<style>
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans.ttf");font-weight:400}
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans-Bold.ttf");font-weight:700}
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans-Oblique.ttf");font-style:italic}
+@font-face{font-family:M;src:url("../../skills/fonts/DejaVuSansMono.ttf")}
+:root{--k:#101314;--g:#6d757b;--h:#d6dadd;--a:#0a7d5a}
+
+@page{size:A4;margin:19mm 16mm 16mm 16mm;
+  @bottom-left{content:string(run);font:400 7pt S;color:#6d757b;letter-spacing:.09em}
+  @bottom-right{content:counter(page);font:400 7pt M;color:#6d757b}}
+@page:first{margin:0;@bottom-left{content:none}@bottom-right{content:none}}
+
+html{font-size:9.6pt}
+body{font-family:S;color:var(--k);line-height:1.55;margin:0}
+h1,h2,h3{margin:0;font-weight:700;break-after:avoid}
+p{margin:0 0 1.6mm}
+b{font-weight:700}
+
+/* ── cover ─────────────────────────────────────────────────────────── */
+.cover{height:297mm;padding:30mm 22mm 18mm;box-sizing:border-box;display:flex;flex-direction:column;break-after:page}
+.cover .top{flex:1}
+.mark{font:700 7pt M;letter-spacing:.34em;color:var(--a)}
+.cover h1{font-size:33pt;line-height:1.03;letter-spacing:-.015em;margin:16mm 0 0;max-width:130mm}
+.cover .lede{font-size:12pt;line-height:1.4;color:var(--g);margin-top:6mm;max-width:112mm}
+.cover .rule{height:2.6pt;background:var(--k);margin:9mm 0 5mm}
+.facts{display:flex;gap:0}
+.facts div{flex:1;padding-right:5mm}
+.facts dt{font:700 6.8pt S;letter-spacing:.16em;text-transform:uppercase;color:var(--g)}
+.facts dd{margin:1.6mm 0 0;font-size:11pt;font-weight:700;line-height:1.25}
+.cover .foot{font:400 7.4pt S;color:var(--g);border-top:.5pt solid var(--h);padding-top:3mm;margin-top:9mm}
+
+/* ── section + sidenote grid ───────────────────────────────────────── */
+.row{display:flex;gap:6mm;margin-bottom:7mm}
+.side{width:34mm;flex:none}
+.main{flex:1;min-width:0}
+h2{string-set:run content();font-size:15pt;letter-spacing:-.01em;line-height:1.15}
+.side .n{font:700 7pt M;color:var(--a);letter-spacing:.1em;display:block;margin-bottom:1.5mm}
+.side p{font-size:7.6pt;line-height:1.5;color:var(--g);margin-top:2.5mm}
+.hr{height:.5pt;background:var(--k);margin:0 0 4mm}
+h3{font-size:9.8pt;margin:5mm 0 2mm}
+h3:first-child{margin-top:0}
+
+/* ── tables: rules only, no fills ──────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:8.6pt;margin:0 0 3mm}
+thead{display:table-header-group}
+th{font:700 6.8pt S;letter-spacing:.13em;text-transform:uppercase;color:var(--g);text-align:left;
+   padding:0 3mm 1.6mm 0;border-bottom:.9pt solid var(--k)}
+td{padding:1.9mm 3mm 1.9mm 0;border-bottom:.4pt solid var(--h);vertical-align:baseline}
+th:last-child,td:last-child{padding-right:0}
+th.n,td.n{text-align:right;font-family:M;font-size:8.2pt;font-variant-numeric:tabular-nums;white-space:nowrap}
+th.n{font-family:S}
+tr{break-inside:avoid}
+tr.tot td{border-top:.9pt solid var(--k);border-bottom:1.8pt double var(--k);font-weight:700}
+
+/* ── session block ─────────────────────────────────────────────────── */
+.sesh{break-inside:avoid;margin-bottom:6mm}
+.sesh .hd{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.6pt solid var(--k);padding-bottom:1.6mm;margin-bottom:2.5mm}
+.sesh .hd h3{margin:0;font-size:10.5pt}
+.sesh .hd span{font:400 7.6pt M;color:var(--g);letter-spacing:.04em}
+.sesh table{margin-bottom:0}
+.warm{font-size:7.8pt;color:var(--g);margin-top:2.2mm;padding-left:4mm;border-left:1.4pt solid var(--h)}
+
+/* ── figures ───────────────────────────────────────────────────────── */
+.big{display:flex;gap:0;margin:0 0 5mm;border-top:.9pt solid var(--k);border-bottom:.5pt solid var(--h)}
+.big div{flex:1;padding:3mm 4mm 3.4mm 0}
+.big .v{font:700 21pt M;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.big .l{font:700 6.6pt S;letter-spacing:.15em;text-transform:uppercase;color:var(--g);margin-bottom:2mm}
+.big .d{font-size:7.6pt;color:var(--g);margin-top:1.4mm}
+.big .d.up{color:var(--a)}
+
+ul{margin:0 0 1.6mm;padding-left:4mm}li{margin-bottom:1.2mm}
+.note{border-left:2.4pt solid var(--a);padding:.4mm 0 .4mm 4mm;margin:0 0 4mm;break-inside:avoid}
+.note b{display:block;font-size:7pt;letter-spacing:.16em;text-transform:uppercase;color:var(--a);margin-bottom:1.4mm}
+.note.stop{border-color:#9d1f1f}.note.stop b{color:#9d1f1f}
+.end{border-top:.9pt solid var(--k);margin-top:8mm;padding-top:3mm;font-size:7.4pt;color:var(--g);line-height:1.5}
+</style>
+</head>
+<body>
+
+<!-- ══ COVER ══════════════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="top">
+    <div class="mark">ATOMIX / PERFORMANCE</div>
+    <h1>Strength &amp; Conditioning<br>Mesocycle 03</h1>
+    <div class="lede">Twelve weeks, four sessions per week. Hypertrophy carried into
+      strength, with recovery — not work capacity — treated as the binding constraint.</div>
+  </div>
+  <div class="rule"></div>
+  <dl class="facts">
+    <div><dt>Prepared for</dt><dd>Arel Tarım</dd></div>
+    <div><dt>Period</dt><dd>21 Jul —<br>12 Oct 2026</dd></div>
+    <div><dt>Sessions</dt><dd>48<br>4 / week</dd></div>
+    <div><dt>Primary goal</dt><dd>Lower-body<br>maximal strength</dd></div>
+  </dl>
+  <div class="foot">ATX-TRN-2026-014 · supersedes ATX-TRN-2026-009 · Personal training and nutrition plan.
+    Not medical advice, diagnosis, or treatment.</div>
+</div>
+
+<!-- ══ 01 POSITION ════════════════════════════════════════════════════ -->
+<div class="row">
+  <div class="side">
+    <span class="n">01</span>
+    <p>Estimates use Epley from the heaviest logged set. Tonnage is sets × reps × load across all working sets.</p>
+  </div>
+  <div class="main">
+    <h2>Position</h2>
+    <div class="hr"></div>
+    <div class="big">
+      <div><div class="l">Body mass</div><div class="v">78.4</div><div class="d">kg · −1.2 vs cycle 2</div></div>
+      <div><div class="l">Resting HR</div><div class="v">54</div><div class="d">bpm · 7-day mean</div></div>
+      <div><div class="l">Squat 1RM</div><div class="v">132</div><div class="d up">kg · target 145</div></div>
+      <div><div class="l">Weekly load</div><div class="v">41.2</div><div class="d up">tonnes · +8 %</div></div>
+    </div>
+    <p>Cycle 2 closed complete — no missed top sets, no unplanned deloads. Sleep averaged 7 h 05 m against a
+    41-minute standard deviation, which is the widest spread in three cycles. The programme therefore raises
+    intensity while holding weekly volume flat: recovery cannot absorb both.</p>
+    <table>
+      <thead><tr><th>Metric</th><th class="n">Now</th><th class="n">Week 6 gate</th><th class="n">Week 12</th><th>Measured</th></tr></thead>
+      <tbody>
+        <tr><td>Back squat, est. 1RM</td><td class="n">132 kg</td><td class="n">138</td><td class="n">145</td><td>Epley, top set</td></tr>
+        <tr><td>Deadlift, est. 1RM</td><td class="n">160 kg</td><td class="n">168</td><td class="n">175</td><td>Epley, top set</td></tr>
+        <tr><td>5 km run</td><td class="n">24:40</td><td class="n">23:50</td><td class="n">23:00</td><td>Health Connect</td></tr>
+        <tr><td>Body fat, BIA</td><td class="n">16.8 %</td><td class="n">15.9</td><td class="n">15.0</td><td>Fasted, Monday</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ 02 STRUCTURE ═══════════════════════════════════════════════════ -->
+<div class="row">
+  <div class="side">
+    <span class="n">02</span>
+    <p>Intensity is prescribed as a band, not a number. Land inside it at the stated RPE and the load is correct.</p>
+  </div>
+  <div class="main">
+    <h2>Structure</h2>
+    <div class="hr"></div>
+    <table>
+      <thead><tr><th>Block</th><th class="n">Weeks</th><th>Emphasis</th><th class="n">Intensity</th><th class="n">Sets/muscle/wk</th><th>Deload</th></tr></thead>
+      <tbody>
+        <tr><td>Accumulation</td><td class="n">1–4</td><td>Volume, technique under fatigue</td><td class="n">67–72 %</td><td class="n">16–18</td><td>—</td></tr>
+        <tr><td>Intensification</td><td class="n">5–8</td><td>Heavy triples, bar speed</td><td class="n">78–85 %</td><td class="n">12–14</td><td>Wk 8, −40 % vol</td></tr>
+        <tr><td>Realisation</td><td class="n">9–11</td><td>Singles at RPE 8–9</td><td class="n">87–92 %</td><td class="n">9–11</td><td>—</td></tr>
+        <tr><td>Test</td><td class="n">12</td><td>Attempts, re-baseline</td><td class="n">95–100 %</td><td class="n">4–6</td><td>Taper</td></tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <b>Autoregulation</b>
+      If morning HRV sits more than 1.5 SD under the 7-day mean, or sleep fell short of six hours, drop the day's
+      top set by one RPE point and cut the final back-off set. Do not repay the volume later in the week.
+    </div>
+  </div>
+</div>
+
+<!-- ══ 03 THE WEEK ════════════════════════════════════════════════════ -->
+<div class="row">
+  <div class="side">
+    <span class="n">03</span>
+    <p>Week 5 shown in full. Thursday mirrors Monday with the deadlift leading; Saturday mirrors Tuesday with the overhead press.</p>
+    <p>RPE 8 = two reps left in reserve.</p>
+  </div>
+  <div class="main">
+    <h2>The Week</h2>
+    <div class="hr"></div>
+
+    <div class="sesh">
+      <div class="hd"><h3>Monday — Lower, squat lead</h3><span>68 min · RPE cap 8</span></div>
+      <table>
+        <thead><tr><th>Exercise</th><th class="n">Sets × reps</th><th class="n">Load</th><th class="n">RPE</th><th class="n">Rest</th><th>Cue</th></tr></thead>
+        <tbody>
+          <tr><td>Back squat</td><td class="n">4 × 3</td><td class="n">108 kg</td><td class="n">8</td><td class="n">3:00</td><td>Brace before the unrack</td></tr>
+          <tr><td>Romanian deadlift</td><td class="n">3 × 8</td><td class="n">90 kg</td><td class="n">7</td><td class="n">2:00</td><td>Bar tracks the shin</td></tr>
+          <tr><td>Bulgarian split squat</td><td class="n">3 × 10 ea</td><td class="n">22 kg</td><td class="n">8</td><td class="n">1:30</td><td>Torso stays upright</td></tr>
+          <tr><td>Standing calf raise</td><td class="n">4 × 12</td><td class="n">60 kg</td><td class="n">9</td><td class="n">1:00</td><td>Two-second stretch</td></tr>
+        </tbody>
+      </table>
+      <div class="warm">Warm-up — 8 min bike, ankle rockers, two empty-bar sets, then 55 % × 5, 70 % × 3, 82 % × 1.</div>
+    </div>
+
+    <div class="sesh">
+      <div class="hd"><h3>Tuesday — Upper, horizontal</h3><span>62 min · RPE cap 8</span></div>
+      <table>
+        <thead><tr><th>Exercise</th><th class="n">Sets × reps</th><th class="n">Load</th><th class="n">RPE</th><th class="n">Rest</th><th>Cue</th></tr></thead>
+        <tbody>
+          <tr><td>Bench press</td><td class="n">4 × 4</td><td class="n">82 kg</td><td class="n">8</td><td class="n">2:30</td><td>Elbows at 45°</td></tr>
+          <tr><td>Chest-supported row</td><td class="n">4 × 8</td><td class="n">70 kg</td><td class="n">8</td><td class="n">2:00</td><td>Pause at the sternum</td></tr>
+          <tr><td>Incline dumbbell press</td><td class="n">3 × 10</td><td class="n">28 kg</td><td class="n">8</td><td class="n">1:30</td><td>Full lockout</td></tr>
+          <tr><td>Face pull</td><td class="n">3 × 15</td><td class="n">25 kg</td><td class="n">7</td><td class="n">1:00</td><td>Rotate, don't row</td></tr>
+        </tbody>
+      </table>
+      <div class="warm">Warm-up — band pull-aparts, two empty-bar sets, then 60 % × 5, 75 % × 3.</div>
+    </div>
+
+    <div class="sesh">
+      <div class="hd"><h3>Wednesday &amp; Sunday — Aerobic</h3><span>45 min · zone 2</span></div>
+      <table>
+        <thead><tr><th>Modality</th><th class="n">Duration</th><th class="n">Target HR</th><th>Constraint</th></tr></thead>
+        <tbody>
+          <tr><td>Cycling, steady</td><td class="n">45 min</td><td class="n">122–138</td><td>Never within 6 h of a lower session</td></tr>
+          <tr><td>Tempo run, Friday</td><td class="n">28 min</td><td class="n">152–162</td><td>Skip if legs read above 5/10 sore</td></tr>
+          <tr><td>Walking, daily</td><td class="n">—</td><td class="n">8 000 steps</td><td>Recovery, not training</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 04 FUEL ════════════════════════════════════════════════════════ -->
+<div class="row">
+  <div class="side">
+    <span class="n">04</span>
+    <p>Protein is fixed across all day types. Carbohydrate carries the adjustment.</p>
+  </div>
+  <div class="main">
+    <h2>Fuel</h2>
+    <div class="hr"></div>
+    <table>
+      <thead><tr><th>Day type</th><th class="n">Energy</th><th class="n">Protein</th><th class="n">Carbs</th><th class="n">Fat</th><th>Timing</th></tr></thead>
+      <tbody>
+        <tr><td>Training</td><td class="n">2 750</td><td class="n">165 g</td><td class="n">330 g</td><td class="n">78 g</td><td>60 g carbs, 90 min pre</td></tr>
+        <tr><td>Aerobic</td><td class="n">2 500</td><td class="n">165 g</td><td class="n">265 g</td><td class="n">80 g</td><td>—</td></tr>
+        <tr><td>Rest</td><td class="n">2 300</td><td class="n">165 g</td><td class="n">205 g</td><td class="n">85 g</td><td>—</td></tr>
+        <tr class="tot"><td>Weekly mean</td><td class="n">2 564</td><td class="n">165 g</td><td class="n">276 g</td><td class="n">81 g</td><td></td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>Hydration floor 3.0 L on training days; add 500 ml per hour of aerobic work above 25 °C.</li>
+      <li>Creatine monohydrate 5 g daily, timing irrelevant. Vitamin D3 2 000 IU with a meal containing fat.</li>
+      <li>Weekly mean body mass drives adjustment. A single morning reading drives nothing.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ══ 05 LIMITS ══════════════════════════════════════════════════════ -->
+<div class="row">
+  <div class="side">
+    <span class="n">05</span>
+    <p>Amber means modify the session in front of you. Red means the session does not happen.</p>
+  </div>
+  <div class="main">
+    <h2>Limits</h2>
+    <div class="hr"></div>
+    <table>
+      <thead><tr><th>Signal</th><th>Source</th><th>Green</th><th>Amber — modify</th><th>Red — stop</th></tr></thead>
+      <tbody>
+        <tr><td>Sleep</td><td>Health Connect</td><td>≥ 7 h 00</td><td>6 h 00 – 6 h 59</td><td>&lt; 6 h, twice running</td></tr>
+        <tr><td>Resting HR</td><td>Wearable, on waking</td><td>≤ 58 bpm</td><td>59–64</td><td>≥ 65 for three days</td></tr>
+        <tr><td>Session RPE</td><td>Manual log</td><td>Flat or falling</td><td>+1 at fixed load</td><td>+2 at fixed load</td></tr>
+        <tr><td>Joint pain</td><td>Self-report</td><td>0–2 / 10</td><td>3–4 / 10</td><td>≥ 5 / 10, or any sharp pain</td></tr>
+      </tbody>
+    </table>
+    <div class="note stop">
+      <b>Stop and seek assessment</b>
+      Chest pain, fainting or near-fainting, unexplained breathlessness, sudden joint instability, or a resting heart
+      rate above 100 bpm. Training does not resume until a clinician has cleared it.
+    </div>
+    <h3>Progression</h3>
+    <ul>
+      <li><b>Double progression.</b> Every set at the top of its rep range at the prescribed RPE → add 2.5 kg upper, 5 kg lower.</li>
+      <li><b>Missed session.</b> One is dropped, never rescheduled. Two in a week rolls the block forward by one week.</li>
+      <li><b>Stall.</b> Two flat weeks on a lift → reset the load by 10 % and rebuild across three weeks.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="end">
+  Prepared by Atomix for one named individual · ATX-TRN-2026-014 · 21 July 2026.
+  A personal training and nutrition plan. <b>Not medical advice, diagnosis, or treatment</b>, and no substitute for
+  assessment by a licensed clinician. 1RM figures are estimates. Loads assume a 20 kg bar and 1.25 kg plate pairs.
+</div>
+
+</body>
+</html>

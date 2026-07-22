@@ -82,6 +82,10 @@ that opens Google Maps).
   expand it into a coordinate array. Copy `durationMin`, `noTrafficMin`, `distanceKm`,
   `mode` from the tool output; the client renders `noTrafficMin` vs `durationMin` as the
   traffic delta. Mark exactly ONE route `primary: true`.
+  **Copy the polyline byte-for-byte and do NOT escape it.** Encoded polylines contain
+  backslashes (`...KgB\}KJeC...`) — leave them exactly as the tool printed them. The
+  client un-mangles that field itself. If you "helpfully" escape or re-encode it, the
+  route drawn on the map is silently the wrong shape.
 - `navigate` present ⇒ the NAVIGATE button shows and opens Google Maps to that point/mode.
 - `autoNavigate: true` **only** when the owner explicitly commanded navigation this turn
   ("take me there", "navigate", "yol tarifi başlat") — it makes the client open Google

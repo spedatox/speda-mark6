@@ -41,7 +41,10 @@ import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import com.speda.heartbreaker.data.AgentCommEntry
 import com.speda.heartbreaker.data.IgorApi
+import com.speda.heartbreaker.designsystem.brand.AgentMark
+import com.speda.heartbreaker.designsystem.brand.AgentMarks
 import com.speda.heartbreaker.designsystem.brand.Brands
+import com.speda.heartbreaker.designsystem.brand.Finish
 import com.speda.heartbreaker.designsystem.glass.HbGlassShape
 import com.speda.heartbreaker.designsystem.glass.HbGlassState
 import com.speda.heartbreaker.designsystem.glass.hbGlass
@@ -283,6 +286,16 @@ private fun CommBubble(e: AgentCommEntry, compact: Boolean) {
 
 @Composable
 private fun Avatar(id: String, color: Color, size: Dp) {
+    // The agent's own mark, bare — no ring or plate around it. Below 28.dp the
+    // glass bloom swallows the geometry, so small chips take the flat cut.
+    // Only the initial fallback keeps a plate; a lone letter needs one to read.
+    if (AgentMarks.has(id)) {
+        AgentMark(
+            agentId = id, color = color, size = size,
+            finish = if (size >= 28.dp) Finish.Glass else Finish.Flat,
+        )
+        return
+    }
     Box(
         Modifier.size(size).hbGlass(shape = HbGlassShape.Pill, state = HbGlassState.Tint(color)),
         contentAlignment = Alignment.Center,

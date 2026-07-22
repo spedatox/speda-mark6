@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<!-- SPEDA · GENERAL REPORT ─ the house default. Fork for anything a specialist
+     agent does not own: briefs, situation reports, decision memos, post-incident.
+     Answer first. Every number has a unit, every claim a source, every action an
+     owner and a date. Delete sections that have nothing to say — never pad them. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SPEDA Report</title>
+<style>
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans.ttf");font-weight:400}
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans-Bold.ttf");font-weight:700}
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans-Oblique.ttf");font-style:italic}
+@font-face{font-family:M;src:url("../../skills/fonts/DejaVuSansMono.ttf")}
+:root{--k:#0d1013;--g:#697077;--h:#d8dbde;--a:#0f5f73;--w:#a35a00;--r:#9d1f1f;--ok:#136b3f}
+
+@page{size:A4;margin:19mm 16mm 16mm 16mm;
+  @top-right{content:string(ref);font:400 6.6pt M;color:#697077;letter-spacing:.12em}
+  @bottom-left{content:string(run);font:400 7pt S;color:#697077;letter-spacing:.09em}
+  @bottom-right{content:counter(page) " / " counter(pages);font:400 7pt M;color:#697077}}
+@page:first{margin:0;@top-right{content:none}@bottom-left{content:none}@bottom-right{content:none}}
+
+html{font-size:9.5pt}
+body{font-family:S;color:var(--k);line-height:1.56;margin:0}
+h1,h2,h3{margin:0;font-weight:700;break-after:avoid}
+p{margin:0 0 1.8mm}
+
+/* ── cover ─────────────────────────────────────────────────────────── */
+.cover{height:297mm;padding:28mm 20mm 16mm;box-sizing:border-box;display:flex;flex-direction:column;break-after:page}
+.kicker{font:700 7pt M;letter-spacing:.32em;color:var(--a)}
+.cover h1{font-size:34pt;line-height:1.02;letter-spacing:-.02em;margin:15mm 0 0;max-width:128mm}
+.cover .q{font-size:12pt;line-height:1.42;color:var(--g);margin-top:7mm;max-width:112mm}
+.cover .mid{flex:1}
+/* answer-first panel: the only thing that must survive a skim */
+.answer{border-top:2.6pt solid var(--k);border-bottom:.6pt solid var(--h);padding:5mm 0 5.5mm;margin-bottom:0}
+.answer b{display:block;font:700 6.8pt S;letter-spacing:.2em;text-transform:uppercase;color:var(--g);margin-bottom:2.5mm}
+.answer p{font-size:11.5pt;line-height:1.45;margin:0}
+/* domain readout */
+.state{display:flex;border-bottom:.6pt solid var(--h)}
+.state div{flex:1;padding:5mm 4mm 5mm 0;border-right:.4pt solid var(--h)}
+.state div:last-child{border-right:0;padding-right:0}
+.state dt{font:700 6.5pt S;letter-spacing:.16em;text-transform:uppercase;color:var(--g)}
+.state dd{margin:2.2mm 0 0;font:700 12pt S;line-height:1.15}
+.state small{display:block;font-weight:400;font-size:7.6pt;color:var(--g);margin-top:1.4mm;font-family:M}
+.state dd.ok{color:var(--ok)}.state dd.w{color:var(--w)}.state dd.r{color:var(--r)}
+.cover .foot{font:400 7.4pt M;color:var(--g);padding-top:4mm;letter-spacing:.04em;line-height:1.6}
+
+/* ── section: mono rail left, prose right ──────────────────────────── */
+.sec{display:flex;gap:6mm;margin-bottom:7mm}
+.rail{width:30mm;flex:none;font-family:M;font-size:7pt;line-height:1.55;color:var(--g);letter-spacing:.02em}
+.rail .ix{font-weight:400;color:var(--a);letter-spacing:.16em;display:block;margin-bottom:2mm}
+.rail p{margin:0 0 2.6mm}
+.rail .lab{font-family:S;font-weight:700;font-size:6.6pt;letter-spacing:.15em;text-transform:uppercase;color:var(--k);display:block;margin-bottom:1.2mm}
+.bd{flex:1;min-width:0}
+h2{string-set:run content();font-size:15.5pt;letter-spacing:-.014em;line-height:1.14;margin-bottom:1.8mm}
+.hr{height:.9pt;background:var(--k);margin:0 0 4mm}
+h3{font-size:9.8pt;margin:5mm 0 1.6mm}
+h3:first-child{margin-top:0}
+
+/* ── tables ────────────────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:8.5pt;margin:0 0 3mm}
+thead{display:table-header-group}
+th{font:700 6.7pt S;letter-spacing:.13em;text-transform:uppercase;color:var(--g);text-align:left;
+   padding:0 3mm 1.6mm 0;border-bottom:.9pt solid var(--k)}
+td{padding:1.9mm 3mm 1.9mm 0;border-bottom:.4pt solid var(--h);vertical-align:baseline}
+th:last-child,td:last-child{padding-right:0}
+th.n,td.n{text-align:right;font-family:M;font-size:8pt;font-variant-numeric:tabular-nums;white-space:nowrap}
+th.n{font-family:S}
+td.m{font-family:M;font-size:7.8pt;color:var(--g);white-space:nowrap}
+tr{break-inside:avoid}
+
+/* ── state marks ───────────────────────────────────────────────────── */
+.s{font:700 6.8pt S;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+.s.ok{color:var(--ok)}.s.w{color:var(--w)}.s.r{color:var(--r)}.s.i{color:var(--g)}
+.you{font:700 6.8pt S;letter-spacing:.1em;text-transform:uppercase;color:var(--k);
+     border-bottom:1.4pt solid var(--w);white-space:nowrap}
+
+.flag{border-left:2.4pt solid var(--w);padding:.4mm 0 .4mm 4mm;margin:1mm 0 4mm;break-inside:avoid}
+.flag b{display:block;font:700 6.8pt S;letter-spacing:.16em;text-transform:uppercase;color:var(--w);margin-bottom:1.4mm}
+.two{display:flex;gap:7mm}.two>div{flex:1}
+.two h3{border-bottom:.5pt solid var(--h);padding-bottom:1.4mm;margin-top:0}
+ul{margin:0 0 1.8mm;padding-left:4mm}li{margin-bottom:1.3mm}
+ul.d{list-style:none;padding-left:0}
+ul.d li{padding-left:5mm;position:relative}
+ul.d li::before{content:"·";position:absolute;left:1mm;font-family:M;color:var(--a);font-weight:700}
+.end{border-top:.9pt solid var(--k);margin-top:8mm;padding-top:3mm;font-size:7.4pt;color:var(--g);line-height:1.55}
+</style>
+</head>
+<body>
+
+<!-- ══ COVER ══════════════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="mid">
+    <div class="kicker">SPEDA / SITUATION BRIEF</div>
+    <h1>Week 30</h1>
+    <div class="q">14 — 20 July 2026. Consolidated from Sentinel, NightCrawler, Centurion and Atomix.
+      Three items need a decision from you; none of them before Thursday.</div>
+  </div>
+  <div class="answer">
+    <b>If you read nothing else</b>
+    <p>One live issue: production lost Maps resolution for eleven hours on Sunday, and the cause was billing, not code.
+    Everything else held inside its normal band. The item with a clock on it is the deploy key — four days past policy.</p>
+  </div>
+  <dl class="state">
+    <div><dt>Systems</dt><dd class="ok">Operational</dd><small>1 incident · closed</small></div>
+    <div><dt>Finance</dt><dd class="ok">On plan</dd><small>savings 33.1 %</small></div>
+    <div><dt>Security</dt><dd class="w">1 open</dd><small>key age 184 d</small></div>
+    <div><dt>Health</dt><dd class="ok">On program</dd><small>4 / 4 sessions</small></div>
+  </dl>
+  <div class="foot">SPD-BRF-2026-W30 · generated 21 Jul 2026 09:00 +03 · 4 contributing agents · next brief 28 Jul<br>
+    Internal · prepared for a single reader · figures unaudited, current at generation time</div>
+</div>
+
+<!-- ══ 01 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="rail">
+    <span class="ix">01 / EVENTS</span>
+    <span class="lab">Window</span>
+    <p>14 Jul 00:00 —<br>20 Jul 23:59 +03</p>
+    <span class="lab">Sources</span>
+    <p>systems · sentinel<br>centurion · atomix</p>
+  </div>
+  <div class="bd">
+    <h2>What happened</h2>
+    <div class="hr"></div>
+    <table>
+      <thead><tr><th>When</th><th>Event</th><th>Consequence</th><th>State</th></tr></thead>
+      <tbody>
+        <tr><td class="m">Sun 20, 02:14</td><td>Maps resolution began failing in production</td><td>Location queries returned “not found” for 11 h</td><td><span class="s ok">Closed</span></td></tr>
+        <tr><td class="m">Wed 16</td><td>Two annual subscriptions renewed together</td><td>Category ran 125 % of budget</td><td><span class="s w">Recurring</span></td></tr>
+        <tr><td class="m">Thu 17</td><td>Deploy key passed 180 days</td><td>No exposure seen; policy breached</td><td><span class="s w">Open</span></td></tr>
+        <tr><td class="m">Fri 18</td><td>Android client build back to green</td><td>Unblocks the M2 milestone</td><td><span class="s ok">Done</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ 02 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="rail">
+    <span class="ix">02 / ANALYSIS</span>
+    <span class="lab">Detection gap</span>
+    <p>11 h 04 m<br>first failure to<br>first alert</p>
+    <span class="lab">Class</span>
+    <p>silent degradation<br>plausible output</p>
+  </div>
+  <div class="bd">
+    <h2>Why it happened</h2>
+    <div class="hr"></div>
+    <h3>The outage was never a code failure</h3>
+    <p>It presented as a resolver bug — every lookup returned an empty result with no error reaching the client. The
+    actual cause was disabled billing on the cloud project, which the provider reports as an ordinary empty response
+    rather than as an authorisation failure. Eleven hours passed before anyone noticed, because nothing in the stack
+    distinguishes “no results” from “no entitlement”.</p>
+    <p>The code fix is small: treat a zero-result response carrying the provider's quota header as an error and alert
+    on it. The lesson is larger. A silent degradation that still produces plausible output is the failure class most
+    likely to run unnoticed here, and it is the one worth building detection against.</p>
+    <h3>Subscription growth is structural</h3>
+    <p>Sentinel flagged the same category two months running. One renewal is timing; two consecutive breaches with a
+    22 % price rise behind one of them is a trend. Left alone it adds roughly ₺9 600 a year.</p>
+  </div>
+</div>
+
+<!-- ══ 03 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="rail">
+    <span class="ix">03 / MEASURES</span>
+    <span class="lab">Band</span>
+    <p>four-week mean<br>± normal variance</p>
+    <span class="lab">Note</span>
+    <p>uptime excludes<br>the Maps window<br>from latency</p>
+  </div>
+  <div class="bd">
+    <h2>Where things stand</h2>
+    <div class="hr"></div>
+    <table>
+      <thead><tr><th>Measure</th><th class="n">This week</th><th class="n">4-week mean</th><th class="n">Δ</th><th>Reading</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Production uptime</td><td class="n">99.35 %</td><td class="n">99.94 %</td><td class="n">−0.59 pp</td><td><span class="s w">Below band</span></td><td class="m">systems</td></tr>
+        <tr><td>Median request latency</td><td class="n">184 ms</td><td class="n">179 ms</td><td class="n">+5 ms</td><td><span class="s ok">Normal</span></td><td class="m">systems</td></tr>
+        <tr><td>Weekly spend</td><td class="n">₺31 200</td><td class="n">₺28 900</td><td class="n">+8.0 %</td><td><span class="s w">High</span></td><td class="m">sentinel</td></tr>
+        <tr><td>Sessions completed</td><td class="n">4 / 4</td><td class="n">3.8 / 4</td><td class="n">+0.2</td><td><span class="s ok">On plan</span></td><td class="m">atomix</td></tr>
+        <tr><td>Mean sleep</td><td class="n">7 h 05</td><td class="n">6 h 58</td><td class="n">+7 min</td><td><span class="s ok">Normal</span></td><td class="m">atomix</td></tr>
+      </tbody>
+    </table>
+    <div class="two">
+      <div>
+        <h3>Expected next week</h3>
+        <ul class="d">
+          <li>Android M2 closes if the build holds green.</li>
+          <li>Sentinel's July close lands 1 August, dental one-off excluded.</li>
+          <li>Deploy-key rotation, once you name a window.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Being watched</h3>
+        <ul class="d">
+          <li>Whether the new alert actually fires on a synthetic quota failure.</li>
+          <li>A third consecutive month of subscription overrun.</li>
+          <li>Liquid runway, still under the six-month target.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 04 — never delete this section ═════════════════════════════════ -->
+<div class="sec">
+  <div class="rail">
+    <span class="ix">04 / LEDGER</span>
+    <span class="lab">Owner</span>
+    <p>who moves it,<br>not who cares<br>about it</p>
+    <span class="lab">Open</span>
+    <p>5 items<br>3 need you</p>
+  </div>
+  <div class="bd">
+    <h2>What happens next</h2>
+    <div class="hr"></div>
+    <table>
+      <thead><tr><th>#</th><th>Action</th><th>Owner</th><th class="n">By</th><th>You?</th></tr></thead>
+      <tbody>
+        <tr><td class="m">A-1</td><td>Alert on zero-result responses carrying a quota header</td><td>SPEDA</td><td class="n">24 Jul</td><td><span class="s i">No</span></td></tr>
+        <tr><td class="m">A-2</td><td>Name a maintenance window for deploy-key rotation</td><td>Owner</td><td class="n">24 Jul</td><td><span class="you">Decide</span></td></tr>
+        <tr><td class="m">A-3</td><td>Cancel or accept the two renewed subscriptions</td><td>Owner</td><td class="n">31 Jul</td><td><span class="you">Decide</span></td></tr>
+        <tr><td class="m">A-4</td><td>Redirect surplus to the liquid reserve, or hold course</td><td>Owner</td><td class="n">31 Jul</td><td><span class="you">Decide</span></td></tr>
+        <tr><td class="m">A-5</td><td>Close Android M2, open M3 scope</td><td>SPEDA</td><td class="n">28 Jul</td><td><span class="s i">No</span></td></tr>
+      </tbody>
+    </table>
+    <div class="flag">
+      <b>Only A-2 has a clock</b>
+      The deploy key is 184 days old against a 180-day limit. Rotation takes about fifteen minutes and needs a short
+      deploy freeze — name the window and it is done the same day. A-3 and A-4 can wait for month end without cost.
+    </div>
+    <h3>Provenance</h3>
+    <ul class="d">
+      <li>Systems figures come from the production host. The outage window is measured from first to last failing request, not from alert time.</li>
+      <li>Finance is Sentinel's June close plus unreconciled July to date, which may restate.</li>
+      <li>Health comes from Health Connect via Atomix; one session was logged by hand after a sync failure.</li>
+      <li>Nothing in this brief originates from an untrusted external source without being marked as such.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="end">
+  SPEDA · SPD-BRF-2026-W30 · generated 21 July 2026 09:00 +03 from four contributing agents.
+  Internal document prepared for a single reader. Figures are unaudited and reflect the data available at generation
+  time. Where a claim rests on one source, the source is named beside it.
+</div>
+
+</body>
+</html>

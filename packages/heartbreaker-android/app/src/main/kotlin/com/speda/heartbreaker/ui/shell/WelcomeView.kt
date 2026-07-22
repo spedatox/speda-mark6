@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.speda.heartbreaker.data.IgorApi
+import com.speda.heartbreaker.designsystem.brand.AgentMark
+import com.speda.heartbreaker.designsystem.brand.AgentMarks
 import com.speda.heartbreaker.designsystem.brand.Brand
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbFonts
@@ -135,6 +137,13 @@ fun WelcomeView(
             color = palette.textFaint,
         )
         Spacer(Modifier.height(18.dp))
+
+        // The agent's mark crowns the hero. Agents without art fall straight
+        // through to the wordmark rather than reserving an empty gap.
+        if (AgentMarks.has(brand.agentId)) {
+            AgentMark(agentId = brand.agentId, color = palette.accent, size = 76.dp)
+            Spacer(Modifier.height(14.dp))
+        }
 
         // Agent hero — the brand, as large as the screen allows.
         AgentHero(brand)

@@ -52,7 +52,10 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.designsystem.brand.Brand
+import com.speda.heartbreaker.designsystem.brand.AgentMark
+import com.speda.heartbreaker.designsystem.brand.AgentMarks
 import com.speda.heartbreaker.designsystem.brand.Brands
+import com.speda.heartbreaker.designsystem.brand.Finish
 import com.speda.heartbreaker.designsystem.glass.HbGlassShape
 import com.speda.heartbreaker.designsystem.glass.HbGlassState
 import com.speda.heartbreaker.designsystem.glass.LocalHazeState
@@ -203,12 +206,23 @@ fun SidebarDrawer(
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
+                        // The mark centres itself against the pair; the rest of
+                        // the row stays bottom-aligned so name and model number
+                        // keep their shared baseline.
+                        if (AgentMarks.has(brand.agentId)) {
+                            AgentMark(
+                                agentId = brand.agentId, color = palette.accent, size = 20.dp,
+                                modifier = Modifier.align(Alignment.CenterVertically),
+                            )
+                        }
+                        // Only the name may shrink — the model number never truncates.
                         HbText(
                             brand.name,
                             style = HbType.headerBar.copy(fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.14.em),
                             color = Color.White,
                             caps = true,
                             maxLines = 1,
+                            modifier = Modifier.weight(1f, fill = false),
                         )
                         HbText(
                             brand.modelNumber,
@@ -332,17 +346,23 @@ fun SidebarDrawer(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
-                Box(
-                    Modifier
-                        .size(28.dp)
-                        .hbGlass(shape = HbGlassShape.R9),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    HbText(
-                        (userName.firstOrNull() ?: brand.avatarInitial.first()).uppercase(),
-                        style = HbType.headerBar.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                        color = palette.accent,
-                    )
+                // The agent's mark, bare and full-height. Only the initial
+                // fallback keeps a plate, since a lone letter needs one to read.
+                if (AgentMarks.has(brand.agentId)) {
+                    AgentMark(agentId = brand.agentId, color = palette.accent, size = 30.dp)
+                } else {
+                    Box(
+                        Modifier
+                            .size(28.dp)
+                            .hbGlass(shape = HbGlassShape.R9),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        HbText(
+                            (userName.firstOrNull() ?: brand.avatarInitial.first()).uppercase(),
+                            style = HbType.headerBar.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                            color = palette.accent,
+                        )
+                    }
                 }
                 Column(Modifier.weight(1f)) {
                     HbText(
@@ -546,7 +566,15 @@ private fun AgentDropdown(current: String, onSelect: (String) -> Unit, onDismiss
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
+                // The agent's own mark carries the colour the dot used to.
+                if (AgentMarks.has(id)) {
+                    AgentMark(
+                        agentId = id, color = accent, size = 16.dp,
+                        finish = if (active) Finish.Glass else Finish.Flat,
+                    )
+                } else {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
+                }
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     HbText(
                         b.name,

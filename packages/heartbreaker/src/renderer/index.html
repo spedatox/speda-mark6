@@ -3,7 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; frame-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:* https: wss:" />
+    <!--
+      worker-src MUST list blob: — MapLibre GL builds its tile worker from a
+      Blob URL, and without this directive worker-src falls back through
+      child-src to script-src ('self'), which rejects blob: — and every ```map
+      fence degrades to MAP // CANVAS UNAVAILABLE.
+      blob: here only permits workers from code this document already created;
+      it does not widen script-src.
+
+      This directive is necessary but not sufficient for the packaged desktop
+      app: a file:// document has an opaque origin and Chromium blocks
+      blob:file:/// workers regardless of CSP. That is why main/index.ts serves
+      the packaged renderer over app://bundle/ instead of file://.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; frame-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:* https: wss:" />
     <title>Speda Mark VI</title>
   </head>
   <body>

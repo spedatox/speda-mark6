@@ -158,7 +158,10 @@
 
   --shadow-lg: 0 0 0 1px rgba(var(--hb-accent-rgb),0.18), 0 18px 50px rgba(0,0,0,0.6);
 
-  --sidebar-width: 248px;
+  /* 268 not 248 — the header now leads with the agent's logo, and the longest
+     brand ("NightCrawler Mark III") needs the extra room to keep its model
+     number off the truncation edge. */
+  --sidebar-width: 268px;
 
   /* Sharp world — radii collapse to 0 */
   --radius-bubble: 0; --radius-input: 0; --radius-card: 0;

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" fill="none" role="img" aria-label="Sentinel">
+  <title>Sentinel</title>
+  <defs>
+    <clipPath id="sentinel-clip"><path d="M93.76 0L93.76 40.19C87.93 37.41 68.85 26.36 58.75 23.5C48.65 20.64 37.41 23.1 33.14 23.01C35.04 24.1 34.36 24.55 44.49 29.5C54.62 34.44 85.68 48.81 93.92 52.67L93.76 76.18L50 100L6.08 75.69L7.05 47.81L50.81 70.18L66.37 64.99L6.4 36.47L6.73 0L93.76 0Z"/></clipPath>
+    <linearGradient id="sentinel-sheen" x1="0.08" y1="0" x2="0.62" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.62"/>
+      <stop offset="0.42" stop-color="#fff" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="sentinel-bloom" cx="0.28" cy="0.20" r="0.8">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="sentinel-lift" x="-35%" y="-35%" width="170%" height="170%">
+      <feDropShadow dx="0" dy="1.6" stdDeviation="2.4" flood-color="#000" flood-opacity="0.36"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#d99c44" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <g filter="url(#sentinel-lift)">
+    <path d="M93.76 0L93.76 40.19C87.93 37.41 68.85 26.36 58.75 23.5C48.65 20.64 37.41 23.1 33.14 23.01C35.04 24.1 34.36 24.55 44.49 29.5C54.62 34.44 85.68 48.81 93.92 52.67L93.76 76.18L50 100L6.08 75.69L7.05 47.81L50.81 70.18L66.37 64.99L6.4 36.47L6.73 0L93.76 0Z" fill="#d99c44" fill-opacity="0.92"/>
+    <g clip-path="url(#sentinel-clip)">
+      <rect width="100" height="100" fill="url(#sentinel-sheen)"/>
+      <rect width="100" height="100" fill="url(#sentinel-bloom)"/>
+    </g>
+    <path d="M93.76 0L93.76 40.19C87.93 37.41 68.85 26.36 58.75 23.5C48.65 20.64 37.41 23.1 33.14 23.01C35.04 24.1 34.36 24.55 44.49 29.5C54.62 34.44 85.68 48.81 93.92 52.67L93.76 76.18L50 100L6.08 75.69L7.05 47.81L50.81 70.18L66.37 64.99L6.4 36.47L6.73 0L93.76 0Z" fill="none" stroke="#fff" stroke-opacity="0.38" stroke-width="0.9"
+          stroke-linejoin="round"/>
+  </g>
+</svg>

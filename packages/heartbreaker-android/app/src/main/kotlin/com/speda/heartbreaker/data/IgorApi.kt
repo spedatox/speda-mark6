@@ -536,7 +536,10 @@ class IgorApi(
         samples: List<HealthSampleDto>,
     ): HealthIngestResult? = withContext(Dispatchers.IO) {
         runCatching {
-            val body = json.encodeToString(HealthIngestRequest(device = device, samples = samples))
+            val body = json.encodeToString(
+                HealthIngestRequest.serializer(),
+                HealthIngestRequest(device = device, samples = samples),
+            )
             val request = Request.Builder()
                 .url("${config.apiBase}/health/ingest")
                 .header("X-API-Key", config.apiKey)

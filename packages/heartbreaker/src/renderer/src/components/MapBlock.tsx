@@ -38,6 +38,40 @@ interface MapSpec {
   markers?: MapMarker[]; routes?: MapRoute[]; navigate?: MapNavigate; autoNavigate?: boolean
 }
 
+/* ── Fence repair ────────────────────────────────────────────────────────────── */
+
+/**
+ * Make `polyline` values JSON-safe before parsing the fence.
+ *
+ * Google's encoded polylines legitimately contain `\` — byte 92 sits inside the
+ * encoding alphabet, and a real Bursa route came back as `...KgB\}KJeC...`. The
+ * model copies the polyline verbatim out of get_route (that is what the prompt
+ * asks for), so the `\` lands in the JSON string raw. Two things then go wrong:
+ *
+ *   `\}`  → invalid escape  → JSON.parse throws  → MAP // PARSE ERROR
+ *   `\t`  → VALID escape    → parses "fine"      → polyline silently corrupted,
+ *                                                  and a WRONG route is drawn
+ *
+ * The second is the dangerous one: it fails silently, ~650 m off, with no error.
+ * So we cannot simply try/catch — the value has to be treated as a literal.
+ *
+ * We rewrite only `"polyline": "..."` values, doubling every backslash so the
+ * parser hands back the exact bytes the encoder produced. This deliberately
+ * assumes polylines are copied verbatim and never pre-escaped, which is now
+ * stated as a contract in prompts/core/06_visual_output.md. Every other field
+ * (labels, titles) keeps normal JSON escaping.
+ *
+ * NOT idempotent, by nature — it treats its input as unescaped. Apply it exactly
+ * once, to the raw fence text, immediately before JSON.parse.
+ */
+function repairFence(raw: string): string {
+  return raw.replace(
+    /("polyline"\s*:\s*")((?:[^"\\]|\\.)*)(")/g,
+    (_m, head: string, value: string, tail: string) =>
+      head + value.replace(/\\/g, '\\\\') + tail,
+  )
+}
+
 /* ── Google encoded-polyline decoder (port of domain/Polyline.kt) ────────────── */
 
 function decodePolyline(encoded: string): [number, number][] {
@@ -88,6 +122,20 @@ const STARK_STYLE: maplibregl.StyleSpecification = {
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────────────────── */
+
+/** Can this renderer still hand out a WebGL2 context right now? */
+function webglAvailable(): boolean {
+  try {
+    const probe = document.createElement('canvas')
+    const gl = probe.getContext('webgl2')
+    // Hand the probe context straight back — holding it would consume one of the
+    // very slots we are checking for.
+    gl?.getExtension('WEBGL_lose_context')?.loseContext()
+    return !!gl
+  } catch {
+    return false
+  }
+}
 
 function cssVar(name: string, fallback: string): string {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
@@ -149,7 +197,7 @@ async function reverseGeocode(lat: number, lng: number): Promise<string | null> 
 export default function MapBlock({ children }: { children: string }): React.ReactElement {
   const spec = useMemo<MapSpec | null>(() => {
     try {
-      const s = JSON.parse(children) as MapSpec
+      const s = JSON.parse(repairFence(children)) as MapSpec
       const hasContent = (s.markers?.length ?? 0) > 0 || (s.routes?.length ?? 0) > 0 || !!s.center
       return hasContent ? s : null
     } catch {
@@ -198,6 +246,7 @@ function CoordinateFooter({ lat, lng }: { lat: number; lng: number }): React.Rea
 
 function MapCanvas({ spec }: { spec: MapSpec }): React.ReactElement {
   const containerRef = useRef<HTMLDivElement>(null)
+  const [failed, setFailed] = useState<string | null>(null)
   const height = spec.height ?? 240
 
   useEffect(() => {
@@ -206,17 +255,37 @@ function MapCanvas({ spec }: { spec: MapSpec }): React.ReactElement {
     const accentBright = cssVar('--hb-cyan-bright', '#5fcce6')
     const dim = cssVar('--hb-cyan-dim', '#1d5d70')
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: STARK_STYLE,
-      interactive: true, // zoom / pan / rotate
-      attributionControl: { compact: true },
-      center: spec.center ? [spec.center.lng, spec.center.lat] : [0, 0],
-      zoom: spec.zoom ?? 12,
-    })
+    // MapLibre needs a WebGL2 context and browsers cap how many can be live at
+    // once; past the cap, construction throws. Probe first, so a chat full of
+    // maps degrades to a readable message instead of an exception.
+    // (maplibregl.supported() existed in v3 and was removed in v4 — hence the
+    // hand-rolled check.)
+    if (!webglAvailable()) {
+      setFailed('WebGL unavailable — too many live maps, or no GPU acceleration.')
+      return
+    }
+
+    let map: maplibregl.Map
+    try {
+      map = new maplibregl.Map({
+        container: containerRef.current,
+        style: STARK_STYLE,
+        interactive: true, // zoom / pan / rotate
+        attributionControl: { compact: true },
+        center: spec.center ? [spec.center.lng, spec.center.lat] : [0, 0],
+        zoom: spec.zoom ?? 12,
+      })
+    } catch (e) {
+      setFailed(e instanceof Error ? e.message : String(e))
+      return
+    }
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
 
+    // Everything below runs inside MapLibre's own async event dispatch, OUTSIDE
+    // React's call stack — a throw here is NOT caught by the ErrorBoundary and
+    // becomes an unhandled window error. Contain it here or not at all.
     map.on('load', () => {
+      try {
       const bounds = new maplibregl.LngLatBounds()
       let hasBounds = false
 
@@ -265,9 +334,15 @@ function MapCanvas({ spec }: { spec: MapSpec }): React.ReactElement {
       if (!spec.center && hasBounds) {
         try { map.fitBounds(bounds, { padding: 40, maxZoom: 15, duration: 0 }) } catch { /* pre-layout */ }
       }
+      } catch (e) {
+        console.error('[MapBlock] failed to draw route/marker layers', e)
+        setFailed(e instanceof Error ? e.message : String(e))
+      }
     })
 
-    return () => map.remove()
+    // Release the WebGL context on unmount. Browsers cap concurrent contexts, so
+    // leaking one per map would eventually make every later map fail to build.
+    return () => { try { map.remove() } catch { /* already gone */ } }
   }, [spec])
 
   return (
@@ -281,6 +356,19 @@ function MapCanvas({ spec }: { spec: MapSpec }): React.ReactElement {
         backgroundSize: '28px 28px', pointerEvents: 'none',
       }} />
       <div ref={containerRef} style={{ position: 'absolute', inset: 0, borderRadius: 4, overflow: 'hidden' }} />
+      {failed && (
+        // The wireframe behind still reads as design, so this stays a quiet
+        // caption rather than a full error panel — the route figures below
+        // (distance, duration, NAVIGATE) remain usable without the canvas.
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+          padding: '0 1rem', fontFamily: "'Rajdhani', sans-serif",
+          fontSize: '0.7rem', letterSpacing: '0.1em', color: 'var(--hb-text-faint)',
+        }}>
+          MAP // CANVAS UNAVAILABLE<br />{failed.slice(0, 90)}
+        </div>
+      )}
     </div>
   )
 }
