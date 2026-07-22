@@ -109,6 +109,29 @@ cross-reference._
 _Gym log, day by day. Atomix is the only writer; other agents read. Program-level
 facts ("6 days/week, cutting for the wedding") belong in current.md, not here.
 Orion compresses entries older than ~4 weeks into weekly summaries._
+
+## Equipment
+
+_What the gym actually has — racks, bars, machines, cables, dumbbell range — plus
+what is missing, broken, or always occupied. Atomix asks; never assumes._
+
+## Benchmarks
+
+_Current working loads / bests per main lift, dated. Updated in place as they move._
+
+## Profile
+
+_Strengths, weak points, injuries and limitations, movements he likes and hates._
+
+## Log
+
+_One entry per session, newest first:_
+
+<!-- Schema — copy per session:
+### YYYY-MM-DD — <split> · <duration> · RPE <n>
+- <exercise> <sets>x<reps> @ <load> (<delta vs last>) — <note>
+- Notes: <deviations, pain, skipped sets, substitutions, energy>
+-->
 """,
     "/memories/log.md": """\
 # Session Log
