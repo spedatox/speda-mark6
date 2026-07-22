@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { QuestionRequest, PermissionRequestData, InteractionQuestion } from '../lib/types'
+import { useEffect, useState } from 'react'
+import type { QuestionRequest, PendingAsk, InteractionQuestion } from '../lib/types'
 
 /**
  * Mid-turn owner interactions from the Optimus peer — the TUI's
@@ -8,7 +8,8 @@ import type { QuestionRequest, PermissionRequestData, InteractionQuestion } from
  *
  * question   → walk through the questions, options + free-text "Other",
  *              resolve {answers:{question: answer}} or {declined:true}.
- * permission → Yes / Yes-remember / No, resolve {behavior, remember}.
+ * permission → Approve / Approve-and-remember / Deny, answered through
+ *              POST /agents/asks/{ask_id} and relayed to the peer.
  */
 
 const mono = "'JetBrains Mono', monospace"
@@ -46,35 +47,60 @@ const btn = (variant: 'primary' | 'ghost' | 'danger'): React.CSSProperties => ({
 
 /* ── Permission ──────────────────────────────────────────────────────────── */
 
-export function PermissionPrompt({ data, onResolve }: {
-  data: PermissionRequestData
-  onResolve: (response: Record<string, unknown>) => void
+/**
+ * A peer's safety gate has stopped an irreversible operation and is waiting.
+ *
+ * The command is shown verbatim and never truncated — approving a force-push
+ * means knowing which branch. The countdown is live because the decision has a
+ * deadline on the peer's side: when it runs out the peer denies locally and
+ * carries on, so a card the owner ignores is a "no" and should visibly look
+ * like one rather than sitting there implying it still matters.
+ */
+export function PermissionPrompt({ ask, onResolve }: {
+  ask: PendingAsk
+  onResolve: (approved: boolean, remember: boolean) => void
 }) {
-  const command = typeof data.input?.command === 'string' ? data.input.command as string : null
+  const [left, setLeft] = useState(Math.ceil(ask.seconds_left))
+
+  useEffect(() => {
+    setLeft(Math.ceil(ask.seconds_left))
+    const t = setInterval(() => setLeft(n => Math.max(0, n - 1)), 1000)
+    return () => clearInterval(t)
+  }, [ask.ask_id, ask.seconds_left])
+
+  const expired = left <= 0
   return (
     <div className="hb-glass-sm" style={frame}>
-      <div style={headerStyle}>◈ Permission — Optimus wants to run</div>
-      <div style={{ fontFamily: mono, fontSize: '0.74rem', color: '#ecf6f9', wordBreak: 'break-word' }}>
-        ● {data.summary}
+      <div style={{ ...headerStyle, display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+        <span>◈ Permission — {ask.agent_id} wants to run {ask.tool}</span>
+        <span style={{ color: expired ? '#ff6b80' : left <= 20 ? '#f2b75c' : 'var(--hb-text-dim)' }}>
+          {expired ? 'expired — denied' : `${left}s`}
+        </span>
       </div>
-      {command && command.split('\n').length > 1 && (
-        <pre style={{
-          margin: 0, fontFamily: mono, fontSize: '0.62rem', color: 'var(--hb-icon-bright)',
-          whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 120, overflow: 'auto',
-          background: 'rgba(255,255,255,0.03)', padding: '0.4rem 0.55rem',
-        }}>{command}</pre>
-      )}
+
+      <pre style={{
+        margin: 0, fontFamily: mono, fontSize: '0.68rem', color: '#ecf6f9',
+        whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 160, overflow: 'auto',
+        background: 'rgba(255,255,255,0.03)', padding: '0.45rem 0.6rem',
+        borderLeft: '2px solid rgba(255,107,128,0.5)',
+      }}>{ask.action_key}</pre>
+
+      <div style={{ fontFamily: mono, fontSize: '0.62rem', color: 'var(--hb-text-dim)', lineHeight: 1.5 }}>
+        {ask.reason}
+      </div>
+
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <button style={btn('primary')} onClick={() => onResolve({ behavior: 'allow', remember: false })}>
-          Yes
+        <button style={btn('primary')} disabled={expired}
+                onClick={() => onResolve(true, false)}>
+          Approve
         </button>
-        {data.rule_label && (
-          <button style={btn('ghost')} onClick={() => onResolve({ behavior: 'allow', remember: true })}>
-            Yes, {data.rule_label}
-          </button>
-        )}
-        <button style={btn('danger')} onClick={() => onResolve({ behavior: 'deny', remember: false })}>
-          No
+        <button style={btn('ghost')} disabled={expired}
+                onClick={() => onResolve(true, true)}>
+          Approve — don't ask again
+        </button>
+        <button style={btn('danger')} disabled={expired}
+                onClick={() => onResolve(false, false)}>
+          Deny
         </button>
       </div>
     </div>

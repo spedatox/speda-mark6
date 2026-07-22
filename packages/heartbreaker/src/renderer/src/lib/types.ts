@@ -82,8 +82,36 @@ export interface ModelInfo {
   provider?: string // 'anthropic' | 'openai' | 'gemini' | 'zai' | 'deepseek' | 'ollama' — absent on old backends
 }
 
+/** One question in a mid-turn interaction from a peer. */
+export interface InteractionQuestion {
+  question: string
+  header?: string
+  multiSelect?: boolean
+  options?: { label: string; description?: string }[]
+}
+
+export interface QuestionRequest {
+  questions?: InteractionQuestion[]
+}
+
+/**
+ * An irreversible operation an external peer's safety gate has stopped, waiting
+ * on the owner. `action_key` is the exact command or path — shown verbatim and
+ * never truncated, because approving a force-push means knowing which branch.
+ */
+export interface PendingAsk {
+  ask_id: string
+  agent_id: string
+  tool: string
+  action_key: string
+  reason: string
+  job_id: string
+  chat_id: string | null
+  seconds_left: number
+}
+
 export interface SSEEvent {
-  type: 'start' | 'chunk' | 'tool' | 'tool_result' | 'file' | 'done' | 'error'
+  type: 'start' | 'chunk' | 'tool' | 'tool_result' | 'file' | 'done' | 'error' | 'permission_request'
   data: unknown
   session_id: number
   request_id: string

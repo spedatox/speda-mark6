@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
-import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, fetchWelcome } from '../lib/api'
+import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, fetchWelcome, answerAsk } from '../lib/api'
 import { useProfile } from './Sidebar'
 import MessageList from './MessageList'
 import InputBar from './InputBar'
-import type { AppConfig, ImageBlock, DocBlock, UploadedFile } from '../lib/types'
+import { PermissionPrompt } from './InteractionPrompt'
+import AgentMark from './AgentMark'
+import { hasMark } from '../lib/agentMarks'
+import type { AppConfig, ImageBlock, DocBlock, UploadedFile, PendingAsk } from '../lib/types'
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10)
@@ -96,6 +99,21 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
         {dateLine}
       </p>
 
+      {/* Agent mark — crowns the hero. Only for agents whose art exists; the
+          rest fall straight through to the wordmark with no reserved gap. */}
+      {profile?.agentId && hasMark(profile.agentId) && (
+        <AgentMark
+          agentId={profile.agentId}
+          size={104}
+          title={profile.name}
+          style={{
+            width: 'clamp(64px, 14vw, 104px)', height: 'auto',
+            marginBottom: '1.1rem',
+            animation: 'fadeSlideIn 0.5s 0.12s ease both',
+          }}
+        />
+      )}
+
       {/* Agent name + mark — the hero, biggest element on screen */}
       <div data-brand-text style={{
         display: 'flex', alignItems: 'baseline', gap: '0.7rem',
@@ -177,6 +195,10 @@ interface Props {
 export default function ChatMain({ config, onSelectSession }: Props) {
   const { state, dispatch } = useChatContext()
   const { settings } = useSettings()
+  // One card at a time: the peer parks the ask inside a single tool dispatch,
+  // so a second gated action cannot be raised until this one is answered.
+  const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null)
+
   const abortRef = useRef<AbortController | null>(null)
   // request_id of the turn currently streaming into the visible session — the
   // stop button cancels THIS run on the backend (dropping the socket no longer
@@ -350,6 +372,11 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         } else if (event.type === 'tool_result') {
           const d = event.data as { id: string; result: string }
           dispatch({ type: 'SET_TOOL_RESULT', payload: { id: assistantId, toolId: d.id, result: d.result } })
+        } else if (event.type === 'permission_request') {
+          // A peer's gate stopped an irreversible operation. The card replaces
+          // nothing and blocks nothing — the peer is already counting down and
+          // will deny on its own if the owner never answers.
+          setPendingAsk(event.data as PendingAsk)
         } else if (event.type === 'file') {
           dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
         } else if (event.type === 'done') {
@@ -513,7 +540,12 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           } else if (event.type === 'tool_result') {
             const d = event.data as { id: string; result: string }
             dispatch({ type: 'SET_TOOL_RESULT', payload: { id: assistantId, toolId: d.id, result: d.result } })
-          } else if (event.type === 'file') {
+          } else if (event.type === 'permission_request') {
+          // A peer's gate stopped an irreversible operation. The card replaces
+          // nothing and blocks nothing — the peer is already counting down and
+          // will deny on its own if the owner never answers.
+          setPendingAsk(event.data as PendingAsk)
+        } else if (event.type === 'file') {
             dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
           } else if (event.type === 'done') {
             if (handle != null) cancelAnimationFrame(handle)
@@ -582,6 +614,16 @@ export default function ChatMain({ config, onSelectSession }: Props) {
 
   const isEmpty = state.messages.length === 0
 
+  // Answering is fire-and-forget: the decision goes to Igor, Igor relays it to
+  // the peer, and the peer resumes or reports the refusal in its own stream.
+  // A failed POST means the ask already expired, which the peer has already
+  // treated as a denial — so the card just clears either way.
+  const resolveAsk = useCallback(async (approved: boolean, remember: boolean) => {
+    const ask = pendingAsk
+    setPendingAsk(null)
+    if (ask) await answerAsk(config, ask.ask_id, approved, remember)
+  }, [pendingAsk, config])
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {isEmpty
@@ -594,6 +636,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           />
         )
       }
+      {pendingAsk && <PermissionPrompt ask={pendingAsk} onResolve={resolveAsk} />}
       <InputBar onSend={send} onStop={stop} config={config} />
     </div>
   )

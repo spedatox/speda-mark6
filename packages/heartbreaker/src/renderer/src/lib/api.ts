@@ -1,4 +1,4 @@
-import type { AppConfig, SSEEvent, ModelInfo, ImageBlock, DocBlock } from './types'
+import type { AppConfig, SSEEvent, ModelInfo, ImageBlock, DocBlock, PendingAsk } from './types'
 
 /** Auth header for every backend call — the service X-API-Key. */
 export function authHeaders(
@@ -829,4 +829,36 @@ export async function fetchOnlineAgents(config: AppConfig): Promise<OnlineAgent[
   } catch {
     return []
   }
+}
+
+
+/** Irreversible operations a peer is waiting on the owner for.
+
+    The guaranteed path. A chat job's card also arrives inline on its own
+    stream, but a dispatched background job has no stream, and a window that was
+    closed when the ask was raised never saw one either. */
+export async function fetchPendingAsks(config: AppConfig): Promise<PendingAsk[]> {
+  const res = await fetch(`${config.apiBase}/agents/asks`, { headers: authHeaders(config) })
+  if (!res.ok) return []
+  return res.json()
+}
+
+/** Send the owner's decision down to the peer.
+
+    A 404 means the ask is gone — expired, already answered, or its agent
+    disconnected. That is not a retry condition: the peer runs its own timeout
+    and has already denied locally, so the operation did not happen either way. */
+export async function answerAsk(
+  config: AppConfig,
+  askId: string,
+  approved: boolean,
+  remember = false,
+  note = '',
+): Promise<boolean> {
+  const res = await fetch(`${config.apiBase}/agents/asks/${encodeURIComponent(askId)}`, {
+    method: 'POST',
+    headers: { ...authHeaders(config), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ approved, remember, note }),
+  })
+  return res.ok
 }
