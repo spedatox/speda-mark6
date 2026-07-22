@@ -248,7 +248,7 @@ CONFIG_GROUPS: list[ConfigGroup] = [
             ConfigField("house_party_passphrase", "House Party Passphrase", "password", secret=True,
                         help="Owner passphrase to engage the all-hands protocol."),
             ConfigField("cors_allowed_origins", "CORS Allowed Origins", "text",
-                        help="Comma-separated browser origins. Empty = none (desktop is unaffected)."),
+                        help="Extra comma-separated browser origins. The desktop app is always allowed."),
             ConfigField("log_level", "Log Level", "select", requires_restart=_LIVE,
                         options=["INFO", "DEBUG", "WARNING", "ERROR"]),
             ConfigField("debug", "Debug Mode", "bool",
