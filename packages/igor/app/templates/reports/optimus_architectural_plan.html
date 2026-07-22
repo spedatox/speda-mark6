@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<!-- OPTIMUS · ARCHITECTURAL PLAN ─ fork per design.
+     Layout: hanging section numerals + full-width figure plates.
+     Spine 1–10 is fixed. Diagrams are inline SVG only — nothing is fetched. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Architectural Plan</title>
+<style>
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans.ttf");font-weight:400}
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans-Bold.ttf");font-weight:700}
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans-Oblique.ttf");font-style:italic}
+@font-face{font-family:M;src:url("../../skills/fonts/DejaVuSansMono.ttf")}
+:root{--k:#0f1216;--g:#6a717a;--h:#d7dbe0;--a:#1d4ed8;--w:#a35a00;--r:#9d1f1f;--ok:#136b3f}
+
+@page{size:A4;margin:19mm 16mm 16mm 16mm;
+  @top-right{content:string(ref);font:400 6.6pt M;color:#6a717a;letter-spacing:.1em}
+  @bottom-left{content:string(run);font:400 7pt S;color:#6a717a;letter-spacing:.09em}
+  @bottom-right{content:counter(page) " of " counter(pages);font:400 7pt M;color:#6a717a}}
+@page:first{margin:0;@top-right{content:none}@bottom-left{content:none}@bottom-right{content:none}}
+
+html{font-size:9.5pt}
+body{font-family:S;color:var(--k);line-height:1.56;margin:0}
+h1,h2,h3,h4{margin:0;font-weight:700;break-after:avoid}
+p{margin:0 0 1.8mm}
+code{font-family:M;font-size:8.4pt}
+
+/* ── cover: technical title sheet ──────────────────────────────────── */
+.cover{height:297mm;padding:24mm 20mm 16mm;box-sizing:border-box;display:flex;flex-direction:column;break-after:page}
+.cover .top{flex:1}
+.kicker{font:700 7pt M;letter-spacing:.3em;color:var(--a)}
+.cover h1{font-size:32pt;line-height:1.04;letter-spacing:-.018em;margin:15mm 0 0;max-width:132mm}
+.cover .q{font-size:11.5pt;line-height:1.45;color:var(--g);margin-top:7mm;max-width:116mm}
+.status{display:inline-block;margin-top:9mm;border:.9pt solid var(--w);color:var(--w);
+        font:700 7pt M;letter-spacing:.2em;padding:1.6mm 3mm}
+.rev{margin-top:9mm;border-top:2.4pt solid var(--k)}
+.rev table{width:100%;border-collapse:collapse;font-size:8.4pt}
+.rev th{font:700 6.6pt S;letter-spacing:.15em;text-transform:uppercase;color:var(--g);text-align:left;padding:2.5mm 4mm 1.6mm 0}
+.rev td{padding:1.8mm 4mm 1.8mm 0;border-top:.4pt solid var(--h);vertical-align:baseline}
+.rev td.m{font-family:M;font-size:8pt}
+.cover .foot{font-size:7.4pt;color:var(--g);border-top:.5pt solid var(--h);padding-top:3mm;margin-top:8mm;line-height:1.55}
+
+/* ── contents ──────────────────────────────────────────────────────── */
+.toc{margin-bottom:8mm}
+.toc h4{font:700 6.8pt S;letter-spacing:.2em;text-transform:uppercase;color:var(--g);
+        border-bottom:.9pt solid var(--k);padding-bottom:1.8mm;margin-bottom:3mm}
+.toc ol{list-style:none;margin:0;padding:0;column-count:2;column-gap:9mm}
+.toc li{display:flex;align-items:baseline;font-size:8.8pt;margin-bottom:1.4mm;break-inside:avoid}
+.toc .i{font-family:M;font-size:7.6pt;color:var(--a);width:7mm;flex:none}
+.toc .dot{flex:1;border-bottom:.4pt dotted var(--h);margin:0 2mm 1mm}
+
+/* ── sections: hanging numeral ─────────────────────────────────────── */
+.sec{display:flex;gap:6mm;margin-bottom:7mm}
+.sec .num{width:16mm;flex:none;font:700 15pt M;color:var(--h);letter-spacing:-.03em;line-height:1.05;padding-top:.6mm}
+.sec .bd{flex:1;min-width:0}
+h2{string-set:run content();font-size:15pt;letter-spacing:-.012em;line-height:1.15;margin-bottom:1.6mm}
+.hr{height:.9pt;background:var(--k);margin:0 0 4mm}
+h3{font-size:9.8pt;margin:5mm 0 1.8mm}
+h3:first-child{margin-top:0}
+h3 .x{font-family:M;font-size:8pt;color:var(--g);margin-right:2.5mm}
+
+/* ── tables ────────────────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:8.5pt;margin:0 0 3mm}
+thead{display:table-header-group}
+th{font:700 6.7pt S;letter-spacing:.13em;text-transform:uppercase;color:var(--g);text-align:left;
+   padding:0 3mm 1.6mm 0;border-bottom:.9pt solid var(--k)}
+td{padding:1.9mm 3mm 1.9mm 0;border-bottom:.4pt solid var(--h);vertical-align:baseline}
+th:last-child,td:last-child{padding-right:0}
+td.m{font-family:M;font-size:8pt}
+th.n,td.n{text-align:right;font-family:M;font-size:8pt;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr{break-inside:avoid}
+
+/* ── two-up lists ──────────────────────────────────────────────────── */
+.two{display:flex;gap:8mm;margin-bottom:2mm}
+.two>div{flex:1}
+.two h3{border-bottom:.5pt solid var(--h);padding-bottom:1.4mm}
+ul{margin:0 0 1.8mm;padding-left:4mm}li{margin-bottom:1.3mm}
+ul.tick{list-style:none;padding-left:0}
+ul.tick li{padding-left:5mm;position:relative}
+ul.tick li::before{content:"—";position:absolute;left:0;color:var(--a);font-family:M;font-size:8pt}
+
+/* ── figure plate: full width, breaks the text column ──────────────── */
+.plate{margin:0 0 5mm;break-inside:avoid}
+.plate svg{width:100%;height:auto;display:block}
+.plate .cap{display:flex;gap:4mm;border-top:.9pt solid var(--k);padding-top:2mm;margin-top:2.5mm;font-size:7.8pt;color:var(--g);line-height:1.5}
+.plate .cap b{color:var(--k);font-family:M;font-size:7.4pt;letter-spacing:.1em;white-space:nowrap}
+
+/* ── contract blocks ───────────────────────────────────────────────── */
+pre{font-family:M;font-size:8pt;line-height:1.5;margin:0 0 3.5mm;padding:0 0 0 4mm;
+    border-left:1.8pt solid var(--a);white-space:pre-wrap;break-inside:avoid;color:#1a1f26}
+pre .c{color:var(--g)}
+
+/* ── state marks ───────────────────────────────────────────────────── */
+.s{font:700 6.8pt S;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+.s.ok{color:var(--ok)}.s.op{color:var(--w)}.s.no{color:var(--r)}.s.in{color:var(--a)}
+.flag{border-left:2.4pt solid var(--w);padding:.4mm 0 .4mm 4mm;margin:0 0 4mm;break-inside:avoid}
+.flag b{display:block;font:700 6.8pt S;letter-spacing:.16em;text-transform:uppercase;color:var(--w);margin-bottom:1.4mm}
+.end{border-top:.9pt solid var(--k);margin-top:8mm;padding-top:3mm;font-size:7.4pt;color:var(--g);line-height:1.55}
+</style>
+</head>
+<body>
+
+<!-- ══ COVER ══════════════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="top">
+    <div class="kicker">OPTIMUS / SYSTEMS ARCHITECTURE</div>
+    <h1>Event Ingestion<br>Pipeline</h1>
+    <div class="q">Taking storage off the request path: a durable buffer between producers
+      and the datastore, with the failure semantics stated rather than assumed.</div>
+    <div class="status">DRAFT — FOR REVIEW</div>
+  </div>
+  <div class="rev">
+    <table>
+      <thead><tr><th>Rev</th><th>Date</th><th>Change</th><th>Author</th><th>Reviewers</th></tr></thead>
+      <tbody>
+        <tr><td class="m">B</td><td class="m">2026-07-21</td><td>Partition strategy reopened; rollout phased</td><td>Optimus</td><td>SPEDA · Centurion</td></tr>
+        <tr><td class="m">A</td><td class="m">2026-06-30</td><td>Initial circulation</td><td>Optimus</td><td>SPEDA</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="foot">OPT-ARCH-2026-007 · supersedes OPT-ARCH-2026-004 · target release Q4 2026.
+    Two decisions remain open (AD-4, AD-5). This is a design under review, not an approved build order.</div>
+</div>
+
+<!-- ══ CONTENTS ═══════════════════════════════════════════════════════ -->
+<nav class="toc">
+  <h4>Contents</h4>
+  <ol>
+    <li><span class="i">01</span>Problem<span class="dot"></span><span>3</span></li>
+    <li><span class="i">02</span>Goals and non-goals<span class="dot"></span><span>3</span></li>
+    <li><span class="i">03</span>Topology<span class="dot"></span><span>3</span></li>
+    <li><span class="i">04</span>Responsibilities<span class="dot"></span><span>4</span></li>
+    <li><span class="i">05</span>Contracts<span class="dot"></span><span>4</span></li>
+    <li><span class="i">06</span>Flows<span class="dot"></span><span>5</span></li>
+    <li><span class="i">07</span>Budgets<span class="dot"></span><span>5</span></li>
+    <li><span class="i">08</span>Decisions<span class="dot"></span><span>6</span></li>
+    <li><span class="i">09</span>Risks<span class="dot"></span><span>6</span></li>
+    <li><span class="i">10</span>Rollout<span class="dot"></span><span>7</span></li>
+  </ol>
+</nav>
+
+<!-- ══ 01 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="num">01</div>
+  <div class="bd">
+    <h2>Problem</h2><div class="hr"></div>
+    <p>Every inbound event is written synchronously to the primary datastore inside the request handler. At current
+    volume that costs a median 180 ms of request latency and binds producer availability to database availability.
+    Two incidents last quarter came from write amplification during backfills — in both, healthy producers failed
+    because storage was busy.</p>
+    <p>This document proposes an asynchronous path with an explicit durable buffer, and fixes the contracts, failure
+    semantics, and rollout sequence before any code is written.</p>
+  </div>
+</div>
+
+<!-- ══ 02 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="num">02</div>
+  <div class="bd">
+    <h2>Goals and non-goals</h2><div class="hr"></div>
+    <div class="two">
+      <div>
+        <h3>Goals</h3>
+        <ul class="tick">
+          <li>Producer latency independent of storage availability.</li>
+          <li>p99 accepted-write under 25 ms at five times current peak.</li>
+          <li>At-least-once delivery onto idempotent consumers.</li>
+          <li>Replay of any 30-day window without touching producers.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Non-goals</h3>
+        <ul class="tick">
+          <li>Exactly-once semantics end to end.</li>
+          <li>Cross-region active/active replication.</li>
+          <li>Any change to the public producer API.</li>
+          <li>Migration of historical data.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 03 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="num">03</div>
+  <div class="bd">
+    <h2>Topology</h2><div class="hr"></div>
+    <div class="plate">
+      <svg viewBox="0 0 660 196" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif">
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#0f1216"/></marker></defs>
+        <rect x="150" y="8" width="300" height="180" fill="none" stroke="#d7dbe0" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="300" y="-2" font-size="7.5" fill="#6a717a" text-anchor="middle" letter-spacing="1.6" transform="translate(0,6)">INTERNAL NETWORK</text>
+        <g fill="#fff" stroke="#0f1216" stroke-width="1.1">
+          <rect x="6"   y="70" width="104" height="48"/>
+          <rect x="162" y="70" width="104" height="48"/>
+          <rect x="316" y="24" width="104" height="48"/>
+          <rect x="316" y="120" width="104" height="48"/>
+          <rect x="470" y="70" width="104" height="48"/>
+        </g>
+        <g stroke="#1d4ed8" stroke-width="2.6">
+          <line x1="6" y1="70" x2="110" y2="70"/><line x1="162" y1="70" x2="266" y2="70"/>
+          <line x1="316" y1="24" x2="420" y2="24"/><line x1="470" y1="70" x2="574" y2="70"/>
+        </g>
+        <line x1="316" y1="120" x2="420" y2="120" stroke="#a35a00" stroke-width="2.6"/>
+        <g fill="#0f1216" font-size="10.5" text-anchor="middle">
+          <text x="58"  y="92">Producers</text><text x="214" y="92">Ingest API</text>
+          <text x="368" y="46">Durable log</text><text x="368" y="142">Dead letter</text><text x="522" y="92">Consumers</text>
+        </g>
+        <g fill="#6a717a" font-size="8" text-anchor="middle">
+          <text x="58"  y="106">HTTP · SDK</text><text x="214" y="106">validate → append</text>
+          <text x="368" y="60">partitioned · 30 d</text><text x="368" y="156">poison messages</text><text x="522" y="106">idempotent upsert</text>
+        </g>
+        <g stroke="#0f1216" stroke-width="1.1" fill="none" marker-end="url(#ar)">
+          <path d="M110 94 H156"/><path d="M266 88 H292 V48 H310"/><path d="M266 100 H292 V144 H310"/><path d="M420 48 H444 V94 H464"/>
+        </g>
+        <text x="284" y="82" font-size="7.5" fill="#6a717a">ack</text>
+      </svg>
+      <div class="cap"><b>FIG 1</b><span>The ingest API acknowledges only after a durable append. Storage writes happen entirely off the request path;
+      the dead-letter branch is the only place a message can come to rest without reaching a consumer.</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 04 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="num">04</div>
+  <div class="bd">
+    <h2>Responsibilities</h2><div class="hr"></div>
+    <table>
+      <thead><tr><th>Component</th><th>Owns</th><th>Must not</th><th>Scales by</th><th>Fails as</th></tr></thead>
+      <tbody>
+        <tr><td>Ingest API</td><td>Auth, schema validation, durable append</td><td>Touch the primary datastore</td><td>Stateless replicas</td><td>503, producer retries</td></tr>
+        <tr><td>Durable log</td><td>Per-key ordering, 30-day retention</td><td>Transform payloads</td><td>Partitions</td><td>Reduced throughput</td></tr>
+        <tr><td>Consumers</td><td>Idempotent upsert, enrichment</td><td>Hold non-idempotent side effects</td><td>One per partition</td><td>Lag grows, no loss</td></tr>
+        <tr><td>DLQ processor</td><td>Quarantine, alerting, manual replay</td><td>Retry indefinitely</td><td>Single worker</td><td>Alerts at depth &gt; 0</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ 05 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="num">05</div>
+  <div class="bd">
+    <h2>Contracts</h2><div class="hr"></div>
+    <p>The envelope versions independently of the payload. Consumers ignore unknown envelope fields and route unknown
+    <code>schema_version</code> majors to the dead-letter queue rather than parsing them optimistically.</p>
+<pre>{
+  "event_id":       "uuid-v7",        <span class="c">// idempotency key, producer-generated</span>
+  "schema_version": "2.1",            <span class="c">// major bump = breaking</span>
+  "occurred_at":    "2026-07-21T09:14:02.881Z",
+  "partition_key":  "user:1042",      <span class="c">// ordering scope</span>
+  "producer":       "heartbreaker/1.8.0",
+  "payload":        { }               <span class="c">// opaque to the pipeline</span>
+}</pre>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Req.</th><th>Constraint</th></tr></thead>
+      <tbody>
+        <tr><td class="m">event_id</td><td>UUIDv7</td><td>yes</td><td>Drives a seven-day deduplication window</td></tr>
+        <tr><td class="m">occurred_at</td><td>RFC 3339 UTC</td><td>yes</td><td>Rejected beyond 24 h in the future</td></tr>
+        <tr><td class="m">partition_key</td><td>string ≤ 128</td><td>yes</td><td>Ordering holds within one key only</td></tr>
+        <tr><td class="m">payload</td><td>object ≤ 256 KiB</td><td>yes</td><td>Never inspected by the pipeline</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ 06 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="num">06</div>
+  <div class="bd">
+    <h2>Flows</h2><div class="hr"></div>
+    <h3><span class="x">6.1</span>Accepted write</h3>
+<pre>producer  → ingest    POST /v2/events                  auth + schema
+ingest    → log       append(partition_key)            fsync ack
+ingest    → producer  202 Accepted {event_id}          ≤ 25 ms p99
+consumer  → store     UPSERT … ON CONFLICT DO NOTHING  dedup by event_id</pre>
+    <h3><span class="x">6.2</span>Consumer failure</h3>
+<pre>raise             → offset uncommitted → redelivery, backoff ×5
+attempts spent    → publish to DLQ with envelope + trace
+DLQ depth &gt; 0     → page on-call; replay is manual, after the fix</pre>
+  </div>
+</div>
+
+<!-- ══ 07 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="num">07</div>
+  <div class="bd">
+    <h2>Budgets</h2><div class="hr"></div>
+    <table>
+      <thead><tr><th>Property</th><th>Target</th><th>Proven by</th><th>State</th></tr></thead>
+      <tbody>
+        <tr><td>Accepted-write latency</td><td class="m">p99 ≤ 25 ms</td><td>Ingest histogram, one week</td><td><span class="s in">Designed</span></td></tr>
+        <tr><td>Durability</td><td class="m">no acked loss</td><td>Chaos kill of one broker</td><td><span class="s op">Unproven</span></td></tr>
+        <tr><td>Consumer lag</td><td class="m">≤ 60 s at 5×</td><td>30-minute soak at peak</td><td><span class="s op">Unproven</span></td></tr>
+        <tr><td>Replay window</td><td class="m">30 days</td><td>Retention configuration</td><td><span class="s ok">Met</span></td></tr>
+        <tr><td>Data at rest</td><td class="m">encrypted, internal</td><td>Centurion review</td><td><span class="s ok">Met</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ 08 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="num">08</div>
+  <div class="bd">
+    <h2>Decisions</h2><div class="hr"></div>
+    <table>
+      <thead><tr><th>ID</th><th>Decision</th><th>Rejected</th><th>Because</th><th>State</th></tr></thead>
+      <tbody>
+        <tr><td class="m">AD-1</td><td>Durable log as the buffer</td><td>In-memory queue, direct write</td><td>Replay is unreachable without retention</td><td><span class="s ok">Accepted</span></td></tr>
+        <tr><td class="m">AD-2</td><td>At-least-once + idempotent consumers</td><td>Exactly-once transactions</td><td>Cost and operational weight exceed the benefit</td><td><span class="s ok">Accepted</span></td></tr>
+        <tr><td class="m">AD-3</td><td>Producer-generated event id</td><td>Server-generated</td><td>Dedup must survive producer retries</td><td><span class="s ok">Accepted</span></td></tr>
+        <tr><td class="m">AD-4</td><td>Partition key granularity</td><td>—</td><td>Skew analysis outstanding</td><td><span class="s op">Open</span></td></tr>
+        <tr><td class="m">AD-5</td><td>DLQ retention period</td><td>—</td><td>Awaiting data-retention input</td><td><span class="s op">Open</span></td></tr>
+      </tbody>
+    </table>
+    <div class="flag">
+      <b>Blocking</b>
+      AD-4 closes before load testing starts. Partition strategy cannot change after the first production write without
+      a full replay, so it is cheaper to argue about it now. Decision date: 04 August 2026.
+    </div>
+  </div>
+</div>
+
+<!-- ══ 09 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="num">09</div>
+  <div class="bd">
+    <h2>Risks</h2><div class="hr"></div>
+    <table>
+      <thead><tr><th>Risk</th><th class="n">L</th><th class="n">I</th><th>Mitigation</th><th>Owner</th></tr></thead>
+      <tbody>
+        <tr><td>Partition skew from a hot key</td><td class="n">M</td><td class="n">H</td><td>Cardinality analysis pre-cutover; salted keys held in reserve</td><td>Optimus</td></tr>
+        <tr><td>Silent consumer lag during backfill</td><td class="n">M</td><td class="n">M</td><td>Lag SLO with a paging alert at 60 s</td><td>SPEDA</td></tr>
+        <tr><td>Schema drift between producers</td><td class="n">H</td><td class="n">M</td><td>Registry with a CI-enforced compatibility gate</td><td>Optimus</td></tr>
+        <tr><td>DLQ becomes a silent data grave</td><td class="n">L</td><td class="n">H</td><td>Page on any non-zero depth; weekly review</td><td>SPEDA</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ 10 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="num">10</div>
+  <div class="bd">
+    <h2>Rollout</h2><div class="hr"></div>
+    <table>
+      <thead><tr><th>Phase</th><th>Scope</th><th>Exit criterion</th><th>Reversal</th></tr></thead>
+      <tbody>
+        <tr><td>0 · Shadow</td><td>Dual write, consumers read-only</td><td>Zero divergence over 72 h</td><td>Disable shadow writes</td></tr>
+        <tr><td>1 · Canary</td><td>5 % of producers</td><td>p99 ≤ 25 ms, DLQ empty</td><td>Flag back to the sync path</td></tr>
+        <tr><td>2 · Ramp</td><td>25 → 100 % over ten days</td><td>Lag SLO held at every step</td><td>Flag rollback, replay the gap</td></tr>
+        <tr><td>3 · Cleanup</td><td>Remove the synchronous path</td><td>Two weeks stable at 100 %</td><td><span class="s no">None — gate on phase 2</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="end">
+  Optimus · OPT-ARCH-2026-007 rev B · 21 July 2026. Circulated for review. Implementation does not begin while AD-4
+  and AD-5 remain open; the rollout table is the only authorised sequence once they close.
+</div>
+
+</body>
+</html>

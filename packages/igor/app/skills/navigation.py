@@ -67,39 +67,143 @@ def _home_location() -> dict | None:
         return None
 
 
-async def _geocode(client: httpx.AsyncClient, address: str) -> dict | None:
-    """Free-text → {lat,lng,place} via the Geocoding API. None on no match."""
+async def _geocode(client: httpx.AsyncClient, address: str) -> tuple[dict | None, str | None]:
+    """Free-text → ({lat,lng,place} | None, api_error | None) via the Geocoding API.
+
+    Per Google's own guidance this is only good for COMPLETE, unambiguous postal
+    addresses — it is the second leg of _text_to_point, never the first.
+
+    The second element is non-None only when the API itself refused us (bad key,
+    billing disabled, quota). "No candidates" is (None, None) — a genuine miss.
+    Keeping those apart is the whole point: a REQUEST_DENIED once masqueraded as
+    an unfindable place, which sent debugging after Turkish place names for hours
+    when billing was simply switched off.
+    """
     resp = await client.get(
         _GEOCODE_URL,
         params={"address": address, "key": settings.google_maps_api_key},
     )
     if resp.status_code != 200:
-        return None
-    results = resp.json().get("results") or []
+        logger.warning("geocode: HTTP %s for %r — %s", resp.status_code, address, resp.text[:300])
+        return None, f"Geocoding API HTTP {resp.status_code}: {resp.text[:200]}"
+    payload = resp.json()
+    status = payload.get("status")
+    if status not in ("OK", "ZERO_RESULTS"):
+        msg = payload.get("error_message") or ""
+        logger.error("geocode: %s for %r — %s", status, address, msg)
+        return None, f"Geocoding API {status}: {msg}"
+    results = payload.get("results") or []
     if not results:
-        return None
+        logger.info("geocode: no candidates for %r", address)
+        return None, None
     top = results[0]
     loc = top["geometry"]["location"]
-    return {"lat": loc["lat"], "lng": loc["lng"], "place": top.get("formatted_address")}
+    return {"lat": loc["lat"], "lng": loc["lng"],
+            "place": top.get("formatted_address")}, None
+
+
+async def _place_search(
+    client: httpx.AsyncClient, text: str, bias: dict | None
+) -> tuple[dict | None, str | None]:
+    """Free-text → {lat,lng,place} via Places Text Search (New). None on no match.
+
+    This is the FIRST resolver leg because the owner names places the way people
+    do — "Bursa Uludağ Üniversitesi Metro İstasyonu", "Suryapı Marka AVM" — and
+    those are establishments/transit stops, not postal addresses. The Geocoding
+    API is documented as the wrong tool for non-address queries and returns zero
+    candidates for them; Text Search resolves both, and also handles addresses,
+    so it strictly dominates as the opening move.
+    """
+    body: dict = {"textQuery": text, "maxResultCount": 1}
+    if bias is not None:
+        # A soft bias, not a restriction: keeps "metro istasyonu" landing in the
+        # owner's city without ever excluding a correct far-away match.
+        body["locationBias"] = {
+            "circle": {
+                "center": {"latitude": bias["lat"], "longitude": bias["lng"]},
+                "radius": 50000.0,
+            }
+        }
+    resp = await client.post(
+        _PLACES_URL,
+        json=body,
+        headers={
+            "X-Goog-Api-Key": settings.google_maps_api_key,
+            "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location",
+            "Content-Type": "application/json",
+        },
+    )
+    if resp.status_code != 200:
+        logger.error("place_search: HTTP %s for %r — %s", resp.status_code, text, resp.text[:300])
+        return None, f"Places API HTTP {resp.status_code}: {resp.text[:200]}"
+    places = resp.json().get("places") or []
+    if not places:
+        logger.info("place_search: no candidates for %r", text)
+        return None, None
+    top = places[0]
+    loc = top.get("location") or {}
+    if "latitude" not in loc or "longitude" not in loc:
+        return None, None
+    name = (top.get("displayName") or {}).get("text")
+    return {
+        "lat": loc["latitude"],
+        "lng": loc["longitude"],
+        "place": name or top.get("formattedAddress"),
+    }, None
+
+
+async def _text_to_point(
+    client: httpx.AsyncClient, text: str, context: AgentContext
+) -> tuple[dict | None, str | None]:
+    """Resolve owner-written place text: Places first, Geocoding second.
+
+    Returns (point, api_error). Both legs must miss cleanly before we call a place
+    unfindable; if either leg was refused by Google we surface that instead, so an
+    infrastructure fault never gets reported to the owner as a bad place name.
+    """
+    bias = _client_location(context) or _home_location()
+    hit, err = await _place_search(client, text, bias)
+    if hit is not None:
+        logger.info("resolved %r → %s [%.6f,%.6f] via places", text,
+                    hit.get("place"), hit["lat"], hit["lng"])
+        return hit, None
+    hit, err2 = await _geocode(client, text)
+    if hit is not None:
+        logger.info("resolved %r → %s [%.6f,%.6f] via geocoding", text,
+                    hit.get("place"), hit["lat"], hit["lng"])
+        return hit, None
+    api_error = err or err2
+    if api_error:
+        logger.error("place text %r unresolved due to upstream refusal: %s", text, api_error)
+        return None, api_error
+    logger.warning("could not resolve place text %r (places + geocoding both empty)", text)
+    return None, None
 
 
 async def _resolve_point(
     client: httpx.AsyncClient, value: Any, context: AgentContext, *, allow_defaults: bool
-) -> dict | None:
-    """A route/search endpoint → {lat,lng,place?}.
+) -> tuple[dict | None, str]:
+    """A route/search endpoint → ({lat,lng,place?} | None, reason).
 
     Accepts a {lat,lng} object (used verbatim), a JSON-object STRING like
     '{"lat":..,"lng":..}' (the schema's coordinate form — the model passes strings),
-    a free-text address (geocoded), or — when allow_defaults and the value is empty
-    — the owner's live location, then their configured home.
+    free-text (resolved via _text_to_point), or — when allow_defaults and the value
+    is empty — the owner's live location, then their configured home.
+
+    The second element says WHY there is no point, and the failure modes are kept
+    apart deliberately: "unresolved" means the owner named a place we could not
+    find, "missing" means nothing was supplied and there was no fallback, and
+    "api:<detail>" means Google refused the lookup and nothing is wrong with the
+    input at all. Collapsing these is what made a disabled-billing 403 report
+    itself to the owner as a missing home location.
     """
     if isinstance(value, dict) and "lat" in value and "lng" in value:
         return {"lat": float(value["lat"]), "lng": float(value["lng"]),
-                "place": value.get("place")}
+                "place": value.get("place")}, "ok"
     text = (value or "").strip() if isinstance(value, str) else ""
     if text:
         # A coordinate object may arrive as a JSON string — parse it before
-        # falling back to treating the text as a geocodable address.
+        # falling back to treating the text as a place name.
         if text.startswith("{"):
             parsed = None
             try:
@@ -108,11 +212,15 @@ async def _resolve_point(
                 parsed = None
             if isinstance(parsed, dict) and "lat" in parsed and "lng" in parsed:
                 return {"lat": float(parsed["lat"]), "lng": float(parsed["lng"]),
-                        "place": parsed.get("place")}
-        return await _geocode(client, text)
+                        "place": parsed.get("place")}, "ok"
+        hit, api_error = await _text_to_point(client, text, context)
+        if hit is not None:
+            return hit, "ok"
+        return None, (f"api:{api_error}" if api_error else "unresolved")
     if allow_defaults:
-        return _client_location(context) or _home_location()
-    return None
+        hit = _client_location(context) or _home_location()
+        return (hit, "ok" if hit else "missing")
+    return None, "missing"
 
 
 class GetRouteSkill(Skill):
@@ -173,13 +281,33 @@ class GetRouteSkill(Skill):
 
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                origin = await _resolve_point(client, args.get("origin"), context, allow_defaults=True)
-                dest = await _resolve_point(client, args.get("destination"), context, allow_defaults=False)
+                origin, origin_why = await _resolve_point(
+                    client, args.get("origin"), context, allow_defaults=True)
+                dest, dest_why = await _resolve_point(
+                    client, args.get("destination"), context, allow_defaults=False)
+                # Report the failure the owner can actually act on, in priority
+                # order. An upstream refusal outranks everything (nothing the owner
+                # types will fix it); an origin they NAMED that we couldn't find is
+                # a lookup failure, not a missing home. Never answer one with another.
+                for field, why in (("origin", origin_why), ("destination", dest_why)):
+                    if why.startswith("api:"):
+                        return (f"get_route: Google refused the {field} lookup — "
+                                f"{why[4:]}. This is a configuration/billing fault on "
+                                f"the Maps API key, NOT a bad place name. Tell the owner "
+                                f"routing is down and needs the key checked; do not ask "
+                                f"them to rephrase.")
                 if origin is None:
-                    return ("get_route: no origin — the owner didn't share a location this "
-                            "turn and no home is configured. Ask where to start from.")
+                    if origin_why == "unresolved":
+                        return (f"get_route: couldn't resolve the origin "
+                                f"'{args.get('origin')}' — no matching place was found. "
+                                f"Ask the owner to name it differently (add the city, or "
+                                f"a nearby landmark), or retry with coordinates.")
+                    return ("get_route: no origin was given — the owner didn't share a "
+                            "location this turn and no home is configured. Ask where to "
+                            "start from.")
                 if dest is None:
-                    return f"get_route: couldn't resolve the destination '{args.get('destination')}'."
+                    return (f"get_route: couldn't resolve the destination "
+                            f"'{args.get('destination')}' — no matching place was found.")
 
                 body = {
                     "origin": {"location": {"latLng": {"latitude": origin["lat"], "longitude": origin["lng"]}}},
@@ -301,7 +429,7 @@ class FindPlacesSkill(Skill):
 
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                centre = await _resolve_point(client, args.get("near"), context, allow_defaults=True)
+                centre, _ = await _resolve_point(client, args.get("near"), context, allow_defaults=True)
                 body: dict = {"textQuery": query, "maxResultCount": max_results, "openNow": open_now}
                 if centre is not None:
                     body["locationBias"] = {

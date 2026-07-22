@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SPEDA agent marks</title>
+<style>
+  body { background:#080d12; color:#8fa6b2; font:13px/1.5 system-ui, sans-serif;
+         margin:0; padding:32px; }
+  h1 { font-size:13px; letter-spacing:.18em; text-transform:uppercase;
+       font-weight:500; color:#5d7f8a; margin:0 0 24px; }
+  .grid { display:flex; flex-wrap:wrap; gap:20px; }
+  .cell { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.09);
+          border-radius:16px; padding:20px 16px 14px; text-align:center; width:164px; }
+  .g  { height:100px; display:flex; align-items:center; justify-content:center; }
+  .r  { display:flex; gap:12px; align-items:center; justify-content:center;
+        margin:14px 0 12px; height:32px; }
+  .n  { letter-spacing:.1em; text-transform:uppercase; font-size:11px; color:#5d7f8a; }
+  code { color:#3a6472; font-size:10px; }
+</style>
+<h1>Agent marks &mdash; glass finish, then 32 / 20 / 14 px</h1>
+<div class="grid" id="grid"></div>
+<script>
+  const AGENTS = ['speda','sentinel','nightcrawler','ultron','centurion','atomix','optimus']
+  document.getElementById('grid').innerHTML = AGENTS.map(a => `
+    <div class="cell">
+      <div class="g"><img src="svg/${a}-glass.svg" width="88" height="88" alt="${a}"></div>
+      <div class="r">
+        <img src="svg/${a}-glass.svg" width="32" height="32" alt="">
+        <img src="svg/${a}-glass.svg" width="20" height="20" alt="">
+        <img src="svg/${a}-glass.svg" width="14" height="14" alt="">
+      </div>
+      <div class="n">${a}</div>
+      <code>svg/${a}.svg</code>
+    </div>`).join('')
+</script>

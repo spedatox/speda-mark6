@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" fill="none" role="img" aria-label="Atomix">
+  <title>Atomix</title>
+  <defs>
+    <clipPath id="atomix-clip"><path d="M50.06 9.57L100 90.43L72.34 89.8L49.19 53L23.9 52.63L50.06 9.57ZM62.45 89.55L41.43 90.18L31.66 75.66L22.03 90.18L0 89.92L19.52 59.76L44.56 60.14L62.45 89.55Z"/></clipPath>
+    <linearGradient id="atomix-sheen" x1="0.08" y1="0" x2="0.62" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.62"/>
+      <stop offset="0.42" stop-color="#fff" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="atomix-bloom" cx="0.28" cy="0.20" r="0.8">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="atomix-lift" x="-35%" y="-35%" width="170%" height="170%">
+      <feDropShadow dx="0" dy="1.6" stdDeviation="2.4" flood-color="#000" flood-opacity="0.36"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#3fae74" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <g filter="url(#atomix-lift)">
+    <path d="M50.06 9.57L100 90.43L72.34 89.8L49.19 53L23.9 52.63L50.06 9.57ZM62.45 89.55L41.43 90.18L31.66 75.66L22.03 90.18L0 89.92L19.52 59.76L44.56 60.14L62.45 89.55Z" fill="#3fae74" fill-opacity="0.92"/>
+    <g clip-path="url(#atomix-clip)">
+      <rect width="100" height="100" fill="url(#atomix-sheen)"/>
+      <rect width="100" height="100" fill="url(#atomix-bloom)"/>
+    </g>
+    <path d="M50.06 9.57L100 90.43L72.34 89.8L49.19 53L23.9 52.63L50.06 9.57ZM62.45 89.55L41.43 90.18L31.66 75.66L22.03 90.18L0 89.92L19.52 59.76L44.56 60.14L62.45 89.55Z" fill="none" stroke="#fff" stroke-opacity="0.38" stroke-width="0.9"
+          stroke-linejoin="round"/>
+  </g>
+</svg>

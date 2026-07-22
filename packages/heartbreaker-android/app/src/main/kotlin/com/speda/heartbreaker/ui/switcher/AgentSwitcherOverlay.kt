@@ -5,12 +5,9 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -55,15 +52,15 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.speda.heartbreaker.designsystem.brand.AgentMark
+import com.speda.heartbreaker.designsystem.brand.AgentMarks
 import com.speda.heartbreaker.designsystem.brand.Brands
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.theme.ThemeEngine
@@ -280,20 +277,27 @@ private fun Pod(
     ) {
         Box(Modifier.size(100.dp).scale(scale * (if (confirming) flare else 1f)), contentAlignment = Alignment.Center) {
             if (selected) Rings(color)
-            // Avatar
-            Box(
-                Modifier
-                    .size(58.dp)
-                    .scale(if (selected) 1.14f else 1f)
-                    .clip(CircleShape)
-                    .background(color.copy(alpha = if (selected) 0.28f else 0.16f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                HbText(
-                    Brands.monogram(id),
-                    style = HbType.headerBar.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.06.em),
-                    color = if (selected) Color.White else color,
+            // Avatar — the mark stands bare inside the rings, no plate behind it
+            if (AgentMarks.has(id)) {
+                AgentMark(
+                    agentId = id, color = color, size = 58.dp,
+                    modifier = Modifier.scale(if (selected) 1.14f else 1f),
                 )
+            } else {
+                Box(
+                    Modifier
+                        .size(58.dp)
+                        .scale(if (selected) 1.14f else 1f)
+                        .clip(CircleShape)
+                        .background(color.copy(alpha = if (selected) 0.28f else 0.16f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    HbText(
+                        Brands.monogram(id),
+                        style = HbType.headerBar.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.06.em),
+                        color = if (selected) Color.White else color,
+                    )
+                }
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -314,38 +318,25 @@ private fun Pod(
     }
 }
 
-/** Dual counter-rotating HUD arcs behind the selected avatar. */
+/**
+ * Selection bay behind the chosen agent's mark — a still reactor glow and a
+ * static dashed ring.
+ *
+ * The ring and arc used to counter-rotate (360° every 14s and 6s). That spin
+ * fought the mark it framed, so it is gone: selection now reads from the glow,
+ * the scale-up and the lit name, none of which animate on a loop.
+ */
 @Composable
 private fun Rings(color: Color) {
-    val t = rememberInfiniteTransition(label = "rings")
-    val outer by t.animateFloat(0f, 360f, infiniteRepeatable(tween(14000, easing = LinearEasing), RepeatMode.Restart), label = "outer")
-    val inner by t.animateFloat(360f, 0f, infiniteRepeatable(tween(6000, easing = LinearEasing), RepeatMode.Restart), label = "inner")
-
     Box(Modifier.size(100.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.size(74.dp).clip(CircleShape).background(Brush.radialGradient(listOf(color.copy(alpha = 0.35f), Color.Transparent))))
         Canvas(Modifier.size(100.dp)) {
             val d = size.minDimension
-            // outer dashed full ring
-            rotate(outer) {
-                drawCircle(
-                    color = color.copy(alpha = 0.7f),
-                    radius = d / 2f - 3.dp.toPx(),
-                    style = Stroke(width = 1.4.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f * density, 9f * density))),
-                )
-            }
-            // inner bright arc
-            rotate(inner) {
-                val r = d / 2f - 16.dp.toPx()
-                drawArc(
-                    color = color,
-                    startAngle = 0f,
-                    sweepAngle = 100f,
-                    useCenter = false,
-                    topLeft = Offset((size.width - 2 * r) / 2f, (size.height - 2 * r) / 2f),
-                    size = Size(2 * r, 2 * r),
-                    style = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round),
-                )
-            }
+            drawCircle(
+                color = color.copy(alpha = 0.7f),
+                radius = d / 2f - 3.dp.toPx(),
+                style = Stroke(width = 1.4.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f * density, 9f * density))),
+            )
         }
     }
 }

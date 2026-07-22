@@ -11,6 +11,7 @@ import WidgetFrame from './WidgetFrame'
 import ChartBlock from './ChartBlock'
 import CalendarBlock from './CalendarBlock'
 import MapBlock from './MapBlock'
+import ErrorBoundary from './ErrorBoundary'
 import HousePartyWarning from './HousePartyWarning'
 
 const RENDERABLE_LANGS = new Set(['html', 'svg'])
@@ -497,14 +498,18 @@ const mdComponents: any = {
     const lang = /language-(\w+)/.exec(className || '')?.[1] ?? ''
     const code = String(children).replace(/\n$/, '')
     if (!inline && (lang || code.includes('\n'))) {
+      // Rich blocks run third-party renderers (MapLibre/WebGL, charting) on
+      // model-authored input — each one is a place a throw can escape and, with
+      // no boundary, blank the entire window. Isolate them individually so a bad
+      // block degrades to a chip instead of killing the conversation.
       if (lang === 'chart') {
-        return <ChartBlock>{code}</ChartBlock>
+        return <ErrorBoundary label="CHART"><ChartBlock>{code}</ChartBlock></ErrorBoundary>
       }
       if (lang === 'calendar') {
-        return <CalendarBlock>{code}</CalendarBlock>
+        return <ErrorBoundary label="CALENDAR"><CalendarBlock>{code}</CalendarBlock></ErrorBoundary>
       }
       if (lang === 'map') {
-        return <MapBlock>{code}</MapBlock>
+        return <ErrorBoundary label="MAP"><MapBlock>{code}</MapBlock></ErrorBoundary>
       }
       if (HPP_ALIASES.has(lang) || (HPP_AMBIGUOUS.has(lang) && looksLikeHppWarning(code))) {
         return <HousePartyWarning>{code}</HousePartyWarning>

@@ -5,6 +5,8 @@ import type { Session, AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { deleteSession, renameSession, fetchActiveRuns } from '../lib/api'
+import { hasMark } from '../lib/agentMarks'
+import AgentMark from './AgentMark'
 
 const ProfileContext = createContext<AppProfile | null>(null)
 export const useProfile = () => useContext(ProfileContext)!
@@ -443,12 +445,15 @@ function AgentRow({ brand, active, onClick }: {
         textAlign: 'left',
       }}
     >
-      {/* Color dot */}
-      <div style={{
-        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-        background: brand.accent,
-        boxShadow: active ? `0 0 6px ${brand.accent}` : 'none',
-      }} />
+      {/* The agent's own mark — carries the colour the dot used to */}
+      <AgentMark
+        agentId={brand.agentId}
+        size={16}
+        color={brand.accent}
+        finish={active ? 'glass' : 'flat'}
+        style={{ flexShrink: 0, opacity: active || hover ? 1 : 0.65,
+                 transition: 'opacity 0.12s' }}
+      />
       {/* Name + mark */}
       <div style={{ minWidth: 0, flex: 1 }}>
         <span style={{
@@ -494,6 +499,9 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive, switchAgent 
   const nameSize = brandLen > 18 ? '0.82rem' : brandLen > 14 ? '0.96rem' : '1.15rem'
   const markSize = brandLen > 18 ? '0.62rem' : brandLen > 14 ? '0.72rem' : '0.82rem'
   const tracking = brandLen > 14 ? '0.1em' : '0.18em'
+  // The logo tracks the wordmark's size — a fixed box would tower over the
+  // shrunken long names (NightCrawler) and crowd out the model number.
+  const logoSize = brandLen > 18 ? 15 : brandLen > 14 ? 18 : 21
 
   return (
     <div className="hb-seam-b" style={{
@@ -509,29 +517,41 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive, switchAgent 
         onClick={toggleDropdown}
         title="Switch agent"
         style={{
-          display: 'flex', alignItems: 'baseline', gap: '0.4rem',
+          display: 'flex', alignItems: 'center', gap: '0.4rem',
           minWidth: 0, overflow: 'hidden',
           background: 'transparent', border: 'none', cursor: 'pointer',
           padding: 0, margin: 0,
         }}
       >
-        <span data-brand-text style={{
-          fontFamily: "'Rajdhani',sans-serif",
-          fontSize: nameSize, fontWeight: 800,
-          letterSpacing: tracking, textTransform: 'uppercase',
-          color: '#ffffff',
-          lineHeight: 1.1, whiteSpace: 'nowrap',
+        <AgentMark agentId={profile.agentId} size={logoSize}
+                   style={{ flexShrink: 0 }} />
+        {/* Name and model number share a baseline of their own, so the logo
+            beside them is centred against the pair rather than sitting on it —
+            otherwise the two fall out of line whenever nameSize changes.
+            Only the name may shrink; the model number never truncates. */}
+        <span style={{
+          display: 'flex', alignItems: 'baseline', gap: '0.4rem',
+          minWidth: 0,
         }}>
-          {profile.name}
-        </span>
-        <span data-brand-text style={{
-          fontFamily: "'Rajdhani',sans-serif",
-          fontSize: markSize, fontWeight: 800,
-          letterSpacing: tracking, textTransform: 'uppercase',
-          color: 'var(--hb-cyan)',
-          lineHeight: 1.1, whiteSpace: 'nowrap', flexShrink: 0,
-        }}>
-          {profile.modelNumber}
+          <span data-brand-text style={{
+            fontFamily: "'Rajdhani',sans-serif",
+            fontSize: nameSize, fontWeight: 800,
+            letterSpacing: tracking, textTransform: 'uppercase',
+            color: '#ffffff',
+            lineHeight: 1.1, whiteSpace: 'nowrap',
+            minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {profile.name}
+          </span>
+          <span data-brand-text style={{
+            fontFamily: "'Rajdhani',sans-serif",
+            fontSize: markSize, fontWeight: 800,
+            letterSpacing: tracking, textTransform: 'uppercase',
+            color: 'var(--hb-cyan)',
+            lineHeight: 1.1, whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            {profile.modelNumber}
+          </span>
         </span>
         {/* Dropdown chevron */}
         <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -636,23 +656,29 @@ function SidebarFooter({ profile, onOpenSettings }: { profile: AppProfile; onOpe
           textAlign: 'left',
         }}
       >
-        {/* Avatar — sharp square with teal border */}
-        <div className="hb-glass-xs" style={{
-          width: 28, height: 28,
-          flexShrink: 0,
-          background: 'rgba(var(--hb-accent-rgb),0.12)',
-          boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.15)',
-          border: `1px solid ${menuOpen || hover ? 'var(--hb-edge-bright)' : 'var(--hb-edge)'}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: "'Rajdhani',sans-serif",
-          fontSize: '0.8rem', fontWeight: 700,
-          color: menuOpen || hover ? 'var(--hb-cyan-bright)' : 'var(--hb-cyan)',
-          letterSpacing: '0.05em',
-          transition: 'border-color 0.12s, color 0.12s',
-          userSelect: 'none',
-        }}>
-          {(settings.userName?.[0] || profile.avatarInitial || '?').toUpperCase()}
-        </div>
+        {/* Avatar — the agent's mark, bare and full-height. Only the initial
+            fallback keeps a plate, since a lone letter needs one to read. */}
+        {hasMark(profile.agentId) ? (
+          <AgentMark agentId={profile.agentId} size={30}
+                     style={{ flexShrink: 0 }} />
+        ) : (
+          <div className="hb-glass-xs" style={{
+            width: 28, height: 28,
+            flexShrink: 0,
+            background: 'rgba(var(--hb-accent-rgb),0.12)',
+            boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.15)',
+            border: `1px solid ${menuOpen || hover ? 'var(--hb-edge-bright)' : 'var(--hb-edge)'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: "'Rajdhani',sans-serif",
+            fontSize: '0.8rem', fontWeight: 700,
+            color: menuOpen || hover ? 'var(--hb-cyan-bright)' : 'var(--hb-cyan)',
+            letterSpacing: '0.05em',
+            transition: 'border-color 0.12s, color 0.12s',
+            userSelect: 'none',
+          }}>
+            {(settings.userName?.[0] || profile.avatarInitial || '?').toUpperCase()}
+          </div>
+        )}
 
         {/* Name + tagline */}
         <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>

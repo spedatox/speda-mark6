@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<!-- SENTINEL · FINANCIAL REPORT ─ fork per period. Ledger discipline:
+     every figure has a unit and a period · totals carry a double rule ·
+     estimates are declared in §06 · nothing here is advice. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Financial Report</title>
+<style>
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans.ttf");font-weight:400}
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans-Bold.ttf");font-weight:700}
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans-Oblique.ttf");font-style:italic}
+@font-face{font-family:M;src:url("../../skills/fonts/DejaVuSansMono.ttf")}
+:root{--k:#111417;--g:#6b7278;--h:#d9dcdf;--a:#0d5c47;--up:#0d5c47;--dn:#9d1f1f}
+
+@page{size:A4;margin:19mm 15mm 16mm 15mm;
+  @top-right{content:string(ref);font:400 6.6pt M;color:#6b7278;letter-spacing:.1em}
+  @bottom-left{content:string(run);font:400 7pt S;color:#6b7278;letter-spacing:.09em}
+  @bottom-right{content:counter(page);font:400 7pt M;color:#6b7278}}
+@page:first{margin:0;@top-right{content:none}@bottom-left{content:none}@bottom-right{content:none}}
+
+html{font-size:9.4pt}
+body{font-family:S;color:var(--k);line-height:1.55;margin:0}
+h1,h2,h3{margin:0;font-weight:700;break-after:avoid}
+p{margin:0 0 1.8mm}
+
+/* ── cover: the number is the headline ─────────────────────────────── */
+.cover{height:297mm;padding:26mm 20mm 16mm;box-sizing:border-box;display:flex;flex-direction:column;break-after:page}
+.kicker{font:700 7pt M;letter-spacing:.3em;color:var(--a)}
+.cover h1{font-size:29pt;line-height:1.06;letter-spacing:-.018em;margin:13mm 0 0}
+.cover .per{font-size:11.5pt;color:var(--g);margin-top:4mm}
+.hero{flex:1;display:flex;flex-direction:column;justify-content:center;border-top:2.6pt solid var(--k);
+      border-bottom:.6pt solid var(--h);margin:11mm 0 0;padding:9mm 0}
+.hero .l{font:700 6.8pt S;letter-spacing:.2em;text-transform:uppercase;color:var(--g)}
+.hero .v{font:700 58pt M;line-height:1;letter-spacing:-.035em;font-variant-numeric:tabular-nums;margin-top:4mm}
+.hero .d{font-size:11pt;color:var(--g);margin-top:4mm}
+.hero .d b{color:var(--up)}
+.strip{display:flex;border-bottom:.6pt solid var(--h)}
+.strip div{flex:1;padding:5mm 5mm 5mm 0}
+.strip dt{font:700 6.6pt S;letter-spacing:.16em;text-transform:uppercase;color:var(--g)}
+.strip dd{margin:2mm 0 0;font:700 15pt M;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1}
+.strip small{display:block;font-family:S;font-weight:400;font-size:7.6pt;color:var(--g);margin-top:1.8mm;letter-spacing:0}
+.cover .foot{font-size:7.4pt;color:var(--g);padding-top:4mm;line-height:1.55}
+
+/* ── section ───────────────────────────────────────────────────────── */
+.sec{margin-bottom:7mm}
+h2{string-set:run content();font-size:14.5pt;letter-spacing:-.012em;line-height:1.15;margin-bottom:1.6mm}
+h2 em{font-style:normal;font-family:M;font-size:8.4pt;color:var(--g);letter-spacing:.14em;margin-right:3mm;vertical-align:.9mm}
+.hr{height:.9pt;background:var(--k);margin:0 0 3.5mm}
+h3{font-size:9.6pt;margin:5mm 0 1.8mm}
+
+/* ── statement tables ──────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:8.5pt;margin:0 0 2.5mm}
+thead{display:table-header-group}
+th{font:700 6.6pt S;letter-spacing:.13em;text-transform:uppercase;color:var(--g);text-align:left;
+   padding:0 0 1.6mm 3mm;border-bottom:.9pt solid var(--k)}
+td{padding:1.7mm 0 1.7mm 3mm;border-bottom:.35pt solid var(--h);vertical-align:baseline}
+th:first-child,td:first-child{padding-left:0}
+th.n,td.n{text-align:right;font-family:M;font-size:8.2pt;font-variant-numeric:tabular-nums;white-space:nowrap}
+th.n{font-family:S}
+tr{break-inside:avoid}
+tr.h td{font-weight:700;border-bottom:.35pt solid var(--k);padding-top:3.4mm}
+tr.s td:first-child{padding-left:5mm;color:var(--g)}
+tr.t td{font-weight:700;border-top:.9pt solid var(--k);border-bottom:2.2pt double var(--k)}
+tr.g td{border-bottom:0;padding:0;height:2mm}
+.up{color:var(--up)}.dn{color:var(--dn)}
+td.n small{font-family:S;font-size:7pt;color:var(--g)}
+
+/* ── commentary rail ───────────────────────────────────────────────── */
+.row{display:flex;gap:6mm}
+.row .main{flex:1;min-width:0}
+.row .rail{width:36mm;flex:none;font-size:7.6pt;line-height:1.5;color:var(--g)}
+.rail b{display:block;font-family:S;font-size:6.7pt;letter-spacing:.15em;text-transform:uppercase;color:var(--k);margin-bottom:1.5mm}
+.rail p{margin:0 0 3mm}
+
+/* ── utilisation bars: hairline scale, no fill boxes ───────────────── */
+.u{display:block;height:1.9mm;background:var(--h);position:relative}
+.u i{position:absolute;left:0;top:0;bottom:0;background:var(--k);display:block}
+.u i.o{background:var(--dn)}
+
+/* ── chart plate ───────────────────────────────────────────────────── */
+.plate{margin:1mm 0 4mm;break-inside:avoid}
+.plate svg{width:100%;height:auto;display:block}
+.plate .cap{border-top:.9pt solid var(--k);padding-top:2mm;margin-top:2mm;font-size:7.6pt;color:var(--g);line-height:1.5}
+.plate .cap b{color:var(--k);font-family:M;font-size:7.2pt;letter-spacing:.1em;margin-right:2.5mm}
+
+.flag{border-left:2.4pt solid var(--k);padding:.4mm 0 .4mm 4mm;margin:1mm 0 4mm;break-inside:avoid;font-size:8.8pt}
+.flag b{display:block;font:700 6.8pt S;letter-spacing:.16em;text-transform:uppercase;color:var(--g);margin-bottom:1.4mm}
+.flag p{margin:0 0 1.6mm}.flag p:last-child{margin-bottom:0}.flag i{font-style:normal;font-weight:700}
+.flag.w{border-color:var(--dn)}.flag.w b{color:var(--dn)}
+ul{margin:0 0 1.8mm;padding-left:4mm}li{margin-bottom:1.2mm}
+.end{border-top:.9pt solid var(--k);margin-top:8mm;padding-top:3mm;font-size:7.4pt;color:var(--g);line-height:1.55}
+</style>
+</head>
+<body>
+
+<!-- ══ COVER ══════════════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="kicker">SENTINEL / FINANCE</div>
+  <h1>Monthly Financial Report</h1>
+  <div class="per">June 2026 · consolidated personal position · six accounts</div>
+  <div class="hero">
+    <div class="l">Net worth, 30 June 2026</div>
+    <div class="v">₺2 418 900</div>
+    <div class="d"><b>▲ ₺61 400 · +2.6 %</b> against May — all of it market movement, none of it accumulation.</div>
+  </div>
+  <dl class="strip">
+    <div><dt>Income</dt><dd>186 400<small>TRY · flat MoM</small></dd></div>
+    <div><dt>Expenses</dt><dd>124 780<small>TRY · +8.1 %</small></dd></div>
+    <div><dt>Surplus</dt><dd>61 620<small>TRY · −13.9 %</small></dd></div>
+    <div><dt>Savings rate</dt><dd>33.1 %<small>floor is 35 %</small></dd></div>
+  </dl>
+  <div class="foot">SEN-FIN-2026-06 · prepared 21 July 2026 · base currency TRY · figures unaudited.
+    Historical position and budget performance only. <b>Not investment, tax, or financial advice.</b></div>
+</div>
+
+<!-- ══ 01 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="row">
+    <div class="main">
+      <h2><em>01</em>Income and expenditure</h2>
+      <div class="hr"></div>
+      <table>
+        <thead><tr><th>TRY</th><th class="n">Jun 2026</th><th class="n">May 2026</th><th class="n">Δ</th><th class="n">Δ %</th><th class="n">Year to date</th></tr></thead>
+        <tbody>
+          <tr class="h"><td>Income</td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>
+          <tr><td>Salary, net</td><td class="n">168 000</td><td class="n">168 000</td><td class="n">—</td><td class="n">0.0</td><td class="n">1 008 000</td></tr>
+          <tr><td>Consulting</td><td class="n">14 200</td><td class="n">15 100</td><td class="n dn">−900</td><td class="n dn">−6.0</td><td class="n">78 400</td></tr>
+          <tr><td>Dividends and interest</td><td class="n">4 200</td><td class="n">3 900</td><td class="n up">+300</td><td class="n up">+7.7</td><td class="n">23 600</td></tr>
+          <tr class="t"><td>Total income</td><td class="n">186 400</td><td class="n">187 000</td><td class="n">−600</td><td class="n">−0.3</td><td class="n">1 110 000</td></tr>
+          <tr class="g"><td colspan="6"></td></tr>
+          <tr class="h"><td>Expenditure</td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>
+          <tr><td>Housing</td><td class="n">38 000</td><td class="n">38 000</td><td class="n">—</td><td class="n">0.0</td><td class="n">228 000</td></tr>
+          <tr><td>Food and household</td><td class="n">21 400</td><td class="n">20 100</td><td class="n dn">+1 300</td><td class="n dn">+6.5</td><td class="n">121 900</td></tr>
+          <tr><td>Transport</td><td class="n">9 800</td><td class="n">9 200</td><td class="n dn">+600</td><td class="n dn">+6.5</td><td class="n">55 300</td></tr>
+          <tr><td>Health</td><td class="n">18 600</td><td class="n">6 400</td><td class="n dn">+12 200</td><td class="n dn">+190.6</td><td class="n">44 100</td></tr>
+          <tr class="s"><td>of which dental, non-recurring</td><td class="n">12 400</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">12 400</td></tr>
+          <tr><td>Discretionary</td><td class="n">18 980</td><td class="n">22 770</td><td class="n up">−3 790</td><td class="n up">−16.6</td><td class="n">128 400</td></tr>
+          <tr><td>Subscriptions</td><td class="n">4 000</td><td class="n">3 200</td><td class="n dn">+800</td><td class="n dn">+25.0</td><td class="n">21 300</td></tr>
+          <tr><td>Other</td><td class="n">14 000</td><td class="n">15 800</td><td class="n up">−1 800</td><td class="n up">−11.4</td><td class="n">92 600</td></tr>
+          <tr class="t"><td>Total expenditure</td><td class="n">124 780</td><td class="n">115 470</td><td class="n">+9 310</td><td class="n">+8.1</td><td class="n">691 600</td></tr>
+          <tr class="g"><td colspan="6"></td></tr>
+          <tr class="t"><td>Net surplus</td><td class="n">61 620</td><td class="n">71 530</td><td class="n">−9 910</td><td class="n">−13.9</td><td class="n">418 400</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="rail">
+      <b>Reading this</b>
+      <p>Colour marks direction of benefit, not direction of the number: rising expenditure reads red, falling reads green.</p>
+      <p>Δ compares with the immediately preceding month. Year to date runs from 1 January.</p>
+      <b>The month in one line</b>
+      <p>Income held. Expenditure rose 8.1 %, and 12 400 of the 9 310 increase is a single dental invoice — strip it out and
+      the month ran under budget.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 02 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <h2><em>02</em>Budget against actual</h2>
+  <div class="hr"></div>
+  <table>
+    <thead><tr><th>Category</th><th class="n">Budget</th><th class="n">Actual</th><th class="n">Variance</th><th class="n">Used</th><th style="width:34mm">Utilisation</th></tr></thead>
+    <tbody>
+      <tr><td>Housing</td><td class="n">38 000</td><td class="n">38 000</td><td class="n">—</td><td class="n">100 %</td><td><span class="u"><i style="width:100%"></i></span></td></tr>
+      <tr><td>Food and household</td><td class="n">22 000</td><td class="n">21 400</td><td class="n up">−600</td><td class="n">97 %</td><td><span class="u"><i style="width:97%"></i></span></td></tr>
+      <tr><td>Transport</td><td class="n">10 000</td><td class="n">9 800</td><td class="n up">−200</td><td class="n">98 %</td><td><span class="u"><i style="width:98%"></i></span></td></tr>
+      <tr><td>Health</td><td class="n">7 000</td><td class="n">18 600</td><td class="n dn">+11 600</td><td class="n dn">266 %</td><td><span class="u"><i class="o" style="width:100%"></i></span></td></tr>
+      <tr><td>Discretionary</td><td class="n">20 000</td><td class="n">18 980</td><td class="n up">−1 020</td><td class="n">95 %</td><td><span class="u"><i style="width:95%"></i></span></td></tr>
+      <tr><td>Subscriptions</td><td class="n">3 200</td><td class="n">4 000</td><td class="n dn">+800</td><td class="n dn">125 %</td><td><span class="u"><i class="o" style="width:100%"></i></span></td></tr>
+      <tr class="t"><td>Total</td><td class="n">115 200</td><td class="n">124 780</td><td class="n">+9 580</td><td class="n">108 %</td><td></td></tr>
+    </tbody>
+  </table>
+  <div class="flag w">
+    <b>Two variances, one of them structural</b>
+    <p><i>Health, +11 600.</i> A single dental procedure of 12 400. Excluding it the category ran 800 under budget.
+    Restore the normal line in July and it closes itself.</p>
+    <p><i>Subscriptions, +800.</i> Not a timing artefact. Two annual renewals landed together and one price rose 22 %.
+    Left alone this adds about 9 600 to the year, and it is the second consecutive month over budget.</p>
+  </div>
+</div>
+
+<!-- ══ 03 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="row">
+    <div class="main">
+      <h2><em>03</em>Net worth, seven months</h2>
+      <div class="hr"></div>
+      <div class="plate">
+        <svg viewBox="0 0 620 178" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif">
+          <g stroke="#d9dcdf" stroke-width=".8">
+            <line x1="42" y1="14" x2="612" y2="14"/><line x1="42" y1="52" x2="612" y2="52"/>
+            <line x1="42" y1="90" x2="612" y2="90"/><line x1="42" y1="128" x2="612" y2="128"/>
+          </g>
+          <line x1="42" y1="150" x2="612" y2="150" stroke="#111417" stroke-width="1"/>
+          <g fill="#6b7278" font-size="8" text-anchor="end">
+            <text x="36" y="17">2.5M</text><text x="36" y="55">2.3M</text><text x="36" y="93">2.1M</text><text x="36" y="131">1.9M</text>
+          </g>
+          <g fill="#111417">
+            <rect x="62"  y="118" width="52" height="32"/><rect x="140" y="106" width="52" height="44"/>
+            <rect x="218" y="98"  width="52" height="52"/><rect x="296" y="82"  width="52" height="68"/>
+            <rect x="374" y="64"  width="52" height="86"/><rect x="452" y="48"  width="52" height="102"/>
+            <rect x="530" y="30"  width="52" height="120"/>
+          </g>
+          <rect x="530" y="24" width="52" height="4" fill="#0d5c47"/>
+          <g fill="#6b7278" font-size="8" text-anchor="middle">
+            <text x="88"  y="164">Dec</text><text x="166" y="164">Jan</text><text x="244" y="164">Feb</text><text x="322" y="164">Mar</text>
+            <text x="400" y="164">Apr</text><text x="478" y="164">May</text><text x="556" y="164" fill="#0d5c47">Jun</text>
+          </g>
+        </svg>
+        <div class="cap"><b>FIG 1</b>Month-end consolidated net worth, TRY. Seven-month change +23.4 %, of which roughly 61 % is
+        contribution and 39 % market movement.</div>
+      </div>
+    </div>
+    <div class="rail">
+      <b>Composition</b>
+      <p>The split between contribution and market movement matters more than the level: contribution is repeatable,
+      market movement is not.</p>
+      <p>June is the first month this year where market movement carried the entire gain.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 04 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <h2><em>04</em>Assets and liabilities</h2>
+  <div class="hr"></div>
+  <table>
+    <thead><tr><th>Holding</th><th>Class</th><th class="n">Value</th><th class="n">Weight</th><th class="n">Δ MoM</th><th class="n">Target</th><th class="n">Drift</th></tr></thead>
+    <tbody>
+      <tr><td>Deposit accounts</td><td>Cash</td><td class="n">312 400</td><td class="n">12.4 %</td><td class="n up">+1.1</td><td class="n">10.0 %</td><td class="n">+2.4</td></tr>
+      <tr><td>Equity index funds</td><td>Equity</td><td class="n">1 148 000</td><td class="n">45.6 %</td><td class="n up">+4.2</td><td class="n">45.0 %</td><td class="n">+0.6</td></tr>
+      <tr><td>Government bonds</td><td>Fixed income</td><td class="n">486 300</td><td class="n">19.3 %</td><td class="n up">+0.8</td><td class="n">20.0 %</td><td class="n">−0.7</td></tr>
+      <tr><td>Gold</td><td>Commodity</td><td class="n">402 100</td><td class="n">16.0 %</td><td class="n dn">−1.4</td><td class="n">15.0 %</td><td class="n">+1.0</td></tr>
+      <tr><td>Digital assets</td><td>Alternative</td><td class="n">168 900</td><td class="n">6.7 %</td><td class="n up">+9.6</td><td class="n">10.0 %</td><td class="n">−3.3</td></tr>
+      <tr class="t"><td>Total assets</td><td></td><td class="n">2 517 700</td><td class="n">100.0 %</td><td class="n">+2.9</td><td class="n">100.0 %</td><td class="n"></td></tr>
+      <tr class="g"><td colspan="7"></td></tr>
+      <tr><td>Credit card balance</td><td>Liability</td><td class="n">−98 800</td><td class="n">—</td><td class="n dn">+12.4</td><td class="n">—</td><td class="n">—</td></tr>
+      <tr class="t"><td>Net worth</td><td></td><td class="n">2 418 900</td><td class="n"></td><td class="n">+2.6</td><td class="n"></td><td class="n"></td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:7.6pt;color:#6b7278">Weights are of gross assets. Drift beyond ±3.0 pp triggers a rebalancing review — digital assets sit at −3.3 pp and breach it.</p>
+</div>
+
+<!-- ══ 05 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="row">
+    <div class="main">
+      <h2><em>05</em>Liquidity and standing alerts</h2>
+      <div class="hr"></div>
+      <table>
+        <thead><tr><th>Measure</th><th class="n">Value</th><th>Reading</th></tr></thead>
+        <tbody>
+          <tr><td>Average monthly expenditure, trailing six months</td><td class="n">115 267</td><td>Runway denominator</td></tr>
+          <tr><td>Liquid assets</td><td class="n">312 400</td><td>Cash only; gold excluded</td></tr>
+          <tr><td>Emergency runway</td><td class="n dn">2.7 months</td><td>Target is six</td></tr>
+          <tr><td>Debt service ratio</td><td class="n up">0.0 %</td><td>Card cleared each cycle</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>Alert</th><th>Trigger</th><th>State</th><th class="n">Next check</th></tr></thead>
+        <tbody>
+          <tr><td>Savings rate floor</td><td>Below 35 % in any month</td><td class="dn">Fired — 33.1 % in June</td><td class="n">31 Jul</td></tr>
+          <tr><td>Emergency runway</td><td>Below six months liquid</td><td class="dn">Fired — fourth month</td><td class="n">31 Jul</td></tr>
+          <tr><td>Subscription creep</td><td>Over 110 % of budget twice</td><td class="dn">Fired — second month</td><td class="n">31 Jul</td></tr>
+          <tr><td>Allocation drift</td><td>Beyond ±3.0 pp of target</td><td class="dn">Fired — digital −3.3 pp</td><td class="n">31 Jul</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="rail">
+      <b>The standing gap</b>
+      <p>Liquid runway has been short for four consecutive months. Closing it needs roughly 380 000 in cash — about six
+      months of directing the entire surplus to deposits instead of investment.</p>
+      <p>That is a decision with a real cost, not an oversight to be corrected. It is stated here so it stays visible.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 06 ═════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <h2><em>06</em>Basis of preparation</h2>
+  <div class="hr"></div>
+  <ul>
+    <li>Balances as reported by each institution at 21 July 2026, 09:00. Two accounts settle T+1 and may restate by up to ₺2 000.</li>
+    <li>Foreign-currency holdings converted at the period-end rate, not at transaction-date rates.</li>
+    <li>Fund valuations use the last published NAV; two funds lag by one business day.</li>
+    <li>Uncategorised transactions of ₺1 840 — 1.5 % of spend — sit in Other. They were not spread across categories by estimate.</li>
+    <li>No tax provision is modelled. No forward projection appears anywhere in this report.</li>
+  </ul>
+</div>
+
+<div class="end">
+  Sentinel · SEN-FIN-2026-06 · generated 21 July 2026 for the account owner's personal information.
+  This report describes historical position and budget performance. It is <b>not investment, tax, or financial advice</b>,
+  contains no recommendation to buy or sell any asset, and must not be relied upon as such. Figures are unaudited.
+</div>
+
+</body>
+</html>

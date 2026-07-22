@@ -16,6 +16,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +46,8 @@ import com.speda.heartbreaker.designsystem.theme.HbPalette
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbFonts
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.domain.MathExtract
+import com.speda.heartbreaker.domain.MathSpan
 import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
@@ -68,6 +72,7 @@ import org.commonmark.node.SoftLineBreak
 import org.commonmark.node.StrongEmphasis
 import org.commonmark.node.ThematicBreak
 import org.commonmark.parser.Parser
+import org.commonmark.renderer.html.HtmlRenderer
 import org.commonmark.node.Text as MdText
 
 /**
@@ -79,15 +84,27 @@ import org.commonmark.node.Text as MdText
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-private val PARSER: Parser = Parser.builder()
-    .extensions(
-        listOf(
-            TablesExtension.create(),
-            StrikethroughExtension.create(),
-            AutolinkExtension.create(),
-        ),
-    )
-    .build()
+private val EXTENSIONS = listOf(
+    TablesExtension.create(),
+    StrikethroughExtension.create(),
+    AutolinkExtension.create(),
+)
+
+private val PARSER: Parser = Parser.builder().extensions(EXTENSIONS).build()
+
+/**
+ * Only ever asked to render a single math-bearing paragraph — KaTeX needs HTML,
+ * and hand-writing a second inline renderer would be a second place to keep in
+ * step with [appendInlines].
+ */
+private val HTML: HtmlRenderer = HtmlRenderer.builder().extensions(EXTENSIONS).build()
+
+/**
+ * The math lifted out of the current document, indexed by the placeholders left
+ * behind in the AST. Handed down rather than threaded through every composable:
+ * only two leaves ever read it, and both sit several levels deep.
+ */
+private val LocalMathSpans = compositionLocalOf { emptyList<MathSpan>() }
 
 /** `.prose` — Inter 0.95rem, line-height 1.7, no tracking. */
 private val ProseBase = TextStyle(
@@ -100,8 +117,12 @@ private val ProseBase = TextStyle(
 @Composable
 fun ProseText(markdown: String, modifier: Modifier = Modifier) {
     val palette = LocalHbPalette.current
-    val doc = remember(markdown) { PARSER.parse(markdown) }
-    Column(modifier.fillMaxWidth()) { Blocks(doc, palette) }
+    // Math leaves the source before the parser runs — see MathExtract for why.
+    val math = remember(markdown) { MathExtract.extract(markdown) }
+    val doc = remember(math) { PARSER.parse(math.markdown) }
+    CompositionLocalProvider(LocalMathSpans provides math.spans) {
+        Column(modifier.fillMaxWidth()) { Blocks(doc, palette) }
+    }
 }
 
 @Composable
@@ -117,11 +138,7 @@ private fun Blocks(parent: Node, palette: HbPalette) {
 private fun Block(node: Node, palette: HbPalette) {
     when (node) {
         is Heading -> HeadingPlate(node, palette)
-        is Paragraph -> BasicText(
-            text = inlines(node, palette),
-            style = ProseBase.merge(TextStyle(color = palette.text)),
-            modifier = Modifier.padding(vertical = 8.dp), // .prose p { margin: 0.5rem 0 }
-        )
+        is Paragraph -> ParagraphBlock(node, palette)
         is BulletList -> ListBlock(node, palette, ordered = false)
         is OrderedList -> ListBlock(node, palette, ordered = true)
         is BlockQuote -> Quote(node, palette)
@@ -131,6 +148,50 @@ private fun Block(node: Node, palette: HbPalette) {
         is TableBlock -> TableView(node, palette)
         else -> Blocks(node, palette) // containers we don't style directly
     }
+}
+
+/* ── Paragraphs — native, unless there is math in them ───────────────────── */
+
+/**
+ * A paragraph carrying a formula goes to KaTeX whole. Inline math has to share a
+ * baseline with the words around it, so the whole run needs one layout box; a
+ * WebView holding only the formula could never line up. Everything else keeps
+ * the native Compose path — the WebView is the exception, not the default.
+ */
+@Composable
+private fun ParagraphBlock(node: Paragraph, palette: HbPalette, inList: Boolean = false) {
+    val spans = LocalMathSpans.current
+    val html = remember(node, spans) { if (carriesMath(node)) HTML.render(node) else null }
+
+    when {
+        html != null -> MathProse(html, spans)
+        // A list item's paragraph carries no extra vertical margin.
+        inList -> BasicText(
+            text = inlines(node, palette),
+            style = ProseBase.merge(TextStyle(color = palette.text)),
+        )
+        else -> BasicText(
+            text = inlines(node, palette),
+            style = ProseBase.merge(TextStyle(color = palette.text)),
+            modifier = Modifier.padding(vertical = 8.dp), // .prose p { margin: 0.5rem 0 }
+        )
+    }
+}
+
+/** Does any literal under [node] still hold a [MathExtract] placeholder? */
+private fun carriesMath(node: Node): Boolean {
+    var child = node.firstChild
+    while (child != null) {
+        val literal = when (child) {
+            is MdText -> child.literal
+            is Code -> child.literal
+            else -> null
+        }
+        if (literal != null && MathExtract.hasPlaceholder(literal)) return true
+        if (literal == null && carriesMath(child)) return true
+        child = child.next
+    }
+    return false
 }
 
 /* ── Fence dispatch ──────────────────────────────────────────────────────── */
@@ -269,11 +330,7 @@ private fun ListItemBody(item: ListItem, palette: HbPalette, depth: Int) {
     var child = item.firstChild
     while (child != null) {
         when (child) {
-            // A list item's paragraph carries no extra vertical margin.
-            is Paragraph -> BasicText(
-                text = inlines(child, palette),
-                style = ProseBase.merge(TextStyle(color = palette.text)),
-            )
+            is Paragraph -> ParagraphBlock(child, palette, inList = true)
             is BulletList -> ListBlock(child, palette, ordered = false, depth = depth + 1)
             is OrderedList -> ListBlock(child, palette, ordered = true, depth = depth + 1)
             else -> Block(child, palette)
@@ -405,21 +462,27 @@ private fun TableCellView(cell: TableCell, palette: HbPalette, header: Boolean) 
 
 /* ── Inlines ─────────────────────────────────────────────────────────────── */
 
-private fun inlines(parent: Node, palette: HbPalette): AnnotatedString =
-    buildAnnotatedString { appendInlines(parent, palette) }
+@Composable
+private fun inlines(parent: Node, palette: HbPalette): AnnotatedString {
+    val spans = LocalMathSpans.current
+    return buildAnnotatedString { appendInlines(parent, palette, spans) }
+}
 
-private fun AnnotatedString.Builder.appendInlines(parent: Node, palette: HbPalette) {
+private fun AnnotatedString.Builder.appendInlines(parent: Node, palette: HbPalette, math: List<MathSpan>) {
     var child = parent.firstChild
     while (child != null) {
         when (val n = child) {
-            is MdText -> append(n.literal)
+            // Placeholders reaching a renderer with no math support — a heading, a
+            // table cell — turn back into the TeX the user wrote. Never a stray
+            // private-use glyph.
+            is MdText -> append(MathExtract.restore(n.literal, math))
             // strong → white
             is StrongEmphasis -> withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.Bold)) {
-                appendInlines(n, palette)
+                appendInlines(n, palette, math)
             }
             // em → amber, and NOT italic (the CSS kills font-style)
             is Emphasis -> withStyle(SpanStyle(color = palette.amber, fontStyle = FontStyle.Normal)) {
-                appendInlines(n, palette)
+                appendInlines(n, palette, math)
             }
             // inline code → cyan text on an accent-tinted chip
             is Code -> withStyle(
@@ -438,18 +501,18 @@ private fun AnnotatedString.Builder.appendInlines(parent: Node, palette: HbPalet
                 val linkStyle = SpanStyle(color = palette.accentBright, textDecoration = TextDecoration.Underline)
                 if (href.isNotBlank()) {
                     withLink(LinkAnnotation.Url(href, TextLinkStyles(style = linkStyle))) {
-                        appendInlines(n, palette)
+                        appendInlines(n, palette, math)
                     }
                 } else {
-                    withStyle(linkStyle) { appendInlines(n, palette) }
+                    withStyle(linkStyle) { appendInlines(n, palette, math) }
                 }
             }
             is Strikethrough -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
-                appendInlines(n, palette)
+                appendInlines(n, palette, math)
             }
             is SoftLineBreak -> append(' ')
             is HardLineBreak -> append('\n')
-            else -> appendInlines(n, palette)
+            else -> appendInlines(n, palette, math)
         }
         child = child.next
     }
