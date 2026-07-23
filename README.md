@@ -5,7 +5,7 @@
 
 ### Specialized Personal Executive Digital Assistant Mark VI
 
-<img width="1920" height="995" alt="image" src="https://github.com/user-attachments/assets/ab1d67df-ae91-42ea-baf2-15b3dd94ebab" />
+<img width="1920" height="1014" alt="image" src="https://github.com/user-attachments/assets/3691eed2-f8a2-4922-b188-2fe3c24b3402" />
 
 
 **A private, proactive, multi-agent executive assistant** — a suite of eight
@@ -55,7 +55,9 @@ carries its own identity, model policy, toolset and signature colour. Address
 any of them directly; they quietly hand work to each other when a task belongs
 to someone else's domain.
 
-<img width="1919" height="1013" alt="image" src="https://github.com/user-attachments/assets/25206040-24de-4fc2-8290-374bd983da0e" />
+
+<img width="1918" height="1016" alt="image" src="https://github.com/user-attachments/assets/c7c889c1-fe57-497b-bfc8-f59246764b14" />
+
 
 
 | Agent | Mark | Domain | What they do |
