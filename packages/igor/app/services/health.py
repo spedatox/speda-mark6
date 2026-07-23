@@ -92,7 +92,7 @@ async def ingest_samples(
     pending = 0
     touched: set[tuple[date_cls, str]] = set()
 
-    async with db.no_autoflush:
+    with db.no_autoflush:
         for s in samples:
             metric = s["metric"]
             start_aware = s["start"]
