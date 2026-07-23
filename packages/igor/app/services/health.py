@@ -74,7 +74,115 @@ async def ingest_samples(
     Returns {"accepted", "duplicates", "days_rolled"}. Idempotent by
     (metric, start_ts, origin): a re-sent batch reports duplicates and changes
     nothing, which is what lets the phone retry safely after a failed POST.
+
+    The loop runs inside ``no_autoflush`` so that the SELECT for sample N
+    never triggers a premature INSERT of samples 0..N-1 — that autoflush was
+    the root cause of the ``UNIQUE constraint failed`` errors when the phone
+    retried a partially-succeeded batch.  We flush explicitly in sub-batches
+    of _FLUSH_EVERY rows to keep the SQLite write-lock short and avoid the
+    ``database is locked`` errors that occurred when a single 4 000-row flush
+    held the lock for seconds.
     """
+    from sqlalchemy.exc import IntegrityError
+
+    _FLUSH_EVERY = 500
+
+    accepted = 0
+    duplicates = 0
+    pending = 0
+    touched: set[tuple[date_cls, str]] = set()
+
+    async with db.no_autoflush:
+        for s in samples:
+            metric = s["metric"]
+            start_aware = s["start"]
+            start_ts = _to_naive_utc(start_aware)
+            end_ts = _to_naive_utc(s.get("end") or start_aware)
+            origin = s.get("origin") or ""
+            day = local_day(start_aware)
+
+            existing = (
+                await db.execute(
+                    select(HealthSample).where(
+                        HealthSample.metric == metric,
+                        HealthSample.start_ts == start_ts,
+                        HealthSample.origin == origin,
+                    )
+                )
+            ).scalar_one_or_none()
+
+            if existing is not None:
+                # A re-send of a record the collector has since corrected
+                # (Health Connect surfaces edits through the same Changes
+                # API) — take the new value, but it is not a NEW sample.
+                existing.end_ts = end_ts
+                existing.value = float(s["value"])
+                existing.unit = s.get("unit") or ""
+                existing.detail = json.dumps(s.get("detail") or {}, ensure_ascii=False)
+                existing.day = day
+                if device:
+                    existing.device = device
+                duplicates += 1
+            else:
+                db.add(
+                    HealthSample(
+                        metric=metric,
+                        start_ts=start_ts,
+                        end_ts=end_ts,
+                        day=day,
+                        value=float(s["value"]),
+                        unit=s.get("unit") or "",
+                        detail=json.dumps(s.get("detail") or {}, ensure_ascii=False),
+                        origin=origin,
+                        device=device,
+                    )
+                )
+                accepted += 1
+                pending += 1
+            touched.add((day, metric))
+
+            # Sub-batch flush: release the SQLite write-lock periodically so
+            # concurrent requests (chat, tool calls) aren't starved.
+            if pending >= _FLUSH_EVERY:
+                try:
+                    await db.flush()
+                except IntegrityError:
+                    # A concurrent ingest already wrote some of these rows
+                    # (phone retry / overlapping WorkManager + manual sync).
+                    # Roll back the pending batch, then re-process them as
+                    # duplicates by expunging and continuing — the next
+                    # sub-batch or the final flush will pick up the rest.
+                    await db.rollback()
+                    return await _retry_ingest(db, samples, device)
+                pending = 0
+
+    # Final flush for any remaining rows.
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        return await _retry_ingest(db, samples, device)
+
+    for day, metric in touched:
+        await recompute_daily(db, day, metric)
+    await db.commit()
+
+    logger.info(
+        "health_ingest",
+        extra={"accepted": accepted, "duplicates": duplicates, "days": len(touched)},
+    )
+    return {"accepted": accepted, "duplicates": duplicates, "days_rolled": len(touched)}
+
+
+async def _retry_ingest(
+    db: AsyncSession, samples: list[dict], device: str
+) -> dict:
+    """Fallback: re-process the entire batch one row at a time, treating every
+    IntegrityError as a duplicate.  This is the slow path that only fires
+    when a concurrent ingest already wrote some of the same rows — it turns
+    the race into a clean duplicate count instead of a 500."""
+    from sqlalchemy.exc import IntegrityError
+
     accepted = 0
     duplicates = 0
     touched: set[tuple[date_cls, str]] = set()
@@ -98,9 +206,6 @@ async def ingest_samples(
         ).scalar_one_or_none()
 
         if existing is not None:
-            # A re-send of a record the collector has since corrected (Health
-            # Connect surfaces edits through the same Changes API) — take the
-            # new value, but it is not a NEW sample.
             existing.end_ts = end_ts
             existing.value = float(s["value"])
             existing.unit = s.get("unit") or ""
@@ -123,7 +228,14 @@ async def ingest_samples(
                     device=device,
                 )
             )
-            accepted += 1
+            try:
+                await db.flush()
+                accepted += 1
+            except IntegrityError:
+                # Written by the concurrent ingest between our SELECT and
+                # our INSERT — treat as duplicate, not an error.
+                await db.rollback()
+                duplicates += 1
         touched.add((day, metric))
 
     await db.flush()
@@ -133,7 +245,8 @@ async def ingest_samples(
 
     logger.info(
         "health_ingest",
-        extra={"accepted": accepted, "duplicates": duplicates, "days": len(touched)},
+        extra={"accepted": accepted, "duplicates": duplicates, "days": len(touched),
+               "retry_path": True},
     )
     return {"accepted": accepted, "duplicates": duplicates, "days_rolled": len(touched)}
 
