@@ -83,38 +83,44 @@ async def ingest_samples(
     ``database is locked`` errors that occurred when a single 4 000-row flush
     held the lock for seconds.
     """
+    from sqlalchemy import tuple_
     from sqlalchemy.exc import IntegrityError
 
-    _FLUSH_EVERY = 500
+    _CHUNK_SIZE = 500
 
     accepted = 0
     duplicates = 0
-    pending = 0
     touched: set[tuple[date_cls, str]] = set()
 
+    # Pre-parse timestamps and extract unique tuple keys for bulk lookup
+    prepared = []
+    keys = []
+    for s in samples:
+        metric = s["metric"]
+        start_aware = s["start"]
+        start_ts = _to_naive_utc(start_aware)
+        end_ts = _to_naive_utc(s.get("end") or start_aware)
+        origin = s.get("origin") or ""
+        day = local_day(start_aware)
+        prepared.append((metric, start_ts, end_ts, day, origin, s))
+        keys.append((metric, start_ts, origin))
+
+    # Bulk fetch existing records in chunks of 500 to stay well under SQLite parameter limits
+    existing_map: dict[tuple[str, datetime_cls, str], HealthSample] = {}
+    for i in range(0, len(keys), _CHUNK_SIZE):
+        chunk_keys = keys[i : i + _CHUNK_SIZE]
+        stmt = select(HealthSample).where(
+            tuple_(HealthSample.metric, HealthSample.start_ts, HealthSample.origin).in_(chunk_keys)
+        )
+        res = await db.execute(stmt)
+        for row in res.scalars():
+            existing_map[(row.metric, row.start_ts, row.origin)] = row
+
     with db.no_autoflush:
-        for s in samples:
-            metric = s["metric"]
-            start_aware = s["start"]
-            start_ts = _to_naive_utc(start_aware)
-            end_ts = _to_naive_utc(s.get("end") or start_aware)
-            origin = s.get("origin") or ""
-            day = local_day(start_aware)
-
-            existing = (
-                await db.execute(
-                    select(HealthSample).where(
-                        HealthSample.metric == metric,
-                        HealthSample.start_ts == start_ts,
-                        HealthSample.origin == origin,
-                    )
-                )
-            ).scalar_one_or_none()
-
+        for metric, start_ts, end_ts, day, origin, s in prepared:
+            existing = existing_map.get((metric, start_ts, origin))
             if existing is not None:
                 # A re-send of a record the collector has since corrected
-                # (Health Connect surfaces edits through the same Changes
-                # API) — take the new value, but it is not a NEW sample.
                 existing.end_ts = end_ts
                 existing.value = float(s["value"])
                 existing.unit = s.get("unit") or ""
@@ -124,39 +130,22 @@ async def ingest_samples(
                     existing.device = device
                 duplicates += 1
             else:
-                db.add(
-                    HealthSample(
-                        metric=metric,
-                        start_ts=start_ts,
-                        end_ts=end_ts,
-                        day=day,
-                        value=float(s["value"]),
-                        unit=s.get("unit") or "",
-                        detail=json.dumps(s.get("detail") or {}, ensure_ascii=False),
-                        origin=origin,
-                        device=device,
-                    )
+                new_sample = HealthSample(
+                    metric=metric,
+                    start_ts=start_ts,
+                    end_ts=end_ts,
+                    day=day,
+                    value=float(s["value"]),
+                    unit=s.get("unit") or "",
+                    detail=json.dumps(s.get("detail") or {}, ensure_ascii=False),
+                    origin=origin,
+                    device=device,
                 )
+                db.add(new_sample)
+                existing_map[(metric, start_ts, origin)] = new_sample
                 accepted += 1
-                pending += 1
             touched.add((day, metric))
 
-            # Sub-batch flush: release the SQLite write-lock periodically so
-            # concurrent requests (chat, tool calls) aren't starved.
-            if pending >= _FLUSH_EVERY:
-                try:
-                    await db.flush()
-                except IntegrityError:
-                    # A concurrent ingest already wrote some of these rows
-                    # (phone retry / overlapping WorkManager + manual sync).
-                    # Roll back the pending batch, then re-process them as
-                    # duplicates by expunging and continuing — the next
-                    # sub-batch or the final flush will pick up the rest.
-                    await db.rollback()
-                    return await _retry_ingest(db, samples, device)
-                pending = 0
-
-    # Final flush for any remaining rows.
     try:
         await db.flush()
     except IntegrityError:
