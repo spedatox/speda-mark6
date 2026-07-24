@@ -1,0 +1,996 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   SPEDA MARK VI — FUI design system
+   Reference: Iron Man 2 holographic UI (Prologue / Jayse Hansen)
+
+   Principles:
+   - Desaturated petrol-blue + steel-grey on near-black. Restraint over neon.
+   - Hairline 1px borders, corner brackets, ruler ticks. Precision, not bloom.
+   - Sharp rectangular panels. No rounded glowing cards.
+   - Tiny technical typography: caps, letter-spaced labels, monospace numerics.
+   - Glow is minimal and cold. Information density reads as instrumentation.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+/* SamsungOne — the real Samsung UI font, for readable body copy */
+@font-face {
+  font-family: 'SamsungOne';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/SamsungOne-400.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'SamsungOne';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/SamsungOne-700.ttf') format('truetype');
+}
+/* SamsungSharpSans — Samsung's display face, available for headings */
+@font-face {
+  font-family: 'SamsungSharpSans';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/SamsungSharpSans-Bold.ttf') format('truetype');
+}
+
+:root {
+  /* ── Fonts ────────────────────────────────────────────────────────────── */
+  --font-ui:      'Rajdhani', 'Saira', -apple-system, 'Segoe UI', sans-serif;     /* HUD chrome */
+  --font-read:    'Inter', -apple-system, 'Segoe UI', sans-serif;                 /* chat reading */
+  --font-display: 'SamsungSharpSans', 'SamsungOne', sans-serif;                   /* optional headings */
+  /* Former data-mono was var(--font-mono) — replaced app-wide with Inter per
+     owner request (kill the display-monospace look). Actual code blocks keep
+     their own JetBrains/Fira monospace in CodeBlock.tsx. */
+  --font-mono:    'Inter', -apple-system, 'Segoe UI', sans-serif;                 /* labels/readouts */
+
+  /* ── Core palette (SPEDA Mark VI Core — neutral dark, cyan as accent only) ──
+     Striker keeps SPEDA cyan as the ACCENT, but the backgrounds/surfaces are
+     neutral near-black greys — no petrol-cyan wash. Only --hb-cyan* and things
+     that explicitly use rgba(var(--hb-accent-rgb),A) carry the accent. */
+  --hb-void:        #060607;   /* deepest background — neutral */
+  --hb-base:        #0a0a0b;   /* base background — neutral */
+  --hb-petrol:      #17181b;   /* panel fill base — neutral */
+  --hb-steel:       #212227;   /* raised surface — neutral */
+  --hb-line:        rgba(255, 255, 255, 0.09);        /* neutral hairline border */
+  --hb-line-bright: rgba(var(--hb-accent-rgb), 0.50); /* active border — cyan accent */
+  --hb-cyan:        #36abca;   /* primary accent */
+  --hb-cyan-bright: #5fcce6;   /* active accent */
+  --hb-cyan-dim:    #1d5d70;   /* dim accent */
+  /* Raw accent triplets. Single agent → no re-hue at runtime; these stay cyan. */
+  --hb-accent-rgb:      54, 171, 202;
+  --hb-cyan-bright-rgb: 95, 204, 230;
+  --hb-cyan-dim-rgb:    29, 93, 112;
+  /* Dim icon scale — inactive chrome icons. Neutral greys. */
+  --hb-icon:        #6b7075;
+  --hb-icon-dim:    #4a4e52;
+  --hb-icon-bright: #9aa0a6;
+  --hb-amber:        #d99c44;  /* Stark orange — selection, folders, timestamps */
+  --hb-amber-bright: #f2b75c;  /* active orange */
+  --hb-amber-dim:    rgba(217,156,68,0.14); /* orange fill */
+  --hb-red:         #c84a3a;   /* alert */
+  --hb-green:       #4fa377;   /* nominal */
+  --hb-text:        #e3e3e3;   /* primary text — neutral light */
+  --hb-text-dim:    #9aa0a6;   /* secondary */
+  --hb-text-faint:  #5f6368;   /* muted / captions */
+  /* White header bars — "IP ADDRESS BOOK" / "SEARCH CONFIGURATION" style */
+  --hb-bar-light:      linear-gradient(180deg, #edf3f5 0%, #cfdade 55%, #b9c9cf 100%);
+  --hb-bar-light-text: #16242c;
+  /* Cyan filled header bars — "_FROM A DHCP SERVER" style */
+  --hb-bar-cyan:       linear-gradient(180deg, #43aecd 0%, #2b85a3 70%, #226e88 100%);
+  --hb-bar-cyan-text:  #eafaff;
+
+  /* ── Liquid glass (iOS-26 reference grade) ────────────────────────────────
+     The material is a thick frosted slab, not a tint: a milky cool-white
+     fill gives the glass visible body over the dark void, deep blur frosts
+     what passes through, and the slab is rimmed by light — a bright specular
+     catch on top, a fainter one underneath (the slab's thickness), and a
+     soft drop that lifts it off the background. Still zero gradient fills. */
+  --hb-edge:        rgba(255, 255, 255, 0.12);        /* neutral lit glass rim */
+  --hb-edge-bright: rgba(var(--hb-accent-rgb), 0.55); /* focused / hovered rim — cyan accent */
+  --hb-holo-fill:   var(--glass-tint);          /* neutral frost */
+  --hb-holo-blur:   blur(22px) saturate(115%);  /* the frost itself — calmer */
+  --hb-holo-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),   /* top specular catch (softened) */
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.05),  /* bottom rim — slab thickness */
+    0 6px 22px rgba(0, 0, 0, 0.35);              /* soft lift */
+  /* Focused / hovered — brighter catch, same construction */
+  --hb-holo-shadow-active:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.1),
+    0 8px 32px rgba(0, 0, 0, 0.4);
+
+  /* ── ONE unified glass material (the single .glass recipe) ─────────────────
+     Every glass component — buttons, dropdowns, panels, headers, chips, the
+     modal shell — draws from THESE tokens, so the whole app shares one material.
+     Dark-adapted from the reference glass-card: a rim-lit frosted slab with a
+     top specular streak, a left light edge, a bottom slab-thickness rim, a faint
+     inner glass glow, and a soft drop that lifts it off the void. The fill is a
+     dark occluding base (nested backdrop roots cancel a child's blur, so the
+     fill must occlude on its own) with a milky tint layered on top. Rounded
+     corners per the reference. Tint/active/amber are thin modifiers on top. */
+  --glass-menu:     rgba(22, 23, 26, 0.95);        /* neutral opaque fill for dropdowns/menus */
+  --glass-r:        14px;                          /* unified rounded corner */
+  --glass-r-pill:   9999px;                        /* .glass-round opt-in */
+  --glass-fill:     rgba(18, 19, 22, 0.62);        /* neutral occluding dark base */
+  --glass-tint:     rgba(224, 226, 230, 0.05);     /* neutral cool-white wash */
+  --glass-tint-hi:  rgba(224, 226, 230, 0.10);     /* hover wash */
+  --glass-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),     /* top specular streak (softened) */
+    inset 1px 0 0 0 rgba(255, 255, 255, 0.07),     /* left light edge */
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.05),    /* bottom rim (slab body) */
+    0 6px 22px rgba(0, 0, 0, 0.32);                /* soft lift */
+  --glass-shadow-active:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.28),
+    inset 1px 0 0 0 rgba(255, 255, 255, 0.11),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.06),
+    0 8px 26px rgba(0, 0, 0, 0.4);
+
+  /* ── Map the app's existing variables onto the FUI palette ───────────────
+     The ported components reference these — redefining them reskins the whole
+     app in one move, no component edits needed. */
+  --bg-primary:     var(--hb-base);
+  --bg-sidebar:     rgba(17, 18, 20, 0.72);
+  --bg-hover:       rgba(255, 255, 255, 0.06);
+  --bg-active:      rgba(var(--hb-accent-rgb), 0.16);
+  --bg-input:       rgba(20, 21, 24, 0.66);
+  --bg-user-bubble: rgba(42, 44, 50, 0.50);
+  --bg-code:        #0d0d0f;
+  --bg-code-header: #08080a;
+
+  --text-primary:   var(--hb-text);
+  --text-secondary: var(--hb-text-dim);
+  --text-muted:     var(--hb-text-faint);
+
+  --border:         var(--hb-line);
+  --border-focus:   var(--hb-line-bright);
+
+  --scrollbar-thumb:       rgba(255, 255, 255, 0.16);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.30);
+
+  --accent:        var(--hb-cyan);
+  --accent-hover:  var(--hb-cyan-bright);
+  --accent-muted:  rgba(var(--hb-accent-rgb), 0.14);
+
+  --gradient-gem: linear-gradient(135deg, var(--hb-cyan-bright) 0%, var(--hb-cyan) 50%, var(--hb-cyan-dim) 100%);
+
+  --shadow-lg: 0 0 0 1px rgba(255,255,255,0.05), 0 18px 46px rgba(0,0,0,0.55);
+
+  --sidebar-width: 268px;
+
+  /* Rounded world — softened, modern glass corners (no more radius-0 FUI). */
+  --radius-bubble: 1.15rem; --radius-input: 1rem; --radius-card: 12px;
+  --radius-sm: 8px; --radius-xs: 6px;
+}
+
+/* ── Reset — chrome stays structurally sharp (0px grounds the app window);
+   glass layers opt into the 4px micro-radius below. ─────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.hb-round, .hb-round * { border-radius: 9999px !important; }   /* opt-out for gauges/dials */
+/* Rounded glass radius scale (modern, softened). */
+.hb-glass     { border-radius: 16px !important; }
+.hb-glass-top { border-radius: 16px 16px 0 0 !important; }
+.hb-glass-sm  { border-radius: 12px !important; }
+.hb-glass-xs  { border-radius: 9px !important; }
+
+/* Structural seams — Striker replaces the Stark double-line etched groove
+   with a single calm neutral hairline divider. */
+.hb-seam-r { border-right: 1px solid var(--border); }
+.hb-seam-b { border-bottom: 1px solid var(--border); }
+.hb-seam-t { border-top: 1px solid var(--border); }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   THE ONE GLASS MATERIAL
+   `.glass` is the single canonical class for every glass surface. The existing
+   design-system classes (.hb-holo, .hb-btn, .hb-field, .hb-panel, headers,
+   chips, the modal shell) are listed alongside it so the ENTIRE app renders one
+   identical material — no per-component glass recipes. State is expressed with
+   thin modifiers (.glass-tint / .glass-active / .glass-amber / .glass-ghost /
+   .glass-round), never by re-declaring the material.
+   ════════════════════════════════════════════════════════════════════════════ */
+.glass,
+.hb-holo,
+.hb-panel,
+.hb-btn,
+.hb-field,
+.hb-glass,
+.hb-glass-sm,
+.hb-glass-xs,
+.hb-glass-top,
+.hb-head-light,
+.hb-head-cyan,
+.hb-head-glass,
+.hb-panel-head,
+.hb-query-box,
+.hb-chip-amber {
+  border-radius: var(--glass-r) !important;
+  background:
+    linear-gradient(var(--glass-tint), var(--glass-tint)),
+    var(--glass-fill);
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
+  border: 1px solid var(--hb-edge);
+  box-shadow: var(--glass-shadow);
+}
+
+/* ── Glass modifiers — thin state layers on the single material ─────────────
+   Placed AFTER the base so they win the cascade for the same properties.
+   .glass-tint reads its accent from `color` (set inline / by the component). */
+.glass-round { border-radius: var(--glass-r-pill) !important; }
+.glass-sm    { border-radius: 9px !important; }
+
+.glass-tint, .hb-btn-tint {
+  border-color: color-mix(in srgb, currentColor 55%, transparent);
+  background:
+    linear-gradient(color-mix(in srgb, currentColor 16%, transparent),
+                    color-mix(in srgb, currentColor 16%, transparent)),
+    var(--glass-fill);
+}
+
+.glass-active,
+.glass-interactive:hover:not(:disabled) {
+  border-color: var(--hb-edge-bright);
+  box-shadow: var(--glass-shadow-active);
+}
+
+.glass-amber, .hb-chip-amber {
+  border-color: rgba(217, 156, 68, 0.45);
+  background:
+    linear-gradient(rgba(217, 156, 68, 0.20), rgba(217, 156, 68, 0.20)),
+    var(--glass-fill);
+  color: var(--hb-amber-bright);
+}
+
+/* Cyan-tinted header keeps its accent wash + text on the shared material. */
+.hb-head-cyan {
+  background:
+    linear-gradient(rgba(var(--hb-accent-rgb), 0.16), rgba(var(--hb-accent-rgb), 0.16)),
+    var(--glass-fill);
+  color: var(--hb-cyan-bright);
+}
+
+.glass-ghost {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.glass-ghost:hover { background: var(--glass-tint); }
+
+html, body, #root { height: 100%; overflow: hidden; }
+/* No HUD frame in Striker — the app fills the window edge to edge. */
+#root { padding: 0; }
+
+body {
+  font-family: 'Rajdhani', 'Saira', -apple-system, 'Segoe UI', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  color: var(--hb-text);
+  /* Neutral deep base — near-black, no cyan wash. */
+  background: linear-gradient(160deg, #070708 0%, #0a0a0c 42%, #0c0c0e 64%, #070708 100%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
+/* ── Fluid ambient engine ───────────────────────────────────────────────────
+   The neural canvas (NeuralBackground.tsx) handles the living background.
+   No CSS pseudo-element blobs needed — the canvas draws drifting nodes,
+   synaptic connections forming/breaking, and pulses traveling along them,
+   all in the agent's accent color. */
+
+/* ── Agent-swap morph ───────────────────────────────────────────────────────
+   morphTheme() in theme.ts handles the colour shift — every frame the palette is
+   rebuilt at the interpolated accent. The class below crossfades brand-specific
+   text (agent name, tagline, prompts) so they dissolve out at the morph start
+   and reform with the new content at the midpoint. Attach [data-brand-text] to
+   any element whose text content changes on agent swap. */
+[data-brand-text] {
+  transition: opacity 0.18s ease;
+}
+.agent-morphing [data-brand-text] {
+  opacity: 0;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar             { width: 0.3rem; height: 0.3rem; }
+::-webkit-scrollbar-track       { background: transparent; }
+::-webkit-scrollbar-thumb       { background: var(--scrollbar-thumb); }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+::selection { background: rgba(var(--hb-accent-rgb), 0.30); color: #eafaff; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   FUI primitives — utility classes for components we restyle directly
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Tiny technical label — caps, letter-spaced */
+.hb-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hb-text-dim);
+}
+
+/* Monospace data readout */
+.hb-readout {
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--hb-cyan-bright);
+}
+
+/* Panel — glass module. Material comes from the unified .glass base. */
+.hb-panel { position: relative; }
+
+/* Panel header bar — caps title on the shared glass material (accent text). */
+.hb-panel-head {
+  display: flex; align-items: center; gap: 0.4rem;
+  height: 22px;
+  padding: 0 0.5rem;
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #d7eef5;
+}
+
+/* Status cells */
+.hb-cell { font-family: var(--font-mono); font-size: 0.66rem; padding: 0 0.3rem; }
+.hb-ok   { color: var(--hb-green); }
+.hb-warn { color: var(--hb-amber); }
+.hb-alert{ color: var(--hb-red); }
+
+/* Bright glass header plate — caps title on the shared glass material. */
+.hb-head-light {
+  display: flex; align-items: center; gap: 0.45rem;
+  min-height: 24px;
+  padding: 0 0.6rem;
+  color: #e9f5f9;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+}
+
+/* Accent glass header bar — cyan text; accent wash comes from the modifier. */
+.hb-head-cyan {
+  display: flex; align-items: center; gap: 0.45rem;
+  min-height: 22px;
+  padding: 0 0.6rem;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+}
+
+/* ── Fluid-glass buttons — the ONLY button material in the app ─────────────
+   .hb-btn        frosted slab button (labels, actions)
+   .hb-btn-tint   tinted state — set `color` inline, rim/fill derive from it
+   .hb-btn-ghost  icon-glyph button — invisible slab, glass wash on hover
+   Consumers must NOT set inline border/background/box-shadow (they'd win the
+   cascade and break the material); tint via `color` only. */
+/* CRITICAL: glass fills must OCCLUDE on their own. Most of these controls sit
+   inside an ancestor that already has backdrop-filter (sidebar, composer,
+   modal, every .hb-holo slab) — a nested backdrop root, so the child's own
+   blur is cancelled by Chromium and a whisper fill turns into a see-through
+   mess. Every fill below is therefore a dark occluding base with the milky
+   tint layered on top; blur stays as progressive enhancement for the
+   top-level cases where it does work. */
+.hb-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  color: var(--hb-icon-bright);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+.hb-btn:hover:not(:disabled) {
+  border-color: var(--hb-edge-bright);
+  background:
+    linear-gradient(var(--glass-tint-hi), var(--glass-tint-hi)),
+    var(--glass-fill);
+  color: var(--hb-text);
+  box-shadow: var(--glass-shadow-active);
+}
+.hb-btn:disabled { opacity: 0.45; cursor: default; }
+.hb-btn-tint:hover:not(:disabled) {
+  border-color: color-mix(in srgb, currentColor 80%, transparent);
+  background:
+    linear-gradient(color-mix(in srgb, currentColor 24%, transparent), color-mix(in srgb, currentColor 24%, transparent)),
+    var(--glass-fill);
+  color: inherit;
+}
+.hb-btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; cursor: pointer;
+  border-radius: 8px !important;
+  color: var(--hb-icon-dim);
+  transition: background 0.12s, color 0.12s;
+}
+.hb-btn-ghost:hover { background: rgba(190, 215, 235, 0.08); color: var(--hb-text-dim); }
+
+/* Fluid-glass input / textarea field — shared glass material, lit focus rim */
+.hb-field {
+  color: var(--hb-text);
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.hb-field:focus, .hb-field:focus-within {
+  border-color: var(--hb-edge-bright);
+  box-shadow: var(--glass-shadow-active), 0 0 0 1px rgba(var(--hb-accent-rgb), 0.18);
+}
+
+/* Comms-bubble markdown: the bubble glass hugs the content — no stray
+   first/last margins from the prose rules. */
+.hb-comm-md > :first-child { margin-top: 0; }
+.hb-comm-md > :last-child  { margin-bottom: 0; }
+
+/* Fluid-glass header — frosted plate for floating comms slabs. Liquid-glass
+   rules apply: the fill is a whisper, the frost comes from BLUR, the base is
+   an etched dual seam (light catch + grounding groove), never a solid bar. */
+.hb-head-glass {
+  display: flex; align-items: center; gap: 0.45rem;
+  min-height: 26px;
+  padding: 0 0.6rem;
+  color: var(--hb-cyan-bright);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+}
+
+/* Amber data chip — "05.06.10" timestamp boxes. Amber wash via .glass-amber
+   sibling rule; this keeps only layout/type. */
+.hb-chip-amber {
+  display: inline-flex; align-items: center;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem; letter-spacing: 0.08em;
+}
+
+/* Outlined query box — ":ANTON VANKO" search tag. Shared glass material,
+   pill-shaped (opts into the round radius). */
+.hb-query-box {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 1px 10px 1px 8px;
+  border-radius: var(--glass-r-pill) !important;
+  color: #eaf6fa;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.hb-query-box::before { content: ':'; color: var(--hb-cyan-bright); font-weight: 700; }
+
+/* Segmented data bar — the orange/teal block meters */
+.hb-seg {
+  height: 5px;
+  background-image: repeating-linear-gradient(90deg,
+    currentColor 0 6px, transparent 6px 8px);
+  opacity: 0.85;
+}
+
+/* Thin oversized numerals — the calendar / countdown digits */
+.hb-num-thin {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Animations — restrained, fluid, hardware-smooth
+   ════════════════════════════════════════════════════════════════════════════ */
+@keyframes hbFadeIn   { from { opacity: 0; } to { opacity: 1; } }
+/* Glass-layer entrance — soft rise + fade, replaces the old clip-path wipe */
+@keyframes hbRise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes hbBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+/* House Party — the roster's signature colors on parade. Animates `color`
+   only; consumers point borders/fills/glows at currentColor so one keyframe
+   themes every piece of war-room chrome. Order = the ROSTER order. */
+@keyframes hbPartyCycle {
+  0%, 100% { color: #36abca; }  /* speda */
+  12.5%    { color: #d99c44; }  /* sentinel */
+  25%      { color: #9165e6; }  /* nightcrawler */
+  37.5%    { color: #8a93a6; }  /* ultron */
+  50%      { color: #d8483c; }  /* centurion */
+  62.5%    { color: #3fae74; }  /* atomix */
+  75%      { color: #2f4f8f; }  /* optimus */
+  87.5%    { color: #e0703a; }  /* orion */
+}
+.hb-party-cycle { animation: hbPartyCycle 21s linear infinite; }
+/* GlassSelect option rows — hover wash on the liquid-glass dropdown */
+.hb-glass-opt { transition: background 0.1s ease; }
+.hb-glass-opt:hover { background: rgba(190, 215, 235, 0.07) !important; }
+.hb-party-rim {
+  animation: hbPartyCycle 21s linear infinite;
+  border-color: currentColor !important;
+}
+@keyframes hbFlicker {
+  0%,100% { opacity: 1; } 92% { opacity: 1; } 94% { opacity: 0.7; } 96% { opacity: 1; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+/* Insignia arc rotations — slow and deliberate, not a spinner */
+@keyframes insigniaRotCW  { to { transform: rotate(360deg); } }
+@keyframes insigniaRotCCW { to { transform: rotate(-360deg); } }
+/* keep names used by ported components alive */
+@keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes blink    { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalIn  { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+@keyframes dropDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes widgetEntrance { from { opacity: 0; transform: translateY(10px) scale(0.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes skeletonPulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.6; } }
+@keyframes textShimmer { 0% { background-position: 150% 0; } 100% { background-position: -50% 0; } }
+@keyframes caretBreathe {
+  0%,100% { opacity: 1; box-shadow: 0 0 5px 1px rgba(var(--hb-cyan-bright-rgb),0.5); }
+  50%     { opacity: 0.4; box-shadow: 0 0 2px 0 rgba(var(--hb-cyan-bright-rgb),0.2); }
+}
+@keyframes caretSheen { 0% { background-position: 0 120%; } 100% { background-position: 0 -20%; } }
+
+.thinking-shimmer {
+  background: linear-gradient(100deg,
+    var(--hb-text-faint) 0%, var(--hb-text-faint) 35%,
+    var(--hb-cyan-bright) 50%,
+    var(--hb-text-faint) 65%, var(--hb-text-faint) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  animation: textShimmer 1.6s linear infinite;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Prose (markdown) — Stark FUI instrumentation style
+   Reference: Iron Man 2 Jayse Hansen holographic UI
+   ════════════════════════════════════════════════════════════════════════════ */
+.prose {
+  user-select: text;
+  font-family: var(--font-read);
+  line-height: 1.7;
+  letter-spacing: 0;
+  color: var(--hb-text);
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+/* Chat input + edit fields read as body copy */
+textarea { font-family: var(--font-read) !important; letter-spacing: 0 !important; }
+
+.prose p { margin: 0.5rem 0; }
+.prose p:first-child { margin-top: 0; }
+.prose p:last-child  { margin-bottom: 0; }
+
+/* ── H1 — full-width frosted glass header plate ─────────────────────────────── */
+.prose h1 {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 0.75rem 0 0.65rem;
+  margin: 1.6rem 0 0.6rem;
+  background: rgba(var(--hb-accent-rgb), 0.12);
+  border-radius: 10px !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 0 rgba(255, 255, 255, 0.06);
+  border-left: 2px solid var(--hb-cyan);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffffff;
+  position: relative;
+}
+.prose h1:first-child { margin-top: 0; }
+
+/* H1 underscore split — "MAIN_SUB" → main in white, _SUB in cyan */
+.prose h1 .hb-h-main { color: #ffffff; }
+.prose h1 .hb-h-sub  { color: var(--hb-cyan); font-size: 0.9em; letter-spacing: 0.14em; margin-left: 0.05em; }
+
+/* ── H2 — panel header bar (same style as H1, scaled down) ──────────────────── */
+.prose h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 30px;
+  padding: 0 0.7rem 0 0.6rem;
+  margin: 1.5rem 0 0.5rem;
+  background: rgba(var(--hb-accent-rgb), 0.1);
+  border-radius: 9px !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.17), inset 0 -1px 0 0 rgba(255, 255, 255, 0.05);
+  border-left: 3px solid var(--hb-cyan);
+  font-family: 'Rajdhani', sans-serif !important;
+  font-size: 1.3rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+}
+.prose h2 .hb-h-main { color: #ffffff; }
+.prose h2 .hb-h-sub  { color: var(--hb-cyan); font-size: 0.88em; }
+
+/* ── H3 — panel header bar (lighter) ────────────────────────────────────────── */
+.prose h3 {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 0.65rem 0 0.6rem;
+  margin: 1.2rem 0 0.4rem;
+  background: rgba(var(--hb-accent-rgb), 0.07);
+  border-radius: 8px !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.13);
+  border-left: 2px solid rgba(var(--hb-accent-rgb),0.6);
+  font-family: 'Rajdhani', sans-serif !important;
+  font-size: 1.12rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em;
+  color: #dcedf3;
+}
+/* ── H4 — panel header bar (lightest) ───────────────────────────────────────── */
+.prose h4 {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 0.6rem 0 0.55rem;
+  margin: 1rem 0 0.3rem;
+  background: rgba(var(--hb-accent-rgb), 0.05);
+  border-radius: 7px !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+  border-left: 2px solid rgba(var(--hb-accent-rgb),0.4);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.02rem; font-weight: 700; letter-spacing: 0.04em;
+  color: #9bbac5;
+}
+
+/* ── Strong → Stark cyan highlight ─────────────────────────────────────────── */
+.prose strong {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+/* ── Em → amber tint (warning/aside) ───────────────────────────────────────── */
+.prose em { font-style: normal; color: var(--hb-amber); }
+
+/* ── Lists — angular teal markers ───────────────────────────────────────────── */
+.prose ul {
+  list-style: none;
+  padding-left: 1.3rem;
+  margin: 0.5rem 0;
+}
+.prose ol {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+.prose ul li {
+  position: relative;
+  margin: 0.22rem 0;
+  padding-left: 0.1rem;
+}
+.prose ul li::before {
+  content: '▸';
+  position: absolute;
+  left: -1.1rem;
+  top: 0.08em;
+  color: var(--hb-cyan);
+  font-size: 0.72em;
+  line-height: 1;
+}
+.prose ol li { margin: 0.22rem 0; }
+.prose ol li::marker { color: var(--hb-cyan); font-family: var(--font-mono); font-size: 0.82em; }
+
+/* Nested lists — dim the marker */
+.prose ul ul li::before { color: var(--hb-cyan-dim); content: '·'; font-size: 1em; top: 0; }
+
+/* ── Code ────────────────────────────────────────────────────────────────────── */
+.prose code {
+  font-family: inherit; font-size: inherit;
+  background: transparent; padding: 0;
+  border: none; color: var(--hb-cyan-bright);
+  font-weight: 600;
+}
+.prose pre { margin: 0.75rem 0; }
+.prose pre code { background: none; padding: 0; border: none; color: inherit; }
+
+/* ── Blockquote — panel inset ───────────────────────────────────────────────── */
+.prose blockquote {
+  position: relative;
+  border: none;
+  margin: 0.75rem 0;
+  padding: 0.4rem 0.75rem 0.4rem 0.85rem;
+  background: rgba(var(--hb-cyan-dim-rgb), 0.45);
+  border-left: 2px solid var(--hb-cyan-dim);
+  color: var(--hb-text-dim);
+}
+.prose blockquote::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--hb-line-bright), transparent 70%);
+}
+
+/* ── Links ───────────────────────────────────────────────────────────────────── */
+.prose a {
+  color: var(--hb-cyan-bright); text-decoration: none;
+  border-bottom: 1px solid rgba(var(--hb-cyan-bright-rgb),0.3);
+}
+.prose a:hover { border-bottom-color: var(--hb-cyan-bright); color: #8ee6f5; }
+
+/* ── Table — data grid ───────────────────────────────────────────────────────── */
+.prose table {
+  border-collapse: collapse; width: 100%; margin: 0.75rem 0;
+  font-size: 0.82rem; font-family: var(--font-mono);
+  border: 1px solid var(--hb-line);
+}
+.prose th {
+  background: rgba(var(--hb-accent-rgb), 0.12);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  font-size: 0.64rem; color: #cfe7ee;
+  border: 1px solid var(--hb-line); padding: 0.3rem 0.6rem;
+  font-family: 'Rajdhani', sans-serif;
+}
+.prose td {
+  border: 1px solid rgba(var(--hb-accent-rgb),0.14); padding: 0.28rem 0.6rem;
+  color: var(--hb-text-dim);
+}
+.prose tr:nth-child(even) td { background: rgba(var(--hb-accent-rgb),0.04); }
+.prose tr:hover td { background: rgba(var(--hb-accent-rgb),0.09); color: var(--hb-text); }
+
+/* ── HR — tick-mark ruler ────────────────────────────────────────────────────── */
+.prose hr {
+  border: none;
+  height: 1px;
+  margin: 1.25rem 0;
+  /* etched glass seam — light catch fading toward both ends */
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16) 12%, rgba(255, 255, 255, 0.16) 88%, transparent);
+  position: relative;
+}
+.prose hr::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 1px; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.35) 12%, rgba(0, 0, 0, 0.35) 88%, transparent);
+}
+
+/* ── Image ───────────────────────────────────────────────────────────────────── */
+.prose img { max-width: 100%; border: 1px solid var(--hb-line); }
+
+/* ── Sources line — "**Sources:** [A](u) · [B](u)" ─────────────────────────── */
+/* Tagged with .hb-sources by the React <p> renderer — only paragraphs that
+   literally start with "Sources:" match, so normal bold-led text is untouched. */
+.prose p.hb-sources strong:first-child {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hb-icon-dim);
+  margin-right: 0.35rem;
+}
+.prose p.hb-sources a {
+  display: inline-block;
+  padding: 0.08em 0.45em;
+  background: rgba(var(--hb-accent-rgb),0.08);
+  border: 1px solid rgba(var(--hb-accent-rgb),0.2);
+  border-bottom: none;
+  color: #46818f !important;
+  font-family: var(--font-mono);
+  font-size: 0.68em;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+.prose p.hb-sources a:hover {
+  background: rgba(var(--hb-accent-rgb),0.18);
+  color: var(--hb-cyan-bright) !important;
+  border-color: rgba(var(--hb-accent-rgb),0.45);
+}
+
+/* Range input — FUI slider */
+input[type=range] {
+  -webkit-appearance: none; appearance: none;
+  height: 2px; background: rgba(var(--hb-accent-rgb),0.25); outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 10px; height: 14px;
+  background: var(--hb-cyan); cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(8,16,20,0.8);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Mobile — tactical OS under 768px
+   Breakpoint must stay in sync with lib/useIsMobile.ts, which drives the
+   structural pieces (sidebar drawer, HUD telemetry consolidation).
+   ════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* Secondary chrome text nodes collapse on small displays */
+  .hb-hide-sm { display: none !important; }
+
+  /* Session title query box may breathe once the MONITOR label is gone */
+  .hb-query-box { max-width: 58vw !important; }
+
+  /* Suggestion cards — 2x2 grid becomes a tight vertical stack.
+     The cards themselves keep the exact .hb-holo glass material. */
+  .hb-prompt-grid {
+    display: flex !important;
+    flex-direction: column;
+    max-width: 100% !important;
+  }
+
+  /* Welcome date line — relax the 0.34em tracking so it never wraps */
+  .hb-welcome-date { letter-spacing: 0.18em !important; }
+
+  /* Composer locks to the live viewport bottom, full-width with a micro
+     edge buffer; frosts what scrolls beneath it. */
+  .hb-composer {
+    position: sticky;
+    bottom: 0;
+    z-index: 50;
+    padding: 0.4rem 0.55rem calc(0.55rem + env(safe-area-inset-bottom)) !important;
+    background: rgba(6, 12, 16, 0.55);
+    backdrop-filter: var(--hb-holo-blur);
+    -webkit-backdrop-filter: var(--hb-holo-blur);
+  }
+  /* 16px floor stops iOS Safari from zooming the page on input focus */
+  .hb-composer textarea { font-size: 16px !important; }
+}
+
+/* Mobile browsers: track the dynamic viewport so the composer hugs the
+   keyboard/URL-bar edge instead of hiding behind it */
+@supports (height: 100dvh) {
+  @media (max-width: 767px) {
+    html, body, #root { height: 100dvh; }
+  }
+}
+
+/* ── Touch targets — 44px minimum hit area on coarse pointers ────────────────
+   An invisible centered pseudo-element extends each button's tappable zone
+   without moving a single visual pixel or thickening any 1px border.
+   Seam/bracket classes are excluded — their pseudos draw the etched lines. */
+@media (pointer: coarse) {
+  button:not(.hb-seam-b):not(.hb-seam-t):not(.hb-seam-r):not(.hb-bracketed) {
+    position: relative;
+  }
+  button:not(.hb-seam-b):not(.hb-seam-t):not(.hb-seam-r):not(.hb-bracketed)::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ── DATA_BANKS // KNOWLEDGE — memory file markdown readout ──────────────────
+   The panel renders each canonical /memories file through react-markdown.
+   These rules dress the standard markdown element tree in the board's
+   holographic dossier voice: cyan uppercase headers, ▸ fact bullets, italic
+   notes — while now honouring the full syntax (bold, links, code, tables,
+   blockquotes, nested + task lists, rules) instead of a 3-case line parser. */
+.hb-mem-md {
+  font-family: 'SamsungOne', 'Inter', sans-serif;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--hb-text-dim);
+  overflow-wrap: anywhere;
+}
+.hb-mem-md > :first-child { margin-top: 0; }
+.hb-mem-md > :last-child  { margin-bottom: 0; }
+
+.hb-mem-md h1, .hb-mem-md h2, .hb-mem-md h3,
+.hb-mem-md h4, .hb-mem-md h5, .hb-mem-md h6 {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hb-cyan);
+  margin: 0.55rem 0 0.2rem;
+  break-after: avoid;
+}
+.hb-mem-md h1 { font-size: 0.74rem; }
+.hb-mem-md h2 { font-size: 0.66rem; }
+.hb-mem-md h3, .hb-mem-md h4, .hb-mem-md h5, .hb-mem-md h6 {
+  font-size: 0.62rem;
+  color: var(--hb-cyan-dim);
+  letter-spacing: 0.16em;
+}
+
+.hb-mem-md p { margin: 0.14rem 0; break-inside: avoid; }
+.hb-mem-md strong { color: var(--hb-text); font-weight: 700; }
+.hb-mem-md em { color: var(--hb-icon); font-style: italic; }
+.hb-mem-md a { color: var(--hb-cyan-bright); text-decoration: underline; text-underline-offset: 2px; }
+
+.hb-mem-md ul, .hb-mem-md ol { margin: 0.1rem 0; padding-left: 0; list-style: none; }
+.hb-mem-md li {
+  position: relative;
+  padding-left: 0.95rem;
+  margin: 0.1rem 0;
+  break-inside: avoid;
+}
+.hb-mem-md ul > li::before {
+  content: '▸';
+  position: absolute;
+  left: 0;
+  top: -0.02em;
+  color: var(--hb-cyan);
+  font-size: 0.78em;
+}
+.hb-mem-md ol { counter-reset: hb-mem-li; }
+.hb-mem-md ol > li { counter-increment: hb-mem-li; }
+.hb-mem-md ol > li::before {
+  content: counter(hb-mem-li) '.';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--hb-cyan);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+}
+.hb-mem-md li > ul, .hb-mem-md li > ol { margin: 0.05rem 0; }
+/* GFM task lists: drop the counter/▸, keep the checkbox. */
+.hb-mem-md li.task-list-item { padding-left: 0.2rem; }
+.hb-mem-md li.task-list-item::before { content: none; }
+.hb-mem-md li.task-list-item input { margin-right: 0.35rem; accent-color: var(--hb-cyan); }
+
+.hb-mem-md code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: rgba(var(--hb-accent-rgb), 0.1);
+  border: 1px solid rgba(var(--hb-accent-rgb), 0.18);
+  border-radius: 3px;
+  padding: 0.03em 0.35em;
+  color: var(--hb-cyan-bright);
+}
+.hb-mem-md pre {
+  margin: 0.3rem 0;
+  padding: 0.5rem 0.6rem;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(var(--hb-accent-rgb), 0.22);
+  border-radius: 4px;
+  overflow-x: auto;
+  break-inside: avoid;
+}
+.hb-mem-md pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--hb-text-dim);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.hb-mem-md blockquote {
+  margin: 0.3rem 0;
+  padding: 0.1rem 0 0.1rem 0.6rem;
+  border-left: 2px solid rgba(var(--hb-accent-rgb), 0.4);
+  color: var(--hb-icon);
+  font-style: italic;
+}
+
+.hb-mem-md hr {
+  border: none;
+  border-top: 1px solid rgba(var(--hb-accent-rgb), 0.2);
+  margin: 0.5rem 0;
+}
+
+.hb-mem-md table {
+  border-collapse: collapse;
+  margin: 0.3rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  break-inside: avoid;
+}
+.hb-mem-md th, .hb-mem-md td {
+  border: 1px solid rgba(var(--hb-accent-rgb), 0.2);
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+}
+.hb-mem-md th {
+  color: var(--hb-cyan);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(var(--hb-accent-rgb), 0.08);
+}
+.hb-mem-md img { max-width: 100%; }

@@ -12,48 +12,11 @@ from app.core.context import AgentContext
 from app.database import AsyncSessionLocal, get_db
 from app.schemas.chat import ChatRequest
 from app.core.surface import annotate_last_user
+from app.services.errors import friendly_provider_error
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
 
-
-def _friendly_error(model: str, exc: Exception) -> str:
-    """Turn a raw provider exception into a short, actionable message for the UI.
-    Covers the common dead-ends (missing key, no credit, rate limit, no uplink)
-    across every provider so the user sees WHY instead of a frozen spinner."""
-    provider = model.partition(":")[0] if ":" in model else "anthropic"
-    text = str(exc).lower()
-    # NVIDIA NIM's signature failure: the key lists models fine (GET /v1/models
-    # → 200) but EVERY chat call 404s with "Function … not found for account".
-    # It's an account-side permission ("Public API Endpoints"), not our request —
-    # so say that instead of a raw 404 the owner can't act on.
-    if provider == "nvidia" and ("not found for account" in text or "function" in text or "404" in text):
-        return (
-            "NVIDIA can list models but can't run them for this account — it's missing the "
-            "'Public API Endpoints' permission (a known NVIDIA account issue, not a model or "
-            "key problem). Fix it at build.nvidia.com / email help@build.nvidia.com, or just "
-            "use another provider (OpenAI, Gemini, z.ai, DeepSeek, Anthropic)."
-        )
-    # A tool-call rejection is NOT an auth failure, but OpenAI's 5.6 family
-    # reports one as a 401 "insufficient permissions" — which used to surface as
-    # "check your key" and sent the owner hunting a perfectly good key. Match the
-    # payload wording first so the real cause is named.
-    if "function tools" in text or "/v1/responses" in text or "reasoning_effort" in text:
-        return (
-            f"{provider.title()} rejected the tool definitions for this model — it's the "
-            "request payload, not your API key. This model needs its tool calls on the "
-            "Responses API; pick another model if it persists."
-        )
-    if "401" in text or "unauthorized" in text or "api key" in text or "authentication" in text:
-        key = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}.get(provider, "ANTHROPIC_API_KEY")
-        return f"{provider.title()} rejected the request — check that {key} is set and valid."
-    if "credit" in text or "billing" in text or "quota" in text or "insufficient" in text:
-        return f"{provider.title()} reports no available credit/quota for this account."
-    if "429" in text or "rate limit" in text or "overloaded" in text or "529" in text:
-        return f"{provider.title()} is rate-limited or overloaded right now — try again shortly."
-    if "connect" in text or "timeout" in text or "connection" in text:
-        return f"Couldn't reach {provider.title()}. Check the network (or the local Ollama daemon)."
-    return f"{provider.title()} request failed: {exc}"
 
 @router.get("/models")
 async def list_models():
@@ -71,7 +34,7 @@ async def welcome(agent_id: str, request: Request):
     failure so the client just keeps its static greeting."""
     from app.services.welcome import get_welcome
 
-    text = await get_welcome(agent_id, request.app.state.profiles)
+    text = await get_welcome(agent_id, request.app.state.profiles, request.app.state.welcome_cache)
     return {"text": text}
 
 
@@ -98,79 +61,14 @@ async def get_messages(
 ):
     from sqlalchemy import select, asc
     from app.models.message import Message
+    from app.services.chat_history import rows_from_messages
 
     result = await db.execute(
         select(Message)
         .where(Message.session_id == session_id)
         .order_by(asc(Message.created_at))
     )
-    messages = result.scalars().all()
-
-    def extract_text(content) -> str:
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            return ''.join(
-                block.get('text', '') for block in content
-                if isinstance(block, dict) and block.get('type') == 'text'
-            )
-        return ''
-
-    def extract_images(content) -> list[str]:
-        """Rebuild data: URLs from stored base64 image blocks so attachments
-        re-render when an old session is reopened (they're persisted in the DB)."""
-        if not isinstance(content, list):
-            return []
-        out = []
-        for block in content:
-            if isinstance(block, dict) and block.get('type') == 'image':
-                src = block.get('source', {})
-                if src.get('type') == 'base64' and src.get('data'):
-                    out.append(f"data:{src.get('media_type', 'image/png')};base64,{src['data']}")
-        return out
-
-    def extract_meta(content) -> dict:
-        """Pull the SPEDA display-only meta block so the tool disclosure,
-        download cards (assistant) and upload chips (user) survive a reload."""
-        if not isinstance(content, list):
-            return {}
-        for block in content:
-            if isinstance(block, dict) and block.get('type') == '_speda_meta':
-                return {
-                    'tools': block.get('tools', []),
-                    'files': block.get('files', []),
-                    'uploads': block.get('uploads', []),
-                }
-        return {}
-
-    out = []
-    for m in messages:
-        if m.role not in ('user', 'assistant'):
-            continue
-        meta = extract_meta(m.content)
-        # For a user turn with document uploads, the real text blocks hold the
-        # extracted file contents; the bubble must show only the user's own
-        # message, which was stashed in the meta block at save time.
-        if m.role == 'user' and meta.get('uploads'):
-            content_text = meta.get('text', '')
-        else:
-            content_text = extract_text(m.content)
-        row = {
-            'id': str(m.id),
-            'role': m.role,
-            'content': content_text,
-            'tools': meta.get('tools', []),
-            'isStreaming': False,
-            'isError': False,
-        }
-        if (imgs := extract_images(m.content)):
-            row['images'] = imgs
-        if meta.get('files'):
-            row['files'] = meta['files']
-        if meta.get('uploads'):
-            row['uploads'] = meta['uploads']
-        out.append(row)
-    return out
+    return rows_from_messages(result.scalars().all())
 
 
 @router.get("/sessions")
@@ -269,39 +167,9 @@ async def _run_chat(
         # which already ends with the user turn being regenerated.
         history = await session_manager.load_history(db, session.id)
     else:
-        # Build the user turn. Images keep their native vision blocks (every
-        # provider's translation layer supports them). Non-image files are
-        # extracted to plain text server-side and embedded as text blocks, so a
-        # PDF/DOCX/XLSX/CSV reaches the model IDENTICALLY on every provider —
-        # including open-weight and local ones that have no document support.
-        if body.attachments or body.documents:
-            from app.services.attachments import extract_text
+        from app.services.attachments import build_user_content
 
-            blocks: list = [
-                {
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": att.media_type, "data": att.data},
-                }
-                for att in body.attachments
-            ]
-            for doc in body.documents:
-                blocks.append({"type": "text", "text": extract_text(doc.name, doc.media_type, doc.data)})
-            if body.message:
-                blocks.append({"type": "text", "text": body.message})
-            # Display-only meta: upload chips on the user bubble survive a reload.
-            # Stripped from the history sent to the model by SessionManager._clean.
-            if body.documents:
-                # `text` carries the user's own message so the reloaded bubble
-                # shows it — NOT the wall of extracted document text (which lives
-                # in real text blocks the model reads but the UI must not echo).
-                blocks.append({
-                    "type": "_speda_meta",
-                    "uploads": [{"name": d.name, "size": d.size or 0} for d in body.documents],
-                    "text": body.message or "",
-                })
-            user_content: list | str = blocks
-        else:
-            user_content = body.message
+        user_content = build_user_content(body.message, body.attachments, body.documents)
 
         # Save FIRST, then load history including the new message. load_history
         # stamps user messages from their DB created_at, so the prompt built this
@@ -368,7 +236,7 @@ async def _run_chat(
         return agent_proxy.run(ctx) if use_external else orchestrator.run(ctx)
 
     def format_error(exc: Exception) -> str:
-        return _friendly_error(model, exc)
+        return friendly_provider_error(model, exc)
 
     # Post-turn work (title/log/compaction/embedding) runs at turn COMPLETION —
     # detached from the response — so it fires even if the client disconnected

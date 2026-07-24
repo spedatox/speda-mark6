@@ -214,3 +214,43 @@ def extract_text(name: str, media_type: str, data_b64: str) -> str:
         f"{body}{truncated}\n"
         f"[End of {name}]"
     )
+
+
+def build_user_content(
+    message: str,
+    attachments: list,
+    documents: list,
+) -> list | str:
+    """Assemble one user turn's content blocks from a ChatRequest's message +
+    attachments/documents. Images keep their native vision blocks (every
+    provider's translation layer supports them). Non-image files are extracted
+    to plain text here and embedded as text blocks, so a PDF/DOCX/XLSX/CSV
+    reaches the model IDENTICALLY on every provider — including open-weight and
+    local ones with no native document support. Returns the bare message string
+    when there are no attachments/documents (no meta block needed)."""
+    if not attachments and not documents:
+        return message
+
+    blocks: list = [
+        {
+            "type": "image",
+            "source": {"type": "base64", "media_type": att.media_type, "data": att.data},
+        }
+        for att in attachments
+    ]
+    for doc in documents:
+        blocks.append({"type": "text", "text": extract_text(doc.name, doc.media_type, doc.data)})
+    if message:
+        blocks.append({"type": "text", "text": message})
+    # Display-only meta: upload chips on the user bubble survive a reload.
+    # Stripped from the history sent to the model by SessionManager._clean.
+    if documents:
+        # `text` carries the user's own message so the reloaded bubble shows it
+        # — NOT the wall of extracted document text (which lives in real text
+        # blocks the model reads but the UI must not echo).
+        blocks.append({
+            "type": "_speda_meta",
+            "uploads": [{"name": d.name, "size": d.size or 0} for d in documents],
+            "text": message or "",
+        })
+    return blocks

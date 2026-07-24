@@ -32,8 +32,23 @@ _CURRENT_PATH = "/memories/current.md"
 _TTL_S = 90 * 60          # regenerate at most every ~90 min within a part-of-day
 _MEM_CHARS = 900          # how much of each memory file to feed the model
 
-# (agent_id, part_of_day) → (text, expires_monotonic)
-_cache: dict[tuple[str, str], tuple[str, float]] = {}
+
+class WelcomeCache:
+    """Process-local TTL cache backing get_welcome(). One instance lives on
+    app.state.welcome_cache (Rule 6) — created in the lifespan and passed in
+    by the router, rather than living as a bare module global."""
+
+    def __init__(self) -> None:
+        self._entries: dict[tuple[str, str], tuple[str, float]] = {}
+
+    def get(self, key: tuple[str, str]) -> str | None:
+        hit = self._entries.get(key)
+        if hit is not None and hit[1] > _time.monotonic():
+            return hit[0]
+        return None
+
+    def set(self, key: tuple[str, str], text: str) -> None:
+        self._entries[key] = (text, _time.monotonic() + (_TTL_S if text else 120))
 
 
 def _part_of_day(hour: int) -> str:
@@ -71,7 +86,7 @@ async def _read_memory(user_id: int) -> tuple[str, str]:
         return "", ""
 
 
-async def get_welcome(agent_id: str, profiles, *, user_id: int = 1) -> str:
+async def get_welcome(agent_id: str, profiles, cache: WelcomeCache, *, user_id: int = 1) -> str:
     """Return a cached-or-freshly-generated welcome remark for `agent_id`.
     Returns "" on any failure so the caller simply keeps the static greeting."""
     profile = profiles.get(agent_id)
@@ -84,14 +99,14 @@ async def get_welcome(agent_id: str, profiles, *, user_id: int = 1) -> str:
         now_dt = datetime.now()
     pod = _part_of_day(now_dt.hour)
     key = (agent_id, pod)
-    hit = _cache.get(key)
-    if hit is not None and hit[1] > _time.monotonic():
-        return hit[0]
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
 
     text = await _generate(profile, pod, now_dt, user_id)
     # Cache even an empty result briefly so a broken provider isn't hammered on
     # every welcome-screen mount.
-    _cache[key] = (text, _time.monotonic() + (_TTL_S if text else 120))
+    cache.set(key, text)
     return text
 
 

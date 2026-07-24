@@ -201,8 +201,14 @@ async def lifespan(app: FastAPI):
     # ── 7. Orchestrator (reuses the client already injected into the registry) ──
     # Profiles were constructed at 2.5 — the dispatch skill's schema needed them.
     from app.core.orchestrator import AgentOrchestrator
+    from app.skills.memory import MemoryRecallCache
+    from app.services.welcome import WelcomeCache
 
-    orchestrator = AgentOrchestrator(registry, llm_client, profiles)
+    # One instance each for the process (Rule 6) — threaded into the
+    # orchestrator/router instead of living as bare module globals.
+    memory_cache = MemoryRecallCache()
+    welcome_cache = WelcomeCache()
+    orchestrator = AgentOrchestrator(registry, llm_client, profiles, memory_cache)
 
     # Late-bind the dispatch primitive now that the full engine exists.
     dispatcher.wire(
@@ -236,6 +242,8 @@ async def lifespan(app: FastAPI):
     # Permission asks relayed from external peers (the Forge's safety gate).
     app.state.pending_asks = pending_asks
     app.state.orchestrator = orchestrator
+    app.state.memory_cache = memory_cache
+    app.state.welcome_cache = welcome_cache
     app.state.ws_manager = ws_manager
     app.state.session_manager = session_manager
     app.state.profiles = profiles
