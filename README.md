@@ -275,21 +275,27 @@ and the agentic loop, everything is provider-agnostic behind one LLM client, and
 n8n is the only scheduler. Heartbreaker is the face; Igor is the brain and
 hands. The full contract is codified in **[`CLAUDE.md`](CLAUDE.md)**.
 
-**Deeper docs** live in [`docs/`](docs/):
+**Deeper docs** live in [`docs/`](docs/) — start at the
+**[documentation index](docs/README.md)**, which maps everything below and the
+per-package component docs ([IGOR.md](packages/igor/IGOR.md),
+[HEARTBREAKER.md](packages/heartbreaker/HEARTBREAKER.md),
+[STRIKER.md](packages/striker/STRIKER.md)).
 
 | Doc | What |
 |---|---|
+| [docs/README.md](docs/README.md) | **The documentation index** — the map to every doc below and the component docs |
 | [REFERENCE.md](docs/REFERENCE.md) | Full capability catalog, HTTP API, and configuration reference |
 | [SETUP.md](docs/SETUP.md) · [DEPLOY.md](DEPLOY.md) | Install & production runbook |
-| [MEMORY_ARCHITECTURE.md](docs/MEMORY_ARCHITECTURE.md) | How memory works |
+| [MEMORY_ARCHITECTURE.md](docs/MEMORY_ARCHITECTURE.md) · [MEMORY_REVISION_R1.md](docs/MEMORY_REVISION_R1.md) | How memory works |
 | [TELEGRAM_ARCHITECTURE.md](docs/TELEGRAM_ARCHITECTURE.md) | The bot fleet |
 | [ANDROID_PORT_PLAN.md](docs/ANDROID_PORT_PLAN.md) | Heartbreaker Core — the parity contract with the desktop client |
-| [FORGE_INTEGRATION_PLAN.md](docs/FORGE_INTEGRATION_PLAN.md) · [NEWS_BRIEFING_PLAN.md](docs/NEWS_BRIEFING_PLAN.md) · [BACKGROUND_OPS_PLAN.md](docs/BACKGROUND_OPS_PLAN.md) · [STARK_MAPS_PLAN.md](docs/STARK_MAPS_PLAN.md) | Design notes for the newest systems |
+| [FORGE_INTEGRATION_PLAN.md](docs/FORGE_INTEGRATION_PLAN.md) · [NEWS_BRIEFING_PLAN.md](docs/NEWS_BRIEFING_PLAN.md) · [BACKGROUND_OPS_PLAN.md](docs/BACKGROUND_OPS_PLAN.md) · [STARK_MAPS_PLAN.md](docs/STARK_MAPS_PLAN.md) · [ATOMIX_HEALTH_SYNC.md](docs/ATOMIX_HEALTH_SYNC.md) | Design notes for the newest systems |
 
 **Monorepo:** `packages/igor` (**Igor** — the backend) · `packages/heartbreaker`
 (the desktop/web app) · `packages/heartbreaker-android` (**Heartbreaker Core**)
-· `packages/desktop` (neutral fork base) · `packages/sandbox` (the isolated
-computer). The Forge is a separate deployment that connects back as a peer.
+· `packages/striker` (**SPEDA Mark VI Core** — the single-agent "lite" build) ·
+`packages/sandbox` (the isolated computer). The Forge is a separate deployment
+that connects back as a peer.
 
 ---
 
