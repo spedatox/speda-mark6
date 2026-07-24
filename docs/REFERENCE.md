@@ -37,7 +37,8 @@ agentic loop handles every stop reason explicitly (`end_turn`, `tool_use`,
 |---|---|
 | `packages/igor` | FastAPI backend — orchestrator, capability registry, skills, memory, automations, news desk, turn runner |
 | `packages/heartbreaker` | **Primary UI** (Electron + React) — the fluid-glass HUD |
-| `packages/desktop` | Neutral UI template — the base forks re-skin (never themed) |
+| `packages/striker` | *SPEDA Mark VI Core* — the single-agent (SPEDA-only) public "lite" build; same features on a calmer theme (re-themed from the old `packages/desktop` neutral base) |
+| `packages/heartbreaker-android` | **Heartbreaker Core** — native Kotlin + Compose mobile client |
 | `packages/sandbox` | Isolated command-execution container ("capable computer") |
 | *(separate repo)* The Forge | Optimus's Mark II execution engine — connects back as a WebSocket peer |
 

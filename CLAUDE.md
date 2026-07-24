@@ -8,9 +8,9 @@ Read this file in full before touching a single file. This is not optional.
 
 This is `speda-mark-vi` — **Igor**, the backend core of SPEDA (Specialized Personal Executive Digital Assistant). It is a single-user, proactive ambient AI assistant. Component names: **Igor** = this backend; **Heartbreaker** = the desktop client (packages/heartbreaker); **The Legion** = the sub-agent worker system (wire name `Task`).
 
-**Multi-tenant architecture.** SPEDA and five of the Superior Six — Sentinel, NightCrawler, Ultron, Centurion, Atomix — are **in-process agent profiles** inside this single backend. Each is an `AgentProfile` subclass with its own identity, model policy, tool allowlist, and prompt directory. They share one event loop, one database, one `CapabilityRegistry`, and one owner's memory. They are addressed by `agent_id` on every request.
+**Multi-tenant architecture.** SPEDA and five of the Superior Six — Sentinel, NightCrawler, Ultron, Centurion, Atomix — are **in-process agent profiles** inside this single backend, alongside **Orion**, the system's own maintenance & memory custodian. Each is an `AgentProfile` subclass with its own identity, model policy, tool allowlist, and prompt directory. They share one event loop, one database, one `CapabilityRegistry`, and one owner's memory. They are addressed by `agent_id` on every request. A separate `warroom` profile (a `SPEDAProfile` subclass) is the **House Party Protocol** command channel — the same brain and tools as SPEDA under a distinct `agent_id` so full-roster operations never bleed into the owner's day-to-day SPEDA session.
 
-**Optimus is the single exception.** Optimus is a standalone, independently deployed framework. It connects back to this backend as an external WebSocket peer via `WebSocketManager`. It is not built here and does not run in-process.
+**Optimus is the single exception.** Optimus is a standalone, independently deployed framework. It connects back to this backend as an external WebSocket peer via `WebSocketManager`. It is not built here and does not run in-process. (Its in-process `optimus.py` profile is only the proxy/fallback stub: while the external peer is online, `/chat/optimus` turns and inter-agent dispatches route to it external-first.)
 
 Deployment target: Contabo Cloud. Production-grade from day one.
 
@@ -74,7 +74,7 @@ Three distinct communication channels exist. Do not confuse them.
 | `WS /ws` | WebSocket | Flutter real-time chat (bidirectional, for voice/low-latency) |
 | `websocket/manager.py` | WebSocket | **Optimus ONLY** — external peer presence, dispatch, results |
 
-`WebSocketManager` manages the Optimus external connection. It is not used for in-process agents (Sentinel, NightCrawler, Ultron, Centurion, Atomix are profiles, not sockets) and not used for Flutter user sessions. If you are writing Flutter chat logic, use either `POST /chat/{agent_id}` (SSE) or `WS /ws` — not `WebSocketManager`.
+`WebSocketManager` manages the Optimus external connection. It is not used for in-process agents (Sentinel, NightCrawler, Ultron, Centurion, Atomix, Orion are profiles, not sockets) and not used for Flutter user sessions. If you are writing Flutter chat logic, use either `POST /chat/{agent_id}` (SSE) or `WS /ws` — not `WebSocketManager`.
 
 ---
 
@@ -120,6 +120,12 @@ Build in this exact sequence. Nothing is built before what it depends on exists.
 
 ## Directory Structure
 
+This tree reflects the codebase as actually built — it has grown well past the
+original Phase-1 skeleton (Legion, News, Telegram, Automations, the detached
+turn runner, external-peer proxying) but every addition still lives inside the
+tier/profile/service boundaries the rules above define. If you add a module,
+add it here too — this list is the contract, not a historical snapshot.
+
 ```
 speda-mark-vi/
 ├── CLAUDE.md
@@ -128,11 +134,13 @@ speda-mark-vi/
 ├── pyproject.toml
 ├── .env.example
 └── app/
-    ├── main.py
-    ├── config.py
+    ├── main.py                  # lifespan + app factory — assembled last
+    ├── config.py                # Settings (env-backed)
+    ├── config_schema.py         # Declarative schema for the owner-facing /config UI
     ├── database.py
     ├── middleware/
-    │   └── auth.py              # API key validation — applied to all routes
+    │   ├── auth.py              # X-API-Key validation — applied to all routes
+    │   └── security.py
     ├── profiles/
     │   ├── base.py              # AgentProfile ABC — agent_id, domain, tool_allowlist, model policy
     │   ├── registry.py          # ProfileRegistry — loads all enabled profiles, lookup by agent_id
@@ -141,61 +149,105 @@ speda-mark-vi/
     │   ├── nightcrawler.py      # NightCrawler — OSINT, web surveillance, research
     │   ├── ultron.py            # Ultron — academic research, knowledge synthesis
     │   ├── centurion.py         # Centurion — cyber security (owns cve_intelligence)
-    │   └── atomix.py            # Atomix — personal health (the owner's health, not system health)
+    │   ├── atomix.py            # Atomix — personal health (the owner's health, not system health)
+    │   ├── optimus.py           # Optimus — proxy/fallback stub for the external Forge peer
+    │   ├── orion.py             # Orion — Mark VI maintenance: memory custodian & host ops
+    │   └── warroom.py           # War Room — House Party Protocol session-scope alias (SPEDAProfile subclass)
     ├── prompts/
-    │   ├── shared/              # Common sections: formatting, memory protocol, output rules
-    │   └── agents/
-    │       ├── speda/           # SPEDA-specific identity/voice/boundary prompts
-    │       ├── sentinel/
-    │       ├── nightcrawler/
-    │       ├── ultron/
-    │       ├── centurion/
-    │       └── atomix/
+    │   ├── loader.py            # Prompt assembly
+    │   ├── core/                # Common sections: formatting, memory protocol, agent network, output rules
+    │   └── agents/               # Per-agent identity/voice/boundary prompts (one dir per agent_id)
     ├── core/
     │   ├── orchestrator.py      # AgentOrchestrator — owns the agentic loop + system prompt
     │   ├── context.py           # AgentContext dataclass
     │   ├── registry.py          # CapabilityRegistry — all four tiers unified
     │   ├── agent_registry.py    # AgentRegistry — WebSocket-based agent presence
-    │   └── session_manager.py   # SessionManager — session lifecycle + history loading
+    │   ├── session_manager.py   # SessionManager — session lifecycle + history loading
+    │   ├── turn_runner.py       # TurnRegistry — detached turns survive client disconnects (BgOps)
+    │   ├── dispatch.py          # Agent-to-agent dispatch primitive — direct AND House Party broadcast
+    │   ├── external_proxy.py    # ExternalAgentProxy — wired peer proxy for Optimus/Forge (app.state.agent_proxy)
+    │   ├── external_chat.py     # Superseded by external_proxy.py — not constructed anywhere; confirm before touching
+    │   ├── runtime_state.py     # Persisted runtime flags (budget mode, House Party engaged) — not a scheduler
+    │   ├── surface.py           # Client-surface annotation for the live user turn
+    │   └── files.py             # Generated-file bookkeeping under /tmp/speda_outputs/
+    ├── legion/                  # The Legion (D-SA1–D-SA5) — Tier 0, registered before all other tiers
+    │   ├── roster.py            # Legionnaire definitions (scout/researcher/analyst/judge/general)
+    │   └── runner.py
+    ├── news/                    # NightCrawler's briefing pipeline
+    │   ├── collector.py
+    │   ├── dedup.py
+    │   ├── escalate.py
+    │   └── feeds.py
+    ├── telegram/                # Telegram channel (per-agent bots, in/out of the same orchestrator loop)
+    │   ├── client.py
+    │   ├── gateway.py           # Inbound update → normal orchestrator run
+    │   ├── linking.py
+    │   ├── registry.py
+    │   └── renderer.py
+    ├── automations/             # n8n-facing composer/manager (no internal scheduler — n8n still owns cron)
+    │   ├── composer.py
+    │   └── manager.py
     ├── routers/
-    │   ├── chat.py              # POST /chat (SSE), WS /ws (WebSocket) — Flutter user-facing
+    │   ├── chat.py              # POST /chat[/{agent_id}] (SSE), WS /ws — Flutter user-facing
     │   ├── trigger.py           # POST /trigger/{agent_id} — n8n webhook
-    │   ├── agents.py            # GET /agents — registry status
+    │   ├── agents.py            # GET /agents, House Party toggle, agent WebSocket presence
     │   ├── admin.py             # DELETE /admin/outputs — temp file cleanup (called by n8n)
+    │   ├── automations.py
+    │   ├── config.py            # Owner-facing settings UI, backed by config_schema.py
+    │   ├── connections.py       # OAuth connections (Google, Notion)
+    │   ├── files.py
+    │   ├── import_chats.py
+    │   ├── memory.py
+    │   ├── news.py
+    │   ├── telegram.py
     │   └── health.py
     ├── skills/
     │   ├── base.py              # Skill ABC
-    │   ├── tts.py               # Kokoro TTS
-    │   ├── stt.py               # Whisper STT
-    │   ├── notifications.py     # Flutter push
+    │   ├── memory.py            # Memory tool + recall_for_context/recall_sessions_for_context + MemoryRecallCache
+    │   ├── dispatch.py          # dispatch_agent / house_party tools
+    │   ├── osint.py             # NightCrawler's threat-intel lookups (IP/URL/hash/breach/dark-web/crypto)
+    │   ├── navigation.py
+    │   ├── news.py
+    │   ├── system_ops.py
     │   ├── documents.py         # PPTX / DOCX / PDF generation
-    │   └── system.py
+    │   ├── tts.py                # Kokoro TTS
+    │   ├── stt.py                # Whisper STT
+    │   ├── notifications.py     # Flutter push
+    │   ├── legion.py             # The Legion's Task-tool surface
+    │   ├── automations.py, budget.py, health_data.py, read_skill.py, sandbox.py,
+    │   │   save_file.py, search_history.py, semantic_search.py, telegram.py,
+    │   │   toolsets.py, system.py
+    │   └── fonts/, skill_docs/  # static assets, not modules
     ├── mcp/
     │   ├── client.py            # MCPClient base
-    │   └── servers.py           # All MCP server registrations
+    │   ├── servers.py           # All MCP server registrations
+    │   └── google_rest.py       # Google Workspace REST bridge (OAuth 2.1, HTTP/SSE per Security section)
     ├── adapters/
     │   ├── base.py              # OSSAdapter ABC
     │   ├── gpt_researcher.py
     │   └── shannon.py
     ├── services/
-    │   ├── anthropic_client.py
-    │   ├── memory.py
-    │   └── n8n.py               # Webhook auth, trigger formatting
-    ├── models/
-    │   ├── user.py
-    │   ├── session.py
-    │   ├── message.py
-    │   ├── agent.py
-    │   ├── tool_call.py
-    │   └── notification.py
+    │   ├── anthropic_client.py, llm_client.py   # Multi-provider LLM routing (llm_client) + model catalog
+    │   ├── memory.py, memory_store.py           # Post-turn tasks (title/recap/compaction), revision log
+    │   ├── attachments.py       # Upload text extraction + build_user_content (turn content-block assembly)
+    │   ├── chat_history.py      # rows_from_messages — stored-message → UI-row shaping
+    │   ├── errors.py            # friendly_provider_error — cross-provider error translation
+    │   ├── welcome.py           # Home-screen welcome remark + WelcomeCache
+    │   ├── compaction.py, embeddings.py, embedding_indexer.py, history_indexer.py
+    │   ├── health.py            # Atomix health-sample ingestion
+    │   ├── forge_peer.py, sandbox_launcher.py   # External backend (Forge) process/session bridge
+    │   ├── pending_asks.py      # Permission asks relayed from external peers
+    │   ├── telegram.py
+    │   └── n8n.py, n8n_api.py   # Webhook auth, trigger formatting
+    ├── models/                  # ORM models — one file per table (user, session, message, agent,
+    │                            # agent_message, automation, health_sample, memory/memory_file/memory_revision,
+    │                            # message_embedding, news_item/news_quota/news_watch, notification, tool_call)
     ├── schemas/
-    │   ├── chat.py
-    │   ├── sse.py
-    │   ├── agent.py
-    │   └── trigger.py
-    └── websocket/
-        ├── manager.py           # WebSocketManager — Superior Six agent connections
-        └── protocol.py          # WebSocket message type definitions (no startup step)
+    │   ├── chat.py, sse.py, agent.py, trigger.py, health.py
+    ├── websocket/
+    │   ├── manager.py           # WebSocketManager — Optimus/Forge external peer connections ONLY
+    │   └── protocol.py          # WebSocket message type definitions (no startup step)
+    └── templates/               # (currently empty)
 ```
 
 ---
@@ -303,9 +355,26 @@ The Legion is the sub-agent worker system (`app/legion/`). Wire name of the tool
 | User-facing interactive response | claude-sonnet-4-6 |
 | Background monitoring, pre-filter, classification | claude-haiku-4-5-20251001 |
 | Agent-to-agent subtasks | claude-haiku-4-5-20251001 (Sonnet if complexity demands) |
-| House Party Protocol (future) | claude-sonnet-4-6 across all agents |
+| House Party Protocol (engaged) | claude-sonnet-4-6 across all agents — full interactive grade, not the background tier |
 
 Each agent's `AgentProfile` governs its own model allocation via `allocate_model()`. Model IDs live exclusively in individual profile files under `app/profiles/`. The `ProfileRegistry` loads all profiles at startup and attaches them to `app.state`. The orchestrator resolves the correct profile from `context.agent_id` and calls its `allocate_model()` at context construction time.
+
+---
+
+## House Party Protocol
+
+Shipped (D-C4's "future" row above is live) — the all-hands mode that rallies every in-process agent at once, gated by a passphrase rather than a build flag.
+
+- **State:** a single persisted runtime flag, `app/core/runtime_state.py::get_house_party()` / `set_house_party()`. Not a session or per-agent setting — it is process-wide, like budget mode.
+- **Engaging it:**
+  - Owner-driven: `POST /agents/house-party` (`app/routers/agents.py`). Engaging requires the `house_party_passphrase` (constant-time compare); standing down does not.
+  - Agent-driven: the `house_party` tool (`app/skills/dispatch.py`) — same passphrase gate, invocable only on the owner's explicit instruction, never at an agent's own initiative.
+- **What changes while engaged:**
+  - `app/core/dispatch.py`'s broadcast primitive (`kind="broadcast", protocol="house_party"`) becomes available — fan `task` out to every in-process agent at once. It is refused outside the protocol; normal dispatch stays strictly direct, one-to-one.
+  - Model policy escalates to full interactive grade (`profile.allocate_model("user")`) for every agent's subtasks, not the background tier — this is what makes House Party Protocol expensive and why it defaults off.
+  - `AgentOrchestrator.build_system_prompt()` injects a `## HOUSE PARTY PROTOCOL — ACTIVE` block so every agent knows the mode is live and how to hand it back down.
+- **War Room** (`app/profiles/warroom.py`, `agent_id="warroom"`) is the session-scope channel this plays out in — see "What This Repo Is" above. It is a `SPEDAProfile` subclass with `dispatch_target=False`: agents still dispatch to `speda`, never to `warroom` directly.
+- Do not add a second engage path (e.g. a raw runtime-state write from a router or skill outside `agents.py`/`dispatch.py`) — the passphrase gate is the only authorization boundary and both entry points must go through it.
 
 ---
 
@@ -337,7 +406,7 @@ Each agent's `AgentProfile` governs its own model allocation via `allocate_model
 - Do not add internal scheduling logic. n8n handles all of that.
 - Do not give agents direct access to each other. In-process agents dispatch through `app/core/dispatch.py` (the orchestrator-routed primitive); Optimus communicates only via WebSocket through `WebSocketManager`.
 - Do not put identity strings (agent name, persona, model policy, tool allowlist) in core modules. They belong in `app/profiles/{agent_id}.py`.
-- Do not implement House Party Protocol. It is parked until all five in-process agents are operational and OQ6/OQ9 are settled.
+- Do not add a House Party engage path outside `POST /agents/house-party` and the `house_party` tool — both are the only places the passphrase gate is enforced (see the House Party Protocol section).
 - Do not use `break` after the first tool call. The loop runs until `end_turn`.
 - Do not store generated files permanently. `/tmp/speda_outputs/` with 24-hour cleanup via n8n → `DELETE /admin/outputs`.
 - Do not run Playwright MCP without container isolation. CVE-2025-9611. Internal network only.
