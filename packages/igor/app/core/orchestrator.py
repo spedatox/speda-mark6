@@ -7,7 +7,7 @@ from app.core.registry import CapabilityRegistry
 from app.profiles.registry import ProfileRegistry
 from app.schemas.sse import SSEEvent, SSEEventType
 from app.services.llm_client import LLMClient, blocks_to_dicts
-from app.skills.memory import recall_for_context, recall_sessions_for_context
+from app.skills.memory import MemoryRecallCache, recall_for_context, recall_sessions_for_context
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +32,12 @@ class AgentOrchestrator:
         registry: CapabilityRegistry,
         client: LLMClient,
         profiles: ProfileRegistry,
+        memory_cache: MemoryRecallCache,
     ) -> None:
         self._registry = registry
         self._client = client
         self._profiles = profiles
+        self._memory_cache = memory_cache
 
     def build_system_prompt(self, context: AgentContext) -> str:
         """
@@ -161,7 +163,9 @@ class AgentOrchestrator:
         memory_block = ""
         if context.db is not None:
             try:
-                memory_block = await recall_for_context(context.user_id, context.db, context.agent_id) or ""
+                memory_block = await recall_for_context(
+                    context.user_id, context.db, context.agent_id, cache=self._memory_cache
+                ) or ""
                 if memory_block:
                     logger.info(
                         "memory_context_injected",
@@ -186,6 +190,7 @@ class AgentOrchestrator:
                     context.db,
                     context.agent_id,
                     context.session_id,
+                    cache=self._memory_cache,
                     scope=profile.episodic_recall_scope,
                 ) or ""
                 if episodic_block:
@@ -285,7 +290,7 @@ class AgentOrchestrator:
         # Episodic block is deliberately NOT `_cache`-flagged: all four Anthropic
         # cache breakpoints are already spent (tools + the two blocks above + the
         # conversation tail). It doesn't need its own breakpoint — it is frozen
-        # per session (see _episodic_cache in skills/memory.py), so the 5m
+        # per session (see MemoryRecallCache in skills/memory.py), so the 5m
         # conversation breakpoint caches it as part of the stable prefix.
         if episodic_block:
             system_blocks.append({"type": "text", "text": episodic_block})

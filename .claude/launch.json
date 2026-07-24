@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "hb-web", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "packages/heartbreaker", "run", "web:dev"], "port": 5273 }
+    { "name": "hb-web", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "packages/heartbreaker", "run", "web:dev"], "port": 5273 },
+    { "name": "striker-web", "runtimeExecutable": "C:/Program Files/nodejs/npm.cmd", "runtimeArgs": ["--prefix", "packages/striker", "run", "web:dev"], "port": 5173 }
   ]
 }

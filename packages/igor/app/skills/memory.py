@@ -268,15 +268,45 @@ async def ensure_seeded(user_id: int, db) -> None:
 
 # ── Recall for context injection (used by orchestrator) ──────────────────────
 
-# In-process recall cache: the assembled memory block is stable within a
-# session (memory rarely changes mid-conversation). Cache the result keyed on
-# the max updated_at timestamp — if no memory file was written since the last
-# recall, skip the full assembly and return the cached string. Saves a DB
-# round-trip + string assembly on every turn after the first.
-_recall_cache: dict[tuple[int, str], tuple[str, str]] = {}  # (user_id, agent_id) -> (watermark, block)
+class MemoryRecallCache:
+    """Process-local cache backing recall_for_context / recall_sessions_for_context.
+
+    One instance lives on app.state.memory_cache (Rule 6) — created in the
+    lifespan and threaded through the orchestrator and the external chat proxy,
+    rather than living as a bare module global.
+
+    Two independent caches:
+      - recall: the assembled memory block is stable within a session (memory
+        rarely changes mid-conversation). Keyed on the max updated_at
+        timestamp — if no memory file was written since the last recall, skip
+        the full assembly and return the cached string.
+      - episodic: frozen per-session block, computed once on a session's first
+        turn and reused verbatim for the session's whole lifetime, bounded so
+        process memory can't grow unboundedly across many sessions.
+    """
+
+    def __init__(self, episodic_max: int = 256) -> None:
+        self._recall: dict[tuple[int, str], tuple[str, str]] = {}
+        self._episodic: dict[int, str] = {}
+        self._episodic_max = episodic_max
+
+    def get_recall(self, key: tuple[int, str]) -> tuple[str, str] | None:
+        return self._recall.get(key)
+
+    def set_recall(self, key: tuple[int, str], watermark: str, block: str) -> None:
+        self._recall[key] = (watermark, block)
+
+    def get_episodic(self, session_id: int) -> str | None:
+        return self._episodic.get(session_id)
+
+    def set_episodic(self, session_id: int, block: str) -> None:
+        if len(self._episodic) >= self._episodic_max:
+            # Evict oldest inserted (dict preserves insertion order) — dead sessions.
+            self._episodic.pop(next(iter(self._episodic)))
+        self._episodic[session_id] = block
 
 
-async def recall_for_context(user_id: int, db, agent_id: str = "speda") -> str:
+async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache: MemoryRecallCache) -> str:
     """
     Load the memory context to prepend to the system prompt.
     Returns: directory listing (so the agent knows what exists) + the preloaded
@@ -301,7 +331,7 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda") -> str:
     # from the UI (no file change) still refreshes the injected block.
     watermark = max((f.updated_at.isoformat() for f in all_files), default="") + f"|{source_file or ''}"
     cache_key = (user_id, agent_id)
-    cached = _recall_cache.get(cache_key)
+    cached = cache.get_recall(cache_key)
     if cached and cached[0] == watermark:
         return cached[1]
 
@@ -348,7 +378,7 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda") -> str:
         "shapes how you respond — act on it, never cite it aloud."
         f"{source_directive}"
     )
-    _recall_cache[cache_key] = (watermark, block)
+    cache.set_recall(cache_key, watermark, block)
     return block
 
 
@@ -360,8 +390,7 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda") -> str:
 # deliberately UNCACHED at the API level (all 4 cache breakpoints are spent),
 # so it must never change mid-session or the 5m conversation cache would bust
 # every turn. New sessions always miss this cache and read fresh recaps.
-_episodic_cache: dict[int, str] = {}  # session_id -> frozen "## Previous sessions" block
-_EPISODIC_CACHE_MAX = 256  # bound process memory; oldest (insertion order) evicted
+# (Cache storage itself lives in MemoryRecallCache above — Rule 6.)
 
 # Legacy fallback: sessions that predate the recap feature may still have a
 # compaction summary — better than nothing, truncated hard.
@@ -373,6 +402,7 @@ async def recall_sessions_for_context(
     db,
     agent_id: str,
     session_id: int,
+    cache: MemoryRecallCache,
     scope: str = "own",
 ) -> str:
     """
@@ -390,7 +420,7 @@ async def recall_sessions_for_context(
     if not settings.episodic_recap_enabled:
         return ""
 
-    cached = _episodic_cache.get(session_id)
+    cached = cache.get_episodic(session_id)
     if cached is not None:
         return cached
 
@@ -444,10 +474,7 @@ async def recall_sessions_for_context(
             + "\n\n".join(kept)
         )
 
-    if len(_episodic_cache) >= _EPISODIC_CACHE_MAX:
-        # Evict oldest inserted (dict preserves insertion order) — dead sessions.
-        _episodic_cache.pop(next(iter(_episodic_cache)))
-    _episodic_cache[session_id] = block
+    cache.set_episodic(session_id, block)
     return block
 
 
