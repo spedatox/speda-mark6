@@ -56,9 +56,12 @@ const btn = (variant: 'primary' | 'ghost' | 'danger'): React.CSSProperties => ({
  * carries on, so a card the owner ignores is a "no" and should visibly look
  * like one rather than sitting there implying it still matters.
  */
-export function PermissionPrompt({ ask, onResolve }: {
+export function PermissionPrompt({ ask, onResolve, embedded = false }: {
   ask: PendingAsk
   onResolve: (approved: boolean, remember: boolean) => void
+  /** When embedded in the global asks tray, drop the absolute centering above
+   *  the input bar and flow inside the tray's stacked container instead. */
+  embedded?: boolean
 }) {
   const [left, setLeft] = useState(Math.ceil(ask.seconds_left))
 
@@ -69,8 +72,13 @@ export function PermissionPrompt({ ask, onResolve }: {
   }, [ask.ask_id, ask.seconds_left])
 
   const expired = left <= 0
+  // Embedded cards flow within the tray (static, full-width); the inline chat
+  // card keeps its absolute perch above the input bar.
+  const cardStyle: React.CSSProperties = embedded
+    ? { ...frame, position: 'relative', left: 'auto', bottom: 'auto', transform: 'none', width: '100%', zIndex: 'auto' }
+    : frame
   return (
-    <div className="hb-glass-sm" style={frame}>
+    <div className="hb-glass-sm" style={cardStyle}>
       <div style={{ ...headerStyle, display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
         <span>◈ Permission — {ask.agent_id} wants to run {ask.tool}</span>
         <span style={{ color: expired ? '#ff6b80' : left <= 20 ? '#f2b75c' : 'var(--hb-text-dim)' }}>
