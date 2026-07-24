@@ -15,6 +15,7 @@ import Layout from './components/Layout'
 import HudFrame from './components/HudFrame'
 import NeuralBackground from './components/NeuralBackground'
 import PartyActivation from './components/PartyActivation'
+import PendingAsksTray from './components/PendingAsksTray'
 import type { AppConfig } from './lib/types'
 import { fetchSessions, getHouseParty, setHouseParty } from './lib/api'
 import 'katex/dist/katex.min.css'
@@ -260,6 +261,7 @@ function AppInner() {
           onEnterWarRoom={enterWarRoom}
           onExitWarRoom={() => exitWarRoom(true)}
         />
+        <PendingAsksTray config={config} />
         {activation && (
           <PartyActivation mode={activation} onIgnite={igniteActivation} onDone={activationDone} />
         )}

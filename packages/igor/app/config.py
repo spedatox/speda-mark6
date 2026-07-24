@@ -334,16 +334,25 @@ class Settings(BaseSettings):
     sandbox_workspace: str = str(_DATA_DIR / "sandbox_workspace")
 
     # ── The Forge peer (app/services/forge_peer.py) ────────────────────────────
-    # The Forge (Mark II) is the standalone execution engine for Optimus. SPEDA
-    # owns its lifecycle: the lifespan handler launches it as a child process,
-    # and it connects back to WS /agents/ws/<forge_agent> as an external peer.
-    # While online, /chat/optimus is proxied to it; offline, the in-process
-    # OptimusProfile answers instead (graceful fallback — the Forge is never a
-    # hard dependency). forge_dir empty disables autostart.
+    # The Forge (Mark II) is the standalone execution engine. SPEDA owns its
+    # lifecycle: the lifespan handler launches ONE child process per agent in
+    # `forge_agents`, and each connects back to WS /agents/ws/<agent_id> as an
+    # external peer. While an agent's peer is online, /chat/<agent_id> is proxied
+    # to it; offline, that agent's in-process profile answers instead (graceful
+    # fallback — the Forge is never a hard dependency). forge_dir empty disables
+    # autostart. The Forge repo ships profiles for every agent listed here.
     forge_autostart: bool = True
     forge_dir: str = ""                       # absolute path to the forge-mk1 repo
+    # Comma-separated agents to back with a Forge peer. Each must have a
+    # `<id>/profile.toml` in the Forge repo AND `external_backend = True` on its
+    # in-process profile here. `forge_agent` (singular) is the legacy fallback
+    # used only when `forge_agents` is left blank.
+    forge_agents: str = "optimus,centurion"
     forge_agent: str = "optimus"
-    forge_ws_url: str = "ws://127.0.0.1:8000/agents/ws/optimus"
+    # Base agents-WS URL — the launcher appends `/<agent_id>` per peer, so this
+    # must NOT carry a trailing agent segment. A legacy value ending in an agent
+    # id (…/agents/ws/optimus) is tolerated: the launcher strips it.
+    forge_ws_url: str = "ws://127.0.0.1:8000/agents/ws"
     forge_cell_backend: str = "auto"          # docker | subprocess | auto
     forge_python: str = ""                    # override interpreter; empty → uv run
 
