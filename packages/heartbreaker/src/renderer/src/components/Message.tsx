@@ -778,27 +778,43 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
   const [editValue, setEditValue] = useState(message.content)
   const [lightbox, setLightbox] = useState<string | null>(null)
 
-  // ── Typewriter reveal (rAF, adaptive catch-up) ───────────────────────────
-  // A requestAnimationFrame loop reveals characters with exponential easing:
-  // the further behind the buffer, the faster it types — so it always catches
-  // up smoothly with the model and finishes gracefully when the stream ends,
-  // instead of stuttering on a fixed interval or hard-snapping at the end.
+  // ── Typewriter reveal (rAF, steady pacing) ───────────────────────────────
+  // A requestAnimationFrame loop reveals characters at a brisk STEADY rate with a
+  // gentle, hard-CAPPED catch-up. When a burst of deltas lands at once — token
+  // batches coalesced over the network, a coarse provider chunk — it types them
+  // out as a visible sweep instead of flashing the whole paragraph in. The cap is
+  // what preserves the real-time feel: an uncapped `remaining × k` reveals a burst
+  // in ~150ms, which reads as "wait… wait… paragraph".
   const targetRef = useRef(message.content)
   targetRef.current = message.content
+  const streamingRef = useRef(message.isStreaming)
+  streamingRef.current = message.isStreaming
 
-  // Skip the typewriter when a code block is present — slicing mid-fence yields
-  // malformed markdown, and WidgetFrame owns the visual reveal for those.
-  const hasCodeBlock = message.content.includes('```')
+  // How far it is SAFE to reveal. Never slice INTO an unclosed ``` fence — that
+  // yields malformed markdown mid-stream. (The old code dumped the ENTIRE message
+  // the instant any ``` appeared, killing the typewriter for the prose too.) While
+  // streaming, hold the reveal at the start of an open fence; prose before/after and
+  // any CLOSED block still stream. Once the turn is done, reveal everything.
+  const safeTarget = useCallback((text: string): number => {
+    if (!streamingRef.current) return text.length
+    let idx = -1
+    let count = 0
+    for (let i = text.indexOf('```'); i !== -1; i = text.indexOf('```', i + 3)) {
+      count++
+      idx = i
+    }
+    return count % 2 === 1 ? idx : text.length
+  }, [])
 
   const revealedRef = useRef<number>(
-    message.isStreaming && !hasCodeBlock ? 0 : message.content.length
+    message.isStreaming ? 0 : message.content.length
   )
   const rafRef = useRef<number | null>(null)
   const lastTsRef = useRef<number>(0)
   const [displayLen, setDisplayLen] = useState<number>(revealedRef.current)
 
   const tick = useCallback((ts: number) => {
-    const target = targetRef.current.length
+    const target = safeTarget(targetRef.current)
     const dt = lastTsRef.current ? Math.min((ts - lastTsRef.current) / 1000, 0.05) : 0
     lastTsRef.current = ts
 
@@ -811,30 +827,26 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
       return
     }
 
-    // chars/sec = max(floor, remaining × catch-up). Exponential-approach easing.
-    const FLOOR = 45
-    const CATCH_UP = 7
-    const speed = Math.max(FLOOR, remaining * CATCH_UP)
+    // chars/sec: a brisk steady BASE, plus a gentle catch-up when it falls behind
+    // a fast model, hard-CAPPED so even a big burst types out as a visible sweep
+    // (never an instant flash). Self-balances a few words behind a steady stream.
+    const BASE = 90
+    const CATCH_UP = 2.5
+    const MAX = 700
+    const speed = Math.min(MAX, BASE + remaining * CATCH_UP)
     revealedRef.current = Math.min(target, revealedRef.current + speed * dt)
 
     setDisplayLen(Math.floor(revealedRef.current))
     rafRef.current = requestAnimationFrame(tick)
-  }, [])
+  }, [safeTarget])
 
   useEffect(() => {
-    if (hasCodeBlock) {
-      // Reveal everything at once; WidgetFrame animates the block in.
-      if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
-      revealedRef.current = targetRef.current.length
-      setDisplayLen(targetRef.current.length)
-      return
-    }
-    // Kick the loop if more content arrived and it isn't already running.
-    if (rafRef.current == null && revealedRef.current < targetRef.current.length) {
+    // Kick the loop if more (safely-revealable) content arrived and it isn't running.
+    if (rafRef.current == null && revealedRef.current < safeTarget(targetRef.current)) {
       lastTsRef.current = 0
       rafRef.current = requestAnimationFrame(tick)
     }
-  }, [message.content, hasCodeBlock, tick])
+  }, [message.content, message.isStreaming, tick, safeTarget])
 
   useEffect(() => () => {
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
@@ -1032,7 +1044,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
               return (
                 <Fragment key={`x${i}`}>
                   <TextSegment text={seg.text} />
-                  {isLast && (message.isStreaming || (!hasCodeBlock && isRevealing)) && <StreamingCursor />}
+                  {isLast && (message.isStreaming || isRevealing) && <StreamingCursor />}
                 </Fragment>
               )
             })}
