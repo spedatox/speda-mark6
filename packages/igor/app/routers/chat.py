@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import logging
 import uuid
@@ -16,6 +17,52 @@ from app.services.errors import friendly_provider_error
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
+
+# SSE keepalive. A detached run emits events only when the engine does, so a long
+# silent tool call (a multi-minute scan, a slow model) sends zero bytes and an
+# intermediary (Caddy, a NAT, a VPN) can idle-kill the socket even though the turn
+# is healthy. Wrap the subscriber stream and inject a ':' comment line whenever the
+# source is quiet for KEEPALIVE_S. Comment lines are ignored by the client's SSE
+# parser — they cost nothing but keep the pipe warm.
+#
+# The inner generator is pumped by a task into a queue; the outer loop races the
+# queue against a timeout. This is deliberate: racing the generator's __anext__ with
+# asyncio.wait_for would CANCEL it on every timeout, and for turns.subscribe that
+# runs its finally and drops the subscription. Pumping keeps the subscription alive;
+# only a real client disconnect (this wrapper being aclosed) tears it down.
+KEEPALIVE_S = 15.0
+
+# Headers that tell every hop NOT to buffer the stream — otherwise a proxy holds
+# chunks back and delivers them in a burst, which reads as "wait… wait… paragraph".
+SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+
+
+async def _with_keepalive(inner, interval: float = KEEPALIVE_S):
+    q: asyncio.Queue = asyncio.Queue()
+    _END = object()
+
+    async def _pump():
+        try:
+            async for item in inner:
+                await q.put(item)
+        finally:
+            await q.put(_END)
+
+    task = asyncio.create_task(_pump())
+    try:
+        while True:
+            try:
+                item = await asyncio.wait_for(q.get(), timeout=interval)
+            except asyncio.TimeoutError:
+                yield ": ping\n\n"
+                continue
+            if item is _END:
+                break
+            yield item
+    finally:
+        task.cancel()
+        with contextlib.suppress(BaseException):
+            await task
 
 
 @router.get("/models")
@@ -272,8 +319,9 @@ async def _run_chat(
     # The response is just a SUBSCRIBER to the detached run. Dropping it (reload,
     # switch, watchdog) unsubscribes but never cancels — the run persists itself.
     return StreamingResponse(
-        request.app.state.turns.subscribe(request_id),
+        _with_keepalive(request.app.state.turns.subscribe(request_id)),
         media_type="text/event-stream",
+        headers=SSE_HEADERS,
     )
 
 
@@ -315,8 +363,9 @@ async def chat_attach(request_id: str, request: Request):
     live stream to completion. An unknown/evicted id yields an empty stream (its
     answer is already in the DB — the client just reloads the session normally)."""
     return StreamingResponse(
-        request.app.state.turns.subscribe(request_id),
+        _with_keepalive(request.app.state.turns.subscribe(request_id)),
         media_type="text/event-stream",
+        headers=SSE_HEADERS,
     )
 
 
