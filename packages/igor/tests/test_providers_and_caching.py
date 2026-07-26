@@ -111,17 +111,99 @@ def test_parse_model_ref():
     assert parse_model_ref("weird:thing") == ("anthropic", "weird:thing")
 
 
-def test_background_model_follows_active_provider():
+@pytest.fixture
+def unpinned(monkeypatch):
+    """No routing-matrix pins and no .env model overrides — the profile's own
+    policy, isolated from whatever the dev machine has configured."""
+    monkeypatch.setattr("app.core.runtime_state.get_agent_models", lambda: {})
+    monkeypatch.setattr(settings, "llm_background_model", "")
+    monkeypatch.setattr(settings, "llm_main_model", "")
+
+
+def test_background_model_follows_active_provider(unpinned):
     p = SPEDAProfile()
-    assert p.background_model("claude-sonnet-4-6") == (
-        settings.llm_background_model or p.haiku_model
-    )
+    assert p.background_model("claude-sonnet-4-6") == p.haiku_model
     assert p.background_model("openai:gpt-5.1") == "openai:gpt-5-mini"
     assert p.background_model("gemini:gemini-2.5-pro") == "gemini:gemini-2.5-flash"
     assert p.background_model("zai:glm-4.6") == "zai:glm-4.5-air"
     assert p.background_model("deepseek:deepseek-v4-pro") == "deepseek:deepseek-v4-flash"
     # Dead Zone: the local model is the only one that exists.
     assert p.background_model("ollama:llama3.1:8b") == "ollama:llama3.1:8b"
+
+
+# ── The routing matrix is the authority ──────────────────────────────────────
+# Every case below is a way the engine used to reach for Anthropic on its own.
+# It may only ever run what the owner picked, on the provider they picked.
+
+
+def test_a_pinned_agent_runs_its_pin_on_every_trigger_source(unpinned, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.runtime_state.get_agent_models", lambda: {"speda": "zai:glm-4.6"}
+    )
+    p = SPEDAProfile()
+    for source in ("user", "n8n", "agent"):
+        assert p.allocate_model(source) == "zai:glm-4.6"
+    assert p.allocate_model("n8n", is_background=True) == "zai:glm-4.6"
+
+
+def test_background_work_for_a_pinned_agent_stays_on_the_pinned_provider(
+    unpinned, monkeypatch
+):
+    """The bug: background_model keyed off a hardcoded provider tuple, so an
+    agent routed outside that list had every title, recap and Legion pre-filter
+    silently billed to Anthropic. End to end from the pin, nothing crosses."""
+    monkeypatch.setattr(
+        "app.core.runtime_state.get_agent_models", lambda: {"speda": "zai:glm-4.6"}
+    )
+    p = SPEDAProfile()
+    for source in ("user", "n8n", "agent"):
+        assert p.background_model(p.allocate_model(source)) == "zai:glm-4.5-air"
+
+
+def test_a_provider_with_no_cheap_tier_keeps_the_model_it_was_given(unpinned):
+    # Ollama declares no cheap tier (the local model is the only one there) —
+    # it stands rather than degrading to a hosted Anthropic model.
+    p = SPEDAProfile()
+    assert p.background_model("ollama:qwen3:14b") == "ollama:qwen3:14b"
+
+
+def test_a_per_turn_model_pick_is_not_overridden_by_the_agent_pin(unpinned, monkeypatch):
+    """The composer's per-turn pick is MORE specific than the matrix pin, so
+    background work follows the model the turn actually ran on."""
+    monkeypatch.setattr(
+        "app.core.runtime_state.get_agent_models", lambda: {"speda": "zai:glm-4.6"}
+    )
+    p = SPEDAProfile()
+    assert p.background_model("openai:gpt-5.1") == "openai:gpt-5-mini"
+
+
+def test_an_unrecognised_prefix_is_never_rewritten_into_an_anthropic_call(unpinned):
+    # parse_model_ref reports an unknown prefix as Anthropic; the cheap tier must
+    # NOT take that as licence to substitute Haiku for the owner's ref.
+    p = SPEDAProfile()
+    assert p.cheap_tier("groq:llama-3.3") == "groq:llama-3.3"
+    assert p.background_model("groq:llama-3.3") == "groq:llama-3.3"
+
+
+def test_an_unpinned_automated_turn_stays_on_the_deployments_provider(
+    unpinned, monkeypatch
+):
+    """A deployment whose main model is zai must not have its n8n turns land on
+    Anthropic Haiku just because no background model was configured."""
+    monkeypatch.setattr(settings, "llm_main_model", "zai:glm-4.6")
+    p = SPEDAProfile()
+    assert p.allocate_model("user") == "zai:glm-4.6"
+    assert p.allocate_model("n8n") == "zai:glm-4.5-air"
+    assert p.allocate_model("agent") == "zai:glm-4.5-air"
+
+
+def test_env_background_override_still_wins_when_nothing_is_pinned(
+    unpinned, monkeypatch
+):
+    monkeypatch.setattr(settings, "llm_background_model", "openai:gpt-5-mini")
+    p = SPEDAProfile()
+    assert p.allocate_model("n8n") == "openai:gpt-5-mini"
+    assert p.background_model("claude-sonnet-4-6") == "openai:gpt-5-mini"
 
 
 # ── Chat-completions translation (OpenAI / Gemini / Ollama parity) ──────────

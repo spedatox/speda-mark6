@@ -39,6 +39,7 @@ import com.speda.heartbreaker.data.AgentModelInfo
 import com.speda.heartbreaker.data.ConnectionsResult
 import com.speda.heartbreaker.data.Health
 import com.speda.heartbreaker.data.HbSettings
+import com.speda.heartbreaker.data.LegionModelInfo
 import com.speda.heartbreaker.data.ModelInfo
 import com.speda.heartbreaker.data.OnlineAgent
 import com.speda.heartbreaker.designsystem.glass.HbGlassShape
@@ -100,6 +101,7 @@ fun SystemsBoardScreen(
     var servers by remember { mutableStateOf(ConnectionsResult()) }
     var budgetMode by remember { mutableStateOf(true) }
     var agentInfos by remember { mutableStateOf<List<AgentModelInfo>>(emptyList()) }
+    var legionInfos by remember { mutableStateOf<List<LegionModelInfo>>(emptyList()) }
 
     fun reloadConnections() {
         scope.launch { servers = api.getConnections(config) }
@@ -108,6 +110,7 @@ fun SystemsBoardScreen(
     LaunchedEffect(config) {
         models = api.fetchModels(config)
         agentInfos = api.fetchAgentModels(config)
+        legionInfos = api.fetchLegionModels(config)
         budgetMode = api.getBudgetMode(config)
         servers = api.getConnections(config)
     }
@@ -202,6 +205,13 @@ fun SystemsBoardScreen(
                     scope.launch {
                         val infos = api.pinAgentModel(config, agentId, model)
                         if (infos.isNotEmpty()) agentInfos = infos
+                    }
+                },
+                legionInfos = legionInfos,
+                onPinLegionModel = { workerId, model ->
+                    scope.launch {
+                        val infos = api.pinLegionModel(config, workerId, model)
+                        if (infos.isNotEmpty()) legionInfos = infos
                     }
                 },
             )

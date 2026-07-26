@@ -300,6 +300,7 @@ class LegionRunner:
             from_agent=context.agent_id,
             worker_id=worker.worker_id,
             task=f"{description} — {prompt}",
+            origin_session_id=context.extra.get("room_session_id") or context.session_id,
         )
         bg_context = _detached_context(context)
 
@@ -312,6 +313,16 @@ class LegionRunner:
                     request_id=context.request_id, context=bg_context,
                 )
                 status = "ok"
+            except asyncio.CancelledError:
+                # Shutdown cancelled the worker. Close the ticket here — nothing
+                # else will, and a ticket left "running" claims to be working
+                # forever in the comms tray.
+                await self._log_finish(
+                    msg_id, status="cancelled",
+                    result="Cancelled — the backend shut down while this worker was running.",
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                )
+                raise
             except Exception as e:  # noqa: BLE001
                 result = f"Background worker failed: {e}"
                 status = "error"
@@ -346,6 +357,7 @@ class LegionRunner:
 
     async def _log_start(
         self, *, request_id: str, from_agent: str, worker_id: str, task: str,
+        origin_session_id: int | None = None,
     ) -> int | None:
         try:
             from app.database import AsyncSessionLocal
@@ -360,6 +372,7 @@ class LegionRunner:
                     protocol="direct",
                     task=task[:4000],
                     status="running",
+                    origin_session_id=origin_session_id,
                     created_at=datetime.utcnow(),
                 )
                 db.add(row)

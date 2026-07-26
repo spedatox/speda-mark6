@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.speda.heartbreaker.data.AgentModelInfo
 import com.speda.heartbreaker.data.ConnectionInfo
 import com.speda.heartbreaker.data.ConnectionsResult
+import com.speda.heartbreaker.data.LegionModelInfo
 import com.speda.heartbreaker.data.ModelInfo
 import com.speda.heartbreaker.designsystem.brand.Brands
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
@@ -40,9 +41,14 @@ import java.util.Locale
 /**
  * CORE ROUTING_MATRIX — mobile port of SystemsBoard.tsx's periodic-table model
  * tiles + MCP toolset tiles + per-agent model pins. The grid-of-tiles layout
- * doesn't reflow to a phone column, so it becomes three stacked lists: tap a
- * model to route the active session onto it, tap a toolset to toggle it live,
- * tap an agent row to pick its pinned core inline. Same data, same actions.
+ * doesn't reflow to a phone column, so it becomes stacked lists: tap a model to
+ * route the active session onto it, tap a toolset to toggle it live, tap an
+ * agent or legionnaire row to pick its pinned core inline.
+ *
+ * Every list here is COLLAPSED by default. Providers are queried live now, so
+ * the model roster runs to dozens of rows and rendering it open buried the rest
+ * of the board — DATA_BANKS sat several screens below the fold. Collapsed, each
+ * section states its current selection in one line and opens on demand.
  */
 @Composable
 fun RoutingMatrix(
@@ -53,43 +59,149 @@ fun RoutingMatrix(
     onToggleServer: (ConnectionInfo) -> Unit,
     agentInfos: List<AgentModelInfo>,
     onPinAgentModel: (String, String?) -> Unit,
+    legionInfos: List<LegionModelInfo>,
+    onPinLegionModel: (String, String?) -> Unit,
 ) {
     val palette = LocalHbPalette.current
     Panel {
-        Caption("CORES · ${models.size} MODELS", palette.accent)
-        if (models.isEmpty()) {
-            HbText("NOT FOUND", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
-        } else {
-            val providers = models.map { it.provider ?: "anthropic" }.distinct()
-            providers.forEach { p ->
-                HbText(p.uppercase(Locale.ENGLISH), style = HbType.readout.copy(fontSize = 9.sp), color = palette.accentBright, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
-                models.filter { (it.provider ?: "anthropic") == p }.forEach { m ->
-                    ModelRow(m, active = m.id == activeModel) { onSelectModel(m.id) }
+        val activeName = models.firstOrNull { it.id == activeModel }?.name
+            ?.ifEmpty { activeModel } ?: activeModel.ifEmpty { "PROFILE DEFAULT" }
+        Section(
+            title = "CORES · ${models.size} MODELS",
+            summary = activeName,
+            color = palette.accent,
+        ) {
+            if (models.isEmpty()) {
+                HbText("NOT FOUND", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
+            } else {
+                val providers = models.map { it.provider ?: "anthropic" }.distinct()
+                providers.forEach { p ->
+                    val group = models.filter { (it.provider ?: "anthropic") == p }
+                    // The provider holding the active model opens with the
+                    // section; the rest stay shut so a 40-model NVIDIA listing
+                    // never buries the one the owner came for.
+                    ProviderGroup(
+                        provider = p,
+                        count = group.size,
+                        initiallyOpen = group.any { it.id == activeModel },
+                    ) {
+                        group.forEach { m ->
+                            ModelRow(m, active = m.id == activeModel) { onSelectModel(m.id) }
+                        }
+                    }
                 }
             }
         }
 
         Spacer(Modifier.height(10.dp))
-        Caption("CONTEXT SHARDS · MCP TOOLSETS", palette.amber)
-        if (servers.servers.isEmpty()) {
-            HbText("NO SHARDS", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
-        } else {
-            servers.servers.forEach { c -> ServerToggleRow(c) { onToggleServer(c) } }
+        Section(
+            title = "CONTEXT SHARDS · MCP TOOLSETS",
+            summary = "${servers.servers.count { it.active && it.connected }}/${servers.servers.size} LINKED",
+            color = palette.amber,
+        ) {
+            if (servers.servers.isEmpty()) {
+                HbText("NO SHARDS", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
+            } else {
+                servers.servers.forEach { c -> ServerToggleRow(c) { onToggleServer(c) } }
+            }
         }
 
         if (agentInfos.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
-            Caption("AGENT CORES · PER-AGENT MODEL ROUTING", palette.accentBright)
-            agentInfos.forEach { info ->
-                AgentCoreRow(info, models) { model -> onPinAgentModel(info.agentId, model) }
+            Section(
+                title = "AGENT CORES · PER-AGENT ROUTING",
+                summary = agentInfos.count { it.override != null }.let { n ->
+                    if (n == 0) "ALL ON PROFILE" else "$n PINNED"
+                },
+                color = palette.accentBright,
+            ) {
+                agentInfos.forEach { info ->
+                    AgentCoreRow(info, models) { model -> onPinAgentModel(info.agentId, model) }
+                }
+            }
+        }
+
+        if (legionInfos.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            val pinned = legionInfos.count { it.override != null }
+            val deploymentPin = legionInfos.firstNotNullOfOrNull { it.deploymentPin }
+            Section(
+                title = "LEGION CORES · WORKER ROUTING",
+                summary = when {
+                    deploymentPin != null -> "ENV PIN → $deploymentPin"
+                    pinned == 0 -> "ALL ON EFFORT POLICY"
+                    else -> "$pinned PINNED"
+                },
+                color = palette.amber,
+            ) {
+                if (deploymentPin != null) {
+                    HbText(
+                        "LEGION_MODEL_OVERRIDE is set — every legionnaire runs on " +
+                            "$deploymentPin and these pins are inert until it is cleared.",
+                        style = HbType.readout.copy(fontSize = 9.sp),
+                        color = palette.amber,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
+                legionInfos.forEach { info ->
+                    LegionCoreRow(info, models) { model -> onPinLegionModel(info.workerId, model) }
+                }
             }
         }
     }
 }
 
+/** A collapsed-by-default block: caption + one-line summary of what's currently
+ *  selected, opening to the full list on tap. */
 @Composable
-private fun Caption(text: String, color: Color) {
-    HbText(text, style = HbType.readout.copy(fontSize = 9.sp), color = color, caps = true, modifier = Modifier.padding(bottom = 4.dp))
+private fun Section(
+    title: String,
+    summary: String,
+    color: Color,
+    content: @Composable () -> Unit,
+) {
+    val palette = LocalHbPalette.current
+    var open by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                HbText(title, style = HbType.readout.copy(fontSize = 9.sp), color = color, caps = true, maxLines = 1)
+                HbText(summary, style = HbType.readout.copy(fontSize = 10.5.sp), color = palette.textDim, caps = true, maxLines = 1)
+            }
+            if (open) HbGlyphs.ChevronUp(palette.icon, size = 9.dp) else HbGlyphs.ChevronDown(palette.icon, size = 9.dp)
+        }
+        if (open) Column(Modifier.fillMaxWidth().padding(top = 2.dp)) { content() }
+    }
+}
+
+/** One provider's models inside the CORES section — collapsible in its own
+ *  right, because a single live provider listing can be dozens of rows. */
+@Composable
+private fun ProviderGroup(
+    provider: String,
+    count: Int,
+    initiallyOpen: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val palette = LocalHbPalette.current
+    var open by remember(provider, initiallyOpen) { mutableStateOf(initiallyOpen) }
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().clickable { open = !open }.padding(top = 6.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            HbText(provider.uppercase(Locale.ENGLISH), style = HbType.readout.copy(fontSize = 9.sp), color = palette.accentBright, maxLines = 1)
+            HbText("· $count", style = HbType.readout.copy(fontSize = 9.sp), color = palette.textFaint)
+            Spacer(Modifier.weight(1f))
+            if (open) HbGlyphs.ChevronUp(palette.icon, size = 8.dp) else HbGlyphs.ChevronDown(palette.icon, size = 8.dp)
+        }
+        if (open) content()
+    }
 }
 
 @Composable
@@ -168,6 +280,52 @@ private fun AgentCoreRow(info: AgentModelInfo, models: List<ModelInfo>, onPin: (
         if (expanded) {
             Column(Modifier.fillMaxWidth().padding(start = 34.dp, top = 4.dp)) {
                 OptionRow(profileLabel, selected = !pinned) { onPin(null); expanded = false }
+                models.forEach { m ->
+                    OptionRow(m.name.ifEmpty { m.id }.uppercase(Locale.ENGLISH), selected = info.override == m.id) {
+                        onPin(m.id); expanded = false
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegionCoreRow(info: LegionModelInfo, models: List<ModelInfo>, onPin: (String?) -> Unit) {
+    val palette = LocalHbPalette.current
+    var expanded by remember { mutableStateOf(false) }
+    val pinned = info.override != null
+    // A legionnaire has no model of its own to fall back to — its default is a
+    // RULE resolved against whichever agent deployed it, so name the rule.
+    val policyLabel = "EFFORT ${info.effort.uppercase(Locale.ENGLISH)} · ${info.derivedFrom.uppercase(Locale.ENGLISH)}"
+
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clickable { expanded = !expanded },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                Modifier.size(24.dp).clip(CircleShape).background(palette.amber.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                HbText(info.workerId.take(2).uppercase(Locale.ENGLISH), style = HbType.readout.copy(fontSize = 9.sp), color = palette.amber)
+            }
+            Column(Modifier.weight(1f)) {
+                HbText(info.workerId.uppercase(Locale.ENGLISH), style = HbType.readout.copy(fontSize = 11.sp), color = palette.amber, maxLines = 1)
+                HbText(
+                    if (pinned) "PINNED → ${info.override}" else policyLabel,
+                    style = HbType.readout.copy(fontSize = 9.sp),
+                    color = if (pinned) palette.amber else palette.textFaint,
+                    maxLines = 1,
+                )
+            }
+            if (expanded) HbGlyphs.ChevronUp(palette.icon, size = 9.dp) else HbGlyphs.ChevronDown(palette.icon, size = 9.dp)
+        }
+        if (expanded) {
+            Column(Modifier.fillMaxWidth().padding(start = 34.dp, top = 4.dp)) {
+                HbText(info.whenToUse, style = HbType.readout.copy(fontSize = 9.sp), color = palette.textFaint, modifier = Modifier.padding(bottom = 4.dp))
+                OptionRow(policyLabel, selected = !pinned) { onPin(null); expanded = false }
                 models.forEach { m ->
                     OptionRow(m.name.ifEmpty { m.id }.uppercase(Locale.ENGLISH), selected = info.override == m.id) {
                         onPin(m.id); expanded = false

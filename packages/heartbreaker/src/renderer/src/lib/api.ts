@@ -805,6 +805,48 @@ export async function pinTelegramModel(
   }
 }
 
+/* ── Legion worker model routing ──────────────────────────────────────────── */
+
+export interface LegionModelInfo {
+  worker_id: string
+  when_to_use: string
+  effort: string
+  /** Human-readable description of the effort rule used when nothing is pinned. */
+  derived_from: string
+  override: string | null
+  /** LEGION_MODEL_OVERRIDE from the deployment env — outranks every pin. */
+  deployment_pin: string | null
+}
+
+export async function fetchLegionModels(config: AppConfig): Promise<LegionModelInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/legion-models`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
+/** Pin a legionnaire to a model ref; null clears it (back to effort policy). */
+export async function pinLegionModel(
+  config: AppConfig,
+  workerId: string,
+  model: string | null,
+): Promise<LegionModelInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/legion-models`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ worker_id: workerId, model }),
+    })
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
 /* ── Online external peers (the Forge link) ───────────────────────────────── */
 
 /** One external peer agent currently connected over WS /agents/ws/<id> — i.e.

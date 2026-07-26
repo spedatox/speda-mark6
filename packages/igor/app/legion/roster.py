@@ -145,18 +145,26 @@ def resolve_worker_model(
 ) -> str:
     """
     Provider-agnostic worker model resolution (priority mirrors Claude Code):
-      1. deployment pin (settings.legion_model_override — empty by default)
-      2. explicit tool param
-      3. effort low/medium → the profile's cheap tier on the SAME provider
+      1. deployment pin (settings.legion_model_override — empty by default),
+         which pins the WHOLE corps
+      2. the owner's per-legionnaire pin, set from the UI and persisted in
+         runtime_state — beats the model's own choice on purpose: it is the
+         owner's cost/quality policy, not a per-call hint
+      3. explicit tool param
+      4. effort low/medium → the profile's cheap tier on the SAME provider
          as the parent model (Anthropic parent → Haiku, zai parent → glm-air…)
-      4. high/inherit → the parent model itself
+      5. high/inherit → the parent model itself
     Never hardcodes a model ID (Rule 10) — everything routes through the
-    profile or the parent.
+    profile, the parent, or an owner-supplied ref.
     """
     from app.config import settings
+    from app.core.runtime_state import get_legion_models
 
     if settings.legion_model_override:
         return settings.legion_model_override
+    pinned = get_legion_models().get(worker.worker_id)
+    if pinned:
+        return pinned
     if explicit:
         return explicit
     if worker.effort in ("low", "medium"):

@@ -108,6 +108,22 @@ def _apply_additive_migrations(sync_conn) -> None:
             )
         )
 
+    # Which chat session (room) an inter-agent exchange was ordered from — what
+    # lets the war room render the whole roster's traffic as one group chat.
+    if "agent_messages" in tables:
+        acols = {c["name"] for c in insp.get_columns("agent_messages")}
+        if "origin_session_id" not in acols:
+            sync_conn.execute(
+                text("ALTER TABLE agent_messages ADD COLUMN origin_session_id INTEGER")
+            )
+            logger.info("schema_migrated", extra={"change": "agent_messages.origin_session_id"})
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_agent_messages_origin "
+                "ON agent_messages (origin_session_id)"
+            )
+        )
+
 
 async def init_db() -> None:
     """Create all tables and seed the default user. Called in lifespan before anything else."""

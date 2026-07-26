@@ -34,6 +34,53 @@ _KNOWN_METRICS = [
     "oxygen_saturation",
 ]
 
+# The names models actually reach for when they don't copy the enum verbatim.
+# The schema declares the enum, but only Anthropic enforces it in the wire
+# format — a background-tier or open-weight model on an automated run happily
+# sends "sleep", and an unmapped name silently matches zero rows, which reads
+# to the caller as "no health data exists". Normalise instead.
+_METRIC_ALIASES = {
+    "sleep": "sleep_session",
+    "sleep_sessions": "sleep_session",
+    "sleep_duration": "sleep_session",
+    "hr": "heart_rate",
+    "heartrate": "heart_rate",
+    "heart_rate_bpm": "heart_rate",
+    "rhr": "resting_heart_rate",
+    "resting_hr": "resting_heart_rate",
+    "restingheartrate": "resting_heart_rate",
+    "exercise": "exercise_session",
+    "exercise_sessions": "exercise_session",
+    "workout": "exercise_session",
+    "workouts": "exercise_session",
+    "activity": "exercise_session",
+    "step": "steps",
+    "step_count": "steps",
+    "steps_count": "steps",
+    "body_weight": "weight",
+    "bodyweight": "weight",
+    "body_fat_percentage": "body_fat",
+    "bodyfat": "body_fat",
+    "spo2": "oxygen_saturation",
+    "blood_oxygen": "oxygen_saturation",
+}
+
+
+def _normalise_metrics(raw: list[str]) -> tuple[list[str], list[str]]:
+    """(recognised metric names, names we could not map). Unmapped names are
+    reported back to the caller rather than quietly narrowing the query to
+    nothing."""
+    metrics: list[str] = []
+    unknown: list[str] = []
+    for name in raw:
+        key = name.strip().lower().replace(" ", "_").replace("-", "_")
+        resolved = key if key in _KNOWN_METRICS else _METRIC_ALIASES.get(key)
+        if resolved is None:
+            unknown.append(name)
+        elif resolved not in metrics:
+            metrics.append(resolved)
+    return metrics, unknown
+
 
 class HealthDataSkill(Skill):
     name = "health_data"
@@ -50,7 +97,10 @@ class HealthDataSkill(Skill):
         "meaning of the word). Returns compact JSON: per-day aggregates for the "
         "requested metrics and range, plus a period-over-period trend comparison "
         "against the immediately preceding window; pass granularity='raw' for "
-        "individual samples instead. If nothing has synced yet it says so — tell "
+        "individual samples instead. Ranges resolve against the owner's LOCAL "
+        "calendar, and a night's sleep is filed under the day it STARTED — so "
+        "last night's sleep is on yesterday's date when you ask in the morning. "
+        "If nothing has synced yet it says so — tell "
         "the owner to set the link up in Settings ▸ Health on the Android app "
         "rather than guessing at numbers."
     )
@@ -91,18 +141,29 @@ class HealthDataSkill(Skill):
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
-        metrics = [m for m in (args.get("metrics") or []) if isinstance(m, str)]
+        requested = [m for m in (args.get("metrics") or []) if isinstance(m, str)]
+        metrics, unknown = _normalise_metrics(requested)
+        if requested and not metrics:
+            return (
+                f"Unrecognised metric name(s): {', '.join(unknown)}. Valid metrics "
+                f"are: {', '.join(_KNOWN_METRICS)}. Re-call with one of those, or "
+                "omit `metrics` entirely to get everything."
+            )
         range_spec = str(args.get("range") or "7d")
         granularity = str(args.get("granularity") or "daily").lower()
 
         start, end = health_service.parse_range(range_spec)
         span_days = (end - start).days + 1
+        note = (
+            f"Ignored unrecognised metric(s) {', '.join(unknown)}."
+            if unknown else ""
+        )
 
         async with AsyncSessionLocal() as db:
             if granularity == "raw":
                 rows = await health_service.raw_rows(db, metrics, start, end)
                 if not rows:
-                    return self._empty(metrics, start, end)
+                    return await self._no_rows(db, metrics, start, end)
                 payload = {
                     "range": {"start": start.isoformat(), "end": end.isoformat()},
                     "granularity": "raw",
@@ -120,11 +181,13 @@ class HealthDataSkill(Skill):
                 }
                 if len(payload["samples"]) >= 200:
                     payload["truncated"] = "Capped at 200 samples — narrow the range or metric."
+                if note:
+                    payload["note"] = note
                 return json.dumps(payload, ensure_ascii=False)
 
             rows = await health_service.daily_rows(db, metrics, start, end)
             if not rows:
-                return self._empty(metrics, start, end)
+                return await self._no_rows(db, metrics, start, end)
 
             # The immediately preceding window of equal length, for the trend.
             from datetime import timedelta
@@ -160,18 +223,51 @@ class HealthDataSkill(Skill):
         }
         if trends:
             payload["trend_vs_previous_period"] = trends
+        if note:
+            payload["note"] = note
         return json.dumps(payload, ensure_ascii=False)
 
     @staticmethod
-    def _empty(metrics: list[str], start, end) -> str:
+    async def _no_rows(db, metrics: list[str], start, end) -> str:
+        """An empty window is NOT the same as an empty pipe, and conflating the
+        two is how a briefing ends up announcing "no health data synced" over a
+        database full of samples: an automated run has no human to correct a
+        wrong date range or a metric the phone doesn't collect. So look at what
+        actually exists and hand the caller the coverage it needs to re-query.
+        Only a genuinely empty store gets the set-up-the-link message."""
         which = ", ".join(metrics) if metrics else "any metric"
-        return (
+        head = (
             f"No health data stored for {which} between {start.isoformat()} and "
-            f"{end.isoformat()}. Either the range predates the first sync, or the "
-            "Health Connect link has not been set up yet — the owner enables it in "
-            "Settings ▸ Health in the Android app. Do not estimate or invent "
-            "figures; say the data isn't there."
+            f"{end.isoformat()}. "
         )
+        try:
+            st = await health_service.status(db)
+        except Exception as exc:  # noqa: BLE001 — never turn a miss into a crash
+            logger.warning("health_status_probe_failed", extra={"error": str(exc)})
+            return head + "Do not estimate or invent figures; say the data isn't there."
+
+        if not st["samples"]:
+            return head + (
+                "Nothing has EVER synced — the Health Connect link has not been set "
+                "up yet; the owner enables it in Settings ▸ Health in the Android "
+                "app. Do not estimate or invent figures; say the data isn't there."
+            )
+
+        available = ", ".join(f"{m} ({n})" for m, n in sorted(st["per_metric"].items()))
+        msg = head + (
+            "The pipe IS live, so do not tell the owner health sync is missing — "
+            "this window is simply empty. Stored data covers "
+            f"{st['first_day']} → {st['last_day']} (last ingest {st['last_ingest']}), "
+            f"metrics: {available}. Re-call this tool with a range inside that span "
+            f"(today is {health_service.owner_today().isoformat()}) and a metric "
+            "from that list before concluding anything."
+        )
+        if "sleep_session" in metrics:
+            msg += (
+                " Note: a night's sleep is filed under the calendar day it STARTED, "
+                "so last night's sleep sits on yesterday's date in a morning query."
+            )
+        return msg
 
 
 def _headline(metric: str, agg: dict) -> float | None:

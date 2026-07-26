@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +36,7 @@ import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.data.ModelInfo
 import com.speda.heartbreaker.data.Uplink
 import com.speda.heartbreaker.designsystem.brand.Brands
+import com.speda.heartbreaker.designsystem.glass.LocalAmbientHazeState
 import com.speda.heartbreaker.designsystem.glass.LocalHazeState
 import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.domain.AppConfig
@@ -48,6 +50,16 @@ import com.speda.heartbreaker.ui.shell.SidebarDrawer
 import com.speda.heartbreaker.ui.shell.WelcomeView
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+
+/** Scroll offset far past any real message height, so LazyList clamps to the
+ *  very bottom of the target item — "show me the END of this message", not its
+ *  first line. Deliberately not Int.MAX_VALUE: the offset is summed with layout
+ *  positions internally, and a bounded value can't overflow that arithmetic. */
+private const val SCROLL_TO_END = 1_000_000
+
+/** How far off the bottom (px) still counts as "parked at the bottom", so a
+ *  pixel of overscroll or a settling layout doesn't stop the stream following. */
+private const val STICK_SLACK_PX = 96
 
 /**
  * The shell: HUD strip → header → welcome/transcript → composer, with the
@@ -118,8 +130,34 @@ fun ChatScreen(
     val activeTitle = state.sessions.firstOrNull { it.id == state.activeSessionId }?.title
 
     val listState = rememberLazyListState()
-    LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.content?.length) {
-        if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.lastIndex)
+
+    // Is the transcript parked at the bottom? Anything else means the owner
+    // scrolled up to read, and the stream must leave the viewport alone.
+    val atBottom by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
+            last.index >= info.totalItemsCount - 1 &&
+                last.offset + last.size <= info.viewportEndOffset + STICK_SLACK_PX
+        }
+    }
+
+    // A NEW message (the owner's send, or the assistant's bubble appearing) is a
+    // deliberate act — always bring the view down to it.
+    LaunchedEffect(state.messages.size) {
+        if (state.messages.isNotEmpty()) {
+            listState.scrollToItem(state.messages.lastIndex, SCROLL_TO_END)
+        }
+    }
+
+    // While text streams in, follow the TAIL — and only while the owner is
+    // already at the bottom. Scrolling to the item index alone parks the
+    // viewport on the message's FIRST line, so every chunk threw the reader back
+    // to the top of the answer while the new text grew off-screen below.
+    LaunchedEffect(state.messages.lastOrNull()?.content?.length) {
+        if (atBottom && state.messages.isNotEmpty()) {
+            listState.scrollToItem(state.messages.lastIndex, SCROLL_TO_END)
+        }
     }
 
     Box(modifier.fillMaxSize()) {
@@ -143,11 +181,12 @@ fun ChatScreen(
             // what makes them read as glass rather than tinted panels. (Blurring
             // only the ambient shows nothing: a smooth gradient blurs to itself.)
             Box(Modifier.weight(1f).fillMaxWidth().hbHazeSource(haze)) {
-                // Glass INSIDE the backdrop must not blur — it would sample the
-                // source it lives in, itself included. It falls back to the
-                // occluding fill, which is exactly the CSS's nested-backdrop-root
-                // rule: a nested surface's own blur is cancelled anyway.
-                CompositionLocalProvider(LocalHazeState provides null) {
+                // Glass INSIDE this backdrop must not blur IT — it would sample
+                // the source it lives in, itself included. It refracts the
+                // ambient instead: strictly behind, never a feedback loop, and
+                // full of moving accent light, so bubbles are real frosted glass
+                // rather than the flat occluding-fill fallback.
+                CompositionLocalProvider(LocalHazeState provides LocalAmbientHazeState.current) {
                     if (state.messages.isEmpty()) {
                         WelcomeView(
                             brand = brand,

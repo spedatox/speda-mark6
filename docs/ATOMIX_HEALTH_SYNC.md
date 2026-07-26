@@ -242,6 +242,21 @@ class HealthDataSkill(Skill):
   `restricted_to={"atomix"}`.
 - Returns dailies by default; raw samples only when granularity asks — keeps
   tool results small and cache-friendly.
+- *As built, hardening for automated runs* (a briefing has no human to correct a
+  bad query, and it runs on the background model tier):
+  - Ranges resolve against the owner's **local** date (`health.owner_today()`),
+    the same frame samples are filed in. UTC "today" is the previous local day
+    for the first three hours of every Istanbul morning — when the digest fires.
+  - Metric names are normalised through an alias table (`sleep` →
+    `sleep_session`, `rhr` → `resting_heart_rate`, …). Only Anthropic enforces
+    the schema `enum` on the wire; an unmapped name used to match zero rows and
+    read as "no health data exists". A wholly unmappable name gets a corrective
+    error naming the valid metrics, not an empty result.
+  - An empty window is distinguished from an empty pipe: with samples in the
+    store the tool reports the covered day span, the per-metric counts, the last
+    ingest and today's date so the caller can re-query, and explicitly tells it
+    not to claim health sync is missing. The "set the link up in Settings ▸
+    Health" message is reserved for a store that has genuinely never synced.
 
 ### 3.3 Ambient digest (n8n-owned, per CLAUDE.md)
 

@@ -1,23 +1,16 @@
-import { useEffect } from 'react'
-
 const MONO = 'var(--font-mono)'
 const UI = "'Rajdhani', sans-serif"
 
 /**
- * HousePartyWarning — the in-chat trigger for the House Party authorization
- * pop-up. SPEDA emits a ```hpp-warning block; instead of rendering the full
- * card (and asking the owner to type the passphrase into the composer, which
- * was lame and insecure), this renders a slim glowing banner and raises a
- * `speda:hpp-authorize` event so Layout opens the real modal — a proper window
- * with a MASKED passphrase field, validated server-side.
+ * HousePartyWarning — SALVAGE rendering for a ```hpp-warning fence.
  *
- * It auto-opens once when it first appears (debounced so streaming re-mounts
- * don't reopen it), and the banner stays as a click-to-reopen affordance.
+ * The live authorization flow no longer goes through the transcript at all: the
+ * backend's house_party tool raises a `house_party_auth` SSE event and ChatMain
+ * opens the passphrase window off that. This component only exists so an old
+ * transcript — or a model that emits the fence out of habit — shows a banner the
+ * owner can click instead of a raw code block. It does NOT auto-open: scrolling
+ * back through history must never pop an authorization window.
  */
-
-// Debounce auto-open across the many re-mounts ReactMarkdown does while the
-// block is still streaming in.
-let _lastAutoOpen = 0
 
 function openModal(objective: string) {
   window.dispatchEvent(new CustomEvent('speda:hpp-authorize', { detail: { objective } }))
@@ -26,14 +19,6 @@ function openModal(objective: string) {
 export default function HousePartyWarning({ children }: { children?: string }) {
   const objMatch = /(?:^|\n)\s*objective\s*:\s*(.+)/i.exec(children ?? '')
   const objective = objMatch ? objMatch[1].trim().slice(0, 180) : ''
-
-  useEffect(() => {
-    const now = Date.now()
-    if (now - _lastAutoOpen > 2500) {
-      _lastAutoOpen = now
-      openModal(objective)
-    }
-  }, [objective])
 
   const AMBER = 'var(--hb-amber-bright)'
   return (

@@ -63,6 +63,15 @@ class AgentProfile(ABC):
     # it has cross-agent situational awareness.
     episodic_recall_scope: Literal["own", "all"] = "own"
 
+    # Which side of the House Party Protocol this agent is on while it is
+    # engaged: True = MISSION COMMANDER (plans the objective, dispatches the
+    # roster, debriefs the owner), False = OPERATIVE (takes dispatched work,
+    # including work outside its usual domain). The orchestrator picks the
+    # protocol block off this flag — identity decision, so it lives here and not
+    # as an agent_id comparison in core (Rule 10). SPEDA sets it True, and its
+    # war-room session alias inherits it.
+    house_party_commander: bool = False
+
     name: str
     sonnet_model: str = "claude-sonnet-4-6"
     haiku_model: str = "claude-haiku-4-5-20251001"
@@ -83,22 +92,55 @@ class AgentProfile(ABC):
         """Build the full system prompt string from the template and runtime context vars."""
         ...
 
+    def cheap_tier(self, model_ref: str) -> str:
+        """The cheap model on `model_ref`'s OWN provider — or `model_ref` itself
+        when that provider has no cheaper tier declared.
+
+        Provider detection goes through llm_client.parse_model_ref, the same
+        function that decides where a call is actually sent, so this can never
+        disagree with the router. It never returns a different provider than it
+        was given: a deployment with no Anthropic key must not have Anthropic
+        models appear out of a "cheap tier" lookup.
+
+        The Anthropic tier applies only to a genuinely bare Anthropic model name.
+        parse_model_ref reports an UNRECOGNISED prefix ("groq:…") as Anthropic
+        too — that ref is returned untouched instead, so a ref the owner set
+        fails loudly as theirs rather than quietly becoming a Haiku call.
+        """
+        from app.services.llm_client import parse_model_ref
+
+        provider, _ = parse_model_ref(model_ref)
+        tier = self.background_models.get(provider)
+        if tier:
+            return tier
+        if provider == "anthropic" and ":" not in model_ref:
+            return self.haiku_model
+        return model_ref
+
     def background_model(self, active_model_ref: str) -> str:
         """
-        Cheap model ON THE SAME PROVIDER as the active chat model, for background
-        tasks. Chatting on OpenAI/Gemini must not silently spend Anthropic
-        credit (or fail when no Anthropic key is configured), and in the Dead
-        Zone (Ollama, no uplink) the local model is the only one that answers.
+        Cheap model for background work (titles, recaps, compaction, Legion
+        pre-filters) — ALWAYS on the provider the owner actually chose.
+
+        `active_model_ref` is the model this turn is genuinely running on, which
+        is already the end of the routing chain: the composer's per-turn pick,
+        else the Telegram pin, else the routing-matrix pin for this agent, else
+        the .env override, else the profile. So the cheap tier is derived from
+        it and never from a provider the engine picked on its own. Only an
+        explicit LLM_BACKGROUND_MODEL — the owner naming a background model
+        themselves — outranks it.
+
+        The old version keyed off a hardcoded provider tuple and fell back to
+        Anthropic Haiku for anything it didn't recognise, so an agent routed to
+        a provider outside that list had every title, recap and Legion
+        pre-filter quietly billed to Anthropic. Nothing here reaches for
+        Anthropic unless the resolved model IS Anthropic.
         """
         from app.config import settings
 
-        provider, sep, _ = active_model_ref.partition(":")
-        if not sep or provider not in ("openai", "gemini", "zai", "deepseek", "nvidia", "ollama"):
-            # Anthropic path — keep honoring the .env override.
-            return settings.llm_background_model or self.haiku_model
-        if provider == "ollama":
-            return active_model_ref
-        return self.background_models.get(provider, active_model_ref)
+        if settings.llm_background_model:
+            return settings.llm_background_model
+        return self.cheap_tier(active_model_ref)
 
     def allocate_model(
         self,
@@ -106,13 +148,22 @@ class AgentProfile(ABC):
         is_background: bool = False,
     ) -> str:
         """
-        SPEDA governs model allocation — agents do not decide independently (D-C4).
-        - User-facing interactive → Sonnet 4.6
-        - Background / automated → Haiku 4.5
-        Precedence: the owner's runtime per-agent override (set from the UI,
-        app/core/runtime_state.py) wins over everything; then the .env
-        LLM_MAIN_MODEL / LLM_BACKGROUND_MODEL deployment overrides; then this
-        profile's own models (any "provider:model" ref — see llm_client.py).
+        Which model this agent runs on, for any kind of turn.
+
+        Precedence:
+          1. the owner's per-agent pin from the routing matrix
+             (app/core/runtime_state.get_agent_models) — it wins over
+             everything, for EVERY trigger source. If the owner pinned an
+             agent, that is the model it runs, whether the turn came from the
+             app, from n8n, or from another agent. No exceptions.
+          2. the .env deployment overrides (LLM_MAIN_MODEL /
+             LLM_BACKGROUND_MODEL).
+          3. this profile's own models (D-C4: interactive → Sonnet,
+             automated → the cheap tier).
+
+        An unpinned automated turn takes the cheap tier OF THE MAIN MODEL'S
+        PROVIDER, not a hardcoded Anthropic one: a deployment whose main model
+        is `zai:…` must not have its n8n turns silently land on Anthropic.
         """
         from app.config import settings
         from app.core.runtime_state import get_agent_models
@@ -122,7 +173,9 @@ class AgentProfile(ABC):
             return override
 
         if is_background or triggered_by in ("n8n", "agent"):
-            return settings.llm_background_model or self.haiku_model
+            if settings.llm_background_model:
+                return settings.llm_background_model
+            return self.cheap_tier(settings.llm_main_model or self.sonnet_model)
         return settings.llm_main_model or self.sonnet_model
 
     def allocate_telegram_model(self) -> str:

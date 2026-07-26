@@ -41,6 +41,17 @@ export interface FileMeta {
   url: string    // e.g. /files/report.pdf
 }
 
+/** Provenance for a turn the owner did not write — an n8n automation opening a
+ *  session. Present only on such turns; the bubble is attributed to the trigger
+ *  instead of to the owner. */
+export interface TriggerMeta {
+  source: string        // "n8n"
+  label: string         // human name of the automation ("Morning brief")
+  job?: string
+  automation?: string
+  output_mode?: string  // "push" | "silent"
+}
+
 export interface ChatMessage {
   id: string
   role: Role
@@ -54,6 +65,7 @@ export interface ChatMessage {
   images?: string[]   // data: URLs for display in the user bubble
   files?: FileMeta[]  // downloadable files SPEDA produced
   uploads?: UploadedFile[]  // non-image files the user attached (display chips)
+  trigger?: TriggerMeta     // set when an automation, not the owner, sent this turn
   status?: string     // live status line while streaming (real phase, not looped filler)
   sessionId?: number  // which session a STREAMING bubble belongs to — lets
                       // SELECT_SESSION preserve an in-flight tail instead of
@@ -111,7 +123,8 @@ export interface PendingAsk {
 }
 
 export interface SSEEvent {
-  type: 'start' | 'chunk' | 'tool' | 'tool_result' | 'file' | 'done' | 'error' | 'permission_request'
+  type: 'start' | 'chunk' | 'tool' | 'tool_result' | 'file' | 'done' | 'error'
+      | 'permission_request' | 'house_party_auth'
   data: unknown
   session_id: number
   request_id: string

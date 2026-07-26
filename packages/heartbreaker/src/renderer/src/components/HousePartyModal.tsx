@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ROSTER } from '../lib/agents'
+import { ROSTER, agentColor } from '../lib/agents'
 import { engageHouseParty } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import { Avatar } from './CommBubble'
@@ -162,10 +162,15 @@ export default function HousePartyModal({
           <span style={{ fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--hb-icon)', flexShrink: 0 }}>
             Standing by
           </span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {ROSTER.map((id, i) => (
-              <span key={id} style={{ opacity: 0.6, animation: `hppBoot 0.4s ease ${0.2 + i * 0.05}s both` }}>
-                <Avatar id={id} size={22} />
+              // Each mark in its own signature colour — the flat finish paints in
+              // currentColor, so a monochrome row here reads as muddy grey.
+              <span key={id} style={{
+                display: 'flex', color: agentColor(id),
+                animation: `hppBoot 0.4s ease ${0.2 + i * 0.05}s both`,
+              }}>
+                <Avatar id={id} size={26} />
               </span>
             ))}
           </div>

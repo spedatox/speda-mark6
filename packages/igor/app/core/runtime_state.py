@@ -115,6 +115,33 @@ def set_agent_model(agent_id: str, model: str | None) -> None:
     logger.info("agent_model_set", extra={"agent_id": agent_id, "model": model or "(default)"})
 
 
+# ── Per-legionnaire model overrides ─────────────────────────────────────────
+# The owner can pin any Legion worker type (scout, researcher, analyst, judge,
+# general) to a specific model ref. An empty/absent entry leaves that worker on
+# its effort-derived allocation (see legion/roster.resolve_worker_model), which
+# stays provider-agnostic. The deployment-wide LEGION_MODEL_OVERRIDE still wins
+# over everything — it exists to pin the whole corps during an incident.
+
+def get_legion_models() -> dict[str, str]:
+    """worker_id → pinned model ref. Empty = every worker on effort policy."""
+    return dict(_load().get("legion_models", {}))
+
+
+def set_legion_model(worker_id: str, model: str | None) -> None:
+    state = _load()
+    models = dict(state.get("legion_models", {}))
+    if model:
+        models[worker_id] = model
+    else:
+        models.pop(worker_id, None)
+    state["legion_models"] = models
+    _save()
+    logger.info(
+        "legion_model_set",
+        extra={"worker_id": worker_id, "model": model or "(default)"},
+    )
+
+
 def get_telegram_models() -> dict[str, str]:
     """Per-agent model override for Telegram channel only."""
     return dict(_load().get("telegram_models", {}))

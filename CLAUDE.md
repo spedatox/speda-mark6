@@ -164,6 +164,7 @@ speda-mark-vi/
     │   ├── agent_registry.py    # AgentRegistry — WebSocket-based agent presence
     │   ├── session_manager.py   # SessionManager — session lifecycle + history loading
     │   ├── turn_runner.py       # TurnRegistry — detached turns survive client disconnects (BgOps)
+    │   ├── trigger_runner.py    # n8n turns run as persisted chat turns on the TurnRegistry
     │   ├── dispatch.py          # Agent-to-agent dispatch primitive — direct AND House Party broadcast
     │   ├── external_proxy.py    # ExternalAgentProxy — wired peer proxy for Optimus/Forge (app.state.agent_proxy)
     │   ├── external_chat.py     # Superseded by external_proxy.py — not constructed anywhere; confirm before touching
@@ -238,7 +239,7 @@ speda-mark-vi/
     │   ├── forge_peer.py, sandbox_launcher.py   # External backend (Forge) process/session bridge
     │   ├── pending_asks.py      # Permission asks relayed from external peers
     │   ├── telegram.py
-    │   └── n8n.py, n8n_api.py   # Webhook auth, trigger formatting
+    │   └── n8n.py, n8n_api.py   # Webhook auth (X-N8N-Secret), n8n REST client
     ├── models/                  # ORM models — one file per table (user, session, message, agent,
     │                            # agent_message, automation, health_sample, memory/memory_file/memory_revision,
     │                            # message_embedding, news_item/news_quota/news_watch, notification, tool_call)
@@ -358,6 +359,10 @@ The Legion is the sub-agent worker system (`app/legion/`). Wire name of the tool
 | House Party Protocol (engaged) | claude-sonnet-4-6 across all agents — full interactive grade, not the background tier |
 
 Each agent's `AgentProfile` governs its own model allocation via `allocate_model()`. Model IDs live exclusively in individual profile files under `app/profiles/`. The `ProfileRegistry` loads all profiles at startup and attaches them to `app.state`. The orchestrator resolves the correct profile from `context.agent_id` and calls its `allocate_model()` at context construction time.
+
+**The routing matrix outranks this table.** The owner's per-agent pin (`runtime_state.get_agent_models()`, set from the UI) wins over everything, for *every* trigger source — app, n8n, or inter-agent. The table above is only what an **unpinned** agent falls back to.
+
+**Never cross providers on the engine's own initiative.** `background_model()` derives the cheap tier from the model the turn is actually running on, via `cheap_tier()` — same provider or nothing. If a provider declares no cheap tier, the model in hand is used unchanged. No code path may substitute an Anthropic model for one the owner routed elsewhere, and no module outside `app/profiles/` may read `haiku_model`/`sonnet_model` directly (that read is what silently pulled background jobs back onto Anthropic).
 
 ---
 

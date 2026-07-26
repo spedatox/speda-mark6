@@ -61,6 +61,10 @@ class SPEDAProfile(AgentProfile):
     # executive needs cross-agent situational awareness. Specialists keep the
     # base "own" scope.
     episodic_recall_scope = "all"
+    # Mission commander under the House Party Protocol — SPEDA plans and
+    # dispatches; every other profile is an operative. The war-room alias
+    # (profiles/warroom.py) subclasses this and inherits the command role.
+    house_party_commander = True
 
     name = AGENT_NAME   # derived from 01_identity.md — never hardcode here
     sonnet_model = "claude-sonnet-4-6"

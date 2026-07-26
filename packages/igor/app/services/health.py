@@ -16,6 +16,7 @@ import logging
 from collections import defaultdict
 from datetime import date as date_cls
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -332,12 +333,25 @@ async def recompute_daily(db: AsyncSession, day: date_cls, metric: str) -> None:
     await db.flush()
 
 
+def owner_today() -> date_cls:
+    """The owner's LOCAL calendar date. Samples are filed by local day
+    (``local_day``), so every range must be resolved in the same frame — UTC
+    "today" is the previous local day for the first three hours of every
+    Istanbul morning, which is exactly when the nightly digest runs."""
+    from app.config import settings
+
+    try:
+        return datetime.now(ZoneInfo(settings.owner_timezone)).date()
+    except Exception:  # noqa: BLE001 — unknown/invalid IANA name
+        return datetime.utcnow().date()
+
+
 def parse_range(spec: str, today: date_cls | None = None) -> tuple[date_cls, date_cls]:
     """Range vocabulary shared by the skill and the API: "today", "yesterday",
     "7d"/"30d"/"90d" (N days back, inclusive of today), or "YYYY-MM-DD:YYYY-MM-DD".
     Unrecognised input falls back to 7d rather than erroring — a model that
     invents a range should still get a sane answer."""
-    today = today or datetime.utcnow().date()
+    today = today or owner_today()
     spec = (spec or "7d").strip().lower()
 
     if spec == "today":

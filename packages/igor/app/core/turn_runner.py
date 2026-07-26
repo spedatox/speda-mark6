@@ -87,6 +87,7 @@ class TurnRegistry:
         engine_factory: EngineFactory,
         format_error: Callable[[Exception], str],
         on_complete: Callable[[], Awaitable[None]] | None = None,
+        on_settle: Callable[[str], Awaitable[None]] | None = None,
     ) -> str | None:
         """Launch a detached turn. Returns its request_id, or None if the active
         cap is hit (the caller surfaces a friendly error to the user)."""
@@ -102,7 +103,7 @@ class TurnRegistry:
         )
         self._turns[context.request_id] = turn
         turn.task = asyncio.create_task(
-            self._run(turn, context, engine_factory, format_error, on_complete)
+            self._run(turn, context, engine_factory, format_error, on_complete, on_settle)
         )
         return context.request_id
 
@@ -115,6 +116,7 @@ class TurnRegistry:
         engine_factory: EngineFactory,
         format_error: Callable[[Exception], str],
         on_complete: Callable[[], Awaitable[None]] | None,
+        on_settle: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         chunks: list[str] = []
         tools: list[dict] = []
@@ -218,6 +220,18 @@ class TurnRegistry:
                     await on_complete()
                 except Exception as e:  # noqa: BLE001
                     logger.warning("turn_on_complete_failed", extra={"request_id": turn.request_id, "error": str(e)})
+
+            # Settle hook — unlike on_complete this runs on EVERY outcome. For a
+            # triggered run it is the delivery step: a briefing that broke off
+            # half-way must still reach the owner (with the failure marker the
+            # persisted turn carries), which is what the pre-runner trigger path
+            # did. Chat passes none.
+            if on_settle is not None:
+                status = "cancelled" if cancelled else ("failed" if failed else "ok")
+                try:
+                    await on_settle(status)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("turn_on_settle_failed", extra={"request_id": turn.request_id, "error": str(e)})
         finally:
             await self._finish(turn)
 

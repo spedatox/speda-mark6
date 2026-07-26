@@ -439,6 +439,101 @@ async def _anthropic_models() -> list[dict]:
     return rows
 
 
+# Substrings marking a listed model as NOT a chat model. Every OpenAI-compatible
+# /models endpoint mixes embeddings, rerankers, media generation and speech in
+# with the chat models; none of those belong in a chat model picker.
+_NON_CHAT_MARKERS = (
+    "embed", "rerank", "retriev", "moderation", "aqa",
+    "imagen", "veo", "image-generation", "image-preview",
+    "tts", "audio", "whisper", "-live-", "translation",
+)
+
+# Provider model families, in display order (most → least capable), same shape
+# as _ANTHRO_FAMILY: (id substring, tag, description). A live id we've never
+# seen still lands with a sensible label and sort position; more specific keys
+# must come first ("flash-lite" before "flash").
+_ZAI_FAMILY: list[tuple[str, str, str]] = [
+    ("glm-5", "powerful", "Zhipu flagship — long-horizon agentic coding, very long context"),
+    ("glm-4.6", "powerful", "Prior flagship — strong agentic coding & tool use"),
+    ("air", "fast", "Lightweight and inexpensive for everyday tasks"),
+    ("flash", "fast", "Fastest GLM tier — quick, cheap turns"),
+    ("glm-4", "", "GLM chat model"),
+]
+_GEMINI_FAMILY: list[tuple[str, str, str]] = [
+    ("pro", "powerful", "Google's most capable — long context"),
+    ("flash-lite", "fastest", "Cheapest Gemini tier — high-volume simple tasks"),
+    ("flash", "fast", "Fast and inexpensive for everyday tasks"),
+    ("gemma", "fast", "Open-weight Google model"),
+]
+
+
+def _curated(provider: str, model_ref: str) -> dict | None:
+    """The hand-written _CATALOG entry for a model ref, if there is one. A live
+    listing reuses our copy rather than a machine-generated line."""
+    for m in _CATALOG.get(provider, []):
+        if m["id"] == model_ref:
+            return m
+    return None
+
+
+async def _compat_models(
+    provider: str, family: list[tuple[str, str, str]]
+) -> list[dict]:
+    """Live catalog from a provider's OpenAI-compatible /models endpoint.
+
+    Everything the key can actually reach is listed, so a newly released model
+    shows up in the picker with no code change; `family` only supplies the
+    label/tag/sort for ids we don't have curated copy for. Raises on failure so
+    the caller can fall back to the static catalog."""
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(**_OPENAI_COMPAT[provider]())
+    res = await client.models.list()
+    rows: list[dict] = []
+    for m in res.data:
+        # Gemini's OpenAI bridge returns "models/gemini-2.5-pro" — strip the path
+        # so the ref matches what the chat client sends back.
+        mid = m.id.split("/")[-1]
+        low = mid.lower()
+        if any(x in low for x in _NON_CHAT_MARKERS):
+            continue
+        ref = f"{provider}:{mid}"
+        rank, tag, desc = len(family), "", f"{provider} chat model"
+        for i, (key, t, d) in enumerate(family):
+            if key in low:
+                rank, tag, desc = i, t, d
+                break
+        known = _curated(provider, ref)
+        rows.append({
+            "id": ref,
+            "name": known["name"] if known else mid,
+            "description": (known["description"] if known else desc),
+            "tags": list(known["tags"]) if known else ([tag] if tag else []),
+            "provider": provider,
+            "_rank": rank,
+        })
+    rows.sort(key=lambda r: (r["_rank"], r["id"]))
+    for r in rows:
+        r.pop("_rank", None)
+    return rows
+
+
+async def _live_or_static(provider: str, family: list[tuple[str, str, str]]) -> list[dict]:
+    """Live listing for `provider`, falling back to the static catalog when the
+    endpoint is unreachable, unsupported, or returns nothing usable."""
+    try:
+        rows = await _compat_models(provider, family)
+        if rows:
+            return rows
+        logger.warning("provider_models_empty", extra={"provider": provider})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "failed_to_fetch_provider_models",
+            extra={"provider": provider, "error": str(exc)},
+        )
+    return [{**m, "provider": provider} for m in _CATALOG[provider]]
+
+
 async def _nvidia_models() -> list[dict]:
     """Live NVIDIA NIM catalog from its OpenAI-compatible /v1/models endpoint.
     Lists every model the key can reach (Llama, Nemotron, DeepSeek, Qwen, …),
@@ -479,9 +574,10 @@ async def available_models() -> list[dict]:
     DeepSeek when their API key is set, Ollama when the local daemon answers —
     its installed models are listed live from /api/tags (dev/testing only).
 
-    Anthropic and OpenAI are listed LIVE from each provider's models endpoint so
-    a newly released model appears without a code change; the static _CATALOG is
-    only the offline fallback when the endpoint can't be reached."""
+    Anthropic, OpenAI, Gemini, z.ai and NVIDIA are all listed LIVE from each
+    provider's models endpoint so a newly released model appears without a code
+    change; the static _CATALOG is only the offline fallback for when an
+    endpoint can't be reached (or doesn't offer a listing at all)."""
     out: list[dict] = []
     if settings.anthropic_api_key not in ("", "not-set"):
         try:
@@ -517,9 +613,9 @@ async def available_models() -> list[dict]:
             logger.warning("failed_to_fetch_openai_models", extra={"error": str(exc)})
             out += [{**m, "provider": "openai"} for m in _CATALOG["openai"]]
     if settings.gemini_api_key:
-        out += [{**m, "provider": "gemini"} for m in _CATALOG["gemini"]]
+        out += await _live_or_static("gemini", _GEMINI_FAMILY)
     if settings.zai_api_key:
-        out += [{**m, "provider": "zai"} for m in _CATALOG["zai"]]
+        out += await _live_or_static("zai", _ZAI_FAMILY)
     if settings.deepseek_api_key:
         out += [{**m, "provider": "deepseek"} for m in _CATALOG["deepseek"]]
     if settings.nvidia_api_key:

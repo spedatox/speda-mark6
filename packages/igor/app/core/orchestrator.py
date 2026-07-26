@@ -109,9 +109,8 @@ class AgentOrchestrator:
         # that accepts tasks outside its domain. Engaged/stood down via the
         # house_party tool on the owner's explicit invocation.
         from app.core.runtime_state import get_house_party
-        from app.profiles.registry import DEFAULT_AGENT_ID
         if get_house_party():
-            if context.agent_id == DEFAULT_AGENT_ID:
+            if profile.house_party_commander:
                 stable_core += (
                     "\n\n## HOUSE PARTY PROTOCOL — ACTIVE\n\n"
                     "The owner has engaged the all-hands protocol: the situation is "
@@ -128,10 +127,25 @@ class AgentOrchestrator:
                     "the objective is genuinely done. Do not stop at one round if the "
                     "mission needs more.\n"
                     "4. DEBRIEF — synthesize everything into one decisive answer for "
-                    "the owner: what was done, by whom, what it means, what's next.\n"
-                    "Keep the owner informed of who is working on what. Stand the "
-                    "protocol down (house_party tool) when the owner says the "
-                    "situation is resolved."
+                    "the owner: what was done, by whom, what it means, what's next.\n\n"
+                    "### This is a GROUP CHAT\n"
+                    "The owner is in the room with the whole roster. Every task you "
+                    "dispatch and every agent's reply is rendered in their transcript "
+                    "as that agent's own message, live, the moment it lands — they "
+                    "read the agents directly, not a summary of them. So:\n"
+                    "- Write each dispatch as a message TO that agent, in plain "
+                    "language the owner can follow. It is a public brief, not an "
+                    "internal payload.\n"
+                    "- Never re-narrate or repeat an agent's answer back to the owner "
+                    "— they already read it. Add only what is yours: the decision, "
+                    "the conflict between two agents, the next move.\n"
+                    "- Keep your own messages short, like someone talking in a group "
+                    "chat. The long-form substance comes from the agents.\n"
+                    "- When the owner addresses an agent directly (\"@centurion …\"), "
+                    "dispatch that request to that agent essentially verbatim and let "
+                    "their answer stand. Do not answer for them.\n\n"
+                    "Stand the protocol down (house_party tool) when the owner says "
+                    "the situation is resolved."
                 )
             else:
                 stable_core += (
@@ -141,8 +155,12 @@ class AgentOrchestrator:
                     "fall outside your usual domain — take them anyway and deliver "
                     "your best work; specialization is a preference here, not a "
                     "boundary. Check the network channel in your briefing so you "
-                    "build on the other agents' results instead of duplicating them. "
-                    "Report substance, fast."
+                    "build on the other agents' results instead of duplicating them.\n"
+                    "You are speaking in a GROUP CHAT: your reply is shown to the "
+                    "owner as your own message, under your own name, next to every "
+                    "other agent's. Write it for them to read — lead with the "
+                    "substance, no preamble, no restating the brief, no sign-off. "
+                    "Short and concrete beats long and thorough here."
                 )
 
         # Budget mode — hard frugality directive (runtime-toggleable, persistent).
@@ -441,6 +459,19 @@ class AgentOrchestrator:
                     yield SSEEvent(
                         type=SSEEventType.TOOL_RESULT,
                         data={"id": block.id, "result": preview[:1500]},
+                        session_id=context.session_id,
+                        request_id=context.request_id,
+                    )
+
+                # 2c. The house_party tool asks the owner to authorize by opening
+                #     the app's own passphrase window. Emit it the moment the tool
+                #     returns (not at end-of-turn like `file`) so the window is up
+                #     while the model is still writing its one-line heads-up.
+                auth_ask = context.extra.pop("house_party_auth", None)
+                if auth_ask is not None:
+                    yield SSEEvent(
+                        type=SSEEventType.HOUSE_PARTY_AUTH,
+                        data=auth_ask,
                         session_id=context.session_id,
                         request_id=context.request_id,
                     )
