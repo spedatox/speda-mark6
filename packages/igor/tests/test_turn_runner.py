@@ -87,6 +87,64 @@ async def test_cancel_persists_partial_with_marker():
     assert "[cancelled by owner]" in sm.saved[0][2][0]["text"]
 
 
+async def _graceful_error_engine(ctx):
+    yield SSEEvent(SSEEventType.CHUNK, "working ", ctx.session_id, ctx.request_id)
+    yield SSEEvent(SSEEventType.ERROR, "boom", ctx.session_id, ctx.request_id)
+
+
+async def _raise_engine(ctx):
+    yield SSEEvent(SSEEventType.CHUNK, "did stuff ", ctx.session_id, ctx.request_id)
+    raise RuntimeError("kaboom")
+
+
+async def _tool_only_engine(ctx):
+    yield SSEEvent(SSEEventType.TOOL, {"id": "t1", "name": "run", "input": {}},
+                   ctx.session_id, ctx.request_id)
+    yield SSEEvent(SSEEventType.DONE, "", ctx.session_id, ctx.request_id)
+
+
+async def test_graceful_error_persists_partial_with_marker_and_skips_on_complete():
+    """A peer/engine ERROR event must not erase the turn — the streamed text
+    survives with a failure marker, and post-turn work is skipped."""
+    sm = _FakeSM()
+    reg = turn_runner.TurnRegistry(sm)
+    completed = []
+    reg.start(context=_ctx("e1"), engine_factory=_graceful_error_engine,
+              format_error=str, on_complete=lambda: _set(completed))
+    await asyncio.sleep(0.2)
+    assert len(sm.saved) == 1
+    text = sm.saved[0][2][0]["text"]
+    assert "working " in text and "error: boom" in text
+    assert completed == []              # a failed turn is not titled/embedded
+
+
+async def test_raised_exception_persists_partial_instead_of_vanishing():
+    """A crash mid-stream used to skip persistence entirely. Now the work done
+    before the crash is saved with a marker carrying the error."""
+    sm = _FakeSM()
+    reg = turn_runner.TurnRegistry(sm)
+    reg.start(context=_ctx("e2"), engine_factory=_raise_engine,
+              format_error=str, on_complete=None)
+    await asyncio.sleep(0.2)
+    assert len(sm.saved) == 1
+    text = sm.saved[0][2][0]["text"]
+    assert "did stuff " in text and "kaboom" in text
+
+
+async def test_tool_only_turn_is_not_dropped():
+    """A turn that ran tools but streamed no text still persists — the tool
+    record is work the next turn's history must keep."""
+    sm = _FakeSM()
+    reg = turn_runner.TurnRegistry(sm)
+    reg.start(context=_ctx("e3"), engine_factory=_tool_only_engine,
+              format_error=str, on_complete=None)
+    await asyncio.sleep(0.2)
+    assert len(sm.saved) == 1
+    content = sm.saved[0][2]
+    meta = [b for b in content if b.get("type") == "_speda_meta"]
+    assert meta and meta[0]["tools"][0]["id"] == "t1"
+
+
 async def test_two_subscribers_identical():
     sm = _FakeSM()
     reg = turn_runner.TurnRegistry(sm)
