@@ -36,6 +36,19 @@ data class AgentModelInfo(
     @SerialName("default_background") val defaultBackground: String = "",
 )
 
+/** One Legion worker type's model allocation (GET/POST /agents/legion-models) —
+ *  Systems board LEGION CORES. Legionnaires have no profile, so instead of a
+ *  default model they carry the effort rule their model is derived from. */
+@Serializable
+data class LegionModelInfo(
+    @SerialName("worker_id") val workerId: String,
+    @SerialName("when_to_use") val whenToUse: String = "",
+    val effort: String = "",
+    @SerialName("derived_from") val derivedFrom: String = "",
+    val override: String? = null,
+    @SerialName("deployment_pin") val deploymentPin: String? = null,
+)
+
 /** SPEDA's knowledge bank file (GET/PUT /memory/files) — Systems board DATA_BANKS. */
 @Serializable
 data class MemoryFileInfo(

@@ -25,16 +25,19 @@ async def index_history_endpoint(
 ):
     """
     One-time: mine durable facts about the owner from the entire conversation
-    history (Haiku) and write a consolidated profile to /memories/history.md.
+    history and write a consolidated profile to /memories/history.md.
     Runs in the background. Pass ?force=true to re-index.
     """
     from app.services.history_indexer import index_history
 
-    # History indexing is an owner-level (cross-agent) job — run it on the
-    # default agent's cheap model.
+    # History indexing is an owner-level (cross-agent) job — run it on the cheap
+    # tier of whatever the default agent is ROUTED to, not on a hardcoded
+    # profile field: pinning that agent to another provider must move this job
+    # with it instead of leaving it billing Anthropic.
     profile = request.app.state.profiles.default
+    model = profile.background_model(profile.allocate_model("user"))
     request_id = str(uuid.uuid4())
-    background_tasks.add_task(index_history, 1, request_id, profile.haiku_model, force)
+    background_tasks.add_task(index_history, 1, request_id, model, force)
     return JSONResponse({"accepted": True, "message": "History indexing started in background"})
 
 

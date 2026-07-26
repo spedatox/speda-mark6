@@ -377,6 +377,12 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           // nothing and blocks nothing — the peer is already counting down and
           // will deny on its own if the owner never answers.
           setPendingAsk(event.data as PendingAsk)
+        } else if (event.type === 'house_party_auth') {
+          // The backend is asking the owner to authorize House Party. This is a
+          // real event, not a marker in the text — Layout opens the passphrase
+          // window off it, so the transcript never carries the ask (or a fence).
+          const d = (event.data ?? {}) as { objective?: string }
+          window.dispatchEvent(new CustomEvent('speda:hpp-authorize', { detail: { objective: d.objective } }))
         } else if (event.type === 'file') {
           dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
         } else if (event.type === 'done') {
@@ -541,11 +547,14 @@ export default function ChatMain({ config, onSelectSession }: Props) {
             const d = event.data as { id: string; result: string }
             dispatch({ type: 'SET_TOOL_RESULT', payload: { id: assistantId, toolId: d.id, result: d.result } })
           } else if (event.type === 'permission_request') {
-          // A peer's gate stopped an irreversible operation. The card replaces
-          // nothing and blocks nothing — the peer is already counting down and
-          // will deny on its own if the owner never answers.
-          setPendingAsk(event.data as PendingAsk)
-        } else if (event.type === 'file') {
+            // A peer's gate stopped an irreversible operation. The card replaces
+            // nothing and blocks nothing — the peer is already counting down and
+            // will deny on its own if the owner never answers.
+            setPendingAsk(event.data as PendingAsk)
+          } else if (event.type === 'house_party_auth') {
+            const d = (event.data ?? {}) as { objective?: string }
+            window.dispatchEvent(new CustomEvent('speda:hpp-authorize', { detail: { objective: d.objective } }))
+          } else if (event.type === 'file') {
             dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
           } else if (event.type === 'done') {
             if (handle != null) cancelAnimationFrame(handle)

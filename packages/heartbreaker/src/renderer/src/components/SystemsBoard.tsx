@@ -6,11 +6,12 @@ import { useSettings } from '../store/settings'
 import { useHealth } from '../lib/useHealth'
 import { useOnlineAgents } from '../lib/useOnlineAgents'
 import { useIsMobile } from '../lib/useIsMobile'
-import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, fetchAgentModels, pinAgentModel, commitMemoryFile, fetchMemoryRevisions, restoreMemoryRevision } from '../lib/api'
-import type { ConnectionInfo, MemoryFileInfo, AgentModelInfo, MemoryRevisionInfo } from '../lib/api'
+import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, fetchAgentModels, pinAgentModel, fetchLegionModels, pinLegionModel, commitMemoryFile, fetchMemoryRevisions, restoreMemoryRevision } from '../lib/api'
+import type { ConnectionInfo, MemoryFileInfo, AgentModelInfo, LegionModelInfo, MemoryRevisionInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
 import { agentColor, monogram } from '../lib/agents'
 import AgentModelPicker from './AgentModelPicker'
+import GlassSelect from './GlassSelect'
 
 /**
  * SYSTEMS BOARD — the "PERIODIC 56A." tactical overlay, mapped onto real data.
@@ -274,6 +275,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const [memPath, setMemPath] = useState<string | null>(null)
   const [banksWide, setBanksWide] = useState(false)
   const [agentInfos, setAgentInfos] = useState<AgentModelInfo[]>([])
+  const [legionInfos, setLegionInfos] = useState<LegionModelInfo[]>([])
   // Owner-edit state for the knowledge bank.
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -289,6 +291,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   useEffect(() => {
     fetchModels(config).then(setModels).catch(() => {})
     fetchAgentModels(config).then(setAgentInfos)
+    fetchLegionModels(config).then(setLegionInfos)
     getBudgetMode(config).then(setBudgetMode).catch(() => {})
     fetchMemoryFiles(config).then(files => {
       setMemFiles(files)
@@ -588,6 +591,66 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                         const infos = await pinAgentModel(config, info.agent_id, m)
                         if (infos.length) setAgentInfos(infos)
                       }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Legion worker pins — which core each legionnaire type runs on.
+              Legionnaires have no profile of their own: unpinned, their model is
+              derived from effort against whichever agent deployed them, so the
+              "default" option names that rule rather than a model. */}
+          {legionInfos.length > 0 && (
+            <div style={{ marginTop: '0.85rem' }}>
+              <p style={{
+                fontFamily: MONO, fontSize: '0.55rem', letterSpacing: '0.22em',
+                color: 'var(--hb-amber)', marginBottom: '0.35rem',
+              }}>
+                {'>>:'} LEGION CORES_ PER-WORKER MODEL ROUTING
+              </p>
+              {legionInfos[0].deployment_pin && (
+                <p style={{
+                  fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.1em',
+                  color: 'var(--hb-amber-bright)', marginBottom: '0.35rem',
+                }}>
+                  LEGION_MODEL_OVERRIDE={legionInfos[0].deployment_pin} — every worker is
+                  pinned there; these selectors stay inert until it is cleared.
+                </p>
+              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {legionInfos.map(info => (
+                  <div key={info.worker_id} className="hb-glass-xs" style={{
+                    width: 148, padding: '0.35rem 0.4rem',
+                    display: 'flex', flexDirection: 'column', gap: 4,
+                    border: `1px solid ${info.override ? 'var(--hb-amber)' : 'rgba(var(--hb-accent-rgb),0.2)'}`,
+                    background: 'rgba(20, 42, 52, 0.15)',
+                    backdropFilter: 'var(--hb-holo-blur)',
+                    WebkitBackdropFilter: 'var(--hb-holo-blur)',
+                  }}>
+                    <span style={{
+                      fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.08em',
+                      color: 'var(--hb-text-dim)', textTransform: 'uppercase',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {info.worker_id} · {info.effort}
+                    </span>
+                    <GlassSelect
+                      value={info.override ?? ''}
+                      options={[
+                        { value: '', label: `EFFORT (${info.derived_from})` },
+                        ...models.map(m => ({ value: m.id, label: m.name.toUpperCase() })),
+                      ]}
+                      onChange={async v => {
+                        const infos = await pinLegionModel(config, info.worker_id, v || null)
+                        if (infos.length) setLegionInfos(infos)
+                      }}
+                      tint="var(--hb-amber)"
+                      active={!!info.override}
+                      title={info.override
+                        ? `${info.worker_id} pinned to ${info.override} — select EFFORT to restore the derived model`
+                        : `${info.worker_id}: ${info.when_to_use}\nUnpinned → ${info.derived_from}`}
                     />
                   </div>
                 ))}

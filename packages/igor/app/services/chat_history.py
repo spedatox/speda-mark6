@@ -49,6 +49,10 @@ def _extract_meta(content) -> dict:
                 'tools': block.get('tools', []),
                 'files': block.get('files', []),
                 'uploads': block.get('uploads', []),
+                # Provenance for a turn the owner did not write (an n8n
+                # automation opening a session). The UI attributes the bubble to
+                # the trigger instead of to them.
+                'trigger': block.get('trigger'),
             }
     return {}
 
@@ -75,6 +79,10 @@ def rows_from_messages(messages: list[Message]) -> list[dict]:
             'tools': meta.get('tools', []),
             'isStreaming': False,
             'isError': False,
+            # UTC, ISO-8601 with the Z the naive DB value implies. The war room
+            # merges these against inter-agent traffic timestamps to rebuild one
+            # group-chat timeline, so a reloaded room reads in the right order.
+            'createdAt': m.created_at.isoformat() + 'Z',
         }
         if (imgs := _extract_images(m.content)):
             row['images'] = imgs
@@ -82,5 +90,7 @@ def rows_from_messages(messages: list[Message]) -> list[dict]:
             row['files'] = meta['files']
         if meta.get('uploads'):
             row['uploads'] = meta['uploads']
+        if meta.get('trigger'):
+            row['trigger'] = meta['trigger']
         out.append(row)
     return out

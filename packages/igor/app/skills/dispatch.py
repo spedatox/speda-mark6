@@ -100,23 +100,28 @@ class DispatchAgentSkill(Skill):
         depth = int(context.extra.get("dispatch_depth", 0))
         background = bool(args.get("background", False))
         cwd = (args.get("working_directory") or "").strip() or None
+        # The room this exchange belongs to: the chat session the owner is
+        # watching. On a dispatched agent that is the room it inherited, not its
+        # own private session — so a second-hop dispatch still shows up in the
+        # same group chat (app/core/dispatch.py).
+        room = context.extra.get("room_session_id") or context.session_id
 
         if agent == "all":
             return await self._dispatcher.broadcast(
                 from_agent=context.agent_id, task=task,
                 user_id=context.user_id, request_id=context.request_id,
-                depth=depth, background=background,
+                depth=depth, background=background, origin_session_id=room,
             )
         if background:
             return await self._dispatcher.spawn(
                 from_agent=context.agent_id, to_agent=agent, task=task,
                 user_id=context.user_id, request_id=context.request_id,
-                depth=depth, cwd=cwd,
+                depth=depth, cwd=cwd, origin_session_id=room,
             )
         return await self._dispatcher.dispatch(
             from_agent=context.agent_id, to_agent=agent, task=task,
             user_id=context.user_id, request_id=context.request_id,
-            depth=depth, cwd=cwd,
+            depth=depth, cwd=cwd, origin_session_id=room,
         )
 
 
@@ -237,16 +242,14 @@ class HousePartySkill(Skill):
         "cost across all agents at once, so it is never the way to answer routine "
         "questions (the time, a lookup, a single-agent task). Engaging REQUIRES an "
         "authorization passphrase that only the owner holds. When the owner asks to "
-        "engage: emit a fenced code block whose info string is EXACTLY `hpp-warning` "
-        "(three backticks, then hpp-warning) — not `hpp`, not `text`. That block "
-        "opens a secure authorization WINDOW in the app with a masked passphrase "
-        "field; the owner types the passphrase THERE and the app engages the "
-        "protocol directly. So leave the block body EMPTY except for an optional "
-        "single `objective: <one line>` when you know the mission, do not write any "
-        "warning text yourself, and — critically — do NOT ask the owner to type the "
-        "passphrase in chat and do NOT call this tool to engage. You never see or "
-        "handle the passphrase. Emit the block, tell the owner the authorization "
-        "window is open, and stop. Only emit the block on the owner's explicit "
+        "engage: call this tool with engaged=true, NO passphrase, and an optional "
+        "one-line `objective`. That opens a secure authorization WINDOW in the "
+        "owner's app with a masked passphrase field — the owner types the "
+        "passphrase THERE and the app engages the protocol itself. Never write a "
+        "warning card, a code block, or a fenced block of your own, and never ask "
+        "the owner to type the passphrase into the chat: you must not see or handle "
+        "it. Make the call, tell the owner in one line that the authorization "
+        "window is open, and stop. Only request authorization on the owner's explicit "
         "invocation (e.g. 'House Party Protocol', 'assemble the agents', 'all hands "
         "on deck') — NEVER on your own judgement, never inferred from urgency, and a "
         "dispatched agent must never trigger it. Standing down is the one action you "
@@ -263,13 +266,22 @@ class HousePartySkill(Skill):
                 "type": "boolean",
                 "description": "True to engage the protocol, False to stand down.",
             },
+            "objective": {
+                "type": "string",
+                "description": (
+                    "One line naming the mission, shown in the authorization "
+                    "window so the owner sees what they are authorizing. Omit it "
+                    "when the owner has not said what the all-hands run is for."
+                ),
+            },
             "passphrase": {
                 "type": "string",
                 "description": (
-                    "The owner's authorization passphrase, required to ENGAGE "
-                    "(ignored when standing down). Pass the exact phrase the owner "
-                    "spoke in their message this turn — never a guessed or "
-                    "remembered value. Omit it and the engage is refused."
+                    "Leave this OUT. It exists only for surfaces with no "
+                    "authorization window (Telegram), where the owner may speak "
+                    "the passphrase in their message — pass the exact phrase they "
+                    "spoke this turn, never a guessed or remembered value. On the "
+                    "app, omitting it is correct: the owner types it in the window."
                 ),
             },
         },
@@ -304,29 +316,54 @@ class HousePartySkill(Skill):
         # ── Engage: passphrase-gated ────────────────────────────────────────────
         # The protocol is heavy/expensive/prototype, so it only arms on the
         # owner's exact authorization passphrase. Constant-time compare; SPEDA
-        # never learns the secret — it must relay what the owner spoke.
+        # never learns the secret.
         import hmac
 
         supplied = str(args.get("passphrase") or "").strip()
         expected = (settings.house_party_passphrase or "").strip()
-        if not supplied or not expected or not hmac.compare_digest(supplied, expected):
-            logger.warning(
-                "house_party_engage_denied",
-                extra={
-                    "request_id": context.request_id,
-                    "reason": "missing_passphrase" if not supplied else "bad_passphrase",
-                },
+
+        # No passphrase — the normal path. Raise an authorization ASK: the
+        # orchestrator turns this into a `house_party_auth` SSE event and the
+        # app opens its own window with a masked field, which engages the
+        # protocol directly via POST /agents/house-party. Nothing about the
+        # secret passes through the model or the transcript.
+        if not supplied:
+            # Telegram has no authorization window to open, so there the owner
+            # does have to speak the phrase — say so instead of promising a
+            # window that will never appear.
+            if context.trigger_payload.get("channel") == "telegram":
+                return (
+                    "House Party Protocol not engaged: this channel has no "
+                    "authorization window. Ask the owner to reply with the exact "
+                    "authorization passphrase, then call this tool again passing "
+                    "it verbatim. Never guess it."
+                )
+
+            objective = str(args.get("objective") or "").strip()[:180]
+            context.extra["house_party_auth"] = {"objective": objective}
+            logger.info(
+                "house_party_auth_requested",
+                extra={"request_id": context.request_id, "objective": objective},
             )
             return (
-                "REFUSED — House Party Protocol not engaged: "
-                + ("no authorization passphrase was supplied."
-                   if not supplied else "the authorization passphrase was incorrect.")
-                + " Do NOT retry with a guessed value. Instead, present the owner the "
-                "warning card by emitting a fenced ```hpp-warning code block (the UI "
-                "renders it as a HEAVY/EXPENSIVE/PROTOTYPE authorization window that "
-                "notes the protocol runs the entire roster at full model grade), and "
-                "ask them to speak the exact authorization passphrase. Only call this "
-                "tool again once the owner gives the passphrase in their next message."
+                "Authorization window opened on the owner's app — it is asking them "
+                "for the House Party passphrase now. Tell the owner in ONE line that "
+                "the window is open and then STOP: do not call this tool again, do "
+                "not ask for the passphrase in chat, and do not act as if the "
+                "protocol were engaged. The app engages it itself once they "
+                "authorize; you will see the war room open on the next turn."
+            )
+
+        if not expected or not hmac.compare_digest(supplied, expected):
+            logger.warning(
+                "house_party_engage_denied",
+                extra={"request_id": context.request_id, "reason": "bad_passphrase"},
+            )
+            return (
+                "REFUSED — House Party Protocol not engaged: the authorization "
+                "passphrase was incorrect. Do NOT retry with a guessed value. Call "
+                "this tool once more with engaged=true and NO passphrase to reopen "
+                "the authorization window, and let the owner authorize there."
             )
 
         was = get_house_party()

@@ -16,10 +16,13 @@ import HousePartyWarning from './HousePartyWarning'
 
 const RENDERABLE_LANGS = new Set(['html', 'svg'])
 
-// House Party warning card — the model's language tag is unreliable (it has
-// emitted `hpp`, `hpp-warning`, etc.), so match explicit aliases OR detect the
-// warning by content. Content-detection is gated to ambiguous tags so a real
-// C++ `.hpp` header is never mistaken for the card.
+// House Party authorization is a real SSE event (`house_party_auth`) now, not a
+// marker in the text — see ChatMain. This stays as a SALVAGE path only: an older
+// transcript, or a model that writes the fence out of habit, must never leave a
+// raw code block sitting in the chat. The tag is unreliable (`hpp`,
+// `hpp-warning`, …) so match explicit aliases OR detect by content, with
+// content-detection gated to ambiguous tags so a real C++ `.hpp` header is
+// never mistaken for the card.
 const HPP_ALIASES = new Set(['hpp-warning', 'house_party', 'house-party', 'houseparty', 'party-warning'])
 const HPP_AMBIGUOUS = new Set(['', 'hpp', 'text', 'txt', 'plaintext', 'md', 'markdown'])
 function looksLikeHppWarning(code: string): boolean {
@@ -45,6 +48,7 @@ function IconRefresh()   { return <svg width="14" height="14" viewBox="0 0 24 24
 function IconSpeaker()   { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg> }
 function IconEdit()      { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> }
 function IconTrash()     { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg> }
+function IconBolt()      { return <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> }
 
 /* ── Working status ──────────────────────────────────────────────────────── */
 
@@ -495,7 +499,9 @@ const mdComponents: any = {
     return <p>{children}</p>
   },
   code({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) {
-    const lang = /language-(\w+)/.exec(className || '')?.[1] ?? ''
+    // Hyphens included — `language-hpp-warning` used to truncate to `hpp`, so
+    // the alias set could never match its own primary tag.
+    const lang = /language-([\w-]+)/.exec(className || '')?.[1] ?? ''
     const code = String(children).replace(/\n$/, '')
     if (!inline && (lang || code.includes('\n'))) {
       // Rich blocks run third-party renderers (MapLibre/WebGL, charting) on
@@ -965,6 +971,20 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
             </div>
           ) : (
             <>
+              {message.trigger && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0.375rem',
+                  fontSize: '0.6875rem', letterSpacing: '0.08em', textTransform: 'uppercase',
+                  color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)',
+                }}>
+                  <IconBolt />
+                  <span>{message.trigger.label}</span>
+                  <span style={{ opacity: 0.55 }}>
+                    · {message.trigger.source}
+                    {message.trigger.output_mode ? ` · ${message.trigger.output_mode}` : ''}
+                  </span>
+                </div>
+              )}
               {message.images && message.images.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', justifyContent: 'flex-end', marginBottom: message.content ? '0.4rem' : 0 }}>
                   {message.images.map((src, i) => (
@@ -997,7 +1017,9 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                 </div>
               )}
               <div style={{ opacity: hovered ? 1 : 0, transition: 'opacity 0.15s', display: 'flex', alignItems: 'center', gap: '0.125rem' }}>
-                {onEditAndResend && (
+                {onEditAndResend && !message.trigger && (
+                  // An automation's seed turn isn't editable: resending it would
+                  // re-file it as the owner's own message and lose the origin.
                   <ActionBtn title="Edit message" onClick={() => { setEditValue(message.content); setEditing(true) }}>
                     <IconEdit />
                   </ActionBtn>

@@ -43,6 +43,18 @@ internal val BLUR_RADIUS = 28.dp   // --hb-holo-blur: blur(28px)
  */
 val LocalHazeState: ProvidableCompositionLocal<HazeState?> = staticCompositionLocalOf { null }
 
+/**
+ * The AMBIENT-ONLY backdrop — the living void, and nothing of the UI drawn over it.
+ *
+ * [LocalHazeState] accumulates content sources (the transcript is one, so the
+ * header and composer refract the text scrolling under them). A surface that
+ * lives INSIDE one of those sources cannot blur it — it would sample itself.
+ * That surface refracts this state instead: the ambient sits strictly behind it,
+ * so there is no feedback, and the orbiting accent blobs give it something real
+ * to bend. Message bubbles are the case this exists for.
+ */
+val LocalAmbientHazeState: ProvidableCompositionLocal<HazeState?> = staticCompositionLocalOf { null }
+
 @Composable
 fun rememberHbHazeState(): HazeState = remember { HazeState() }
 

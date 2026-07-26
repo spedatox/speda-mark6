@@ -35,6 +35,9 @@ class AgentCommEntry(BaseModel):
     result: str | None
     status: str
     duration_ms: int | None
+    # The chat session this exchange was ordered from — the "room" it belongs to
+    # in the group-chat view. None for traffic logged before the column existed.
+    origin_session_id: int | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -72,6 +75,27 @@ class AgentModelSet(BaseModel):
 class AgentTelegramModelSet(BaseModel):
     agent_id: str
     model: str | None = None  # None/empty = clear the pin, use desktop model
+
+
+class LegionModelInfo(BaseModel):
+    """One Legion worker type's model allocation, for the Legion model UI.
+
+    Legionnaires have no profile of their own — their model is derived from
+    effort against whatever the DEPLOYING agent is running on, so there is no
+    single "default model" to show. `effort` and `derived_from` describe that
+    rule instead, and `override` is the owner's pin on top of it."""
+
+    worker_id: str
+    when_to_use: str
+    effort: str
+    derived_from: str          # human-readable description of the effort rule
+    override: str | None       # owner's runtime pin; None = effort policy
+    deployment_pin: str | None # LEGION_MODEL_OVERRIDE — overrides everything
+
+
+class LegionModelSet(BaseModel):
+    worker_id: str
+    model: str | None = None  # None/empty = clear the pin, back to effort policy
 
 
 class PendingAskEntry(BaseModel):

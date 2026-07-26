@@ -167,7 +167,12 @@ private fun UserRow(
                 Modifier
                     .wrapContentWidth()
                     .widthIn(max = 320.dp)
-                    .hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Tint(palette.accent))
+                    // The plain material — the milky frost, NOT HbGlassState.Tint.
+                    // Tint is the active/selected state layer (a 16% accent wash);
+                    // using it here made every bubble a flat cyan panel. The web
+                    // bubble is `.hb-holo`, i.e. the unified neutral glass, and the
+                    // accent shows only where it should: the 1px lit rim.
+                    .hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Default)
                     .noRippleClick { showActions = !showActions }
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {

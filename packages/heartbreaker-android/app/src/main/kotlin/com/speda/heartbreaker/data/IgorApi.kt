@@ -436,6 +436,22 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
+    // ── Legion worker model routing (GET/POST /agents/legion-models) ─────────────
+
+    suspend fun fetchLegionModels(config: AppConfig): List<LegionModelInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/agents/legion-models")?.let { json.decodeFromString<List<LegionModelInfo>>(it) }
+        }.getOrNull() ?: emptyList()
+    }
+
+    /** Pin a legionnaire to a model ref; null clears it (back to effort policy). */
+    suspend fun pinLegionModel(config: AppConfig, workerId: String, model: String?): List<LegionModelInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = buildJsonObject { put("worker_id", workerId); put("model", model) }
+            postJson(config, "/agents/legion-models", body)?.let { json.decodeFromString<List<LegionModelInfo>>(it) }
+        }.getOrNull() ?: emptyList()
+    }
+
     // ── Knowledge bank / source-of-truth memory files (GET/PUT /memory/files) ────
 
     suspend fun fetchMemoryFiles(config: AppConfig): List<MemoryFileInfo> = withContext(Dispatchers.IO) {

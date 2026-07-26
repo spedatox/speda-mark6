@@ -1,9 +1,43 @@
 import { useEffect } from 'react'
 import { ROSTER, agentColor } from '../lib/agents'
-import { Avatar } from './CommBubble'
+import AgentMark from './AgentMark'
 
 const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
+
+/** Roster mark size in the cinematic. This is the hero moment — the marks carry
+ *  it, so they're sized off the viewport rather than pinned to a chat-chip px. */
+const MARK = 'clamp(56px, 8.5vw, 104px)'
+const MARK_SM = 'clamp(40px, 5.5vw, 68px)'
+
+/** A roster mark at cinematic scale: full-bleed art, never clipped.
+ *
+ *  Two things used to wreck it. The `hb-round` wrapper rounds `*` to 9999px,
+ *  which cut the corners clean off a square wordmark; and the glass finish's
+ *  drop-shadow/glow filter paints outside the 100x100 viewBox, which the UA's
+ *  default `overflow: hidden` on <svg> sliced flat at the edge. So: no round
+ *  wrapper on the mark, and `overflow: visible` so the bloom carries. The ping
+ *  ring is its own circle behind the art instead of a shape imposed on it. */
+function CineMark({ id, size, ping }: { id: string; size: string; ping?: string }) {
+  const c = agentColor(id)
+  return (
+    <span style={{
+      position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      width: size, height: size, color: c, flexShrink: 0,
+    }}>
+      {ping && (
+        <span aria-hidden className="hb-round" style={{
+          position: 'absolute', inset: '-8%', color: c, animation: ping,
+        }} />
+      )}
+      {/* `size` is a CSS length, so it overrides the width/height attributes —
+          the mark stays fluid with the viewport. Agents with no art fall through
+          to AgentMark's monogram, which shares the same box. */}
+      <AgentMark agentId={id} size={104} finish="glass"
+                 style={{ width: size, height: size, overflow: 'visible', position: 'relative' }} />
+    </span>
+  )
+}
 
 /**
  * HOUSE PARTY PROTOCOL — the activation cinematic (Iron Man 3).
@@ -156,31 +190,26 @@ export default function PartyActivation({ mode, onIgnite, onDone }: {
           {/* The roster boots online, one by one */}
           <div style={{
             display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
-            gap: 'clamp(0.9rem, 3vw, 1.8rem)', maxWidth: 720,
+            gap: 'clamp(1.1rem, 3.4vw, 2.4rem)', maxWidth: 'min(1120px, 94vw)',
           }}>
             {ROSTER.map((id, i) => {
               const d = 1.05 + i * 0.18
               const c = agentColor(id)
               return (
                 <div key={id} style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
                   animation: `hbHppBoot 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.2) ${d}s both`,
                 }}>
-                  <span className="hb-round" style={{
-                    color: c, display: 'flex',
-                    animation: `hbHppPing 0.7s ease-out ${d + 0.12}s both`,
-                  }}>
-                    <Avatar id={id} size={44} />
-                  </span>
+                  <CineMark id={id} size={MARK} ping={`hbHppPing 0.7s ease-out ${d + 0.12}s both`} />
                   <span style={{
-                    fontFamily: UI, fontSize: '0.62rem', fontWeight: 700,
-                    letterSpacing: '0.18em', textTransform: 'uppercase',
+                    fontFamily: UI, fontSize: '0.72rem', fontWeight: 700,
+                    letterSpacing: '0.2em', textTransform: 'uppercase',
                     color: 'var(--hb-text-dim)',
                   }}>
                     {id}
                   </span>
                   <span style={{
-                    fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.14em', color: c,
+                    fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.16em', color: c,
                     animation: `hbHppSub 0.3s ease ${d + 0.22}s both`,
                   }}>
                     ONLINE
@@ -216,13 +245,16 @@ export default function PartyActivation({ mode, onIgnite, onDone }: {
           }}>
             {'// STAND DOWN — ALL UNITS RETURNING TO STATION'}
           </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '1.2rem' }}>
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
+            gap: 'clamp(0.9rem, 2.6vw, 1.6rem)', maxWidth: 'min(900px, 92vw)',
+          }}>
             {ROSTER.map((id, i) => (
-              <span key={id} className="hb-round" style={{
+              <span key={id} style={{
                 display: 'flex',
                 animation: `hbHppWink 0.4s ease ${0.35 + (ROSTER.length - 1 - i) * 0.09}s both`,
               }}>
-                <Avatar id={id} size={34} />
+                <CineMark id={id} size={MARK_SM} />
               </span>
             ))}
           </div>

@@ -274,6 +274,14 @@ async def lifespan(app: FastAPI):
     app.state.sandbox_launcher = sandbox_launcher
     app.state.forge_launcher = forge_launcher
 
+    # ── 10. Close out dispatches orphaned by the previous process ─────────────
+    # A dispatch/legion ticket only ever runs in-process, so anything still
+    # marked "running" at boot died with the last process. Left alone it shows
+    # up in the comms tray as a task that has been working for weeks.
+    from app.core.dispatch import sweep_stale_dispatches
+
+    await sweep_stale_dispatches()
+
     logger.info(
         "startup_complete",
         extra={

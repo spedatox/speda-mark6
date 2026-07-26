@@ -74,6 +74,43 @@ def test_override_beats_everything(monkeypatch):
     assert m == "openai:gpt-5-mini"
 
 
+# ── Owner's per-legionnaire pins ─────────────────────────────────────────────
+
+@pytest.fixture
+def pins(monkeypatch):
+    """Swap the persisted per-worker pins for an in-memory dict."""
+    store: dict[str, str] = {}
+    monkeypatch.setattr("app.core.runtime_state.get_legion_models", lambda: dict(store))
+    return store
+
+
+def test_pin_beats_effort_policy(pins):
+    pins["scout"] = "gemini:gemini-2.5-flash"
+    m = resolve_worker_model(LEGION_ROSTER["scout"], None, "zai:glm-4.6", _Profile())
+    assert m == "gemini:gemini-2.5-flash"
+
+
+def test_pin_beats_the_models_explicit_choice(pins):
+    # The pin is the owner's cost policy, not a hint — an explicit tool param
+    # must not be able to route around it.
+    pins["analyst"] = "openai:gpt-5-mini"
+    m = resolve_worker_model(LEGION_ROSTER["analyst"], "zai:glm-4.6", "claude-sonnet-4-6", _Profile())
+    assert m == "openai:gpt-5-mini"
+
+
+def test_pin_is_per_worker(pins):
+    pins["scout"] = "gemini:gemini-2.5-flash"
+    m = resolve_worker_model(LEGION_ROSTER["researcher"], None, "openai:gpt-5.2", _Profile())
+    assert m == "openai:gpt-5-mini"  # untouched by scout's pin
+
+
+def test_deployment_override_beats_pin(pins, monkeypatch):
+    monkeypatch.setattr(settings, "legion_model_override", "openai:gpt-5-mini")
+    pins["analyst"] = "zai:glm-4.6"
+    m = resolve_worker_model(LEGION_ROSTER["analyst"], None, "claude-sonnet-4-6", _Profile())
+    assert m == "openai:gpt-5-mini"
+
+
 def test_default_override_is_empty():
     # THE core fix: no deployment pin by default → provider-agnostic.
     # (Guard against the old claude-haiku hardcode sneaking back.)

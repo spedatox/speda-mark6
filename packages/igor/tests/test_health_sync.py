@@ -186,6 +186,15 @@ async def test_rollup_is_dropped_when_its_samples_are(db):
 # ── Range parsing ────────────────────────────────────────────────────────────
 
 
+def test_ranges_resolve_against_the_owners_local_day_not_utc():
+    # Samples are filed by LOCAL day (see local_day), so an unanchored range
+    # must resolve in the same frame. UTC "today" is the previous local day for
+    # the first three hours of every Istanbul morning — precisely when the
+    # nightly digest runs, which used to shift its whole window by a day.
+    assert hs.parse_range("today")[0] == hs.owner_today()
+    assert hs.parse_range("7d")[1] == hs.owner_today()
+
+
 def test_parse_range_vocabulary():
     today = date(2026, 7, 20)
     assert hs.parse_range("today", today) == (today, today)
@@ -267,6 +276,70 @@ async def test_skill_returns_dailies_and_a_trend(monkeypatch, db):
     trend = payload["trend_vs_previous_period"]["steps"]
     assert trend["current_avg"] == 2000 and trend["previous_avg"] == 1000
     assert trend["delta_pct"] == 100.0
+
+
+async def test_empty_window_over_a_live_pipe_reports_coverage_not_a_dead_link(
+    monkeypatch, db
+):
+    """The briefing bug: an automated turn queries a window it guessed wrong,
+    gets nothing back, and tells the owner health sync isn't set up — over a
+    database full of samples. An empty window must be distinguishable from an
+    empty pipe, with enough coverage detail to re-query."""
+    from app.skills.health_data import HealthDataSkill
+
+    now = datetime.now(TZ).replace(hour=9, minute=0, second=0, microsecond=0)
+    await hs.ingest_samples(
+        db, [_sample("steps", now - timedelta(days=i), 2000, "count") for i in range(5)]
+    )
+    monkeypatch.setattr("app.skills.health_data.AsyncSessionLocal", lambda: _Passthrough(db))
+
+    out = await HealthDataSkill().execute(
+        {"metrics": ["steps"], "range": "2025-03-01:2025-03-07"}, None
+    )
+    assert "pipe IS live" in out
+    assert "Nothing has EVER synced" not in out
+    assert "steps (5)" in out                     # what exists
+    assert hs.owner_today().isoformat() in out    # and what "today" actually is
+
+
+async def test_metric_aliases_are_normalised_not_silently_dropped(monkeypatch, db):
+    # Only Anthropic enforces the schema enum on the wire; a background-tier or
+    # open-weight model on an automated run sends "sleep", and an unmapped name
+    # matched zero rows — indistinguishable from "you have no sleep data".
+    from app.skills.health_data import HealthDataSkill
+
+    night = datetime.now(TZ).replace(hour=23, minute=40, second=0, microsecond=0)
+    await hs.ingest_samples(db, [_sample("sleep_session", night - timedelta(days=1), 400, "min")])
+    monkeypatch.setattr("app.skills.health_data.AsyncSessionLocal", lambda: _Passthrough(db))
+
+    payload = json.loads(
+        await HealthDataSkill().execute({"metrics": ["sleep"], "range": "7d"}, None)
+    )
+    assert "sleep_session" in payload["daily"]
+
+
+async def test_unmappable_metric_returns_a_corrective_error(monkeypatch, db):
+    from app.skills.health_data import HealthDataSkill
+
+    monkeypatch.setattr("app.skills.health_data.AsyncSessionLocal", lambda: _Passthrough(db))
+    out = await HealthDataSkill().execute({"metrics": ["vo2max"], "range": "7d"}, None)
+    assert "Unrecognised metric" in out and "resting_heart_rate" in out
+
+
+async def test_partly_unknown_metric_list_still_answers_and_says_what_it_dropped(
+    monkeypatch, db
+):
+    from app.skills.health_data import HealthDataSkill
+
+    await hs.ingest_samples(
+        db, [_sample("steps", datetime.now(TZ).replace(hour=9), 4000, "count")]
+    )
+    monkeypatch.setattr("app.skills.health_data.AsyncSessionLocal", lambda: _Passthrough(db))
+    payload = json.loads(
+        await HealthDataSkill().execute({"metrics": ["steps", "vo2max"], "range": "7d"}, None)
+    )
+    assert "steps" in payload["daily"]
+    assert "vo2max" in payload["note"]
 
 
 class _Passthrough:

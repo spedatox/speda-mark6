@@ -166,10 +166,35 @@ All endpoints require `X-API-Key` (middleware) unless noted.
 | `GET` | `/agents/comms` | Inter-agent traffic feed |
 | `GET/POST` | `/agents/models` | Per-agent model pins |
 | `GET/POST` | `/agents/house-party` | Protocol state / engage (passphrase) / stand-down |
-| `POST` | `/trigger/{agent_id}` | n8n callback *(also needs `X-N8N-Secret`)* |
+| `POST` | `/trigger/{agent_id}` | n8n callback *(also needs `X-N8N-Secret`)* — runs as a normal persisted chat turn (see below); `503` when the turn registry is full |
 | `GET` | `/files/{name}` | Download generated artifacts |
 | `POST` | `/admin/import-chats` · `/admin/index-history` | History import + memory mining |
 | `DELETE` | `/admin/outputs` | Temp-file cleanup (n8n daily) |
+
+### An automated turn is a chat turn
+
+`POST /trigger/{agent_id}` does not run a private loop of its own
+(`app/core/trigger_runner.py`). It opens a session, saves the automation's seed
+as a real user message, loads it back through `load_history` — so it is
+timestamp-stamped exactly like a chat message, which is the only way any agent
+knows what day it is — and launches the run on the same `TurnRegistry` chat
+uses. Consequences:
+
+- the conversation is readable in the app, with the agent's tool calls intact;
+- the opening turn is attributed to the **trigger**, not the owner (a
+  `_speda_meta.trigger` block the UI renders as the sender);
+- the session is titled from the automation at launch ("Morning brief · 26 Jul")
+  rather than sitting on "New conversation";
+- `/chat/attach/{request_id}` tails a running briefing and `/chat/cancel` stops
+  one;
+- post-turn work (session log, recap, compaction, embeddings) runs as it does
+  for chat, and a peer-backed agent (Optimus/Forge) is triggered on its peer;
+- `push` delivery happens on settle, so a run that errors half-way still sends
+  what it produced, carrying the early-exit marker.
+
+The one deliberate difference from chat is the model tier: automated turns use
+`profile.allocate_model("n8n")` (background grade, per the D-C4 table). Pin an
+agent higher from the UI (`/agents/models`) if a briefing needs it.
 
 ---
 

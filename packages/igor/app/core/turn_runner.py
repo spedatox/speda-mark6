@@ -48,6 +48,17 @@ class _Done:
 _DONE = _Done()
 
 
+def _failure_marker(note: str | None) -> str:
+    """The trailing marker stamped onto a turn that ended in error.
+
+    Mirrors the cancel path's ``_[cancelled by owner]_``. Deterministic given
+    the stored note, so the reloaded transcript stays byte-stable and the
+    prompt cache holds. The note is included so the next turn can see WHY the
+    previous attempt broke off, not just that it did."""
+    detail = f": {note.strip()}" if note and note.strip() else ""
+    return f"\n\n_[turn ended early — error{detail}]_"
+
+
 @dataclass
 class _Turn:
     request_id: str
@@ -76,6 +87,7 @@ class TurnRegistry:
         engine_factory: EngineFactory,
         format_error: Callable[[Exception], str],
         on_complete: Callable[[], Awaitable[None]] | None = None,
+        on_settle: Callable[[str], Awaitable[None]] | None = None,
     ) -> str | None:
         """Launch a detached turn. Returns its request_id, or None if the active
         cap is hit (the caller surfaces a friendly error to the user)."""
@@ -91,7 +103,7 @@ class TurnRegistry:
         )
         self._turns[context.request_id] = turn
         turn.task = asyncio.create_task(
-            self._run(turn, context, engine_factory, format_error, on_complete)
+            self._run(turn, context, engine_factory, format_error, on_complete, on_settle)
         )
         return context.request_id
 
@@ -104,11 +116,14 @@ class TurnRegistry:
         engine_factory: EngineFactory,
         format_error: Callable[[Exception], str],
         on_complete: Callable[[], Awaitable[None]] | None,
+        on_settle: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         chunks: list[str] = []
         tools: list[dict] = []
         files: list[dict] = []
         cancelled = False
+        failed = False          # a terminal error (graceful or raised) ended the turn
+        failure_note: str | None = None  # the error text, stamped into the saved turn
         terminal_seen = False  # engine emitted a DONE/ERROR of its own
         running_len = 0  # chars streamed so far — stamped onto each tool as
         # afterChars so a reloaded/historical message can interleave tools at
@@ -126,6 +141,12 @@ class TurnRegistry:
                         et = event.type
                         if et in (SSEEventType.DONE, SSEEventType.ERROR):
                             terminal_seen = True
+                        if et == SSEEventType.ERROR:
+                            # A graceful terminal error from the engine/peer. Note
+                            # it so the partial turn is persisted with a marker
+                            # instead of vanishing from the history.
+                            failed = True
+                            failure_note = str(event.data) if event.data else None
                         if et == SSEEventType.CHUNK and isinstance(event.data, str):
                             chunks.append(event.data)
                             running_len += len(event.data)
@@ -155,12 +176,16 @@ class TurnRegistry:
                         "turn_stream_failed",
                         extra={"request_id": turn.request_id, "error": str(exc)},
                     )
+                    failed = True
+                    failure_note = format_error(exc)
+                    terminal_seen = True    # we emit ERROR below; no synthetic DONE
                     self._emit(turn, SSEEvent(
-                        type=SSEEventType.ERROR, data=format_error(exc),
+                        type=SSEEventType.ERROR, data=failure_note,
                         session_id=turn.session_id, request_id=turn.request_id,
                     ))
-                    await self._finish(turn)
-                    return
+                    # Fall through to persist the partial turn. A turn that died
+                    # after doing real work must leave a trace — otherwise the
+                    # next turn starts blind, as if the work never happened.
 
                 # Guaranteed terminal: if the engine generator completed without
                 # ever emitting DONE/ERROR (the external-proxy path can), inject
@@ -176,24 +201,45 @@ class TurnRegistry:
                         session_id=turn.session_id, request_id=turn.request_id,
                     ))
 
+                # A failed turn is stamped so the reloaded transcript shows it
+                # broke off — a half-finished answer must not read as complete,
+                # and the marker guarantees there is something to persist even
+                # when no text streamed before the failure.
+                if failed:
+                    chunks.append(_failure_marker(failure_note))
+
                 # Persist the assistant turn (moved verbatim out of the router's
                 # SSE generator — it now runs regardless of who is listening).
                 await self._persist(db, turn, chunks, tools, files)
 
             # Post-turn work (title/log/compaction/embedding) — detached, after
             # persistence, never blocking the stream (Rule 7). Skipped on cancel
-            # so a half-turn doesn't get titled/embedded as if complete.
-            if on_complete is not None and not cancelled:
+            # or failure so a half-turn doesn't get titled/embedded as if complete.
+            if on_complete is not None and not cancelled and not failed:
                 try:
                     await on_complete()
                 except Exception as e:  # noqa: BLE001
                     logger.warning("turn_on_complete_failed", extra={"request_id": turn.request_id, "error": str(e)})
+
+            # Settle hook — unlike on_complete this runs on EVERY outcome. For a
+            # triggered run it is the delivery step: a briefing that broke off
+            # half-way must still reach the owner (with the failure marker the
+            # persisted turn carries), which is what the pre-runner trigger path
+            # did. Chat passes none.
+            if on_settle is not None:
+                status = "cancelled" if cancelled else ("failed" if failed else "ok")
+                try:
+                    await on_settle(status)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("turn_on_settle_failed", extra={"request_id": turn.request_id, "error": str(e)})
         finally:
             await self._finish(turn)
 
     async def _persist(self, db, turn: _Turn, chunks: list[str], tools: list[dict], files: list[dict]) -> None:
         full = "".join(chunks)
-        if not (full or files):
+        # A turn that ran tools counts as work even with no text — dropping it
+        # would erase what the agent did from the next turn's history.
+        if not (full or files or tools):
             return
         content: list = [{"type": "text", "text": full}]
         if tools or files:

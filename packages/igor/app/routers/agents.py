@@ -7,9 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.runtime_state import (
     get_agent_models,
     get_house_party,
+    get_legion_models,
     get_telegram_models,
     set_agent_model,
     set_house_party,
+    set_legion_model,
     set_telegram_model,
 )
 from app.database import get_db
@@ -24,6 +26,8 @@ from app.schemas.agent import (
     AskAnswer,
     HousePartySet,
     HousePartyState,
+    LegionModelInfo,
+    LegionModelSet,
     PendingAskEntry,
 )
 from fastapi import Depends, HTTPException
@@ -43,13 +47,21 @@ async def list_agents(request: Request):
 async def agent_comms(
     limit: int = 100,
     after_id: int = 0,
+    session_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Recent inter-agent traffic (newest first) — feeds the comms tray in the
-    UI. `after_id` lets the tray poll incrementally for new rows."""
+    UI. `after_id` lets the tray poll incrementally for new rows.
+
+    `session_id` narrows it to one ROOM: every exchange ordered from that chat
+    session, including sub-dispatches further down the chain (they inherit the
+    origin). That is what the war room renders as a group chat alongside the
+    owner's own messages."""
     stmt = select(AgentMessage).order_by(AgentMessage.id.desc()).limit(min(limit, 300))
     if after_id:
         stmt = stmt.where(AgentMessage.id > after_id)
+    if session_id is not None:
+        stmt = stmt.where(AgentMessage.origin_session_id == session_id)
     rows = (await db.execute(stmt)).scalars().all()
     return list(rows)
 
@@ -70,9 +82,14 @@ async def agent_models(request: Request):
             override=overrides.get(p.agent_id),
             telegram_override=tg_overrides.get(p.agent_id),
             # What allocate_model would pick WITHOUT the owner's pin — the .env
-            # deployment override, else the profile's own models.
+            # deployment override, else the profile's own models. The background
+            # line is derived from the main model's PROVIDER (never a hardcoded
+            # Anthropic tier), so the matrix shows what would actually run.
             default_main=settings.llm_main_model or p.sonnet_model,
-            default_background=settings.llm_background_model or p.haiku_model,
+            default_background=(
+                settings.llm_background_model
+                or p.cheap_tier(settings.llm_main_model or p.sonnet_model)
+            ),
         )
         for p in request.app.state.profiles.roster()
         # Session-scope aliases (warroom) mirror their parent's brain — they are
@@ -98,6 +115,54 @@ async def agent_telegram_model_set(body: AgentTelegramModelSet, request: Request
         raise HTTPException(status_code=404, detail=f"Unknown agent '{body.agent_id}'")
     set_telegram_model(body.agent_id, (body.model or "").strip() or None)
     return await agent_models(request)
+
+
+# How each effort level resolves when the owner has NOT pinned a model — shown
+# in the UI so an unpinned worker still reads as configured, not unknown.
+_EFFORT_RULE = {
+    "low": "cheap tier on the deploying agent's provider",
+    "medium": "cheap tier on the deploying agent's provider",
+    "high": "the deploying agent's own model",
+    "inherit": "the deploying agent's own model",
+}
+
+
+@router.get("/agents/legion-models", response_model=list[LegionModelInfo])
+async def legion_models():
+    """Every Legion worker type and the model it will run on.
+
+    Legionnaires are data, not profiles (app/legion/roster.py), so this reads
+    the roster directly rather than the profile registry."""
+    from app.config import settings
+    from app.legion.roster import LEGION_ROSTER
+
+    overrides = get_legion_models()
+    pin = settings.legion_model_override or None
+    return [
+        LegionModelInfo(
+            worker_id=w.worker_id,
+            when_to_use=w.when_to_use,
+            effort=w.effort,
+            derived_from=_EFFORT_RULE[w.effort],
+            override=overrides.get(w.worker_id),
+            deployment_pin=pin,
+        )
+        for w in LEGION_ROSTER.values()
+    ]
+
+
+@router.post("/agents/legion-models", response_model=list[LegionModelInfo])
+async def legion_model_set(body: LegionModelSet):
+    """Pin a Legion worker type to a model ref (or clear it with model=null).
+    The pin beats the legionnaire's effort policy and the model's own explicit
+    choice; only the deployment-wide LEGION_MODEL_OVERRIDE outranks it."""
+    from app.legion.roster import LEGION_ROSTER
+
+    if body.worker_id not in LEGION_ROSTER:
+        raise HTTPException(
+            status_code=404, detail=f"Unknown legionnaire '{body.worker_id}'")
+    set_legion_model(body.worker_id, (body.model or "").strip() or None)
+    return await legion_models()
 
 
 @router.get("/agents/house-party", response_model=HousePartyState)

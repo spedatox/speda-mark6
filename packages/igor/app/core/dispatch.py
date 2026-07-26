@@ -55,6 +55,10 @@ EXTERNAL_TIMEOUT_S = 180.0          # WebSocket peers must answer within this wi
 EXTERNAL_CODING_TIMEOUT_S = 600.0   # coding peers (Optimus) get room for real work
 MAX_RESULT_CHARS = 12_000           # cap what flows back into the caller's context
 MAX_BACKGROUND = 5                  # concurrent background (spawned) dispatches
+# Hard ceiling on a detached background dispatch. Nothing else bounds an
+# in-process run (external peers have their own timeouts), so without this a
+# wedged orchestrator loop leaves its row on "running" indefinitely.
+BACKGROUND_TIMEOUT_S = 900.0
 
 # The group channel: how much recent network traffic a dispatched agent sees,
 # and how hard each entry is truncated inside the transcript. Keeps the shared
@@ -102,6 +106,41 @@ async def channel_transcript(
     return "\n".join(lines)
 
 
+async def sweep_stale_dispatches() -> int:
+    """
+    Close out every exchange still marked `running` at startup.
+
+    A dispatch only ever runs inside this process, so a row left on "running"
+    when we boot belongs to a run that died with the previous process (crash,
+    redeploy, kill -9) — it is not working, and left alone it sits in the comms
+    tray claiming to be live forever. Called from the lifespan handler before
+    the app serves traffic. Returns how many rows were closed.
+    """
+    from sqlalchemy import update
+
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                update(AgentMessage)
+                .where(AgentMessage.status == "running")
+                .values(
+                    status="interrupted",
+                    result=(
+                        "Interrupted — the backend restarted while this was running. "
+                        "The task did not finish; re-run it if the result is still needed."
+                    ),
+                )
+            )
+            await db.commit()
+            closed = int(result.rowcount or 0)
+    except Exception as e:  # noqa: BLE001 — telemetry cleanup never blocks startup
+        logger.warning("dispatch_sweep_failed", extra={"error": str(e)})
+        return 0
+    if closed:
+        logger.info("dispatch_sweep", extra={"closed": closed})
+    return closed
+
+
 class AgentDispatcher:
     """Runs inter-agent tasks and logs the traffic. One instance on app.state."""
 
@@ -143,6 +182,7 @@ class AgentDispatcher:
         request_id: str,
         depth: int = 0,
         cwd: str | None = None,
+        origin_session_id: int | None = None,
     ) -> str:
         """
         Run `task` on `to_agent` and return its final text to the caller.
@@ -157,11 +197,23 @@ class AgentDispatcher:
         msg_id = await self._log_start(
             request_id=request_id, from_agent=from_agent, to_agent=to_agent,
             kind="dispatch", protocol=protocol, task=task,
+            origin_session_id=origin_session_id,
         )
-        result, status, session_id, duration_ms = await self._execute(
-            from_agent=from_agent, to_agent=to_agent, task=task, user_id=user_id,
-            request_id=request_id, depth=depth, protocol=protocol, cwd=cwd, own_msg_id=msg_id,
-        )
+        try:
+            result, status, session_id, duration_ms = await self._execute(
+                from_agent=from_agent, to_agent=to_agent, task=task, user_id=user_id,
+                request_id=request_id, depth=depth, protocol=protocol, cwd=cwd,
+                own_msg_id=msg_id, origin_session_id=origin_session_id,
+            )
+        except asyncio.CancelledError:
+            # The caller's turn was stopped (owner hit stop, client vanished,
+            # shutdown). Close the row out — an abandoned dispatch that stays
+            # "running" is exactly the ghost the comms tray used to show.
+            await self._log_finish(
+                msg_id, status="cancelled", session_id=None, duration_ms=0,
+                result="Cancelled — the turn that ordered this dispatch was stopped.",
+            )
+            raise
         await self._log_finish(
             msg_id, status=status, result=result, session_id=session_id, duration_ms=duration_ms,
         )
@@ -191,6 +243,7 @@ class AgentDispatcher:
     async def _execute(
         self, *, from_agent: str, to_agent: str, task: str, user_id: int,
         request_id: str, depth: int, protocol: str, cwd: str | None, own_msg_id: int | None,
+        origin_session_id: int | None = None,
     ) -> tuple[str, str, int | None, int]:
         """The dispatch body: external-first routing with in-process fallback.
         Returns (result, status, session_id, duration_ms). Shared by the
@@ -213,12 +266,14 @@ class AgentDispatcher:
                     profile=profile, from_agent=from_agent, task=task,
                     user_id=user_id, request_id=request_id, depth=depth,
                     house_party=(protocol == "house_party"), own_msg_id=own_msg_id,
+                    origin_session_id=origin_session_id,
                 )
         elif profile is not None:
             result, status, session_id = await self._run_in_process(
                 profile=profile, from_agent=from_agent, task=task,
                 user_id=user_id, request_id=request_id, depth=depth,
                 house_party=(protocol == "house_party"), own_msg_id=own_msg_id,
+                origin_session_id=origin_session_id,
             )
         else:
             result, status = await self._run_external(
@@ -236,6 +291,7 @@ class AgentDispatcher:
         request_id: str,
         depth: int = 0,
         cwd: str | None = None,
+        origin_session_id: int | None = None,
     ) -> str:
         """Background dispatch: start `task` on `to_agent` in a detached task and
         return a ticket IMMEDIATELY so the caller's own turn can finish. The
@@ -255,10 +311,12 @@ class AgentDispatcher:
         msg_id = await self._log_start(
             request_id=request_id, from_agent=from_agent, to_agent=to_agent,
             kind="dispatch", protocol=protocol, task=task,
+            origin_session_id=origin_session_id,
         )
         task_obj = asyncio.create_task(self._run_and_finish(
             msg_id=msg_id, from_agent=from_agent, to_agent=to_agent, task=task,
             user_id=user_id, request_id=request_id, depth=depth, protocol=protocol, cwd=cwd,
+            origin_session_id=origin_session_id,
         ))
         self._background.add(task_obj)
         task_obj.add_done_callback(self._background.discard)
@@ -272,13 +330,38 @@ class AgentDispatcher:
     async def _run_and_finish(
         self, *, msg_id: int | None, from_agent: str, to_agent: str, task: str,
         user_id: int, request_id: str, depth: int, protocol: str, cwd: str | None,
+        origin_session_id: int | None = None,
     ) -> None:
-        """Detached body of a background dispatch: execute, then log the result."""
+        """Detached body of a background dispatch: execute, then log the result.
+
+        EVERY exit path finalizes the row — success, failure, the hard timeout,
+        and cancellation on shutdown. Nothing else is watching this task, so a
+        path that skips the finish log leaves a ticket "running" forever."""
+        started = time.monotonic()
         try:
-            result, status, session_id, duration_ms = await self._execute(
-                from_agent=from_agent, to_agent=to_agent, task=task, user_id=user_id,
-                request_id=request_id, depth=depth, protocol=protocol, cwd=cwd, own_msg_id=msg_id,
+            result, status, session_id, duration_ms = await asyncio.wait_for(
+                self._execute(
+                    from_agent=from_agent, to_agent=to_agent, task=task, user_id=user_id,
+                    request_id=request_id, depth=depth, protocol=protocol, cwd=cwd,
+                    own_msg_id=msg_id, origin_session_id=origin_session_id,
+                ),
+                timeout=BACKGROUND_TIMEOUT_S,
             )
+        except asyncio.TimeoutError:
+            logger.warning("agent_dispatch_bg_timeout", extra={"request_id": request_id, "to": to_agent})
+            result, status, session_id = (
+                f"Timed out — {to_agent} was still working after "
+                f"{int(BACKGROUND_TIMEOUT_S / 60)} minutes and the dispatch was abandoned.",
+                "timeout", None,
+            )
+            duration_ms = int((time.monotonic() - started) * 1000)
+        except asyncio.CancelledError:
+            await self._log_finish(
+                msg_id, status="cancelled", session_id=None,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                result="Cancelled — the backend shut down while this was running.",
+            )
+            raise
         except Exception as e:  # noqa: BLE001 — a background dispatch must never crash the loop
             logger.error("agent_dispatch_bg_error", extra={"request_id": request_id, "to": to_agent, "error": str(e)})
             result, status, session_id, duration_ms = f"Background dispatch failed: {e}", "error", None, 0
@@ -299,6 +382,7 @@ class AgentDispatcher:
         request_id: str,
         depth: int = 0,
         background: bool = False,
+        origin_session_id: int | None = None,
     ) -> str:
         """
         House Party fan-out: run `task` on every in-process agent except the
@@ -322,6 +406,7 @@ class AgentDispatcher:
                 self.spawn(
                     from_agent=from_agent, to_agent=t, task=task,
                     user_id=user_id, request_id=request_id, depth=depth,
+                    origin_session_id=origin_session_id,
                 )
                 for t in targets
             ])
@@ -330,11 +415,13 @@ class AgentDispatcher:
         await self._log_start(
             request_id=request_id, from_agent=from_agent, to_agent="all",
             kind="broadcast", protocol="house_party", task=task, status="ok",
+            origin_session_id=origin_session_id,
         )
         results = await asyncio.gather(*[
             self.dispatch(
                 from_agent=from_agent, to_agent=t, task=task,
                 user_id=user_id, request_id=request_id, depth=depth,
+                origin_session_id=origin_session_id,
             )
             for t in targets
         ])
@@ -363,7 +450,7 @@ class AgentDispatcher:
     async def _run_in_process(
         self, *, profile, from_agent: str, task: str,
         user_id: int, request_id: str, depth: int, house_party: bool,
-        own_msg_id: int | None = None,
+        own_msg_id: int | None = None, origin_session_id: int | None = None,
     ) -> tuple[str, str, int | None]:
         """Run the target agent's own orchestrator loop; returns (text, status, session_id)."""
         # House Party = full interactive grade across all agents (D-C4); normal
@@ -398,19 +485,34 @@ class AgentDispatcher:
                     system_prompt="",
                     conversation_history=[{
                         "role": "user",
-                        "content": (
+                        # Timestamp-stamped like a chat turn: the system prompt
+                        # tells the agent the newest user message's stamp is the
+                        # current time, and a synthetic turn has no DB row to
+                        # derive one from. Without it a dispatched agent runs
+                        # with no idea what day it is and date-scoped tools
+                        # (health_data, calendar, news) get queried on a
+                        # hallucinated window.
+                        "content": self._session_manager.stamp_user_content(
                             f"Inter-agent dispatch from {from_agent.upper()}. Complete "
                             "the task below and reply with the result — your answer "
                             f"goes back to {from_agent.upper()}, not to the owner, so "
                             "skip greetings and pleasantries and lead with the "
                             "substance. Be complete but compact."
                             f"{channel_block}\n\n"
-                            f"TASK: {task}"
+                            f"TASK: {task}",
+                            datetime.utcnow(),
                         ),
                     }],
                     db=db,
                     timezone=settings.owner_timezone,
-                    extra={"dispatch_depth": depth + 1},
+                    extra={
+                        "dispatch_depth": depth + 1,
+                        # Carry the ROOM down the chain: anything this agent
+                        # dispatches onward is still part of the conversation the
+                        # owner is watching, so it must log against the same
+                        # origin session instead of the agent's private one.
+                        "room_session_id": origin_session_id,
+                    },
                 )
 
                 chunks: list[str] = []
@@ -479,12 +581,14 @@ class AgentDispatcher:
     async def _log_start(
         self, *, request_id: str, from_agent: str, to_agent: str,
         kind: str, protocol: str, task: str, status: str = "running",
+        origin_session_id: int | None = None,
     ) -> int | None:
         try:
             async with AsyncSessionLocal() as db:
                 row = AgentMessage(
                     request_id=request_id, from_agent=from_agent, to_agent=to_agent,
                     kind=kind, protocol=protocol, task=task[:4000], status=status,
+                    origin_session_id=origin_session_id,
                     created_at=datetime.utcnow(),
                 )
                 db.add(row)

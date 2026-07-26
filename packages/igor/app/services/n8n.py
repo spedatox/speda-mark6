@@ -21,15 +21,6 @@ def validate_n8n_secret(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Invalid or missing N8N secret")
 
 
-def format_trigger_context(payload: dict) -> dict:
-    """
-    Normalise an n8n trigger payload into a standard context dict.
-    Adds defaults for fields n8n may omit.
-    """
-    return {
-        "type": payload.get("type", "unknown"),
-        "job": payload.get("job"),
-        "from_agent": payload.get("from"),
-        "event": payload.get("event"),
-        "raw": payload,
-    }
+# format_trigger_context moved to app/core/trigger_runner.py — it is pure payload
+# shaping with no request concerns, and keeping it here forced its only consumer
+# to import FastAPI transitively. This module is the auth boundary now.
