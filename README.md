@@ -102,7 +102,7 @@ design, not two.
 - **Live session indicator** — a job keeps streaming even if you switch away, and
   a marker shows which conversations are still running.
 
-### 📱 Heartbreaker Core — the deck in your pocket
+### 📱 Speda GO — the deck in your pocket
 
 <img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/704053d8-74b8-4a44-8d75-138c55dde3f9" />
 
