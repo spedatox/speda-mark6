@@ -2,16 +2,110 @@ import logging
 import logging.config
 import json
 from pathlib import Path
+from typing import Any
+
 from pydantic import AliasChoices, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic.fields import FieldInfo
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 _DATA_DIR = Path.home() / ".speda"
 
 # Owner-editable overrides written from the desktop Settings → Configuration tab
-# (routers/config.py). Layered OVER the checked-in .env so a value set in the UI
-# wins, survives restarts, and never touches the repo. Real OS env vars still win
-# over both (pydantic precedence: init > os.environ > env_file[last] > .. > first).
+# (routers/config.py). Ranked ABOVE real OS environment variables by
+# _ManagedEnvSource below — listing it in `env_file=` is NOT enough in production;
+# see that class for why.
 _MANAGED_ENV = _DATA_DIR / ".env"
+
+# Keys the DEPLOYMENT must own outright, never the owner's override file.
+# docker-compose.yml sets DATABASE_URL via `environment:` specifically to outrank
+# the deployment .env; the managed file lives in the bind-mounted data dir, so
+# without this exemption a stray line there could silently repoint the database.
+_DEPLOYMENT_OWNED = frozenset({"DATABASE_URL"})
+
+
+# ── Managed-env override store (desktop Configuration tab) ───────────────────
+# A tiny KEY=VALUE reader/writer over _MANAGED_ENV. Deliberately not a full
+# dotenv parser — we only ever write what we wrote (simple, quoted values) and
+# read it back. Defined above Settings because _ManagedEnvSource reads it while
+# the module-level `settings` object is being constructed.
+
+def _dq(value: str) -> str:
+    """Double-quote a value, escaping quotes/backslashes, so multi-word or
+    special-character secrets round-trip intact."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def read_managed_env() -> dict[str, str]:
+    """Parse the managed override file into a dict. Missing file → empty."""
+    out: dict[str, str] = {}
+    if not _MANAGED_ENV.exists():
+        return out
+    try:
+        for line in _MANAGED_ENV.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, raw = line.partition("=")
+            key = key.strip()
+            raw = raw.strip()
+            if len(raw) >= 2 and raw[0] == raw[-1] == '"':
+                raw = raw[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+            out[key] = raw
+    except Exception as e:  # noqa: BLE001
+        logging.getLogger(__name__).error("managed_env_read_failed", extra={"error": str(e)})
+    return out
+
+
+def write_managed_env(updates: dict[str, str | None]) -> None:
+    """Merge `updates` into the managed override file. A None value deletes the
+    key (falls back to the deployment .env / default). Atomic-ish rewrite."""
+    current = read_managed_env()
+    for key, value in updates.items():
+        if value is None:
+            current.pop(key, None)
+        else:
+            current[key] = value
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# SPEDA managed overrides — written by the desktop Configuration tab.",
+        "# Edit in the app (Settings → Configuration). Values here win over .env.",
+        "",
+    ]
+    for key in sorted(current):
+        lines.append(f"{key}={_dq(current[key])}")
+    _MANAGED_ENV.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+class _ManagedEnvSource(PydanticBaseSettingsSource):
+    """The owner's Configuration-tab overrides, ranked above real OS env vars.
+
+    Naming this file in `env_file=` is not enough in production. pydantic ranks
+    `os.environ` above EVERY dotenv layer, and docker-compose's `env_file:` does
+    not hand the deployment .env to the process as a file — it expands it into
+    real environment variables. So in a container every key present in both the
+    deployment .env and this file was decided by the deployment .env, and the
+    Configuration tab silently did nothing. (It behaved as documented under bare
+    uvicorn, which is why it looked fine in dev.) This source restores the
+    intended precedence in both environments.
+
+    Keys in `_DEPLOYMENT_OWNED` are skipped — the deployment keeps those.
+    """
+
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        # Unused: __call__ supplies the whole mapping in one pass.
+        return None, field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        return {
+            key.lower(): value
+            for key, value in read_managed_env().items()
+            if key.upper() not in _DEPLOYMENT_OWNED
+        }
 
 
 class JSONFormatter(logging.Formatter):
@@ -42,12 +136,33 @@ class JSONFormatter(logging.Formatter):
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        # Tuple order = precedence low→high: the managed override file wins over
-        # the checked-in .env. Both are optional (missing file is ignored).
-        env_file=(".env", str(_MANAGED_ENV)),
+        # Bare-metal/dev only: the deployment .env sitting next to the process.
+        # In Docker this file is not in the image — compose expands it into real
+        # env vars instead. _MANAGED_ENV is deliberately NOT listed here; it is
+        # applied by _ManagedEnvSource, which outranks os.environ.
+        env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Highest → lowest precedence. The owner's Configuration tab sits just
+        under explicit init kwargs and above everything the deployment supplies."""
+        return (
+            init_settings,
+            _ManagedEnvSource(settings_cls),
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     # Anthropic
     anthropic_api_key: str = "not-set"
@@ -394,61 +509,6 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
-
-# ── Managed-env override store (desktop Configuration tab) ───────────────────
-# A tiny KEY=VALUE reader/writer over _MANAGED_ENV. Deliberately not a full
-# dotenv parser — we only ever write what we wrote (simple, quoted values) and
-# read it back. pydantic re-reads the file at startup, so writes here take full
-# effect on the next boot; the router also live-updates the in-memory `settings`
-# object for values that are read lazily (feature flags, thresholds, model refs).
-
-def _dq(value: str) -> str:
-    """Double-quote a value, escaping quotes/backslashes, so multi-word or
-    special-character secrets round-trip intact."""
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
-
-
-def read_managed_env() -> dict[str, str]:
-    """Parse the managed override file into a dict. Missing file → empty."""
-    out: dict[str, str] = {}
-    if not _MANAGED_ENV.exists():
-        return out
-    try:
-        for line in _MANAGED_ENV.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, raw = line.partition("=")
-            key = key.strip()
-            raw = raw.strip()
-            if len(raw) >= 2 and raw[0] == raw[-1] == '"':
-                raw = raw[1:-1].replace('\\"', '"').replace("\\\\", "\\")
-            out[key] = raw
-    except Exception as e:  # noqa: BLE001
-        logging.getLogger(__name__).error("managed_env_read_failed", extra={"error": str(e)})
-    return out
-
-
-def write_managed_env(updates: dict[str, str | None]) -> None:
-    """Merge `updates` into the managed override file. A None value deletes the
-    key (falls back to the checked-in .env / default). Atomic-ish rewrite."""
-    current = read_managed_env()
-    for key, value in updates.items():
-        if value is None:
-            current.pop(key, None)
-        else:
-            current[key] = value
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    lines = [
-        "# SPEDA managed overrides — written by the desktop Configuration tab.",
-        "# Edit in the app (Settings → Configuration). Values here win over .env.",
-        "",
-    ]
-    for key in sorted(current):
-        lines.append(f"{key}={_dq(current[key])}")
-    _MANAGED_ENV.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def configure_logging() -> None:
