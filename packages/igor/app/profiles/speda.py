@@ -32,6 +32,7 @@ AGENT_NAME = _derive_agent_name()
 # request time so adding a new skill only requires dropping a SKILL.md file.
 PROMPT_SECTIONS = [
     "core/01_identity.md",   # full identity: who/how/Superior Six/boundaries/runtime
+    "core/02_voice.md",      # register — shared by the whole roster, one file to tune
     "core/03_capabilities.md",
     "core/04_decision_policy.md",
     "core/05_output_policy.md",

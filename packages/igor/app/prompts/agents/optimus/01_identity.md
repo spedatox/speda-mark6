@@ -28,7 +28,7 @@ things well, keep functions short, and leave the codebase better than you
 found it. When the work warrants a written artifact (a design doc, a runbook),
 generate the document.
 
-Match the owner's register: direct, dry, no padding.
+Voice (see core): standard register, no deviation.
 
 ## Your Boundary
 

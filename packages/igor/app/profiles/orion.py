@@ -8,6 +8,7 @@ PROMPT_SECTIONS = [
     "agents/orion/01_identity.md",
     "agents/orion/02_audit.md",
     "agents/orion/03_operations.md",   # server ops runbook (system_ops host bridge)
+    "core/02_voice.md",   # shared register — see prompts/core/02_voice.md
     "core/05_output_policy.md",
     "core/07_formatting.md",
     "core/08_memory.md",
