@@ -153,6 +153,9 @@ class ToolUseBlock:
     name: str
     input: dict
     type: str = "tool_use"
+    # Gemini 3.x thought signature — opaque, provider-specific, and MANDATORY to
+    # echo back on the next request (see _thought_signature). None everywhere else.
+    signature: str | None = None
 
 
 @dataclass
@@ -179,14 +182,20 @@ def blocks_to_dicts(content_blocks) -> list[dict]:
         if block.type == "text":
             result.append({"type": "text", "text": block.text})
         elif block.type == "tool_use":
-            result.append(
-                {
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                }
-            )
+            entry = {
+                "type": "tool_use",
+                "id": block.id,
+                "name": block.name,
+                "input": block.input,
+            }
+            # Underscore-prefixed = internal marker, stripped at every wire
+            # boundary (same convention as the `_cache` hint on system blocks).
+            # Carries Gemini's thought signature across the loop's iterations;
+            # absent for every other provider.
+            signature = getattr(block, "signature", None)
+            if signature:
+                entry["_signature"] = signature
+            result.append(entry)
         else:
             # Pass through unknown block types as-is
             try:
@@ -279,6 +288,7 @@ class LLMClient:
                     id=tc.id or _gen_tool_id(),
                     name=tc.function.name,
                     input=_parse_tool_args(tc.function.arguments, tc.function.name),
+                    signature=_thought_signature(tc),
                 )
             )
         return LLMMessage(
@@ -792,16 +802,21 @@ def _translate_message(message: dict) -> list[dict]:
                     }
                 )
         elif btype == "tool_use":
-            tool_calls.append(
-                {
-                    "id": block["id"],
-                    "type": "function",
-                    "function": {
-                        "name": block["name"],
-                        "arguments": json.dumps(block.get("input") or {}),
-                    },
-                }
-            )
+            call = {
+                "id": block["id"],
+                "type": "function",
+                "function": {
+                    "name": block["name"],
+                    "arguments": json.dumps(block.get("input") or {}),
+                },
+            }
+            # Hand Gemini back its own thought signature on the call it signed.
+            # Mandatory on Gemini 3.x (see _thought_signature); every other
+            # provider never set one, so nothing is added for them.
+            signature = block.get("_signature")
+            if signature:
+                call["extra_content"] = {"google": {"thought_signature": signature}}
+            tool_calls.append(call)
         elif btype == "tool_result":
             rc = block.get("content", "")
             if isinstance(rc, list):
@@ -1019,6 +1034,34 @@ def _parse_tool_args(raw: str | None, tool_name: str) -> dict:
         return {}
 
 
+def _thought_signature(tc) -> str | None:
+    """Pull Gemini's thought signature off a returned tool call.
+
+    Gemini 3.x attaches an opaque signature of its own reasoning to each
+    functionCall part and REQUIRES it back, verbatim, on the request that
+    carries the tool result. Drop it and the follow-up call dies with
+    400 INVALID_ARGUMENT "Function call is missing a thought_signature in
+    functionCall parts" — i.e. the tool runs, then the turn that was supposed
+    to say something about the result never happens.
+
+    On the OpenAI-compat endpoint it rides a non-standard field on the tool
+    call itself, `extra_content.google.thought_signature` (Google's take on the
+    Realtime API extension pattern). The OpenAI SDK has no model for it, so
+    depending on version it lands either as a stray attribute or in
+    `model_extra` — read both. Only the FIRST of a set of parallel calls is
+    signed; the rest legitimately have none, so absence is never an error.
+
+    https://ai.google.dev/gemini-api/docs/thinking#signatures
+    """
+    extra = getattr(tc, "extra_content", None)
+    if extra is None:
+        extra = (getattr(tc, "model_extra", None) or {}).get("extra_content")
+    google = extra.get("google") if isinstance(extra, dict) else getattr(extra, "google", None)
+    if isinstance(google, dict):
+        return google.get("thought_signature")
+    return getattr(google, "thought_signature", None)
+
+
 def _gen_tool_id() -> str:
     # Gemini's compat layer can omit tool-call ids; the internal format requires
     # one to pair tool_use with tool_result. Generated, never hardcoded.
@@ -1116,8 +1159,11 @@ class _OpenAICompatStream:
                     idx = len(self._tool_calls) if (name or not self._tool_calls) \
                         else max(self._tool_calls)
                 acc = self._tool_calls.setdefault(
-                    idx, {"id": "", "name": "", "arguments": ""}
+                    idx, {"id": "", "name": "", "arguments": "", "signature": None}
                 )
+                signature = _thought_signature(tc)
+                if signature:
+                    acc["signature"] = signature
                 if tc.id:
                     acc["id"] = tc.id
                 if tc.function:
@@ -1142,6 +1188,7 @@ class _OpenAICompatStream:
                     id=acc["id"] or _gen_tool_id(),
                     name=acc["name"],
                     input=_parse_tool_args(acc["arguments"], acc["name"]),
+                    signature=acc.get("signature"),
                 )
             )
         return LLMMessage(

@@ -25,6 +25,8 @@ from app.services.llm_client import (
     _OpenAICompatStream,
     _responses_to_message,
     _stop_reason_for,
+    _thought_signature,
+    blocks_to_dicts,
     TextBlock,
     ToolUseBlock,
     _to_openai_params,
@@ -495,6 +497,60 @@ def test_tool_blocks_outrank_finish_reason():
     assert _stop_reason_for("stop", [TextBlock(text="hi")]) == "end_turn"
     assert _stop_reason_for("STOP", []) == "end_turn"
     assert _stop_reason_for("length", [TextBlock(text="hi")]) == "max_tokens"
+
+
+# ── Gemini thought signatures ────────────────────────────────────────────────
+# Gemini 3.x signs each functionCall part and REQUIRES the signature back on the
+# request carrying the tool result; without it the follow-up dies with 400
+# INVALID_ARGUMENT and the turn never gets to answer. Verified against the live
+# gemini-3.6-flash endpoint. https://ai.google.dev/gemini-api/docs/thinking#signatures
+
+
+def _signed_call(sig, *, name="get_time", as_extra_model=False):
+    """A returned tool call shaped like Gemini's, where the signature rides a
+    field the OpenAI SDK has no model for."""
+    fn = SimpleNamespace(name=name, arguments='{"tz":"Europe/Istanbul"}')
+    extra = {"google": {"thought_signature": sig}} if sig else None
+    if as_extra_model:  # older SDK: unknown fields land in model_extra
+        return SimpleNamespace(index=None, id="fc_1", function=fn,
+                               model_extra={"extra_content": extra})
+    return SimpleNamespace(index=None, id="fc_1", function=fn, extra_content=extra)
+
+
+def test_thought_signature_extraction():
+    assert _thought_signature(_signed_call("SIG==")) == "SIG=="
+    assert _thought_signature(_signed_call("SIG==", as_extra_model=True)) == "SIG=="
+    # Unsigned calls are normal — only the first of a parallel set is signed.
+    assert _thought_signature(_signed_call(None)) is None
+    assert _thought_signature(SimpleNamespace(function=None)) is None
+
+
+def test_signature_survives_the_block_round_trip():
+    signed = ToolUseBlock(id="fc_1", name="get_time", input={"tz": "UTC"}, signature="SIG==")
+    plain = ToolUseBlock(id="fc_2", name="get_weather", input={"city": "Ankara"})
+    dumped = blocks_to_dicts([signed, plain])
+    assert dumped[0]["_signature"] == "SIG=="
+    assert "_signature" not in dumped[1]  # nothing invented for unsigned calls
+
+    out = _translate_message({"role": "assistant", "content": dumped})
+    calls = out[0]["tool_calls"]
+    assert calls[0]["extra_content"] == {"google": {"thought_signature": "SIG=="}}
+    assert "extra_content" not in calls[1]
+    # The marker itself must never reach the wire.
+    assert "_signature" not in calls[0] and "_signature" not in calls[0]["function"]
+
+
+def test_internal_markers_stripped_before_anthropic():
+    # A turn that starts on Gemini and falls back to Anthropic mid-loop would
+    # otherwise hand Anthropic a content block with an unknown key.
+    msgs = [{"role": "assistant", "content": [
+        {"type": "tool_use", "id": "fc_1", "name": "get_time", "input": {},
+         "_signature": "SIG=="}]}]
+    out = _apply_prompt_caching({"model": "claude-sonnet-4-6", "messages": msgs})
+    block = out["messages"][0]["content"][0]
+    assert "_signature" not in block
+    assert block["name"] == "get_time"          # everything real is preserved
+    assert msgs[0]["content"][0]["_signature"]  # caller's list not mutated
 
 
 def _chunk(*, content=None, tool_calls=None, finish=None, usage=None):

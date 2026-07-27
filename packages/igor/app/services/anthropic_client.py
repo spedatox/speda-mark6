@@ -51,6 +51,34 @@ class AnthropicClient:
         return self._client.messages.stream(**_apply_prompt_caching(kwargs))
 
 
+def _strip_internal_markers(messages: list) -> list:
+    """Drop underscore-prefixed keys from message content blocks.
+
+    Those markers are ours, not Anthropic's — the provider rejects unknown keys
+    on a content block. Only one exists today: `_signature`, the Gemini thought
+    signature llm_client carries across the agentic loop. It reaches Anthropic
+    at all only when a turn starts on Gemini and the fallback chain moves it
+    here mid-loop, which is exactly when a 400 would be hardest to read.
+    Returns the input untouched when there is nothing to strip."""
+    if not any(
+        isinstance(b, dict) and any(k.startswith("_") for k in b)
+        for m in messages
+        for b in (m.get("content") or [] if isinstance(m.get("content"), list) else [])
+    ):
+        return messages
+    cleaned = []
+    for m in messages:
+        content = m.get("content")
+        if isinstance(content, list):
+            m = {**m, "content": [
+                {k: v for k, v in b.items() if not k.startswith("_")}
+                if isinstance(b, dict) else b
+                for b in content
+            ]}
+        cleaned.append(m)
+    return cleaned
+
+
 def _apply_prompt_caching(kwargs: dict) -> dict:
     """
     Insert ephemeral cache breakpoints on the stable request prefix.
@@ -119,6 +147,7 @@ def _apply_prompt_caching(kwargs: dict) -> dict:
     #   tools(1) + stable system(1) + memory system(≤1) + conversation(1).
     messages = out.get("messages")
     if messages:
+        messages = _strip_internal_markers(messages)
         msgs = [dict(m) for m in messages]
         last = dict(msgs[-1])
         content = last.get("content")
