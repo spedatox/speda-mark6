@@ -26,6 +26,11 @@ dependencies = [
     "numpy>=1.26.0",
     "feedparser>=6.0",
     "trafilatura>=1.12",
+    # FCM HTTP v1 auth. google-auth alone rather than firebase-admin: all we
+    # need is a service-account OAuth2 token, and httpx (already here) posts the
+    # message. firebase-admin would pull the whole Firebase surface and a
+    # synchronous messaging client into an async process.
+    "google-auth>=2.35.0",
 ]
 
 [project.optional-dependencies]

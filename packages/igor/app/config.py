@@ -282,6 +282,15 @@ class Settings(BaseSettings):
     # the SAME number for every bot (it is their Telegram user id).
     telegram_chat_id: str = ""
 
+    # Firebase Cloud Messaging — the push channel to Ultron Wear.
+    # Path to a service-account JSON with the Firebase Admin SDK role. FCM HTTP
+    # v1 requires an OAuth2 bearer token minted from this; the legacy server-key
+    # endpoint was decommissioned in June 2024. Empty = push disabled, which is
+    # a supported configuration (the watch falls back to asking locally).
+    fcm_credentials_file: str = ""
+    # Optional: derived from the credentials file's project_id when blank.
+    fcm_project_id: str = ""
+
     # App
     debug: bool = False
     log_level: str = "INFO"
