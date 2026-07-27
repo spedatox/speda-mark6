@@ -3,8 +3,8 @@ package com.speda.heartbreaker.ui.prose
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +27,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -36,8 +38,10 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -46,7 +50,9 @@ import com.speda.heartbreaker.designsystem.theme.HbPalette
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbFonts
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.domain.MarkdownPrep
 import com.speda.heartbreaker.domain.MathExtract
+import com.speda.heartbreaker.domain.TableColumns
 import com.speda.heartbreaker.domain.MathSpan
 import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
@@ -73,6 +79,7 @@ import org.commonmark.node.StrongEmphasis
 import org.commonmark.node.ThematicBreak
 import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.HtmlRenderer
+import kotlin.math.max
 import org.commonmark.node.Text as MdText
 
 /**
@@ -117,8 +124,11 @@ private val ProseBase = TextStyle(
 @Composable
 fun ProseText(markdown: String, modifier: Modifier = Modifier) {
     val palette = LocalHbPalette.current
+    // Every surface goes through here, so the table leniency lives here rather
+    // than in the chat-only prepare() pipeline: memory files get it too.
+    val source = remember(markdown) { MarkdownPrep.stitchTables(markdown) }
     // Math leaves the source before the parser runs — see MathExtract for why.
-    val math = remember(markdown) { MathExtract.extract(markdown) }
+    val math = remember(source) { MathExtract.extract(source) }
     val doc = remember(math) { PARSER.parse(math.markdown) }
     CompositionLocalProvider(LocalMathSpans provides math.spans) {
         Column(modifier.fillMaxWidth()) { Blocks(doc, palette) }
@@ -405,59 +415,206 @@ private fun Hr() {
 
 /* ── Table — data grid ───────────────────────────────────────────────────── */
 
+/**
+ * A table is laid out by hand because the two things the CSS gets for free from
+ * the browser — `table-layout: auto` and `border-collapse: collapse` — have no
+ * equivalent in a Row/Column of independently-sized cells. Without them every
+ * cell was a fixed 150dp box drawing its own four borders at its own height, so
+ * a row of unequal cells read as a scatter of floating rectangles rather than a
+ * grid. [TableColumns.solve] restores the first, [CellPlate] the second.
+ */
+private class TableRowData(val cells: List<TableCell>, val header: Boolean)
+
+private fun tableRows(node: TableBlock): List<TableRowData> {
+    val out = mutableListOf<TableRowData>()
+    var section = node.firstChild
+    while (section != null) {
+        var row = section.firstChild
+        while (row != null) {
+            if (row is TableRow) {
+                val cells = mutableListOf<TableCell>()
+                var cell = row.firstChild
+                while (cell != null) {
+                    if (cell is TableCell) cells += cell
+                    cell = cell.next
+                }
+                if (cells.isNotEmpty()) out += TableRowData(cells, cells[0].isHeader)
+            }
+            row = row.next
+        }
+        section = section.next
+    }
+    return out
+}
+
 @Composable
 private fun TableView(node: TableBlock, palette: HbPalette) {
-    // Wide tables scroll inside their own container rather than stretching the row.
-    Column(
+    val rows = remember(node) { tableRows(node) }
+    if (rows.isEmpty()) return
+    val cols = remember(rows) { rows.maxOf { it.cells.size } }
+    // .prose tr:nth-child(even) — the header sits in its own <thead>, so the
+    // zebra counts body rows from one again: the SECOND body row is the tinted one.
+    val zebra = remember(rows) {
+        var body = 0
+        rows.map { row -> if (row.header) false else body++ % 2 == 1 }
+    }
+    val hairline = palette.accent.copy(alpha = 0.14f)
+    val scroll = rememberScrollState()
+
+    // The viewport width is captured OUTSIDE the scroll container: inside it the
+    // width constraint is infinite, and a table that has to shrink to fit needs
+    // to know what it is fitting into.
+    BoxWithConstraints(
         Modifier
-            .padding(vertical = 12.dp)
-            .horizontalScroll(rememberScrollState())
-            .border(1.dp, palette.line),
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
     ) {
-        var section = node.firstChild
-        var rowIndex = 0
-        while (section != null) {
-            var row = section.firstChild
-            while (row != null) {
-                if (row is TableRow) {
-                    val header = rowIndexIsHeader(row)
-                    Row(Modifier.background(if (!header && rowIndex % 2 == 0) palette.accent.copy(alpha = 0.04f) else Color.Transparent)) {
-                        var cell = row.firstChild
-                        while (cell != null) {
-                            if (cell is TableCell) TableCellView(cell, palette, header)
-                            cell = cell.next
+        val viewport = constraints.maxWidth
+        Box(Modifier.horizontalScroll(scroll)) {
+            Layout(
+                modifier = Modifier.border(1.dp, palette.line),
+                content = {
+                    // Plates first, so they are placed — and therefore drawn —
+                    // beneath the text.
+                    rows.forEachIndexed { r, row ->
+                        for (c in 0 until cols) {
+                            CellPlate(
+                                fill = when {
+                                    row.header -> palette.accent.copy(alpha = 0.12f)
+                                    zebra[r] -> palette.accent.copy(alpha = 0.04f)
+                                    else -> Color.Transparent
+                                },
+                                rule = if (row.header) palette.line else hairline,
+                                headLight = row.header,
+                                lastColumn = c == cols - 1,
+                                lastRow = r == rows.lastIndex,
+                            )
                         }
                     }
-                    if (!header) rowIndex++
+                    rows.forEach { row ->
+                        for (c in 0 until cols) CellText(row.cells.getOrNull(c), palette, row.header)
+                    }
+                },
+            ) { measurables, outer ->
+                val slots = rows.size * cols
+                val plates = measurables.subList(0, slots)
+                val texts = measurables.subList(slots, slots * 2)
+
+                val minW = IntArray(cols)
+                val maxW = IntArray(cols)
+                for (r in rows.indices) {
+                    for (c in 0 until cols) {
+                        val m = texts[r * cols + c]
+                        minW[c] = max(minW[c], m.minIntrinsicWidth(Constraints.Infinity))
+                        maxW[c] = max(maxW[c], m.maxIntrinsicWidth(Constraints.Infinity))
+                    }
                 }
-                row = row.next
+                val target = when {
+                    outer.hasBoundedWidth -> outer.maxWidth
+                    viewport in 1 until Constraints.Infinity -> viewport
+                    else -> maxW.sum()
+                }
+                val widths = TableColumns.solve(minW, maxW, target)
+
+                // Cells measure at their column's width; the row takes the height
+                // of the tallest — one row, one height, which is the whole point.
+                val rowH = IntArray(rows.size)
+                val cellP = ArrayList<Placeable>(slots)
+                for (r in rows.indices) {
+                    var h = 0
+                    for (c in 0 until cols) {
+                        val p = texts[r * cols + c].measure(Constraints.fixedWidth(widths[c]))
+                        cellP += p
+                        h = max(h, p.height)
+                    }
+                    rowH[r] = h
+                }
+                val plateP = ArrayList<Placeable>(slots)
+                for (r in rows.indices) {
+                    for (c in 0 until cols) {
+                        plateP += plates[r * cols + c].measure(Constraints.fixed(widths[c], rowH[r]))
+                    }
+                }
+
+                layout(widths.sum(), rowH.sum()) {
+                    var y = 0
+                    for (r in rows.indices) {
+                        var x = 0
+                        for (c in 0 until cols) {
+                            plateP[r * cols + c].place(x, y)
+                            x += widths[c]
+                        }
+                        y += rowH[r]
+                    }
+                    y = 0
+                    for (r in rows.indices) {
+                        var x = 0
+                        for (c in 0 until cols) {
+                            val p = cellP[r * cols + c]
+                            // vertical-align: middle, as a browser gives a <td>.
+                            p.place(x, y + (rowH[r] - p.height) / 2)
+                            x += widths[c]
+                        }
+                        y += rowH[r]
+                    }
+                }
             }
-            section = section.next
         }
     }
 }
 
-private fun rowIndexIsHeader(row: TableRow): Boolean =
-    (row.firstChild as? TableCell)?.isHeader == true
-
+/**
+ * The fill and the rules for one grid slot, drawn behind the cell's text. Each
+ * plate draws only its RIGHT and BOTTOM rule — the table's own border closes the
+ * top and left — which is what collapses neighbouring rules into a single
+ * hairline instead of stacking two.
+ */
 @Composable
-private fun TableCellView(cell: TableCell, palette: HbPalette, header: Boolean) {
+private fun CellPlate(
+    fill: Color,
+    rule: Color,
+    headLight: Boolean,
+    lastColumn: Boolean,
+    lastRow: Boolean,
+) {
     Box(
         Modifier
-            .width(150.dp)
-            .background(if (header) palette.accent.copy(alpha = 0.12f) else Color.Transparent)
-            .border(1.dp, if (header) palette.line else palette.accent.copy(alpha = 0.14f))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-    ) {
-        BasicText(
-            text = inlines(cell, palette),
-            style = if (header) {
+            .background(fill)
+            .drawBehind {
+                val px = 1.dp.toPx()
+                if (!lastColumn) drawRect(rule, Offset(size.width - px, 0f), Size(px, size.height))
+                if (!lastRow) drawRect(rule, Offset(0f, size.height - px), Size(size.width, px))
+                // th — box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.12)
+                if (headLight) {
+                    drawRect(Color.White.copy(alpha = 0.12f), Offset.Zero, Size(size.width, px))
+                }
+            },
+    )
+}
+
+@Composable
+private fun CellText(cell: TableCell?, palette: HbPalette, header: Boolean) {
+    Box(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+        if (cell != null) {
+            val base = if (header) {
                 HbType.headerBar.copy(fontSize = 10.sp, letterSpacing = 0.14.em, color = Color(0xFFCFE7EE))
             } else {
                 ProseBase.merge(TextStyle(color = palette.textDim, fontSize = 13.sp))
-            },
-        )
+            }
+            BasicText(
+                text = inlines(cell, palette),
+                // The delimiter row's `---:` / `:---:` finally does something.
+                style = base.copy(textAlign = cellAlign(cell)),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
+}
+
+private fun cellAlign(cell: TableCell): TextAlign = when (cell.alignment) {
+    TableCell.Alignment.CENTER -> TextAlign.Center
+    TableCell.Alignment.RIGHT -> TextAlign.End
+    else -> TextAlign.Start
 }
 
 /* ── Inlines ─────────────────────────────────────────────────────────────── */

@@ -54,4 +54,64 @@ class MarkdownPrepTest {
             )
         }
     }
+
+    /* ── stitchTables — Android-only, no TS counterpart to gate against ───── */
+
+    @Test
+    fun reattaches_a_row_stranded_behind_a_blank_line() {
+        val src = """
+            | Item | Amount |
+            |---|---|
+            | Rent | 8,000 |
+
+            | Total | | 24,245.83 | |
+        """.trimIndent()
+        assertEquals(
+            """
+            | Item | Amount |
+            |---|---|
+            | Rent | 8,000 |
+            | Total | | 24,245.83 | |
+            """.trimIndent(),
+            MarkdownPrep.stitchTables(src),
+        )
+    }
+
+    @Test
+    fun leaves_a_second_table_alone() {
+        val src = """
+            | A | B |
+            |---|---|
+            | 1 | 2 |
+
+            | C | D |
+            |---|---|
+            | 3 | 4 |
+        """.trimIndent()
+        assertEquals(src, MarkdownPrep.stitchTables(src))
+    }
+
+    @Test
+    fun leaves_prose_and_fenced_pipes_alone() {
+        val src = """
+            | A | B |
+            |---|---|
+            | 1 | 2 |
+
+            Some prose after the table.
+
+            ```
+            | not | a | table |
+            ```
+
+            | still | prose |
+        """.trimIndent()
+        assertEquals(src, MarkdownPrep.stitchTables(src))
+    }
+
+    @Test
+    fun ignores_documents_without_tables() {
+        val src = "# Heading\n\nA paragraph with a | pipe in it.\n"
+        assertEquals(src, MarkdownPrep.stitchTables(src))
+    }
 }

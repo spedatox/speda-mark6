@@ -132,7 +132,16 @@ async def list_sessions(
         db, user_id=1, agent_id=agent_id, limit=limit
     )
     return [
-        {"id": s.id, "title": s.title, "started_at": s.started_at.isoformat()}
+        {
+            "id": s.id,
+            "title": s.title,
+            "started_at": s.started_at.isoformat(),
+            # Running token spend for the session. NULL on every session that
+            # predates the counter — reported as 0 rather than omitted so the
+            # UI never has to special-case a missing field.
+            "tokens_in": s.token_count_input or 0,
+            "tokens_out": s.token_count_output or 0,
+        }
         for s in sessions
     ]
 

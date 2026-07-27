@@ -30,7 +30,7 @@ _T_RSS = ("n8n-nodes-base.rssFeedReadTrigger", 1)
 _T_WEBHOOK = ("n8n-nodes-base.webhook", 2)
 
 
-def _node(name: str, type_ver: tuple, x: int, params: dict) -> dict:
+def _node(name: str, type_ver: tuple, x: int, params: dict, **extra) -> dict:
     type_, ver = type_ver
     return {
         # n8n's public-API workflow schema REQUIRES a per-node id (a UUID) and
@@ -42,7 +42,24 @@ def _node(name: str, type_ver: tuple, x: int, params: dict) -> dict:
         "typeVersion": ver,
         "position": [x, 300],
         "parameters": params,
+        # retryOnFail/maxTries/etc. are node-level siblings of "parameters",
+        # not entries inside it — n8n silently ignores them if nested.
+        **extra,
     }
+
+
+def _interval_rule(minutes: int) -> dict:
+    """Schedule-trigger rule for an every-N-minutes cadence.
+
+    n8n compiles a "minutes" interval into the minute field of a cron
+    expression, which only spans 0-59. Anything >= 60 therefore cannot be
+    expressed that way and silently collapses to firing every hour — so a
+    720-minute watcher ends up hammering the target 12x more often than asked.
+    Promote whole hours to the "hours" field, which compiles to the hour slot.
+    """
+    if minutes >= 60 and minutes % 60 == 0:
+        return {"interval": [{"field": "hours", "hoursInterval": minutes // 60}]}
+    return {"interval": [{"field": "minutes", "minutesInterval": minutes}]}
 
 
 def _callback_body(kind: str, name: str, intent: str) -> str:
@@ -159,13 +176,16 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
         if not url:
             raise ValueError("web_watch automations need a 'url'")
         every = int(spec.get("interval_minutes", 360))
-        trigger = _node("Schedule", _T_SCHEDULE, 0, {
-            "rule": {"interval": [{"field": "minutes", "minutesInterval": every}]}
-        })
+        trigger = _node("Schedule", _T_SCHEDULE, 0, {"rule": _interval_rule(every)})
+        # Watched pages are third-party sites on networks we do not control, so a
+        # single dropped connection (ECONNRESET, reset by a WAF, a brief 5xx) is
+        # expected background noise rather than a real failure. Without a retry
+        # the whole run dies on the first blip and the watcher stays silent until
+        # the next tick — for a 12-hour cadence that is a 12-hour blind spot.
         fetch = _node("Fetch page", _T_HTTP, 220, {
             "url": url,
             "options": {"response": {"response": {"responseFormat": "text"}}},
-        })
+        }, retryOnFail=True, maxTries=3, waitBetweenTries=5000)
         gate = _node("Detect change", _T_CODE, 440, {
             "jsCode": _gate_code(spec.get("look_for"), expires_at)
         })

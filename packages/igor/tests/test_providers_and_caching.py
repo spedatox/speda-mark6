@@ -26,6 +26,7 @@ from app.services.llm_client import (
     _responses_to_message,
     _stop_reason_for,
     _thought_signature,
+    _usage_from,
     blocks_to_dicts,
     TextBlock,
     ToolUseBlock,
@@ -476,6 +477,51 @@ def test_older_gpt5_never_forced_to_none_with_tools():
         p = _to_openai_params("openai", model, kwargs)
         assert "none" != p.get("extra_body", {}).get("reasoning_effort"), model
         assert "reasoning_effort" not in p, model  # not top-level either
+
+
+def test_usage_counts_hidden_reasoning_as_output():
+    # Gemini 2.5/3.x report prompt=8 completion=7 total=204 — the 189-token gap
+    # is thinking, which is BILLED as output. Verified live against
+    # gemini-2.5-flash. Taking completion_tokens at face value under-reports
+    # the turn's real output cost by ~30x.
+    u = _usage_from(SimpleNamespace(prompt_tokens=8, completion_tokens=7,
+                                    total_tokens=204, prompt_tokens_details=None))
+    assert u.input_tokens == 8
+    assert u.output_tokens == 196
+
+    # A provider whose total is just prompt+completion is left alone.
+    u = _usage_from(SimpleNamespace(prompt_tokens=100, completion_tokens=40,
+                                    total_tokens=140, prompt_tokens_details=None))
+    assert (u.input_tokens, u.output_tokens) == (100, 40)
+
+    # Missing/zero total (some providers omit it) must not zero the output.
+    u = _usage_from(SimpleNamespace(prompt_tokens=100, completion_tokens=40,
+                                    total_tokens=0, prompt_tokens_details=None))
+    assert (u.input_tokens, u.output_tokens) == (100, 40)
+
+    assert _usage_from(None).input_tokens == 0
+
+
+async def test_stream_asks_every_provider_for_usage():
+    # Usage is only reported on a stream when it is explicitly requested — and
+    # Gemini, which used to reject the parameter, now accepts it. Skipping it
+    # there left every Gemini turn reporting zero tokens.
+    for provider in ("openai", "gemini", "zai", "deepseek", "ollama"):
+        s = _OpenAICompatStream(None, {"model": "m"}, provider)
+        captured = {}
+
+        class _Client:
+            class chat:
+                class completions:
+                    @staticmethod
+                    async def create(**kw):
+                        captured.update(kw)
+                        return None
+
+        s._client = _Client()
+        await s.open()
+        assert captured.get("stream_options") == {"include_usage": True}, provider
+        assert captured.get("stream") is True, provider
 
 
 def test_finish_reason_mapping():

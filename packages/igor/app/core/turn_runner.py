@@ -212,6 +212,21 @@ class TurnRegistry:
                 # SSE generator — it now runs regardless of who is listening).
                 await self._persist(db, turn, chunks, tools, files)
 
+                # Token spend for this turn, on the session's running totals.
+                # Runs on every outcome including a failed or cancelled turn —
+                # tokens burned before the failure were still billed, and a
+                # counter that quietly omits them is worse than none.
+                spend = context.extra.get("token_usage") or {}
+                if spend:
+                    try:
+                        await self._session_manager.add_token_usage(
+                            db, turn.session_id,
+                            int(spend.get("input", 0)), int(spend.get("output", 0)),
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning("turn_usage_persist_failed",
+                                       extra={"request_id": turn.request_id, "error": str(e)})
+
             # Post-turn work (title/log/compaction/embedding) — detached, after
             # persistence, never blocking the stream (Rule 7). Skipped on cancel
             # or failure so a half-turn doesn't get titled/embedded as if complete.

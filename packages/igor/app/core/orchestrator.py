@@ -399,15 +399,26 @@ class AgentOrchestrator:
             # Observability: how much of the input prefix was served from cache.
             usage = getattr(response, "usage", None)
             if usage is not None:
+                cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+                cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
                 log.info(
                     "prompt_cache",
                     extra={
                         "request_id": context.request_id,
-                        "cache_read": getattr(usage, "cache_read_input_tokens", 0) or 0,
-                        "cache_write": getattr(usage, "cache_creation_input_tokens", 0) or 0,
+                        "cache_read": cache_read,
+                        "cache_write": cache_write,
                         "input_tokens": getattr(usage, "input_tokens", 0) or 0,
                     },
                 )
+                # Running cost of THIS turn, summed over every iteration of the
+                # loop. A tool-using turn re-sends the whole prompt each time
+                # round, and each of those sends is billed, so the sum — not the
+                # last iteration — is what the turn actually cost. Anthropic
+                # reports cached prefix tokens OUTSIDE input_tokens, so they are
+                # added back in: they are part of the prompt the model read.
+                spend = context.extra.setdefault("token_usage", {"input": 0, "output": 0})
+                spend["input"] += (getattr(usage, "input_tokens", 0) or 0) + cache_read + cache_write
+                spend["output"] += getattr(usage, "output_tokens", 0) or 0
 
             stop_reason = response.stop_reason
 
@@ -543,9 +554,13 @@ class AgentOrchestrator:
                 request_id=context.request_id,
             )
 
+        # DONE carries this turn's token spend so the UI can update its readout
+        # immediately. It is a DELTA, not a total: persistence runs after the
+        # generator finishes, so a client that refetched the session here would
+        # still see the pre-turn total.
         yield SSEEvent(
             type=SSEEventType.DONE,
-            data={},
+            data={"usage": context.extra.get("token_usage", {"input": 0, "output": 0})},
             session_id=context.session_id,
             request_id=context.request_id,
         )

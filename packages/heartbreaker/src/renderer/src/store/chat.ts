@@ -1,12 +1,24 @@
 import { createContext, useContext } from 'react'
 import type { ChatMessage, Session, AppConfig } from '../lib/types'
 
+export interface TokenUsage {
+  input: number
+  output: number
+}
+
 export interface ChatState {
   config: AppConfig | null
   sessions: Session[]
   activeSessionId: number | null
   messages: ChatMessage[]
   isStreaming: boolean
+  /** Token spend for the ACTIVE session only. Seeded from the backend when a
+   *  session is opened, then advanced by each turn's DONE event. Deliberately
+   *  NOT re-derived from `sessions` on every refresh: the session list is
+   *  refetched the moment a turn ends, but the backend persists the turn's
+   *  tokens just AFTER it emits DONE, so that response still carries the
+   *  pre-turn total and would roll the readout backwards. */
+  tokenUsage: TokenUsage
 }
 
 export const initialState: ChatState = {
@@ -15,6 +27,7 @@ export const initialState: ChatState = {
   activeSessionId: null,
   messages: [],
   isStreaming: false,
+  tokenUsage: { input: 0, output: 0 },
 }
 
 export type ChatAction =
@@ -22,6 +35,7 @@ export type ChatAction =
   | { type: 'SET_SESSIONS'; payload: Session[] }
   | { type: 'SELECT_SESSION'; payload: { sessionId: number; messages: ChatMessage[] } }
   | { type: 'NEW_CHAT' }
+  | { type: 'ADD_TOKEN_USAGE'; payload: TokenUsage }
   | { type: 'ADD_USER_MESSAGE'; payload: ChatMessage }
   | { type: 'ADD_ASSISTANT_MESSAGE'; payload: ChatMessage }
   | { type: 'APPEND_CHUNK'; payload: { id: string; chunk: string } }
@@ -56,11 +70,16 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           m.sessionId === action.payload.sessionId &&
           !action.payload.messages.some(p => p.id === m.id)
       )
+      const opened = state.sessions.find(s => s.id === action.payload.sessionId)
       return {
         ...state,
         activeSessionId: action.payload.sessionId,
         messages: [...action.payload.messages, ...kept],
         isStreaming: kept.length > 0,
+        tokenUsage: {
+          input: opened?.tokens_in ?? 0,
+          output: opened?.tokens_out ?? 0,
+        },
       }
     }
 
@@ -73,7 +92,19 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       }
 
     case 'NEW_CHAT':
-      return { ...state, activeSessionId: null, messages: [], isStreaming: false }
+      return {
+        ...state, activeSessionId: null, messages: [], isStreaming: false,
+        tokenUsage: { input: 0, output: 0 },
+      }
+
+    case 'ADD_TOKEN_USAGE':
+      return {
+        ...state,
+        tokenUsage: {
+          input: state.tokenUsage.input + (action.payload.input || 0),
+          output: state.tokenUsage.output + (action.payload.output || 0),
+        },
+      }
 
     case 'ADD_USER_MESSAGE':
       return { ...state, messages: [...state.messages, action.payload] }

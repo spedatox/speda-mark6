@@ -351,10 +351,50 @@ private fun AttachItem(label: String, onClick: () -> Unit) {
     }
 }
 
-/** Provider-grouped glass dropdown of routable models. */
+/** Provider display names — mirrors PROVIDER_LABELS in InputBar.tsx. */
+private val PROVIDER_LABELS = mapOf(
+    "anthropic" to "ANTHROPIC",
+    "openai" to "OPENAI",
+    "gemini" to "GOOGLE GEMINI",
+    "zai" to "Z.AI · GLM",
+    "deepseek" to "DEEPSEEK",
+    "nvidia" to "NVIDIA NIM",
+    "ollama" to "DEAD ZONE PROTOCOL",
+)
+
+private val MODEL_ID_PREFIX = Regex("^(anthropic|openai|gemini|zai|deepseek|nvidia|ollama):")
+private val CLAUDE_PREFIX = Regex("^Claude\\s+", RegexOption.IGNORE_CASE)
+
+/** The web's shortModelName — drop the provider prefix and the "Claude " noise. */
+private fun shortModelName(name: String): String =
+    name.replace(MODEL_ID_PREFIX, "").replace(CLAUDE_PREFIX, "")
+
+/** Old backends report no provider; everything routed then was Anthropic. */
+private fun ModelInfo.providerKey(): String =
+    provider?.takeIf { it.isNotBlank() } ?: "anthropic"
+
+/**
+ * Provider-grouped glass dropdown of routable models — a single-expand accordion.
+ * The catalogue runs to a hundred-odd models across seven providers, which on a
+ * phone is minutes of scrolling, so only provider headers are listed and exactly
+ * one group is ever open: the one holding the pinned model, or whichever the owner
+ * taps. Opening a group shuts the previous one, so the sheet never grows past a
+ * screen.
+ */
 @Composable
 private fun ModelPicker(models: List<ModelInfo>, current: String, onPick: (String) -> Unit) {
     val palette = LocalHbPalette.current
+
+    // Provider order follows the backend's catalogue order, as the web does.
+    val groups = remember(models) {
+        models.groupBy { it.providerKey() }.toList()
+    }
+    val currentProvider = remember(models, current) {
+        models.firstOrNull { it.id == current }?.providerKey()
+    }
+    // Land on the pinned model's provider; null (unknown pin) means all shut.
+    var expanded by remember(currentProvider) { mutableStateOf(currentProvider) }
+
     Column(
         Modifier
             .padding(bottom = 52.dp)
@@ -370,38 +410,109 @@ private fun ModelPicker(models: List<ModelInfo>, current: String, onPick: (Strin
             )
             return@Column
         }
-        LazyColumn(Modifier.heightIn(max = 260.dp)) {
-            items(models, key = { it.id }) { m ->
-                val active = m.id == current
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(if (active) palette.accent.copy(alpha = 0.12f) else Color.Transparent)
-                        .clickable { onPick(m.id) }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        HbText(
-                            m.name.ifEmpty { m.id },
-                            style = HbType.headerBar.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.1.em),
-                            color = if (active) Color.White else palette.textDim,
-                            caps = true,
-                            maxLines = 1,
-                        )
-                        if (m.provider != null) {
-                            HbText(
-                                m.provider,
-                                style = HbType.readout.copy(fontSize = 9.sp),
-                                color = palette.textFaint,
-                                caps = true,
-                                maxLines = 1,
-                            )
-                        }
+        LazyColumn(Modifier.heightIn(max = 340.dp)) {
+            groups.forEach { (provider, list) ->
+                val open = provider == expanded
+                item(key = "provider:$provider") {
+                    ProviderHeader(
+                        label = PROVIDER_LABELS[provider] ?: provider,
+                        count = list.size,
+                        open = open,
+                        holdsCurrent = provider == currentProvider,
+                        onClick = { expanded = if (open) null else provider },
+                    )
+                }
+                if (open) {
+                    items(list, key = { it.id }) { m ->
+                        ModelRow(model = m, active = m.id == current, onClick = { onPick(m.id) })
                     }
                 }
             }
         }
+    }
+}
+
+/** One collapsed provider group — label, model count, open/shut chevron. */
+@Composable
+private fun ProviderHeader(
+    label: String,
+    count: Int,
+    open: Boolean,
+    holdsCurrent: Boolean,
+    onClick: () -> Unit,
+) {
+    val palette = LocalHbPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(if (open) palette.accent.copy(alpha = 0.10f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // Shut groups still say where the pin lives.
+        Box(
+            Modifier
+                .size(5.dp)
+                .clip(CircleShape)
+                .background(if (holdsCurrent) palette.accentBright else Color.Transparent),
+        )
+        HbText(
+            label,
+            style = HbType.headCyan.copy(fontSize = 11.sp, letterSpacing = 0.16.em),
+            color = if (open || holdsCurrent) palette.accentBright else palette.iconBright,
+            caps = true,
+            maxLines = 1,
+            modifier = Modifier.weight(1f),
+        )
+        HbText(
+            count.toString(),
+            style = HbType.readout.copy(fontSize = 10.sp),
+            color = palette.textFaint,
+        )
+        if (open) {
+            HbGlyphs.ChevronUp(palette.accentBright, size = 9.dp)
+        } else {
+            HbGlyphs.ChevronDown(palette.iconDim, size = 9.dp)
+        }
+    }
+}
+
+/** One model inside an open provider group. */
+@Composable
+private fun ModelRow(model: ModelInfo, active: Boolean, onClick: () -> Unit) {
+    val palette = LocalHbPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(if (active) palette.accent.copy(alpha = 0.12f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(start = 25.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            HbText(
+                shortModelName(model.name.ifEmpty { model.id }),
+                style = HbType.headerBar.copy(
+                    fontSize = 11.sp,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.SemiBold,
+                    letterSpacing = 0.1.em,
+                ),
+                color = if (active) Color.White else palette.textDim,
+                caps = true,
+                maxLines = 1,
+            )
+            if (model.description.isNotBlank()) {
+                HbText(
+                    model.description,
+                    style = HbType.readout.copy(fontSize = 9.5.sp),
+                    color = palette.iconDim,
+                    maxLines = 2,
+                )
+            }
+        }
+        if (active) HbGlyphs.Check(palette.accentBright, size = 11.dp)
     }
 }

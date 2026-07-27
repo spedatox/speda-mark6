@@ -96,6 +96,20 @@ function ForgeLink({ config, agentId }: { config: AppConfig; agentId: string }) 
   )
 }
 
+/** 847 → "847", 1_240 → "1.2k", 12_400 → "12k", 1_240_000 → "1.24M".
+ *  Keeps the readout a fixed narrow width as a long chat's counts grow.
+ *  The 999_500 cut-off (not 1_000_000) is deliberate: above it the rounded
+ *  thousands would render as "1000k" instead of rolling over to "1.00M". */
+function compactTokens(n: number): string {
+  if (n < 1000) return String(n)
+  if (n < 999_500) {
+    const k = n / 1000
+    return `${k < 10 ? k.toFixed(1) : Math.round(k)}k`
+  }
+  const m = n / 1_000_000
+  return `${m < 10 ? m.toFixed(2) : m.toFixed(1)}M`
+}
+
 function IconBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
   return (
     <button
@@ -185,6 +199,22 @@ export default function Header({
       <span className="hb-readout hb-hide-sm" style={{ fontSize: '0.62rem', color: 'var(--hb-text-faint)' }}>
         MSGS {String(state.messages.length).padStart(3, '0')}
       </span>
+
+      {/* Token spend for this link — prompt tokens in, completion tokens out,
+          summed over every turn and every provider. Hidden until the session
+          has actually spent something, so a fresh chat isn't cluttered. */}
+      {(state.tokenUsage.input > 0 || state.tokenUsage.output > 0) && (
+        <span
+          className="hb-readout hb-hide-sm"
+          title={`Tokens this chat — in: ${state.tokenUsage.input.toLocaleString()} · `
+            + `out: ${state.tokenUsage.output.toLocaleString()}\n`
+            + 'Input counts the whole prompt each turn: system, memory, tools and history.'}
+          style={{ fontSize: '0.62rem', color: 'var(--hb-text-faint)' }}
+        >
+          TOK <span style={{ color: 'var(--hb-text-dim)' }}>↑{compactTokens(state.tokenUsage.input)}</span>
+          {' '}<span style={{ color: 'var(--hb-text-dim)' }}>↓{compactTokens(state.tokenUsage.output)}</span>
+        </span>
+      )}
       {state.isStreaming ? (
         <span className="hb-hide-sm" style={{
           display: 'flex', alignItems: 'center', gap: 5,

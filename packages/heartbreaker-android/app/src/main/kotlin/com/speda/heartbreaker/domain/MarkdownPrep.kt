@@ -67,4 +67,73 @@ object MarkdownPrep {
 
     /** The full pipeline a text segment gets before rendering (TextSegment). */
     fun prepare(text: String): String = prepareMath(normalizeCodeFences(sanitizePartialMarkdown(text)))
+
+    /* ── Table leniency (no TS counterpart — see ProseText) ──────────────── */
+
+    private val DELIM_CELL = Regex(":?-+:?")
+
+    /** A line the GFM table parser would take as a row: leading pipe, and one more. */
+    private fun isPipeRow(line: String): Boolean {
+        val t = line.trim()
+        return t.startsWith("|") && t.indexOf('|', 1) > 0
+    }
+
+    /** The `|---|:--:|` line that turns the row above it into a header. */
+    private fun isDelimiterRow(line: String): Boolean {
+        val t = line.trim()
+        if ('-' !in t) return false
+        val cells = t.trim('|').split('|')
+        return cells.isNotEmpty() && cells.all { DELIM_CELL.matches(it.trim()) }
+    }
+
+    /**
+     * Re-attach a table row that a blank line stranded from the table above it.
+     *
+     * GFM ends a table at the first blank line, so a footer the model wrote as
+     *
+     *     | Item | Amount |
+     *     |---|---|
+     *     | Rent | 8,000 |
+     *
+     *     | Total | 24,245.83 |
+     *
+     * renders as literal pipes in a paragraph. The row is only re-attached when a
+     * real table sits directly above it and the row does not start a table of its
+     * own (no delimiter line follows it), which leaves every well-formed document
+     * byte-identical.
+     */
+    fun stitchTables(text: String): String {
+        if ('|' !in text) return text
+        val lines = text.split("\n")
+        val out = ArrayList<String>(lines.size)
+        var fenced = false
+        var inTable = false
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            if (line.trimStart().startsWith("```")) {
+                fenced = !fenced
+                inTable = false
+            } else if (fenced) {
+                // code — left untouched
+            } else if (inTable && line.isBlank()) {
+                var j = i + 1
+                while (j < lines.size && lines[j].isBlank()) j++
+                val orphan = j < lines.size && isPipeRow(lines[j]) &&
+                    (j + 1 >= lines.size || !isDelimiterRow(lines[j + 1]))
+                if (orphan) {
+                    i = j // the blank run is dropped; the row rejoins the table
+                    continue
+                }
+                inTable = false
+            } else if (inTable) {
+                if (!isPipeRow(line)) inTable = false
+            } else if (isPipeRow(line) && i + 1 < lines.size && isDelimiterRow(lines[i + 1])) {
+                inTable = true
+            }
+            out += line
+            i++
+        }
+        return out.joinToString("\n")
+    }
 }

@@ -214,6 +214,18 @@ export default function ChatMain({ config, onSelectSession }: Props) {
   const turnSessionRef = useRef<number | null>(null)
   const [, forceUpdate] = useState(0)
 
+  // Fold a finished turn's token spend into the header readout. The DONE event
+  // carries a delta (the backend persists the totals just after emitting it),
+  // so this adds rather than replaces. Older backends send `{}` — nothing to do.
+  const applyTurnUsage = useCallback((data: unknown) => {
+    const usage = (data as { usage?: { input?: number; output?: number } } | null)?.usage
+    if (!usage) return
+    dispatch({
+      type: 'ADD_TOKEN_USAGE',
+      payload: { input: usage.input ?? 0, output: usage.output ?? 0 },
+    })
+  }, [dispatch])
+
   interface SendOpts {
     images?: ImageBlock[]
     documents?: DocBlock[]  // non-image files — backend extracts their text
@@ -388,6 +400,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         } else if (event.type === 'done') {
           finalizeFlush()  // drain any buffered text before finalizing
           settled = true
+          applyTurnUsage(event.data)
           dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: event.session_id } })
           fetchSessions(config).then(s => dispatch({ type: 'SET_SESSIONS', payload: s })).catch(() => {})
           // Poll for the title — generate_title is a background task that finishes
@@ -560,6 +573,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
             if (handle != null) cancelAnimationFrame(handle)
             flush()
             settled = true
+            applyTurnUsage(event.data)
             dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: event.session_id } })
           } else if (event.type === 'error') {
             if (handle != null) cancelAnimationFrame(handle)

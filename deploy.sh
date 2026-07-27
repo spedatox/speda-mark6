@@ -50,6 +50,36 @@ else
   say "No DOMAIN set — API will be on http://<server-ip>:8000 (no TLS)"
 fi
 
+# ── n8n editor (optional public hostname) ────────────────────────────────────
+# n8n's port mapping is localhost-only and stays that way; publishing it means
+# giving Caddy a site block so it knows the hostname exists and can obtain a
+# certificate for it. Without one, Caddy has no cert for that SNI and aborts the
+# handshake — which browsers report as ERR_SSL_PROTOCOL_ERROR.
+#
+# Like $DOMAIN, the hostname comes from the gitignored .env and the generated
+# block lands in gitignored caddy-sites/, so it stays out of this public repo.
+# Requires DOMAIN to be set, since that is what starts Caddy at all.
+# The editor's only auth boundary is n8n's own owner login — it holds every
+# credential you have connected, so keep that password strong.
+N8N_DOMAIN="$(grep -E '^N8N_DOMAIN=' packages/igor/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' || true)"
+mkdir -p caddy-sites
+if [[ -n "${N8N_DOMAIN}" && -n "${DOMAIN}" ]]; then
+  say "n8n editor: ${N8N_DOMAIN} — Caddy will provision HTTPS and proxy to n8n:5678"
+  # Consumed by docker-compose.yml so n8n generates public URLs, not localhost ones.
+  export N8N_DOMAIN
+  export N8N_PROTOCOL="https"
+  export N8N_PUBLIC_URL="https://${N8N_DOMAIN}/"
+  export N8N_PROXY_HOPS=1
+  cat > caddy-sites/n8n.caddy <<EOF
+${N8N_DOMAIN} {
+	reverse_proxy n8n:5678
+}
+EOF
+else
+  [[ -n "${N8N_DOMAIN}" ]] && say "N8N_DOMAIN set but DOMAIN is not — Caddy is off, so n8n stays tunnel-only"
+  rm -f caddy-sites/n8n.caddy
+fi
+
 # ── H.İ.S.A.R. (optional peer) ───────────────────────────────────────────────
 # Hisar deploys from a sibling clone with its own gitignored .env. If that clone
 # is present and configured, mirror it to main and bring it up in the same
