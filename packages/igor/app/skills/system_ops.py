@@ -241,20 +241,72 @@ class SystemOpsSkill(Skill):
             parts.append("(no output)")
         return "\n\n".join(parts)
 
+    async def _docker_reachable(self) -> tuple[bool, str]:
+        """Can Docker actually be driven from wherever _exec runs?
+
+        The self-restart backgrounds itself, so its exit code only ever reports
+        that the SHELL launched — never that the restart happened. In the
+        containerized deployment there is no docker CLI and no
+        /var/run/docker.sock, so `docker restart` died with 'docker: not found'
+        into a log nobody reads while the tool cheerfully reported success and
+        told the agent to stand down. Probe first so that failure is visible."""
+        probe = "docker version --format {{.Server.Version}}"
+        try:
+            if _remote():
+                proc = await asyncio.create_subprocess_exec(
+                    *_ssh_argv(probe),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+            else:
+                proc = await asyncio.create_subprocess_shell(
+                    probe,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
+        except asyncio.TimeoutError:
+            return False, "the docker probe timed out"
+        except Exception as e:  # noqa: BLE001
+            return False, str(e)
+
+        if proc.returncode == 0:
+            return True, (stdout or b"").decode("utf-8", "replace").strip()
+        detail = ((stderr or b"") + (stdout or b"")).decode("utf-8", "replace").strip()
+        return False, detail or f"exit {proc.returncode}"
+
     async def _restart_service(self, args: dict, context: AgentContext) -> str:
         """Restart a container safely. For the SELF service (Igor/app) this is the
         one operation an in-process agent cannot do inline — restarting your own
         container mid-turn severs the reply ("pulls a Kurt Cobain"). So a self
-        restart is DETACHED on the host and DELAYED: the shell backgrounds
-        immediately (this call returns at once, letting the turn finish and
-        persist), then the container recycles `delay` seconds later, well after
-        the reply has flushed. Other services carry no such hazard and restart
-        synchronously with a status read-back."""
+        restart is DETACHED and DELAYED: the shell backgrounds immediately (this
+        call returns at once, letting the turn finish and persist), then the
+        container recycles `delay` seconds later, well after the reply has
+        flushed. Other services carry no such hazard and restart synchronously
+        with a status read-back.
+
+        Detached means detached in whichever namespace _exec uses — the real host
+        only when system_ops_host is set. With it unset the backend is talking to
+        its OWN container, which is exactly where Docker is unreachable, so every
+        path here is gated on _docker_reachable() first."""
         service = (args.get("service") or "app").strip().lower()
         # Resolve the live container by its compose-service label — robust to the
         # project name (speda-app-1 etc.) without hardcoding it.
         svc = "app" if service in _SELF_SERVICES else service
         resolve = f"docker ps -q -f label=com.docker.compose.service={shlex.quote(svc)}"
+
+        ok, detail = await self._docker_reachable()
+        if not ok:
+            where = "the host over SSH" if _remote() else "inside this container"
+            await self._log_op(context, f"restart_service ({svc}) UNAVAILABLE: {detail}")
+            return (
+                f"Could NOT restart {svc}: Docker is not reachable from {where} — {detail}\n\n"
+                "Nothing was scheduled and nothing restarted. The containerized backend "
+                "has no docker CLI and no /var/run/docker.sock, so it cannot recycle "
+                "itself: either system_ops_host must be set so ops run on the real host, "
+                "or the owner has to restart it. Report this to the owner as FAILED — "
+                "do not claim a restart is pending."
+            )
 
         if service in _SELF_SERVICES:
             delay = max(3, min(int(args.get("delay", 10) or 10), 60))
