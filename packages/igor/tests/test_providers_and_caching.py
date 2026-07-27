@@ -22,7 +22,11 @@ from app.profiles.speda import SPEDAProfile
 from app.services.anthropic_client import _apply_prompt_caching
 from app.services.llm_client import (
     _FINISH_TO_STOP,
+    _OpenAICompatStream,
     _responses_to_message,
+    _stop_reason_for,
+    TextBlock,
+    ToolUseBlock,
     _to_openai_params,
     _to_responses_params,
     _translate_message,
@@ -476,6 +480,97 @@ def test_finish_reason_mapping():
     assert _FINISH_TO_STOP["stop"] == "end_turn"
     assert _FINISH_TO_STOP["tool_calls"] == "tool_use"
     assert _FINISH_TO_STOP["length"] == "max_tokens"
+
+
+def test_tool_blocks_outrank_finish_reason():
+    # Gemini's compat bridge reports "stop" (or nothing at all) on a response
+    # that carries tool_calls. Mapped verbatim that ends the agentic loop at the
+    # moment the model asked for a tool — the tool never runs and the turn is
+    # left with an empty answer. The blocks decide.
+    calls = [ToolUseBlock(id="call_1", name="get_time", input={})]
+    assert _stop_reason_for("stop", calls) == "tool_use"
+    assert _stop_reason_for(None, calls) == "tool_use"
+    assert _stop_reason_for("STOP", calls) == "tool_use"
+    # Without tool blocks the reported reason still rules, case-insensitively.
+    assert _stop_reason_for("stop", [TextBlock(text="hi")]) == "end_turn"
+    assert _stop_reason_for("STOP", []) == "end_turn"
+    assert _stop_reason_for("length", [TextBlock(text="hi")]) == "max_tokens"
+
+
+def _chunk(*, content=None, tool_calls=None, finish=None, usage=None):
+    delta = SimpleNamespace(content=content, tool_calls=tool_calls)
+    return SimpleNamespace(
+        choices=[SimpleNamespace(delta=delta, finish_reason=finish)], usage=usage
+    )
+
+
+def _tc(*, index=None, id=None, name=None, arguments=None):
+    fn = SimpleNamespace(name=name, arguments=arguments)
+    return SimpleNamespace(index=index, id=id, function=fn)
+
+
+async def _drain(stream):
+    async for _ in stream.text_stream:
+        pass
+    return await stream.get_final_message()
+
+
+async def test_gemini_stream_tool_call_survives(monkeypatch):
+    # Full Gemini shape: preamble text, a tool call with NO id and NO index,
+    # arguments split across deltas, finish_reason "stop".
+    chunks = [
+        _chunk(content="Let me check."),
+        _chunk(tool_calls=[_tc(name="get_time", arguments='{"tz":')]),
+        _chunk(tool_calls=[_tc(arguments='"UTC"}')]),
+        _chunk(finish="stop"),
+    ]
+
+    class _Raw:
+        async def __aiter__(self):
+            for c in chunks:
+                yield c
+
+        async def close(self):
+            pass
+
+    stream = _OpenAICompatStream(None, {"model": "gemini-2.5-pro"}, "gemini")
+    stream._raw = _Raw()
+    msg = await _drain(stream)
+
+    assert msg.stop_reason == "tool_use"          # not end_turn — the loop continues
+    text = [b for b in msg.content if isinstance(b, TextBlock)]
+    tools = [b for b in msg.content if isinstance(b, ToolUseBlock)]
+    assert text[0].text == "Let me check."        # preamble survives the tool call
+    assert len(tools) == 1
+    assert tools[0].name == "get_time"
+    assert tools[0].input == {"tz": "UTC"}        # split arguments reassembled
+    assert tools[0].id                            # id synthesized when omitted
+
+
+async def test_gemini_stream_parallel_calls_without_index():
+    # Two calls, neither carrying an index. They must not collapse into one
+    # slot (which concatenates both argument blobs into unparseable JSON).
+    chunks = [
+        _chunk(tool_calls=[_tc(name="search", arguments='{"q":"a"}')]),
+        _chunk(tool_calls=[_tc(name="search", arguments='{"q":"b"}')]),
+        _chunk(finish="tool_calls"),
+    ]
+
+    class _Raw:
+        async def __aiter__(self):
+            for c in chunks:
+                yield c
+
+        async def close(self):
+            pass
+
+    stream = _OpenAICompatStream(None, {}, "gemini")
+    stream._raw = _Raw()
+    msg = await _drain(stream)
+
+    tools = [b for b in msg.content if isinstance(b, ToolUseBlock)]
+    assert [t.input for t in tools] == [{"q": "a"}, {"q": "b"}]
+    assert tools[0].id != tools[1].id  # distinct ids to pair results against
 
 
 # ── Dead Zone Protocol + hallucinated tools ──────────────────────────────────

@@ -283,7 +283,7 @@ class LLMClient:
             )
         return LLMMessage(
             content=blocks,
-            stop_reason=_FINISH_TO_STOP.get(choice.finish_reason, "end_turn"),
+            stop_reason=_stop_reason_for(choice.finish_reason, blocks),
             usage=_usage_from(resp.usage),
         )
 
@@ -1025,6 +1025,24 @@ def _gen_tool_id() -> str:
     return f"call_{uuid.uuid4().hex[:24]}"
 
 
+def _stop_reason_for(finish: str | None, blocks: list) -> str:
+    """finish_reason → Anthropic stop_reason, with the assembled blocks winning
+    over the reported reason whenever a tool was requested.
+
+    Gemini's compat bridge emits tool_calls while reporting finish_reason
+    "stop" — and on the streaming path frequently reports none at all. Mapping
+    that verbatim yields end_turn, so the orchestrator breaks out of the loop at
+    the exact moment the model asked for a tool: the tool never runs, and the
+    turn ends holding a tool_use block with no text. That renders as an empty
+    answer, and because the turn produced no chunks and no TOOL event, the
+    runner has nothing to persist — the reloaded transcript loses it entirely.
+    The blocks are the ground truth: if the model asked for a tool, the stop
+    reason IS tool_use. Same guard covers Ollama, which has the identical quirk."""
+    if any(isinstance(b, ToolUseBlock) for b in blocks):
+        return "tool_use"
+    return _FINISH_TO_STOP.get((finish or "").lower(), "end_turn")
+
+
 def _usage_from(u) -> Usage:
     if u is None:
         return Usage()
@@ -1085,8 +1103,20 @@ class _OpenAICompatStream:
                 self._text.append(delta.content)
                 yield delta.content
             for tc in delta.tool_calls or []:
+                # `index` is what pairs an argument delta with the call it
+                # belongs to. Gemini's bridge can omit it; without a fallback
+                # every parallel call collapses onto the key None (arguments
+                # concatenated into one unparseable blob) and sorted() then
+                # raises on mixed None/int keys. A fresh call carries its name,
+                # so start a new slot on those and keep appending to the last
+                # one otherwise.
+                idx = tc.index
+                if idx is None:
+                    name = getattr(tc.function, "name", None) if tc.function else None
+                    idx = len(self._tool_calls) if (name or not self._tool_calls) \
+                        else max(self._tool_calls)
                 acc = self._tool_calls.setdefault(
-                    tc.index, {"id": "", "name": "", "arguments": ""}
+                    idx, {"id": "", "name": "", "arguments": ""}
                 )
                 if tc.id:
                     acc["id"] = tc.id
@@ -1116,7 +1146,7 @@ class _OpenAICompatStream:
             )
         return LLMMessage(
             content=blocks,
-            stop_reason=_FINISH_TO_STOP.get(self._finish, "end_turn"),
+            stop_reason=_stop_reason_for(self._finish, blocks),
             usage=self._usage,
         )
 
