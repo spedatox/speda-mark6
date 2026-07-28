@@ -86,6 +86,13 @@ services:
       # these from packages/igor/.env so there is still exactly one secret file.
       - SPEDA_API_KEY=${SPEDA_API_KEY:-}
       - N8N_SECRET=${N8N_SECRET:-}
+      # …and the permission to actually READ them from an expression. n8n 2.x
+      # blocks {{ $env.* }} by default and fails the run with "access to env
+      # vars denied" — which is why only composer-generated workflows worked
+      # before: those bake the literal secret into the node. Repo-committed
+      # workflows cannot do that (the key would be in git), so they read $env
+      # and need this. Only the owner can author workflows here.
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
     volumes:
       - n8n_data:/home/node/.n8n
 
