@@ -154,6 +154,50 @@ class TelegramBot:
             ok_any = ok_any or result is not None
         return ok_any
 
+    async def send_question(
+        self, text: str, buttons: list[tuple[str, str]], chat_id: str | None = None
+    ) -> str:
+        """Send a message with one-tap answer buttons. Returns the message id
+        ('' on failure).
+
+        Separate from send_message because a question is not a notification: it
+        is not chunked (a question that splits across two bubbles puts the
+        buttons under the wrong half), and its whole point is the reply_markup.
+        `buttons` is [(label, callback_value)] — the value comes back on the tap
+        and is what gets recorded as the answer, so it stays short and stable
+        while the label can be reworded freely.
+        """
+        chat = chat_id or get_telegram_owner_id()
+        if not chat:
+            logger.warning("telegram_no_owner", extra={"agent_id": self.agent_id})
+            return ""
+        markup = {"inline_keyboard": [[{"text": label, "callback_data": value}]
+                                      for label, value in buttons]}
+        result = await self._call(
+            "sendMessage", chat_id=chat, text=_md_to_html(text[:_MAX_TEXT]),
+            parse_mode="HTML", reply_markup=markup,
+        )
+        if result is None:
+            result = await self._call(
+                "sendMessage", chat_id=chat, text=text[:_MAX_TEXT], reply_markup=markup,
+            )
+        return str(result.get("message_id", "")) if result else ""
+
+    async def answer_callback(self, callback_id: str, text: str = "") -> None:
+        """Acknowledge a button tap. Telegram shows a spinner on the button until
+        this is called, so skipping it makes a working ack look broken."""
+        await self._call("answerCallbackQuery", callback_query_id=callback_id, text=text[:200])
+
+    async def clear_buttons(self, chat_id: str, message_id: str) -> None:
+        """Strip the keyboard off an already-answered question. Without this the
+        old buttons stay tappable and a second tap looks like it did nothing."""
+        if not (chat_id and message_id):
+            return
+        await self._call(
+            "editMessageReplyMarkup", chat_id=chat_id, message_id=int(message_id),
+            reply_markup={"inline_keyboard": []},
+        )
+
     async def send_chat_action(self, chat_id: str | None = None, action: str = "typing") -> None:
         chat = chat_id or get_telegram_owner_id()
         if chat:
@@ -225,8 +269,11 @@ class TelegramBot:
 
     async def set_webhook(self, url: str, secret_token: str) -> bool:
         result = await self._call(
+            # callback_query is REQUIRED for reminder answer buttons — Telegram
+            # simply does not deliver taps to a webhook that hasn't asked for
+            # them, and the failure is silent: the button spins forever.
             "setWebhook", url=url, secret_token=secret_token,
-            allowed_updates=["message"], drop_pending_updates=False,
+            allowed_updates=["message", "callback_query"], drop_pending_updates=False,
         )
         return result is not None
 

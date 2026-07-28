@@ -59,6 +59,14 @@ class TelegramGateway:
         if update_id:
             self._seen[agent_id] = update_id
 
+        # 1b. Button taps (reminder answers) resolve here and RETURN — they must
+        # never reach the orchestrator. The whole point of an inline button is
+        # that answering "yes I took it" costs nothing; routing a tap through a
+        # turn would make the cheap path the expensive one.
+        if update.get("callback_query"):
+            await self._handle_callback(agent_id, update["callback_query"])
+            return
+
         message = update.get("message") or update.get("edited_message")
         if not message:
             return  # non-message update (we only subscribe to messages anyway)
@@ -180,6 +188,49 @@ class TelegramGateway:
         bg_model = profile.background_model(profile.allocate_telegram_model())
         asyncio.create_task(
             run_post_turn_tasks(session.id, request_id, _OWNER_USER_ID, bg_model)
+        )
+
+    async def _handle_callback(self, agent_id: str, cb: dict) -> None:
+        """A tapped answer button. Deterministic, no model, no turn.
+
+        Telegram spins the button until answerCallbackQuery comes back, so every
+        path here — including the rejections — must answer it, or a working ack
+        looks broken to the owner.
+        """
+        from app.services import reminders
+
+        bot = self._bots.get(agent_id)
+        cb_id = str(cb.get("id", ""))
+        sender_id = str(cb.get("from", {}).get("id", ""))
+
+        owner = get_telegram_owner_id()
+        if not owner or not hmac.compare_digest(sender_id, owner):
+            logger.warning("telegram_callback_unauthorized", extra={"agent_id": agent_id})
+            if bot and cb_id:
+                await bot.answer_callback(cb_id, "Not authorized.")
+            return
+
+        parsed = reminders.parse_callback(str(cb.get("data", "")))
+        if parsed is None:
+            if bot and cb_id:
+                await bot.answer_callback(cb_id, "")
+            return
+
+        cycle_id, value = parsed
+        async with AsyncSessionLocal() as db:
+            result = await reminders.answer(db, cycle_id, value, via="button", bots=self._bots)
+
+        note = {
+            "ok": "Kaydedildi ✅",
+            "already": "Already recorded.",
+            "unknown": "That reminder is gone.",
+        }.get(result.get("status", ""), "")
+        if bot and cb_id:
+            await bot.answer_callback(cb_id, note)
+        logger.info(
+            "telegram_callback_handled",
+            extra={"agent_id": agent_id, "cycle": cycle_id,
+                   "status": result.get("status")},
         )
 
     async def _build_user_content(self, bot, message: dict, text: str):

@@ -341,7 +341,7 @@ def owner_today() -> date_cls:
     from app.config import settings
 
     try:
-        return datetime.now(ZoneInfo(settings.owner_timezone)).date()
+        return owner_today()
     except Exception:  # noqa: BLE001 — unknown/invalid IANA name
         return datetime.utcnow().date()
 

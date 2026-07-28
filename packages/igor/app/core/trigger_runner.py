@@ -33,6 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.clock import owner_now
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal
 from app.models.message import Message
@@ -144,7 +145,9 @@ def session_title(payload: dict, today: datetime | None = None) -> str:
     the "AUTOMATED TRIGGER" boilerplate every time. generate_title is idempotent
     on an already-titled session, so it steps aside.
     """
-    stamp = (today or datetime.now()).strftime("%d %b")
+    # The owner's date, not the container's: a run at 01:00 Istanbul is still
+    # "yesterday" in UTC, and the sidebar would name it the wrong day.
+    stamp = (today or owner_now()).strftime("%d %b")
     return f"{_label(payload)} · {stamp}"[:255]
 
 

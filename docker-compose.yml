@@ -64,8 +64,14 @@ services:
       # network instead (see N8N_DOMAIN in deploy.sh).
       - "127.0.0.1:5678:5678"
     environment:
-      - GENERIC_TIMEZONE=${TZ:-UTC}
-      - TZ=${TZ:-UTC}
+      # The owner's zone, not UTC. n8n interprets every cron in this timezone,
+      # so a UTC default silently shifted "08:00" schedules to 11:00 local and
+      # people compensated by hand (a morning brief scheduled for 05:00). The
+      # app container deliberately stays on UTC — it STORES instants and
+      # converts at the edges (app/core/clock.py) — but n8n's whole job is
+      # wall-clock scheduling, so it must think in the owner's clock.
+      - GENERIC_TIMEZONE=${TZ:-Europe/Istanbul}
+      - TZ=${TZ:-Europe/Istanbul}
       - N8N_DIAGNOSTICS_ENABLED=false
       - N8N_RUNNERS_ENABLED=true
       # Behind Caddy, n8n cannot infer its own public URL — it would generate

@@ -16,6 +16,7 @@ from app.models.news_watch import NewsWatch
 from app.models.news_quota import NewsQuota
 from app.models.health_sample import HealthSample, HealthDaily
 from app.models.academic import AttendanceEntry, CourseSlot, Device, TermConfig
+from app.models.reminder import ReminderCycle
 
 __all__ = [
     "User", "Session", "Message", "Memory", "MemoryFile", "MemoryRevision",
@@ -24,4 +25,5 @@ __all__ = [
     "NewsItem", "NewsWatch", "NewsQuota",
     "HealthSample", "HealthDaily",
     "CourseSlot", "TermConfig", "AttendanceEntry", "Device",
+    "ReminderCycle",
 ]

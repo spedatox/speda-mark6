@@ -221,7 +221,16 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
         "name": name,
         "nodes": nodes,
         "connections": _connect(*chain),
-        "settings": {"executionOrder": "v1"},
+        # Pin the workflow's timezone explicitly. n8n interprets a cron in its
+        # own GENERIC_TIMEZONE otherwise, which is how "brief me at 8am" became
+        # a workflow scheduled for 05:00 that someone had hand-compensated —
+        # correct only for as long as nobody touched the container's TZ.
+        # A per-workflow timezone outranks the global one, so this stays right
+        # regardless of how the n8n service is configured.
+        "settings": {
+            "executionOrder": "v1",
+            "timezone": settings.owner_timezone,
+        },
     }
 
 

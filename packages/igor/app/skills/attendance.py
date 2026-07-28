@@ -8,6 +8,7 @@ surface over it, per Rule 1 and Rule 5.
 import logging
 from datetime import datetime
 
+from app.core.clock import owner_now
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal
 from app.services import academic as academic_service
@@ -131,7 +132,8 @@ class AskAttendanceSkill(Skill):
 
         async with AsyncSessionLocal() as db:
             occurrence = await academic_service.occurrence_just_ended(
-                db, datetime.now(), window_minutes=window
+                # Wall-clock comparison against the timetable — see core/clock.py.
+                db, owner_now(), window_minutes=window
             )
             if occurrence is None:
                 return "No lecture has just ended without an answer, so there is nothing to ask."

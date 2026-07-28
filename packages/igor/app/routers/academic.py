@@ -14,6 +14,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import owner_now
 from app.database import get_db
 from app.schemas.academic import (
     AttendanceRecordOut,
@@ -137,8 +138,11 @@ async def ask_pending(
     """
     validate_n8n_secret(request)
 
+    # owner_now(), not datetime.now(): the timetable stores wall-clock "HH:MM"
+    # in the owner's zone, and the container runs on UTC — comparing the two
+    # directly asked about the wrong lecture, three hours out (core/clock.py).
     occurrence = await academic_service.occurrence_just_ended(
-        db, datetime.now(), window_minutes=window_minutes
+        db, owner_now(), window_minutes=window_minutes
     )
     if occurrence is None:
         return {"status": "idle", "asked": None}

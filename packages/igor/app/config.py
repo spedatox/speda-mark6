@@ -209,9 +209,16 @@ class Settings(BaseSettings):
     # server clock and every stored timestamp stay UTC — correct for a server —
     # but the owner is a single human in ONE place, so the app PRESENTS time and
     # interprets "9am" in this zone. It is injected into every AgentContext and
-    # user-message stamps render in it. Default "UTC" = no localization. Read
-    # lazily at request time, so a change via the Configuration tab is live.
-    owner_timezone: str = "UTC"
+    # user-message stamps render in it. Read lazily at request time, so a change
+    # via the Configuration tab is live.
+    #
+    # The default is the owner's zone, NOT "UTC". It used to be UTC, and because
+    # the server's .env never set OWNER_TIMEZONE, every wall-clock decision in
+    # the system quietly ran three hours early: message stamps the agents read,
+    # the health day boundary, lecture-end detection. A default of "UTC" for a
+    # single-user system is not a neutral choice — it is a wrong one that nobody
+    # sees until they compare a timestamp to their own watch. See core/clock.py.
+    owner_timezone: str = "Europe/Istanbul"
 
     # Auth — single service credential (X-API-Key) for the desktop app + scripts.
     speda_api_key: str = "dev-key"

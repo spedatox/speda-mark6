@@ -93,14 +93,19 @@ def test_stamp_is_deterministic():
     ts = datetime(2026, 6, 11, 19, 40, 23)  # seconds must NOT leak into the stamp
     a = SessionManager.stamp_user_content("what time is it", ts)
     b = SessionManager.stamp_user_content("what time is it", ts)
-    assert a == b == "[2026-06-11 19:40 UTC] what time is it"
+    # created_at is stored UTC and rendered in the OWNER's zone (+03), because
+    # this stamp is how the agent knows what time it is — a UTC stamp had every
+    # agent answering "what time is it" three hours early. Byte-stability, the
+    # property that protects the prompt cache, is unaffected: same instant plus
+    # same zone is always the same string.
+    assert a == b == "[2026-06-11 22:40 +03] what time is it"
 
 
 def test_stamp_list_content_prepends_text_block():
     ts = datetime(2026, 6, 11, 8, 5, 0)
     content = [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "x"}}]
     stamped = SessionManager.stamp_user_content(content, ts)
-    assert stamped[0] == {"type": "text", "text": "[2026-06-11 08:05 UTC]"}
+    assert stamped[0] == {"type": "text", "text": "[2026-06-11 11:05 +03]"}
     assert stamped[1]["type"] == "image"
 
 

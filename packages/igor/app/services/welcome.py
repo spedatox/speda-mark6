@@ -93,10 +93,7 @@ async def get_welcome(agent_id: str, profiles, cache: WelcomeCache, *, user_id: 
     if profile is None:
         return ""
 
-    try:
-        now_dt = datetime.now(ZoneInfo(settings.owner_timezone))
-    except Exception:  # unknown IANA name → server clock (UTC)
-        now_dt = datetime.now()
+    now_dt = owner_now()
     pod = _part_of_day(now_dt.hour)
     key = (agent_id, pod)
     hit = cache.get(key)
