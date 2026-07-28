@@ -1,0 +1,236 @@
+{
+  "name": "Mail watch",
+  "meta": {
+    "description": "Watches any number of sender domains and only wakes an agent when mail actually arrives. The scan runs through Mark VI's own Gmail connection — no second credential, no model, no tokens. Everything is configured in ONE node: 'Mail list'. Fork per agent if you want different voices answering. Safe to activate with an empty list."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/10 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-every-10m",
+      "name": "Every 10 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "Mail arrives at any hour, so this runs around the clock — 144 scans a day, each one HTTP request and zero tokens.\n\nEvery rule in the list is checked on this one schedule. Widening it to */30 only delays a push; the SPEDA-Seen label means a longer gap can never lose a message."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════\n//  THE ONLY NODE YOU EDIT. One { … } block per sender domain you care about.\n// ═══════════════════════════════════════════════════════════════════════\n//\n//  domain    REQUIRED. Sender domain, e.g. 'tdv.org'. Subdomains count\n//            (burs@mail.tdv.org); lookalikes do not (info@nottdv.org) —\n//            Igor re-checks the From header properly, because Gmail's own\n//            from: operator is a fuzzy token match and lets those through.\n//\n//  agent     Optional, default 'speda'. Who reads the mail and writes the\n//            push — 'sentinel' for bank/money, 'ultron' for university,\n//            'centurion' for security notices.\n//\n//  intent    Optional. What the agent should DO with it. The mail body is\n//            already in the payload either way, so the agent never re-fetches.\n//            Leave empty for the sensible default (summarise + flag deadlines).\n//\n//  extra     Optional extra Gmail query terms, ANDed on: 'is:unread',\n//            'has:attachment', 'subject:fatura'.\n//\n//  label     Optional, default 'SPEDA-Seen'. The Gmail label that marks a\n//            message handled. Give a rule its OWN label only if two rules\n//            could match the SAME message — otherwise whichever fires first\n//            hides it from the other.\n//\n//  max       Optional, default 10, cap 25. Messages per scan.\n//\nconst MAILS = [\n\n  {\n    domain: 'tdv.org',\n    agent: 'speda',\n    intent: '',\n    extra: '',\n  },\n\n  // { domain: 'garantibbva.com.tr', agent: 'sentinel',\n  //   intent: 'Bu bir banka bildirimi. Tutarı, işlem tipini ve tarihi çıkar; olağandışıysa açıkça uyar.' },\n\n];\n\n// ── Nothing below this line needs editing ───────────────────────────────\nconst DEFAULT_INTENT = \"New mail arrived. The sender, subject and body of every message are ALREADY in `messages` in this payload — do NOT call Gmail or load a toolset, you have the mail. Read it and write the owner one short push in their language: who wrote, what they actually want, and any deadline, amount or action required. One line per message if several arrived. If something needs a reply or a date on the calendar, say so plainly and offer to do it — do not do it unasked.\";\n\nconst out = [];\nMAILS.forEach((m, i) => {\n  if (!m || !m.domain) { return; }\n  out.push({\n    json: {\n      domain: String(m.domain).trim().replace(/^@/, ''),\n      agent: (m.agent || 'speda').trim(),\n      intent: m.intent || DEFAULT_INTENT,\n      extra_query: m.extra || '',\n      label: m.label || 'SPEDA-Seen',\n      max_results: m.max || 10,\n    },\n    pairedItem: { item: 0 },\n  });\n});\n// An empty list returns no items, which stops the branch harmlessly.\nreturn out;"
+      },
+      "id": "mail-list",
+      "name": "Mail list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ],
+      "notes": "⚙️ EDIT HERE — the whole configuration surface. One block per domain, in the MAILS array. The comment block documents every field.\n\nEach entry becomes one item and every node downstream runs once per item, so watching five senders needs no other change.\n\nTO FORK: duplicate the workflow, keep only the rules you want in it, rename it, activate. Rules in different workflows are independent."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://app:8000/mail/watch/scan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"domain\": $json.domain, \"extra_query\": $json.extra_query, \"label\": $json.label, \"max_results\": $json.max_results, \"newer_than_days\": 2, \"include_body\": true, \"body_chars\": 2000 }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "scan-mail",
+      "name": "Igor: scan mail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ],
+      "notes": "THE CHEAP HALF — runs once per rule, taking all its settings from the list. Nothing to edit here.\n\nIgor queries `from:<domain> -label:<label> newer_than:2d` against the owner's Gmail using the connection from Settings ▸ Google Workspace, then re-checks each hit's From header strictly. No LLM, so a quiet mailbox costs nothing.\n\nneverError: one failing rule must not fail the run and take the others with it. The gate inspects each response."
+    },
+    {
+      "parameters": {
+        "jsCode": "const store = $getWorkflowStaticData('global');\nconst broken = store.broken || {};\nconst cfg = $('Mail list').all();\nconst out = [];\n\n$input.all().forEach((item, i) => {\n  const res = item.json || {};\n  const conf = (cfg[i] && cfg[i].json) || {};\n  const id = conf.domain || ('#' + i);\n  const status = res.status || 'error';\n\n  // Watch health, EDGE-triggered per domain: a revoked Google token makes\n  // every rule blind at once, and at a 10-minute cadence that would be 144\n  // identical pushes a day. One on the transition is enough.\n  if (status !== 'ok') {\n    if (!broken[id]) {\n      broken[id] = true;\n      out.push({ json: {\n        alert: true, domain: id, agent: conf.agent || 'speda',\n        detail: res.detail || res.message || status,\n        count: 0, message_ids: [], messages: [], intent: '',\n      }, pairedItem: { item: i } });\n    }\n    return;\n  }\n  broken[id] = false;\n\n  // The normal path: nothing arrived. No items = branch stops = no turn.\n  if (!res.count) { return; }\n\n  out.push({ json: {\n    alert: false,\n    domain: id,\n    agent: conf.agent || 'speda',\n    intent: conf.intent || '',\n    count: res.count,\n    message_ids: res.message_ids || [],\n    messages: res.messages || [],\n    label: conf.label || 'SPEDA-Seen',\n  }, pairedItem: { item: i } });\n});\n\nstore.broken = broken;\nreturn out;"
+      },
+      "id": "gate",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        300
+      ],
+      "notes": "The cost boundary — everything downstream spends money, everything upstream does not. On a normal run every rule reports zero and this returns no items, which stops the branch.\n\npairedItem is set explicitly so the mark-seen node can find its own rule's message ids."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://app:8000/trigger/{{ $json.agent }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"payload\": { \"type\": \"watchdog\", \"event\": \"new_mail\", \"job\": \"mail_watch\", \"automation\": \"Mail watch — \" + $json.domain, \"source\": \"gmail\", \"domain\": $json.domain, \"count\": $json.count, \"messages\": $json.messages, \"intent\": $json.alert ? (\"Your mail watch for \" + $json.domain + \" cannot read Gmail right now (\" + $json.detail + \"). Tell the owner in one short line that the watch is blind and Google likely needs reconnecting in Settings. Do not call any tool.\") : $json.intent }, \"output_mode\": \"push\" }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "notify",
+      "name": "Igor: trigger agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "THE EXPENSIVE HALF — one agentic turn per rule that found mail. The agent comes from the rule, so the URL is an expression; nothing to edit here.\n\nNo neverError, deliberately: a failure must kill the branch BEFORE mark-seen, leaving the mail unlabelled so the next poll retries it. Retries cover the 503 the trigger endpoint returns when the turn registry is at capacity."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://app:8000/mail/watch/seen",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"message_ids\": $('Gate').item.json.message_ids, \"label\": $('Gate').item.json.label }) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "mark-seen",
+      "name": "Igor: mark seen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1640,
+        300
+      ],
+      "notes": "Labels exactly the messages just handed to the agent, so the next scan skips them. This is what stops the same mail pushing every 10 minutes. Unread state is untouched — the mail still looks new in the inbox.\n\n$('Gate').item — not .first() — so when two rules both find mail, each ack labels ITS OWN messages.\n\nDeliberately AFTER the trigger: labelling first would lose a message whenever the notify call failed. On the blind-watch alert path message_ids is empty and this is a no-op."
+    }
+  ],
+  "connections": {
+    "Every 10 minutes": {
+      "main": [
+        [
+          {
+            "node": "Mail list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mail list": {
+      "main": [
+        [
+          {
+            "node": "Igor: scan mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Igor: scan mail": {
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate": {
+      "main": [
+        [
+          {
+            "node": "Igor: trigger agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Igor: trigger agent": {
+      "main": [
+        [
+          {
+            "node": "Igor: mark seen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "pinData": {}
+}

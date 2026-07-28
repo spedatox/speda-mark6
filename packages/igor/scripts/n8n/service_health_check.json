@@ -1,0 +1,171 @@
+{
+  "name": "Service health check",
+  "meta": {
+    "description": "Pings the services that make up the deployment and tells an agent when one goes down — and again when it comes back. Alerts fire on the EDGE, so a service that stays down produces one message, not one every five minutes. Pure HTTP, no model, until something is actually wrong. Everything is configured in ONE node: 'Service list'."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-every-5m",
+      "name": "Every 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "Five minutes is the worst-case time to hear that something died. Tighten to */1 if that matters to you — every tick is a handful of local HTTP requests and no tokens.\n\nNote that this workflow lives INSIDE the stack it watches: if the whole host goes down, so does the thing that would have told you. It catches a dead container, not a dead server. For that you want an outside pinger."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════\n//  THE ONLY NODE YOU EDIT. One { … } block per service to watch.\n// ═══════════════════════════════════════════════════════════════════════\n//\n//  name    REQUIRED. What the owner should hear it called.\n//  url     REQUIRED. Prefer an internal compose address (http://app:8000)\n//          over the public one — you want to know the SERVICE is down, not\n//          that Caddy or DNS is having a moment. Use the public URL only when\n//          the public path is what you are actually testing.\n//  expect  Optional, default 200. Expected HTTP status.\n//  agent   Optional, default 'orion' — Mark VI's own maintenance custodian,\n//          which is whose job this is. 'centurion' if you would rather it\n//          came from security.\n//\n//  Auth: internal Igor endpoints need X-API-Key. /health is the exception —\n//  it is the one unauthenticated path (CLAUDE.md), which is exactly what makes\n//  it the right thing to ping.\n//\nconst SERVICES = [\n\n  { name: 'Igor (app)',  url: 'http://app:8000/health' },\n  { name: 'Sandbox',     url: 'http://sandbox:9000/health' },\n\n  // { name: 'H.İ.S.A.R.', url: 'http://hisar:8600/health' },\n  // { name: 'Public site', url: 'https://your.domain/health', agent: 'centurion' },\n\n];\n\n// ── Nothing below this line needs editing ───────────────────────────────\nconst out = [];\nSERVICES.forEach(s => {\n  if (!s || !s.url || !s.name) { return; }\n  out.push({ json: {\n    name: String(s.name),\n    url: String(s.url),\n    expect: s.expect || 200,\n    agent: (s.agent || 'orion').trim(),\n  }, pairedItem: { item: 0 } });\n});\nreturn out;"
+      },
+      "id": "service-list",
+      "name": "Service list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ],
+      "notes": "⚙️ EDIT HERE — one block per service. Each becomes an item, and the ping node runs once per item.\n\nTO FORK: duplicate for a different agent or a different cadence (e.g. a slow hourly check of external dependencies)."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "ping",
+      "name": "Ping services",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ],
+      "notes": "fullResponse so the gate can read the STATUS CODE rather than guess from the body — a 500 that returns valid JSON must still count as down.\n\nneverError so a refused connection produces an item to inspect instead of failing the run; a health check that dies when the thing it checks dies is not a health check."
+    },
+    {
+      "parameters": {
+        "jsCode": "const store = $getWorkflowStaticData('global');\nconst down = store.down || {};\nconst cfg = $('Service list').all();\nconst out = [];\n\n$input.all().forEach((item, i) => {\n  const conf = (cfg[i] && cfg[i].json) || {};\n  const name = conf.name || ('#' + i);\n  const res = item.json || {};\n  const code = Number(res.statusCode || res.status || 0);\n  const healthy = code === Number(conf.expect || 200);\n  const wasDown = Boolean(down[name]);\n\n  // EDGE-TRIGGERED, both directions. A service that stays down must not send\n  // 288 identical pushes a day, and coming back is worth exactly one message\n  // so you know it is over without going to look.\n  if (!healthy && !wasDown) {\n    down[name] = true;\n    out.push({ json: {\n      event: 'down', name, url: conf.url, code: code || 'no response',\n      agent: conf.agent || 'orion',\n    }, pairedItem: { item: i } });\n  } else if (healthy && wasDown) {\n    down[name] = false;\n    out.push({ json: {\n      event: 'recovered', name, url: conf.url, code,\n      agent: conf.agent || 'orion',\n    }, pairedItem: { item: i } });\n  }\n});\n\nstore.down = down;\n// Everything steady = no items = no turn.\nreturn out;"
+      },
+      "id": "gate",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        300
+      ],
+      "notes": "The cost boundary. Nothing downstream runs while every service is healthy — and while every service is UNhealthy either, because the alert already went out. Only transitions cost a turn.\n\nstore.down holds one flag per service in the workflow's static data. Note that it resets if you re-import the workflow, so the first tick after a re-import re-announces anything currently down."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://app:8000/trigger/{{ $json.agent }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"payload\": { \"type\": \"watchdog\", \"event\": \"service_\" + $json.event, \"job\": \"service_health_check\", \"automation\": \"Health — \" + $json.name, \"service\": $json.name, \"url\": $json.url, \"status_code\": $json.code, \"intent\": $json.event === 'down' ? (\"The service '\" + $json.name + \"' just stopped responding (\" + $json.url + \" returned \" + $json.code + \"). Tell the owner in one or two short lines: what is down and what it means for them in practice. If you have host tools available you may check the obvious cause, but do NOT restart anything or run destructive commands unasked.\") : (\"The service '\" + $json.name + \"' is responding normally again. Tell the owner in ONE short line that it recovered. Do not investigate, do not speculate about the cause, do not call tools.\") }, \"output_mode\": \"push\" }) }}",
+        "options": {
+          "timeout": 20000
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 5000
+      },
+      "id": "alert",
+      "name": "Igor: alert agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        300
+      ],
+      "notes": "One turn per transition. The recovery intent explicitly forbids investigating — otherwise 'it's back' turns into a five-tool post-mortem nobody asked for.\n\nIf Igor itself is what went down, this call fails too and no push arrives. That is unavoidable from inside the stack, and it is why the down-detection here is a convenience rather than a guarantee."
+    }
+  ],
+  "connections": {
+    "Every 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Service list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Service list": {
+      "main": [
+        [
+          {
+            "node": "Ping services",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ping services": {
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate": {
+      "main": [
+        [
+          {
+            "node": "Igor: alert agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "pinData": {}
+}
