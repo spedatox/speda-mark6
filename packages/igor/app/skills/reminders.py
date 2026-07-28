@@ -1,5 +1,7 @@
 import logging
+from datetime import timedelta
 
+from app.core.clock import owner_now
 from app.core.context import AgentContext
 from app.services import reminders as reminder_service
 from app.skills.base import Skill
@@ -16,9 +18,12 @@ class RemindersSkill(Skill):
         "the owner must confirm (medication, supplements, packing a bag) and it "
         "would be bad for them to simply miss it; the text you pass is re-sent "
         "verbatim on every retry, so write it complete and self-contained. Use "
-        "'list' to see what is still waiting, and 'answer' the moment they tell "
+        "'list' to see what is still waiting, 'answer' the moment they tell "
         "you in chat that they did it ('aldım', 'took it', 'done', 'skipped') — "
-        "otherwise it keeps buzzing until it gives up. Do NOT use 'ask' for "
+        "otherwise it keeps buzzing until it gives up — and 'history' to answer "
+        "questions about the past ('did I take it Tuesday?', 'how many days did "
+        "I miss this week?'), which is the ONLY trustworthy source for that; "
+        "never answer such a question from memory. Do NOT use 'ask' for "
         "ordinary notifications that need no confirmation (use "
         "send_telegram_message), and never answer on the owner's behalf unless "
         "they actually said so. Returns the reminder that was sent or closed, "
@@ -30,8 +35,12 @@ class RemindersSkill(Skill):
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["ask", "list", "answer"],
-                "description": "'ask' to send a reminder that nags until answered, 'list' to see open ones, 'answer' to close one.",
+                "enum": ["ask", "list", "answer", "history"],
+                "description": "'ask' to send a reminder that nags until answered, 'list' to see open ones, 'answer' to close one, 'history' to look up what was taken or missed on past days.",
+            },
+            "days": {
+                "type": "integer",
+                "description": "For action 'history': how many past days to cover (default 14).",
             },
             "text": {
                 "type": "string",
@@ -124,6 +133,39 @@ class RemindersSkill(Skill):
                 f"Reminder sent to the owner's Telegram with answer buttons. It will "
                 f"re-ask every {result['every_minutes']} min until they answer, up to "
                 f"{result['max_asks']} times. Do not also send this as a normal message."
+            )
+
+        if action == "history":
+            days = max(1, min(int(args.get("days") or 14), 120))
+            rows = await reminder_service.history(
+                context.db,
+                reminder_id=(args.get("reminder_id") or "").strip(),
+                limit=days * 4,   # a few reminders per day
+            )
+            if not rows:
+                return (
+                    "No reminder history yet — nothing has been asked and closed. "
+                    "Do not guess at what the owner did or didn't take."
+                )
+            cutoff = (owner_now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            rows = [r for r in rows if (r.get("day") or "") >= cutoff]
+            if not rows:
+                return f"No reminders were closed in the last {days} days."
+
+            answered = [r for r in rows if r["status"] == "answered"]
+            missed = [r for r in rows if r["status"] == "gave_up"]
+            lines = [
+                f"- {r['day']} [{r['reminder_id']}] "
+                + (f"{r['answer']}" if r["status"] == "answered" else "NO ANSWER (gave up)")
+                + f" · asked {r['asks']}x"
+                + (f" · via {r['via']}" if r.get("via") else "")
+                for r in rows
+            ]
+            return (
+                f"Last {days} days — {len(answered)} answered, {len(missed)} missed "
+                f"(of {len(rows)} reminders):\n" + "\n".join(lines) +
+                "\n\nThese are the owner's real answers. Report them as they are; a day "
+                "with no row was never asked, which is not the same as a day they skipped."
             )
 
         if action == "list":

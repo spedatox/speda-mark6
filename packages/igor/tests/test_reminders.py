@@ -217,3 +217,30 @@ async def test_another_agents_tick_does_not_touch_it(db):
     await R.open_ask(db, agent_id="atomix", reminder_id="atomix_evening", text=EVENING, bots=bots)
     await R.tick(db, "speda", [], bots, now=R.owner_now() + timedelta(minutes=30))
     assert len(bot.sent) == 1, "SPEDA's tick must not re-ask Atomix's reminder"
+
+
+# ── The ledger Atomix reads back ─────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_history_records_taken_and_missed_days(db):
+    """'Did I take it Tuesday?' must be answerable from data, not memory."""
+    bot = FakeBot(); bots = FakeBots(bot)
+    spec = dict(SPEC, id="lustral", max_asks=2)
+
+    # Day 1: answered.
+    d1 = datetime(2026, 7, 20, 8, 31)
+    await R.tick(db, "atomix", [spec], bots, now=d1)
+    cid, _ = R.parse_callback(bot.sent[-1]["buttons"][0][1])
+    await R.answer(db, cid, "taken", bots=bots)
+
+    # Day 2: ignored until it gave up.
+    d2 = datetime(2026, 7, 21, 8, 31)
+    for i in range(4):
+        await R.tick(db, "atomix", [spec], bots, now=d2 + timedelta(minutes=6 * i))
+
+    rows = await R.history(db, "lustral")
+    by_day = {r["day"]: r for r in rows}
+    assert by_day["2026-07-20"]["status"] == "answered"
+    assert by_day["2026-07-20"]["answer"] == "taken"
+    assert by_day["2026-07-21"]["status"] == "gave_up"
+    assert by_day["2026-07-21"]["asks"] == 2
