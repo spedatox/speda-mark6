@@ -70,6 +70,10 @@ if [[ -n "${N8N_DOMAIN}" && -n "${DOMAIN}" ]]; then
   export N8N_PROTOCOL="https"
   export N8N_PUBLIC_URL="https://${N8N_DOMAIN}/"
   export N8N_PROXY_HOPS=1
+  # Unlink first: a file left by a manual root-run deploy is not writable by the
+  # CI deploy user, and `cat >` cannot clobber a file it cannot open. Removing it
+  # only needs write permission on the directory, which the deploy user has.
+  rm -f caddy-sites/n8n.caddy
   cat > caddy-sites/n8n.caddy <<EOF
 ${N8N_DOMAIN} {
 	reverse_proxy n8n:5678
@@ -104,6 +108,7 @@ if [[ -f "${HISAR_DIR}/.env" ]]; then
     say "H.İ.S.A.R. configured — ${HISAR_DOMAIN}"
     # max_size must be >= HISAR_MAX_UPLOAD_BYTES or Caddy truncates large
     # uploads before the API ever sees them.
+    rm -f caddy-sites/hisar.caddy
     cat > caddy-sites/hisar.caddy <<EOF
 ${HISAR_DOMAIN} {
 	reverse_proxy hisar:8600
