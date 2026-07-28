@@ -8,8 +8,8 @@ one-time setup.
 
 **Status:** **steps 1–2 implemented** (backend: model, service, endpoints,
 `health_data` skill — see §4). Steps 3–6 (the Android courier, the n8n digest)
-are still design-only. Builds on the Heartbreaker Core client
-(`packages/heartbreaker-android`) and the existing skill/registry architecture.
+are still design-only. Builds on the SPEDA GO client
+(`packages/speda-go`) and the existing skill/registry architecture.
 Nothing here changes the orchestrator (CLAUDE.md Rule 5).
 
 ---
@@ -25,7 +25,7 @@ There are two ways to read Samsung Health data:
 
 So the pipeline never talks to Samsung at all. Samsung Health remains the
 *collector* (phone sensors + Galaxy Watch); Health Connect is the *system
-mailbox* we read; Heartbreaker Droid is the *courier*; Igor is the *warehouse*;
+mailbox* we read; SPEDA GO is the *courier*; Igor is the *warehouse*;
 Atomix is the *analyst*.
 
 This also future-proofs the pipe: if the owner ever switches to Google Fit,
@@ -96,7 +96,7 @@ Health Connect (on-device system store)
         │  WorkManager periodic sync, ~every 4h + on app open
         │  Changes API differential token → only NEW/CHANGED records
         ▼
-Heartbreaker Droid  ── POST /health/ingest (X-API-Key, batched JSON) ──►  Igor
+SPEDA GO  ── POST /health/ingest (X-API-Key, batched JSON) ──►  Igor
                                                                            │
                               ┌────────────────────────────────────────────┤
                               ▼                                            ▼
@@ -137,7 +137,7 @@ Heartbreaker Droid  ── POST /health/ingest (X-API-Key, batched JSON) ──�
 
 ---
 
-## 2. Android implementation (`packages/heartbreaker-android`)
+## 2. Android implementation (`packages/speda-go`)
 
 New package: `app/src/main/kotlin/com/speda/heartbreaker/health/`
 

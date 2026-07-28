@@ -255,8 +255,8 @@ npm install && npm run heartbreaker:dev
 ```
 
 On Windows, **`speda.ps1`** boots the whole system — backend, sandbox, the Forge
-link, and the app — with a single command. **Heartbreaker Core** opens straight
-in Android Studio from `packages/heartbreaker-android` (Gradle 8.11 + JDK 21);
+link, and the app — with a single command. **SPEDA GO** opens straight
+in Android Studio from `packages/speda-go` (Gradle 8.11 + JDK 21);
 point it at your backend on first launch and the key is kept in the Android
 Keystore.
 
@@ -288,11 +288,11 @@ per-package component docs ([IGOR.md](packages/igor/IGOR.md),
 | [SETUP.md](docs/SETUP.md) · [DEPLOY.md](DEPLOY.md) | Install & production runbook |
 | [MEMORY_ARCHITECTURE.md](docs/MEMORY_ARCHITECTURE.md) · [MEMORY_REVISION_R1.md](docs/MEMORY_REVISION_R1.md) | How memory works |
 | [TELEGRAM_ARCHITECTURE.md](docs/TELEGRAM_ARCHITECTURE.md) | The bot fleet |
-| [ANDROID_PORT_PLAN.md](docs/ANDROID_PORT_PLAN.md) | Heartbreaker Core — the parity contract with the desktop client |
+| [ANDROID_PORT_PLAN.md](docs/ANDROID_PORT_PLAN.md) | SPEDA GO — the parity contract with the desktop client |
 | [FORGE_INTEGRATION_PLAN.md](docs/FORGE_INTEGRATION_PLAN.md) · [NEWS_BRIEFING_PLAN.md](docs/NEWS_BRIEFING_PLAN.md) · [BACKGROUND_OPS_PLAN.md](docs/BACKGROUND_OPS_PLAN.md) · [STARK_MAPS_PLAN.md](docs/STARK_MAPS_PLAN.md) · [ATOMIX_HEALTH_SYNC.md](docs/ATOMIX_HEALTH_SYNC.md) | Design notes for the newest systems |
 
 **Monorepo:** `packages/igor` (**Igor** — the backend) · `packages/heartbreaker`
-(the desktop/web app) · `packages/heartbreaker-android` (**Heartbreaker Core**)
+(the desktop/web app) · `packages/speda-go` (**SPEDA GO**)
 · `packages/striker` (**SPEDA Mark VI Core** — the single-agent "lite" build) ·
 `packages/sandbox` (the isolated computer). The Forge is a separate deployment
 that connects back as a peer.

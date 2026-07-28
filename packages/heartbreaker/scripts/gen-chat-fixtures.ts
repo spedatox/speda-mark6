@@ -122,7 +122,7 @@ const prep = prepCases.map(c => ({
 }))
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const outDir = resolve(__dirname, '../../heartbreaker-android/app/src/test/resources/fixtures')
+const outDir = resolve(__dirname, '../../speda-go/app/src/test/resources/fixtures')
 mkdirSync(outDir, { recursive: true })
 writeFileSync(resolve(outDir, 'segments.json'), JSON.stringify(out, null, 2) + '\n')
 writeFileSync(resolve(outDir, 'markdown_prep.json'), JSON.stringify(prep, null, 2) + '\n')

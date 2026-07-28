@@ -1,4 +1,4 @@
-# ANDROID PORT PLAN — Heartbreaker Droid
+# ANDROID PORT PLAN — SPEDA GO
 
 **Goal:** a native Android (Kotlin + Jetpack Compose) port of Heartbreaker with a **1:1 visual and UX experience** against the desktop/web client, plus Android-exclusive features layered on top. The Stark fluid-glass hologram language is non-negotiable: same tokens, same material, same motion, same copy.
 
@@ -75,7 +75,7 @@ No backend changes are required for parity. §6 lists the additive endpoints for
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Location | `packages/heartbreaker-android/` in this monorepo | Sits next to the parity source; inert for the GitOps prod deploy (server never builds it). Shares the token fixtures (§7) |
+| Location | `packages/speda-go/` in this monorepo | Sits next to the parity source; inert for the GitOps prod deploy (server never builds it). Shares the token fixtures (§7) |
 | App ID | `com.speda.heartbreaker` | Matches the Electron `appUserModelId` |
 | Language / UI | Kotlin 2.1.x, Jetpack Compose (BOM current), single Activity | The app is one chat surface + overlays; matches desktop UX exactly. No fragment/nav-graph ceremony — overlays are composables, like the web |
 | minSdk / target | **minSdk 31, targetSdk 35** | API 31+ gives RenderEffect backdrop blur (the glass). Personal single-user app → we control the device. The occluding-fill fallback exists anyway if it must drop to 29 |
@@ -96,7 +96,7 @@ No backend changes are required for parity. §6 lists the additive endpoints for
 Module layout (kept deliberately light):
 
 ```
-packages/heartbreaker-android/
+packages/speda-go/
 ├── app/                        # activity, DI graph, navigation-free shell
 │   └── src/main/kotlin/com/speda/heartbreaker/
 │       ├── ui/                 # screens & overlays (mirror of components/)

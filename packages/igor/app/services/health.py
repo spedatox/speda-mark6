@@ -1,7 +1,7 @@
 """
 Health sample ingestion, daily rollups and query helpers.
 
-The owner's biometrics arrive from Heartbreaker Core (Health Connect → phone →
+The owner's biometrics arrive from SPEDA GO (Health Connect → phone →
 POST /health/ingest); this module owns everything that happens after the router
 validates the payload — Rule 1 keeps the router logic-free. The health_data
 skill reads through here too, so the aggregation rules live in exactly one place.

@@ -38,13 +38,13 @@ ships today.
 | **Igor** (backend) | [../packages/igor/IGOR.md](../packages/igor/IGOR.md) | FastAPI agentic core — orchestrator, registry, skills, memory, automations, news, turns |
 | **Heartbreaker** (desktop client) | [../packages/heartbreaker/HEARTBREAKER.md](../packages/heartbreaker/HEARTBREAKER.md) | The primary UI — Stark fluid-glass command deck (Electron + React) |
 | **Striker** / *SPEDA Mark VI Core* | [../packages/striker/STRIKER.md](../packages/striker/STRIKER.md) | The single-agent, public "lite" build — same features, calmer theme, SPEDA only |
-| **Heartbreaker Core** (Android) | [../packages/heartbreaker-android/README.md](../packages/heartbreaker-android/README.md) · [fonts](../packages/heartbreaker-android/docs/FONTS.md) | Native Kotlin + Compose client — the deck in your pocket |
+| **SPEDA GO** (Android) | [../packages/speda-go/README.md](../packages/speda-go/README.md) · [fonts](../packages/speda-go/docs/FONTS.md) | Native Kotlin + Compose client — the deck in your pocket |
 | **Sandbox** | *(no standalone doc — see [`packages/sandbox/server.py`](../packages/sandbox/server.py) and the `run_command` skill)* | The isolated Linux "capable computer" |
 
 > **Package layout.** `packages/igor` (backend) · `packages/heartbreaker`
 > (primary desktop/web UI) · `packages/striker` (single-agent lite build,
 > re-themed from the old `packages/desktop` neutral base) ·
-> `packages/heartbreaker-android` (native mobile) · `packages/sandbox` (isolated
+> `packages/speda-go` (native mobile) · `packages/sandbox` (isolated
 > computer). The Forge is a separate deployment that connects back as a peer.
 
 ---
@@ -75,7 +75,7 @@ Deep dives on how each major system was designed and built.
 ### Clients & surfaces
 | Doc | What |
 |---|---|
-| [ANDROID_PORT_PLAN.md](ANDROID_PORT_PLAN.md) | Heartbreaker Core — the parity contract with the desktop client |
+| [ANDROID_PORT_PLAN.md](ANDROID_PORT_PLAN.md) | SPEDA GO — the parity contract with the desktop client |
 | [STARK_MAPS_PLAN.md](STARK_MAPS_PLAN.md) | Inline maps & traffic-aware navigation |
 
 ### Health & platform

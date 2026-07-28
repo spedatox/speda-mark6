@@ -41,7 +41,7 @@ for (const [key, accent] of Object.entries(accents)) {
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const outDir = resolve(
   __dirname,
-  '../../heartbreaker-android/designsystem/src/test/resources/fixtures',
+  '../../speda-go/designsystem/src/test/resources/fixtures',
 )
 mkdirSync(outDir, { recursive: true })
 

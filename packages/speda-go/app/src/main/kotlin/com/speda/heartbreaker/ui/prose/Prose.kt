@@ -415,14 +415,16 @@ private fun Hr() {
 
 /* ── Table — data grid ───────────────────────────────────────────────────── */
 
-/**
+/*
  * A table is laid out by hand because the two things the CSS gets for free from
  * the browser — `table-layout: auto` and `border-collapse: collapse` — have no
  * equivalent in a Row/Column of independently-sized cells. Without them every
  * cell was a fixed 150dp box drawing its own four borders at its own height, so
- * a row of unequal cells read as a scatter of floating rectangles rather than a
- * grid. [TableColumns.solve] restores the first, [CellPlate] the second.
+ * a row of unequal cells read as a scatter of floating rectangles rather than as
+ * a grid. TableColumns.solve restores the first, CellPlate the second.
  */
+
+/** One parsed row. Ragged rows are padded out to the widest row at layout time. */
 private class TableRowData(val cells: List<TableCell>, val header: Boolean)
 
 private fun tableRows(node: TableBlock): List<TableRowData> {

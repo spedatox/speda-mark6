@@ -6,7 +6,7 @@ Read this file in full before touching a single file. This is not optional.
 
 ## What This Repo Is
 
-This is `speda-mark-vi` — **Igor**, the backend core of SPEDA (Specialized Personal Executive Digital Assistant). It is a single-user, proactive ambient AI assistant. Component names: **Igor** = this backend; **Heartbreaker** = the desktop client (packages/heartbreaker); **The Legion** = the sub-agent worker system (wire name `Task`).
+This is `speda-mark-vi` — **Igor**, the backend core of SPEDA (Specialized Personal Executive Digital Assistant). It is a single-user, proactive ambient AI assistant. Component names: **Igor** = this backend; **Heartbreaker** = the desktop client (packages/heartbreaker); **SPEDA GO** = the mobile client (packages/speda-go — never "Heartbreaker mobile" or "Heartbreaker Droid"; the Kotlin package id `com.speda.heartbreaker` stays as-is on purpose, renaming it would orphan every installed app's Keystore data); **The Legion** = the sub-agent worker system (wire name `Task`).
 
 **Multi-tenant architecture.** SPEDA and five of the Superior Six — Sentinel, NightCrawler, Ultron, Centurion, Atomix — are **in-process agent profiles** inside this single backend, alongside **Orion**, the system's own maintenance & memory custodian. Each is an `AgentProfile` subclass with its own identity, model policy, tool allowlist, and prompt directory. They share one event loop, one database, one `CapabilityRegistry`, and one owner's memory. They are addressed by `agent_id` on every request. A separate `warroom` profile (a `SPEDAProfile` subclass) is the **House Party Protocol** command channel — the same brain and tools as SPEDA under a distinct `agent_id` so full-roster operations never bleed into the owner's day-to-day SPEDA session.
 

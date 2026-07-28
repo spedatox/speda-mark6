@@ -225,7 +225,7 @@ defaulting from client location, geocode failure → diagnostic string, missing 
 
 ---
 
-## 2. Android — `packages/heartbreaker-android`
+## 2. Android — `packages/speda-go`
 
 ### 2.1 Dependencies (`gradle/libs.versions.toml` + `app/build.gradle.kts`)
 

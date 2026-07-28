@@ -36,7 +36,7 @@ async def health(request: Request) -> JSONResponse:
 
 @router.post("/health/ingest")
 async def health_ingest(body: HealthIngestRequest, db: AsyncSession = Depends(get_db)):
-    """Accept a batch of biometrics from Heartbreaker Core. Idempotent on
+    """Accept a batch of biometrics from SPEDA GO. Idempotent on
     (metric, start_ts, origin), so the phone can safely re-send a batch whose
     POST failed — duplicates are counted, not stored twice."""
     return await health_service.ingest_samples(

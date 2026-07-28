@@ -357,6 +357,30 @@ ssh-copy-id -i ~/.ssh/speda_deploy.pub user@your-server-ip
 
 The workflow only triggers on pushes that touch: `packages/igor/**`, `packages/sandbox/**`, `docker-compose.yml`, `deploy.sh`, `Caddyfile`, or the workflow itself. Concurrency control ensures only one deploy runs at a time.
 
+### SPEDA GO — mirror + APK release (`.github/workflows/speda-go.yml`)
+
+A second workflow covers the mobile client. Every push to `main` touching
+`packages/speda-go/**` builds a **signed release APK**, mirrors the package into
+the standalone repo [`spedatox/speda-go`](https://github.com/spedatox/speda-go),
+and publishes the APK as a Release there, tagged `v<spedaGoVersion>-b<run>`.
+
+| Secret | Value |
+|---|---|
+| `SPEDA_GO_TOKEN` | Fine-grained PAT, **only** repo `spedatox/speda-go`, permission *Contents: Read and write* |
+| `SPEDA_GO_KEYSTORE_BASE64` | `base64 -w0` of the release keystore (`.jks`) |
+| `SPEDA_GO_KEYSTORE_PASSWORD` | Keystore password |
+| `SPEDA_GO_KEY_ALIAS` | Key alias inside the keystore (`speda-go`) |
+| `SPEDA_GO_KEY_PASSWORD` | Key password |
+
+```bash
+keytool -genkeypair -keystore speda-go-release.jks -storetype PKCS12 -alias speda-go -keyalg RSA -keysize 4096 -validity 10950
+```
+
+Keep the `.jks` **off the repo and backed up**. Losing it means no future build
+can upgrade an installed SPEDA GO — only a full uninstall/reinstall. The
+standalone repo is a mirror: never hand-edit it, and note that its `README.md`
+is the one file the sync deliberately leaves alone.
+
 ---
 
 ## 11. Docker Services Reference

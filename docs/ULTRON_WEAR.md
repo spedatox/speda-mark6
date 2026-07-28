@@ -222,7 +222,7 @@ stale record arriving late never clobbers a newer answer.
 ## 7. Design language
 
 Ultron Wear runs the Speda (Heartbreaker) design language, ported from
-`packages/heartbreaker-android/designsystem`: the same `ThemeEngine`, one accent
+`packages/speda-go/designsystem`: the same `ThemeEngine`, one accent
 in → the whole palette out, re-hued. Ultron's accent is **`#8a93a6`** from
 `Brands.kt`, hue ≈ 221°, so the structural tokens land in cool blue-slate.
 

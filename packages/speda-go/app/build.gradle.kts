@@ -5,6 +5,15 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Release plumbing. CI (.github/workflows/speda-go-release.yml) injects the build
+// number and the signing material through the environment; a plain local build
+// sees none of it and falls back to versionCode 1 and an unsigned release.
+// providers.environmentVariable (not System.getenv) keeps the configuration cache
+// honest — it re-configures when these change instead of baking in stale values.
+val baseVersion = providers.gradleProperty("spedaGoVersion").get()
+val buildNumber = providers.environmentVariable("SPEDA_GO_BUILD_NUMBER").orNull?.toIntOrNull()
+val keystoreFile = providers.environmentVariable("SPEDA_GO_KEYSTORE_FILE").orNull
+
 android {
     namespace = "com.speda.heartbreaker"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -13,12 +22,26 @@ android {
         applicationId = "com.speda.heartbreaker"   // matches the Electron appUserModelId
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0-m0"
+        versionCode = buildNumber ?: 1
+        versionName = if (buildNumber != null) "$baseVersion-b$buildNumber" else baseVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
+
+    // Personal keystore, single-user app, no Play Store. Present only when the
+    // environment supplies it (CI secrets, or a local export before a release
+    // build) — otherwise the release APK comes out unsigned rather than failing.
+    val releaseSigning = keystoreFile
+        ?.takeIf { it.isNotBlank() && file(it).exists() }
+        ?.let { path ->
+            signingConfigs.create("release") {
+                storeFile = file(path)
+                storePassword = providers.environmentVariable("SPEDA_GO_KEYSTORE_PASSWORD").orNull
+                keyAlias = providers.environmentVariable("SPEDA_GO_KEY_ALIAS").orNull
+                keyPassword = providers.environmentVariable("SPEDA_GO_KEY_PASSWORD").orNull
+            }
+        }
 
     buildTypes {
         debug {
@@ -32,8 +55,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Personal keystore, wired at release time. Single-user app, no Play Store.
-            // signingConfig = signingConfigs.getByName("release")
+            signingConfig = releaseSigning
         }
     }
 

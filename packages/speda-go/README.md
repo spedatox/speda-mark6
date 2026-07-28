@@ -1,4 +1,4 @@
-# Heartbreaker Core
+# SPEDA GO
 
 Native Android (Kotlin + Jetpack Compose) port of the Heartbreaker desktop client,
 targeting a 1:1 visual/UX parity with the sub-768px web layout. See
@@ -113,3 +113,30 @@ or the build scripts stay compiled against the missing `android {}` DSL.
 M2 (Rich content) per the plan: markdown renderer + prose styles, code blocks,
 math, chart/calendar fences, WebView widgets, file cards + downloads, image
 attachments + lightbox, doc uploads, voice input + read-aloud.
+
+## Shipping — the downstream mirror and APK releases
+
+This package is the **source of truth**. It is also published on its own as
+[`spedatox/speda-go`](https://github.com/spedatox/speda-go), and that repo is a
+**mirror** — never hand-edit it, the next sync overwrites whatever you change.
+
+`.github/workflows/speda-go.yml` (in the monorepo root, since only the root
+`.github` is live for Actions) runs on every push to `main` that touches
+`packages/speda-go/**`:
+
+1. unit tests, then `:app:assembleRelease` signed with the personal keystore
+   from repo secrets — the run fails rather than shipping an unsigned APK;
+2. `git archive` of this directory is rsynced over the standalone repo
+   (`--delete`, so the mirror is exact) and pushed as one `sync:` commit;
+3. the APK is attached to a GitHub Release there, tagged
+   `v<spedaGoVersion>-b<run number>`.
+
+The **only** file exempt from the mirror is the standalone repo's `README.md`,
+which keeps its own product front page. Everything else must stay identical.
+
+Versioning: `spedaGoVersion` in `gradle.properties` is the marketing version;
+CI sets `versionCode` to the workflow run number and `versionName` to
+`<spedaGoVersion>-b<run>`, so every build upgrade-installs over the last one.
+Bump `spedaGoVersion` by hand when the milestone changes. A local
+`assembleRelease` with no signing env set produces an **unsigned** APK at
+`versionCode 1` — that is deliberate, not a misconfiguration.
