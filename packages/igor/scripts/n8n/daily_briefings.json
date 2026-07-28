@@ -19,18 +19,24 @@
       "name": "Every 5 minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "notes": "A 5-minute TICK, not the briefing schedule — each briefing's own time lives in the list below. This is what lets one workflow hold briefings at 08:00, 20:00 and Sunday 19:00 without three separate workflows.\n\nA briefing therefore fires on the first tick at or after its time, i.e. up to 5 minutes late. If you need one to the minute, give it its own workflow with a real cron.\n\nThe tick itself costs nothing — it is a Code node deciding 'not yet' 287 times a day."
     },
     {
       "parameters": {
-        "jsCode": "// ═══════════════════════════════════════════════════════════════════════\n//  THE ONLY NODE YOU EDIT. One { … } block per scheduled briefing.\n// ═══════════════════════════════════════════════════════════════════════\n//\n//  ⚠️ EACH FIRING COSTS ONE AGENTIC TURN. That is intended here — you are\n//     asking an agent to actually go and do work — but it is why this list\n//     should hold briefings, not watchers. Anything of the form \"check if X\n//     happened\" belongs in mail_watch / web_publish_watch instead, where the\n//     check is free and only a real hit costs anything.\n//\n//  id       REQUIRED, stable. Used to remember \"already fired today\".\n//  at       REQUIRED, 'HH:MM' in the timezone below.\n//  days     '*' or weekday numbers, 1=Mon … 7=Sun. E.g. '1,2,3,4,5' or '7'.\n//  agent    Who runs it, in whose voice it arrives. Default 'speda'.\n//  intent   REQUIRED. What the agent should DO — written as an instruction to\n//           itself. Be specific about which tools to use; a vague intent gets\n//           a vague briefing.\n//  mode     'push' (delivered to Telegram, the default) or 'silent' (runs and\n//           is stored, nothing is sent — good for indexing or bookkeeping).\n//\nconst TZ = 'Europe/Istanbul';\n\nconst BRIEFINGS = [\n\n  {\n    id: 'morning_brief',\n    at: '08:00',\n    days: '*',\n    agent: 'speda',\n    mode: 'push',\n    intent: 'Sabah brifingi. Takvimi (calendar_list_events), okunmamış önemli mailleri (gmail_search) ve haber başlıklarını (news_headlines) GERÇEKTEN çağır; bugünün planını, çakışmaları ve dikkat edilmesi gerekenleri kısa maddeler halinde yaz. Aracın döndürmediği hiçbir şeyi uydurma — bir bölüm boşsa boş olduğunu söyle.',\n  },\n\n  // { id: 'evening_review', at: '20:00', days: '*', agent: 'atomix', mode: 'push',\n  //   intent: 'Akşam değerlendirmesi. Bugünün sağlık verilerini (health_data) çek; adım, uyku ve aktiviteyi dünle karşılaştır, tek paragraf yorumla.' },\n\n  // { id: 'weekly_finance', at: '19:00', days: '7', agent: 'sentinel', mode: 'push',\n  //   intent: 'Haftalık finans özeti. Bütçeyi ve son işlemleri incele, haftanın harcama trendini ve dikkat çeken kalemleri çıkar.' },\n\n];\n\n// ── Nothing below this line needs editing ───────────────────────────────\n// \"Already fired today\" lives in the workflow's static data, so a briefing\n// fires ONCE at its time rather than on every tick for the rest of the day.\nconst store = $getWorkflowStaticData('global');\nconst fired = store.fired || {};\n\n// Read the clock in the configured zone explicitly rather than trusting the\n// container's TZ — that assumption is exactly what made every schedule in this\n// system three hours out.\nconst parts = new Intl.DateTimeFormat('en-GB', {\n  timeZone: TZ, hour12: false,\n  year: 'numeric', month: '2-digit', day: '2-digit',\n  hour: '2-digit', minute: '2-digit', weekday: 'short',\n}).formatToParts(new Date()).reduce((a, p) => (a[p.type] = p.value, a), {});\n\nconst today = `${parts.year}-${parts.month}-${parts.day}`;\nconst nowMin = Number(parts.hour) * 60 + Number(parts.minute);\nconst dowNum = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 }[parts.weekday];\n\nconst out = [];\nBRIEFINGS.forEach(b => {\n  if (!b || !b.id || !b.at || !b.intent) { return; }\n  if (fired[b.id] === today) { return; }                       // already ran today\n  const days = String(b.days || '*');\n  if (days !== '*' && !days.split(',').map(s => s.trim()).includes(String(dowNum))) { return; }\n  const [hh, mm] = String(b.at).split(':').map(Number);\n  if (nowMin < hh * 60 + mm) { return; }                       // not yet\n\n  fired[b.id] = today;\n  out.push({ json: {\n    id: b.id,\n    agent: (b.agent || 'speda').trim(),\n    intent: b.intent,\n    mode: b.mode === 'silent' ? 'silent' : 'push',\n    at: b.at,\n  }, pairedItem: { item: 0 } });\n});\n\nstore.fired = fired;\nreturn out;"
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════\n//  THE ONLY NODE YOU EDIT. One { … } block per scheduled briefing.\n// ═══════════════════════════════════════════════════════════════════════\n//\n//  ⚠️ EACH FIRING COSTS ONE AGENTIC TURN. That is intended here — you are\n//     asking an agent to actually go and do work — but it is why this list\n//     should hold briefings, not watchers. Anything of the form \"check if X\n//     happened\" belongs in mail_watch / web_publish_watch instead, where the\n//     check is free and only a real hit costs anything.\n//\n//  id       REQUIRED, stable. Used to remember \"already fired today\".\n//  at       REQUIRED, 'HH:MM' in the timezone below.\n//  days     '*' or weekday numbers, 1=Mon … 7=Sun. E.g. '1,2,3,4,5' or '7'.\n//  agent    Who runs it, in whose voice it arrives. Default 'speda'.\n//  intent   REQUIRED. What the agent should DO — written as an instruction to\n//           itself. Be specific about which tools to use; a vague intent gets\n//           a vague briefing.\n//  mode     'push' (delivered to Telegram, the default) or 'silent' (runs and\n//           is stored, nothing is sent — good for indexing or bookkeeping).\n//\nconst TZ = 'Europe/Istanbul';\n\nconst BRIEFINGS = [\n\n  {\n    id: 'morning_brief',\n    at: '08:00',\n    days: '*',\n    agent: 'speda',\n    mode: 'push',\n    intent: \"GUNLUK SABAH BRIEFINGI — bu bir is akisidir, GERCEK araclarla calistir. Su adimlari sirayla yap ve owner a kisa, oz, Turkce bir sabah briefingi yaz (yazdigin metin owner a otomatik push olarak iletilir — send_telegram_message CAGIRMA):\\n\\n1. ONEMLI MAILLER — use_toolset ile google_gmail i yukle, sonra son 24 saatteki onemli mailleri gercek verilerle ozetle (spam/bulten haric). Onemli mail yoksa \\\"yeni onemli mail yok\\\" yaz.\\n2. TAKVIM — use_toolset ile google_calendar i yukle, bugunun etkinliklerini ve onumuzdeki 3 gundeki onemli etkinlikleri listele. Bossa oyle belirt.\\n3. ONEMLI HABERLER — news_deep_dive ile Turkiye ve kategoriler bazinda (country='tr') son 24 saatin one cikan 3-5 haberini kisa ver. category secerek (politics, business, technology) farkli alanlari temsil et.\\n4. SERVER DURUMU — system_info (metric=all) ile disk, bellek ve uptime i GERCEK degerlerle raporla; anormal bir sey varsa vurgula.\\n\\nHicbir veriyi UYDURMA. Bir arac hata verir veya bos donerse bunu durustce yaz. Baslik: \\\"Gunluk Briefing — [bugunun tarihi]\\\".\",\n  },\n\n  // { id: 'evening_review', at: '20:00', days: '*', agent: 'atomix', mode: 'push',\n  //   intent: 'Akşam değerlendirmesi. Bugünün sağlık verilerini (health_data) çek; adım, uyku ve aktiviteyi dünle karşılaştır, tek paragraf yorumla.' },\n\n  // { id: 'weekly_finance', at: '19:00', days: '7', agent: 'sentinel', mode: 'push',\n  //   intent: 'Haftalık finans özeti. Bütçeyi ve son işlemleri incele, haftanın harcama trendini ve dikkat çeken kalemleri çıkar.' },\n\n];\n\n// ── Nothing below this line needs editing ───────────────────────────────\n// \"Already fired today\" lives in the workflow's static data, so a briefing\n// fires ONCE at its time rather than on every tick for the rest of the day.\nconst store = $getWorkflowStaticData('global');\n// First tick after activation (or after a re-import wipes staticData):\n// record today's already-passed briefings as done WITHOUT running them.\n// Otherwise activating this at 14:00 immediately fires the 08:00 brief.\nconst firstRun = store.fired === undefined;\nconst fired = store.fired || {};\n\n// Read the clock in the configured zone explicitly rather than trusting the\n// container's TZ — that assumption is exactly what made every schedule in this\n// system three hours out.\nconst parts = new Intl.DateTimeFormat('en-GB', {\n  timeZone: TZ, hour12: false,\n  year: 'numeric', month: '2-digit', day: '2-digit',\n  hour: '2-digit', minute: '2-digit', weekday: 'short',\n}).formatToParts(new Date()).reduce((a, p) => (a[p.type] = p.value, a), {});\n\nconst today = `${parts.year}-${parts.month}-${parts.day}`;\nconst nowMin = Number(parts.hour) * 60 + Number(parts.minute);\nconst dowNum = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 }[parts.weekday];\n\nconst out = [];\nBRIEFINGS.forEach(b => {\n  if (!b || !b.id || !b.at || !b.intent) { return; }\n  if (fired[b.id] === today) { return; }                       // already ran today\n  const days = String(b.days || '*');\n  if (days !== '*' && !days.split(',').map(s => s.trim()).includes(String(dowNum))) { return; }\n  const [hh, mm] = String(b.at).split(':').map(Number);\n  if (nowMin < hh * 60 + mm) { return; }                       // not yet\n\n  fired[b.id] = today;\n  if (firstRun) { return; }        // seed only, never retro-fire\n  out.push({ json: {\n    id: b.id,\n    agent: (b.agent || 'speda').trim(),\n    intent: b.intent,\n    mode: b.mode === 'silent' ? 'silent' : 'push',\n    at: b.at,\n  }, pairedItem: { item: 0 } });\n});\n\nstore.fired = fired;\nreturn out;"
       },
       "id": "briefing-list",
       "name": "Briefing list",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [520, 300],
+      "position": [
+        520,
+        300
+      ],
       "notes": "⚙️ EDIT HERE — the whole configuration surface. One block per briefing in the BRIEFINGS array; the comment block documents every field.\n\nA briefing fires once per day: store.fired[id] records the date it last ran, in the workflow's static data, so the remaining ~140 ticks that day return nothing.\n\nCAUTION when testing: clearing that memory (or renaming an id) makes a past-due briefing fire immediately on the next tick, which costs a turn.\n\nTO FORK: duplicate, keep the briefings you want, rename, activate."
     },
     {
@@ -40,21 +46,32 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "X-API-Key", "value": "={{ $env.SPEDA_API_KEY }}" },
-            { "name": "X-N8N-Secret", "value": "={{ $env.N8N_SECRET }}" }
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ ({ \"payload\": { \"type\": \"cron\", \"event\": \"scheduled_briefing\", \"job\": $json.id, \"automation\": \"Briefing — \" + $json.id, \"scheduled_for\": $json.at, \"intent\": $json.intent }, \"output_mode\": $json.mode }) }}",
-        "options": { "timeout": 20000 },
+        "options": {
+          "timeout": 20000
+        },
         "retryOnFail": true
       },
       "id": "run-briefing",
       "name": "Igor: run briefing",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [800, 300],
+      "position": [
+        800,
+        300
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 10000,
@@ -62,8 +79,28 @@
     }
   ],
   "connections": {
-    "Every 5 minutes": { "main": [[{ "node": "Briefing list", "type": "main", "index": 0 }]] },
-    "Briefing list": { "main": [[{ "node": "Igor: run briefing", "type": "main", "index": 0 }]] }
+    "Every 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Briefing list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Briefing list": {
+      "main": [
+        [
+          {
+            "node": "Igor: run briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
