@@ -1,0 +1,164 @@
+{
+  "name": "TDV mail watch",
+  "meta": {
+    "description": "Every 10 minutes, asks Igor whether any unhandled mail has arrived from @tdv.org. The scan is pure Gmail REST through Mark VI's own Google connection — no model, no tokens. SPEDA is only triggered when a message actually matches, and the handled mail is labelled SPEDA-Seen afterwards so it never fires twice. Import into n8n, check the domain in the scan node, activate."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/10 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-every-10m",
+      "name": "Every 10 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "notes": "Mail arrives at any hour, so this runs around the clock — 144 scans a day, each one HTTP request and zero tokens. Widen to */30 if you want it lazier; the SPEDA-Seen label means a longer gap only delays the push, it never loses a message."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://app:8000/mail/watch/scan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"domain\": \"tdv.org\", \"max_results\": 10, \"newer_than_days\": 2, \"include_body\": true, \"body_chars\": 2000 }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "scan-tdv",
+      "name": "Igor: scan tdv.org mail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300],
+      "notes": "THE CHEAP HALF. Igor runs `from:tdv.org -label:SPEDA-Seen newer_than:2d` against the owner's Gmail via the connection already set up in Settings ▸ Google Workspace, then re-checks every hit's From header against the domain properly (Gmail's from: is a fuzzy token match — it also hits display names and lookalikes). No LLM is involved, so a poll that finds nothing costs nothing.\n\ndomain is the only field worth changing. Subdomains count (burs@mail.tdv.org); nottdv.org does not.\n\nnewer_than_days is a floor, not the dedup mechanism — the SPEDA-Seen label is. It exists so a fresh watch does not fire on years of archived mail on its first tick.\n\nneverError: a 401/5xx must not mark the run failed and spam the error workflow every 10 minutes. The response is inspected in the gate below instead."
+    },
+    {
+      "parameters": {
+        "jsCode": "const store = $getWorkflowStaticData('global');\nconst res = $input.first().json;\nconst status = res.status ?? 'error';\n\n// ── Watch health, EDGE-triggered ────────────────────────────────────────────\n// A revoked Google token or a broken Igor makes this watch silently blind,\n// which is the failure mode worth waking SPEDA for. But only on the edge: at a\n// 10-minute cadence, alerting every poll would turn one expired token into 144\n// pushes a day.\nif (status !== 'ok') {\n  const wasBroken = Boolean(store.broken);\n  store.broken = true;\n  if (wasBroken) { return []; }\n  return [{ json: {\n    alert: true,\n    status,\n    detail: res.detail ?? res.message ?? '',\n    count: 0,\n    message_ids: [],\n    messages: [],\n  } }];\n}\nstore.broken = false;\n\n// ── The normal path ─────────────────────────────────────────────────────────\n// Nothing from TDV. Return NO items: n8n stops the branch on an empty return,\n// so no trigger call, no agentic turn, no tokens. This is what makes the whole\n// workflow nearly free — it is the outcome ~99% of runs have.\nif (!res.count) { return []; }\n\nreturn [{ json: {\n  alert: false,\n  count: res.count,\n  message_ids: res.message_ids ?? [],\n  messages: res.messages ?? [],\n} }];"
+      },
+      "id": "gate",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300],
+      "notes": "The cost boundary. Everything downstream of this node spends money; everything upstream does not. A Code node that returns [] is used rather than an IF node on purpose — far fewer schema surfaces to get wrong across n8n versions, and it stops the branch outright.\n\nstore.broken lives in the workflow's static data, so the edge-trigger survives between runs."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://app:8000/trigger/speda",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"payload\": { \"type\": \"watchdog\", \"event\": \"tdv_mail\", \"job\": \"tdv_mail_watch\", \"automation\": \"TDV mail watch\", \"source\": \"gmail\", \"domain\": \"tdv.org\", \"count\": $json.count, \"messages\": $json.messages, \"intent\": $json.alert ? (\"Your TDV mail watch cannot read Gmail right now (status: \" + $json.status + \", detail: \" + $json.detail + \"). Tell the owner in one short line that the watch is blind and Google likely needs reconnecting in Settings. Do not call any tool — you already have everything you know.\") : \"New mail arrived from tdv.org. The sender, subject and body of every message are ALREADY in `messages` in this payload — do NOT call Gmail or load a toolset, you have the mail. Read it and write the owner one short push in their language: who wrote, what they actually want, and any deadline, amount or action required. One line per message if several arrived. If something needs a reply or a date on the calendar, say so plainly and offer to do it — do not do it unasked.\" }, \"output_mode\": \"push\" }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "notify-speda",
+      "name": "Igor: trigger SPEDA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "THE EXPENSIVE HALF — one agentic turn, reached only on a real hit.\n\nThe mail bodies travel in the payload, and the intent says so, so SPEDA does not spend a second round trip re-fetching what the scan already read.\n\nNo neverError here, deliberately: if this call fails the branch must die BEFORE the mark-seen node, leaving the mail unlabelled so the next poll retries it. Retries cover the 503 the trigger endpoint returns when the turn registry is at capacity.\n\nRetarget to /trigger/sentinel (money) or another agent by editing the URL — the push is then composed in that agent's voice."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://app:8000/mail/watch/seen",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"message_ids\": $('Gate').first().json.message_ids }) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "mark-seen",
+      "name": "Igor: mark seen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 300],
+      "notes": "Applies the Gmail label SPEDA-Seen (created on first use) to exactly the messages that were just handed to SPEDA, so the next scan skips them. Unread state is left alone — the mail still looks untouched in the inbox.\n\nDeliberately AFTER the trigger: labelling first would lose a message whenever the notify call failed. The cost of this ordering is a possible duplicate push if the trigger succeeds and this call fails; that is the right trade.\n\nOn the watch-broken alert path message_ids is empty and this is a no-op."
+    }
+  ],
+  "connections": {
+    "Every 10 minutes": {
+      "main": [[{ "node": "Igor: scan tdv.org mail", "type": "main", "index": 0 }]]
+    },
+    "Igor: scan tdv.org mail": {
+      "main": [[{ "node": "Gate", "type": "main", "index": 0 }]]
+    },
+    "Gate": {
+      "main": [[{ "node": "Igor: trigger SPEDA", "type": "main", "index": 0 }]]
+    },
+    "Igor: trigger SPEDA": {
+      "main": [[{ "node": "Igor: mark seen", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "pinData": {}
+}

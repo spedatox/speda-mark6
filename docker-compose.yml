@@ -80,6 +80,12 @@ services:
       # X-Forwarded-For. Without this n8n sees every client as the Docker
       # gateway IP, which breaks its login rate limiting.
       - N8N_PROXY_HOPS=${N8N_PROXY_HOPS:-0}
+      # Credentials the imported workflows read as {{ $env.* }} when they call
+      # back into Igor — /trigger and /mail/watch/* both require X-API-Key, and
+      # the n8n-facing ones additionally require X-N8N-Secret. deploy.sh exports
+      # these from packages/igor/.env so there is still exactly one secret file.
+      - SPEDA_API_KEY=${SPEDA_API_KEY:-}
+      - N8N_SECRET=${N8N_SECRET:-}
     volumes:
       - n8n_data:/home/node/.n8n
 

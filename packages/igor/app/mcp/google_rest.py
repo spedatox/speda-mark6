@@ -484,6 +484,20 @@ _PEOPLE_TOOLS = [
 ]
 
 
+# ── Public surface for non-LLM callers ─────────────────────────────────────────
+# services/mail_watch.py is polled by n8n and must never go through the tool /
+# orchestrator layer (that would spend a turn per poll), but it needs exactly the
+# token cache, request path and MIME walking the tools use. These aliases are
+# that seam: one Gmail implementation, two callers. Import these, not the
+# underscored originals.
+
+GMAIL_API = _GMAIL
+google_access_token = _Token.get
+google_api_request = _req
+gmail_header = _hdr
+gmail_text_body = _extract_body
+
+
 def build_google_clients(access_token: str | None = None) -> list[GoogleRestClient]:
     """Build the Google Workspace REST clients. `access_token` is accepted for
     signature-compatibility with the old MCP builder but ignored — clients fetch

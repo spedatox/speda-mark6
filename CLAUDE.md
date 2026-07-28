@@ -198,6 +198,8 @@ speda-mark-vi/
     │   ├── connections.py       # OAuth connections (Google, Notion)
     │   ├── files.py
     │   ├── import_chats.py
+    │   ├── mail.py              # POST /mail/watch/{scan,seen} — n8n's LLM-free Gmail probe
+    │   ├── web_watch.py         # POST /web/watch/{scan,ack} — n8n's LLM-free page-change probe
     │   ├── memory.py
     │   ├── news.py
     │   ├── telegram.py
@@ -236,6 +238,8 @@ speda-mark-vi/
     │   ├── welcome.py           # Home-screen welcome remark + WelcomeCache
     │   ├── compaction.py, embeddings.py, embedding_indexer.py, history_indexer.py
     │   ├── health.py            # Atomix health-sample ingestion
+    │   ├── mail_watch.py        # Gmail domain scan + SPEDA-Seen labelling (no LLM) — see "Cheap probes"
+    │   ├── web_watch.py         # Page fetch + line-level publish diff (no LLM) — see "Cheap probes"
     │   ├── forge_peer.py, sandbox_launcher.py   # External backend (Forge) process/session bridge
     │   ├── pending_asks.py      # Permission asks relayed from external peers
     │   ├── telegram.py
@@ -331,6 +335,24 @@ Example n8n trigger payloads:
 **Temp file cleanup:** n8n runs a daily scheduled workflow that calls `DELETE /admin/outputs`. This endpoint clears files in `/tmp/speda_outputs/` older than 24 hours. The endpoint requires the `X-API-Key` header. Do not implement any other cleanup mechanism.
 
 Do not implement any internal scheduler. Do not add cron logic to the backend. Ever.
+
+### Cheap probes — a poll must not cost a turn
+
+A watcher that fires `POST /trigger/{agent_id}` on every tick spends a full agentic turn to discover that nothing happened. At a ten-minute cadence that is ~144 turns a day to answer "no". So a watcher is split in two, and the split is the rule:
+
+| Half | What it is | Cost |
+|------|-----------|------|
+| **The probe** | A plain endpoint that answers one deterministic question — `/academic/ask-pending`, `/mail/watch/scan`, `/web/watch/scan` | One HTTP call. Zero tokens. |
+| **The trigger** | `POST /trigger/{agent_id}`, reached only when the probe returned a hit | One agentic turn. |
+
+- A probe holds **no reasoning** — "did anyone from this domain write", "did a new line appear on this page", "did a lecture just end". If answering needs judgement, it belongs in the turn, not the probe.
+- Probes live in `app/services/` behind a thin router (Rule 1) and require `X-API-Key` **plus** `X-N8N-Secret` — they read the owner's mail and browsing targets, so the poller proves it is the poller.
+- The workflow's gate is a **Code node returning `[]`** when it should not fire (n8n stops the branch on an empty return) — fewer schema surfaces than an IF node across n8n versions, and the empty return *is* the cost boundary.
+- **Exactly-once is the probe's job, and it commits last.** The scan never marks its own findings as handled; n8n acks (`/mail/watch/seen`, `/web/watch/ack`) only *after* the trigger was accepted. A failed notify therefore repeats next poll instead of vanishing. Never reorder these — a duplicate push is recoverable, a swallowed exam result is not.
+- **Give the agent the data it already cost you to fetch.** The probe's findings ride in the trigger payload and the `intent` says so explicitly, so the turn does not re-fetch (and re-pay for) what the probe just read.
+- Health failures are reported on the **edge**, not per poll — a revoked token must produce one push, not one every ten minutes.
+
+Shipped workflows live in `packages/igor/scripts/n8n/*.json` — import, edit the marked fields, activate. Their node `notes` are the documentation; keep them accurate when you change a node.
 
 ---
 

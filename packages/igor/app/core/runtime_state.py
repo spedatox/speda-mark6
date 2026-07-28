@@ -262,6 +262,42 @@ def set_notion_access_token(token: str) -> None:
     logger.info("notion_access_token_saved")
 
 
+# ── Web watch snapshots ─────────────────────────────────────────────────────
+# One entry per watched page: the last text snapshot SPEDA has been told about,
+# plus a `pending` snapshot the scan produced but nobody has confirmed yet. Two
+# slots, not one, because committing at scan time would swallow a publication
+# whenever the trigger call that follows it failed — the change would be gone
+# from the diff and no one would ever hear about it. n8n promotes pending →
+# committed via /web/watch/ack only after the turn was accepted.
+# NOT a scheduler: n8n still owns the cron (CLAUDE.md). This is just where the
+# "what did the page look like last time" memory lives.
+
+def get_web_watch(watch_id: str) -> dict:
+    """Stored state for one watch: {fingerprint, snapshot, pending, updated_at}.
+    Empty dict when the page has never been scanned."""
+    return dict(_load().get("web_watches", {}).get(watch_id, {}))
+
+
+def set_web_watch(watch_id: str, state: dict) -> None:
+    store = _load()
+    watches = dict(store.get("web_watches", {}))
+    watches[watch_id] = state
+    store["web_watches"] = watches
+    _save()
+
+
+def drop_web_watch(watch_id: str) -> bool:
+    """Forget a watch entirely — the next scan re-baselines instead of diffing.
+    Returns whether anything was actually removed."""
+    store = _load()
+    watches = dict(store.get("web_watches", {}))
+    existed = watches.pop(watch_id, None) is not None
+    store["web_watches"] = watches
+    _save()
+    logger.info("web_watch_dropped", extra={"watch_id": watch_id, "existed": existed})
+    return existed
+
+
 def set_server_active(server: str, active: bool) -> bool:
     state = _load()
     disabled = set(state.get("disabled_servers", []))

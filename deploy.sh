@@ -126,13 +126,18 @@ else
   say "No ${HISAR_DIR}/.env — skipping H.İ.S.A.R. (see hisar-mk1/deploy/README.md)"
 fi
 
-# ── Postgres credentials ───────────────────────────────────────────────────--
+# ── Postgres credentials + n8n's callback secrets ──────────────────────────--
 # Exported (from the one secret file) so compose interpolates them into the
 # postgres service AND the app's DATABASE_URL — they stay in sync, and nothing
 # sensitive lives in the repo. Note: POSTGRES_PASSWORD only takes effect on a
 # FRESH database volume; to rotate it on an existing volume, change it in
 # postgres directly (ALTER ROLE) or recreate the volume.
-for var in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB; do
+#
+# SPEDA_API_KEY / N8N_SECRET are here for the same reason: workflows call back
+# into Igor with both headers and read them as {{ $env.* }}. env_file only feeds
+# a container — compose interpolation needs them in THIS shell, so without this
+# every imported workflow sends empty headers and gets a 401 it cannot explain.
+for var in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB SPEDA_API_KEY N8N_SECRET; do
   val="$(grep -E "^${var}=" packages/igor/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' || true)"
   [[ -n "${val}" ]] && export "${var}=${val}"
 done

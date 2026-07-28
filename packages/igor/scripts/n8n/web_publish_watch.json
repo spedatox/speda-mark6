@@ -1,0 +1,164 @@
+{
+  "name": "Web publish watch (academic calendar)",
+  "meta": {
+    "description": "Every 30 minutes, asks Igor whether anything NEW appeared on a watched page — an academic calendar, an exam-result announcement, a schedule. The scan is a fetch plus a line-level diff against the last acknowledged snapshot: no model, no tokens. SPEDA is triggered only when a genuinely new line shows up, and the snapshot is committed afterwards so the same publication never fires twice. Import into n8n, set url/watch_id/look_for in the scan node, activate."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "7,37 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-every-30m",
+      "name": "Every 30 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "notes": "Offset minutes (7 and 37) rather than 0/30 on purpose: university sites are at their most fragile exactly on the hour, when every other scraper in the country hits them.\n\nFor a result page you are actively waiting on, */5 is reasonable — the scan stays free either way. The only thing a tighter cadence costs is politeness to the site."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://app:8000/web/watch/scan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"watch_id\": \"akademik_takvim\", \"url\": \"https://ogrenci.example.edu.tr/akademik-takvim\", \"look_for\": \"\", \"ignore\": \"son güncelleme|ziyaretçi|copyright|©\", \"max_added\": 40 }) }}",
+        "options": {
+          "timeout": 40000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "scan-page",
+      "name": "Igor: scan page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300],
+      "notes": "THE CHEAP HALF — the only four fields worth editing.\n\nurl       the page to watch.\nwatch_id  the key its snapshot is stored under. Keep it FIXED: changing it re-baselines the watch, which costs one silent scan.\nlook_for  comma-separated keywords, Turkish-folded ('sınav sonuç' matches 'SINAV SONUÇLARI'). Empty = report ANY new line, which is what you want for a calendar page and too noisy for a news-style page.\nignore    regex for lines to drop BEFORE diffing — clocks, visitor counters, 'son güncelleme'. This is the knob that stops false alarms.\n\nIgor fetches the page, strips it to visible text (links kept as 'text [href]', so a newly posted PDF shows up with its URL), and diffs against the last snapshot SPEDA was actually told about. The FIRST scan of a new watch_id returns status 'baseline' and reports nothing — otherwise the whole page would be 'new'.\n\nneverError: a dead site must not mark the run failed every 30 minutes. The gate inspects the response instead.\n\nNote: this reads server-rendered HTML. A page that paints its content with JavaScript returns 'no readable text' — that is what NightCrawler and its Playwright MCP are for, not this."
+    },
+    {
+      "parameters": {
+        "jsCode": "const store = $getWorkflowStaticData('global');\nconst res = $input.first().json;\nconst status = res.status ?? 'error';\n\n// ── Watch health, EDGE-triggered ────────────────────────────────────────────\n// A site that 404s, blocks us, or switches to a JS-rendered page makes this\n// watch permanently blind while looking perfectly healthy in n8n. Worth one\n// push — but only on the transition, never once per poll.\nif (status === 'error') {\n  const wasBroken = Boolean(store.broken);\n  store.broken = true;\n  if (wasBroken) { return []; }\n  return [{ json: {\n    alert: true,\n    detail: res.detail ?? '',\n    url: res.url ?? '',\n    fingerprint: '',\n    added: [],\n    added_count: 0,\n  } }];\n}\nstore.broken = false;\n\n// 'baseline' is the first sight of a page: recorded, deliberately silent.\nif (status !== 'ok' || !res.changed) { return []; }\n\n// ── Something was published ─────────────────────────────────────────────────\nreturn [{ json: {\n  alert: false,\n  url: res.url,\n  title: res.title ?? '',\n  fingerprint: res.fingerprint,\n  added: res.added ?? [],\n  added_count: res.added_count ?? 0,\n  truncated: Boolean(res.truncated),\n  removed_count: res.removed_count ?? 0,\n} }];"
+      },
+      "id": "gate",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300],
+      "notes": "The cost boundary — everything downstream spends money, everything upstream does not. An empty return stops the branch outright, which is the outcome of nearly every run.\n\nstore.broken lives in the workflow's static data so the health edge-trigger survives between runs."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://app:8000/trigger/speda",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"payload\": { \"type\": \"watchdog\", \"event\": \"page_published\", \"job\": \"web_publish_watch\", \"automation\": \"Web publish watch\", \"source\": \"web\", \"url\": $json.url, \"page_title\": $json.title, \"added\": $json.added, \"added_count\": $json.added_count, \"removed_count\": $json.removed_count, \"intent\": $json.alert ? (\"Your web publish watch can no longer read \" + $json.url + \" (\" + $json.detail + \"). Tell the owner in one short line that the watch is blind and what looks wrong. Do not call any tool.\") : \"Something new was published on a page the owner is watching. The exact new lines are ALREADY in `added` in this payload — do NOT fetch the page again, you have the change. Write the owner one short push in their language: what appeared, and the date, deadline or link that matters. Links come through as 'text [url]' — quote the url when there is one. If the new lines are only cosmetic (a reworded menu item, a moved heading), say plainly that nothing important changed rather than inventing significance.\" }, \"output_mode\": \"push\" }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "notify-speda",
+      "name": "Igor: trigger SPEDA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "THE EXPENSIVE HALF — one agentic turn, reached only on a real publication.\n\nThe new lines travel in the payload and the intent says so, so SPEDA does not spend a second round trip re-fetching a page Igor already read.\n\nNo neverError, deliberately: a failure must kill the branch BEFORE the ack node, leaving the snapshot uncommitted so the next poll reports the same publication again. Retries cover the 503 the trigger endpoint returns when the turn registry is at capacity.\n\nRetarget to /trigger/ultron (academic) or /trigger/nightcrawler (surveillance) by editing the URL — the push is then composed in that agent's voice."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://app:8000/web/watch/ack",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"watch_id\": \"akademik_takvim\", \"fingerprint\": $('Gate').first().json.fingerprint }) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "ack-snapshot",
+      "name": "Igor: ack snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 300],
+      "notes": "Commits the scanned page as the new baseline, so the next scan diffs against what SPEDA was actually told about and does not re-report it.\n\nwatch_id must match the scan node's — if you change one, change both.\n\nDeliberately AFTER the trigger: committing first would lose a publication whenever the notify call failed. The cost of this ordering is a possible duplicate push if the trigger succeeds and this call fails; that is the right trade for 'never miss the exam results'.\n\nReturns status 'stale' (and commits nothing) if the page changed again between the scan and now — the next poll picks up both changes together."
+    }
+  ],
+  "connections": {
+    "Every 30 minutes": {
+      "main": [[{ "node": "Igor: scan page", "type": "main", "index": 0 }]]
+    },
+    "Igor: scan page": {
+      "main": [[{ "node": "Gate", "type": "main", "index": 0 }]]
+    },
+    "Gate": {
+      "main": [[{ "node": "Igor: trigger SPEDA", "type": "main", "index": 0 }]]
+    },
+    "Igor: trigger SPEDA": {
+      "main": [[{ "node": "Igor: ack snapshot", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "pinData": {}
+}
