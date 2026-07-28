@@ -55,8 +55,14 @@ fun MainScreen(
         val routeConfig = remember(uplink, agentId) {
             AppConfig(uplink.apiBase, uplink.apiKey, agentId)
         }
-        val resolveRoute: suspend (String) -> String? = remember(routeConfig) {
-            { routeId -> graph.api.fetchRouteGeometry(routeConfig, routeId) }
+        val resolveRoute = remember(routeConfig) {
+            // Declared explicitly rather than inferred: a lambda literal only
+            // converts to a suspend type when the expected type is unambiguous,
+            // and through remember's type parameter it is not.
+            val fn: suspend (String) -> String? = { routeId ->
+                graph.api.fetchRouteGeometry(routeConfig, routeId)
+            }
+            fn
         }
 
         CompositionLocalProvider(
