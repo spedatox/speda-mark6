@@ -143,3 +143,77 @@ async def test_a_broken_entry_cannot_stop_the_others(db):
     out = await R.tick(db, "atomix", [bad, SPEC], bots, now=datetime(2026, 7, 28, 8, 31))
     assert len(bot.sent) == 1
     assert out["skipped"] and out["sent"]
+
+
+# ── Agent-composed reminders (the evening-checklist path) ────────────────────
+# The reminder Atomix sends is personalised in a turn, so it has no entry in any
+# n8n list. It must still nag exactly like a declared one.
+
+EVENING = "Akşam kontrol: 150 mg Lustral, 5 g kreatin, spor kartı, çanta hazır mı?"
+
+
+@pytest.mark.asyncio
+async def test_agent_opened_reminder_is_sent_immediately_with_buttons(db):
+    bot = FakeBot(); bots = FakeBots(bot)
+    out = await R.open_ask(db, agent_id="atomix", reminder_id="atomix_evening",
+                           text=EVENING, options=["✅ Tamam", "⏭️ Atladım"], bots=bots)
+    assert out["status"] == "ok"
+    assert len(bot.sent) == 1 and EVENING in bot.sent[0]["text"]
+    assert [b[0] for b in bot.sent[0]["buttons"]] == ["✅ Tamam", "⏭️ Atladım"]
+
+
+@pytest.mark.asyncio
+async def test_tick_keeps_asking_a_reminder_n8n_never_heard_of(db):
+    """The whole point: n8n's list is EMPTY, and it still nags."""
+    bot = FakeBot(); bots = FakeBots(bot)
+    await R.open_ask(db, agent_id="atomix", reminder_id="atomix_evening",
+                     text=EVENING, options=["✅ Tamam"], every_minutes=5, max_asks=3, bots=bots)
+    t0 = R.owner_now()
+    await R.tick(db, "atomix", [], bots, now=t0 + timedelta(minutes=1))   # too soon
+    assert len(bot.sent) == 1
+    await R.tick(db, "atomix", [], bots, now=t0 + timedelta(minutes=6))   # due
+    assert len(bot.sent) == 2 and "reminder 2/3" in bot.sent[1]["text"]
+    assert EVENING in bot.sent[1]["text"], "the personalised text must be re-sent verbatim"
+
+
+@pytest.mark.asyncio
+async def test_agent_opened_reminder_stops_when_answered(db):
+    bot = FakeBot(); bots = FakeBots(bot)
+    await R.open_ask(db, agent_id="atomix", reminder_id="atomix_evening",
+                     text=EVENING, options=["✅ Tamam"], max_asks=5, bots=bots)
+    cycle_id, value = R.parse_callback(bot.sent[0]["buttons"][0][1])
+    assert (await R.answer(db, cycle_id, value, bots=bots))["status"] == "ok"
+    t0 = R.owner_now()
+    for m in (6, 12, 60):
+        await R.tick(db, "atomix", [], bots, now=t0 + timedelta(minutes=m))
+    assert len(bot.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_agent_opened_reminder_gives_up(db):
+    bot = FakeBot(); bots = FakeBots(bot)
+    await R.open_ask(db, agent_id="atomix", reminder_id="atomix_evening",
+                     text=EVENING, every_minutes=5, max_asks=2, bots=bots)
+    t0 = R.owner_now()
+    for i in range(1, 5):
+        await R.tick(db, "atomix", [], bots, now=t0 + timedelta(minutes=6 * i))
+    assert len(bot.sent) == 2
+    hist = await R.history(db, "atomix_evening")
+    assert hist[0]["status"] == "gave_up"
+
+
+@pytest.mark.asyncio
+async def test_a_retried_trigger_cannot_open_two_questions(db):
+    bot = FakeBot(); bots = FakeBots(bot)
+    a = await R.open_ask(db, agent_id="atomix", reminder_id="atomix_evening", text=EVENING, bots=bots)
+    b = await R.open_ask(db, agent_id="atomix", reminder_id="atomix_evening", text=EVENING, bots=bots)
+    assert a["status"] == "ok" and b["status"] == "already_open"
+    assert len(bot.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_another_agents_tick_does_not_touch_it(db):
+    bot = FakeBot(); bots = FakeBots(bot)
+    await R.open_ask(db, agent_id="atomix", reminder_id="atomix_evening", text=EVENING, bots=bots)
+    await R.tick(db, "speda", [], bots, now=R.owner_now() + timedelta(minutes=30))
+    assert len(bot.sent) == 1, "SPEDA's tick must not re-ask Atomix's reminder"

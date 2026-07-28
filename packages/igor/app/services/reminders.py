@@ -22,6 +22,7 @@ forkable template: duplicate it, point it at another agent, rewrite the list,
 and this module needs no change at all.
 """
 
+import json
 import logging
 from datetime import datetime, timedelta
 
@@ -101,20 +102,26 @@ async def _closed_today(db: AsyncSession, reminder_id: str, day: str) -> bool:
     return row.scalars().first() is not None
 
 
-def _buttons(spec: dict, cycle_id: int) -> list[tuple[str, str]]:
-    """Answer buttons for one reminder. A reminder with no options configured
-    still gets a single confirm button — the whole feature is "until you
-    answer", so there must always be something to tap."""
-    options = spec.get("options") or [{"label": "✅ Done", "value": "done"}]
+def _normalise_options(options) -> list[dict]:
+    """[{label, value}] from whatever the caller supplied — the n8n list, or an
+    agent's tool call, which may pass bare strings."""
     out = []
-    for opt in options[:6]:  # more than six buttons is a menu, not a question
+    for opt in (options or [])[:6]:  # more than six buttons is a menu, not a question
         if isinstance(opt, str):
             label, value = opt, opt.lower().replace(" ", "_")[:24]
         else:
             label = str(opt.get("label") or opt.get("value") or "OK")
             value = str(opt.get("value") or label).lower().replace(" ", "_")[:24]
-        out.append((label[:40], callback_value(cycle_id, value)))
-    return out
+        out.append({"label": label[:40], "value": value})
+    return out or [{"label": "✅ Done", "value": "done"}]
+
+
+def _buttons(spec: dict, cycle_id: int) -> list[tuple[str, str]]:
+    """Answer buttons for one reminder. A reminder with no options configured
+    still gets a single confirm button — the whole feature is "until you
+    answer", so there must always be something to tap."""
+    return [(o["label"], callback_value(cycle_id, o["value"]))
+            for o in _normalise_options(spec.get("options"))]
 
 
 async def tick(db: AsyncSession, agent_id: str, reminders: list[dict], bots, now: datetime | None = None) -> dict:
@@ -183,6 +190,11 @@ async def tick(db: AsyncSession, agent_id: str, reminders: list[dict], bots, now
                 skipped.append(reminder_id)
                 continue
 
+            # Remember what it takes to re-ask this cycle without the spec.
+            cycle.options_json = json.dumps(_normalise_options(spec.get("options")),
+                                            ensure_ascii=False)
+            cycle.every_minutes = every
+
             attempt = cycle.asks + 1
             text = str(spec["text"])
             if attempt > 1:
@@ -216,6 +228,24 @@ async def tick(db: AsyncSession, agent_id: str, reminders: list[dict], bots, now
             )
             skipped.append(spec.get("id") or "(error)")
 
+    # ── Cycles this tick's config knows nothing about ────────────────────────
+    # An agent-opened reminder (personalised text composed in a turn) has no
+    # entry in any n8n list, so the loop above never sees it. Without this it
+    # would be asked exactly once and then sit open forever — which is the one
+    # behaviour the whole feature exists to prevent.
+    known = {str(s.get("id") or "") for s in (reminders or [])}
+    for cycle in await _open_cycles_for(db, agent_id):
+        if cycle.reminder_id in known:
+            continue
+        if cycle.next_ask_at and cycle.next_ask_at > now:
+            waiting.append(cycle.reminder_id)
+            continue
+        result = await _ask_open_cycle(db, cycle, bot, now)
+        (gave_up if result == "gave_up" else sent if result == "asked" else skipped).append(
+            cycle.reminder_id if result != "asked"
+            else {"reminder_id": cycle.reminder_id, "ask": cycle.asks, "of": cycle.max_asks}
+        )
+
     return {
         "status": "ok",
         "agent": agent_id,
@@ -224,6 +254,117 @@ async def tick(db: AsyncSession, agent_id: str, reminders: list[dict], bots, now
         "waiting": waiting,
         "skipped": skipped,
     }
+
+
+async def _open_cycles_for(db: AsyncSession, agent_id: str) -> list[ReminderCycle]:
+    rows = await db.execute(
+        select(ReminderCycle).where(
+            ReminderCycle.status == "open", ReminderCycle.agent_id == agent_id
+        )
+    )
+    return list(rows.scalars().all())
+
+
+async def _ask_open_cycle(db: AsyncSession, cycle: ReminderCycle, bot, now: datetime) -> str:
+    """Re-ask (or give up on) a cycle using only what the cycle itself stores.
+    Returns 'asked' | 'gave_up' | 'skipped'."""
+    if cycle.asks >= cycle.max_asks:
+        cycle.status = "gave_up"
+        cycle.closed_at = now
+        await db.commit()
+        if bot and cycle.chat_id and cycle.last_message_id:
+            await bot.clear_buttons(cycle.chat_id, cycle.last_message_id)
+        logger.info("reminder_gave_up",
+                    extra={"reminder_id": cycle.reminder_id, "asks": cycle.asks})
+        return "gave_up"
+
+    if bot is None or not bot.configured:
+        return "skipped"
+
+    try:
+        options = json.loads(cycle.options_json) if cycle.options_json else []
+    except ValueError:
+        options = []
+    buttons = [(o["label"], callback_value(cycle.id, o["value"]))
+               for o in _normalise_options(options)]
+
+    attempt = cycle.asks + 1
+    text = cycle.question
+    if attempt > 1:
+        text = f"{text}\n\n<i>(reminder {attempt}/{cycle.max_asks})</i>"
+    if cycle.chat_id and cycle.last_message_id:
+        await bot.clear_buttons(cycle.chat_id, cycle.last_message_id)
+
+    message_id = await bot.send_question(text, buttons)
+    cycle.asks = attempt
+    cycle.last_ask_at = now
+    cycle.next_ask_at = now + timedelta(minutes=cycle.every_minutes or DEFAULT_EVERY_MINUTES)
+    if message_id:
+        from app.core.runtime_state import get_telegram_owner_id
+
+        cycle.last_message_id = message_id
+        cycle.chat_id = cycle.chat_id or get_telegram_owner_id()
+    await db.commit()
+    logger.info("reminder_asked",
+                extra={"reminder_id": cycle.reminder_id, "agent_id": cycle.agent_id,
+                       "ask": attempt, "source": "agent"})
+    return "asked"
+
+
+async def open_ask(
+    db: AsyncSession,
+    *,
+    agent_id: str,
+    reminder_id: str,
+    text: str,
+    options=None,
+    every_minutes: int = DEFAULT_EVERY_MINUTES,
+    max_asks: int = DEFAULT_MAX_ASKS,
+    bots=None,
+) -> dict:
+    """Open a reminder whose text an AGENT just composed, and send it now.
+
+    This is the bridge between the two halves of the system. The expensive,
+    personalised part — "you trained today, rest tomorrow, pack your bag" —
+    happens once, in a turn that was going to run anyway. Everything after it
+    is free: the tick re-asks this exact text until it is answered, and a tap
+    closes it without a model.
+
+    Idempotent per day: asking again while a cycle for the same reminder_id is
+    already open returns that cycle instead of opening a second one, so a
+    retried trigger cannot produce two competing questions.
+    """
+    now = owner_now()
+    day = now.strftime("%Y-%m-%d")
+    reminder_id = (reminder_id or "ask").strip()[:64]
+
+    existing = await _open_cycle(db, reminder_id, day)
+    if existing is not None:
+        return {"status": "already_open", "reminder_id": reminder_id,
+                "cycle_id": existing.id, "asks": existing.asks}
+
+    cycle = ReminderCycle(
+        reminder_id=reminder_id,
+        agent_id=agent_id,
+        question=str(text),
+        status="open",
+        max_asks=max(1, min(int(max_asks), 200)),
+        every_minutes=max(1, min(int(every_minutes), 1440)),
+        options_json=json.dumps(_normalise_options(options), ensure_ascii=False),
+        day=day,
+        opened_at=now,
+    )
+    db.add(cycle)
+    await db.commit()
+    await db.refresh(cycle)
+
+    bot = bots.get(agent_id) if bots else None
+    result = await _ask_open_cycle(db, cycle, bot, now)
+    if result != "asked":
+        return {"status": "opened_not_sent", "reminder_id": reminder_id,
+                "cycle_id": cycle.id, "detail": "no usable Telegram bot for this agent"}
+    return {"status": "ok", "reminder_id": reminder_id, "cycle_id": cycle.id,
+            "max_asks": cycle.max_asks, "every_minutes": cycle.every_minutes}
 
 
 async def answer(

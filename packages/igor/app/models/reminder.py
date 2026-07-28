@@ -55,6 +55,17 @@ class ReminderCycle(Base):
     asks: Mapped[int] = mapped_column(Integer, default=0)
     max_asks: Mapped[int] = mapped_column(Integer, default=10)
 
+    # Everything needed to RE-ask without the n8n definition in hand.
+    #
+    # A reminder can be opened two ways: declaratively from the n8n list (static
+    # text, the cheap path), or by an agent that just composed a personalised
+    # message. The second kind has no entry in any config node, so the re-ask
+    # would have nothing to send unless the cycle carries its own options and
+    # cadence. That is what these two columns are for — they turn a cycle into
+    # a self-contained thing the tick can keep asking on its own.
+    options_json: Mapped[str] = mapped_column(Text, default="")
+    every_minutes: Mapped[int] = mapped_column(Integer, default=5)
+
     # Wall-clock date the cycle belongs to ("2026-07-28"), so a daily reminder
     # opens exactly once per day no matter how often the tick runs.
     day: Mapped[str] = mapped_column(String(10), default="")

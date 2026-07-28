@@ -124,6 +124,20 @@ def _apply_additive_migrations(sync_conn) -> None:
             )
         )
 
+    # A reminder cycle opened by an AGENT (personalised text, composed in a turn)
+    # carries no n8n definition, so it has to remember its own buttons and
+    # cadence or the tick has nothing to re-ask with.
+    if "reminder_cycles" in tables:
+        rcols = {c["name"] for c in insp.get_columns("reminder_cycles")}
+        if "options_json" not in rcols:
+            sync_conn.execute(text("ALTER TABLE reminder_cycles ADD COLUMN options_json TEXT"))
+            logger.info("schema_migrated", extra={"change": "reminder_cycles.options_json"})
+        if "every_minutes" not in rcols:
+            sync_conn.execute(
+                text("ALTER TABLE reminder_cycles ADD COLUMN every_minutes INTEGER DEFAULT 5")
+            )
+            logger.info("schema_migrated", extra={"change": "reminder_cycles.every_minutes"})
+
 
 async def init_db() -> None:
     """Create all tables and seed the default user. Called in lifespan before anything else."""

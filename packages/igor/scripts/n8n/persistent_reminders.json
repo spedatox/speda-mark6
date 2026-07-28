@@ -1,5 +1,5 @@
 {
-  "name": "Persistent reminders — TEMPLATE",
+  "name": "Persistent reminders — Atomix",
   "meta": {
     "description": "A reminder that keeps asking over Telegram until you tap an answer. Everything is configured in TWO places in one node: which agent asks, and the reminder list. Fork this workflow once per agent (Atomix for health, SPEDA for chores…), rename it, edit the list, activate. Asking and answering cost zero tokens — no LLM is involved unless you reply in words instead of tapping."
   },
@@ -19,19 +19,25 @@
       "name": "Every 5 minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "notes": "This is the CLOCK, and it sets the finest resolution available to every reminder below. A reminder set for 08:30 fires on the first tick at or after 08:30, and `every_minutes` cannot be shorter than this interval.\n\nEvery 5 minutes is 288 ticks a day, each one HTTP + a database read. No tokens. Do not be tempted to slow it down to 'save' anything — there is nothing to save, and it would blunt every reminder's timing."
     },
     {
       "parameters": {
-        "jsCode": "// ═══════════════════════════════════════════════════════════════════════\n//  THE ONLY NODE YOU EDIT.  Fork this workflow per agent: duplicate it,\n//  change AGENT below, rewrite REMINDERS, rename the workflow, activate.\n// ═══════════════════════════════════════════════════════════════════════\n\n//  Which agent asks. Its Telegram bot sends the question and its voice is the\n//  one you hear — 'atomix' for health, 'ultron' for academic, 'sentinel' for\n//  money, 'speda' for everything else. The agent must have a bot token set and\n//  you must have tapped /start on it.\nconst AGENT = 'atomix';\n\n//  ── Fields ────────────────────────────────────────────────────────────\n//  id             REQUIRED, stable. Renaming it starts a fresh reminder and\n//                 loses the history attached to the old name.\n//  text           REQUIRED. Sent verbatim — write it in the language you want\n//                 to be asked in. No model rewrites it.\n//  at             'HH:MM' wall clock, Europe/Istanbul (workflow Settings ▸\n//                 Timezone). Omit for 'due whenever this workflow runs'.\n//  days           '*' or weekday numbers, 1=Mon … 7=Sun. E.g. '1,2,3,4,5'.\n//  options        The answer BUTTONS. label = what you see, value = what gets\n//                 recorded in the history. First one should be the happy path.\n//  every_minutes  How often it re-asks while unanswered. Default 5.\n//  max_asks       How many times before it gives up and logs the day as\n//                 missed. Default 10 — so 10 × 5 min ≈ 50 minutes of nagging.\n//\nconst REMINDERS = [\n\n  {\n    id: 'medicine_morning',\n    text: '💊 Sabah ilacını aldın mı?',\n    at: '08:30',\n    days: '*',\n    options: [\n      { label: '✅ Aldım',      value: 'taken' },\n      { label: '⏭️ Atladım',    value: 'skipped' },\n    ],\n    every_minutes: 5,\n    max_asks: 10,\n  },\n\n  // ── Add more below. Delete the example above once yours works. ────────\n  // {\n  //   id: 'water_evening',\n  //   text: '💧 Bugün yeterince su içtin mi?',\n  //   at: '21:00',\n  //   options: [{ label: '✅ Evet', value: 'yes' }, { label: '❌ Hayır', value: 'no' }],\n  //   every_minutes: 15, max_asks: 4,\n  // },\n\n];\n\n// ── Nothing below this line needs editing ───────────────────────────────\nconst clean = REMINDERS.filter(r => r && r.id && r.text);\nif (!clean.length) { return []; }   // empty list = do nothing, harmlessly\nreturn [{ json: { agent: AGENT, reminders: clean }, pairedItem: { item: 0 } }];"
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════\n//  THE ONLY NODE YOU EDIT.  Fork this workflow per agent: duplicate it,\n//  change AGENT below, rewrite REMINDERS, rename the workflow, activate.\n// ═══════════════════════════════════════════════════════════════════════\n\n//  Which agent asks. Its Telegram bot sends the question and its voice is the\n//  one you hear — 'atomix' for health, 'ultron' for academic, 'sentinel' for\n//  money, 'speda' for everything else. The agent must have a bot token set and\n//  you must have tapped /start on it.\nconst AGENT = 'atomix';\n\n//  ── Fields ────────────────────────────────────────────────────────────\n//  id             REQUIRED, stable. Renaming it starts a fresh reminder and\n//                 loses the history attached to the old name.\n//  text           REQUIRED. Sent verbatim — write it in the language you want\n//                 to be asked in. No model rewrites it.\n//  at             'HH:MM' wall clock, Europe/Istanbul (workflow Settings ▸\n//                 Timezone). Omit for 'due whenever this workflow runs'.\n//  days           '*' or weekday numbers, 1=Mon … 7=Sun. E.g. '1,2,3,4,5'.\n//  options        The answer BUTTONS. label = what you see, value = what gets\n//                 recorded in the history. First one should be the happy path.\n//  every_minutes  How often it re-asks while unanswered. Default 5.\n//  max_asks       How many times before it gives up and logs the day as\n//                 missed. Default 10 — so 10 × 5 min ≈ 50 minutes of nagging.\n//\nconst REMINDERS = [\n\n  // ── EXAMPLE — uncomment and edit to add a FIXED-text reminder ─────────\n  // {\n  //   id: 'medicine_morning',\n  //   text: '💊 Sabah ilacını aldın mı?',\n  //   at: '08:30',\n  //   days: '*',\n  //   options: [\n  //     { label: '✅ Aldım',      value: 'taken' },\n  //     { label: '⏭️ Atladım',    value: 'skipped' },\n  //   ],\n  //   every_minutes: 5,\n  //   max_asks: 10,\n  // },\n\n  // ── Add more below. Delete the example above once yours works. ────────\n  // {\n  //   id: 'water_evening',\n  //   text: '💧 Bugün yeterince su içtin mi?',\n  //   at: '21:00',\n  //   options: [{ label: '✅ Evet', value: 'yes' }, { label: '❌ Hayır', value: 'no' }],\n  //   every_minutes: 15, max_asks: 4,\n  // },\n\n];\n\n// ── Nothing below this line needs editing ───────────────────────────────\nconst clean = REMINDERS.filter(r => r && r.id && r.text);\n// ALWAYS tick, even with an empty list. Igor also re-asks reminders that\n// agents opened themselves (the `reminders` tool), and those have no entry\n// here — returning [] would strand them after their first send.\nreturn [{ json: { agent: AGENT, reminders: clean }, pairedItem: { item: 0 } }];"
       },
       "id": "reminder-list",
       "name": "Reminder list",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [520, 300],
-      "notes": "⚙️ EDIT HERE — the agent on one line, the reminders in one array. The comment block documents every field.\n\nTO FORK FOR ANOTHER AGENT: duplicate the whole workflow (⋯ ▸ Duplicate), change AGENT, replace the reminder list, rename it something like 'Persistent reminders — Ultron', and activate. The two run side by side; nothing is shared but the code.\n\nSafe to leave empty: no items means the run stops here, green, having done nothing."
+      "position": [
+        520,
+        300
+      ],
+      "notes": "⚙️ EDIT HERE — the agent on one line, the reminders in one array. The comment block documents every field.\n\nAn EMPTY list is a valid, useful configuration: the workflow then exists purely to re-ask reminders that agents open themselves via the `reminders` tool. Only put an entry here when the text is FIXED and needs no agent to write it.\n\nTO FORK FOR ANOTHER AGENT: duplicate the whole workflow (⋯ ▸ Duplicate), change AGENT, replace the list, rename it 'Persistent reminders — Ultron', activate. One per agent that needs reminders — the tick only touches its own agent's cycles."
     },
     {
       "parameters": {
@@ -66,16 +72,35 @@
       "name": "Igor: reminder tick",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [800, 300],
-      "notes": "Hands the whole list to Igor, which decides everything: which reminders are due, which open ones are ready to re-ask, and which have run out of asks. It sends each question over the chosen agent's Telegram bot with the answer buttons attached.\n\nNO LLM RUNS HERE. Asking, re-asking, giving up and recording a tapped answer are all deterministic — that is what makes a 5-minute nag affordable.\n\nAnswering: tap a button and it closes instantly, still with no turn. Or just reply in words ('aldım') — that is a normal Telegram conversation with the agent, which costs one turn, and the agent closes the reminder with its `reminders` tool.\n\nThe response lists what was sent / gave_up / waiting; open it in an execution to see what happened. neverError keeps a backend blip from failing the run every 5 minutes."
+      "position": [
+        800,
+        300
+      ],
+      "notes": "Hands the whole list to Igor, which decides everything: which reminders are due, which open ones are ready to re-ask, and which have run out of asks. It sends each question over the chosen agent's Telegram bot with the answer buttons attached.\n\nIT ALSO DRIVES REMINDERS THAT ARE NOT IN THE LIST. An agent can open one itself with the `reminders` tool when it has composed a personalised message that must be confirmed — Atomix's evening checklist works this way, written fresh each night and then re-asked verbatim. Those cycles have no entry here, and this tick is what keeps asking them. So KEEP THIS WORKFLOW ACTIVE even with an empty list: an empty list is not idle, it is the engine for every agent-opened reminder for this AGENT.\n\nNO LLM RUNS HERE. Asking, re-asking, giving up and recording a tapped answer are all deterministic — that is what makes a 5-minute nag affordable.\n\nAnswering: tap a button and it closes instantly, still with no turn. Or reply in words ('aldım') — a normal Telegram conversation, one turn, and the agent closes it with the same tool.\n\nThe response lists what was sent / gave_up / waiting. neverError keeps a backend blip from failing the run every 5 minutes."
     }
   ],
   "connections": {
     "Every 5 minutes": {
-      "main": [[{ "node": "Reminder list", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Reminder list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Reminder list": {
-      "main": [[{ "node": "Igor: reminder tick", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Igor: reminder tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
