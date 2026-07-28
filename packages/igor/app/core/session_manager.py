@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -300,6 +300,33 @@ class SessionManager:
             extra={"session_id": session_id, "kept": keep, "deleted": len(ids)},
         )
         return len(ids)
+
+    async def add_token_usage(
+        self,
+        db: AsyncSession,
+        session_id: int,
+        input_tokens: int,
+        output_tokens: int,
+    ) -> None:
+        """Add one turn's token spend to a session's running totals.
+
+        Accumulated rather than recomputed: token counts are only knowable from
+        the provider's own response at the moment of the call, and a turn's cost
+        depends on how many loop iterations it took. UPDATE ... = COALESCE(col,0)
+        + n so the pre-existing NULL on older sessions starts from zero, and so
+        concurrent turns on one session can't lose an increment to a
+        read-modify-write race."""
+        if input_tokens <= 0 and output_tokens <= 0:
+            return
+        await db.execute(
+            update(Session)
+            .where(Session.id == session_id)
+            .values(
+                token_count_input=func.coalesce(Session.token_count_input, 0) + input_tokens,
+                token_count_output=func.coalesce(Session.token_count_output, 0) + output_tokens,
+            )
+        )
+        await db.commit()
 
     async def save_message(
         self,

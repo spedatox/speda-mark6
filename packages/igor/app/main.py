@@ -139,6 +139,15 @@ async def lifespan(app: FastAPI):
     # Connect. Read-only; unrestricted so SPEDA can relay without a dispatch.
     from app.skills.health_data import HealthDataSkill
     await registry.register_skill(HealthDataSkill())
+
+    # Academic desk — Ultron's course attendance ledger, written from the watch
+    # (Ultron Wear) and read back here. check_attendance is read-only and
+    # unrestricted so SPEDA can answer "kaç hakkım kaldı" without a dispatch;
+    # ask_attendance is the push side, normally driven by the n8n per-lecture
+    # trigger. See docs/ULTRON_WEAR.md.
+    from app.skills.attendance import AskAttendanceSkill, AttendanceStatusSkill
+    await registry.register_skill(AttendanceStatusSkill())
+    await registry.register_skill(AskAttendanceSkill())
     await registry.register_skill(UseToolsetSkill())
     await registry.register_skill(AutomationsSkill())
     await registry.register_skill(DispatchAgentSkill(
@@ -376,7 +385,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections, memory, telegram, news, config as config_router
+    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections, memory, telegram, news, academic, config as config_router
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -390,6 +399,7 @@ def create_app() -> FastAPI:
     app.include_router(memory.router)
     app.include_router(telegram.router)
     app.include_router(news.router)
+    app.include_router(academic.router)
     app.include_router(config_router.router)
 
     return app

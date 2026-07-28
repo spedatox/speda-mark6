@@ -1,4 +1,4 @@
-import type { AppConfig, SSEEvent, ModelInfo, ImageBlock, DocBlock, PendingAsk } from './types'
+import type { AppConfig, SSEEvent, ModelInfo, ImageBlock, DocBlock, PendingAsk, Session } from './types'
 
 /** Auth header for every backend call — the service X-API-Key. */
 export function authHeaders(
@@ -238,7 +238,7 @@ export async function fetchMessages(
 export async function fetchSessions(
   config: AppConfig,
   limit = 500
-): Promise<Array<{ id: number; title: string | null; started_at: string }>> {
+): Promise<Session[]> {
   const res = await fetch(`${config.apiBase}/sessions?agent_id=${config.agentId}&limit=${limit}`, {
     headers: authHeaders(config),
   })

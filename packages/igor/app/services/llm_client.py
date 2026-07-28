@@ -1095,9 +1095,20 @@ def _usage_from(u) -> Usage:
     # the usage object as prompt_cache_hit_tokens. Prefer whichever is present.
     cached = getattr(details, "cached_tokens", 0) or 0
     cached = cached or (getattr(u, "prompt_cache_hit_tokens", 0) or 0)
+
+    prompt = getattr(u, "prompt_tokens", 0) or 0
+    completion = getattr(u, "completion_tokens", 0) or 0
+    # Hidden reasoning is BILLED as output but is not in completion_tokens on
+    # every provider: Gemini 2.5/3.x returns e.g. prompt=8 completion=7
+    # total=204, the 189-token gap being thinking. Taking completion_tokens at
+    # face value there would under-report output by ~30x. The total is the
+    # provider's own arithmetic, so trust whichever is larger.
+    total = getattr(u, "total_tokens", 0) or 0
+    if total > prompt + completion:
+        completion = total - prompt
     return Usage(
-        input_tokens=getattr(u, "prompt_tokens", 0) or 0,
-        output_tokens=getattr(u, "completion_tokens", 0) or 0,
+        input_tokens=prompt,
+        output_tokens=completion,
         cache_read_input_tokens=cached,
     )
 
@@ -1122,8 +1133,12 @@ class _OpenAICompatStream:
 
     async def open(self) -> None:
         params = dict(self._params, stream=True)
-        if self._provider != "gemini":  # Gemini's compat layer rejects it
-            params["stream_options"] = {"include_usage": True}
+        # Asking for usage is the ONLY way any of these providers reports token
+        # counts on a stream — without it the final chunk carries none at all.
+        # Gemini used to reject the parameter, which is why it was skipped here;
+        # it accepts it now (verified against gemini-2.5-flash and 3.6-flash),
+        # and skipping it was leaving every Gemini turn with zero usage.
+        params["stream_options"] = {"include_usage": True}
         self._raw = await self._client.chat.completions.create(**params)
 
     @property

@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react'
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
@@ -158,7 +158,8 @@ function ModelItem({ model, selected, onSelect }: {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        width: '100%', padding: '0.45rem 0.7rem 0.45rem 0.8rem',
+        // Indented — these rows hang off the provider header above them.
+        width: '100%', padding: '0.45rem 0.7rem 0.45rem 1.6rem',
         display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
         border: 'none',
         borderLeft: selected
@@ -204,6 +205,65 @@ function ModelItem({ model, selected, onSelect }: {
   )
 }
 
+/* ── Provider group header — one row per provider, collapsed ─────────────── */
+function ProviderRow({ label, count, open, holdsActive, onClick }: {
+  label: string; count: number; open: boolean; holdsActive: boolean; onClick: () => void
+}) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: '100%', padding: '0.5rem 0.7rem 0.5rem 0.8rem',
+        display: 'flex', alignItems: 'center', gap: '0.5rem',
+        border: 'none',
+        borderLeft: open
+          ? '2px solid var(--hb-cyan)'
+          : hover
+          ? '2px solid rgba(var(--hb-accent-rgb),0.3)'
+          : '2px solid transparent',
+        background: open
+          ? 'rgba(var(--hb-accent-rgb),0.1)'
+          : hover
+          ? 'rgba(var(--hb-accent-rgb),0.05)'
+          : 'transparent',
+        cursor: 'pointer', textAlign: 'left',
+        transition: 'background 0.1s, border-color 0.1s',
+      }}
+    >
+      {/* A shut group still says where the pin lives. */}
+      <span style={{
+        width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+        background: holdsActive ? 'var(--hb-cyan-bright)' : 'transparent',
+      }}/>
+      <span style={{
+        flex: 1, minWidth: 0,
+        fontFamily: "'Rajdhani',sans-serif",
+        fontSize: '0.68rem', fontWeight: 700,
+        letterSpacing: '0.18em', textTransform: 'uppercase',
+        color: open || holdsActive
+          ? 'var(--hb-cyan-bright)'
+          : hover ? 'var(--hb-text-dim)' : 'var(--hb-icon-bright)',
+      }}>
+        {label}
+      </span>
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+        letterSpacing: '0.1em', color: 'var(--hb-text-faint)', flexShrink: 0,
+      }}>
+        {count}
+      </span>
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none"
+        stroke={open ? 'var(--hb-cyan)' : 'var(--hb-icon-dim)'} strokeWidth="2.5"
+        style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </button>
+  )
+}
+
 /* ── Model picker ─────────────────────────────────────────────────────────── */
 function ModelPicker({ models, activeId, onSelect }: {
   models: ModelInfo[]; activeId: string; onSelect: (id: string) => void
@@ -223,6 +283,28 @@ function ModelPicker({ models, activeId, onSelect }: {
   const active = models.find(m => m.id === activeId)
   const label  = active ? shortModelName(active.name) : shortModelName(activeId)
   const [hover, setHover] = useState(false)
+
+  // The catalogue runs to a hundred-odd models across seven providers, so the
+  // panel lists PROVIDERS and opens exactly one group at a time. Provider order
+  // follows the backend's catalogue order.
+  const groups = useMemo(() => {
+    const by = new Map<string, ModelInfo[]>()
+    for (const m of models) {
+      const p = m.provider || 'anthropic'
+      const list = by.get(p)
+      if (list) list.push(m)
+      else by.set(p, [m])
+    }
+    return [...by.entries()]
+  }, [models])
+  const activeProvider = active ? (active.provider || 'anthropic') : null
+  const [expanded, setExpanded] = useState<string | null>(activeProvider)
+
+  // Every time the panel opens, land on the pinned model's group rather than
+  // wherever the last visit left the accordion.
+  useEffect(() => {
+    if (open) setExpanded(activeProvider)
+  }, [open, activeProvider])
 
   return (
     <div style={{ position: 'relative' }} ref={ref}>
@@ -289,18 +371,16 @@ function ModelPicker({ models, activeId, onSelect }: {
             SELECT MODEL
           </div>
           <div style={{ padding: '0.2rem 0', maxHeight: 420, overflowY: 'auto' }}>
-            {Array.from(new Set(models.map(m => m.provider ?? 'anthropic'))).map(provider => (
+            {groups.map(([provider, list]) => (
               <div key={provider}>
-                <div style={{
-                  padding: '0.45rem 0.8rem 0.1rem',
-                  fontFamily: "'Rajdhani', sans-serif",
-                  fontSize: '0.6rem', fontWeight: 700,
-                  letterSpacing: '0.2em', textTransform: 'uppercase',
-                  color: 'var(--hb-icon)',
-                }}>
-                  {PROVIDER_LABELS[provider] ?? provider}
-                </div>
-                {models.filter(m => (m.provider ?? 'anthropic') === provider).map(m => (
+                <ProviderRow
+                  label={PROVIDER_LABELS[provider] ?? provider}
+                  count={list.length}
+                  open={expanded === provider}
+                  holdsActive={provider === activeProvider}
+                  onClick={() => setExpanded(p => (p === provider ? null : provider))}
+                />
+                {expanded === provider && list.map(m => (
                   <ModelItem
                     key={m.id}
                     model={m}

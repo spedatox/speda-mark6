@@ -12,9 +12,13 @@ from app.schemas.sse import SSEEvent, SSEEventType
 class _FakeSM:
     def __init__(self):
         self.saved = []
+        self.usage = []
 
     async def save_message(self, db, sid, role, content):
         self.saved.append((sid, role, content))
+
+    async def add_token_usage(self, db, sid, tin, tout):
+        self.usage.append((sid, tin, tout))
 
 
 class _DummyCtx:
@@ -116,6 +120,46 @@ async def test_graceful_error_persists_partial_with_marker_and_skips_on_complete
     text = sm.saved[0][2][0]["text"]
     assert "working " in text and "error: boom" in text
     assert completed == []              # a failed turn is not titled/embedded
+
+
+async def _spending_engine(ctx):
+    """An engine that bills tokens across two loop iterations, as a tool-using
+    turn does — the orchestrator accumulates into ctx.extra as it goes."""
+    ctx.extra["token_usage"] = {"input": 0, "output": 0}
+    for i in range(2):
+        ctx.extra["token_usage"]["input"] += 1200
+        ctx.extra["token_usage"]["output"] += 90
+        yield SSEEvent(SSEEventType.CHUNK, f"part{i} ", ctx.session_id, ctx.request_id)
+    yield SSEEvent(SSEEventType.DONE, {"usage": ctx.extra["token_usage"]},
+                   ctx.session_id, ctx.request_id)
+
+
+async def _spending_then_crashing_engine(ctx):
+    ctx.extra["token_usage"] = {"input": 800, "output": 40}
+    yield SSEEvent(SSEEventType.CHUNK, "spent it ", ctx.session_id, ctx.request_id)
+    raise RuntimeError("kaboom")
+
+
+async def test_token_spend_is_persisted_once_per_turn():
+    """Every iteration of the loop is billed, so the session's totals take the
+    SUM, applied once when the turn settles — not once per iteration."""
+    sm = _FakeSM()
+    reg = turn_runner.TurnRegistry(sm)
+    reg.start(context=_ctx("t1"), engine_factory=_spending_engine,
+              format_error=str, on_complete=None)
+    await asyncio.sleep(0.2)
+    assert sm.usage == [(7, 2400, 180)]
+
+
+async def test_token_spend_survives_a_crashed_turn():
+    """Tokens burned before a failure were still billed — dropping them would
+    make the counter quietly under-report exactly when things go wrong."""
+    sm = _FakeSM()
+    reg = turn_runner.TurnRegistry(sm)
+    reg.start(context=_ctx("t2"), engine_factory=_spending_then_crashing_engine,
+              format_error=str, on_complete=None)
+    await asyncio.sleep(0.2)
+    assert sm.usage == [(7, 800, 40)]
 
 
 async def test_raised_exception_persists_partial_instead_of_vanishing():

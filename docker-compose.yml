@@ -57,15 +57,29 @@ services:
     image: docker.n8n.io/n8nio/n8n:latest
     restart: unless-stopped
     ports:
-      # localhost-only — the n8n editor is NOT exposed to the internet. Reach it
-      # via an SSH tunnel for setup: ssh -L 5678:127.0.0.1:5678 <server>, then
-      # open http://localhost:5678 to create the API key.
+      # localhost-only — n8n is never published by this port mapping. It stays
+      # here so the SSH tunnel keeps working as a fallback:
+      #   ssh -L 5678:127.0.0.1:5678 <server>, then open http://localhost:5678
+      # Public access, when configured, goes through Caddy over the internal
+      # network instead (see N8N_DOMAIN in deploy.sh).
       - "127.0.0.1:5678:5678"
     environment:
       - GENERIC_TIMEZONE=${TZ:-UTC}
       - TZ=${TZ:-UTC}
       - N8N_DIAGNOSTICS_ENABLED=false
       - N8N_RUNNERS_ENABLED=true
+      # Behind Caddy, n8n cannot infer its own public URL — it would generate
+      # editor links, OAuth callbacks and webhook URLs pointing at localhost:5678.
+      # These pin it to the public hostname. All empty when N8N_DOMAIN is unset,
+      # which leaves n8n's own localhost defaults intact.
+      - N8N_HOST=${N8N_DOMAIN:-}
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+      - N8N_EDITOR_BASE_URL=${N8N_PUBLIC_URL:-}
+      - WEBHOOK_URL=${N8N_PUBLIC_URL:-}
+      # Exactly one proxy (Caddy) sits in front, so trust one hop of
+      # X-Forwarded-For. Without this n8n sees every client as the Docker
+      # gateway IP, which breaks its login rate limiting.
+      - N8N_PROXY_HOPS=${N8N_PROXY_HOPS:-0}
     volumes:
       - n8n_data:/home/node/.n8n
 

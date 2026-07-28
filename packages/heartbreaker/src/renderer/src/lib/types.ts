@@ -76,6 +76,10 @@ export interface Session {
   id: number
   title: string | null
   started_at: string
+  /** Running token spend for this session, across every provider. Absent on
+   *  responses from a backend older than the counter. */
+  tokens_in?: number
+  tokens_out?: number
 }
 
 export interface AppConfig {
