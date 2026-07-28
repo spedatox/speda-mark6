@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.speda.heartbreaker.AppGraph
 import com.speda.heartbreaker.data.Uplink
@@ -14,6 +15,8 @@ import com.speda.heartbreaker.designsystem.glass.LocalHazeState
 import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.designsystem.glass.rememberHbHazeState
 import com.speda.heartbreaker.ui.chat.ChatScreen
+import com.speda.heartbreaker.ui.prose.LocalRouteResolver
+import com.speda.heartbreaker.domain.AppConfig
 
 /**
  * The configured shell root: the ambient void is the single Haze source that all
@@ -46,9 +49,20 @@ fun MainScreen(
 
         // Every hbGlass surface below picks this up and becomes real frosted
         // glass, without any call site knowing about Haze.
+        // Map cards reference route geometry by id and resolve it here, against
+        // the same Igor the chat streams from. Provided once at the root so no
+        // prose block needs to know about AppGraph.
+        val routeConfig = remember(uplink, agentId) {
+            AppConfig(uplink.apiBase, uplink.apiKey, agentId)
+        }
+        val resolveRoute: suspend (String) -> String? = remember(routeConfig) {
+            { routeId -> graph.api.fetchRouteGeometry(routeConfig, routeId) }
+        }
+
         CompositionLocalProvider(
             LocalHazeState provides haze,
             LocalAmbientHazeState provides ambientHaze,
+            LocalRouteResolver provides resolveRoute,
         ) {
             ChatScreen(
                 graph = graph,

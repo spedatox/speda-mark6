@@ -183,6 +183,25 @@ class IgorApi(
 
     // ── Detached-run coordination ─────────────────────────────────────────────
 
+    /**
+     * Real geometry for a route the agent referenced by id.
+     *
+     * The polyline never travels through the model — it is ~500 delta-encoded
+     * characters and a single mistyped one silently redraws the route into a
+     * different valley. The fence carries a ten-character id instead and this
+     * fetches the truth. Null on any failure, which the card renders as a
+     * missing line rather than a wrong one.
+     */
+    suspend fun fetchRouteGeometry(config: AppConfig, routeId: String): String? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                getString(config, "/navigation/route/$routeId")?.let { body ->
+                    json.parseToJsonElement(body).jsonObject["polyline"]
+                        ?.jsonPrimitive?.contentOrNull
+                }
+            }.getOrNull()
+        }
+
     suspend fun fetchActiveRuns(config: AppConfig, sessionId: Int? = null): List<ActiveRun> = withContext(Dispatchers.IO) {
         val q = if (sessionId != null) "?session_id=$sessionId" else ""
         runCatching {

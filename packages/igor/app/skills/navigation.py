@@ -25,6 +25,7 @@ from typing import Any
 import httpx
 
 from app.config import settings
+from app.services import routes as route_store
 from app.core.context import AgentContext
 from app.skills.base import Skill
 
@@ -236,7 +237,7 @@ class GetRouteSkill(Skill):
         "find_places). Origin may be omitted to route from the owner's current "
         "location automatically. Returns, per route: distance, live-traffic "
         "duration AND the no-traffic duration (their gap is the congestion story), "
-        "the road summary, an encoded polyline for drawing, and a ready Google "
+        "the road summary, a routeId the client resolves into the drawn line, and a ready Google "
         "Maps deep link — plus the resolved origin/destination coordinates so you "
         "can build the fence without asking again."
     )
@@ -354,25 +355,56 @@ class GetRouteSkill(Skill):
             f"google_maps_link={deep_link}",
             "",
         ]
+        # Park the geometry server-side and hand back ids. The polyline is
+        # deliberately NOT printed below: a ~500-character delta-encoded string
+        # containing backslashes cannot be retyped reliably, and when it is
+        # retyped wrong the route still parses and still looks like a road — it
+        # just goes somewhere else entirely. What is not in the context cannot
+        # be corrupted. See models/route.py.
+        parsed = []
         for i, r in enumerate(routes):
-            dur = _dur_min(r.get("duration"))
-            static = _dur_min(r.get("staticDuration"))
-            dist_km = round((r.get("distanceMeters") or 0) / 1000.0, 1)
+            parsed.append({
+                "polyline": (r.get("polyline") or {}).get("encodedPolyline", ""),
+                "label": r.get("description") or "",
+                "mode": mode,
+                "distance_km": round((r.get("distanceMeters") or 0) / 1000.0, 1),
+                "duration_min": _dur_min(r.get("duration")),
+                "no_traffic_min": _dur_min(r.get("staticDuration")),
+                "origin_lat": origin["lat"], "origin_lng": origin["lng"],
+                "dest_lat": dest["lat"], "dest_lng": dest["lng"],
+            })
+        route_ids = await route_store.store(context.db, parsed)
+
+        for i, (r, p) in enumerate(zip(routes, parsed)):
+            dur, static = p["duration_min"], p["no_traffic_min"]
             labels = ", ".join(r.get("routeLabels") or []) or ("primary" if i == 0 else "alternative")
-            summary = r.get("description") or "—"
-            delay = (f", +{dur - static} min vs no-traffic" if dur is not None and static is not None
-                     and dur > static else "")
-            poly = (r.get("polyline") or {}).get("encodedPolyline", "")
+            delay = (f", +{dur - static} min vs no-traffic"
+                     if dur is not None and static is not None and dur > static else "")
             lines.append(
-                f"[{i}] {labels}: {dist_km} km, ~{dur if dur is not None else '?'} min{delay}"
-                f" via {summary}"
+                f"[{i}] {labels}: {p['distance_km']} km, ~{dur if dur is not None else '?'} min"
+                f"{delay} via {p['label'] or '—'}"
             )
-            lines.append(f"    polyline={poly}")
-        lines.append(
-            "\nRender this as a ```map fence: one route per polyline (mark route 0 primary), "
-            "include durationMin AND noTrafficMin so the client shows the traffic delta, and "
-            "set navigate to the destination so the owner can tap through to Google Maps."
-        )
+            if i < len(route_ids):
+                lines.append(f"    routeId={route_ids[i]}")
+
+        if route_ids:
+            lines.append(
+                "\nRender this as a ```map fence. Give each route its routeId EXACTLY as "
+                "printed above — copy it character for character and invent nothing:\n"
+                '  "routes": [{"routeId": "' + route_ids[0] + '", "primary": true, '
+                '"durationMin": …, "noTrafficMin": …, "distanceKm": …, "label": "…"}]\n'
+                "The client fetches the real geometry from that id; there is no polyline "
+                "for you to write and you must NOT invent one. Mark route 0 primary, include "
+                "durationMin AND noTrafficMin so the traffic delta shows, and set navigate to "
+                "the destination so the owner can tap through to Google Maps."
+            )
+        else:
+            # The store failed. Say so rather than drawing a line from memory.
+            lines.append(
+                "\nRoute geometry could NOT be stored, so no map line can be drawn this "
+                "turn. Render the distances and timings as text, tell the owner the map "
+                "is unavailable right now, and do NOT invent a polyline."
+            )
         return "\n".join(lines)
 
 

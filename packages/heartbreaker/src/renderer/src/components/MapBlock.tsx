@@ -23,13 +23,23 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { looksIncomplete } from '../lib/partialJson'
+import { useChatContext } from '../store/chat'
 
 /* ── Spec types ─────────────────────────────────────────────────────────────── */
 
 interface LatLng { lat: number; lng: number }
 interface MapMarker extends LatLng { label?: string; kind?: string; subtitle?: string }
 interface MapRoute {
-  polyline: string; label?: string; durationMin?: number; noTrafficMin?: number
+  /** Inline geometry. Absent on current fences — see routeId. */
+  polyline?: string
+  /**
+   * Server-held geometry reference ("r_1a2b3c4d"), resolved via
+   * GET /navigation/route/{id}. The polyline stopped travelling through the
+   * model because one mistyped character in 500 still parses, still looks like
+   * a road, and ends somewhere else entirely (app/models/route.py).
+   */
+  routeId?: string
+  label?: string; durationMin?: number; noTrafficMin?: number
   distanceKm?: number; mode?: string; primary?: boolean
 }
 interface MapNavigate extends LatLng { mode?: string; label?: string }
@@ -192,10 +202,54 @@ async function reverseGeocode(lat: number, lng: number): Promise<string | null> 
   }
 }
 
+/**
+ * Fills in geometry for routes that arrived as a routeId. Returns null while a
+ * fetch is outstanding so the card renders once, complete, rather than drawing
+ * a half-empty map and then jumping.
+ *
+ * A failed fetch yields a route with no polyline, which draws no line — the
+ * honest outcome. Never fabricate geometry to fill the gap.
+ */
+function useResolvedRoutes(spec: MapSpec | null): MapSpec | null {
+  const { state } = useChatContext()
+  const apiBase = state.config?.apiBase
+  const apiKey = state.config?.apiKey
+  const [resolved, setResolved] = useState<MapSpec | null>(null)
+
+  const pending = !!spec?.routes?.some(r => !r.polyline && r.routeId)
+
+  useEffect(() => {
+    if (!spec) { setResolved(null); return }
+    if (!pending) { setResolved(spec); return }
+    let alive = true
+    ;(async () => {
+      const routes = await Promise.all(
+        (spec.routes ?? []).map(async r => {
+          if (r.polyline || !r.routeId || !apiBase) return r
+          try {
+            const res = await fetch(`${apiBase}/navigation/route/${r.routeId}`, {
+              headers: apiKey ? { 'X-API-Key': apiKey } : {},
+            })
+            if (!res.ok) return r
+            const body = await res.json()
+            return { ...r, polyline: (body?.polyline as string) || '' }
+          } catch {
+            return r
+          }
+        }),
+      )
+      if (alive) setResolved({ ...spec, routes })
+    })()
+    return () => { alive = false }
+  }, [spec, pending, apiBase, apiKey])
+
+  return resolved
+}
+
 /* ── Component ───────────────────────────────────────────────────────────────── */
 
 export default function MapBlock({ children }: { children: string }): React.ReactElement {
-  const spec = useMemo<MapSpec | null>(() => {
+  const parsed = useMemo<MapSpec | null>(() => {
     try {
       const s = JSON.parse(repairFence(children)) as MapSpec
       const hasContent = (s.markers?.length ?? 0) > 0 || (s.routes?.length ?? 0) > 0 || !!s.center
@@ -205,7 +259,10 @@ export default function MapBlock({ children }: { children: string }): React.Reac
     }
   }, [children])
 
-  if (!spec) return looksIncomplete(children) ? <Materializing /> : <ParseError raw={children} />
+  const spec = useResolvedRoutes(parsed)
+
+  if (!parsed) return looksIncomplete(children) ? <Materializing /> : <ParseError raw={children} />
+  if (!spec) return <Materializing />   // fetching route geometry
 
   const primary = primaryRoute(spec)
   const focus = focusPoint(spec)
@@ -292,7 +349,7 @@ function MapCanvas({ spec }: { spec: MapSpec }): React.ReactElement {
       // Routes — alternatives below, primary (glow + line) on top.
       const routes = [...(spec.routes ?? [])].sort((a, b) => Number(a.primary) - Number(b.primary))
       routes.forEach((route, i) => {
-        const coords = decodePolyline(route.polyline)
+        const coords = decodePolyline(route.polyline ?? '')
         if (coords.length < 2) return
         coords.forEach(c => { bounds.extend(c); hasBounds = true })
         map.addSource(`route-${i}`, {

@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,6 +86,17 @@ import org.maplibre.android.geometry.LatLng as MlLatLng
 val LocalMessageStreaming = compositionLocalOf { false }
 
 /**
+ * Resolves a routeId ("r_1a2b3c4d") into its encoded polyline by asking Igor.
+ * Provided at the app root; defaults to "cannot resolve" so previews and tests
+ * render the card without a line instead of crashing.
+ *
+ * This exists because the geometry must never pass through the model: a
+ * hand-copied polyline that loses one character still parses, still looks like
+ * a road, and quietly ends 19 km from the destination.
+ */
+val LocalRouteResolver = compositionLocalOf<suspend (String) -> String?> { { null } }
+
+/**
  * ```map fences — the Stark map card. MapLibre GL Native draws our own dark style
  * (assets/map_style_stark.json, OpenFreeMap vector tiles, no Google Play Services);
  * routes and markers are runtime layers tinted in the active agent's accent, so
@@ -96,8 +108,25 @@ val LocalMessageStreaming = compositionLocalOf { false }
 @Composable
 fun MapBlock(raw: String, modifier: Modifier = Modifier) {
     val spec = remember(raw) { parseMapSpec(raw) }
+    val resolve = LocalRouteResolver.current
+
+    // Routes referenced by id need one round trip before anything can be drawn.
+    // Resolving here (rather than inside the map surface) keeps the draw path a
+    // pure function of a complete spec — no half-drawn lines, no redraw dance.
+    val pending = spec?.routes?.any { it.polyline.isBlank() && it.routeId != null } == true
+    val ready by produceState(initialValue = if (pending) null else spec, spec) {
+        val s = spec ?: return@produceState
+        value = if (!pending) s else s.copy(
+            routes = s.routes.map { r ->
+                if (r.polyline.isNotBlank() || r.routeId == null) r
+                else r.copy(polyline = resolve(r.routeId).orEmpty())
+            },
+        )
+    }
+
     when {
-        spec != null -> MapCard(spec, modifier)
+        ready != null -> MapCard(ready!!, modifier)
+        spec != null -> Materializing("MAP", modifier)      // fetching geometry
         looksIncomplete(raw) -> Materializing("MAP", modifier)
         else -> ParseError("MAP", raw, modifier)
     }

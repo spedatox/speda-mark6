@@ -29,7 +29,16 @@ data class MapMarker(
 )
 
 data class MapRoute(
-    val polyline: String,
+    /**
+     * The drawn geometry. Empty when the fence referenced [routeId] instead —
+     * the client resolves it from Igor before drawing. Never hand-written by a
+     * model: an encoded polyline is ~500 delta-encoded characters, and one wrong
+     * character sends the whole line somewhere else while still looking like a
+     * road (see app/models/route.py).
+     */
+    val polyline: String = "",
+    /** Server-held geometry reference, e.g. "r_1a2b3c4d". */
+    val routeId: String? = null,
     val label: String? = null,
     val durationMin: Int? = null,
     val noTrafficMin: Int? = null,
@@ -85,9 +94,14 @@ fun parseMapSpec(raw: String): MapSpec? = runCatching {
 
     val routes = (o["routes"] as? JsonArray).orEmptyArr().mapNotNull { el ->
         val r = el as? JsonObject ?: return@mapNotNull null
-        val poly = r.str("polyline")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        // Either form is valid: a routeId (current) or an inline polyline
+        // (messages written before routeIds existed). One of them must be there.
+        val poly = r.str("polyline")?.takeIf { it.isNotBlank() }
+        val routeId = r.str("routeId")?.takeIf { it.isNotBlank() }
+        if (poly == null && routeId == null) return@mapNotNull null
         MapRoute(
-            polyline = poly,
+            polyline = poly ?: "",
+            routeId = routeId,
             label = r.str("label"),
             durationMin = r.intv("durationMin"),
             noTrafficMin = r.intv("noTrafficMin"),

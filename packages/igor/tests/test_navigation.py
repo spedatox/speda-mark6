@@ -9,14 +9,34 @@ import json
 from types import SimpleNamespace
 
 import pytest
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
+from app.database import Base
 from app.skills.navigation import FindPlacesSkill, GetRouteSkill, _dur_min, _maps_dir_link
 
 
-def _ctx(client_location=None):
-    """Minimal AgentContext stand-in — the skills only read .extra."""
-    return SimpleNamespace(extra={"client_location": client_location} if client_location else {})
+def _ctx(client_location=None, db=None):
+    """Minimal AgentContext stand-in — the skills read .extra and .db (the route
+    store, which get_route writes the geometry to before handing back an id)."""
+    return SimpleNamespace(
+        extra={"client_location": client_location} if client_location else {},
+        db=db,
+    )
+
+
+@pytest_asyncio.fixture
+async def db():
+    """A real in-memory DB so get_route exercises the route store rather than
+    the 'could not store' fallback."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with maker() as session:
+        yield session
+    await engine.dispose()
 
 
 class _FakeResponse:
@@ -88,7 +108,7 @@ async def test_get_route_no_key(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_route_defaults_origin_to_client_location(monkeypatch):
+async def test_get_route_defaults_origin_to_client_location(monkeypatch, db):
     # destination is a coordinate object (no geocode call); origin defaults to the
     # live client location → exactly one POST to computeRoutes.
     routes_payload = {
@@ -101,7 +121,7 @@ async def test_get_route_defaults_origin_to_client_location(monkeypatch):
     fake = _FakeClient([_FakeResponse(200, routes_payload)])
     _patch_client(monkeypatch, fake)
 
-    ctx = _ctx(client_location={"lat": 41.00, "lng": 29.00, "place": "Kadıköy"})
+    ctx = _ctx(client_location={"lat": 41.00, "lng": 29.00, "place": "Kadıköy"}, db=db)
     out = await GetRouteSkill().execute(
         {"destination": json.dumps({"lat": 41.11, "lng": 29.02})}, ctx
     )
@@ -113,7 +133,11 @@ async def test_get_route_defaults_origin_to_client_location(monkeypatch):
     assert body["routingPreference"] == "TRAFFIC_AWARE_OPTIMAL"
     assert "34 min" in out.lower()          # 2040s → 34 min
     assert "+12 min vs no-traffic" in out   # 34 − 22
-    assert "polyline=abcd" in out
+    # The polyline must NOT reach the model — that is the whole fix. It is
+    # stored server-side and referenced by id, because a hand-copied polyline
+    # that loses one character still parses and still looks like a road.
+    assert "abcd" not in out, "the raw geometry must never be handed to the model"
+    assert "routeId=r_" in out
 
 
 @pytest.mark.asyncio
@@ -142,7 +166,7 @@ async def test_get_route_upstream_error(monkeypatch):
 # station/mall names), and each way it can fail must report itself as itself.
 
 @pytest.mark.asyncio
-async def test_text_origin_resolves_via_places_first(monkeypatch):
+async def test_text_origin_resolves_via_places_first(monkeypatch, db):
     places_payload = {
         "places": [{
             "displayName": {"text": "Bursa Uludağ Üniversitesi Metro İstasyonu"},
@@ -160,18 +184,19 @@ async def test_text_origin_resolves_via_places_first(monkeypatch):
     out = await GetRouteSkill().execute({
         "origin": "Bursa Uludağ Üniversitesi Metro İstasyonu",
         "destination": json.dumps({"lat": 40.2100, "lng": 29.0100}),
-    }, _ctx())
+    }, _ctx(db=db))
 
     # Places is consulted first, and Geocoding is never reached on a hit.
     assert "searchText" in fake.calls[0][1]
     assert len(fake.calls) == 2
     body = fake.calls[1][2]
     assert body["origin"]["location"]["latLng"]["latitude"] == 40.2265
-    assert "polyline=xyz" in out
+    # The geometry is stored server-side now; the model gets an id.
+    assert "routeId=r_" in out
 
 
 @pytest.mark.asyncio
-async def test_text_origin_falls_back_to_geocoding(monkeypatch):
+async def test_text_origin_falls_back_to_geocoding(monkeypatch, db):
     geo_payload = {"status": "OK", "results": [{
         "geometry": {"location": {"lat": 40.19, "lng": 29.06}},
         "formatted_address": "Bursa, Türkiye",
@@ -187,11 +212,12 @@ async def test_text_origin_falls_back_to_geocoding(monkeypatch):
 
     out = await GetRouteSkill().execute({
         "origin": "Bursa", "destination": json.dumps({"lat": 40.21, "lng": 29.01}),
-    }, _ctx())
+    }, _ctx(db=db))
 
     assert "searchText" in fake.calls[0][1]
     assert "geocode" in fake.calls[1][1]
-    assert "polyline=q" in out
+    # The geometry is stored server-side now; the model gets an id.
+    assert "routeId=r_" in out
 
 
 @pytest.mark.asyncio
@@ -252,7 +278,7 @@ async def test_find_places_biases_to_client_location(monkeypatch):
     fake = _FakeClient([_FakeResponse(200, places_payload)])
     _patch_client(monkeypatch, fake)
 
-    ctx = _ctx(client_location={"lat": 41.03, "lng": 29.00})
+    ctx = _ctx(client_location={"lat": 41.03, "lng": 29.00}, db=db)
     out = await FindPlacesSkill().execute({"query": "specialty coffee"}, ctx)
 
     method, url, body, _ = fake.calls[0]
