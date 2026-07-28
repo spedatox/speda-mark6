@@ -278,6 +278,13 @@ def get_web_watch(watch_id: str) -> dict:
     return dict(_load().get("web_watches", {}).get(watch_id, {}))
 
 
+def get_web_watches() -> dict[str, dict]:
+    """Every stored watch. Read-only view for the listing endpoint — the owner
+    edits the watch LIST in n8n, so this is how they see what Igor actually
+    holds snapshots for (including watches they have since removed)."""
+    return dict(_load().get("web_watches", {}))
+
+
 def set_web_watch(watch_id: str, state: dict) -> None:
     store = _load()
     watches = dict(store.get("web_watches", {}))

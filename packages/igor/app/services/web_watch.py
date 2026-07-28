@@ -36,10 +36,16 @@ import hashlib
 import html as html_mod
 import logging
 import re
+from datetime import datetime, timezone
 
 import httpx
 
-from app.core.runtime_state import get_web_watch, set_web_watch
+from app.core.runtime_state import (
+    drop_web_watch,
+    get_web_watch,
+    get_web_watches,
+    set_web_watch,
+)
 from app.news.dedup import normalize_text
 
 logger = logging.getLogger(__name__)
@@ -71,6 +77,10 @@ _ANCHOR = re.compile(r"<a\b[^>]*?href\s*=\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a\s*
 _BREAKS = re.compile(r"</?(br|p|div|li|tr|h[1-6]|section|article|td|th)\b[^>]*>", re.I)
 _TAGS = re.compile(r"<[^>]+>")
 _TITLE = re.compile(r"<title[^>]*>(.*?)</title\s*>", re.I | re.S)
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def page_title(html: str) -> str:
@@ -171,7 +181,8 @@ async def scan(
     state = get_web_watch(watch_id)
 
     if not state.get("snapshot"):
-        set_web_watch(watch_id, {"fingerprint": print_, "snapshot": snapshot, "pending": None})
+        set_web_watch(watch_id, {"fingerprint": print_, "snapshot": snapshot,
+                                 "pending": None, "updated_at": _now(), "url": url})
         logger.info("web_watch_baseline", extra={"watch_id": watch_id, "lines": len(lines)})
         return {"status": "baseline", "changed": False, "watch_id": watch_id, "url": url,
                 "title": title, "fingerprint": print_, "added": [], "added_count": 0,
@@ -185,6 +196,8 @@ async def scan(
     # Park it. Committing here instead would lose the publication if the trigger
     # call that follows fails — see the module docstring.
     state["pending"] = {"fingerprint": print_, "snapshot": snapshot}
+    state["url"] = url
+    state["scanned_at"] = _now()
     set_web_watch(watch_id, state)
 
     changed = bool(kept)
@@ -229,6 +242,33 @@ def ack(watch_id: str, fingerprint_: str) -> dict:
         "fingerprint": pending["fingerprint"],
         "snapshot": pending["snapshot"],
         "pending": None,
+        "url": state.get("url", ""),
+        "updated_at": _now(),
     })
     logger.info("web_watch_acked", extra={"watch_id": watch_id})
     return {"status": "ok", "watch_id": watch_id, "fingerprint": pending["fingerprint"]}
+
+
+def list_watches() -> list[dict]:
+    """What Igor actually holds snapshots for — the owner edits the watch LIST
+    in n8n, so this is the only way to see the other side of that and spot
+    watch_ids left behind by a renamed or deleted entry."""
+    out = []
+    for watch_id, state in sorted(get_web_watches().items()):
+        out.append({
+            "watch_id": watch_id,
+            "url": state.get("url", ""),
+            "lines": len((state.get("snapshot") or "").split("\n")) if state.get("snapshot") else 0,
+            "updated_at": state.get("updated_at", ""),
+            "scanned_at": state.get("scanned_at", ""),
+            "pending": bool(state.get("pending")),
+        })
+    return out
+
+
+def reset(watch_id: str) -> dict:
+    """Forget a watch's snapshot. The next scan re-baselines it silently rather
+    than reporting the whole page as new — which is exactly what you want after
+    changing `ignore`, or when a site redesign has made the diff meaningless."""
+    existed = drop_web_watch(watch_id)
+    return {"status": "ok" if existed else "noop", "watch_id": watch_id}

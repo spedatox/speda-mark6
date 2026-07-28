@@ -200,6 +200,7 @@ speda-mark-vi/
     │   ├── import_chats.py
     │   ├── mail.py              # POST /mail/watch/{scan,seen} — n8n's LLM-free Gmail probe
     │   ├── web_watch.py         # POST /web/watch/{scan,ack} — n8n's LLM-free page-change probe
+    │   │                        #   + GET /web/watch, DELETE /web/watch/{id} — owner-facing list/reset
     │   ├── memory.py
     │   ├── news.py
     │   ├── telegram.py

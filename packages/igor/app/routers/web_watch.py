@@ -40,3 +40,20 @@ async def ack_page(request: Request, body: WebAckRequest) -> dict:
     ack'd one is never reported at all."""
     validate_n8n_secret(request)
     return web_watch.ack(body.watch_id, body.fingerprint)
+
+
+# ── Owner-facing (X-API-Key only; these are for the human, not the poller) ────
+
+@router.get("/web/watch")
+async def list_watches() -> dict:
+    """Every page Igor holds a snapshot for. Use it to check a watch_id in the
+    n8n list matches one here — a typo there silently creates a second watch
+    that baselines instead of reporting."""
+    return {"watches": web_watch.list_watches()}
+
+
+@router.delete("/web/watch/{watch_id}")
+async def reset_watch(watch_id: str) -> dict:
+    """Forget this watch's snapshot; the next scan re-baselines it silently.
+    The fix after changing `ignore` or when a redesign made the diff useless."""
+    return web_watch.reset(watch_id)
