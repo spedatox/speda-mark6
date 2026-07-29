@@ -107,7 +107,7 @@ async def ingest_samples(
         keys.append((metric, start_ts, origin))
 
     # Bulk fetch existing records in chunks of 500 to stay well under SQLite parameter limits
-    existing_map: dict[tuple[str, datetime_cls, str], HealthSample] = {}
+    existing_map: dict[tuple[str, datetime, str], HealthSample] = {}
     for i in range(0, len(keys), _CHUNK_SIZE):
         chunk_keys = keys[i : i + _CHUNK_SIZE]
         stmt = select(HealthSample).where(

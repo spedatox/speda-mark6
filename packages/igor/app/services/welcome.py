@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 
 from app.config import settings
+from app.core.clock import owner_now
 from app.database import AsyncSessionLocal
 from app.models.memory_file import MemoryFile
 
