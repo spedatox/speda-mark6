@@ -46,6 +46,7 @@ private enum class SettingsTab(val label: String) {
     Config("Configuration"),
     Connections("Connections"),
     Automations("Automations"),
+    Reminders("Reminders"),
     Health("Health"),
     Interface("Interface"),
     Data("Data"),
@@ -113,6 +114,7 @@ fun SettingsScreen(
                 SettingsTab.Config -> ConfigTabView(config, graph)
                 SettingsTab.Connections -> ConnectionsTab(config, graph)
                 SettingsTab.Automations -> AutomationsTab(config, graph)
+                SettingsTab.Reminders -> RemindersTab(config, graph)
                 SettingsTab.Health -> HealthTab(config, graph)
                 SettingsTab.Interface -> InterfaceTab(config, graph)
                 SettingsTab.Data -> DataTab(config, graph)
@@ -123,7 +125,7 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun TabChip(label: String, active: Boolean, onClick: () -> Unit) {
+internal fun TabChip(label: String, active: Boolean, onClick: () -> Unit) {
     val palette = LocalHbPalette.current
     Box(
         Modifier

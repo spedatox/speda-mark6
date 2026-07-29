@@ -47,3 +47,17 @@ class ReminderAnswerRequest(BaseModel):
     cycle_id: int = 0
     reminder_id: str = Field(default="", max_length=64)
     answer: str = Field(default="done", max_length=64)
+
+
+class ReminderDefinitionIn(BaseModel):
+    """One standing reminder, as the clients' Reminders section edits it."""
+
+    text: str = Field(max_length=2000)
+    agent: str = Field(default="speda", max_length=32)
+    # "HH:MM" wall clock; empty means "whenever the tick runs".
+    at: str = Field(default="", max_length=5)
+    days: str = Field(default="*", max_length=32)
+    options: list[ReminderOption | str] = Field(default_factory=list, max_length=6)
+    every_minutes: int = Field(default=5, ge=1, le=1440)
+    max_asks: int = Field(default=10, ge=1, le=200)
+    enabled: bool = True

@@ -4,6 +4,7 @@ import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
 import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus } from '../lib/api'
+import RemindersTab from './RemindersTab'
 import type { AppConfig } from '../lib/types'
 import ConfigTab from './ConfigTab'
 
@@ -12,7 +13,7 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'general' | 'config' | 'connections' | 'automations' | 'interface' | 'data' | 'account'
+type Tab = 'general' | 'config' | 'connections' | 'automations' | 'reminders' | 'interface' | 'data' | 'account'
 
 export default function SettingsModal({ config, onClose }: Props) {
   const { settings, update } = useSettings()
@@ -203,6 +204,7 @@ export default function SettingsModal({ config, onClose }: Props) {
     { id: 'config', label: 'Configuration' },
     { id: 'connections', label: 'Connections' },
     { id: 'automations', label: 'Automations' },
+    { id: 'reminders', label: 'Reminders' },
     { id: 'interface', label: 'Interface' },
     { id: 'data', label: 'Data' },
     { id: 'account', label: 'Account' },
@@ -577,6 +579,9 @@ export default function SettingsModal({ config, onClose }: Props) {
                 </p>
               </div>
             )}
+
+            {/* Reminders tab — standing questions that nag until answered */}
+            {tab === 'reminders' && <RemindersTab config={config} />}
 
             {/* Automations tab — SPEDA's proactive n8n watchers */}
             {tab === 'automations' && (

@@ -202,6 +202,58 @@ class IgorApi(
             }.getOrNull()
         }
 
+    /* ── Persistent reminders ──────────────────────────────────────────────
+     * Standing reminders configured in Settings ▸ Reminders. Igor asks them on
+     * a schedule and keeps asking until answered; these are the definitions,
+     * not the runs.
+     */
+
+    suspend fun getReminders(config: AppConfig): List<ReminderDefinition> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                getString(config, "/reminders/definitions")?.let { body ->
+                    json.decodeFromString<ReminderDefinitionsResponse>(body).definitions
+                }
+            }.getOrNull() ?: emptyList()
+        }
+
+    suspend fun saveReminder(config: AppConfig, def: ReminderDefinition): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body = json.encodeToString(
+                    ReminderDefinitionBody.serializer(),
+                    ReminderDefinitionBody.from(def),
+                )
+                val request = Request.Builder()
+                    .url("${config.apiBase}/reminders/definitions/${def.id}")
+                    .header("X-API-Key", config.apiKey)
+                    .put(body.toRequestBody(jsonMedia))
+                    .build()
+                restClient.newCall(request).execute().use { it.isSuccessful }
+            }.getOrDefault(false)
+        }
+
+    suspend fun deleteReminder(config: AppConfig, id: String): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val request = Request.Builder()
+                    .url("${config.apiBase}/reminders/definitions/$id")
+                    .header("X-API-Key", config.apiKey)
+                    .delete()
+                    .build()
+                restClient.newCall(request).execute().use { it.isSuccessful }
+            }.getOrDefault(false)
+        }
+
+    suspend fun getReminderHistory(config: AppConfig, limit: Int = 20): List<ReminderCycleInfo> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                getString(config, "/reminders/history?limit=$limit")?.let { body ->
+                    json.decodeFromString<ReminderHistoryResponse>(body).history
+                }
+            }.getOrNull() ?: emptyList()
+        }
+
     suspend fun fetchActiveRuns(config: AppConfig, sessionId: Int? = null): List<ActiveRun> = withContext(Dispatchers.IO) {
         val q = if (sessionId != null) "?session_id=$sessionId" else ""
         runCatching {

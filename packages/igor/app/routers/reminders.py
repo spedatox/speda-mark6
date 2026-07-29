@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.reminder import (
     ReminderAnswerRequest,
+    ReminderDefinitionIn,
     ReminderTickRequest,
     ReminderTickResponse,
 )
@@ -43,6 +44,33 @@ async def tick(
         reminders=[r.model_dump() for r in body.reminders],
         bots=request.app.state.telegram_bots,
     )
+
+
+# ── Definitions (the app's Reminders settings section) ───────────────────────
+
+@router.get("/reminders/definitions")
+async def list_definitions(agent: str = "", db: AsyncSession = Depends(get_db)) -> dict:
+    """Every standing reminder the owner has configured."""
+    return {"definitions": await reminder_service.list_definitions(db, agent_id=agent)}
+
+
+@router.put("/reminders/definitions/{reminder_id}")
+async def save_definition(
+    reminder_id: str, body: ReminderDefinitionIn, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Create or replace one. The id in the path wins over any in the body, so a
+    rename is an explicit delete + create rather than a silent orphaning of the
+    history attached to the old id."""
+    spec = body.model_dump()
+    spec["id"] = reminder_id
+    return await reminder_service.upsert_definition(db, spec)
+
+
+@router.delete("/reminders/definitions/{reminder_id}")
+async def remove_definition(reminder_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """Delete a definition. Its history is kept — removing a reminder should not
+    erase the record of having answered it."""
+    return await reminder_service.delete_definition(db, reminder_id)
 
 
 @router.get("/reminders/open")

@@ -17,6 +17,7 @@ from app.models.news_quota import NewsQuota
 from app.models.health_sample import HealthSample, HealthDaily
 from app.models.academic import AttendanceEntry, CourseSlot, Device, TermConfig
 from app.models.reminder import ReminderCycle
+from app.models.reminder_definition import ReminderDefinition
 from app.models.route import RouteGeometry
 
 __all__ = [
@@ -26,5 +27,5 @@ __all__ = [
     "NewsItem", "NewsWatch", "NewsQuota",
     "HealthSample", "HealthDaily",
     "CourseSlot", "TermConfig", "AttendanceEntry", "Device",
-    "ReminderCycle", "RouteGeometry",
+    "ReminderCycle", "ReminderDefinition", "RouteGeometry",
 ]

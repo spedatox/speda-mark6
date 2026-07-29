@@ -244,3 +244,69 @@ async def test_history_records_taken_and_missed_days(db):
     assert by_day["2026-07-20"]["answer"] == "taken"
     assert by_day["2026-07-21"]["status"] == "gave_up"
     assert by_day["2026-07-21"]["asks"] == 2
+
+
+# ── Definitions: the app's Reminders settings section ────────────────────────
+
+@pytest.mark.asyncio
+async def test_definition_round_trips(db):
+    out = await R.upsert_definition(db, {
+        "id": "lustral", "agent": "atomix", "text": "💊 150 mg Lustral aldın mı?",
+        "at": "23:00", "days": "*", "options": ["✅ Aldım", "⏭️ Atladım"],
+        "every_minutes": 5, "max_asks": 10,
+    })
+    assert out["status"] == "ok"
+    rows = await R.list_definitions(db, agent_id="atomix")
+    assert len(rows) == 1 and rows[0]["id"] == "lustral"
+    assert [o["label"] for o in rows[0]["options"]] == ["✅ Aldım", "⏭️ Atladım"]
+    # A second upsert with the same id edits rather than duplicating.
+    await R.upsert_definition(db, {"id": "lustral", "agent": "atomix",
+                                   "text": "changed", "at": "22:00"})
+    rows = await R.list_definitions(db, agent_id="atomix")
+    assert len(rows) == 1 and rows[0]["text"] == "changed" and rows[0]["at"] == "22:00"
+
+
+@pytest.mark.asyncio
+async def test_stored_definition_fires_without_any_n8n_entry(db):
+    bot = FakeBot(); bots = FakeBots(bot)
+    await R.upsert_definition(db, {"id": "lustral", "agent": "atomix", "text": "💊 Lustral",
+                                   "at": "08:30", "options": ["✅ Aldım"], "max_asks": 2})
+    # n8n sends an EMPTY list — the definition alone must drive the ask.
+    await R.tick(db, "atomix", [], bots, now=datetime(2026, 7, 28, 8, 31))
+    assert len(bot.sent) == 1 and "Lustral" in bot.sent[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_disabled_definition_does_not_fire(db):
+    bot = FakeBot(); bots = FakeBots(bot)
+    await R.upsert_definition(db, {"id": "lustral", "agent": "atomix", "text": "💊 Lustral",
+                                   "at": "08:30", "enabled": False})
+    await R.tick(db, "atomix", [], bots, now=datetime(2026, 7, 28, 8, 31))
+    assert bot.sent == []
+
+
+@pytest.mark.asyncio
+async def test_stored_definition_shadows_an_inline_one_with_the_same_id(db):
+    """Both surfaces still work, but the one the owner edits in the app wins —
+    and it must NOT be asked twice."""
+    bot = FakeBot(); bots = FakeBots(bot)
+    await R.upsert_definition(db, {"id": "medicine_morning", "agent": "atomix",
+                                   "text": "FROM THE APP", "at": "08:30"})
+    await R.tick(db, "atomix", [SPEC], bots, now=datetime(2026, 7, 28, 8, 31))
+    assert len(bot.sent) == 1, "one reminder, not one per source"
+    assert "FROM THE APP" in bot.sent[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_definition_keeps_its_history(db):
+    bot = FakeBot(); bots = FakeBots(bot)
+    await R.upsert_definition(db, {"id": "lustral", "agent": "atomix", "text": "💊 Lustral",
+                                   "at": "08:30", "max_asks": 1})
+    await R.tick(db, "atomix", [], bots, now=datetime(2026, 7, 28, 8, 31))
+    cid, _ = R.parse_callback(bot.sent[0]["buttons"][0][1])
+    await R.answer(db, cid, "taken", bots=bots)
+
+    assert (await R.delete_definition(db, "lustral"))["status"] == "ok"
+    assert await R.list_definitions(db, agent_id="atomix") == []
+    hist = await R.history(db, "lustral")
+    assert hist and hist[0]["answer"] == "taken", "history must survive the delete"

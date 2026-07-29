@@ -904,3 +904,65 @@ export async function answerAsk(
   })
   return res.ok
 }
+
+/* ── Persistent reminders ─────────────────────────────────────────────────────
+ * Standing reminders the owner configures in Settings ▸ Reminders. Igor asks
+ * them on a schedule and keeps asking until answered; these endpoints are the
+ * definitions, not the runs (see app/models/reminder_definition.py).
+ */
+
+export interface ReminderOption { label: string; value: string }
+export interface ReminderDefinition {
+  id: string
+  agent: string
+  text: string
+  at: string
+  days: string
+  options: ReminderOption[]
+  every_minutes: number
+  max_asks: number
+  enabled: boolean
+  updated_at?: string
+}
+export interface ReminderCycleInfo {
+  reminder_id: string; day: string; status: string
+  answer: string; via: string; asks: number; closed_at: string
+}
+
+export async function getReminders(config: AppConfig): Promise<ReminderDefinition[]> {
+  const res = await fetch(`${config.apiBase}/reminders/definitions`, { headers: authHeaders(config) })
+  if (!res.ok) return []
+  return (await res.json()).definitions ?? []
+}
+
+export async function saveReminder(
+  config: AppConfig,
+  def: ReminderDefinition,
+): Promise<{ status: string; detail?: string }> {
+  const { id, ...body } = def
+  const res = await fetch(`${config.apiBase}/reminders/definitions/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) return { status: 'error', detail: `HTTP ${res.status}` }
+  return await res.json()
+}
+
+export async function deleteReminder(config: AppConfig, id: string): Promise<void> {
+  await fetch(`${config.apiBase}/reminders/definitions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(config),
+  })
+}
+
+/** Recently closed cycles — what was actually taken or missed. */
+export async function getReminderHistory(
+  config: AppConfig, limit = 30,
+): Promise<ReminderCycleInfo[]> {
+  const res = await fetch(`${config.apiBase}/reminders/history?limit=${limit}`, {
+    headers: authHeaders(config),
+  })
+  if (!res.ok) return []
+  return (await res.json()).history ?? []
+}

@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import owner_now
 from app.models.reminder import ReminderCycle
+from app.models.reminder_definition import ReminderDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,87 @@ def _buttons(spec: dict, cycle_id: int) -> list[tuple[str, str]]:
             for o in _normalise_options(spec.get("options"))]
 
 
+async def list_definitions(db: AsyncSession, agent_id: str = "", enabled_only: bool = False) -> list[dict]:
+    """The owner's standing reminders, as the clients show them."""
+    q = select(ReminderDefinition)
+    if agent_id:
+        q = q.where(ReminderDefinition.agent_id == agent_id)
+    if enabled_only:
+        q = q.where(ReminderDefinition.enabled.is_(True))
+    rows = (await db.execute(q.order_by(ReminderDefinition.at, ReminderDefinition.id))).scalars().all()
+    return [_definition_dict(r) for r in rows]
+
+
+def _definition_dict(r: ReminderDefinition) -> dict:
+    try:
+        options = json.loads(r.options_json) if r.options_json else []
+    except ValueError:
+        options = []
+    return {
+        "id": r.id, "agent": r.agent_id, "text": r.text, "at": r.at, "days": r.days,
+        "options": _normalise_options(options),
+        "every_minutes": r.every_minutes, "max_asks": r.max_asks,
+        "enabled": bool(r.enabled),
+        "updated_at": r.updated_at.isoformat(timespec="seconds") if r.updated_at else "",
+    }
+
+
+async def upsert_definition(db: AsyncSession, spec: dict) -> dict:
+    """Create or replace one definition. The id is the owner's slug."""
+    rid = str(spec.get("id") or "").strip()[:64]
+    if not rid or not str(spec.get("text") or "").strip():
+        return {"status": "invalid", "detail": "id and text are required"}
+
+    row = (await db.execute(
+        select(ReminderDefinition).where(ReminderDefinition.id == rid)
+    )).scalars().first()
+    if row is None:
+        row = ReminderDefinition(id=rid)
+        db.add(row)
+
+    row.agent_id = (spec.get("agent") or "speda").strip()[:32]
+    row.text = str(spec["text"])
+    row.at = str(spec.get("at") or "").strip()[:5]
+    row.days = str(spec.get("days") or "*").strip()[:32]
+    row.options_json = json.dumps(_normalise_options(spec.get("options")), ensure_ascii=False)
+    row.every_minutes = max(1, min(int(spec.get("every_minutes") or DEFAULT_EVERY_MINUTES), 1440))
+    row.max_asks = max(1, min(int(spec.get("max_asks") or DEFAULT_MAX_ASKS), 200))
+    row.enabled = bool(spec.get("enabled", True))
+    row.updated_at = datetime.utcnow()
+    await db.commit()
+    logger.info("reminder_definition_saved", extra={"reminder_id": rid, "agent_id": row.agent_id})
+    return {"status": "ok", "definition": _definition_dict(row)}
+
+
+async def delete_definition(db: AsyncSession, reminder_id: str) -> dict:
+    """Remove a definition. History for that id is deliberately left alone —
+    deleting a reminder should not erase the record of having taken it."""
+    row = (await db.execute(
+        select(ReminderDefinition).where(ReminderDefinition.id == reminder_id)
+    )).scalars().first()
+    if row is None:
+        return {"status": "noop", "reminder_id": reminder_id}
+    await db.delete(row)
+    await db.commit()
+    logger.info("reminder_definition_deleted", extra={"reminder_id": reminder_id})
+    return {"status": "ok", "reminder_id": reminder_id}
+
+
+async def _merged_specs(db: AsyncSession, agent_id: str, payload: list[dict]) -> list[dict]:
+    """This tick's reminders: the owner's stored definitions plus anything the
+    workflow sent inline. Stored wins on an id collision — it is the surface the
+    owner edits, so it is the one they expect to see take effect."""
+    stored = await list_definitions(db, agent_id=agent_id, enabled_only=True)
+    by_id = {s["id"]: s for s in stored}
+    for spec in payload or []:
+        rid = str(spec.get("id") or "").strip()
+        if rid and rid in by_id:
+            logger.info("reminder_definition_shadowed", extra={"reminder_id": rid})
+            continue
+        by_id[rid or f"_inline_{len(by_id)}"] = spec
+    return list(by_id.values())
+
+
 async def tick(db: AsyncSession, agent_id: str, reminders: list[dict], bots, now: datetime | None = None) -> dict:
     """One poll. Opens due reminders, re-asks open ones, gives up on exhausted
     ones. Returns a per-reminder summary for the n8n execution log.
@@ -136,7 +218,10 @@ async def tick(db: AsyncSession, agent_id: str, reminders: list[dict], bots, now
     bot = bots.get(agent_id)
     sent, gave_up, waiting, skipped = [], [], [], []
 
-    for spec in reminders or []:
+    # The owner's stored definitions are the primary source; the workflow's
+    # inline list still works so an existing fork keeps firing.
+    specs = await _merged_specs(db, agent_id, reminders)
+    for spec in specs:
         try:
             reminder_id = str(spec.get("id") or "").strip()
             if not reminder_id or not str(spec.get("text") or "").strip():
@@ -233,7 +318,7 @@ async def tick(db: AsyncSession, agent_id: str, reminders: list[dict], bots, now
     # entry in any n8n list, so the loop above never sees it. Without this it
     # would be asked exactly once and then sit open forever — which is the one
     # behaviour the whole feature exists to prevent.
-    known = {str(s.get("id") or "") for s in (reminders or [])}
+    known = {str(s.get("id") or "") for s in specs}
     for cycle in await _open_cycles_for(db, agent_id):
         if cycle.reminder_id in known:
             continue
