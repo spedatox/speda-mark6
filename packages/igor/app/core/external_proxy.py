@@ -36,8 +36,12 @@ logger = logging.getLogger(__name__)
 # gap means it died without a terminal frame.
 IDLE_TIMEOUT_S = 300.0
 
-# chat_event "type" → SSEEventType. Deliberately 1:1 — the peer speaks the SSE
-# vocabulary so this proxy stays a dumb re-wrapper.
+# chat_event "type" → SSEEventType. The type map is 1:1 — the peer speaks the
+# SSE vocabulary. Payloads are 1:1 too EXCEPT tool_result: the peer emits the
+# Anthropic-native shape ({tool_use_id, is_error, content}) while every consumer
+# — both clients' live renderers and the turn runner that persists the turn for
+# history — reads the orchestrator's shape ({id, result}). _normalize_tool_result
+# below bridges that so a proxied result renders and saves like an in-process one.
 _EVENT_MAP = {
     "chunk": SSEEventType.CHUNK,
     "tool": SSEEventType.TOOL,
@@ -48,6 +52,39 @@ _EVENT_MAP = {
 }
 
 _TERMINAL = frozenset({"done", "error"})
+
+# Match AgentOrchestrator's tool_result preview cap so the disclosure panel holds
+# the same amount of output whichever engine ran the turn.
+_RESULT_PREVIEW_CHARS = 1500
+
+
+def _stringify_content(content: object) -> str:
+    """Flatten an Anthropic tool_result `content` into display text. The peer may
+    send a plain string or a list of content blocks
+    ([{"type": "text", "text": ...}, ...]); every consumer wants one string."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            str(b.get("text", b.get("content", ""))) if isinstance(b, dict) else str(b)
+            for b in content
+        ]
+        return "\n".join(p for p in parts if p)
+    return str(content)
+
+
+def _normalize_tool_result(data: object) -> dict:
+    """Peer tool_result payload → the canonical {id, result} the clients and the
+    turn runner read. Tolerant of either shape so it is a no-op if the peer is
+    ever updated to emit {id, result} directly: it reads `id`/`result` first and
+    falls back to the peer's `tool_use_id`/`content`."""
+    if not isinstance(data, dict):
+        return {"id": None, "result": _stringify_content(data)[:_RESULT_PREVIEW_CHARS]}
+    tool_id = data.get("id", data.get("tool_use_id"))
+    raw = data.get("result", data.get("content"))
+    return {"id": tool_id, "result": _stringify_content(raw)[:_RESULT_PREVIEW_CHARS]}
 
 
 class ExternalAgentProxy:
@@ -139,9 +176,14 @@ class ExternalAgentProxy:
                     )
                     continue
 
+                data = event.get("data", "" if etype in ("chunk", "error") else {})
+                if etype == "tool_result":
+                    # Bridge the peer's Anthropic-native shape onto the {id,
+                    # result} contract every consumer reads (see _EVENT_MAP note).
+                    data = _normalize_tool_result(data)
                 yield SSEEvent(
                     type=sse_type,
-                    data=event.get("data", "" if etype in ("chunk", "error") else {}),
+                    data=data,
                     session_id=context.session_id,
                     request_id=context.request_id,
                 )
