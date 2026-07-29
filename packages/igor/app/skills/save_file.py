@@ -58,6 +58,8 @@ def _unique_path(name: str) -> Path:
 
 class SaveFileSkill(Skill):
     name = "save_file"
+    deferred = True
+    search_keywords = "save download export attachment write file store"
     description = (
         "Writes text content you generate to a real downloadable file and delivers it "
         "to the user as a download card in the chat. THIS is how you hand over any "

@@ -136,7 +136,7 @@ def test_background_model_follows_active_provider(unpinned):
     p = SPEDAProfile()
     assert p.background_model("claude-sonnet-4-6") == p.haiku_model
     assert p.background_model("openai:gpt-5.1") == "openai:gpt-5-mini"
-    assert p.background_model("gemini:gemini-2.5-pro") == "gemini:gemini-2.5-flash"
+    assert p.background_model("gemini:gemini-2.5-pro") == "gemini:gemini-3.5-flash-lite"
     assert p.background_model("zai:glm-4.6") == "zai:glm-4.5-air"
     assert p.background_model("deepseek:deepseek-v4-pro") == "deepseek:deepseek-v4-flash"
     # Dead Zone: the local model is the only one that exists.
@@ -462,8 +462,13 @@ def test_responses_output_parsing():
     # The id must be call_id — item.id cannot be paired against by the API.
     assert msg.content[1].id == "call_9"
     assert msg.content[1].input == {"tz": "UTC"}
-    assert msg.usage.input_tokens == 100
+    # input_tokens is what was billed at FULL rate, matching Anthropic's
+    # convention — the provider reports 100 INCLUSIVE of its 64 cached, so the
+    # cached span is subtracted rather than counted twice. The orchestrator sums
+    # input + cache_read into "what the model read", which is 100 again.
+    assert msg.usage.input_tokens == 36
     assert msg.usage.cache_read_input_tokens == 64
+    assert msg.usage.input_tokens + msg.usage.cache_read_input_tokens == 100
 
     truncated = SimpleNamespace(
         output=[SimpleNamespace(type="message", content=[SimpleNamespace(type="output_text", text="par")])],
@@ -792,3 +797,121 @@ async def test_available_models_dynamic_fetch(monkeypatch):
 
 
 
+
+
+# ── Progressive tool disclosure (defer_loading + tool_search) ────────────────
+#
+# The point of the mechanism is cost, so these assert the two properties that
+# actually produce the saving: a deferred tool costs a NAME in the prefix
+# instead of a full Rule 11 schema, and resolving one APPENDS to the tool array
+# rather than rebuilding it (a rebuild would reorder the bytes the provider
+# cached and invalidate the whole prefix, costing more than it saved).
+
+
+class _DeferredSkill(Skill):
+    name = "obscure_thing"
+    deferred = True
+    search_keywords = "widget frobnicate gadget"
+    description = "Deferred. Does an obscure thing. Test only. Returns text."
+    input_schema = {"type": "object", "properties": {}}
+
+    async def execute(self, args, context):  # pragma: no cover
+        return "ok"
+
+
+@pytest.fixture
+async def deferring_registry():
+    r = CapabilityRegistry()
+    await r.register_skill(_OfflineSkill())
+    await r.register_skill(_DeferredSkill())
+    return r
+
+
+async def test_deferred_tool_is_absent_until_searched(deferring_registry):
+    names = {t["name"] for t in deferring_registry.list_tools()}
+    assert "local_thing" in names
+    assert "obscure_thing" not in names   # costs a name, not a schema
+
+    index = deferring_registry.tool_index()
+    assert "obscure_thing" in index
+    assert "Does an obscure thing" not in index  # the description stayed home
+
+    loaded = {"obscure_thing"}
+    assert "obscure_thing" in {
+        t["name"] for t in deferring_registry.list_tools(loaded_tools=loaded)
+    }
+
+
+async def test_resolved_tools_append_and_never_reorder_the_prefix(deferring_registry):
+    """The cache-preserving property, asserted directly: the pre-resolution tool
+    array must remain a strict PREFIX of the post-resolution one."""
+    before = [t["name"] for t in deferring_registry.list_tools()]
+    after = [
+        t["name"]
+        for t in deferring_registry.list_tools(loaded_tools={"obscure_thing"})
+    ]
+    assert after[: len(before)] == before
+    assert after[len(before):] == ["obscure_thing"]
+
+
+async def test_anthropic_path_flags_instead_of_withholding(deferring_registry):
+    """On Anthropic the tool ships flagged so the API's own tool-search can
+    resolve it; the flag is what keeps it out of the model's context."""
+    by_name = {t["name"]: t for t in deferring_registry.list_tools(defer_loading=True)}
+    assert by_name["obscure_thing"]["defer_loading"] is True
+    assert "defer_loading" not in by_name["local_thing"]
+
+
+async def test_search_matches_author_keywords_not_just_the_description(
+    deferring_registry,
+):
+    # "frobnicate" appears nowhere in the name or description — only in the
+    # keywords, which is the bridge between the owner's words and the domain's.
+    assert [t["name"] for t in deferring_registry.search_tools("frobnicate")] == [
+        "obscure_thing"
+    ]
+    assert deferring_registry.search_tools("something entirely unrelated") == []
+
+
+async def test_search_never_leaks_the_keyword_marker_to_a_provider(
+    deferring_registry,
+):
+    for tool in deferring_registry.list_tools(loaded_tools={"obscure_thing"}):
+        assert not any(k.startswith("_") for k in tool)
+
+
+# ── Per-turn tool memo ───────────────────────────────────────────────────────
+
+
+async def test_identical_read_only_calls_run_once_per_turn():
+    calls = []
+
+    class _Counting(Skill):
+        name = "counting_thing"
+        read_only = True
+        description = "Read-only. Counts its calls. Test only. Returns text."
+        input_schema = {"type": "object", "properties": {"q": {"type": "string"}}}
+
+        async def execute(self, args, context):
+            calls.append(args)
+            return f"result-{len(calls)}"
+
+    class _Writer(_Counting):
+        name = "writing_thing"
+        read_only = False
+
+    r = CapabilityRegistry()
+    await r.register_skill(_Counting())
+    await r.register_skill(_Writer())
+    ctx = SimpleNamespace(extra={}, request_id="t", agent_id="speda")
+
+    assert await r.execute("counting_thing", {"q": "a"}, ctx) == "result-1"
+    assert await r.execute("counting_thing", {"q": "a"}, ctx) == "result-1"  # memo
+    assert len(calls) == 1
+    await r.execute("counting_thing", {"q": "b"}, ctx)  # different args → runs
+    assert len(calls) == 2
+
+    # A write invalidates the memo: a cached read must not outlive a mutation.
+    await r.execute("writing_thing", {"q": "x"}, ctx)
+    await r.execute("counting_thing", {"q": "a"}, ctx)
+    assert len(calls) == 4

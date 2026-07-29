@@ -537,6 +537,8 @@ _REQUIRED_LIBS = {
 
 class DocumentsSkill(Skill):
     name = "generate_document"
+    deferred = True
+    search_keywords = "powerpoint pptx slides deck word docx pdf report document presentation export write file"
     description = (
         "Generates a downloadable PPTX, DOCX, or PDF file. "
         "Use ONLY when the user explicitly says they want a file to save, download, print, or send — "

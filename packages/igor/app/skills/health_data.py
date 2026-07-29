@@ -84,6 +84,8 @@ def _normalise_metrics(raw: list[str]) -> tuple[list[str], list[str]]:
 
 class HealthDataSkill(Skill):
     name = "health_data"
+    deferred = True
+    search_keywords = "heart rate sleep steps weight fitness workout gym vitals wearable watch body"
     description = (
         "Queries the owner's own biometrics synced from their phone and watch via "
         "Samsung Health / Health Connect: steps, distance, sleep sessions with "

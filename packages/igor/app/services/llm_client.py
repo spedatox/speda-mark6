@@ -247,9 +247,14 @@ class LLMClient:
         for provider, model in self._chain(kwargs.get("model", "")):
             try:
                 if provider == "anthropic":
-                    # `reasoning_effort` is an OpenAI/Gemini hint; the Anthropic
-                    # SDK rejects unknown kwargs, so strip it on this path.
-                    anthro = {k: v for k, v in kwargs.items() if k != "reasoning_effort"}
+                    # `reasoning_effort` is an OpenAI/Gemini hint and `cache_key`
+                    # an OpenAI cache-routing hint; the Anthropic SDK rejects
+                    # unknown kwargs, so strip both on this path (Anthropic does
+                    # its caching through explicit cache_control breakpoints).
+                    anthro = {
+                        k: v for k, v in kwargs.items()
+                        if k not in ("reasoning_effort", "cache_key")
+                    }
                     return await self._anthropic.create_message(
                         **{**anthro, "model": model}
                     )
@@ -340,15 +345,15 @@ _CATALOG = {
     ],
     "gemini": [
         {
-            "id": "gemini:gemini-2.5-pro",
-            "name": "Gemini 2.5 Pro",
-            "description": "Google's most capable — long context",
+            "id": "gemini:gemini-3.6-flash",
+            "name": "Gemini 3.6 Flash",
+            "description": "Google's current flagship Flash — long context",
             "tags": ["powerful"],
         },
         {
-            "id": "gemini:gemini-2.5-flash",
-            "name": "Gemini 2.5 Flash",
-            "description": "Fast and inexpensive for everyday tasks",
+            "id": "gemini:gemini-3.5-flash-lite",
+            "name": "Gemini 3.5 Flash-Lite",
+            "description": "Fastest and cheapest — high-volume simple tasks",
             "tags": ["fast"],
         },
     ],
@@ -666,8 +671,16 @@ def _to_openai_params(provider: str, model: str, kwargs: dict) -> dict:
 
     system = kwargs.get("system")
     if isinstance(system, list):
-        # Orchestrator system blocks. `_cache` markers are Anthropic prompt-cache
-        # hints — meaningless here, just join the text.
+        # Orchestrator system blocks joined in order. There is no `cache_control`
+        # equivalent to carry over: z.ai, DeepSeek, Gemini and OpenAI all cache
+        # IMPLICITLY — they match the longest identical prefix themselves and
+        # bill the hit at a fraction of input, with no request field to set. So
+        # the `_cache` markers are dropped, and what actually earns the discount
+        # on this path is that the joined bytes are stable turn to turn: the
+        # blocks arrive in a fixed order, the clock lives in per-message stamps
+        # (SessionManager.stamp_user_content), and resolved tools are appended
+        # rather than spliced in. Reordering these blocks would silently cost
+        # real money on every provider here.
         system = "\n\n".join(b.get("text", "") for b in system)
     if system:
         msgs.append({"role": "system", "content": system})
@@ -699,6 +712,15 @@ def _to_openai_params(provider: str, model: str, kwargs: dict) -> dict:
             params["max_completion_tokens"] = max_tokens
         else:
             params["max_tokens"] = max_tokens
+
+    # OpenAI's one explicit caching control: a routing key that keeps requests
+    # sharing a prefix on the same cache. Implicit matching alone spreads a
+    # conversation across backends and misses; the key pins it. Scoped per
+    # session (OpenAI's own recommendation is a session-shaped key) and sent
+    # only where it exists — no other provider on this path accepts it.
+    cache_key = kwargs.get("cache_key")
+    if provider == "openai" and cache_key:
+        params.setdefault("extra_body", {})["prompt_cache_key"] = str(cache_key)
 
     # Reasoning-effort hint — lets short background tasks (e.g. title generation)
     # work on reasoning models. Without it, a GPT-5 / Gemini-2.5 model spends its
@@ -894,6 +916,12 @@ def _to_responses_params(model: str, kwargs: dict) -> dict:
     if max_tokens:
         params["max_output_tokens"] = max_tokens
 
+    # Same cache-routing key as the chat-completions path — the Responses API
+    # takes it natively rather than through extra_body.
+    cache_key = kwargs.get("cache_key")
+    if cache_key:
+        params["prompt_cache_key"] = str(cache_key)
+
     # Reasoning is native here and needs no override for tools to work. Only a
     # caller's explicit hint is forwarded, and never "none" — on this endpoint
     # the field is an enum of minimal/low/medium/high.
@@ -1016,10 +1044,16 @@ def _usage_from_responses(u) -> Usage:
     if u is None:
         return Usage()
     details = getattr(u, "input_tokens_details", None)
+    cached = getattr(details, "cached_tokens", 0) or 0
+    prompt = getattr(u, "input_tokens", 0) or 0
+    # Same inclusive-vs-exclusive split as _usage_from below: the Responses API
+    # reports input_tokens INCLUSIVE of the cached prefix, Anthropic reports it
+    # exclusive. Subtract so `input_tokens` means the same thing — tokens billed
+    # at full rate — on every path the orchestrator sums.
     return Usage(
-        input_tokens=getattr(u, "input_tokens", 0) or 0,
+        input_tokens=max(0, prompt - cached),
         output_tokens=getattr(u, "output_tokens", 0) or 0,
-        cache_read_input_tokens=getattr(details, "cached_tokens", 0) or 0,
+        cache_read_input_tokens=cached,
     )
 
 
@@ -1106,8 +1140,14 @@ def _usage_from(u) -> Usage:
     total = getattr(u, "total_tokens", 0) or 0
     if total > prompt + completion:
         completion = total - prompt
+    # Chat-completions providers report prompt_tokens INCLUSIVE of the cached
+    # prefix; Anthropic reports input_tokens EXCLUSIVE of it. The orchestrator
+    # sums input + cache_read + cache_write into one "what this turn read"
+    # figure, so leaving prompt inclusive double-counted every cached token on
+    # every OpenAI-compatible provider — the more the cache worked, the more the
+    # counter overstated. Subtract here so both conventions mean the same thing.
     return Usage(
-        input_tokens=prompt,
+        input_tokens=max(0, prompt - cached),
         output_tokens=completion,
         cache_read_input_tokens=cached,
     )
@@ -1324,8 +1364,14 @@ class _StreamHandle:
         for provider, model in self._owner._chain(self._kwargs.get("model", "")):
             try:
                 if provider == "anthropic":
+                    # Same kwarg strip as create_message: these two are hints for
+                    # the compat path and the Anthropic SDK rejects unknown keys.
+                    anthro = {
+                        k: v for k, v in self._kwargs.items()
+                        if k not in ("reasoning_effort", "cache_key")
+                    }
                     cm = self._owner._anthropic.stream_message(
-                        **{**self._kwargs, "model": model}
+                        **{**anthro, "model": model}
                     )
                     stream = await cm.__aenter__()
                     self._anthropic_cm = cm

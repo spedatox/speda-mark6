@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 class RunCommandSkill(Skill):
     name = "run_command"
+    deferred = True
+    search_keywords = "shell bash terminal command execute script sandbox run code"
     description = (
         "Runs a shell command in SPEDA's own sandboxed Linux computer (an isolated "
         "container with Python 3.12, pip, git, curl, jq, pandas/numpy preinstalled, "
@@ -82,6 +84,8 @@ class RunCommandSkill(Skill):
 
 class DeliverFileSkill(Skill):
     name = "deliver_file"
+    deferred = True
+    search_keywords = "send deliver file attachment download sandbox output"
     description = (
         "Delivers a file you created in the sandbox (/workspace) to the user as a "
         "downloadable file in the chat. Use this AFTER run_command has produced a "

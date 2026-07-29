@@ -244,9 +244,18 @@ class AgentOrchestrator:
         # daily-brief "pure hallucination" bug. This standing directive is
         # model-agnostic (the ollama block below is greeting-discipline, not
         # this) and forces execute-over-narrate + a hard no-fabrication rule.
+        # Held OUT of stable_core deliberately. Appending it there forked the
+        # cached prefix in two: every n8n turn and every chat turn built a
+        # different ~30k system block, so neither could ever read the other's
+        # cache entry and the automated side — which runs unattended, on a
+        # schedule, and is the larger half of the token spend — paid a cold
+        # prefix every single time. As a trailing block it sits AFTER the two
+        # cached breakpoints, so both trigger sources now share one identical
+        # cached prefix and only these few hundred tokens differ.
+        automated_block = ""
         if context.triggered_by != "user":
-            stable_core += (
-                "\n\n## AUTOMATED RUN — EXECUTE, DON'T NARRATE\n\n"
+            automated_block = (
+                "## AUTOMATED RUN — EXECUTE, DON'T NARRATE\n\n"
                 "This turn was fired by an automation, not a person. No one is "
                 "waiting to answer questions and there is nothing to preview. Carry "
                 "out the requested workflow end to end with REAL tool calls, then "
@@ -292,13 +301,20 @@ class AgentOrchestrator:
                 "be done until the link is restored."
             )
 
-        # Catalog of lazily-loadable toolsets (small, stable → cached). SPEDA
-        # pulls a toolset in via use_toolset only when a task needs it, keeping
-        # the prompt prefix tiny instead of shipping every MCP tool every call.
-        # Pointless in a dead zone — every loadable toolset is remote.
-        catalog = "" if dead_zone else self._registry.toolset_catalog(allowlist=allowlist)
-        if catalog:
-            stable_core = f"{stable_core}\n\n{catalog}"
+        # Progressive tool disclosure. Deferred tools appear here by NAME ONLY;
+        # `tool_search` turns a name into a callable tool when a task needs one.
+        # Names cost a few tokens each against the hundreds a full Rule 11
+        # description costs, so the model keeps sight of its whole capability
+        # surface without the prefix carrying every schema on every iteration.
+        # Pointless in a dead zone — the deferred set is remote either way.
+        index = "" if dead_zone else self._registry.tool_index(
+            allowlist=allowlist,
+            active_servers=context.extra.get("active_servers"),
+            agent_id=context.agent_id,
+            loaded_tools=context.extra.get("loaded_tools"),
+        )
+        if index:
+            stable_core = f"{stable_core}\n\n{index}"
 
         # Structured system blocks. `_cache: True` marks the block for an ephemeral
         # cache breakpoint; the marker is stripped before the request is sent.
@@ -312,17 +328,35 @@ class AgentOrchestrator:
         # conversation breakpoint caches it as part of the stable prefix.
         if episodic_block:
             system_blocks.append({"type": "text", "text": episodic_block})
+        # Trailing, uncached, and last on purpose — see the note where it is
+        # built. Everything above this line is byte-identical for a chat turn
+        # and an n8n turn on the same agent.
+        if automated_block:
+            system_blocks.append({"type": "text", "text": automated_block})
 
         # Keep a plain-string copy for any downstream logging/inspection.
         context.system_prompt = stable_core
 
         # Toolsets loaded this turn (grows when use_toolset is called).
         context.extra.setdefault("active_servers", set())
+        # Deferred tools resolved by tool_search. Seeded from the session so a
+        # tool found on turn 1 is still there on turn 9 without another search.
+        context.extra.setdefault("loaded_tools", set())
+        # The search skill resolves against the registry, so hand it the one the
+        # orchestrator was built with rather than letting it reach for a global
+        # (Rule 6 — no module-level state).
+        context.extra["registry"] = self._registry
+
+        # Anthropic resolves deferred tools with its own server-side tool-search;
+        # every other provider has no such thing, so the registry withholds them
+        # and our tool_search skill appends them. Same behaviour either way.
+        defer_loading = provider == "anthropic"
 
         messages = list(context.conversation_history)
         tools = self._registry.list_tools(
             context.extra["active_servers"], offline_only=dead_zone,
             allowlist=allowlist, agent_id=context.agent_id,
+            loaded_tools=context.extra["loaded_tools"], defer_loading=defer_loading,
         )
         iterations = 0
         produced_text = False  # any text streamed yet this turn (for paragraph breaks)
@@ -372,6 +406,12 @@ class AgentOrchestrator:
                 messages=messages,
                 tools=tools,
                 max_tokens=8096,
+                # Cache-routing key for providers that expose one (OpenAI). Keyed
+                # by agent+session so every iteration of every turn in one
+                # conversation lands on the same cache entry — the prefix they
+                # share is exactly the ~20k the agent re-sends each lap. Ignored
+                # by every other provider.
+                cache_key=f"{context.agent_id}-{context.session_id}",
             ) as stream:
                 first_delta = True
                 async for delta in stream.text_stream:
@@ -413,11 +453,25 @@ class AgentOrchestrator:
                 # Running cost of THIS turn, summed over every iteration of the
                 # loop. A tool-using turn re-sends the whole prompt each time
                 # round, and each of those sends is billed, so the sum — not the
-                # last iteration — is what the turn actually cost. Anthropic
-                # reports cached prefix tokens OUTSIDE input_tokens, so they are
-                # added back in: they are part of the prompt the model read.
-                spend = context.extra.setdefault("token_usage", {"input": 0, "output": 0})
-                spend["input"] += (getattr(usage, "input_tokens", 0) or 0) + cache_read + cache_write
+                # last iteration — is what the turn actually cost.
+                #
+                # `input` is what the model READ (uncached + cached), which is
+                # the context-size figure the UI shows. `billable_input` is what
+                # was charged at FULL rate — the number that actually moves the
+                # invoice, and the only one that tells you whether caching is
+                # working. Every provider now reports input_tokens EXCLUSIVE of
+                # the cached prefix (see _usage_from), so the split is real on
+                # all of them rather than Anthropic-only.
+                spend = context.extra.setdefault(
+                    "token_usage",
+                    {"input": 0, "output": 0, "billable_input": 0,
+                     "cache_read": 0, "cache_write": 0},
+                )
+                uncached = getattr(usage, "input_tokens", 0) or 0
+                spend["input"] += uncached + cache_read + cache_write
+                spend["billable_input"] += uncached
+                spend["cache_read"] += cache_read
+                spend["cache_write"] += cache_write
                 spend["output"] += getattr(usage, "output_tokens", 0) or 0
 
             stop_reason = response.stop_reason
@@ -499,11 +553,16 @@ class AgentOrchestrator:
 
                 messages.append({"role": "user", "content": tool_results})
 
-                # A use_toolset call may have loaded new toolsets — rebuild the
-                # tool list so they're available on the next iteration.
+                # A tool_search (or use_toolset) call may have resolved new
+                # tools — rebuild so they're callable on the next iteration.
+                # Resolved tools are APPENDED after the core set by list_tools,
+                # never spliced into it, so the prefix the provider cached on the
+                # previous iteration is still a prefix of this one.
                 tools = self._registry.list_tools(
                     context.extra["active_servers"], offline_only=dead_zone,
                     allowlist=allowlist, agent_id=context.agent_id,
+                    loaded_tools=context.extra["loaded_tools"],
+                    defer_loading=defer_loading,
                 )
 
             # ── max_tokens ──────────────────────────────────────────────────
@@ -553,6 +612,28 @@ class AgentOrchestrator:
                 session_id=context.session_id,
                 request_id=context.request_id,
             )
+
+        # Turn-level cost summary. The per-iteration `prompt_cache` lines say
+        # what one call did; this says what the TURN cost and how much of it the
+        # cache absorbed. `hit_rate` is the number to watch — a tool-using turn
+        # that re-sends a 30k prefix ten times should be reading ~90% of its
+        # input from cache. Anything near zero means the prefix is churning.
+        _spend = context.extra.get("token_usage") or {}
+        _read = _spend.get("cache_read", 0)
+        log.info(
+            "turn_cost",
+            extra={
+                "request_id": context.request_id,
+                "model": context.model,
+                "iterations": iterations,
+                "input_read": _spend.get("input", 0),
+                "billable_input": _spend.get("billable_input", 0),
+                "cache_read": _read,
+                "cache_write": _spend.get("cache_write", 0),
+                "output": _spend.get("output", 0),
+                "hit_rate": round(_read / max(1, _spend.get("input", 0)), 3),
+            },
+        )
 
         # DONE carries this turn's token spend so the UI can update its readout
         # immediately. It is a DELTA, not a total: persistence runs after the

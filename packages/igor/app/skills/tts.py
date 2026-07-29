@@ -8,6 +8,8 @@ logger = logging.getLogger(__name__)
 
 class TTSSkill(Skill):
     name = "text_to_speech"
+    deferred = True
+    search_keywords = "tts speak voice audio say aloud speech synthesis"
     description = (
         "Converts text to speech audio using the local Kokoro TTS engine running on Contabo. "
         "Use this when the user requests a spoken response, audio playback, or voice output. "

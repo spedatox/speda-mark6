@@ -109,6 +109,8 @@ def _ssh_argv(remote_command: str) -> list[str]:
 
 class SystemOpsSkill(Skill):
     name = "system_ops"
+    deferred = True
+    search_keywords = "server host ops restart service systemd docker deploy disk maintenance admin"
     restricted_to = frozenset({"orion", "optimus"})
     read_only = False
     requires_network = False

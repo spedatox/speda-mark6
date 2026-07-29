@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 class RemindersSkill(Skill):
     name = "reminders"
+    deferred = True
+    search_keywords = "reminder remind nag persistent snooze done taken"
     description = (
         "Sends, reads and closes PERSISTENT reminders — questions that keep "
         "re-asking over Telegram every few minutes until the owner actually "

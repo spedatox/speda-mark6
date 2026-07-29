@@ -226,6 +226,8 @@ async def _resolve_point(
 
 class GetRouteSkill(Skill):
     name = "get_route"
+    deferred = True
+    search_keywords = "directions drive driving navigate navigation route traffic eta commute travel time map"
     description = (
         "Computes turn-by-turn driving/walking/transit directions between two "
         "points WITH LIVE TRAFFIC, using Google's Routes API. Use it whenever the "
@@ -410,6 +412,8 @@ class GetRouteSkill(Skill):
 
 class FindPlacesSkill(Skill):
     name = "find_places"
+    deferred = True
+    search_keywords = "map maps place restaurant cafe shop nearby location address where geocode search place"
     description = (
         "Searches for places (cafés, pharmacies, gas stations, restaurants, ATMs, "
         "…) near a point using Google's Places API, to answer 'where can I go for "

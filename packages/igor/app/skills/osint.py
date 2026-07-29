@@ -67,6 +67,8 @@ def _strip_tags(s: str) -> str:
 
 class IPGeolocateSkill(Skill):
     name = "ip_geolocate"
+    deferred = True
+    search_keywords = "ip address location geolocate country city where isp lookup"
     description = (
         "Geolocates an IPv4/IPv6 address or hostname using ip-api.com, returning "
         "country, region, city, coordinates, timezone, ISP, organization and the "
@@ -130,6 +132,8 @@ class IPGeolocateSkill(Skill):
 
 class IPReputationSkill(Skill):
     name = "ip_reputation"
+    deferred = True
+    search_keywords = "ip address reputation abuse malicious suspicious lookup check threat"
     description = (
         "Checks an IP address against AbuseIPDB, returning its abuse-confidence "
         "score (0–100), how many times it has been reported, the categories/recency "
@@ -235,6 +239,8 @@ async def _abuse_ch_post(url: str, *, data: dict | None = None, json_body: dict 
 
 class URLhausLookupSkill(Skill):
     name = "urlhaus_lookup"
+    deferred = True
+    search_keywords = "url malicious malware link lookup phishing check"
     description = (
         "Looks up a URL or hostname/domain in abuse.ch URLhaus, the malware-URL "
         "database, reporting whether it is a known malware-distribution URL, its "
@@ -306,6 +312,8 @@ class URLhausLookupSkill(Skill):
 
 class ThreatFoxLookupSkill(Skill):
     name = "threatfox_lookup"
+    deferred = True
+    search_keywords = "threat ioc malware indicator lookup ip domain hash"
     description = (
         "Searches abuse.ch ThreatFox for an indicator of compromise — an IP:port, "
         "domain, URL, or file hash — and returns any matching IOCs with their malware "
@@ -363,6 +371,8 @@ class ThreatFoxLookupSkill(Skill):
 
 class MalwareBazaarLookupSkill(Skill):
     name = "malwarebazaar_lookup"
+    deferred = True
+    search_keywords = "malware hash sample sha256 md5 lookup virus file"
     description = (
         "Looks up a file hash (SHA256, SHA1 or MD5) in abuse.ch MalwareBazaar and "
         "returns the sample's metadata: file name and type, size, detected malware "
@@ -421,6 +431,8 @@ class MalwareBazaarLookupSkill(Skill):
 
 class PwnedPasswordSkill(Skill):
     name = "pwned_password_check"
+    deferred = True
+    search_keywords = "password pwned breach leak compromised haveibeenpwned check"
     description = (
         "Checks whether a password appears in Have I Been Pwned's Pwned Passwords "
         "corpus and how many breaches contain it, using the k-anonymity range API — "
@@ -509,6 +521,8 @@ def _harvest_hidden(html_text: str) -> dict:
 
 class DarkWebSearchSkill(Skill):
     name = "darkweb_search"
+    deferred = True
+    search_keywords = "dark web onion tor hidden search leak marketplace"
     description = (
         "Searches the Ahmia index of Tor hidden services (.onion sites) for a query "
         "and returns matching titles, .onion addresses and snippets — all over the "
@@ -595,6 +609,8 @@ class DarkWebSearchSkill(Skill):
 
 class OTXLookupSkill(Skill):
     name = "otx_lookup"
+    deferred = True
+    search_keywords = "threat intel indicator ioc otx alienvault malware ip domain hash lookup"
     description = (
         "Queries AlienVault OTX (Open Threat Exchange) for an indicator — an IP, "
         "domain, hostname, URL, or file hash — and reports how many community threat "
@@ -684,6 +700,8 @@ class OTXLookupSkill(Skill):
 
 class ShodanLookupSkill(Skill):
     name = "shodan_lookup"
+    deferred = True
+    search_keywords = "shodan port scan exposed service host ip internet device lookup"
     description = (
         "Queries Shodan either for a single host (pass 'ip' — returns open ports, "
         "running services/banners, hostnames, the owning org, and known CVEs) or as a "
@@ -767,6 +785,8 @@ class ShodanLookupSkill(Skill):
 
 class EmailDiscoverySkill(Skill):
     name = "email_discovery"
+    deferred = True
+    search_keywords = "email address discover find breach leak osint lookup person"
     description = (
         "Uses Hunter.io to either find the email addresses associated with a company "
         "domain (pass 'domain' — returns addresses with names, roles and confidence "
@@ -867,6 +887,8 @@ _CHAINS = {
 
 class CryptoTraceSkill(Skill):
     name = "crypto_trace"
+    deferred = True
+    search_keywords = "crypto bitcoin wallet blockchain address transaction trace ethereum"
     description = (
         "Traces one or more cryptocurrency addresses, returning each address's balance, "
         "total received/spent and transaction count (plus recent transactions for "
@@ -1121,6 +1143,8 @@ class CryptoTraceSkill(Skill):
 
 class IntelXSearchSkill(Skill):
     name = "intelx_search"
+    deferred = True
+    search_keywords = "intelligence x leak breach search document osint"
     description = (
         "Searches Intelligence X for a selector — an email, domain, IP, URL, Bitcoin "
         "address, or other identifier — across its archive of leaks, breaches, pastes and "

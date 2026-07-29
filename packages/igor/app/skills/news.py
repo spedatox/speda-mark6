@@ -40,6 +40,8 @@ _TIMEOUT = httpx.Timeout(20.0, connect=8.0)
 
 class NewsHeadlinesSkill(Skill):
     name = "news_headlines"
+    deferred = True
+    search_keywords = "news headlines current events article press media story"
     description = (
         "Reads SPEDA's always-on Turkish/English news store — the deduplicated "
         "RSS headlines collected from NTV, Hürriyet, Sabah, Milliyet and other "
@@ -108,6 +110,8 @@ class NewsHeadlinesSkill(Skill):
 
 class NewsWatchSkill(Skill):
     name = "news_watch"
+    deferred = True
+    search_keywords = "news watch monitor topic alert subscribe follow"
     description = (
         "Manages the breaking-news keyword watchlist — the terms (a company, a "
         "place like 'OSTİM', a topic like 'siber') that get flagged the instant "
@@ -226,6 +230,8 @@ def _newsdata_q(query: str) -> str:
 
 class NewsDeepDiveSkill(Skill):
     name = "news_deep_dive"
+    deferred = True
+    search_keywords = "news headlines current events article press media story briefing"
     description = (
         "Tier-2 news analyst — queries NewsData.io for structured cross-outlet "
         "coverage that free RSS can't give: corroboration (how many outlets, "
@@ -374,6 +380,8 @@ async def _tier1_fallback(query: str) -> str:
 
 class ReadArticleSkill(Skill):
     name = "read_article"
+    deferred = True
+    search_keywords = "article read url webpage link fetch page content"
     description = (
         "Fetches a news article URL and extracts its clean, readable main text "
         "for free (no API budget) using a readability extractor. Use it whenever "

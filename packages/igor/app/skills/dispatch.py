@@ -127,6 +127,8 @@ class DispatchAgentSkill(Skill):
 
 class AgentChannelSkill(Skill):
     name = "read_agent_channel"
+    deferred = True
+    search_keywords = "agent channel messages comms inter-agent conversation roster"
     description = (
         "Reads the agent network's group channel — the shared conversation log of "
         "every inter-agent dispatch and reply across the whole suite, newest-first "
@@ -168,6 +170,8 @@ class AgentChannelSkill(Skill):
 
 class DispatchStatusSkill(Skill):
     name = "dispatch_status"
+    deferred = True
+    search_keywords = "dispatch agent status ticket result inter-agent"
     description = (
         "Checks on background dispatches you launched with dispatch_agent "
         "(background=true) — the long-running jobs that keep working after your "
@@ -233,6 +237,8 @@ def _fmt_dispatch(row, brief: bool = False) -> str:
 
 class HousePartySkill(Skill):
     name = "house_party"
+    deferred = True
+    search_keywords = "house party protocol all hands roster emergency all agents mobilize"
     description = (
         "Engages or stands down the House Party Protocol — the all-hands mode for "
         "extremely high-stakes situations, where SPEDA becomes mission commander, "

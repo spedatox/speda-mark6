@@ -153,6 +153,11 @@ async def lifespan(app: FastAPI):
     from app.skills.reminders import RemindersSkill
     await registry.register_skill(RemindersSkill(telegram_bots))
     await registry.register_skill(UseToolsetSkill())
+    # Progressive tool disclosure — resolves a deferred tool's full schema on
+    # demand. Must be registered (and never itself deferred), or the tools named
+    # in the prompt's "Additional tools" index have no way to become callable.
+    from app.skills.tool_search import ToolSearchSkill
+    await registry.register_skill(ToolSearchSkill())
     await registry.register_skill(AutomationsSkill())
     await registry.register_skill(DispatchAgentSkill(
         dispatcher,

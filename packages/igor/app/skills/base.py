@@ -18,6 +18,32 @@ class Skill(ABC):
     name: str
     description: str
     input_schema: dict
+    # Progressive tool disclosure (Anthropic's `defer_loading` pattern).
+    #
+    # False = core: the full definition ships in the prompt prefix every call.
+    # True  = deferred: only the NAME is advertised; the model calls `tool_search`
+    #         to pull the full schema in when a task actually needs it.
+    #
+    # Rule 11 makes every tool description 3-4 sentences, which is right for
+    # selection accuracy and expensive to ship: 41 always-on skills measured
+    # 12.1k tokens, re-sent on every iteration of every turn. Deferral keeps the
+    # descriptions intact and stops paying for the ones this turn never uses.
+    #
+    # The mechanism differs by provider but the model-facing behaviour does not:
+    # on Anthropic the tool is sent with `defer_loading: true` and the API's own
+    # tool-search server tool resolves it; everywhere else the registry omits it
+    # and our `tool_search` skill appends it. Both APPEND the resolved schema
+    # rather than rebuilding the array, which is what keeps the cached prefix
+    # intact — a swap would invalidate everything after it.
+    deferred: bool = False
+
+    # Extra words `tool_search` matches on, beyond the name and description.
+    # Descriptions are written in the domain's own vocabulary ("PPTX", "OSINT",
+    # "geocode") while the model searches in the owner's ("powerpoint", "look up
+    # this IP", "where is this place") — without a bridge, a deferred tool that
+    # exists is simply never found, which is a worse failure than a slightly
+    # larger prefix. Only meaningful on deferred skills; ignored otherwise.
+    search_keywords: str = ""
     read_only: bool = False  # Set True for research/retrieval skills (Rule 9)
     # Set True for skills that need an INTERNET uplink (not just a local
     # service) — they are filtered out under the Dead Zone Protocol.

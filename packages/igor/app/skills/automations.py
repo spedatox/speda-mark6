@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 class AutomationsSkill(Skill):
     name = "manage_automations"
+    deferred = True
+    search_keywords = "automation schedule cron recurring reminder workflow n8n job daily routine trigger"
     description = (
         "Your CONTROL PLANE over n8n — the engine that runs every proactive watcher "
         "(a page changes, exam results appear, a feed posts, a schedule fires). You "

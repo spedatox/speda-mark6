@@ -108,6 +108,29 @@ class LegionRunner:
 
         return _Inherit()
 
+    @staticmethod
+    def _fold_spend(context: "AgentContext", uncached: int, cache_read: int,
+                    cache_write: int, output: int) -> None:
+        """Add one worker call's tokens onto the PARENT turn's running spend.
+
+        A legionnaire is billed to the same invoice as the turn that deployed
+        it, so it belongs in the same counter. Inline workers share the parent's
+        live context and land straight on the turn total the runner persists;
+        a background worker holds a detached context (its parent's HTTP turn is
+        long gone), so its tally accumulates there and is logged on completion
+        instead — the tokens are reported either way, which is the whole point.
+        """
+        spend = context.extra.setdefault(
+            "token_usage",
+            {"input": 0, "output": 0, "billable_input": 0,
+             "cache_read": 0, "cache_write": 0},
+        )
+        spend["input"] = spend.get("input", 0) + uncached + cache_read + cache_write
+        spend["billable_input"] = spend.get("billable_input", 0) + uncached
+        spend["cache_read"] = spend.get("cache_read", 0) + cache_read
+        spend["cache_write"] = spend.get("cache_write", 0) + cache_write
+        spend["output"] = spend.get("output", 0) + output
+
     # ── Tool scoping ──────────────────────────────────────────────────────────
 
     def _worker_tools(self, worker: LegionnaireDef, context: "AgentContext") -> list[dict]:
@@ -164,9 +187,19 @@ class LegionRunner:
         )
 
         messages: list[dict] = [{"role": "user", "content": prompt}]
-        system = f"{worker.system_prompt}\n\nTask: {description}"
+        # Task framing rides the first USER message, not the system prompt. Every
+        # worker of a given type then shares one byte-identical system block, so
+        # the provider's cache (explicit on Anthropic, implicit on the rest) can
+        # serve it across a whole fan-out; appending the task made every worker's
+        # prefix unique and guaranteed a cold cache on each one.
+        system = worker.system_prompt
+        messages[0]["content"] = f"Task: {description}\n\n{prompt}"
         iterations = 0
         salvage: list[str] = []  # accumulated text, returned on guard trip
+        # Per-worker spend. Folded onto the parent turn below so a Legion
+        # deployment stops being invisible in the session's token counters.
+        spend = {"input": 0, "output": 0, "billable_input": 0,
+                 "cache_read": 0, "cache_write": 0}
 
         while True:
             if iterations >= worker.max_iterations:
@@ -177,6 +210,9 @@ class LegionRunner:
                         "worker": worker.worker_id,
                         "iterations": iterations,
                         "description": description,
+                        "billable_input": spend["billable_input"],
+                        "cache_read": spend["cache_read"],
+                        "output": spend["output"],
                     },
                 )
                 partial = "\n".join(s for s in salvage if s.strip())
@@ -197,6 +233,23 @@ class LegionRunner:
                 tools=tools,
                 max_tokens=8096,
             )
+
+            # Account for the call BEFORE any branch can return. A worker that
+            # trips the iteration guard, dies on an unknown stop reason, or
+            # finishes on its first lap has still been billed for every call it
+            # made, and the old loop recorded none of them.
+            _u = getattr(response, "usage", None)
+            if _u is not None:
+                _uncached = getattr(_u, "input_tokens", 0) or 0
+                _read = getattr(_u, "cache_read_input_tokens", 0) or 0
+                _write = getattr(_u, "cache_creation_input_tokens", 0) or 0
+                spend["input"] += _uncached + _read + _write
+                spend["billable_input"] += _uncached
+                spend["cache_read"] += _read
+                spend["cache_write"] += _write
+                spend["output"] += getattr(_u, "output_tokens", 0) or 0
+                self._fold_spend(context, _uncached, _read, _write,
+                                 getattr(_u, "output_tokens", 0) or 0)
 
             stop_reason = response.stop_reason
             messages.append({"role": "assistant", "content": blocks_to_dicts(response.content)})
@@ -219,6 +272,11 @@ class LegionRunner:
                         "iterations": iterations,
                         "duration_ms": int((time.monotonic() - started) * 1000),
                         "result_length": len(result),
+                        "input_read": spend["input"],
+                        "billable_input": spend["billable_input"],
+                        "cache_read": spend["cache_read"],
+                        "cache_write": spend["cache_write"],
+                        "output": spend["output"],
                     },
                 )
                 return result
@@ -330,6 +388,20 @@ class LegionRunner:
                     "legion_background_error",
                     extra={"request_id": context.request_id, "worker": worker.worker_id, "error": str(e)},
                 )
+            _spend = bg_context.extra.get("token_usage") or {}
+            logger.info(
+                "legion_background_cost",
+                extra={
+                    "request_id": context.request_id,
+                    "worker": worker.worker_id,
+                    "model": model,
+                    "status": status,
+                    "input_read": _spend.get("input", 0),
+                    "billable_input": _spend.get("billable_input", 0),
+                    "cache_read": _spend.get("cache_read", 0),
+                    "output": _spend.get("output", 0),
+                },
+            )
             await self._log_finish(
                 msg_id, status=status, result=result,
                 duration_ms=int((time.monotonic() - started) * 1000),
@@ -422,5 +494,9 @@ def _detached_context(context: "AgentContext"):
         db=None,
         timezone=context.timezone,
         extra={"tool_allowlist": context.extra.get("tool_allowlist"),
-               "active_servers": set(context.extra.get("active_servers", set()))},
+               "active_servers": set(context.extra.get("active_servers", set())),
+               # Its own tally: a detached worker outlives the parent turn's
+               # counter, so it accumulates here and is logged on completion.
+               "token_usage": {"input": 0, "output": 0, "billable_input": 0,
+                               "cache_read": 0, "cache_write": 0}},
     )

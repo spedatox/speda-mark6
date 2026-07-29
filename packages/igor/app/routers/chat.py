@@ -260,6 +260,13 @@ async def _run_chat(
     # tools loaded via use_toolset on a prior turn stay in the tool array — no
     # repeated use_toolset calls, no cache-busting rewrites.
     context.extra["active_servers"] = session_manager.get_loaded_servers(session.id)
+    # Same for individually resolved tools (tool_search): seed from the session
+    # so a tool found earlier in the conversation is still callable, and give the
+    # skill a callback to record new ones without handing it the SessionManager.
+    context.extra["loaded_tools"] = session_manager.get_loaded_tools(session.id)
+    context.extra["mark_tools_loaded"] = (
+        lambda names, _sid=session.id: session_manager.mark_tools_loaded(_sid, names)
+    )
 
     # Engine selection: an agent backed by a connected standalone peer (Optimus)
     # streams this turn through the external proxy instead of the in-process

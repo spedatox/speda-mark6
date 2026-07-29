@@ -75,7 +75,7 @@ class SPEDAProfile(AgentProfile):
     # tasks when the user is chatting on that provider (see base.background_model).
     background_models = {
         "openai": "openai:gpt-5-mini",
-        "gemini": "gemini:gemini-2.5-flash",
+        "gemini": "gemini:gemini-3.5-flash-lite",
         "zai": "zai:glm-4.5-air",
         "deepseek": "deepseek:deepseek-v4-flash",
         "nvidia": "nvidia:meta/llama-3.1-8b-instruct",

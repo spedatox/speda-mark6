@@ -65,6 +65,8 @@ class SendTelegramMessageSkill(Skill):
 
 class SendTelegramFileSkill(Skill):
     name = "send_telegram_file"
+    deferred = True
+    search_keywords = "telegram send file photo document upload chat message"
     read_only = False
     requires_network = True
     description = (

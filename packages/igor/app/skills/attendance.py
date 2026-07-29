@@ -27,6 +27,8 @@ _RISK_LABEL = {
 
 class AttendanceStatusSkill(Skill):
     name = "check_attendance"
+    deferred = True
+    search_keywords = "class lecture school attendance university course roll present absent"
     read_only = True  # Rule 9 — pure retrieval, safe to run in parallel
     description = (
         "Reads the owner's course attendance ledger and returns, per subject, how many more "
@@ -101,6 +103,8 @@ class AttendanceStatusSkill(Skill):
 
 class AskAttendanceSkill(Skill):
     name = "ask_attendance"
+    deferred = True
+    search_keywords = "class lecture school attendance university course ask prompt present absent"
     requires_network = True
     description = (
         "Pushes a 'derse girdin mi?' question to the owner's watch for a teaching hour that has "

@@ -40,7 +40,7 @@ class UltronProfile(AgentProfile):
     haiku_model = "claude-haiku-4-5-20251001"
     background_models = {
         "openai": "openai:gpt-5-mini",
-        "gemini": "gemini:gemini-2.5-flash",
+        "gemini": "gemini:gemini-3.5-flash-lite",
         "zai": "zai:glm-4.5-air",
         "deepseek": "deepseek:deepseek-v4-flash",
     }

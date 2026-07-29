@@ -8,6 +8,8 @@ logger = logging.getLogger(__name__)
 
 class STTSkill(Skill):
     name = "speech_to_text"
+    deferred = True
+    search_keywords = "stt transcribe transcription audio voice dictation whisper listen"
     description = (
         "Transcribes an audio file to text using the local Whisper STT engine running on Contabo. "
         "Use this when processing a voice message from the user or transcribing an uploaded audio file. "

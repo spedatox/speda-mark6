@@ -29,12 +29,27 @@ class SessionManager:
     # channel) → session_id.
     _channel_sessions: dict[tuple[int, str, str], int] = {}
 
+    # Per-session resolved-tool memory, the tool_search analogue of the toolset
+    # memory above and load-bearing for the same reason: a tool the model found
+    # on turn 1 must still be in the array on turn 9. Without it the array
+    # shrinks back every turn, the model re-searches for something it already
+    # had, and the tail of the tool list changes on each turn — which is exactly
+    # the prefix churn progressive disclosure exists to prevent.
+    _session_tools: dict[int, set[str]] = {}
+
     def get_loaded_servers(self, session_id: int) -> set[str]:
         return set(self._session_servers.get(session_id, set()))
 
     def mark_servers_loaded(self, session_id: int, servers: set[str]) -> None:
         existing = self._session_servers.get(session_id, set())
         self._session_servers[session_id] = existing | servers
+
+    def get_loaded_tools(self, session_id: int) -> set[str]:
+        return set(self._session_tools.get(session_id, set()))
+
+    def mark_tools_loaded(self, session_id: int, tools: set[str]) -> None:
+        existing = self._session_tools.get(session_id, set())
+        self._session_tools[session_id] = existing | tools
 
     async def reset_channel_session(
         self, db: AsyncSession, channel: str, agent_id: str, user_id: int = 1

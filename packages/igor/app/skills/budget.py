@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 
 class BudgetModeSkill(Skill):
     name = "set_budget_mode"
+    deferred = True
+    search_keywords = "budget cost cheap frugal spend saving mode expensive"
     description = (
         "Turns SPEDA's budget mode ON or OFF when the owner asks (e.g. 'go budget "
         "mode', 'activate budget mode', 'stop saving money', 'unleash yourself', "

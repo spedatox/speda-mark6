@@ -12,6 +12,8 @@ from app.skills.base import Skill
 
 class LegionStatusSkill(Skill):
     name = "legion_status"
+    deferred = True
+    search_keywords = "legion worker subagent background task ticket status result"
     description = (
         "Checks on background legionnaires you deployed with the Task tool "
         "(run_in_background=true) — Legion workers that keep running after your "
