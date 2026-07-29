@@ -277,6 +277,26 @@ async def lifespan(app: FastAPI):
 
     app.state.turns = TurnRegistry(session_manager)
 
+    # Background legionnaires report in when they finish. Wired HERE, not at
+    # Tier-0 registration: the callback closes over the orchestrator, the turn
+    # registry and the session manager, and none of those exist yet when the
+    # Legion is registered first. A completed worker now starts a real push turn
+    # on the agent that deployed it instead of leaving the result sitting in a
+    # ticket until someone thinks to ask.
+    from app.core.trigger_runner import make_legion_reporter
+
+    registry.set_legion_report_hook(
+        make_legion_reporter(
+            profiles=profiles,
+            orchestrator=orchestrator,
+            turns=app.state.turns,
+            session_manager=session_manager,
+            telegram_bots=telegram_bots,
+            agent_proxy=agent_proxy,
+            ws_manager=ws_manager,
+        )
+    )
+
     # ── 9. Child processes — the local sandbox + the Forge peer ────────────────
     # Both are best-effort: a missing dependency logs a warning and SPEDA keeps
     # running. The sandbox gives the run_command skill a computer without Docker;

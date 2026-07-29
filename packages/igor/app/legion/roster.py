@@ -237,9 +237,11 @@ def build_tool_definition() -> dict:
                     "type": "boolean",
                     "default": False,
                     "description": (
-                        "Launch detached and return a ticket immediately; the result "
-                        "is retrieved later via legion_status. Use for long jobs the "
-                        "owner should not wait on."
+                        "Launch detached and return a ticket immediately. Use for long "
+                        "jobs the owner should not wait on. When the worker finishes "
+                        "you are woken automatically with its findings and deliver "
+                        "them to the owner then — you do not need to poll, and "
+                        "legion_status is only for when he asks before it lands."
                     ),
                 },
             },

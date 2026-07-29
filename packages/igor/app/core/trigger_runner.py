@@ -27,6 +27,7 @@ produced — the pre-existing behaviour, kept deliberately.
 """
 
 import logging
+import uuid
 from datetime import datetime
 
 from sqlalchemy import select
@@ -86,6 +87,42 @@ def build_seed(payload: dict, output_mode: str) -> str:
             "now. Still do the real work; keep the write-up brief."
         ),
     }.get(output_mode, "")
+
+    # A finished background legionnaire needs the OPPOSITE instruction to a
+    # briefing. The block above pushes hard on "execute the workflow with real
+    # tools", which is right when the work hasn't happened yet and is exactly
+    # wrong here: the work is done, the findings are in the payload, and an
+    # agent told to ACT will re-run the searches it already paid for — or
+    # redeploy the worker and loop. This branch says: read, synthesise, report.
+    if payload.get("type") == "legion_report":
+        status = payload.get("status") or "ok"
+        failed = status != "ok"
+        return (
+            "BACKGROUND WORK COMPLETE — a legionnaire you deployed earlier has "
+            "finished and the owner has not seen the result yet. No human is "
+            "waiting in this turn; your job is to deliver the finding.\n\n"
+            "- The work is ALREADY DONE. Do NOT re-run the research, do NOT "
+            "repeat the worker's tool calls, and do NOT deploy another "
+            "legionnaire. Everything you need is below.\n"
+            "- Write the owner's message FROM the findings. Lead with the answer, "
+            "not with preamble about the worker. One short line naming which "
+            "legionnaire ran and what it was asked, then the substance.\n"
+            + (
+                "- This run FAILED. Say so plainly, give the error, and say what "
+                "you would try next. Do NOT invent a result to fill the gap.\n"
+                if failed else
+                "- Keep it to what the findings actually support. If they are "
+                "thin or inconclusive, say that rather than padding.\n"
+            )
+            + f"- {delivery}\n\n"
+            f"legionnaire: {payload.get('worker') or 'unknown'}\n"
+            f"task: {payload.get('task') or '(unspecified)'}\n"
+            f"status: {status}\n"
+            f"ticket: {payload.get('ticket') or '(untracked)'}\n\n"
+            "findings:\n"
+            f"{payload.get('result') or '(the worker returned nothing)'}"
+        )
+
     return (
         "AUTOMATED TRIGGER — no human is waiting on this turn, so you must ACT, "
         "not narrate.\n\n"
@@ -116,7 +153,10 @@ def trigger_meta(payload: dict, output_mode: str) -> dict:
     history goes back to the model, so it costs nothing in the prompt.
     """
     return {
-        "source": "n8n",
+        # A legion report is not n8n's doing — the agent's own worker woke it.
+        # The UI labels the sender from this, and attributing it to the
+        # automation channel would misreport who started the conversation.
+        "source": "legion" if payload.get("type") == "legion_report" else "n8n",
         "label": _label(payload),
         "job": payload.get("job") or payload.get("event") or payload.get("type") or "",
         "automation": payload.get("automation") or "",
@@ -165,20 +205,27 @@ async def start_trigger_turn(
     agent_proxy=None,
     ws_manager=None,
     user_id: int = 1,
+    triggered_by: str = "n8n",
 ) -> tuple[str | None, int]:
     """Launch an automated turn as a detached, persisted chat turn.
 
     Returns (request_id | None, session_id) — None means the turn registry was
     at capacity and nothing was started, which the router reports to n8n so it
     can retry instead of assuming the job ran.
+
+    `triggered_by` defaults to "n8n" because that is who fires almost all of
+    these. A completed background legionnaire reporting back is genuinely
+    "agent" — the same three values AgentContext has always allowed — and
+    labelling it honestly keeps the session list and the logs truthful about
+    what woke the agent up.
     """
     agent_id = profile.agent_id
-    model = profile.allocate_model("n8n")
+    model = profile.allocate_model(triggered_by)
 
     session = await session_manager.get_or_create(
         db=db,
         user_id=user_id,
-        triggered_by="n8n",
+        triggered_by=triggered_by,
         model_used=model,
         agent_id=agent_id,
     )
@@ -205,7 +252,7 @@ async def start_trigger_turn(
         user_id=user_id,
         session_id=session.id,
         request_id=request_id,
-        triggered_by="n8n",
+        triggered_by=triggered_by,
         trigger_payload=format_trigger_context(payload),
         output_mode=output_mode,
         model=model,
@@ -360,3 +407,98 @@ async def _store_notification(
             "trigger_notification_store_failed",
             extra={"request_id": request_id, "error": str(e)},
         )
+
+
+# ── Legion completion reports ────────────────────────────────────────────────
+
+
+def make_legion_reporter(
+    *,
+    profiles,
+    orchestrator,
+    turns,
+    session_manager,
+    telegram_bots,
+    agent_proxy=None,
+    ws_manager=None,
+    user_id: int = 1,
+):
+    """Build the callback a finished BACKGROUND legionnaire fires to report in.
+
+    A background worker used to end in silence: the result landed in an
+    agent_messages ticket and sat there until the owner happened to ask
+    legion_status. For a job the owner deliberately sent away — "go research
+    this, tell me when you're done" — silence is the one outcome that makes the
+    feature useless. This turns completion into a real turn on the agent that
+    deployed the worker, with output_mode="push", so the agent reads the
+    findings and writes the owner's message and the existing
+    push → Telegram → notification chain delivers it.
+
+    Deliberately a callback built here rather than logic inside LegionRunner:
+    the Legion owns worker execution and must not learn about sessions,
+    delivery or the turn registry (Rule 1). This closes over what the lifespan
+    already assembled and hands the Legion one awaitable.
+
+    Inline workers are NOT reported — their result returns into the parent turn,
+    where the agent is already holding it and already replying. Reporting those
+    would double-send.
+    """
+
+    async def report(
+        *,
+        agent_id: str,
+        worker_id: str,
+        task: str,
+        result: str,
+        status: str,
+        ticket: int | None = None,
+    ) -> None:
+        profile = profiles.get(agent_id)
+        if profile is None:
+            logger.warning(
+                "legion_report_unknown_agent", extra={"agent_id": agent_id}
+            )
+            return
+
+        payload = {
+            "type": "legion_report",
+            "job": f"{worker_id} report",
+            "worker": worker_id,
+            "task": task,
+            "result": result,
+            "status": status,
+            "ticket": ticket,
+        }
+        request_id = str(uuid.uuid4())
+
+        # Its own DB session: the turn that deployed this worker finished long
+        # ago and its session is gone.
+        async with AsyncSessionLocal() as db:
+            started, session_id = await start_trigger_turn(
+                db=db,
+                profile=profile,
+                payload=payload,
+                output_mode="push",
+                request_id=request_id,
+                orchestrator=orchestrator,
+                turns=turns,
+                session_manager=session_manager,
+                telegram_bots=telegram_bots,
+                agent_proxy=agent_proxy,
+                ws_manager=ws_manager,
+                user_id=user_id,
+                triggered_by="agent",
+            )
+        logger.info(
+            "legion_report_started" if started else "legion_report_refused",
+            extra={
+                "request_id": request_id,
+                "agent_id": agent_id,
+                "worker": worker_id,
+                "status": status,
+                "ticket": ticket,
+                "session_id": session_id,
+            },
+        )
+
+    return report

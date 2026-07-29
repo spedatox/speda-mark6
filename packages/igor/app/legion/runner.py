@@ -52,6 +52,19 @@ class LegionRunner:
         self._registry = registry
         self._profiles = profiles
         self._background: set[asyncio.Task] = set()
+        # Set late in the lifespan (see set_report_hook): the orchestrator and
+        # turn registry it closes over do not exist yet at Tier-0 registration.
+        self._report_hook = None
+
+    def set_report_hook(self, hook) -> None:
+        """Install the callback a finished BACKGROUND worker fires to report in.
+
+        Kept as an injected awaitable rather than logic here: the Legion runs
+        workers and must not know about sessions, delivery or the turn registry
+        (Rule 1). None = the old behaviour, where a background result waits in
+        its ticket until someone asks legion_status.
+        """
+        self._report_hook = hook
 
     # ── Entry point (called by registry.execute for tool "Task") ─────────────
 
@@ -407,15 +420,43 @@ class LegionRunner:
                 duration_ms=int((time.monotonic() - started) * 1000),
             )
 
+            # Report in. The ticket is written FIRST so the result is durable
+            # even if the reporting turn cannot start (registry at capacity,
+            # provider down) — the owner can still retrieve it with
+            # legion_status. Cancellation is not reported: that path is a
+            # shutdown, not a finding, and it returns above before reaching here.
+            if self._report_hook is not None:
+                try:
+                    await self._report_hook(
+                        agent_id=context.agent_id,
+                        worker_id=worker.worker_id,
+                        task=description or prompt,
+                        result=result,
+                        status=status,
+                        ticket=msg_id,
+                    )
+                except Exception as e:  # noqa: BLE001 — never break on delivery
+                    logger.error(
+                        "legion_report_failed",
+                        extra={
+                            "request_id": context.request_id,
+                            "worker": worker.worker_id,
+                            "error": str(e),
+                        },
+                    )
+
         task = asyncio.create_task(_run_and_finish())
         self._background.add(task)
         task.add_done_callback(self._background.discard)
         ticket = f"#{msg_id}" if msg_id else "(untracked)"
         return (
             f"Background legionnaire deployed: {worker.worker_id} on '{description}' "
-            f"— ticket {ticket}. The result is NOT available yet; tell the owner it "
-            "is running and check later with legion_status. Never guess or fabricate "
-            "the result."
+            f"— ticket {ticket}. The result is NOT available yet, so never guess or "
+            "fabricate it. When the worker finishes you will be woken with its "
+            "findings and you will deliver them to the owner then — so tell him it "
+            "is running and that you will report back, and do NOT promise to check "
+            "on it yourself or ask him to remind you. legion_status is only for "
+            "when he asks before it lands."
         )
 
     async def shutdown(self) -> None:

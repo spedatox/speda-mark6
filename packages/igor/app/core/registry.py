@@ -109,6 +109,18 @@ class CapabilityRegistry:
             extra={"tier": 0, "capability": "Task", "brand": "legion"},
         )
 
+    def set_legion_report_hook(self, hook) -> None:
+        """Wire the completion callback for BACKGROUND legionnaires.
+
+        Called late in the lifespan, not at register_legion(): the hook closes
+        over the orchestrator, turn registry and session manager, none of which
+        exist when Tier 0 is registered first. A no-op if the Legion was never
+        registered, so the ordering rule stays a startup concern rather than
+        something every caller has to know about.
+        """
+        if self._legion is not None:
+            self._legion.set_report_hook(hook)
+
     async def legion_shutdown(self) -> None:
         """Cancel in-flight background legionnaires (lifespan teardown)."""
         if self._legion is not None:

@@ -34,7 +34,19 @@ class _Profile:
 
 @pytest.fixture(autouse=True)
 def _no_override(monkeypatch):
+    """Isolate worker-model resolution from the deployment it runs on.
+
+    `resolve_worker_model` consults the owner's persisted per-legionnaire pins
+    at priority 2 — ahead of the explicit tool param and the effort policy — and
+    `get_legion_models()` reads real runtime state off disk. These tests assert
+    the POLICY, so they have to start from no pins; otherwise the suite passes
+    or fails depending on what the owner happens to have configured, which is
+    how it started failing here the moment real pins were set.
+
+    The `pins` fixture below overrides this to test the pin path itself.
+    """
     monkeypatch.setattr(settings, "legion_model_override", "")
+    monkeypatch.setattr("app.core.runtime_state.get_legion_models", lambda: {})
 
 
 def test_low_effort_zai_parent_gets_cheap_zai(monkeypatch):
@@ -207,3 +219,155 @@ def test_legacy_env_alias(monkeypatch):
     monkeypatch.setenv("LEGION_MODEL_OVERRIDE", "openai:gpt-5-mini")
     s = Settings()
     assert s.legion_model_override == "openai:gpt-5-mini"
+
+
+# ── Background workers report in when they finish ────────────────────────────
+#
+# A background worker used to end in silence: the result landed in a ticket and
+# waited for someone to ask legion_status. For a job the owner deliberately sent
+# away, silence is the one outcome that makes the feature useless.
+
+from unittest.mock import AsyncMock
+
+
+def _bg_ctx():
+    """A context complete enough for the background path, which builds a real
+    detached AgentContext (the shared _ctx above is only shaped for tool
+    scoping and has no session identity)."""
+    return SimpleNamespace(
+        request_id="req", agent_id="speda", model="zai:glm-4.6",
+        user_id=1, session_id=42, triggered_by="user",
+        timezone="Europe/Istanbul",
+        extra={"tool_allowlist": None},
+    )
+
+
+async def test_finished_background_worker_reports_to_the_deploying_agent(monkeypatch):
+    import app.legion.runner as runner_mod
+    from app.legion.runner import LegionRunner
+
+    reports = []
+
+    class _Client:
+        async def create_message(self, **kw):
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="the finding")],
+                stop_reason="end_turn",
+                usage=SimpleNamespace(
+                    input_tokens=10, output_tokens=2,
+                    cache_read_input_tokens=0, cache_creation_input_tokens=0,
+                ),
+            )
+
+    r = LegionRunner(_Client(), CapabilityRegistry(), None)
+    monkeypatch.setattr(r, "_log_start", AsyncMock(return_value=7))
+    monkeypatch.setattr(r, "_log_finish", AsyncMock())
+
+    async def _hook(**kw):
+        reports.append(kw)
+
+    r.set_report_hook(_hook)
+
+    ctx = _bg_ctx()
+    out = await r.run_worker(
+        {"description": "dig into X", "prompt": "go", "run_in_background": True}, ctx
+    )
+    assert "ticket #7" in out
+    # The agent must not promise to chase it itself — the wake-up is automatic.
+    assert "report back" in out
+
+    for task in list(r._background):
+        await task
+
+    assert len(reports) == 1
+    rep = reports[0]
+    assert rep["agent_id"] == ctx.agent_id
+    assert rep["status"] == "ok"
+    assert rep["ticket"] == 7
+    assert rep["result"] == "the finding"
+
+
+async def test_inline_workers_do_not_report(monkeypatch):
+    """Their result returns into the parent turn, where the agent is already
+    holding it and already replying — reporting would double-send."""
+    from app.legion.runner import LegionRunner
+
+    reports = []
+
+    class _Client:
+        async def create_message(self, **kw):
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="inline finding")],
+                stop_reason="end_turn", usage=None,
+            )
+
+    r = LegionRunner(_Client(), CapabilityRegistry(), None)
+
+    async def _hook(**kw):
+        reports.append(kw)
+
+    r.set_report_hook(_hook)
+    out = await r.run_worker({"description": "d", "prompt": "p"}, _ctx())
+    assert out == "inline finding"
+    assert reports == []
+
+
+async def test_a_failed_background_worker_still_reports():
+    """Silence on failure is the worst outcome: the owner waits forever for a
+    job that died. The report says it failed rather than not arriving."""
+    from app.legion.runner import LegionRunner
+
+    reports = []
+
+    class _Boom:
+        async def create_message(self, **kw):
+            raise RuntimeError("provider exploded")
+
+    r = LegionRunner(_Boom(), CapabilityRegistry(), None)
+    r._log_start = AsyncMock(return_value=9)
+    r._log_finish = AsyncMock()
+
+    async def _hook(**kw):
+        reports.append(kw)
+
+    r.set_report_hook(_hook)
+    await r.run_worker(
+        {"description": "d", "prompt": "p", "run_in_background": True}, _bg_ctx()
+    )
+    for task in list(r._background):
+        await task
+
+    assert len(reports) == 1
+    assert reports[0]["status"] == "error"
+    assert "provider exploded" in reports[0]["result"]
+
+
+def test_report_seed_forbids_redoing_the_work():
+    """The normal trigger seed pushes hard on 'ACT, call real tools'. Applied to
+    a finished job that makes the agent re-run research it already paid for."""
+    from app.core.trigger_runner import build_seed, trigger_meta
+
+    payload = {
+        "type": "legion_report", "worker": "researcher", "task": "dig into X",
+        "result": "found Y", "status": "ok", "ticket": 3,
+    }
+    seed = build_seed(payload, "push")
+    assert "ALREADY DONE" in seed
+    assert "found Y" in seed
+    assert "researcher" in seed
+    assert "AUTOMATED TRIGGER" not in seed      # not the execute-a-workflow seed
+    assert "use_toolset" not in seed
+    # Provenance: the agent's own worker woke it, not the automation channel.
+    assert trigger_meta(payload, "push")["source"] == "legion"
+
+
+def test_failed_report_seed_forbids_inventing_a_result():
+    from app.core.trigger_runner import build_seed
+
+    seed = build_seed(
+        {"type": "legion_report", "worker": "scout", "task": "t",
+         "result": "Background worker failed: boom", "status": "error"},
+        "push",
+    )
+    assert "FAILED" in seed
+    assert "Do NOT invent" in seed
