@@ -18,6 +18,15 @@ const UI = "'Rajdhani', sans-serif"
 export interface GlassOption {
   value: string
   label: string
+  /**
+   * Optional collapsible section, e.g. the model's provider. When ANY option
+   * carries one the popover groups by it and opens only the group holding the
+   * current value — the model catalogue runs to a hundred-odd entries across
+   * seven providers, and a flat list buries the one you came for. Options with
+   * no group (a "PROFILE" default, say) stay pinned above the groups, always
+   * visible. Omit it everywhere and the list renders flat exactly as before.
+   */
+  group?: string
 }
 
 interface Pos {
@@ -77,6 +86,22 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
   useLayoutEffect(() => {
     if (open) selectedRef.current?.scrollIntoView({ block: 'nearest' })
   }, [open])
+
+  const ungrouped = options.filter(o => !o.group)
+  const groups: [string, GlassOption[]][] = []
+  for (const o of options) {
+    if (!o.group) continue
+    const found = groups.find(g => g[0] === o.group)
+    if (found) found[1].push(o)
+    else groups.push([o.group, [o]])
+  }
+  const activeGroup = options.find(o => o.value === value)?.group ?? null
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+  // Every time it opens, land on the selected value's group rather than
+  // wherever the last visit left the accordion.
+  useEffect(() => {
+    if (open) setOpenGroups(new Set(activeGroup ? [activeGroup] : []))
+  }, [open, activeGroup])
 
   const current = options.find(o => o.value === value)
 
@@ -145,7 +170,9 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
               animation: 'dropDown 0.15s ease both',
             }}
           >
-            {options.map(o => {
+            {/* Ungrouped options stay pinned at the top — a "PROFILE" default
+                must never be hidden behind a collapsed section. */}
+            {(groups.length > 0 ? ungrouped : options).map(o => {
               const selected = o.value === value
               return (
                 <button
@@ -168,6 +195,71 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
                 >
                   {o.label}
                 </button>
+              )
+            })}
+
+            {groups.map(([g, opts]) => {
+              const open_ = openGroups.has(g)
+              const holdsActive = opts.some(o => o.value === value)
+              return (
+                <div key={g}>
+                  <button
+                    className="hb-glass-opt"
+                    onClick={() => setOpenGroups(prev => {
+                      const next = new Set(prev)
+                      next.has(g) ? next.delete(g) : next.add(g)
+                      return next
+                    })}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '0.35rem',
+                      width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
+                      padding: large ? '0.45rem 0.7rem' : '0.32rem 0.6rem',
+                      background: 'transparent',
+                      borderLeft: `2px solid ${holdsActive ? tint : 'transparent'}`,
+                      color: holdsActive ? tint : 'var(--hb-text-faint)',
+                      fontFamily: MONO,
+                      fontSize: large ? '0.62rem' : '0.52rem',
+                      letterSpacing: '0.16em', textTransform: 'uppercase',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span style={{
+                      display: 'inline-block', width: '0.5rem',
+                      transform: open_ ? 'rotate(90deg)' : 'none',
+                      transition: 'transform 120ms ease',
+                    }}>{'›'}</span>
+                    {g}
+                    <span style={{ opacity: 0.55 }}>{opts.length}</span>
+                    {!open_ && holdsActive && <span style={{ color: tint }}>{'●'}</span>}
+                  </button>
+
+                  {open_ && opts.map(o => {
+                    const selected = o.value === value
+                    return (
+                      <button
+                        key={o.value}
+                        ref={selected ? selectedRef : undefined}
+                        className="hb-glass-opt"
+                        onClick={() => { onChange(o.value); setOpen(false) }}
+                        style={{
+                          display: 'block', width: '100%', textAlign: 'left',
+                          padding: large ? '0.45rem 0.7rem 0.45rem 1.35rem' : '0.32rem 0.6rem 0.32rem 1.2rem',
+                          border: 'none', cursor: 'pointer',
+                          background: selected ? `${tint}14` : 'transparent',
+                          borderLeft: `2px solid ${selected ? tint : 'transparent'}`,
+                          color: selected ? tint : 'var(--hb-text-dim)',
+                          fontFamily: large ? UI : MONO,
+                          fontSize: large ? '0.74rem' : '0.56rem',
+                          fontWeight: large ? 600 : 400,
+                          letterSpacing: large ? '0.03em' : '0.08em',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {o.label}
+                      </button>
+                    )
+                  })}
+                </div>
               )
             })}
           </div>

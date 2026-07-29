@@ -382,6 +382,22 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   }
 
   const providers = Array.from(new Set(models.map(m => m.provider ?? 'anthropic')))
+  const activeProvider = models.find(m => m.id === settings.model)?.provider ?? 'anthropic'
+
+  // Provider groups collapse, as they do on SPEDA GO. The catalogue runs to a
+  // hundred-odd models across seven providers, and a live Ollama or NVIDIA
+  // listing alone can be dozens of rows — enough to bury the one model the
+  // owner opened the board to change. Only the group holding the active model
+  // is open; the rest are one click away. Groups toggle independently (the
+  // mobile behaviour) rather than as a single-open accordion, so two providers
+  // can be compared side by side.
+  const [openProviders, setOpenProviders] = useState<Set<string>>(new Set())
+  useEffect(() => { setOpenProviders(new Set([activeProvider])) }, [activeProvider])
+  const toggleProvider = (p: string): void => setOpenProviders(prev => {
+    const next = new Set(prev)
+    next.has(p) ? next.delete(p) : next.add(p)
+    return next
+  })
   const pct = Math.round((budgetTokens.used / Math.max(budgetTokens.limit, 1)) * 100)
   const gaugeColor = pct > 100 ? '#c84a3a' : pct > 70 ? '#f2b75c' : 'var(--hb-cyan-bright)'
   const maxServerTokens = Math.max(...servers.map(s => s.tokens), 1)
@@ -516,23 +532,45 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
             </div>
           )}
 
-          {providers.map(p => (
-            <div key={p} style={{ marginBottom: '0.85rem' }}>
-              <p style={{
-                fontFamily: MONO, fontSize: '0.55rem', letterSpacing: '0.22em',
-                color: 'var(--hb-cyan)', marginBottom: '0.35rem',
-              }}>
-                {'>>:'} {PROVIDER_TAGS[p] ?? p.toUpperCase()}_
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                {models.filter(m => (m.provider ?? 'anthropic') === p).map((m, i) => (
-                  <ModelTile key={m.id} m={m} idx={i}
-                    active={settings.model === m.id}
-                    onSelect={() => update({ model: m.id })} />
-                ))}
+          {providers.map(p => {
+            const group = models.filter(m => (m.provider ?? 'anthropic') === p)
+            const open = openProviders.has(p)
+            const holdsActive = group.some(m => m.id === settings.model)
+            return (
+              <div key={p} style={{ marginBottom: '0.85rem' }}>
+                <p
+                  onClick={() => toggleProvider(p)}
+                  title={open ? `Collapse ${p}` : `Expand ${p} — ${group.length} models`}
+                  style={{
+                    fontFamily: MONO, fontSize: '0.55rem', letterSpacing: '0.22em',
+                    color: holdsActive ? 'var(--hb-cyan-bright)' : 'var(--hb-cyan)',
+                    marginBottom: '0.35rem', cursor: 'pointer', userSelect: 'none',
+                    display: 'flex', alignItems: 'center', gap: '0.4rem',
+                  }}
+                >
+                  <span style={{
+                    display: 'inline-block', width: '0.5rem',
+                    transform: open ? 'rotate(90deg)' : 'none',
+                    transition: 'transform 120ms ease',
+                  }}>{'›'}</span>
+                  {'>>:'} {PROVIDER_TAGS[p] ?? p.toUpperCase()}_
+                  <span style={{ color: 'rgba(var(--hb-cyan-rgb),0.55)' }}>{group.length}</span>
+                  {!open && holdsActive && (
+                    <span style={{ color: 'var(--hb-amber)' }}>{'●'}</span>
+                  )}
+                </p>
+                {open && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {group.map((m, i) => (
+                      <ModelTile key={m.id} m={m} idx={i}
+                        active={settings.model === m.id}
+                        onSelect={() => update({ model: m.id })} />
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           {servers.length > 0 && (
             <div>
@@ -640,7 +678,11 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                       value={info.override ?? ''}
                       options={[
                         { value: '', label: `EFFORT (${info.derived_from})` },
-                        ...models.map(m => ({ value: m.id, label: m.name.toUpperCase() })),
+                        ...models.map(m => ({
+                          value: m.id,
+                          label: m.name.toUpperCase(),
+                          group: m.provider ?? 'anthropic',
+                        })),
                       ]}
                       onChange={async v => {
                         const infos = await pinLegionModel(config, info.worker_id, v || null)

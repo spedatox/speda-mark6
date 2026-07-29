@@ -26,7 +26,13 @@ export default function AgentModelPicker({ info, models, onPin, large = false }:
       value={info.override ?? ''}
       options={[
         { value: '', label: profileLabel },
-        ...models.map(m => ({ value: m.id, label: m.name.toUpperCase() })),
+        // group = provider → the popover collapses by provider and opens
+        // only the one holding this agent's pin (see GlassSelect).
+        ...models.map(m => ({
+          value: m.id,
+          label: m.name.toUpperCase(),
+          group: m.provider ?? 'anthropic',
+        })),
       ]}
       onChange={v => onPin(v || null)}
       tint={c}
