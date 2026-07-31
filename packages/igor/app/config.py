@@ -338,6 +338,24 @@ class Settings(BaseSettings):
     # Servers whose tools are always in the prefix (no use_toolset needed).
     always_on_servers: str = "tavily,notion"
 
+    # ── Voice / TTS (Azure Speech) ───────────────────────────────────────────
+    # Voice mode speaks EVERY reply, so synthesis is a transport concern, not a
+    # tool the model chooses to call (see services/tts.py). Azure Speech is the
+    # engine: native Turkish neural voices (tr-TR-EmelNeural, tr-TR-AhmetNeural),
+    # billed per character with 0.5M free/month, and fast enough to synthesize
+    # sentence-by-sentence while the previous sentence is still playing.
+    # An empty key disables voice mode and nothing else — the rest of the app is
+    # unaffected.
+    azure_speech_key: str = ""
+    azure_speech_region: str = "westeurope"
+    # Fallback voice for any agent whose profile does not name one. The per-agent
+    # voice is IDENTITY and lives in app/profiles/*.py (Rule 10); this is only the
+    # engine default for profiles that stay silent about it.
+    tts_default_voice: str = "tr-TR-EmelNeural"
+    # Azure output-format token. MP3 decodes natively in the browser AudioContext
+    # and is roughly a tenth the size of PCM over the wire.
+    tts_output_format: str = "audio-24khz-48kbitrate-mono-mp3"
+
     # ── Conversation compaction ──────────────────────────────────────────────
     # On a long chat, older turns are summarized (background, Haiku) so the model
     # sees [summary] + recent window instead of the whole growing transcript —

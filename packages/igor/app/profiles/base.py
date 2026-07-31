@@ -76,6 +76,14 @@ class AgentProfile(ABC):
     sonnet_model: str = "claude-sonnet-4-6"
     haiku_model: str = "claude-haiku-4-5-20251001"
 
+    # Azure Speech voice this agent speaks with in voice mode. Identity, so it
+    # lives here and never in core (Rule 10) — the TTS service only resolves it.
+    # Empty = fall back to settings.tts_default_voice. Note that Azure ships
+    # only two NATIVE Turkish neural voices (tr-TR-EmelNeural, tr-TR-AhmetNeural),
+    # so the roster cannot all sound different in Turkish without moving to
+    # multilingual voices.
+    voice_id: str = ""
+
     # Document branding for generate_document output. Neutral by default; each
     # concrete profile overrides with its signature accent (Rule 10).
     doc_theme: DocTheme = DocTheme()

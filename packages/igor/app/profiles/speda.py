@@ -70,6 +70,7 @@ class SPEDAProfile(AgentProfile):
     name = AGENT_NAME   # derived from 01_identity.md — never hardcode here
     sonnet_model = "claude-sonnet-4-6"
     haiku_model = "claude-haiku-4-5-20251001"
+    voice_id = "tr-TR-EmelNeural"
 
     # Cheapest sensible model per non-Anthropic provider, used for background
     # tasks when the user is chatting on that provider (see base.background_model).

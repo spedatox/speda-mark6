@@ -239,6 +239,28 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         ],
     ),
     ConfigGroup(
+        "voice", "Voice Output",
+        "Azure Speech powers spoken replies. Billing is per character with 0.5M free "
+        "per month; markup is stripped before synthesis, so only spoken words are billed. "
+        "Leave the key empty to disable voice output entirely.",
+        [
+            ConfigField("azure_speech_key", "Azure Speech Key", "password", secret=True,
+                        requires_restart=_LIVE,
+                        help="From the Azure Speech resource. Must match the region below."),
+            ConfigField("azure_speech_region", "Azure Region", "text", requires_restart=_LIVE,
+                        help="The Speech resource's region, e.g. westeurope. A key from another "
+                             "region is rejected with HTTP 403.",
+                        placeholder="westeurope"),
+            ConfigField("tts_default_voice", "Default Voice", "text", requires_restart=_LIVE,
+                        help="Fallback for agents whose profile names no voice. Turkish neural "
+                             "voices: tr-TR-EmelNeural (female), tr-TR-AhmetNeural (male).",
+                        placeholder="tr-TR-EmelNeural"),
+            ConfigField("tts_output_format", "Audio Format", "text", requires_restart=_LIVE,
+                        help="Azure output-format token. MP3 plays natively in the client.",
+                        placeholder="audio-24khz-48kbitrate-mono-mp3"),
+        ],
+    ),
+    ConfigGroup(
         "security", "Security & Server",
         "Service credential, CORS, and diagnostics. Change the API key with care — "
         "the desktop app must use the same value.",
