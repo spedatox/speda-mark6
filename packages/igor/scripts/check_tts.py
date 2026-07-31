@@ -29,15 +29,15 @@ async def main() -> int:
     text = sys.argv[1] if len(sys.argv) > 1 else SAMPLE
 
     if not tts.configured():
-        print("✗ AZURE_SPEECH_KEY is not set.")
-        print("  Set it in .env, or in the desktop app under Settings → Configuration → Voice Output.")
+        print("!!  AZURE_SPEECH_KEY is not set.")
+        print("  Set it in .env, or in the desktop app under Settings -> Configuration -> Voice Output.")
         return 1
     print(f"region : {settings.azure_speech_region}")
     print(f"format : {settings.tts_output_format}")
 
     voices = await tts.list_voices()
     if not voices:
-        print("✗ Could not list voices — the key or region is probably wrong.")
+        print("!!  Could not list voices — the key or region is probably wrong.")
         return 1
     turkish = [v for v in voices if (v.get("locale") or "").startswith("tr-")]
     print(f"voices : {len(voices)} reachable, {len(turkish)} Turkish")
@@ -55,12 +55,12 @@ async def main() -> int:
         try:
             audio = await tts.synthesize(text, name)
         except tts.TTSError as exc:
-            print(f"✗ {name}: {exc}")
+            print(f"!!  {name}: {exc}")
             failed = True
             continue
         path = OUT_DIR / f"{name}.mp3"
         path.write_bytes(audio)
-        print(f"✓ {name:26} {len(audio) // 1024:4} KB → {path}")
+        print(f"OK  {name:26} {len(audio) // 1024:4} KB -> {path}")
 
     if not failed:
         print(f"\nPlay the files in {OUT_DIR} and pick the voice you want.")
