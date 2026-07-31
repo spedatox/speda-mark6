@@ -89,10 +89,15 @@ def strip_for_speech(text: str) -> str:
 
 def build_ssml(text: str, voice: str, locale: str | None = None) -> str:
     """Wrap text in an SSML document. Every interpolated value is escaped —
-    the text is model-authored and must never be able to introduce markup."""
+    the text is model-authored and must never be able to introduce markup.
+
+    `locale` is the language of the TEXT. Pass it whenever the voice is a
+    multilingual one, whose name deliberately does not match what it is
+    speaking; guessing from the name there yields English phonetics over
+    Turkish words."""
     # Azure voice names carry their locale as the first two segments
-    # ("tr-TR-EmelNeural" → "tr-TR"); fall back to the voice's own prefix so
-    # callers never have to pass a locale that is already implied.
+    # ("tr-TR-EmelNeural" → "tr-TR"). Guessing is correct only for a native
+    # voice, so it is the last resort, never the normal path.
     if locale is None:
         parts = voice.split("-")
         locale = "-".join(parts[:2]) if len(parts) >= 2 else "en-US"
@@ -109,8 +114,13 @@ class TTSError(RuntimeError):
     """Synthesis failed. Carries a message safe to show the owner."""
 
 
-async def synthesize(text: str, voice: str | None = None) -> bytes:
+async def synthesize(text: str, voice: str | None = None, locale: str | None = None) -> bytes:
     """Synthesize `text` and return encoded audio (MP3 by default).
+
+    `locale` is the language the TEXT is in, which is NOT the voice's own
+    locale: a multilingual voice is named `en-US-…` precisely so it can speak
+    something else. Defaults to settings.tts_locale; only when that is empty
+    does build_ssml fall back to guessing from the voice name.
 
     Raises TTSError with a readable message on any failure — an unconfigured
     key, an empty utterance, or an upstream error. Callers in a streaming path
@@ -126,7 +136,7 @@ async def synthesize(text: str, voice: str | None = None) -> bytes:
         spoken = spoken[:MAX_CHARS]
 
     voice = voice or settings.tts_default_voice
-    ssml = build_ssml(spoken, voice)
+    ssml = build_ssml(spoken, voice, locale or settings.tts_locale or None)
 
     headers = {
         "Ocp-Apim-Subscription-Key": settings.azure_speech_key,

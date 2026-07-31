@@ -15,3 +15,7 @@ class SpeakRequest(BaseModel):
     agent_id: str | None = Field(default=None, max_length=48)
     # Explicit override, mainly for auditioning voices from the settings UI.
     voice: str | None = Field(default=None, max_length=64)
+    # Language of `text`, e.g. "tr-TR". Only needed to speak something other
+    # than the owner's usual language (settings.tts_locale) — a multilingual
+    # voice reads whatever this says, regardless of its own en-US name.
+    locale: str | None = Field(default=None, max_length=16)

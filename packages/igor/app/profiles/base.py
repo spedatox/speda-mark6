@@ -78,10 +78,14 @@ class AgentProfile(ABC):
 
     # Azure Speech voice this agent speaks with in voice mode. Identity, so it
     # lives here and never in core (Rule 10) — the TTS service only resolves it.
-    # Empty = fall back to settings.tts_default_voice. Note that Azure ships
-    # only two NATIVE Turkish neural voices (tr-TR-EmelNeural, tr-TR-AhmetNeural),
-    # so the roster cannot all sound different in Turkish without moving to
-    # multilingual voices.
+    # Empty = fall back to settings.tts_default_voice.
+    #
+    # Prefer a MULTILINGUAL voice. Azure has exactly two native Turkish voices
+    # and both are the ones every CapCut video uses, so they make the assistant
+    # sound like stock filler; the ~57 multilingual voices speak Turkish just as
+    # well, cost the same, and give the roster room to sound like individuals.
+    # Their names are en-US-…/de-DE-… while speaking Turkish, which is why the
+    # spoken language is configured separately (settings.tts_locale).
     voice_id: str = ""
 
     # Document branding for generate_document output. Neutral by default; each

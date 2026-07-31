@@ -351,7 +351,15 @@ class Settings(BaseSettings):
     # Fallback voice for any agent whose profile does not name one. The per-agent
     # voice is IDENTITY and lives in app/profiles/*.py (Rule 10); this is only the
     # engine default for profiles that stay silent about it.
-    tts_default_voice: str = "tr-TR-EmelNeural"
+    tts_default_voice: str = "en-US-BrianMultilingualNeural"
+    # The language SPEDA SPEAKS — deliberately separate from the voice's own
+    # locale, because for a multilingual voice the two differ on purpose. Azure
+    # has only two native Turkish voices and both are the stock CapCut ones, so
+    # the roster uses multilingual voices instead; those carry an en-US/de-DE
+    # name while speaking Turkish, and the SSML xml:lang must follow the TEXT,
+    # not the voice. Left unset, the locale is guessed from the voice name —
+    # which for a multilingual voice would read Turkish with English phonetics.
+    tts_locale: str = "tr-TR"
     # Azure output-format token. MP3 decodes natively in the browser AudioContext
     # and is roughly a tenth the size of PCM over the wire.
     tts_output_format: str = "audio-24khz-48kbitrate-mono-mp3"

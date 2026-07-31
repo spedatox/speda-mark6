@@ -64,3 +64,4 @@ references/
 # Generated Caddy site blocks for optional peers (contain real hostnames).
 caddy-sites/*
 !caddy-sites/.gitkeep
+packages/igor/scripts/tts_samples/

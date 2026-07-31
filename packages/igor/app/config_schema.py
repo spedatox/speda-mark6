@@ -252,9 +252,15 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                              "region is rejected with HTTP 403.",
                         placeholder="westeurope"),
             ConfigField("tts_default_voice", "Default Voice", "text", requires_restart=_LIVE,
-                        help="Fallback for agents whose profile names no voice. Turkish neural "
-                             "voices: tr-TR-EmelNeural (female), tr-TR-AhmetNeural (male).",
-                        placeholder="tr-TR-EmelNeural"),
+                        help="Fallback for agents whose profile names no voice. Prefer a "
+                             "Multilingual voice — the two native Turkish ones (tr-TR-Emel/Ahmet) "
+                             "are the stock CapCut voices and sound like it.",
+                        placeholder="en-US-BrianMultilingualNeural"),
+            ConfigField("tts_locale", "Spoken Language", "text", requires_restart=_LIVE,
+                        help="Language the replies are spoken IN, e.g. tr-TR. Separate from the "
+                             "voice on purpose: a multilingual voice is named en-US-… while "
+                             "speaking Turkish, and this is what tells it which language to read.",
+                        placeholder="tr-TR"),
             ConfigField("tts_output_format", "Audio Format", "text", requires_restart=_LIVE,
                         help="Azure output-format token. MP3 plays natively in the client.",
                         placeholder="audio-24khz-48kbitrate-mono-mp3"),

@@ -52,7 +52,7 @@ async def speak(request: Request, body: SpeakRequest):
     """Synthesize one utterance and return the audio bytes."""
     voice = _resolve_voice(request, body.agent_id, body.voice)
     try:
-        audio = await tts.synthesize(body.text, voice)
+        audio = await tts.synthesize(body.text, voice, body.locale)
     except tts.TTSError as exc:
         # 503, not 500: the turn itself is fine, only the voice is unavailable,
         # and the client is expected to fall back to a silent reply.
