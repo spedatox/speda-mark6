@@ -59,20 +59,41 @@ _FENCE_RE = re.compile(r"```[\s\S]*?```")
 # to the end of the reply where it makes no sense to a listener.
 _TABLE_BLOCK_RE = re.compile(r"(?:^[ \t]*\|.*\|[ \t]*$\n?)+", re.MULTILINE)
 
+# Spoken stand-ins for the blocks that get dropped, keyed by language subtag.
+# These are read out loud, so they belong to the language of the reply — not to
+# the codebase. Unknown languages fall back to English.
+_MARKERS: dict[str, tuple[str, str]] = {
+    "en": ("code omitted", "table omitted"),
+    "tr": ("kod atlandı", "tablo atlandı"),
+    "de": ("Code ausgelassen", "Tabelle ausgelassen"),
+    "es": ("código omitido", "tabla omitida"),
+    "fr": ("code omis", "tableau omis"),
+}
 
-def strip_for_speech(text: str) -> str:
+
+def _markers(locale: str | None) -> tuple[str, str]:
+    lang = (locale or "en").split("-")[0].lower()
+    return _MARKERS.get(lang, _MARKERS["en"])
+
+
+def strip_for_speech(text: str, locale: str | None = None) -> str:
     """Reduce markdown to plain spoken prose.
 
     Removes what reads badly (fences, tables, emphasis marks, link URLs,
     heading hashes) rather than everything — the goal is a sentence a person
     would say, not a stripped-bare token stream.
+
+    `locale` picks the language of the omission markers. They are spoken aloud
+    like any other words, so an English marker inside a Turkish reply is heard
+    as the assistant switching language mid-sentence.
     """
     if not text:
         return ""
 
-    out = _FENCE_RE.sub(" (code omitted) ", text)
+    code_marker, table_marker = _markers(locale)
+    out = _FENCE_RE.sub(f" {code_marker} ", text)
     # Reading a grid cell-by-cell is noise; say a table was here and move on.
-    out = _TABLE_BLOCK_RE.sub(" (table omitted) ", out)
+    out = _TABLE_BLOCK_RE.sub(f" {table_marker} ", out)
 
     out = re.sub(r"`([^`]*)`", r"\1", out)                  # inline code ticks
     out = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", out)         # images
@@ -129,14 +150,15 @@ async def synthesize(text: str, voice: str | None = None, locale: str | None = N
     if not configured():
         raise TTSError("Voice output is not configured — set AZURE_SPEECH_KEY.")
 
-    spoken = strip_for_speech(text)
+    spoken_locale = locale or settings.tts_locale or None
+    spoken = strip_for_speech(text, spoken_locale)
     if not spoken:
         raise TTSError("Nothing to speak after stripping markup.")
     if len(spoken) > MAX_CHARS:
         spoken = spoken[:MAX_CHARS]
 
     voice = voice or settings.tts_default_voice
-    ssml = build_ssml(spoken, voice, locale or settings.tts_locale or None)
+    ssml = build_ssml(spoken, voice, spoken_locale)
 
     headers = {
         "Ocp-Apim-Subscription-Key": settings.azure_speech_key,

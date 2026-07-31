@@ -5,9 +5,12 @@ import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, fe
 import { useProfile } from './Sidebar'
 import MessageList from './MessageList'
 import InputBar from './InputBar'
+import VoiceMode from './VoiceMode'
 import { PermissionPrompt } from './InteractionPrompt'
 import AgentMark from './AgentMark'
 import { hasMark } from '../lib/agentMarks'
+import { VoiceSession, voiceStatus } from '../lib/voice'
+import type { OrbState } from './VoiceOrb'
 import type { AppConfig, ImageBlock, DocBlock, UploadedFile, PendingAsk } from '../lib/types'
 
 function makeId() {
@@ -190,14 +193,65 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
 interface Props {
   config: AppConfig
   onSelectSession: (sessionId: number) => Promise<void>
+  /** Voice mode replaces the transcript with the orb; the composer stays. */
+  voiceOpen?: boolean
+  onCloseVoice?: () => void
 }
 
-export default function ChatMain({ config, onSelectSession }: Props) {
+export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVoice }: Props) {
   const { state, dispatch } = useChatContext()
-  const { settings } = useSettings()
+  const { settings, update } = useSettings()
+  const profile = useProfile()
   // One card at a time: the peer parks the ask inside a single tool dispatch,
   // so a second gated action cannot be raised until this one is answered.
   const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null)
+
+  /* ── Voice mode ────────────────────────────────────────────────────────── */
+  // The session owns an AudioContext, so it is created per TURN (on the click
+  // or keystroke that starts one) and torn down when speech ends. Keeping one
+  // alive across an idle mode would hold an audio device open for nothing.
+  const voiceRef = useRef<VoiceSession | null>(null)
+  const [orbState, setOrbState] = useState<OrbState>('idle')
+  const [voiceReply, setVoiceReply] = useState('')
+  const [voicePrompt, setVoicePrompt] = useState('')
+  const [voiceReady, setVoiceReady] = useState(true)
+
+  // Read the live locale inside the stream loop without making `send` depend on
+  // it — otherwise changing TR/EN mid-turn would rebuild the callback.
+  const localeRef = useRef(settings.voiceLocale)
+  localeRef.current = settings.voiceLocale
+  const voiceOpenRef = useRef(!!voiceOpen)
+  voiceOpenRef.current = !!voiceOpen
+
+  // Ask once per mode entry whether the backend can actually speak, so an
+  // unconfigured key surfaces as a message instead of permanent silence.
+  useEffect(() => {
+    if (!voiceOpen) return
+    let alive = true
+    voiceStatus(config).then(ok => { if (alive) setVoiceReady(ok) })
+    return () => { alive = false }
+  }, [voiceOpen, config])
+
+  const stopSpeaking = useCallback(() => {
+    voiceRef.current?.stop()
+    voiceRef.current = null
+    setOrbState('idle')
+  }, [])
+
+  // Stable identity: the orb polls these every frame, so a new function each
+  // render would restart its animation loop sixty times a second.
+  const voiceAmplitude = useCallback(() => voiceRef.current?.amplitude() ?? 0, [])
+  const voiceSpectrum = useCallback((out: Float32Array) => {
+    if (voiceRef.current) voiceRef.current.spectrum(out)
+    else out.fill(0)
+  }, [])
+
+  // Leaving the mode (or unmounting) must silence it — audio outliving its UI
+  // is the single worst failure this feature can have.
+  useEffect(() => {
+    if (!voiceOpen) stopSpeaking()
+  }, [voiceOpen, stopSpeaking])
+  useEffect(() => () => { voiceRef.current?.stop() }, [])
 
   const abortRef = useRef<AbortController | null>(null)
   // request_id of the turn currently streaming into the visible session — the
@@ -269,6 +323,24 @@ export default function ChatMain({ config, onSelectSession }: Props) {
     const ctrl = new AbortController()
     abortRef.current = ctrl
     forceUpdate(n => n + 1)
+
+    // ── Voice: open a session for THIS turn ──────────────────────────────────
+    // Constructed here because a send is a user gesture, which is what lets an
+    // AudioContext start; built lazily so entering the mode costs nothing until
+    // something is actually said.
+    if (voiceOpenRef.current) {
+      voiceRef.current?.stop()          // a new turn cuts the previous answer
+      const vs = new VoiceSession(config, {
+        agentId: config.agentId,
+        locale: localeRef.current,
+      })
+      vs.onState = setOrbState
+      voiceRef.current = vs
+      void vs.resume()
+      setVoicePrompt(opts.regenerate ? voicePrompt : text)
+      setVoiceReply('')
+      setOrbState('thinking')
+    }
 
     // ── Chunk coalescing ─────────────────────────────────────────────────────
     // Anthropic streams many small text deltas per second. Dispatching each one
@@ -370,7 +442,15 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Thinking' } })
         } else if (event.type === 'chunk') {
           gotContent = true
-          chunkBuf += event.data as string
+          const delta = event.data as string
+          chunkBuf += delta
+          // Feed speech from the RAW delta, not the coalesced buffer: synthesis
+          // is gated on sentence boundaries, so it must see every character in
+          // order, independent of how the UI batches its repaints.
+          if (voiceRef.current) {
+            voiceRef.current.feed(delta)
+            setVoiceReply(prev => prev + delta)
+          }
           if (flushHandle == null) flushHandle = requestAnimationFrame(flushChunks)
         } else if (event.type === 'tool') {
           gotTool = true
@@ -399,6 +479,9 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
         } else if (event.type === 'done') {
           finalizeFlush()  // drain any buffered text before finalizing
+          // Speak the trailing fragment — a reply often ends without terminal
+          // punctuation, and that last clause would otherwise never be said.
+          voiceRef.current?.finish()
           settled = true
           applyTurnUsage(event.data)
           dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: event.session_id } })
@@ -423,6 +506,11 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           setTimeout(pollTitle, 1500)
         } else if (event.type === 'error') {
           finalizeFlush()
+          // Cut speech dead rather than finish(): the turn failed, so whatever
+          // is still queued belongs to an answer that is not coming.
+          voiceRef.current?.stop()
+          voiceRef.current = null
+          setOrbState('idle')
           settled = true
           dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: event.data as string } })
         }
@@ -432,6 +520,9 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       // "thinking" with no way out. Keep whatever text streamed.
       if (!settled) {
         finalizeFlush()
+        // Text did stream, so speak the remainder rather than discarding it —
+        // an abrupt backend close should not swallow the last clause.
+        voiceRef.current?.finish()
         settled = true
         dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: state.activeSessionId ?? 0 } })
       }
@@ -649,7 +740,22 @@ export default function ChatMain({ config, onSelectSession }: Props) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {isEmpty
+      {voiceOpen ? (
+        <VoiceMode
+          state={orbState}
+          amplitude={voiceAmplitude}
+          spectrum={voiceSpectrum}
+          reply={voiceReply}
+          prompt={voicePrompt}
+          locale={settings.voiceLocale}
+          onLocale={locale => update({ voiceLocale: locale })}
+          onClose={() => onCloseVoice?.()}
+          onStopSpeaking={stopSpeaking}
+          configured={voiceReady}
+          agentName={profile?.name ?? 'SPEDA'}
+          agentId={profile?.agentId ?? config.agentId}
+        />
+      ) : isEmpty
         ? <WelcomeView onSend={send} config={config} />
         : (
           <MessageList

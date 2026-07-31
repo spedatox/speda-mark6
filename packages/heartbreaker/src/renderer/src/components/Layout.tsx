@@ -39,6 +39,9 @@ export default function Layout({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
   const [commsOpen, setCommsOpen] = useState(false)
+  // Voice mode is desktop-only: the orb takeover assumes room the phone layout
+  // does not have, and the composer would be under the keyboard anyway.
+  const [voiceOpen, setVoiceOpen] = useState(false)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   // ROSTER CORES model-config window — only meaningful inside the war room.
   const [coresOpen, setCoresOpen] = useState(false)
@@ -53,6 +56,15 @@ export default function Layout({
     window.addEventListener('speda:hpp-authorize', onAuth)
     return () => window.removeEventListener('speda:hpp-authorize', onAuth)
   }, [])
+
+  // Esc leaves voice mode. Registered before the agent-switcher handler below
+  // so the mode is what Esc closes while it is the thing on screen.
+  useEffect(() => {
+    if (!voiceOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setVoiceOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [voiceOpen])
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -133,6 +145,8 @@ export default function Layout({
           onToggleBoard={() => setBoardOpen(v => !v)}
           commsOpen={commsOpen}
           onToggleComms={() => setCommsOpen(v => !v)}
+          voiceOpen={voiceOpen}
+          onToggleVoice={() => setVoiceOpen(v => !v)}
           inWarRoom={inWarRoom}
           onOpenWarRoom={onEnterWarRoom}
         />
@@ -144,7 +158,12 @@ export default function Layout({
             onOpenConfig={() => setCoresOpen(true)}
           />
         )}
-        <ChatMain config={config} onSelectSession={handleSelectSession} />
+        <ChatMain
+          config={config}
+          onSelectSession={handleSelectSession}
+          voiceOpen={voiceOpen && !isMobile}
+          onCloseVoice={() => setVoiceOpen(false)}
+        />
       </div>
 
       {boardOpen && <SystemsBoard config={config} onClose={() => setBoardOpen(false)} />}

@@ -132,6 +132,8 @@ interface Props {
   onToggleBoard?: () => void
   commsOpen?: boolean
   onToggleComms?: () => void
+  voiceOpen?: boolean
+  onToggleVoice?: () => void
   /** True when the app IS the war room (standby or engaged takeover). While
    *  true the strip under the header carries the exit control, so the header
    *  WAR ROOM button hides. */
@@ -142,7 +144,7 @@ interface Props {
 export default function Header({
   config, agentId,
   sidebarOpen, onToggleSidebar, boardOpen, onToggleBoard,
-  commsOpen, onToggleComms, inWarRoom, onOpenWarRoom,
+  commsOpen, onToggleComms, voiceOpen, onToggleVoice, inWarRoom, onOpenWarRoom,
 }: Props) {
   const { state } = useChatContext()
   const activeSession = state.sessions.find(s => s.id === state.activeSessionId)
@@ -282,6 +284,30 @@ export default function Header({
             <line x1="7.2" y1="11" x2="16.8" y2="5.9"/><line x1="7.2" y1="13" x2="16.8" y2="18.1"/>
           </svg>
           COMMS
+        </button>
+      )}
+
+      {/* Voice mode — the orb takes over the transcript; the composer stays,
+          so the owner still types and the answer comes back out loud. */}
+      {onToggleVoice && (
+        <button
+          className={voiceOpen ? 'hb-btn hb-btn-tint' : 'hb-btn'}
+          onClick={onToggleVoice}
+          title={voiceOpen ? 'Leave voice mode' : 'Voice mode — replies are spoken aloud'}
+          style={{
+            height: 24, padding: '0 0.5rem', gap: '0.35rem', flexShrink: 0,
+            ...(voiceOpen ? { color: 'var(--hb-cyan-bright)' } : {}),
+            fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
+            letterSpacing: '0.16em',
+          }}
+        >
+          {/* Waveform — three bars rising out of a centre line */}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="5" y1="9" x2="5" y2="15" />
+            <line x1="12" y1="4" x2="12" y2="20" />
+            <line x1="19" y1="9" x2="19" y2="15" />
+          </svg>
+          VOX
         </button>
       )}
 

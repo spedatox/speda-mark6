@@ -11,6 +11,10 @@ export interface AppSettings {
   /** Working directory sent to the Forge for Optimus jobs (Cell workspace +
    *  Graphify root). Empty = the peer's own default workspace. */
   forgeCwd: string
+  /** Language replies are SPOKEN in. Sent as `locale` on every synthesis call.
+   *  Separate from the voice: the roster uses multilingual voices, which are
+   *  named en-US-… whatever language they are actually reading. */
+  voiceLocale: string
 }
 
 const DEFAULT: AppSettings = {
@@ -20,6 +24,7 @@ const DEFAULT: AppSettings = {
   sidebarOpen: true,
   userName: '',
   forgeCwd: '',
+  voiceLocale: 'en-US',
 }
 
 function load(): AppSettings {
