@@ -19,7 +19,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.core.context import AgentContext
@@ -176,39 +177,64 @@ class NewsWatchSkill(Skill):
 
 # ── Tier 2: NewsData.io analyst ──────────────────────────────────────────────
 
+async def _quota_row(db, day: str) -> None:
+    """Make sure today's ledger row exists. Two Tier-2 calls racing on the first
+    request of a new UTC day both see no row and both insert — the loser hits the
+    uq_news_quota_day constraint. Losing that race is the correct outcome (the
+    winner's row is the one row for the day), so swallow it and carry on."""
+    if await db.scalar(select(NewsQuota.id).where(NewsQuota.day == day)) is not None:
+        return
+    db.add(NewsQuota(day=day))
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+
+
 async def _quota_take(purpose: str) -> tuple[bool, int, int]:
     """Reserve one Tier-2 request for `purpose` on today's UTC ledger row.
     Returns (allowed, used_after, budget). Increments BEFORE the HTTP call —
     the request is spent upstream even on most 4xx; callers refund on connect
-    errors only."""
+    errors only.
+
+    The increment is a single conditional UPDATE rather than a read-modify-write:
+    concurrent reservations would otherwise both read the same `used` and both
+    write `used + 1`, spending two requests off one slot and overrunning the
+    budget."""
     budgets = {
         "deep_dive": settings.news_quota_deep_dive,
         "auto_flag": settings.news_quota_auto_flag,
         "digest": settings.news_quota_digest,
     }
-    budget = budgets.get(purpose, settings.news_quota_deep_dive)
+    if purpose not in budgets:
+        purpose = "deep_dive"
+    budget = budgets[purpose]
+    column = getattr(NewsQuota, purpose)
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     async with AsyncSessionLocal() as db:
-        row = (await db.execute(select(NewsQuota).where(NewsQuota.day == day))).scalar_one_or_none()
-        if row is None:
-            row = NewsQuota(day=day)
-            db.add(row)
-            await db.flush()
-        used = getattr(row, purpose, 0)
-        if used >= budget:
-            return False, used, budget
-        setattr(row, purpose, used + 1)
+        await _quota_row(db, day)
+        result = await db.execute(
+            update(NewsQuota)
+            .where(NewsQuota.day == day, column < budget)
+            .values({purpose: column + 1})
+        )
         await db.commit()
-        return True, used + 1, budget
+        used = await db.scalar(select(column).where(NewsQuota.day == day))
+        if result.rowcount:
+            return True, used if used is not None else budget, budget
+        return False, used if used is not None else budget, budget
 
 
 async def _quota_refund(purpose: str) -> None:
+    column = getattr(NewsQuota, purpose)
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     async with AsyncSessionLocal() as db:
-        row = (await db.execute(select(NewsQuota).where(NewsQuota.day == day))).scalar_one_or_none()
-        if row is not None:
-            setattr(row, purpose, max(0, getattr(row, purpose, 0) - 1))
-            await db.commit()
+        await db.execute(
+            update(NewsQuota)
+            .where(NewsQuota.day == day, column > 0)
+            .values({purpose: column - 1})
+        )
+        await db.commit()
 
 
 def _newsdata_q(query: str) -> str:
