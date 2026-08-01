@@ -1,0 +1,30 @@
+# SPEDA Mark VI — https://spedatox.github.io/speda-mark6/
+#
+# NOTE: robots.txt is only honoured at the ROOT of a host. On a GitHub project
+# page the effective file is https://spedatox.github.io/robots.txt, which is
+# owned by a repo literally named `spedatox.github.io`. This copy is therefore
+# advisory today and becomes authoritative the moment a custom domain is
+# attached via site/CNAME. Submit the sitemap directly in Search Console
+# rather than relying on discovery through this file.
+
+User-agent: *
+Allow: /
+
+# Answer engines — explicitly welcome. Being cited in an AI answer is the
+# fastest route to visibility for a brand term with no existing footprint.
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://spedatox.github.io/speda-mark6/sitemap.xml

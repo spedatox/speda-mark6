@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>SPEDA Mark VI — Self-Hosted Multi-Agent AI Assistant</title>
+<meta name="description" content="SPEDA Mark VI is a private, self-hosted multi-agent AI assistant: eight specialist agents, persistent memory, proactive watchers, desktop and Android clients.">
+<link rel="canonical" href="https://spedatox.github.io/speda-mark6/">
+
+<meta name="author" content="Ahmet Erol Bayrak">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="keywords" content="SPEDA Mark VI, SPEDA, Specialized Personal Executive Digital Assistant, multi-agent AI assistant, self-hosted AI assistant, proactive AI assistant, Heartbreaker, SPEDA GO, Igor, The Legion, House Party Protocol, personal AI agent">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SPEDA Mark VI">
+<meta property="og:title" content="SPEDA Mark VI — Self-Hosted Multi-Agent AI Assistant">
+<meta property="og:description" content="SPEDA Mark VI is a private, self-hosted multi-agent AI assistant: eight specialist agents, persistent memory, proactive watchers, desktop and Android clients.">
+<meta property="og:url" content="https://spedatox.github.io/speda-mark6/">
+<meta property="og:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SPEDA Mark VI — Specialized Personal Executive Digital Assistant">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="SPEDA Mark VI — Self-Hosted Multi-Agent AI Assistant">
+<meta name="twitter:description" content="SPEDA Mark VI is a private, self-hosted multi-agent AI assistant: eight specialist agents, persistent memory, proactive watchers, desktop and Android clients.">
+<meta name="twitter:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta name="twitter:creator" content="@spedatox">
+
+<meta name="theme-color" content="#03060a">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://spedatox.github.io/speda-mark6/#website",
+      "url": "https://spedatox.github.io/speda-mark6/",
+      "name": "SPEDA Mark VI",
+      "alternateName": [
+        "S.P.E.D.A. Mark VI",
+        "SPEDA",
+        "Specialized Personal Executive Digital Assistant"
+      ],
+      "inLanguage": "en",
+      "publisher": {
+        "@id": "https://spedatox.github.io/speda-mark6/#author"
+      }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://spedatox.github.io/speda-mark6/#app",
+      "name": "SPEDA Mark VI",
+      "alternateName": "Specialized Personal Executive Digital Assistant Mark VI",
+      "applicationCategory": "BusinessApplication",
+      "applicationSubCategory": "AI personal assistant",
+      "operatingSystem": "Windows, macOS, Linux, Android",
+      "url": "https://spedatox.github.io/speda-mark6/",
+      "downloadUrl": "https://github.com/spedatox/speda-mark6",
+      "softwareVersion": "Mark VI",
+      "author": {
+        "@id": "https://spedatox.github.io/speda-mark6/#author"
+      },
+      "description": "A private, proactive, self-hosted multi-agent AI assistant. Eight domain-specialist agents share one persistent memory of a single owner, run their own watchers, dispatch work to each other, and answer through a holographic desktop client, a native Android client and Telegram.",
+      "featureList": [
+        "Eight specialist AI agents with individual identities and model policies",
+        "Closed eight-file structured memory with a dedicated custodian agent",
+        "Episodic session recaps and semantic vector recall",
+        "Proactive watchers gated by zero-token probes",
+        "Provider-agnostic routing across Anthropic, OpenAI, Gemini, GLM, DeepSeek, NVIDIA NIM and Ollama",
+        "The Legion parallel sub-agent worker system",
+        "House Party Protocol full-roster mode",
+        "Detached turns that survive client disconnects",
+        "Holographic desktop command deck and native Android client",
+        "Self-hosted with single-key authentication"
+      ]
+    },
+    {
+      "@type": "SoftwareSourceCode",
+      "@id": "https://spedatox.github.io/speda-mark6/#code",
+      "name": "speda-mark6",
+      "description": "Monorepo for SPEDA Mark VI: the Igor FastAPI backend, the Heartbreaker desktop client, the SPEDA GO Android client, the Striker single-agent build and the isolated sandbox.",
+      "codeRepository": "https://github.com/spedatox/speda-mark6",
+      "programmingLanguage": [
+        "Python",
+        "TypeScript",
+        "Kotlin"
+      ],
+      "runtimePlatform": [
+        "FastAPI",
+        "Electron",
+        "React",
+        "Jetpack Compose"
+      ],
+      "author": {
+        "@id": "https://spedatox.github.io/speda-mark6/#author"
+      },
+      "about": {
+        "@id": "https://spedatox.github.io/speda-mark6/#app"
+      }
+    },
+    {
+      "@type": "Person",
+      "@id": "https://spedatox.github.io/speda-mark6/#author",
+      "name": "Ahmet Erol Bayrak",
+      "alternateName": "spedatox",
+      "url": "https://github.com/spedatox",
+      "sameAs": [
+        "https://github.com/spedatox",
+        "https://x.com/spedatox"
+      ]
+    }
+  ]
+}
+</script>
+</head>
+
+<body style="--a: var(--speda)">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="./"><span class="jewel"></span>S.P.E.D.A.<span class="mk">Mark VI</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="agents/">Agents</a>
+      <a href="systems/">Systems</a>
+      <a href="heartbreaker/">Heartbreaker</a>
+      <a href="speda-go/">SPEDA GO</a>
+      <a href="igor/">Igor</a>
+      <a href="faq/">FAQ</a>
+      <a href="https://github.com/spedatox/speda-mark6">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero hero-home">
+  <div class="hero-copy">
+    <p class="eyebrow rise">Specialized Personal Executive Digital Assistant</p>
+    <h1 class="rise">SPEDA<br>Mark VI
+      <span class="hero-sub">Eight agents. One memory. Zero prompts required.</span>
+    </h1>
+    <p class="lede rise">A private, self-hosted AI assistant built as a <strong>standing staff</strong>
+      rather than a chatbot. Eight domain specialists share one persistent memory of a single owner,
+      run senses of their own, act while he sleeps, and answer through a holographic command deck.</p>
+    <div class="actions rise">
+      <a class="btn btn-primary" href="agents/">Meet the roster</a>
+      <a class="btn" href="systems/">How it works</a>
+      <a class="btn" href="https://github.com/spedatox/speda-mark6">Source on GitHub</a>
+    </div>
+  </div>
+  <div class="monolith">
+        <span class="mono-field"></span>
+        <canvas class="mono-canvas" data-glass3d aria-label="The SPEDA Mark VI emblem rendered in glass" role="img"></canvas>
+        <div class="mono-fallback" data-glass-path aria-hidden="true"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="SPEDA"> <path d="M61.95 6.75L62.08 7.4C54.91 11.49 26.32 27.81 19.09 31.95C11.86 36.08 18.77 32.16 18.7 32.21C18.68 32.6 18.59 33.25 18.57 34.55C18.55 35.84 18.57 39.09 18.57 40C18.66 40.06 16.36 38.87 19.09 40.39C21.82 41.9 27.79 44.91 34.94 49.09C42.08 53.27 57.45 62.73 61.95 65.45C60.04 66.62 52.68 71.21 50.52 72.47C48.35 73.72 49.22 72.9 48.96 72.99C44.81 70.48 31.19 62.12 24.03 57.92C16.86 53.72 8.98 49.48 5.97 47.79L6.23 25.84L6.75 25.06C11.36 22.42 27.29 13.4 34.42 9.22C41.54 5.04 46.97 1.54 49.48 0C49.7 0.04 48.7 -0.87 50.78 0.26C52.86 1.39 60.09 5.67 61.95 6.75ZM94.03 39.48L63.51 21.3L74.94 14.55C77.9 16.23 89.59 22.86 92.73 24.68C95.87 26.49 93.59 25.32 93.77 25.45L94.03 39.48ZM93.64 52.34L93.25 74.81L50.26 100L37.79 93.12L37.92 92.6C39.44 91.71 39.89 91.34 47.01 87.27C54.13 83.2 74.96 71.47 80.65 68.18C86.34 64.89 81.08 67.64 81.17 67.53C81.19 66.56 81.3 62.88 81.3 61.69C81.3 60.5 81.19 60.61 81.17 60.39C81.06 60.28 83.35 61.34 80.52 59.74C77.68 58.14 70.35 54.33 64.16 50.78C57.97 47.23 47.71 41.02 43.38 38.44C39.05 35.87 39.05 35.84 38.18 35.32L38.31 34.68L49.87 27.53L51.17 27.53C54.91 29.81 66.56 37.03 73.64 41.17C80.71 45.3 90.3 50.48 93.64 52.34ZM6.1 61.04C6.9 61.45 5.8 60.5 10.91 63.51C16.02 66.52 32.45 76.49 36.75 79.09L25.06 85.84C22.16 84.18 10.78 77.71 7.66 75.84C4.55 73.98 6.58 74.87 6.36 74.68L6.1 61.04Z"/> </svg></div>
+      </div>
+  <p class="scroll-cue">Scroll</p>
+</section>
+
+<section id="premise">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">The premise</p>
+      <h2>An assistant that forgets you is not an assistant.</h2>
+      <p class="lede">Every general chatbot begins each conversation as a stranger with no stake in your
+        week. SPEDA Mark VI inverts all three assumptions: it serves <strong>one owner</strong>, it keeps a
+        <strong>structured memory</strong> of him that outlives any session, and it has
+        <strong>senses that fire on their own schedule</strong> instead of waiting to be asked.</p>
+    </div>
+
+    <div class="stats rise">
+      <div class="stat"><span class="n">8</span><span class="l">specialist agents</span></div>
+      <div class="stat"><span class="n">7</span><span class="l">model providers</span></div>
+      <div class="stat"><span class="n">4</span><span class="l">capability tiers</span></div>
+      <div class="stat"><span class="n">3</span><span class="l">client surfaces</span></div>
+      <div class="stat"><span class="n">0</span><span class="l">accounts or tenancy</span></div>
+    </div>
+
+    <div class="grid g3" style="margin-top:1.1rem">
+      <article class="holo pad rise">
+        <h3 class="card-title">It knows you</h3>
+        <p class="card-body">A closed set of eight Markdown memory files, each answering exactly one question,
+          with a dedicated custodian agent enforcing the boundaries. <a href="systems/memory/">How memory works →</a></p>
+      </article>
+      <article class="holo pad rise">
+        <h3 class="card-title">It acts unprompted</h3>
+        <p class="card-body">Watchers on pages, feeds, markets and mail — gated by zero-token probes so a poll
+          never costs a turn. <a href="systems/automations/">The automation layer →</a></p>
+      </article>
+      <article class="holo pad rise">
+        <h3 class="card-title">It delegates</h3>
+        <p class="card-body">Agents dispatch to each other, and any of them can deploy disposable workers for
+          genuine fan-out. <a href="systems/legion/">The Legion →</a></p>
+      </article>
+      <article class="holo pad rise">
+        <h3 class="card-title">It survives you</h3>
+        <p class="card-body">Turns run detached from your connection. Close the window mid-answer; the work
+          finishes server-side and re-attaches when you return. <a href="igor/">Inside Igor →</a></p>
+      </article>
+      <article class="holo pad rise">
+        <h3 class="card-title">It runs anywhere</h3>
+        <p class="card-body">One router speaks seven providers including local Ollama. Pin a model per agent
+          or run the whole system offline. <a href="systems/capabilities/">The arsenal →</a></p>
+      </article>
+      <article class="holo pad rise">
+        <h3 class="card-title">It stays yours</h3>
+        <p class="card-body">Self-hosted, single-key, no accounts. Conversations, memory and files never leave
+          hardware you control. <a href="faq/">Questions answered →</a></p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="roster">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">The roster</p>
+      <h2>Eight specialists, not eight installs</h2>
+      <p class="lede">Seven of them are <strong>in-process agent profiles</strong> inside a single backend —
+        one event loop, one database, one capability registry, one owner's memory — addressed by
+        <code>agent_id</code> on every request. Optimus is the architectural exception, and Centurion can
+        join it. Each carries its own identity, accent and doctrine.</p>
+    </div>
+    <div class="grid g4">
+      <a class="holo pad agent-card rise" style="--a: var(--speda)" href="agents/speda/">
+        <span class="emblem"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="SPEDA"> <path d="M61.95 6.75L62.08 7.4C54.91 11.49 26.32 27.81 19.09 31.95C11.86 36.08 18.77 32.16 18.7 32.21C18.68 32.6 18.59 33.25 18.57 34.55C18.55 35.84 18.57 39.09 18.57 40C18.66 40.06 16.36 38.87 19.09 40.39C21.82 41.9 27.79 44.91 34.94 49.09C42.08 53.27 57.45 62.73 61.95 65.45C60.04 66.62 52.68 71.21 50.52 72.47C48.35 73.72 49.22 72.9 48.96 72.99C44.81 70.48 31.19 62.12 24.03 57.92C16.86 53.72 8.98 49.48 5.97 47.79L6.23 25.84L6.75 25.06C11.36 22.42 27.29 13.4 34.42 9.22C41.54 5.04 46.97 1.54 49.48 0C49.7 0.04 48.7 -0.87 50.78 0.26C52.86 1.39 60.09 5.67 61.95 6.75ZM94.03 39.48L63.51 21.3L74.94 14.55C77.9 16.23 89.59 22.86 92.73 24.68C95.87 26.49 93.59 25.32 93.77 25.45L94.03 39.48ZM93.64 52.34L93.25 74.81L50.26 100L37.79 93.12L37.92 92.6C39.44 91.71 39.89 91.34 47.01 87.27C54.13 83.2 74.96 71.47 80.65 68.18C86.34 64.89 81.08 67.64 81.17 67.53C81.19 66.56 81.3 62.88 81.3 61.69C81.3 60.5 81.19 60.61 81.17 60.39C81.06 60.28 83.35 61.34 80.52 59.74C77.68 58.14 70.35 54.33 64.16 50.78C57.97 47.23 47.71 41.02 43.38 38.44C39.05 35.87 39.05 35.84 38.18 35.32L38.31 34.68L49.87 27.53L51.17 27.53C54.91 29.81 66.56 37.03 73.64 41.17C80.71 45.3 90.3 50.48 93.64 52.34ZM6.1 61.04C6.9 61.45 5.8 60.5 10.91 63.51C16.02 66.52 32.45 76.49 36.75 79.09L25.06 85.84C22.16 84.18 10.78 77.71 7.66 75.84C4.55 73.98 6.58 74.87 6.36 74.68L6.1 61.04Z"/> </svg></span>
+        <span class="mark">Mark VI</span>
+        <span class="name">SPEDA</span>
+        <span class="domain">Chief of Staff</span>
+        <p class="card-body">Plans, routes, arms automations and commands the roster. The only agent whose recall reaches across every other agent's history.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--sentinel)" href="agents/sentinel/">
+        <span class="emblem"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="Sentinel"> <path d="M93.76 0L93.76 40.19C87.93 37.41 68.85 26.36 58.75 23.5C48.65 20.64 37.41 23.1 33.14 23.01C35.04 24.1 34.36 24.55 44.49 29.5C54.62 34.44 85.68 48.81 93.92 52.67L93.76 76.18L50 100L6.08 75.69L7.05 47.81L50.81 70.18L66.37 64.99L6.4 36.47L6.73 0L93.76 0Z"/> </svg></span>
+        <span class="mark">Mark II</span>
+        <span class="name">Sentinel</span>
+        <span class="domain">Finance & Budget</span>
+        <p class="card-body">Numbers first, narrative second. Pulls the actual quote before it opines, and states the downside every time.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--nightcrawler)" href="agents/nightcrawler/">
+        <span class="emblem"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="NightCrawler"> <path d="M3.53 -0L31.09 0.16L79.81 49.04L80.29 48.88L80.29 0.16L99.2 -0L99.68 96.15L3.53 -0ZM0.32 3.21L96.96 100L69.39 99.84L20.19 50.64L19.87 99.84L0.8 99.84L0.32 3.21Z"/> </svg></span>
+        <span class="mark">Mark III</span>
+        <span class="name">NightCrawler</span>
+        <span class="domain">OSINT & Surveillance</span>
+        <p class="card-body">Corroborates, never trusts. A single source is a lead, not a fact — and everything carries its trail back.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--ultron)" href="agents/ultron/">
+        <span class="emblem"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="Ultron"> <path d="M7.4 0L30.58 18.35L30.58 59.32L48.08 69.7L48.36 100C43.62 96.59 26.67 84.12 19.91 79.52C13.16 74.92 9.84 73.59 7.82 72.4L7.4 0ZM92.6 0L92.18 72.4C90.28 73.49 87.55 74.35 80.8 78.95C74.04 83.55 56.5 96.49 51.64 100L52.06 69.56L69.42 59.46L69.42 18.49L92.6 0Z"/> </svg></span>
+        <span class="mark">Mark III</span>
+        <span class="name">Ultron</span>
+        <span class="domain">Academic Life</span>
+        <p class="card-body">Owns the collision between university and a job. Plans over pep talks, with honest cut-lines.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--centurion)" href="agents/centurion/">
+        <span class="emblem"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="Centurion"> <path d="M92.54 24.81C91.22 25.73 88.62 27.81 84.58 30.33C80.53 32.86 70.97 38.37 68.25 39.97L50.39 29.31L32.39 39.33L32.52 60.03L49.87 70.18L93.44 45.5L93.32 75.06C91.8 75.96 91.5 76.31 84.19 80.46C76.89 84.62 55.27 96.74 49.49 100L6.56 74.68L6.94 24.81C7.11 24.68 4.46 26.01 7.97 24.04C11.48 22.07 21.19 16.92 28.02 12.98C34.85 9.04 45.22 2.55 48.97 0.39C52.72 -1.78 50.26 0.06 50.51 0L92.54 24.81ZM16.32 29.82L16.07 69.41C20.54 72.07 37.19 82.01 42.93 85.35C48.67 88.69 49.25 88.77 50.51 89.46L84.32 69.41L84.06 61.95L50.13 80.98L23.78 65.3L23.91 34.45L49.61 19.15L50.64 19.15L67.74 29.69L68.64 29.69L75.06 25.71L75.19 24.81L49.36 10.54L16.32 29.82Z"/> </svg></span>
+        <span class="mark">Mark I</span>
+        <span class="name">Centurion</span>
+        <span class="domain">Cyber Security</span>
+        <p class="card-body">Defence and offence in balance, on authorized targets only. Severity lives in the finding, never in the delivery.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--atomix)" href="agents/atomix/">
+        <span class="emblem"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="Atomix"> <path d="M50.06 9.57L100 90.43L72.34 89.8L49.19 53L23.9 52.63L50.06 9.57ZM62.45 89.55L41.43 90.18L31.66 75.66L22.03 90.18L0 89.92L19.52 59.76L44.56 60.14L62.45 89.55Z"/> </svg></span>
+        <span class="mark">Mark I</span>
+        <span class="name">Atomix</span>
+        <span class="domain">Health & Wellness</span>
+        <p class="card-body">The owner's body, on evidence rather than fads — and it says plainly when the evidence is weak.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--optimus)" href="agents/optimus/">
+        <span class="emblem"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="Optimus"> <path d="M18.7 85.09L18.7 83.6C18.9 83.36 17.95 83.9 19.92 82.11C21.88 80.33 28.73 74.44 30.49 72.9C31.98 73.85 36.77 77.24 39.43 78.59C42.1 79.95 44.35 80.51 46.48 81.03C48.6 81.55 50.23 81.66 52.17 81.71C54.11 81.75 55.87 81.75 58.13 81.3C60.39 80.85 63.1 80.26 65.72 79C68.34 77.73 71.54 75.68 73.85 73.71C76.15 71.75 78.07 69.35 79.54 67.21C81.01 65.06 81.82 63.55 82.66 60.84C83.49 58.13 84.37 53.93 84.55 50.95C84.73 47.97 84.46 45.75 83.74 42.95C83.02 40.15 81.53 36.59 80.22 34.15C78.91 31.71 77.62 30.13 75.88 28.32C74.14 26.51 71.61 24.57 69.78 23.31C67.95 22.04 66.51 21.41 64.91 20.73C63.3 20.05 62.42 19.63 60.16 19.24C57.9 18.86 53.73 18.45 51.36 18.43C48.98 18.41 47.7 18.72 45.93 19.11C44.17 19.49 43.38 19.4 40.79 20.73C38.19 22.06 32.09 26.04 30.35 27.1C28.52 25.5 21.34 19.29 19.38 17.48C17.41 15.67 18.7 16.46 18.56 16.26L18.83 14.91C19.78 14.11 22 11.79 24.53 10.16C27.06 8.54 30.8 6.44 34.01 5.15C37.22 3.86 40.63 3 43.77 2.44C46.91 1.87 49.8 1.69 52.85 1.76C55.89 1.83 59.26 2.28 62.06 2.85C64.86 3.41 66.98 4.04 69.65 5.15C72.31 6.26 75.45 7.81 78.05 9.49C80.65 11.16 82.88 12.85 85.23 15.18C87.58 17.5 90.31 20.8 92.14 23.44C93.97 26.08 95.05 28.23 96.21 31.03C97.36 33.83 98.42 37.24 99.05 40.24C99.68 43.25 100 45.8 100 49.05C100 52.3 99.64 56.57 99.05 59.76C98.46 62.94 97.63 65.38 96.48 68.16C95.33 70.93 93.72 73.96 92.14 76.42C90.56 78.88 89.27 80.62 86.99 82.93C84.71 85.23 81.14 88.35 78.46 90.24C75.77 92.14 73.71 93.13 70.87 94.31C68.02 95.48 64.41 96.64 61.38 97.29C58.36 97.94 55.83 98.22 52.71 98.24C49.59 98.26 45.89 98.01 42.68 97.43C39.48 96.84 36.38 95.89 33.47 94.72C30.56 93.54 27.66 91.98 25.2 90.38C22.74 88.78 19.78 85.98 18.7 85.09ZM2.44 12.47C7.93 17.21 28.36 34.64 35.37 40.92C42.37 47.2 42.93 48.6 44.44 50.14L0 92.01L2.98 68.7L22.76 50.27L4.07 32.52L2.44 12.47Z"/> </svg></span>
+        <span class="mark">Mark II</span>
+        <span class="name">Optimus</span>
+        <span class="domain">Systems & Code</span>
+        <p class="card-body">Builds to ship. Runs on a standalone execution engine with a real shell when the Forge is up.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--orion)" href="agents/orion/">
+        <span class="emblem"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="Orion"> <path d="M8 6L92 6L70 36L30 36L8 6ZM20 15L35 29L65 29L80 15L20 15ZM30 64L70 64L92 94L8 94L30 64ZM35 71L20 85L80 85L65 71L35 71ZM23 58L33 44L44 44L34 58L23 58ZM39 58L49 44L60 44L50 58L39 58ZM55 58L65 44L76 44L66 58L55 58Z"/> </svg></span>
+        <span class="mark">Mark I</span>
+        <span class="name">Orion</span>
+        <span class="domain">Maintenance & Memory</span>
+        <p class="card-body">The custodian. Moves, merges and timestamps existing memory — and never invents a fact.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="systems">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">The systems</p>
+      <h2>Every part, sold separately</h2>
+      <p class="lede">Eight subsystems do the actual work. None of them is a wrapper around a single API call.</p>
+    </div>
+
+    <div class="split">
+      <div>
+        <p class="eyebrow" style="--a: var(--nightcrawler)">01 — The Legion</p>
+        <h3 style="font-size:1.9rem">Disposable workers, on whatever model you're already paying for</h3>
+        <p>When a job genuinely needs six independent searches across six subtopics, an agent deploys
+          anonymous single-purpose workers: a <strong>scout</strong> triages, <strong>researchers</strong>
+          each take one subtopic in parallel, an <strong>analyst</strong> synthesises, a
+          <strong>judge</strong> audits the draft claim by claim and returns a verdict per claim.</p>
+        <p>Worker models resolve provider-agnostically — low and medium effort drop to the cheap tier
+          <em>of the provider the parent turn is already on</em>, never a hardcoded model ID. The tool's own
+          description talks the model <em>out</em> of using it: expensive and rare, never for lookups.</p>
+        <p><a href="systems/legion/">Read the Legion doctrine →</a></p>
+      </div>
+      <div class="holo pad-lg" style="--a: var(--nightcrawler)">
+        <table style="min-width:0">
+          <thead><tr><th>Legionnaire</th><th>Effort</th><th>Budget</th></tr></thead>
+          <tbody>
+            <tr><td><strong>scout</strong></td><td>low</td><td>6 iterations</td></tr>
+            <tr><td><strong>researcher</strong></td><td>medium</td><td>15 iterations</td></tr>
+            <tr><td><strong>analyst</strong></td><td>high</td><td>20 iterations</td></tr>
+            <tr><td><strong>judge</strong></td><td>low</td><td>8 iterations</td></tr>
+            <tr><td><strong>general</strong></td><td>inherit</td><td>15 iterations</td></tr>
+          </tbody>
+        </table>
+        <ul class="chips">
+          <li>no recursive spawning</li>
+          <li>no dispatch surface</li>
+          <li>12k char result cap</li>
+          <li>max 3 background</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="split flip" style="margin-top:clamp(3rem,6vw,5.5rem)">
+      <div class="holo pad-lg" style="--a: var(--orion)">
+        <table style="min-width:0">
+          <thead><tr><th>File</th><th>The one question it answers</th></tr></thead>
+          <tbody>
+            <tr><td><strong>current.md</strong></td><td>What is true right now?</td></tr>
+            <tr><td><strong>owner.md</strong></td><td>Who is he, before Mark VI existed?</td></tr>
+            <tr><td><strong>dossier.md</strong></td><td>What has he been observed to prefer?</td></tr>
+            <tr><td><strong>projects.md</strong></td><td>What is he building, and where does it stand?</td></tr>
+            <tr><td><strong>social.md</strong></td><td>Who matters to him, and who are they to him?</td></tr>
+            <tr><td><strong>sessions.md</strong></td><td>What happened in the gym, day by day?</td></tr>
+            <tr><td><strong>history.md</strong></td><td>What happened that no longer applies?</td></tr>
+            <tr><td><strong>log.md</strong></td><td>Rolling one-line session trail.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <p class="eyebrow" style="--a: var(--orion)">02 — Memory</p>
+        <h3 style="font-size:1.9rem">A closed file taxonomy, and one agent whose entire job is enforcing it</h3>
+        <p>Memory rots when hygiene is everyone's job and therefore nobody's. So Mark VI declares
+          <strong>exactly eight files</strong>, one question each — creating any other top-level file is a
+          protocol violation — and hands the whole problem to <a href="agents/orion/">Orion</a>, a custodian
+          agent that merges strays, demotes ended states and timestamps everything.</p>
+        <p>One rule governs conflicts: <strong><code>current.md</code> outranks every other file for the
+          present tense.</strong> When history says "works an IT job" and current says otherwise, current
+          wins and the other is demoted rather than deleted.</p>
+        <p><a href="systems/memory/">Read the memory contract →</a></p>
+      </div>
+    </div>
+
+    <div class="split" style="margin-top:clamp(3rem,6vw,5.5rem)">
+      <div>
+        <p class="eyebrow" style="--a: var(--sentinel)">03 — Proactive automations</p>
+        <h3 style="font-size:1.9rem">A poll must not cost a turn</h3>
+        <p>Tell it what to watch in plain language — <em>"track this page for a month and tell me when the
+          results are up"</em> — and the agent composes the watcher itself, arms it, and writes you a proper
+          message on Telegram when it fires.</p>
+        <p>The expensive part is what most systems get wrong. A watcher that fires a full agentic turn every
+          tick spends real money to learn that nothing happened: at a ten-minute cadence that is roughly
+          <strong>144 turns a day to answer "no"</strong>. So every watcher is split in two — a deterministic
+          zero-token <strong>probe</strong>, and a <strong>trigger</strong> that only runs when the probe
+          returns a hit.</p>
+        <p><a href="systems/automations/">How the probes work →</a></p>
+      </div>
+      <div class="holo pad-lg" style="--a: var(--sentinel)">
+        <div class="doctrine" style="margin:0">
+          Exactly-once is the probe's job, and it commits last. The scan never marks its own findings as
+          handled; the acknowledgement happens only after the trigger was accepted.
+          <cite>A duplicate push is recoverable. A swallowed exam result is not.</cite>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid g3" style="margin-top:clamp(3rem,6vw,5.5rem)">
+      <a class="holo pad agent-card rise" style="--a: var(--nightcrawler)" href="systems/news/">
+        <span class="mark">04</span><span class="name">The News Desk</span>
+        <span class="domain">Two-tier intelligence</span>
+        <p class="card-body">An always-on zero-cost RSS layer with cross-outlet dedup and keyword alerts,
+          plus a quota-budgeted analyst tier spent only when the free one cannot answer.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--optimus)" href="systems/forge/">
+        <span class="mark">05</span><span class="name">The Forge</span>
+        <span class="domain">Real code on real machines</span>
+        <p class="card-body">A standalone execution engine that connects back as a WebSocket peer, giving
+          Optimus a privileged shell inside its own isolated cell — with graceful fallback when it's down.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--speda)" href="systems/maps/">
+        <span class="mark">06</span><span class="name">Maps &amp; navigation</span>
+        <span class="domain">Cartography, inline</span>
+        <p class="card-body">Traffic-aware routing rendered inside the conversation. The origin defaults to
+          your live position, so "how do I get home?" never triggers a follow-up question.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--warroom)" href="systems/house-party/">
+        <span class="mark">07</span><span class="name">House Party Protocol</span>
+        <span class="domain">All hands, passphrase-gated</span>
+        <p class="card-body">The whole roster in parallel at full interactive model grade with domain
+          boundaries relaxed — and a War Room takeover of the client until you stand down.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--centurion)" href="systems/capabilities/">
+        <span class="mark">08</span><span class="name">The arsenal</span>
+        <span class="domain">Four tiers, one array</span>
+        <p class="card-body">Skills, MCP servers and wrapped open-source applications — all identical to the
+          model, with lazy loading so a huge toolset costs almost nothing to carry.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--ultron)" href="systems/">
+        <span class="mark">↗</span><span class="name">All systems</span>
+        <span class="domain">The index</span>
+        <p class="card-body">Every subsystem in one place, with the architectural rules each one is built
+          to obey.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="surfaces">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Where it lives</p>
+      <h2>Three surfaces, one assistant</h2>
+      <p class="lede">All three speak the same HTTP, SSE and WebSocket surface. The clients render the
+        network; <a href="igor/">Igor</a> runs it, and holds every line of business logic.</p>
+    </div>
+    <figure style="margin-top:0">
+      <img src="https://github.com/user-attachments/assets/3691eed2-f8a2-4922-b188-2fe3c24b3402"
+           width="1920" height="1014"
+           alt="Heartbreaker, the SPEDA Mark VI desktop command deck, showing a live agent conversation in fluid-glass panels">
+      <figcaption>Heartbreaker — the primary interface, themed to the active agent</figcaption>
+    </figure>
+    <div class="grid g3" style="margin-top:2.6rem">
+      <a class="holo pad agent-card rise" href="heartbreaker/">
+        <span class="name">Heartbreaker</span><span class="domain">Desktop · Electron + React</span>
+        <p class="card-body">The fluid-glass command deck: agent switcher, a live Systems Board of routing and
+          budget telemetry, and a comms tray where you watch agents talk to each other.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--atomix)" href="speda-go/">
+        <span class="name">SPEDA GO</span><span class="domain">Android · Kotlin + Compose</span>
+        <p class="card-body">Native, not a wrapped web view. Full chat core, inline maps and charts, offline
+          transcript cache — verified against the desktop theme engine by fixture tests.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--optimus)" href="igor/">
+        <span class="name">Igor</span><span class="domain">Backend · FastAPI</span>
+        <p class="card-body">One orchestrator owning the loop and the system prompt, one registry owning every
+          capability, and a written contract the code is not allowed to break.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="run">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">See it running</p>
+      <h2>Three commands to a live deck</h2>
+      <p class="lede">SQLite by default, so a first run needs no services at all.</p>
+    </div>
+    <pre><code><span class="c"># 1. Configure</span>
+cp .env.example packages/igor/.env      <span class="c"># one provider key + SPEDA_API_KEY</span>
+
+<span class="c"># 2. Igor, the backend</span>
+cd packages/igor &amp;&amp; uv sync &amp;&amp; uv run uvicorn app.main:app --port 8000 --reload
+
+<span class="c"># 3. The command deck (repo root, new terminal)</span>
+npm install &amp;&amp; npm run heartbreaker:dev</code></pre>
+    <p style="margin-top:1.6rem;color:var(--fg-dim)">On Windows <code>speda.ps1</code> boots the whole system —
+      backend, sandbox, Forge link and app — in one command. <code>docker compose up -d</code> brings up the
+      full stack with Postgres, the isolated sandbox and n8n.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="https://github.com/spedatox/speda-mark6">Read the source</a>
+      <a class="btn" href="faq/">Frequently asked questions</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div><h4>The roster</h4><ul><li><a href="agents/">All eight agents</a></li><li><a href="agents/speda/">SPEDA — Chief of Staff</a></li><li><a href="agents/sentinel/">Sentinel — finance</a></li><li><a href="agents/nightcrawler/">NightCrawler — OSINT</a></li><li><a href="agents/ultron/">Ultron — academic life</a></li><li><a href="agents/centurion/">Centurion — security</a></li><li><a href="agents/atomix/">Atomix — health</a></li><li><a href="agents/optimus/">Optimus — code</a></li><li><a href="agents/orion/">Orion — custodian</a></li></ul></div>
+      <div><h4>The systems</h4><ul><li><a href="systems/">All systems</a></li><li><a href="systems/legion/">The Legion</a></li><li><a href="systems/memory/">Memory & recall</a></li><li><a href="systems/automations/">Proactive automations</a></li><li><a href="systems/news/">The News Desk</a></li><li><a href="systems/forge/">The Forge</a></li><li><a href="systems/maps/">Maps & navigation</a></li><li><a href="systems/house-party/">House Party Protocol</a></li><li><a href="systems/capabilities/">The capability arsenal</a></li></ul></div>
+      <div><h4>The software</h4><ul><li><a href="heartbreaker/">Heartbreaker — desktop</a></li><li><a href="speda-go/">SPEDA GO — Android</a></li><li><a href="igor/">Igor — the backend</a></li><li><a href="faq/">Frequently asked</a></li></ul></div>
+      <div><h4>Source</h4><ul><li><a href="https://github.com/spedatox/speda-mark6">speda-mark6 on GitHub</a></li><li><a href="https://github.com/spedatox/speda-go">SPEDA GO repository</a></li><li><a href="https://github.com/spedatox/forge-mark1">The Forge repository</a></li><li><a href="https://github.com/spedatox">All projects by spedatox</a></li></ul></div>
+    </div>
+    <p class="colophon">
+      <span><strong>S.P.E.D.A.</strong> — Specialized Personal Executive Digital Assistant · Mark VI</span>
+      <span>Built by <a href="https://github.com/spedatox">Ahmet Erol Bayrak</a> · Private project, not licensed for redistribution.</span>
+    </p>
+  </div>
+</footer>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}
+</script>
+<script type="module" src="assets/hero3d.js"></script>
+</body>
+</html>

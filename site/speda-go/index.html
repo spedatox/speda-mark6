@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>SPEDA GO — Native Android Client for SPEDA Mark VI</title>
+<meta name="description" content="SPEDA GO is the native Kotlin and Jetpack Compose Android client for SPEDA Mark VI — full chat core, inline maps and charts, and an offline transcript cache.">
+<link rel="canonical" href="https://spedatox.github.io/speda-mark6/speda-go/">
+
+<meta name="author" content="Ahmet Erol Bayrak">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="keywords" content="SPEDA GO, SPEDA Mark VI Android, Kotlin AI assistant app, Jetpack Compose AI client, native Android AI assistant">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SPEDA Mark VI">
+<meta property="og:title" content="SPEDA GO — Native Android Client for SPEDA Mark VI">
+<meta property="og:description" content="SPEDA GO is the native Kotlin and Jetpack Compose Android client for SPEDA Mark VI — full chat core, inline maps and charts, and an offline transcript cache.">
+<meta property="og:url" content="https://spedatox.github.io/speda-mark6/speda-go/">
+<meta property="og:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SPEDA Mark VI — Specialized Personal Executive Digital Assistant">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="SPEDA GO — Native Android Client for SPEDA Mark VI">
+<meta name="twitter:description" content="SPEDA GO is the native Kotlin and Jetpack Compose Android client for SPEDA Mark VI — full chat core, inline maps and charts, and an offline transcript cache.">
+<meta name="twitter:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta name="twitter:creator" content="@spedatox">
+
+<meta name="theme-color" content="#03060a">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "SPEDA Mark VI",
+          "item": "https://spedatox.github.io/speda-mark6/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "SPEDA GO",
+          "item": "https://spedatox.github.io/speda-mark6/speda-go/"
+        }
+      ]
+    },
+    {
+      "@type": "MobileApplication",
+      "name": "SPEDA GO",
+      "alternateName": "SPEDA Mark VI for Android",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Android",
+      "url": "https://spedatox.github.io/speda-mark6/speda-go/",
+      "downloadUrl": "https://github.com/spedatox/speda-go",
+      "description": "The native Android client for SPEDA Mark VI, written in Kotlin with Jetpack Compose. Carries the full chat core including streaming, the tool feed, inline map, chart and calendar rendering, attachments, an offline transcript cache and the agent switcher.",
+      "author": {
+        "@id": "https://spedatox.github.io/speda-mark6/#author"
+      },
+      "isPartOf": {
+        "@type": "SoftwareApplication",
+        "name": "SPEDA Mark VI",
+        "url": "https://spedatox.github.io/speda-mark6/"
+      }
+    },
+    {
+      "@type": "Person",
+      "@id": "https://spedatox.github.io/speda-mark6/#author",
+      "name": "Ahmet Erol Bayrak",
+      "alternateName": "spedatox",
+      "url": "https://github.com/spedatox",
+      "sameAs": [
+        "https://github.com/spedatox",
+        "https://x.com/spedatox"
+      ]
+    }
+  ]
+}
+</script>
+</head>
+
+<body style="--a: var(--atomix)">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="../"><span class="jewel"></span>S.P.E.D.A.<span class="mk">Mark VI</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="../agents/">Agents</a>
+      <a href="../systems/">Systems</a>
+      <a href="../heartbreaker/">Heartbreaker</a>
+      <a href="../speda-go/" aria-current="page">SPEDA GO</a>
+      <a href="../igor/">Igor</a>
+      <a href="../faq/">FAQ</a>
+      <a href="https://github.com/spedatox/speda-mark6">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" style="min-height:auto;padding:6rem 0 2.5rem">
+  <div class="wrap">
+    <p class="crumb"><a href="../">SPEDA Mark VI</a><span>/</span></p>
+    <p class="eyebrow rise">The Android client</p>
+    <h1 class="rise">SPEDA GO</h1>
+    <p class="lede rise">The command deck in your pocket — native Kotlin and Jetpack Compose, carrying the whole chat core rather than a companion subset.</p>
+    <div class="doctrine rise">Parity with the desktop client is a fixture test suite, agent by agent — not an intention.<cite>packages/speda-go</cite></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="split">
+      <div class="prose" style="max-width:none">
+        <h3>Native, and held to a written parity contract</h3>
+        <p>SPEDA GO is Kotlin and Jetpack Compose rather than a wrapped web view, which means the Stark glass,
+          the palette morph on agent switch, the ambient background and the House Party colour parade are all
+          re-implemented natively. The theme engine is <strong>verified against the desktop one by fixture
+          tests, agent by agent</strong> — parity is a test suite, not an intention.</p>
+        <p>It carries the full chat core rather than a reduced companion subset: streaming with the live tool
+          feed and typewriter rendering, re-attach so a turn that started while the screen was off is still
+          running when you come back, the markdown prose renderer with inline chart, calendar and map blocks,
+          attachments and image upload, download cards filing everything the backend generates, an offline
+          transcript cache and session list, the agent switcher, a configuration tab, and rename or delete on
+          any chat.</p>
+        <p>AMOLED black, fullscreen, built for one thumb. The API key is held in the platform keystore rather
+          than in plain preferences.</p>
+
+        <h3>On the name</h3>
+        <p>The mobile client is <strong>SPEDA GO</strong> — never "Heartbreaker mobile" or "Heartbreaker
+          Droid". <a href="../heartbreaker/">Heartbreaker</a> is the desktop client only. The Kotlin package
+          identifier deliberately still reads as the old name: renaming it would orphan every installed app's
+          keystore data, so it stays exactly where it is.</p>
+      </div>
+      <figure class="portrait" style="margin-top:0">
+        <img src="https://github.com/user-attachments/assets/704053d8-74b8-4a44-8d75-138c55dde3f9"
+             width="738" height="1600"
+             alt="SPEDA GO running on Android showing the AMOLED-black fluid-glass conversation view">
+        <figcaption>One thumb, full deck</figcaption>
+      </figure>
+    </div>
+
+    <div class="prose" style="margin-top:clamp(2.6rem,5vw,4rem)">
+      <h3>Where the phone wins</h3>
+      <p>Location is the case the desktop cannot match. Because the assistant knows which surface it is being
+        addressed from and — with permission — where you are, <em>"how do I get home from here?"</em> resolves
+        without a follow-up question, and answers with a live traffic-aware map inside the conversation.
+        <a href="../systems/maps/">How the maps work →</a></p>
+
+      <h3>Building it</h3>
+      <p>The module opens straight in Android Studio from the monorepo. A push to the main branch produces a
+        signed release through the mirror repository, which is a CI mirror of the package rather than a
+        separate project — only its README is allowed to diverge.</p>
+    </div>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="https://github.com/spedatox/speda-go">SPEDA GO on GitHub</a>
+      <a class="btn" href="https://github.com/spedatox/speda-mark6/blob/main/docs/ANDROID_PORT_PLAN.md">The parity contract</a>
+    </div>
+  </div>
+</section>
+
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div><h4>The roster</h4><ul><li><a href="../agents/">All eight agents</a></li><li><a href="../agents/speda/">SPEDA — Chief of Staff</a></li><li><a href="../agents/sentinel/">Sentinel — finance</a></li><li><a href="../agents/nightcrawler/">NightCrawler — OSINT</a></li><li><a href="../agents/ultron/">Ultron — academic life</a></li><li><a href="../agents/centurion/">Centurion — security</a></li><li><a href="../agents/atomix/">Atomix — health</a></li><li><a href="../agents/optimus/">Optimus — code</a></li><li><a href="../agents/orion/">Orion — custodian</a></li></ul></div>
+      <div><h4>The systems</h4><ul><li><a href="../systems/">All systems</a></li><li><a href="../systems/legion/">The Legion</a></li><li><a href="../systems/memory/">Memory & recall</a></li><li><a href="../systems/automations/">Proactive automations</a></li><li><a href="../systems/news/">The News Desk</a></li><li><a href="../systems/forge/">The Forge</a></li><li><a href="../systems/maps/">Maps & navigation</a></li><li><a href="../systems/house-party/">House Party Protocol</a></li><li><a href="../systems/capabilities/">The capability arsenal</a></li></ul></div>
+      <div><h4>The software</h4><ul><li><a href="../heartbreaker/">Heartbreaker — desktop</a></li><li><a href="../speda-go/">SPEDA GO — Android</a></li><li><a href="../igor/">Igor — the backend</a></li><li><a href="../faq/">Frequently asked</a></li></ul></div>
+      <div><h4>Source</h4><ul><li><a href="https://github.com/spedatox/speda-mark6">speda-mark6 on GitHub</a></li><li><a href="https://github.com/spedatox/speda-go">SPEDA GO repository</a></li><li><a href="https://github.com/spedatox/forge-mark1">The Forge repository</a></li><li><a href="https://github.com/spedatox">All projects by spedatox</a></li></ul></div>
+    </div>
+    <p class="colophon">
+      <span><strong>S.P.E.D.A.</strong> — Specialized Personal Executive Digital Assistant · Mark VI</span>
+      <span>Built by <a href="https://github.com/spedatox">Ahmet Erol Bayrak</a> · Private project, not licensed for redistribution.</span>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

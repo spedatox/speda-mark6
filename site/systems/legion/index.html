@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>The Legion — Sub-Agent Workers in SPEDA Mark VI</title>
+<meta name="description" content="The Legion is the sub-agent worker system of SPEDA Mark VI: scout, researcher, analyst, judge and general, run on the parent model's own cheap tier.">
+<link rel="canonical" href="https://spedatox.github.io/speda-mark6/systems/legion/">
+
+<meta name="author" content="Ahmet Erol Bayrak">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="keywords" content="The Legion, AI sub-agents, parallel research agents, multi-agent fan-out, sub-agent worker system, SPEDA Mark VI">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SPEDA Mark VI">
+<meta property="og:title" content="The Legion — Sub-Agent Workers in SPEDA Mark VI">
+<meta property="og:description" content="The Legion is the sub-agent worker system of SPEDA Mark VI: scout, researcher, analyst, judge and general, run on the parent model's own cheap tier.">
+<meta property="og:url" content="https://spedatox.github.io/speda-mark6/systems/legion/">
+<meta property="og:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SPEDA Mark VI — Specialized Personal Executive Digital Assistant">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The Legion — Sub-Agent Workers in SPEDA Mark VI">
+<meta name="twitter:description" content="The Legion is the sub-agent worker system of SPEDA Mark VI: scout, researcher, analyst, judge and general, run on the parent model's own cheap tier.">
+<meta name="twitter:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta name="twitter:creator" content="@spedatox">
+
+<meta name="theme-color" content="#03060a">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../../assets/site.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "SPEDA Mark VI",
+          "item": "https://spedatox.github.io/speda-mark6/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Systems",
+          "item": "https://spedatox.github.io/speda-mark6/systems/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "The Legion",
+          "item": "https://spedatox.github.io/speda-mark6/systems/legion/"
+        }
+      ]
+    },
+    {
+      "@type": "TechArticle",
+      "headline": "The Legion — Sub-Agent Workers in SPEDA Mark VI",
+      "description": "The Legion is the sub-agent worker system of SPEDA Mark VI: scout, researcher, analyst, judge and general, run on the parent model's own cheap tier.",
+      "url": "https://spedatox.github.io/speda-mark6/systems/legion/",
+      "author": {
+        "@id": "https://spedatox.github.io/speda-mark6/#author"
+      },
+      "about": {
+        "@type": "SoftwareApplication",
+        "name": "SPEDA Mark VI",
+        "url": "https://spedatox.github.io/speda-mark6/"
+      },
+      "proficiencyLevel": "Expert"
+    },
+    {
+      "@type": "Person",
+      "@id": "https://spedatox.github.io/speda-mark6/#author",
+      "name": "Ahmet Erol Bayrak",
+      "alternateName": "spedatox",
+      "url": "https://github.com/spedatox",
+      "sameAs": [
+        "https://github.com/spedatox",
+        "https://x.com/spedatox"
+      ]
+    }
+  ]
+}
+</script>
+</head>
+
+<body style="--a: var(--nightcrawler)">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="../../"><span class="jewel"></span>S.P.E.D.A.<span class="mk">Mark VI</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="../../agents/">Agents</a>
+      <a href="../../systems/" aria-current="page">Systems</a>
+      <a href="../../heartbreaker/">Heartbreaker</a>
+      <a href="../../speda-go/">SPEDA GO</a>
+      <a href="../../igor/">Igor</a>
+      <a href="../../faq/">FAQ</a>
+      <a href="https://github.com/spedatox/speda-mark6">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" style="min-height:auto;padding:6rem 0 2.5rem">
+  <div class="wrap">
+    <p class="crumb"><a href="../../">SPEDA Mark VI</a><span>/</span><a href="../">Systems</a><span>/</span></p>
+    <p class="eyebrow rise">System 01 — The Legion</p>
+    <h1 class="rise">The Legion</h1>
+    <p class="lede rise">Disposable, anonymous, memoryless workers deployed for a single task and discarded. They are not the roster — they are the grunts, and the system is built so they stay that way.</p>
+    <div class="doctrine rise">Each worker is fully isolated: it sees nothing of the conversation, so the prompt must be self-contained, and its result returns only to the agent that deployed it.<cite>app/legion/roster.py</cite></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="prose">
+      <h3>Five workers, and a tool that argues against itself</h3>
+      <p>The Legion is registered as <strong>tier zero</strong> — before skills, before MCP servers, before
+        adapters. Its wire name is <code>Task</code>, because models already know that delegation pattern by
+        that name; The Legion is the branding the descriptions, prompts and logs carry.</p>
+      <p>Its tool description is unusual in that most of it is spent talking the model <em>out</em> of using
+        it. Deploy only when the owner explicitly asked for a deep report <em>and</em> it genuinely needs six or
+        more independent searches across distinct subtopics. Never for news, current events, quick facts,
+        lookups, writes or reminders. Running several searches yourself is stated as preferred over deploying a
+        worker at all. When in doubt: do not deploy.</p>
+      <p>Each legionnaire is <strong>data, not code</strong> — a role prompt, an effort level, an iteration
+        budget and a tool scope. Adding a worker type means adding an entry; the runner and the tool definition
+        pick it up automatically.</p>
+    </div>
+
+    <div class="table-scroll" style="margin-top:2.4rem">
+      <table>
+        <thead><tr><th>Legionnaire</th><th>Effort</th><th>Iterations</th><th>What it is for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>scout</strong></td><td>low</td><td>6</td><td>Cheap triage. Surveys sources fast and returns a ranked shortlist of leads — no deep reading, no synthesis, no conclusions. A heavier worker follows it.</td></tr>
+          <tr><td><strong>researcher</strong></td><td>medium</td><td>15</td><td>The default for fan-out. Takes exactly one subtopic, investigates across multiple independent sources, cross-checks, and returns dense findings with a URL for every non-obvious claim.</td></tr>
+          <tr><td><strong>analyst</strong></td><td>high</td><td>20</td><td>Synthesis. Receives the raw findings of prior workers and produces the finished structured section with a clear line of argument, preserving their attributions.</td></tr>
+          <tr><td><strong>judge</strong></td><td>low</td><td>8</td><td>Verification only. Checks each substantive claim against its source and returns a per-claim verdict — confirmed, wrong with the correction, or unverifiable. It audits; it does not rewrite.</td></tr>
+          <tr><td><strong>general</strong></td><td>inherit</td><td>15</td><td>Anything that does not fit a specialist. Full parent toolset, parent-grade model, self-contained task.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="split">
+      <div class="prose" style="max-width:none">
+        <h3>Never cross providers on the engine's own initiative</h3>
+        <p>This is the part most sub-agent systems get wrong. A cheap worker tier is usually a hardcoded model
+          ID, which silently drags background work back onto one vendor no matter what the owner routed the
+          conversation to.</p>
+        <p>Here, resolution is provider-relative and runs in a fixed priority order: a deployment-wide override
+          first, then the owner's per-legionnaire pin from the UI, then an explicit tool parameter, then effort.
+          Low and medium effort resolve to <strong>the cheap tier of the same provider the parent turn is
+          running on</strong> — an Anthropic parent gets Haiku, a GLM parent gets GLM Air. High and inherited
+          effort take the parent model unchanged.</p>
+        <p>The owner's pin deliberately beats the model's own choice: it is a cost and quality policy, not a
+          per-call hint.</p>
+      </div>
+      <div class="holo pad-lg">
+        <h3 class="card-title">Hard limits</h3>
+        <ul class="prose" style="margin:1rem 0 0">
+          <li><strong>No recursion.</strong> Workers cannot see the delegation tool, so they cannot spawn
+            workers of their own.</li>
+          <li><strong>No persona.</strong> The dispatch tools are withheld too — an anonymous worker must never
+            talk like a roster member.</li>
+          <li><strong>Result cap.</strong> A worker that returns a novel defeats the point of context
+            isolation, so output is truncated to a fixed budget.</li>
+          <li><strong>Fan-out cap.</strong> Concurrent background workers are limited, as a runaway guard.</li>
+          <li><strong>Read-only by default</strong> for scout, researcher and judge, scoped to the research
+            surfaces.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="prose" style="margin-top:clamp(2.6rem,5vw,4rem)">
+      <h3>Isolation is the point</h3>
+      <p>Every worker is fully isolated: it sees <em>nothing</em> of the parent conversation, which is exactly
+        why the deploying agent must write a self-contained prompt. The worker's result returns only to the
+        agent that deployed it — never straight to the owner — and the agent is required to summarise it and
+        name which legionnaires ran, one sentence per worker.</p>
+      <p>Deployed with a background flag, a worker returns a ticket immediately and lands its findings in the
+        comms tray when it is done, so a long research job never blocks the conversation.</p>
+      <p>Budget mode stands the entire Legion down.</p>
+    </div>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="https://github.com/spedatox/speda-mark6/blob/main/packages/igor/app/legion/roster.py">roster.py on GitHub</a>
+      <a class="btn" href="../capabilities/">The four capability tiers</a>
+    </div>
+  </div>
+</section>
+
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div><h4>The roster</h4><ul><li><a href="../../agents/">All eight agents</a></li><li><a href="../../agents/speda/">SPEDA — Chief of Staff</a></li><li><a href="../../agents/sentinel/">Sentinel — finance</a></li><li><a href="../../agents/nightcrawler/">NightCrawler — OSINT</a></li><li><a href="../../agents/ultron/">Ultron — academic life</a></li><li><a href="../../agents/centurion/">Centurion — security</a></li><li><a href="../../agents/atomix/">Atomix — health</a></li><li><a href="../../agents/optimus/">Optimus — code</a></li><li><a href="../../agents/orion/">Orion — custodian</a></li></ul></div>
+      <div><h4>The systems</h4><ul><li><a href="../../systems/">All systems</a></li><li><a href="../../systems/legion/">The Legion</a></li><li><a href="../../systems/memory/">Memory & recall</a></li><li><a href="../../systems/automations/">Proactive automations</a></li><li><a href="../../systems/news/">The News Desk</a></li><li><a href="../../systems/forge/">The Forge</a></li><li><a href="../../systems/maps/">Maps & navigation</a></li><li><a href="../../systems/house-party/">House Party Protocol</a></li><li><a href="../../systems/capabilities/">The capability arsenal</a></li></ul></div>
+      <div><h4>The software</h4><ul><li><a href="../../heartbreaker/">Heartbreaker — desktop</a></li><li><a href="../../speda-go/">SPEDA GO — Android</a></li><li><a href="../../igor/">Igor — the backend</a></li><li><a href="../../faq/">Frequently asked</a></li></ul></div>
+      <div><h4>Source</h4><ul><li><a href="https://github.com/spedatox/speda-mark6">speda-mark6 on GitHub</a></li><li><a href="https://github.com/spedatox/speda-go">SPEDA GO repository</a></li><li><a href="https://github.com/spedatox/forge-mark1">The Forge repository</a></li><li><a href="https://github.com/spedatox">All projects by spedatox</a></li></ul></div>
+    </div>
+    <p class="colophon">
+      <span><strong>S.P.E.D.A.</strong> — Specialized Personal Executive Digital Assistant · Mark VI</span>
+      <span>Built by <a href="https://github.com/spedatox">Ahmet Erol Bayrak</a> · Private project, not licensed for redistribution.</span>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

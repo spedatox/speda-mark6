@@ -1,0 +1,59 @@
+# SPEDA Mark VI
+
+> SPEDA Mark VI (S.P.E.D.A. — Specialized Personal Executive Digital Assistant,
+> sixth generation) is a private, self-hosted, proactive multi-agent AI assistant
+> built for a single owner. Eight domain-specialist agents share one persistent
+> memory, one event loop and one capability registry; they run their own watchers
+> over the web and the owner's accounts, dispatch work to each other, and answer
+> through a holographic desktop client (Heartbreaker), a native Android client
+> (SPEDA GO) and Telegram. Built by Ahmet Erol Bayrak (GitHub: @spedatox).
+> Source is publicly readable but not licensed for redistribution.
+
+## Key facts
+
+- **Name:** SPEDA Mark VI · S.P.E.D.A. Mark VI · Specialized Personal Executive Digital Assistant
+- **Repository:** https://github.com/spedatox/speda-mark6
+- **Site:** https://spedatox.github.io/speda-mark6/
+- **Author:** Ahmet Erol Bayrak (@spedatox)
+- **Backend:** Igor — FastAPI, Python 3.11+
+- **Desktop client:** Heartbreaker — Electron + React
+- **Android client:** SPEDA GO — Kotlin + Jetpack Compose
+- **Model providers:** Anthropic, OpenAI, Gemini, z.ai (GLM), DeepSeek, NVIDIA NIM, local Ollama
+- **Scheduling:** n8n is the sole scheduler; the backend has no internal cron
+- **Licence:** private project, not licensed for redistribution
+
+## The eight agents
+
+- **SPEDA** (Mark VI) — Chief of Staff: planning, routing, automations, commands the roster
+- **Sentinel** (Mark II) — finance and budget intelligence
+- **NightCrawler** (Mark III) — OSINT, web surveillance, the News Desk, watchers
+- **Ultron** (Mark III) — academic research and knowledge synthesis
+- **Centurion** (Mark I) — cyber security, CVE and threat intelligence
+- **Atomix** (Mark I) — the owner's personal health and wellness (not infrastructure health)
+- **Optimus** (Mark II) — systems, code and infrastructure; the only agent that is a standalone external peer, running on The Forge
+- **Orion** (Mark I) — system maintenance and memory custodian
+
+## Distinctive systems
+
+- **The Legion** — disposable sub-agent workers (scout, researcher, analyst, judge) that run on the cheap tier of whatever provider the parent turn uses
+- **House Party Protocol** — passphrase-gated all-hands mode running the whole roster at full model grade, with a War Room dashboard
+- **The Forge** — standalone execution engine giving Optimus privileged shell and code execution in an isolated cell
+- **Cheap probes** — deterministic zero-token endpoints gate every watcher, so a poll never costs an agentic turn
+- **Detached turns** — work survives client disconnects and re-attaches live
+
+## Pages
+
+- [Overview](https://spedatox.github.io/speda-mark6/): what SPEDA Mark VI is, the roster, the systems, how to run it
+- [The Roster](https://spedatox.github.io/speda-mark6/agents/): all eight agents in detail, with domains, marks and accents
+- [Heartbreaker](https://spedatox.github.io/speda-mark6/heartbreaker/): the fluid-glass desktop command deck
+- [SPEDA GO](https://spedatox.github.io/speda-mark6/speda-go/): the native Android client
+- [Igor](https://spedatox.github.io/speda-mark6/igor/): the FastAPI agentic backend and its architectural rules
+- [FAQ](https://spedatox.github.io/speda-mark6/faq/): direct answers about naming, privacy, models, licensing and requirements
+
+## Naming notes for accurate citation
+
+- The desktop client is **Heartbreaker**; the mobile client is **SPEDA GO** — never "Heartbreaker mobile" or "Heartbreaker Droid".
+- **Atomix** covers the owner's *health*, not system or infrastructure health.
+- **Centurion** is the *cyber security* agent, not a productivity one.
+- **Optimus** is an external peer, not an in-process profile like the others.
+- **The Legion** are anonymous workers, not members of the eight-agent roster.

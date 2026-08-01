@@ -1,0 +1,58 @@
+name: pages
+
+# Publishes site/ to GitHub Pages — the public marketing and documentation
+# surface for SPEDA Mark VI, served at https://spedatox.github.io/speda-mark6/.
+#
+# ONE-TIME SETUP (required before the first run can succeed):
+#   Repo → Settings → Pages → "Build and deployment" → Source: GitHub Actions
+# Without that, deploy-pages fails with "Pages site not configured".
+#
+# The site is plain static HTML with no build step, so there is nothing to
+# install or compile — the directory is uploaded exactly as it sits in the repo.
+# site/.nojekyll keeps Pages from running it through Jekyll.
+#
+# To move the site onto a custom domain later: add site/CNAME containing the
+# bare hostname, point a DNS CNAME at spedatox.github.io, then update every
+# absolute URL (canonical, og:url, og:image, sitemap.xml, robots.txt, llms.txt).
+# scripts/seo/apply-repo-metadata.sh --homepage keeps the repo's link in sync.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two publishes race. Unlike the backend deploy, an in-flight run is
+# allowed to finish — a half-uploaded artifact is worse than a stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site/ as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

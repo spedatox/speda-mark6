@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>The Systems of SPEDA Mark VI — How It Actually Works</title>
+<meta name="description" content="The eight subsystems of SPEDA Mark VI: the Legion, memory, proactive automations, the News Desk, the Forge, maps, House Party Protocol and the capability arsenal.">
+<link rel="canonical" href="https://spedatox.github.io/speda-mark6/systems/">
+
+<meta name="author" content="Ahmet Erol Bayrak">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="keywords" content="SPEDA Mark VI architecture, AI assistant subsystems, multi-agent system design, agentic architecture, AI assistant internals">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SPEDA Mark VI">
+<meta property="og:title" content="The Systems of SPEDA Mark VI — How It Actually Works">
+<meta property="og:description" content="The eight subsystems of SPEDA Mark VI: the Legion, memory, proactive automations, the News Desk, the Forge, maps, House Party Protocol and the capability arsenal.">
+<meta property="og:url" content="https://spedatox.github.io/speda-mark6/systems/">
+<meta property="og:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SPEDA Mark VI — Specialized Personal Executive Digital Assistant">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The Systems of SPEDA Mark VI — How It Actually Works">
+<meta name="twitter:description" content="The eight subsystems of SPEDA Mark VI: the Legion, memory, proactive automations, the News Desk, the Forge, maps, House Party Protocol and the capability arsenal.">
+<meta name="twitter:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta name="twitter:creator" content="@spedatox">
+
+<meta name="theme-color" content="#03060a">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "SPEDA Mark VI",
+          "item": "https://spedatox.github.io/speda-mark6/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Systems",
+          "item": "https://spedatox.github.io/speda-mark6/systems/"
+        }
+      ]
+    },
+    {
+      "@type": "ItemList",
+      "name": "The subsystems of SPEDA Mark VI",
+      "numberOfItems": 8,
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "The Legion",
+          "url": "https://spedatox.github.io/speda-mark6/systems/legion/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Memory & recall",
+          "url": "https://spedatox.github.io/speda-mark6/systems/memory/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Proactive automations",
+          "url": "https://spedatox.github.io/speda-mark6/systems/automations/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 4,
+          "name": "The News Desk",
+          "url": "https://spedatox.github.io/speda-mark6/systems/news/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 5,
+          "name": "The Forge",
+          "url": "https://spedatox.github.io/speda-mark6/systems/forge/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 6,
+          "name": "Maps & navigation",
+          "url": "https://spedatox.github.io/speda-mark6/systems/maps/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 7,
+          "name": "House Party Protocol",
+          "url": "https://spedatox.github.io/speda-mark6/systems/house-party/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 8,
+          "name": "The arsenal",
+          "url": "https://spedatox.github.io/speda-mark6/systems/capabilities/"
+        }
+      ]
+    },
+    {
+      "@type": "Person",
+      "@id": "https://spedatox.github.io/speda-mark6/#author",
+      "name": "Ahmet Erol Bayrak",
+      "alternateName": "spedatox",
+      "url": "https://github.com/spedatox",
+      "sameAs": [
+        "https://github.com/spedatox",
+        "https://x.com/spedatox"
+      ]
+    }
+  ]
+}
+</script>
+</head>
+
+<body style="--a: var(--speda)">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="../"><span class="jewel"></span>S.P.E.D.A.<span class="mk">Mark VI</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="../agents/">Agents</a>
+      <a href="../systems/" aria-current="page">Systems</a>
+      <a href="../heartbreaker/">Heartbreaker</a>
+      <a href="../speda-go/">SPEDA GO</a>
+      <a href="../igor/">Igor</a>
+      <a href="../faq/">FAQ</a>
+      <a href="https://github.com/spedatox/speda-mark6">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" style="min-height:auto;padding:6rem 0 2rem">
+  <div class="wrap">
+    <p class="crumb"><a href="../">SPEDA Mark VI</a><span>/</span></p>
+    <p class="eyebrow rise">The systems</p>
+    <h1 class="rise">Eight subsystems,<br>one contract</h1>
+    <p class="lede rise">None of these is a wrapper around a single API call. Each solves a problem that only
+      appears once an assistant is expected to run continuously, remember a person, and spend real money doing
+      it — and each is built to the same written architectural rules.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="grid g3">
+      <a class="holo pad agent-card rise" style="--a: var(--nightcrawler)" href="legion/">
+        <span class="mark">01</span>
+        <span class="name">The Legion</span>
+        <span class="domain">Sub-agent workers</span>
+        <p class="card-body">Scout, researcher, analyst, judge and general — isolated, memoryless, and resolved onto the cheap tier of whatever provider the parent turn already uses.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--orion)" href="memory/">
+        <span class="mark">02</span>
+        <span class="name">Memory &amp; recall</span>
+        <span class="domain">Eight files, one custodian</span>
+        <p class="card-body">A closed taxonomy with one question per file, a precedence rule that settles conflicts, and three tiers of recall above it.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--sentinel)" href="automations/">
+        <span class="mark">03</span>
+        <span class="name">Proactive automations</span>
+        <span class="domain">Probes and triggers</span>
+        <p class="card-body">Deterministic zero-token probes gate every agentic turn, and an automated turn is a real, readable, attachable chat turn.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--nightcrawler)" href="news/">
+        <span class="mark">04</span>
+        <span class="name">The News Desk</span>
+        <span class="domain">Two-tier intelligence</span>
+        <p class="card-body">An always-on free RSS layer with cross-outlet dedup and keyword alerts, plus a metered analyst tier for corroboration and timelines.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--optimus)" href="forge/">
+        <span class="mark">05</span>
+        <span class="name">The Forge</span>
+        <span class="domain">External execution</span>
+        <p class="card-body">A standalone engine connected as a WebSocket peer, giving an agent a privileged shell in its own isolated cell — with graceful fallback.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--speda)" href="maps/">
+        <span class="mark">06</span>
+        <span class="name">Maps &amp; navigation</span>
+        <span class="domain">Cartography inline</span>
+        <p class="card-body">Traffic-aware routing rendered in the conversation, origin defaulted to your live position, never written to stored history.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--warroom)" href="house-party/">
+        <span class="mark">07</span>
+        <span class="name">House Party Protocol</span>
+        <span class="domain">All hands</span>
+        <p class="card-body">The whole roster in parallel at full model grade with boundaries relaxed, behind a passphrase and a War Room takeover.</p>
+      </a>
+      <a class="holo pad agent-card rise" style="--a: var(--centurion)" href="capabilities/">
+        <span class="mark">08</span>
+        <span class="name">The arsenal</span>
+        <span class="domain">Four tiers, one array</span>
+        <p class="card-body">Skills, MCP servers and wrapped open-source engines, lazily mounted and prompt-cached so breadth is nearly free.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">The spine</p>
+      <h2>Rules every subsystem obeys</h2>
+      <p class="lede">These are enforced at review time rather than aspirational, and they are what keeps a
+        system this wide from becoming a pile of special cases.</p>
+    </div>
+    <div class="grid g3">
+      <article class="holo pad"><h3 class="card-title">Nothing lives in routers</h3><p class="card-body">A router builds context, hands off to the engine and streams. No business logic, no prompt construction, no tool registration.</p></article>
+      <article class="holo pad"><h3 class="card-title">One owner of the system prompt</h3><p class="card-body">Prompt assembly exists in exactly one place. Never in a router, never in a service, never inline.</p></article>
+      <article class="holo pad"><h3 class="card-title">One source of request state</h3><p class="card-body">A single context object carries user, session, database, model, timezone and a request UUID. No module-level globals.</p></article>
+      <article class="holo pad"><h3 class="card-title">Every stop reason handled</h3><p class="card-body">The loop handles completion, tool use, truncation and server-tool pauses explicitly, and never breaks after the first tool call.</p></article>
+      <article class="holo pad"><h3 class="card-title">A hard safety guard</h3><p class="card-body">Past thirty tool iterations the loop emits an error and terminates gracefully. A guard against runaway loops, not a feature limit.</p></article>
+      <article class="holo pad"><h3 class="card-title">Zero identity in core</h3><p class="card-body">Names, personalities, prompt templates and model IDs live only in profile files. The engine is untouched by identity.</p></article>
+      <article class="holo pad"><h3 class="card-title">No internal scheduler</h3><p class="card-body">Scheduling is external, permanently. The backend never grows a cron.</p></article>
+      <article class="holo pad"><h3 class="card-title">Everything authenticates</h3><p class="card-body">Middleware validates the API key in constant time before any router runs; automated endpoints validate a second secret on top.</p></article>
+      <article class="holo pad"><h3 class="card-title">Every request is traceable</h3><p class="card-body">A UUID propagates through every log line, tool call record, stream event and background task, so a multi-worker execution can be followed end to end.</p></article>
+    </div>
+    <div class="actions">
+      <a class="btn btn-primary" href="https://github.com/spedatox/speda-mark6/blob/main/CLAUDE.md">The architectural contract</a>
+      <a class="btn" href="../igor/">Inside Igor</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div><h4>The roster</h4><ul><li><a href="../agents/">All eight agents</a></li><li><a href="../agents/speda/">SPEDA — Chief of Staff</a></li><li><a href="../agents/sentinel/">Sentinel — finance</a></li><li><a href="../agents/nightcrawler/">NightCrawler — OSINT</a></li><li><a href="../agents/ultron/">Ultron — academic life</a></li><li><a href="../agents/centurion/">Centurion — security</a></li><li><a href="../agents/atomix/">Atomix — health</a></li><li><a href="../agents/optimus/">Optimus — code</a></li><li><a href="../agents/orion/">Orion — custodian</a></li></ul></div>
+      <div><h4>The systems</h4><ul><li><a href="../systems/">All systems</a></li><li><a href="../systems/legion/">The Legion</a></li><li><a href="../systems/memory/">Memory & recall</a></li><li><a href="../systems/automations/">Proactive automations</a></li><li><a href="../systems/news/">The News Desk</a></li><li><a href="../systems/forge/">The Forge</a></li><li><a href="../systems/maps/">Maps & navigation</a></li><li><a href="../systems/house-party/">House Party Protocol</a></li><li><a href="../systems/capabilities/">The capability arsenal</a></li></ul></div>
+      <div><h4>The software</h4><ul><li><a href="../heartbreaker/">Heartbreaker — desktop</a></li><li><a href="../speda-go/">SPEDA GO — Android</a></li><li><a href="../igor/">Igor — the backend</a></li><li><a href="../faq/">Frequently asked</a></li></ul></div>
+      <div><h4>Source</h4><ul><li><a href="https://github.com/spedatox/speda-mark6">speda-mark6 on GitHub</a></li><li><a href="https://github.com/spedatox/speda-go">SPEDA GO repository</a></li><li><a href="https://github.com/spedatox/forge-mark1">The Forge repository</a></li><li><a href="https://github.com/spedatox">All projects by spedatox</a></li></ul></div>
+    </div>
+    <p class="colophon">
+      <span><strong>S.P.E.D.A.</strong> — Specialized Personal Executive Digital Assistant · Mark VI</span>
+      <span>Built by <a href="https://github.com/spedatox">Ahmet Erol Bayrak</a> · Private project, not licensed for redistribution.</span>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

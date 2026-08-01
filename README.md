@@ -5,13 +5,15 @@
 
 ### Specialized Personal Executive Digital Assistant Mark VI
 
-<img width="1920" height="1014" alt="image" src="https://github.com/user-attachments/assets/3691eed2-f8a2-4922-b188-2fe3c24b3402" />
+<img width="1920" height="1014" alt="SPEDA Mark VI running in Heartbreaker, the holographic fluid-glass desktop command deck, showing a live agent conversation" src="https://github.com/user-attachments/assets/3691eed2-f8a2-4922-b188-2fe3c24b3402" />
 
 
-**A private, proactive, multi-agent executive assistant** — a suite of eight
-domain specialists that watch the world for you, act while you sleep, remember
-who you are, and answer through a holographic command deck straight out of a
-Stark lab — on your desktop, in your pocket, or over Telegram.
+**SPEDA Mark VI is a private, proactive, self-hosted multi-agent AI assistant** —
+a suite of eight domain specialists that watch the world for you, act while you
+sleep, remember who you are, and answer through a holographic command deck
+straight out of a Stark lab — on your desktop, in your pocket, or over Telegram.
+
+**[speda mark vi · the site →](https://spedatox.github.io/speda-mark6/)**
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
@@ -56,7 +58,7 @@ any of them directly; they quietly hand work to each other when a task belongs
 to someone else's domain.
 
 
-<img width="1918" height="1016" alt="image" src="https://github.com/user-attachments/assets/c7c889c1-fe57-497b-bfc8-f59246764b14" />
+<img width="1918" height="1016" alt="The SPEDA Mark VI agent switcher showing all eight agents, each with its own signature accent colour and domain" src="https://github.com/user-attachments/assets/c7c889c1-fe57-497b-bfc8-f59246764b14" />
 
 
 
@@ -68,8 +70,8 @@ to someone else's domain.
 | ⬜ **Ultron** | Mark III | Academy & Work | Research synthesis, literature, deep analytical work. |
 | 🟥 **Centurion** | Mark I | Cyber Security | Vulnerability & CVE analysis, scanning, threat intelligence. |
 | 🟩 **Atomix** | Mark I | Health & Wellness | Personal health, fitness, nutrition, recovery. |
-| 🟩 **Optimus** | Mark II | Systems, Code & Infra | Real coding on real machines via **The Forge**. |
-| 🟪 **Orion** | Mark I | Maintenance & Memory | The system's own custodian — keeps SPEDA's memory and house in order. |
+| 🔵 **Optimus** | Mark II | Systems, Code & Infra | Real coding on real machines via **The Forge**. |
+| 🟧 **Orion** | Mark I | Maintenance & Memory | The system's own custodian — keeps SPEDA's memory and house in order. |
 
 > **Rebrandable to the core.** Identity lives entirely in prompt + profile files;
 > the engine holds zero identity strings. The same codebase ships as any agent —
@@ -77,7 +79,7 @@ to someone else's domain.
 
 ---
 
-<img width="1920" height="994" alt="image" src="https://github.com/user-attachments/assets/fbfbfdd7-dba2-4af5-8f0a-db49e80751d1" />
+<img width="1920" height="994" alt="The SPEDA Mark VI Systems Board showing the live model-routing matrix, active toolset shards, token budget and memory data banks" src="https://github.com/user-attachments/assets/fbfbfdd7-dba2-4af5-8f0a-db49e80751d1" />
 
 
 ## The features
@@ -104,7 +106,7 @@ design, not two.
 
 ### 📱 Speda GO — the deck in your pocket
 
-<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/704053d8-74b8-4a44-8d75-138c55dde3f9" />
+<img width="738" height="1600" alt="SPEDA GO, the native Android client for SPEDA Mark VI, showing the AMOLED-black fluid-glass conversation view" src="https://github.com/user-attachments/assets/704053d8-74b8-4a44-8d75-138c55dde3f9" />
 
 
 A **native Android client** (Kotlin + Jetpack Compose), not a wrapped web view.
@@ -120,7 +122,7 @@ fullscreen, built for one thumb.
 
 ### 🗺️ Maps & navigation — Stark cartography, inline
 
-<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/f0b092e3-eb41-4ef8-bbdd-2fe3da8e1cde" />
+<img width="738" height="1600" alt="SPEDA GO rendering a live traffic-aware route map inline inside an Android conversation" src="https://github.com/user-attachments/assets/f0b092e3-eb41-4ef8-bbdd-2fe3da8e1cde" />
 
 
 Ask for directions and you get a **live map in the conversation**, not a wall of
@@ -283,6 +285,7 @@ per-package component docs ([IGOR.md](packages/igor/IGOR.md),
 
 | Doc | What |
 |---|---|
+| **[spedatox.github.io/speda-mark6](https://spedatox.github.io/speda-mark6/)** | **The project site** — the overview, [the roster](https://spedatox.github.io/speda-mark6/agents/), [Heartbreaker](https://spedatox.github.io/speda-mark6/heartbreaker/), [SPEDA GO](https://spedatox.github.io/speda-mark6/speda-go/), [Igor](https://spedatox.github.io/speda-mark6/igor/) and the [FAQ](https://spedatox.github.io/speda-mark6/faq/) |
 | [docs/README.md](docs/README.md) | **The documentation index** — the map to every doc below and the component docs |
 | [REFERENCE.md](docs/REFERENCE.md) | Full capability catalog, HTTP API, and configuration reference |
 | [SETUP.md](docs/SETUP.md) · [DEPLOY.md](DEPLOY.md) | Install & production runbook |
@@ -302,6 +305,12 @@ that connects back as a peer.
 <div align="center">
 
 **S.P.E.D.A.** — Specialized Personal Executive Digital Assistant · Mark VI
+
+The sixth generation. Predecessors: [Mark V](https://github.com/spedatox/speda-mark5)
+· [Mark IV](https://github.com/spedatox/speda-mark4)
+· [Mark III](https://github.com/spedatox/speda-mark3)
+· [Mark II](https://github.com/spedatox/speda-mark2)
+· [Mark I](https://github.com/spedatox/speda-mark1)
 
 Built by **Ahmet Erol Bayrak** ([@spedatox](https://github.com/spedatox))
 · Private project — not licensed for redistribution.

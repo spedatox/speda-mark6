@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Memory &amp; Recall — How SPEDA Mark VI Remembers</title>
+<meta name="description" content="SPEDA Mark VI's memory is a closed set of eight Markdown files, one question each, enforced by a custodian agent, plus episodic recaps and semantic recall.">
+<link rel="canonical" href="https://spedatox.github.io/speda-mark6/systems/memory/">
+
+<meta name="author" content="Ahmet Erol Bayrak">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="keywords" content="AI assistant memory architecture, persistent AI memory, agent memory hygiene, episodic recall, semantic conversation recall, SPEDA Mark VI">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SPEDA Mark VI">
+<meta property="og:title" content="Memory &amp; Recall — How SPEDA Mark VI Remembers">
+<meta property="og:description" content="SPEDA Mark VI's memory is a closed set of eight Markdown files, one question each, enforced by a custodian agent, plus episodic recaps and semantic recall.">
+<meta property="og:url" content="https://spedatox.github.io/speda-mark6/systems/memory/">
+<meta property="og:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SPEDA Mark VI — Specialized Personal Executive Digital Assistant">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Memory &amp; Recall — How SPEDA Mark VI Remembers">
+<meta name="twitter:description" content="SPEDA Mark VI's memory is a closed set of eight Markdown files, one question each, enforced by a custodian agent, plus episodic recaps and semantic recall.">
+<meta name="twitter:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta name="twitter:creator" content="@spedatox">
+
+<meta name="theme-color" content="#03060a">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../../assets/site.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "SPEDA Mark VI",
+          "item": "https://spedatox.github.io/speda-mark6/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Systems",
+          "item": "https://spedatox.github.io/speda-mark6/systems/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Memory & recall",
+          "item": "https://spedatox.github.io/speda-mark6/systems/memory/"
+        }
+      ]
+    },
+    {
+      "@type": "TechArticle",
+      "headline": "Memory & Recall — How SPEDA Mark VI Remembers",
+      "description": "SPEDA Mark VI's memory is a closed set of eight Markdown files, one question each, enforced by a custodian agent, plus episodic recaps and semantic recall.",
+      "url": "https://spedatox.github.io/speda-mark6/systems/memory/",
+      "author": {
+        "@id": "https://spedatox.github.io/speda-mark6/#author"
+      },
+      "about": {
+        "@type": "SoftwareApplication",
+        "name": "SPEDA Mark VI",
+        "url": "https://spedatox.github.io/speda-mark6/"
+      },
+      "proficiencyLevel": "Expert"
+    },
+    {
+      "@type": "Person",
+      "@id": "https://spedatox.github.io/speda-mark6/#author",
+      "name": "Ahmet Erol Bayrak",
+      "alternateName": "spedatox",
+      "url": "https://github.com/spedatox",
+      "sameAs": [
+        "https://github.com/spedatox",
+        "https://x.com/spedatox"
+      ]
+    }
+  ]
+}
+</script>
+</head>
+
+<body style="--a: var(--orion)">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="../../"><span class="jewel"></span>S.P.E.D.A.<span class="mk">Mark VI</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="../../agents/">Agents</a>
+      <a href="../../systems/" aria-current="page">Systems</a>
+      <a href="../../heartbreaker/">Heartbreaker</a>
+      <a href="../../speda-go/">SPEDA GO</a>
+      <a href="../../igor/">Igor</a>
+      <a href="../../faq/">FAQ</a>
+      <a href="https://github.com/spedatox/speda-mark6">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" style="min-height:auto;padding:6rem 0 2.5rem">
+  <div class="wrap">
+    <p class="crumb"><a href="../../">SPEDA Mark VI</a><span>/</span><a href="../">Systems</a><span>/</span></p>
+    <p class="eyebrow rise">System 02 — Memory</p>
+    <h1 class="rise">Memory that<br>does not rot</h1>
+    <p class="lede rise">Eight files. One question each. One agent whose entire job is keeping them true — and one precedence rule that settles every conflict between them.</p>
+    <div class="doctrine rise">current.md outranks every other file for the present tense. A state that ends is not deleted — it is demoted, with its dates intact.<cite>docs/MEMORY_ARCHITECTURE.md — the file law</cite></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="prose">
+      <h3>The problem it was written to fix</h3>
+      <p>Version one of this memory system worked, and then eroded exactly the way filing systems do. Facts
+        drifted between files — active work lingering in history, project detail leaking into the owner profile.
+        Nothing <em>owned</em> hygiene, so cleanup happened only when some agent happened to notice, mid
+        conversation, with conversation-priority attention. The owner could <em>see</em> memory but not correct
+        it, so errors persisted until an agent stumbled on them. And new file types were added ad hoc with no
+        declared schema, which accelerated the blur.</p>
+      <p>Version two fixes it with three moves: a <strong>strict closed taxonomy</strong> with one question per
+        file, a <strong>dedicated custodian agent</strong> whose entire job is maintenance, and an
+        <strong>owner write path</strong> with audit and precedence rules.</p>
+    </div>
+
+    <div class="table-scroll" style="margin-top:2.4rem">
+      <table>
+        <thead><tr><th>File</th><th>Temporal nature</th><th>The one question it answers</th><th>In context</th></tr></thead>
+        <tbody>
+          <tr><td><code>current.md</code></td><td>Volatile present</td><td>What is true in the owner's life right now?</td><td>Always</td></tr>
+          <tr><td><code>owner.md</code></td><td>The prior</td><td>Who is he, and what shaped him before Mark VI existed?</td><td>Always</td></tr>
+          <tr><td><code>dossier.md</code></td><td>Observed preferences</td><td>What has he been observed to like, dislike and want — and in what manner?</td><td>Always</td></tr>
+          <tr><td><code>history.md</code></td><td>Mark VI-era ledger</td><td>What happened on Mark VI's watch that no longer applies?</td><td>Always</td></tr>
+          <tr><td><code>projects.md</code></td><td>Active ledger</td><td>What is he building, and where does each effort stand?</td><td>On demand</td></tr>
+          <tr><td><code>social.md</code></td><td>People registry</td><td>Who matters to him, who ARE they to him, and what is the latest?</td><td>On demand</td></tr>
+          <tr><td><code>sessions.md</code></td><td>Training log</td><td>What happened in the gym, day by day?</td><td>Atomix only</td></tr>
+          <tr><td><code>log.md</code></td><td>System trail</td><td>Rolling one-line session summaries.</td><td>On demand</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:1rem;color:var(--fg-faint);font-size:0.9rem">Creating any other top-level file is a
+      protocol violation. Strays are merged into the canonical set and deleted.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="split">
+      <div class="prose" style="max-width:none">
+        <h3>One rule settles every conflict</h3>
+        <p><strong><code>current.md</code> outranks every other file for the present tense.</strong> That single
+          precedence rule is what makes the rest tractable. When the historical ledger says one thing about the
+          owner's job and the present-tense file says another, current wins — and the loser is
+          <strong>demoted, not deleted</strong>, moving to history with its dates intact.</p>
+        <p>The present-tense file is deliberately small: a handful of bullets, each date-stamped, covering only
+          genuinely active states — location, employment, training regimen, immediate milestones, live concerns.
+          A file that grows without bound stops disambiguating anything.</p>
+        <p>Every file carries a two-line header the custodian maintains, recording when it was last audited and
+          last written, and by whom.</p>
+      </div>
+      <div class="prose" style="max-width:none">
+        <h3>Recall is tiered, not one search</h3>
+        <p>Structured files are only the base layer. Above them sit three distinct recall mechanisms, because
+          "what did we decide last week" and "have I ever mentioned this library" are different questions:</p>
+        <ul>
+          <li><strong>Episodic recaps.</strong> Every session grows a short background summary — subject,
+            decisions, open threads. Opening a <em>new</em> chat pre-loads the last few recaps for that agent,
+            so "what were we discussing?" is answered without a search.</li>
+          <li><strong>Semantic recall</strong> over embeddings of every past conversation, for the deep cuts.</li>
+          <li><strong>Literal search</strong> by keyword and date over stored messages, for when you know the
+            exact phrase.</li>
+        </ul>
+        <p>All of it is scoped per agent. Specialists recall their own threads; the orchestrator sees across
+          all of them.</p>
+      </div>
+    </div>
+
+    <div class="prose" style="margin-top:clamp(2.6rem,5vw,4rem)">
+      <h3>The custodian, and the one thing it may not do</h3>
+      <p><a href="../../agents/orion/">Orion</a> exists because hygiene as a shared responsibility is hygiene
+        nobody performs. It moves, merges, timestamps and compresses <em>existing</em> memory, runs a periodic
+        audit, and reports in changelogs rather than prose.</p>
+      <p>Its prompt names the prohibition explicitly: it does <strong>not author new facts</strong> about the
+        owner. Inventing memory is identified as the one failure that would make a custodian worse than
+        useless. If a fact is not already in memory or in what was actually said, it does not exist to Orion.</p>
+      <p>The owner also gets a write path — memory is editable and auditable from the client rather than being
+        a black box the agents alone can correct.</p>
+    </div>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="https://github.com/spedatox/speda-mark6/blob/main/docs/MEMORY_ARCHITECTURE.md">The full contract</a>
+      <a class="btn" href="../../agents/orion/">Orion, the custodian</a>
+    </div>
+  </div>
+</section>
+
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div><h4>The roster</h4><ul><li><a href="../../agents/">All eight agents</a></li><li><a href="../../agents/speda/">SPEDA — Chief of Staff</a></li><li><a href="../../agents/sentinel/">Sentinel — finance</a></li><li><a href="../../agents/nightcrawler/">NightCrawler — OSINT</a></li><li><a href="../../agents/ultron/">Ultron — academic life</a></li><li><a href="../../agents/centurion/">Centurion — security</a></li><li><a href="../../agents/atomix/">Atomix — health</a></li><li><a href="../../agents/optimus/">Optimus — code</a></li><li><a href="../../agents/orion/">Orion — custodian</a></li></ul></div>
+      <div><h4>The systems</h4><ul><li><a href="../../systems/">All systems</a></li><li><a href="../../systems/legion/">The Legion</a></li><li><a href="../../systems/memory/">Memory & recall</a></li><li><a href="../../systems/automations/">Proactive automations</a></li><li><a href="../../systems/news/">The News Desk</a></li><li><a href="../../systems/forge/">The Forge</a></li><li><a href="../../systems/maps/">Maps & navigation</a></li><li><a href="../../systems/house-party/">House Party Protocol</a></li><li><a href="../../systems/capabilities/">The capability arsenal</a></li></ul></div>
+      <div><h4>The software</h4><ul><li><a href="../../heartbreaker/">Heartbreaker — desktop</a></li><li><a href="../../speda-go/">SPEDA GO — Android</a></li><li><a href="../../igor/">Igor — the backend</a></li><li><a href="../../faq/">Frequently asked</a></li></ul></div>
+      <div><h4>Source</h4><ul><li><a href="https://github.com/spedatox/speda-mark6">speda-mark6 on GitHub</a></li><li><a href="https://github.com/spedatox/speda-go">SPEDA GO repository</a></li><li><a href="https://github.com/spedatox/forge-mark1">The Forge repository</a></li><li><a href="https://github.com/spedatox">All projects by spedatox</a></li></ul></div>
+    </div>
+    <p class="colophon">
+      <span><strong>S.P.E.D.A.</strong> — Specialized Personal Executive Digital Assistant · Mark VI</span>
+      <span>Built by <a href="https://github.com/spedatox">Ahmet Erol Bayrak</a> · Private project, not licensed for redistribution.</span>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

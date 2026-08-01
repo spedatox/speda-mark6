@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>The Forge — The External Execution Engine of SPEDA Mark VI</title>
+<meta name="description" content="The Forge is the standalone execution engine behind Optimus in SPEDA Mark VI: a privileged shell in an isolated cell, connected back as a WebSocket peer.">
+<link rel="canonical" href="https://spedatox.github.io/speda-mark6/systems/forge/">
+
+<meta name="author" content="Ahmet Erol Bayrak">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="keywords" content="agentic coding engine, AI code execution sandbox, external agent peer, The Forge SPEDA, SPEDA Mark VI">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SPEDA Mark VI">
+<meta property="og:title" content="The Forge — The External Execution Engine of SPEDA Mark VI">
+<meta property="og:description" content="The Forge is the standalone execution engine behind Optimus in SPEDA Mark VI: a privileged shell in an isolated cell, connected back as a WebSocket peer.">
+<meta property="og:url" content="https://spedatox.github.io/speda-mark6/systems/forge/">
+<meta property="og:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SPEDA Mark VI — Specialized Personal Executive Digital Assistant">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The Forge — The External Execution Engine of SPEDA Mark VI">
+<meta name="twitter:description" content="The Forge is the standalone execution engine behind Optimus in SPEDA Mark VI: a privileged shell in an isolated cell, connected back as a WebSocket peer.">
+<meta name="twitter:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta name="twitter:creator" content="@spedatox">
+
+<meta name="theme-color" content="#03060a">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../../assets/site.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "SPEDA Mark VI",
+          "item": "https://spedatox.github.io/speda-mark6/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Systems",
+          "item": "https://spedatox.github.io/speda-mark6/systems/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "The Forge",
+          "item": "https://spedatox.github.io/speda-mark6/systems/forge/"
+        }
+      ]
+    },
+    {
+      "@type": "TechArticle",
+      "headline": "The Forge — The External Execution Engine of SPEDA Mark VI",
+      "description": "The Forge is the standalone execution engine behind Optimus in SPEDA Mark VI: a privileged shell in an isolated cell, connected back as a WebSocket peer.",
+      "url": "https://spedatox.github.io/speda-mark6/systems/forge/",
+      "author": {
+        "@id": "https://spedatox.github.io/speda-mark6/#author"
+      },
+      "about": {
+        "@type": "SoftwareApplication",
+        "name": "SPEDA Mark VI",
+        "url": "https://spedatox.github.io/speda-mark6/"
+      },
+      "proficiencyLevel": "Expert"
+    },
+    {
+      "@type": "Person",
+      "@id": "https://spedatox.github.io/speda-mark6/#author",
+      "name": "Ahmet Erol Bayrak",
+      "alternateName": "spedatox",
+      "url": "https://github.com/spedatox",
+      "sameAs": [
+        "https://github.com/spedatox",
+        "https://x.com/spedatox"
+      ]
+    }
+  ]
+}
+</script>
+</head>
+
+<body style="--a: var(--optimus)">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="../../"><span class="jewel"></span>S.P.E.D.A.<span class="mk">Mark VI</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="../../agents/">Agents</a>
+      <a href="../../systems/" aria-current="page">Systems</a>
+      <a href="../../heartbreaker/">Heartbreaker</a>
+      <a href="../../speda-go/">SPEDA GO</a>
+      <a href="../../igor/">Igor</a>
+      <a href="../../faq/">FAQ</a>
+      <a href="https://github.com/spedatox/speda-mark6">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" style="min-height:auto;padding:6rem 0 2.5rem">
+  <div class="wrap">
+    <p class="crumb"><a href="../../">SPEDA Mark VI</a><span>/</span><a href="../">Systems</a><span>/</span></p>
+    <p class="eyebrow rise">System 05 — The Forge</p>
+    <h1 class="rise">The Forge</h1>
+    <p class="lede rise">The one part of Mark VI that is not Mark VI: a separately deployed execution framework that connects back as a peer and gives an agent real hands on real machines.</p>
+    <div class="doctrine rise">When the peer is offline the in-process profile answers instead. There is never a hard dependency — which is the only reason the split is safe.<cite>app/core/external_proxy.py</cite></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="prose">
+      <h3>An agent whose engine is somewhere else</h3>
+      <p>Every other agent in Mark VI is an in-process profile. <a href="../../agents/optimus/">Optimus</a> is
+        the exception: its real engine is a <strong>standalone, independently deployed coding framework</strong>
+        that connects back to the backend as a WebSocket peer. It is not built in this repository and it does
+        not run inside the assistant's process.</p>
+      <p>While that peer is online, chat turns addressed to Optimus are <strong>proxied to it</strong>, and
+        inter-agent dispatches route to it external-first. It runs with a privileged shell and real code
+        execution inside its own isolated <strong>Cell</strong>, understands a codebase through a graph index,
+        and reads, writes, runs, tests and iterates on its own filesystem before reporting back.</p>
+      <p>When it is offline, the in-process profile answers instead — same identity, same voice, reduced
+        hands. <strong>There is never a hard dependency.</strong> That fallback is the entire reason the split
+        is safe.</p>
+    </div>
+
+    <div class="grid g3" style="margin-top:2.4rem">
+      <article class="holo pad">
+        <h3 class="card-title">The Cell</h3>
+        <p class="card-body">Each peer runs its own isolated container. Centurion's is a security distribution
+          with outbound network for authorized scanning; the tooling never touches the host running the
+          assistant.</p>
+      </article>
+      <article class="holo pad">
+        <h3 class="card-title">Permission relay</h3>
+        <p class="card-body">When the peer needs consent for something consequential, the ask is relayed back
+          through the backend and surfaced to the owner in the client — an external engine does not get to
+          decide on its own.</p>
+      </article>
+      <article class="holo pad">
+        <h3 class="card-title">Visible state</h3>
+        <p class="card-body">The client header carries a live engine jewel reading FORGE LINK or IN-PROCESS,
+          with a workspace picker. You always know which Optimus you are talking to.</p>
+      </article>
+    </div>
+
+    <div class="prose" style="margin-top:clamp(2.6rem,5vw,4rem)">
+      <h3>Not only Optimus</h3>
+      <p>This is worth stating because the architecture documentation describes Optimus as the single
+        exception, and the code has since moved past that.
+        <a href="../../agents/centurion/">Centurion</a> also declares an external backend and can be served by
+        its own peer on its own socket, with the same proxy-when-online, fallback-when-offline behaviour. Two
+        agents can now be externally backed; the rest remain purely in-process.</p>
+      <p>Both peers are configured through the launcher rather than compiled in — where the Forge lives,
+        whether to start it automatically, which socket to reach it on, and which container backend the Cell
+        should use.</p>
+    </div>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="https://github.com/spedatox/forge-mark1">The Forge repository</a>
+      <a class="btn" href="../../agents/optimus/">Optimus</a>
+    </div>
+  </div>
+</section>
+
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div><h4>The roster</h4><ul><li><a href="../../agents/">All eight agents</a></li><li><a href="../../agents/speda/">SPEDA — Chief of Staff</a></li><li><a href="../../agents/sentinel/">Sentinel — finance</a></li><li><a href="../../agents/nightcrawler/">NightCrawler — OSINT</a></li><li><a href="../../agents/ultron/">Ultron — academic life</a></li><li><a href="../../agents/centurion/">Centurion — security</a></li><li><a href="../../agents/atomix/">Atomix — health</a></li><li><a href="../../agents/optimus/">Optimus — code</a></li><li><a href="../../agents/orion/">Orion — custodian</a></li></ul></div>
+      <div><h4>The systems</h4><ul><li><a href="../../systems/">All systems</a></li><li><a href="../../systems/legion/">The Legion</a></li><li><a href="../../systems/memory/">Memory & recall</a></li><li><a href="../../systems/automations/">Proactive automations</a></li><li><a href="../../systems/news/">The News Desk</a></li><li><a href="../../systems/forge/">The Forge</a></li><li><a href="../../systems/maps/">Maps & navigation</a></li><li><a href="../../systems/house-party/">House Party Protocol</a></li><li><a href="../../systems/capabilities/">The capability arsenal</a></li></ul></div>
+      <div><h4>The software</h4><ul><li><a href="../../heartbreaker/">Heartbreaker — desktop</a></li><li><a href="../../speda-go/">SPEDA GO — Android</a></li><li><a href="../../igor/">Igor — the backend</a></li><li><a href="../../faq/">Frequently asked</a></li></ul></div>
+      <div><h4>Source</h4><ul><li><a href="https://github.com/spedatox/speda-mark6">speda-mark6 on GitHub</a></li><li><a href="https://github.com/spedatox/speda-go">SPEDA GO repository</a></li><li><a href="https://github.com/spedatox/forge-mark1">The Forge repository</a></li><li><a href="https://github.com/spedatox">All projects by spedatox</a></li></ul></div>
+    </div>
+    <p class="colophon">
+      <span><strong>S.P.E.D.A.</strong> — Specialized Personal Executive Digital Assistant · Mark VI</span>
+      <span>Built by <a href="https://github.com/spedatox">Ahmet Erol Bayrak</a> · Private project, not licensed for redistribution.</span>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

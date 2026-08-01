@@ -25,6 +25,7 @@ as the map to everything else. Docs fall into three kinds:
 | [REFERENCE.md](REFERENCE.md) | 📘 Technical reference — capability catalog, HTTP API, LLM routing, configuration |
 | [SETUP.md](SETUP.md) | Complete setup guide — local dev through first run |
 | [../DEPLOY.md](../DEPLOY.md) | Production runbook (Contabo / Docker / TLS) |
+| [SEO.md](SEO.md) | The public-visibility playbook — the [`site/`](../site/) Pages build, repo metadata, and what only the owner can do |
 
 ---
 

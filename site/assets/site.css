@@ -1,0 +1,717 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SPEDA MARK VI — public site design system
+   ───────────────────────────────────────────────────────────────────────────
+   Inherits the Heartbreaker design contract (packages/heartbreaker/HEARTBREAKER.md):
+
+     · .holo is this site's port of `.hb-holo` — frosted volumetric depth,
+       soft inner light, agent-tinted rim. Panels are BUILT from it; glass is
+       never reinvented per component.
+     · JARVIS-blue base, per-agent accent. Accents mirror the client brand
+       tables (brands.ts / Brands.kt / agents.ts), which agree with each other.
+     · BANNED PROPS, non-negotiable: background grids, corner brackets, ruler
+       ticks, scanlines. They read as toy sci-fi. Depth comes from light and
+       glass, never from decoration.
+
+   Colour is expressed as `--a` (the active accent) so any section or card can
+   be re-themed by setting one variable.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Ground ───────────────────────────────────────────────────────────── */
+  --ink:        #03060a;
+  --ink-lift:   #070c13;
+  --hair:       rgba(148, 178, 204, 0.13);
+  --hair-lit:   rgba(190, 224, 255, 0.30);
+
+  /* ── Type ─────────────────────────────────────────────────────────────── */
+  --fg:         #e9eff6;
+  --fg-dim:     #97a6b8;
+  --fg-faint:   #5f6d7d;
+
+  /* ── The roster. Mirrors packages/heartbreaker/.../profile/brands.ts ──── */
+  --speda:        #36abca;
+  --sentinel:     #d99c44;
+  --nightcrawler: #9165e6;
+  --ultron:       #8a93a6;
+  --centurion:    #d8483c;
+  --atomix:       #3fae74;
+  --optimus:      #2f4f8f;
+  --orion:        #e0703a;
+  --warroom:      #f2b75c;
+
+  /* JARVIS blue is the base; --a is whatever accent is in force. */
+  --a: var(--speda);
+
+  /* Type inherited from packages/heartbreaker/.../theme/heartbreaker.css:
+     Rajdhani is the HUD chrome face, Inter is the reading face, and real
+     monospace is reserved for actual code. The app deliberately killed the
+     display-monospace look for labels, so labels are Rajdhani here too. */
+  --font-display: 'Rajdhani', 'Saira', -apple-system, 'Segoe UI', sans-serif;
+  --font-hud:     'Rajdhani', 'Saira', -apple-system, 'Segoe UI', sans-serif;
+  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  --measure: 1200px;
+  --radius:  20px;
+  --ease:    cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.66;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Atmosphere: two slow volumetric bleeds. Light, not pattern. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(62% 46% at 16% 4%,  color-mix(in srgb, var(--a) 22%, transparent), transparent 68%),
+    radial-gradient(52% 42% at 88% 16%, rgba(145, 101, 230, 0.11), transparent 72%),
+    radial-gradient(76% 56% at 50% 104%, rgba(47, 79, 143, 0.16), transparent 76%);
+}
+
+/* Grain, so the gradients never band. Not a texture motif — a dither. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+}
+
+/* ═══ Typography ═════════════════════════════════════════════════════════ */
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.005em;
+  line-height: 1.04;
+  margin: 0 0 0.5em;
+  text-wrap: balance;
+}
+
+h1 { font-size: clamp(3.1rem, 6.6vw, 5.6rem); letter-spacing: 0.01em; }
+h2 { font-size: clamp(2.1rem, 3.8vw, 3.3rem); margin-top: 0; }
+h3 { font-size: 1.38rem; }
+h4 { font-size: 1.08rem; }
+
+p { margin: 0 0 1.15em; }
+p:last-child { margin-bottom: 0; }
+strong { color: #fff; font-weight: 600; }
+em { color: var(--fg); font-style: italic; }
+
+a { color: var(--a); text-decoration-color: color-mix(in srgb, var(--a) 40%, transparent); text-underline-offset: 3px; }
+a:hover { text-decoration-color: currentColor; }
+
+/* The signature label: mono, tracked, with a lit rule. */
+.eyebrow {
+  font-family: var(--font-hud);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  margin: 0 0 1.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+.eyebrow::before {
+  content: '';
+  width: 28px; height: 1px;
+  background: var(--a);
+  box-shadow: 0 0 10px var(--a);
+  flex: none;
+}
+
+.lede { font-size: clamp(1.05rem, 1.55vw, 1.26rem); color: var(--fg-dim); max-width: 60ch; }
+.lede strong { color: #fff; }
+
+/* ═══ Layout ═════════════════════════════════════════════════════════════ */
+
+.wrap { width: min(100% - 2.6rem, var(--measure)); margin-inline: auto; }
+.narrow { max-width: 78ch; }
+
+section { padding: clamp(4.5rem, 8.5vw, 8.5rem) 0; position: relative; }
+section + section::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: min(100% - 2.6rem, var(--measure));
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--hair) 18%, var(--hair) 82%, transparent);
+}
+
+.section-head { max-width: 66ch; margin-bottom: clamp(2.4rem, 4vw, 3.8rem); }
+
+/* ═══ Masthead ═══════════════════════════════════════════════════════════ */
+
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  backdrop-filter: blur(24px) saturate(1.7);
+  -webkit-backdrop-filter: blur(24px) saturate(1.7);
+  background: color-mix(in srgb, var(--ink) 78%, transparent);
+  border-bottom: 1px solid var(--hair);
+}
+.masthead .wrap { display: flex; align-items: center; gap: 1.5rem; min-height: 60px; flex-wrap: wrap; }
+
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.06em;
+  color: #fff;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.62rem;
+  white-space: nowrap;
+}
+.wordmark .jewel {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--a);
+  box-shadow: 0 0 14px var(--a);
+}
+.wordmark .mk { color: var(--fg-faint); font-weight: 500; letter-spacing: 0.04em; }
+
+.nav { display: flex; gap: 1.25rem; margin-left: auto; flex-wrap: wrap; }
+.nav a {
+  font-family: var(--font-hud);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  text-decoration: none;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+}
+.nav a:hover, .nav a[aria-current='page'] { color: #fff; border-bottom-color: var(--a); }
+
+/* ═══ .holo — the fluid-glass recipe (port of .hb-holo) ══════════════════ */
+
+/* The material is a thick frosted SLAB, not a tint — and it carries ZERO
+   gradient fills, exactly as heartbreaker.css specifies. Body comes from a
+   milky cool-white fill over the dark void; depth comes from deep blur; and
+   the slab is rimmed by light: a bright specular catch along the top, a
+   fainter one underneath reading as the slab's thickness, and a soft drop
+   that lifts it off the background. */
+.holo {
+  position: relative;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--a) 5%, rgba(255, 255, 255, 0.035));
+  border: 1px solid color-mix(in srgb, var(--a) 22%, transparent);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.07),
+    0 8px 32px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  transition: transform 0.4s var(--ease), border-color 0.4s, box-shadow 0.4s, background 0.4s;
+}
+
+a.holo, .holo.linked { text-decoration: none; color: inherit; display: block; }
+.holo:hover {
+  transform: translateY(-3px);
+  background: color-mix(in srgb, var(--a) 9%, rgba(255, 255, 255, 0.05));
+  border-color: color-mix(in srgb, var(--a) 55%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.1),
+    0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.pad { padding: 1.75rem 1.65rem; }
+.pad-lg { padding: 2.3rem 2.1rem; }
+
+.grid { display: grid; gap: 1.1rem; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+.g4 { grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); }
+
+.card-title { color: #fff; margin-bottom: 0.55rem; position: relative; }
+.card-body { color: var(--fg-dim); font-size: 0.95rem; margin: 0; position: relative; }
+
+/* ═══ Buttons ════════════════════════════════════════════════════════════ */
+
+.actions { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 2.2rem; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.8rem 1.45rem;
+  border-radius: 999px;
+  font-family: var(--font-hud);
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 1px solid var(--hair-lit);
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  transition: transform 0.24s var(--ease), background 0.24s, border-color 0.24s, box-shadow 0.24s;
+}
+.btn:hover { transform: translateY(-2px); background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.45); }
+
+.btn-primary {
+  background: var(--a);
+  border-color: var(--a);
+  color: #03080c;
+  font-weight: 600;
+  box-shadow: 0 10px 36px -12px var(--a);
+}
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--a) 78%, #fff);
+  border-color: color-mix(in srgb, var(--a) 78%, #fff);
+  box-shadow: 0 16px 44px -12px var(--a);
+}
+
+/* ═══ THE MONOLITH — the hero ════════════════════════════════════════════
+   One object: the SPEDA mark, extruded into a real solid and set behind a
+   glass slab. The depth is genuine — the mark is stacked in Z and the whole
+   assembly sits in a perspective container, so rotation reveals its side.
+
+   Rotation is driven by SCROLL POSITION only. There is deliberately no
+   pointer tracking: a hero that chases the cursor is a toy, and it also means
+   the object never moves at all for anyone arriving by keyboard or touch.    */
+
+/* Every page has a .hero band; only the home page splits it into a grid with
+   the monolith beside the copy. Inner heroes stay a plain block wrapping a
+   normal .wrap container. */
+.hero {
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-home {
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(2rem, 5vw, 5rem);
+  padding: 8rem 0 5rem;
+}
+.hero-copy {
+  position: relative;
+  z-index: 2;
+  /* Aligns the copy's left edge to the page container while the monolith is
+     free to sit in the remaining column. */
+  padding-left: max(1.3rem, calc(50vw - var(--measure) / 2));
+  padding-right: 1.5rem;
+}
+.hero-copy > * { max-width: 34rem; }
+.hero h1 { margin-bottom: 0.34em; }
+.hero-sub {
+  display: block;
+  font-family: var(--font-hud);
+  font-size: clamp(0.9rem, 1.35vw, 1.1rem);
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  margin-top: 1.15rem;
+}
+
+.monolith {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-height: min(72vh, 620px);
+}
+
+/* Deliberately transform-free — see the constraint note above. */
+.mono-stage { position: relative; display: grid; place-items: center; }
+
+/* ── The glass object ────────────────────────────────────────────────────
+   The mark is rendered in WebGL (assets/hero3d.js) as an extruded solid with
+   a physical transmission material. CSS cannot do this: a frosted pane and a
+   three-dimensional body are mutually exclusive in CSS, because the transform
+   that creates the depth also forms a backdrop root and kills the backdrop
+   sampling the frost depends on.                                            */
+
+.monolith {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: min(76vh, 660px);
+}
+
+/* Ambient colour for the glass to pick up and refract. Sits behind the canvas
+   and stays soft — it is environment, not a lamp. */
+.mono-field {
+  position: absolute;
+  width: 88%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(40% 40% at 32% 28%, rgba(54, 171, 202, 0.5), transparent 70%),
+    radial-gradient(34% 34% at 72% 68%, rgba(120, 92, 210, 0.36), transparent 72%);
+  filter: blur(60px);
+  opacity: 0.75;
+}
+
+.mono-canvas {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Shown only until WebGL takes over — and left in place if it never does. */
+.mono-fallback {
+  position: absolute;
+  width: 54%;
+  color: var(--a);
+  opacity: 0.5;
+}
+.mono-fallback svg { width: 100%; height: auto; display: block; }
+.mono-canvas[data-glass3d-ready] + .mono-fallback { display: none; }
+
+.scroll-cue {
+  position: absolute;
+  bottom: 1.7rem; left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-hud);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  z-index: 3;
+  animation: cue 2.6s ease-in-out infinite;
+}
+@keyframes cue { 0%,100% { opacity: 0.35; transform: translate(-50%, 0); } 50% { opacity: 0.9; transform: translate(-50%, 5px); } }
+
+/* ═══ Agent cards ════════════════════════════════════════════════════════ */
+
+.agent-card { display: block; text-decoration: none; color: inherit; }
+.agent-card .mark {
+  font-family: var(--font-hud);
+  font-size: 0.64rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  position: relative;
+}
+.agent-card .name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.32rem;
+  letter-spacing: -0.022em;
+  color: #fff;
+  margin: 0.2rem 0 0.15rem;
+  position: relative;
+}
+.agent-card .domain {
+  font-family: var(--font-hud);
+  font-size: 0.7rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--a);
+  margin-bottom: 0.75rem;
+  position: relative;
+}
+.agent-card .emblem {
+  position: absolute;
+  top: 1.3rem; right: 1.3rem;
+  width: 40px; height: 40px;
+  color: var(--a);
+  opacity: 0.5;
+  transition: opacity 0.35s, transform 0.35s var(--ease);
+}
+.agent-card:hover .emblem { opacity: 1; transform: scale(1.08) rotate(-4deg); }
+.agent-card .emblem svg { width: 100%; height: 100%; }
+
+/* A big emblem plate for the top of an agent page. */
+.crest {
+  display: grid;
+  place-items: center;
+  width: clamp(112px, 15vw, 156px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--a) 34%, transparent);
+  background: radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--a) 22%, transparent), rgba(4,10,16,0.55) 72%);
+  box-shadow: 0 0 60px -14px color-mix(in srgb, var(--a) 70%, transparent), inset 0 1px 0 rgba(255,255,255,0.12);
+  margin-bottom: 2rem;
+}
+.crest svg {
+  width: 46%; height: 46%;
+  color: var(--a);
+  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--a) 65%, transparent));
+}
+
+/* ═══ Editorial / PR primitives ══════════════════════════════════════════ */
+
+/* A wide feature row: copy one side, panel the other. */
+.split {
+  display: grid;
+  gap: clamp(2rem, 4vw, 3.6rem);
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  align-items: center;
+}
+.split.flip > :first-child { order: 2; }
+
+/* The stat strip — a fact row, not a decoration. */
+.stats {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  background: var(--hair);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.stat { background: var(--ink-lift); padding: 1.4rem 1.3rem; }
+.stat .n {
+  font-family: var(--font-display);
+  font-size: 1.95rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #fff;
+  display: block;
+  line-height: 1;
+}
+.stat .l {
+  font-family: var(--font-hud);
+  font-size: 0.64rem;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  margin-top: 0.55rem;
+  display: block;
+}
+
+/* A pull quote / doctrine line. */
+.doctrine {
+  border-left: 2px solid var(--a);
+  padding: 0.3rem 0 0.3rem 1.5rem;
+  margin: 2.2rem 0;
+  font-size: 1.12rem;
+  color: var(--fg);
+  max-width: 62ch;
+}
+.doctrine cite {
+  display: block;
+  font-family: var(--font-hud);
+  font-size: 0.66rem;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  font-style: normal;
+  margin-top: 0.85rem;
+}
+
+/* Small mono chips for tool / capability names. */
+.chips { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 1.4rem 0 0; padding: 0; list-style: none; }
+.chips li {
+  font-family: var(--font-hud);
+  font-size: 0.72rem;
+  color: var(--fg-dim);
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  padding: 0.28rem 0.6rem;
+  background: rgba(255,255,255,0.022);
+  transition: color 0.2s, border-color 0.2s;
+}
+.chips li:hover { color: #fff; border-color: color-mix(in srgb, var(--a) 45%, transparent); }
+
+/* ═══ Prose ══════════════════════════════════════════════════════════════ */
+
+.prose { max-width: 74ch; }
+.prose h3 { margin-top: 2.5rem; color: #fff; }
+.prose h3:first-child { margin-top: 0; }
+.prose ul { padding-left: 0; list-style: none; margin: 0 0 1.35em; }
+.prose li { position: relative; padding-left: 1.5rem; margin-bottom: 0.65rem; color: var(--fg-dim); }
+.prose li::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0.7em;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--a);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--a) 70%, transparent);
+}
+.prose li strong { color: #fff; }
+
+pre {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  padding: 1.3rem 1.4rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.75;
+  color: #ccd9e6;
+}
+pre .c { color: var(--fg-faint); }
+code { font-family: var(--font-mono); font-size: 0.89em; color: color-mix(in srgb, var(--a) 55%, #cfe8f2); }
+pre code { color: inherit; font-size: inherit; }
+
+.table-scroll { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--hair); }
+table { width: 100%; border-collapse: collapse; font-size: 0.91rem; min-width: 520px; }
+th, td { text-align: left; padding: 0.82rem 1.1rem; border-bottom: 1px solid var(--hair); }
+th {
+  font-family: var(--font-hud);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.022);
+}
+tr:last-child td { border-bottom: none; }
+td { color: var(--fg-dim); }
+td strong { color: #fff; }
+
+figure { margin: 2.6rem 0 0; }
+figure img {
+  width: 100%; height: auto; display: block;
+  border-radius: var(--radius);
+  border: 1px solid var(--hair);
+  background: var(--ink-lift);
+  box-shadow: 0 36px 90px -40px rgba(0, 0, 0, 0.95);
+}
+figcaption {
+  font-family: var(--font-hud);
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
+  color: var(--fg-faint);
+  margin-top: 0.85rem;
+  text-align: center;
+}
+figure.portrait img { max-width: 320px; margin-inline: auto; }
+
+/* ═══ Breadcrumb ═════════════════════════════════════════════════════════ */
+
+.crumb {
+  font-family: var(--font-hud);
+  font-size: 0.68rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  margin-bottom: 1.6rem;
+}
+.crumb a { color: var(--fg-faint); text-decoration: none; }
+.crumb a:hover { color: var(--a); }
+.crumb span { margin: 0 0.5rem; opacity: 0.5; }
+
+/* ═══ FAQ ════════════════════════════════════════════════════════════════ */
+
+.faq-item { border-bottom: 1px solid var(--hair); padding: 1.7rem 0; }
+.faq-item:first-of-type { border-top: 1px solid var(--hair); }
+.faq-item h3 { color: #fff; margin-bottom: 0.55rem; }
+.faq-item p { color: var(--fg-dim); max-width: 78ch; }
+
+/* ═══ Footer ═════════════════════════════════════════════════════════════ */
+
+.footer { border-top: 1px solid var(--hair); padding: 3.6rem 0 4.2rem; }
+.footer-grid { display: grid; gap: 2.2rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.footer h4 {
+  font-family: var(--font-hud);
+  font-size: 0.66rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+.footer ul { list-style: none; padding: 0; margin: 0; }
+.footer li { margin-bottom: 0.5rem; }
+.footer a { color: var(--fg-dim); text-decoration: none; font-size: 0.92rem; }
+.footer a:hover { color: #fff; }
+.colophon {
+  margin-top: 3rem;
+  padding-top: 1.7rem;
+  border-top: 1px solid var(--hair);
+  color: var(--fg-faint);
+  font-size: 0.84rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* ═══ Motion ═════════════════════════════════════════════════════════════ */
+
+.rise { animation: rise 0.9s var(--ease) backwards; }
+.rise:nth-child(1) { animation-delay: 0.05s; }
+.rise:nth-child(2) { animation-delay: 0.13s; }
+.rise:nth-child(3) { animation-delay: 0.21s; }
+.rise:nth-child(4) { animation-delay: 0.29s; }
+.rise:nth-child(5) { animation-delay: 0.37s; }
+.rise:nth-child(6) { animation-delay: 0.45s; }
+.rise:nth-child(7) { animation-delay: 0.53s; }
+.rise:nth-child(8) { animation-delay: 0.61s; }
+@keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+
+.skip {
+  position: absolute; left: -9999px; top: 0;
+  background: var(--a); color: #03080c;
+  padding: 0.7rem 1.2rem; z-index: 100;
+  font-family: var(--font-hud); font-size: 0.78rem;
+}
+.skip:focus { left: 0; }
+:focus-visible { outline: 2px solid var(--a); outline-offset: 3px; border-radius: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ═══ Responsive ═════════════════════════════════════════════════════════ */
+
+@media (max-width: 900px) {
+  /* Below the split point the monolith leads and the copy follows it, so the
+     object is the first thing on screen rather than a decoration beside text. */
+  .hero-home {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    padding: 4.5rem 0 3.5rem;
+    gap: 2.5rem;
+  }
+  .hero-copy { padding-left: 0; order: 2; }
+  .hero-copy, .monolith { width: min(100% - 2.6rem, var(--measure)); margin-inline: auto; }
+  .monolith { order: 1; min-height: 46vh; }
+  .mono-mark { width: clamp(240px, 66vw, 380px); }
+  .mono-field { width: 112%; }
+  .scroll-cue { display: none; }
+}
+
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .nav { gap: 0.95rem; width: 100%; margin-left: 0; padding-bottom: 0.5rem; }
+  .masthead .wrap { padding-top: 0.7rem; }
+  .pad, .pad-lg { padding: 1.4rem 1.3rem; }
+  .split.flip > :first-child { order: 0; }
+}

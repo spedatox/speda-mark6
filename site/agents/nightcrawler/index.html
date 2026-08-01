@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>NightCrawler — The OSINT Agent of SPEDA Mark VI</title>
+<meta name="description" content="NightCrawler is the OSINT and web-surveillance agent of SPEDA Mark VI: lawful open-source intelligence, corroboration, the watchers and the News Desk.">
+<link rel="canonical" href="https://spedatox.github.io/speda-mark6/agents/nightcrawler/">
+
+<meta name="author" content="Ahmet Erol Bayrak">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="keywords" content="NightCrawler agent, OSINT AI agent, web surveillance AI, open source intelligence automation, threat intelligence agent, SPEDA Mark VI">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SPEDA Mark VI">
+<meta property="og:title" content="NightCrawler — The OSINT Agent of SPEDA Mark VI">
+<meta property="og:description" content="NightCrawler is the OSINT and web-surveillance agent of SPEDA Mark VI: lawful open-source intelligence, corroboration, the watchers and the News Desk.">
+<meta property="og:url" content="https://spedatox.github.io/speda-mark6/agents/nightcrawler/">
+<meta property="og:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SPEDA Mark VI — Specialized Personal Executive Digital Assistant">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="NightCrawler — The OSINT Agent of SPEDA Mark VI">
+<meta name="twitter:description" content="NightCrawler is the OSINT and web-surveillance agent of SPEDA Mark VI: lawful open-source intelligence, corroboration, the watchers and the News Desk.">
+<meta name="twitter:image" content="https://spedatox.github.io/speda-mark6/assets/og.png">
+<meta name="twitter:creator" content="@spedatox">
+
+<meta name="theme-color" content="#03060a">
+<link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="../../assets/site.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "SPEDA Mark VI",
+          "item": "https://spedatox.github.io/speda-mark6/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "The roster",
+          "item": "https://spedatox.github.io/speda-mark6/agents/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "NightCrawler",
+          "item": "https://spedatox.github.io/speda-mark6/agents/nightcrawler/"
+        }
+      ]
+    },
+    {
+      "@type": "TechArticle",
+      "headline": "NightCrawler — OSINT & Surveillance agent of SPEDA Mark VI",
+      "description": "NightCrawler is the OSINT and web-surveillance agent of SPEDA Mark VI: lawful open-source intelligence, corroboration, the watchers and the News Desk.",
+      "url": "https://spedatox.github.io/speda-mark6/agents/nightcrawler/",
+      "author": {
+        "@id": "https://spedatox.github.io/speda-mark6/#author"
+      },
+      "about": {
+        "@type": "SoftwareApplication",
+        "name": "SPEDA Mark VI",
+        "url": "https://spedatox.github.io/speda-mark6/"
+      },
+      "proficiencyLevel": "Expert"
+    },
+    {
+      "@type": "Person",
+      "@id": "https://spedatox.github.io/speda-mark6/#author",
+      "name": "Ahmet Erol Bayrak",
+      "alternateName": "spedatox",
+      "url": "https://github.com/spedatox",
+      "sameAs": [
+        "https://github.com/spedatox",
+        "https://x.com/spedatox"
+      ]
+    }
+  ]
+}
+</script>
+</head>
+
+<body style="--a: var(--nightcrawler)">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="../../"><span class="jewel"></span>S.P.E.D.A.<span class="mk">Mark VI</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="../../agents/" aria-current="page">Agents</a>
+      <a href="../../systems/">Systems</a>
+      <a href="../../heartbreaker/">Heartbreaker</a>
+      <a href="../../speda-go/">SPEDA GO</a>
+      <a href="../../igor/">Igor</a>
+      <a href="../../faq/">FAQ</a>
+      <a href="https://github.com/spedatox/speda-mark6">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" style="min-height:auto;padding:6rem 0 3rem">
+  <div class="wrap">
+    <p class="crumb"><a href="../../">SPEDA Mark VI</a><span>/</span><a href="../">The roster</a><span>/</span></p>
+    <div class="crest rise"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="NightCrawler"> <path d="M3.53 -0L31.09 0.16L79.81 49.04L80.29 48.88L80.29 0.16L99.2 -0L99.68 96.15L3.53 -0ZM0.32 3.21L96.96 100L69.39 99.84L20.19 50.64L19.87 99.84L0.8 99.84L0.32 3.21Z"/> </svg></div>
+    <p class="eyebrow rise">Mark III · OSINT & Surveillance</p>
+    <h1 class="rise">NightCrawler</h1>
+    <p class="lede rise">NightCrawler is the system's eyes on the open web: finding, monitoring and corroborating public information about people, companies, events and trends. It owns the watchers and the <a href="../../systems/news/">News Desk</a>, and it works from open sources only.</p>
+    <div class="doctrine rise">Corroborate, don't trust. A single source is a lead, not a fact.<cite>prompts/agents/nightcrawler/01_identity.md</cite></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="split">
+      <div class="prose" style="max-width:none">
+        <p class="eyebrow">How it operates</p>
+        <h2 style="font-size:1.9rem">The doctrine, in practice</h2>
+        <ul>
+      <li><strong>Cross-checks across independent sources</strong>, weighs their reliability, and separates what is confirmed from what is merely claimed, rumoured or contradicted.</li>
+      <li><strong>Keeps the trail.</strong> Every finding carries its source — link, date, who said it. Intelligence the owner cannot trace back is treated as useless.</li>
+      <li><strong>Watches rather than looks.</strong> A page, a feed or a topic the owner cares about becomes a standing watcher, not a one-off search.</li>
+      <li><strong>Reaches past plain search</strong> with browser automation when a target does not yield to a query.</li>
+        </ul>
+      </div>
+      <div class="prose" style="max-width:none">
+        <p class="eyebrow">In the architecture</p>
+        <h2 style="font-size:1.9rem">What is actually true of it</h2>
+        <ul>
+      <li>Owns the <a href="../../systems/news/">News Desk</a>: an always-on zero-cost RSS tier with cross-outlet deduplication and keyword alerts, plus a quota-budgeted analyst tier.</li>
+      <li>Fronts the OSINT suite — IP geolocation and reputation, URLhaus, ThreatFox, MalwareBazaar, breached password checks, Shodan, OTX, dark-web search, email discovery, crypto tracing and IntelX.</li>
+      <li>Browser automation runs <strong>only inside container isolation on an internal network</strong>. The relevant MCP server carries a known CSRF advisory and is never exposed publicly.</li>
+      <li>Its watchers are the main consumer of the cheap-probe pattern — the deterministic scan is what decides whether an agentic turn is worth spending at all.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:2.6rem;max-width:74ch">Its voice rule is one line long: no embellishment. Sourced, or not stated.</p>
+
+    <div class="table-scroll" style="margin-top:2.6rem">
+      <table>
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td><strong>agent_id</strong></td><td><code>nightcrawler</code></td></tr>
+          <tr><td><strong>Mark</strong></td><td>Mark III</td></tr>
+          <tr><td><strong>Declared domain</strong></td><td>OSINT, web surveillance &amp; research</td></tr>
+          <tr><td><strong>Signature accent</strong></td><td><code>#9165e6</code></td></tr>
+          <tr><td><strong>Profile</strong></td><td><code>app/profiles/nightcrawler.py</code></td></tr>
+          <tr><td><strong>Tool access</strong></td><td>Full registry — every agent sees every registered capability</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">The rest of the roster</p>
+      <h2>Who else is on shift</h2>
+    </div>
+    <div class="grid g3">
+      <a class="holo pad agent-card" style="--a: var(--ultron)" href="../ultron/"><span class="emblem"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="Ultron"> <path d="M7.4 0L30.58 18.35L30.58 59.32L48.08 69.7L48.36 100C43.62 96.59 26.67 84.12 19.91 79.52C13.16 74.92 9.84 73.59 7.82 72.4L7.4 0ZM92.6 0L92.18 72.4C90.28 73.49 87.55 74.35 80.8 78.95C74.04 83.55 56.5 96.49 51.64 100L52.06 69.56L69.42 59.46L69.42 18.49L92.6 0Z"/> </svg></span><span class="mark">Mark III</span><span class="name">Ultron</span><span class="domain">Academic Life</span><p class="card-body">Owns the collision between university and a job. Plans over pep talks, with honest cut-lines.</p></a>
+      <a class="holo pad agent-card" style="--a: var(--centurion)" href="../centurion/"><span class="emblem"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="Centurion"> <path d="M92.54 24.81C91.22 25.73 88.62 27.81 84.58 30.33C80.53 32.86 70.97 38.37 68.25 39.97L50.39 29.31L32.39 39.33L32.52 60.03L49.87 70.18L93.44 45.5L93.32 75.06C91.8 75.96 91.5 76.31 84.19 80.46C76.89 84.62 55.27 96.74 49.49 100L6.56 74.68L6.94 24.81C7.11 24.68 4.46 26.01 7.97 24.04C11.48 22.07 21.19 16.92 28.02 12.98C34.85 9.04 45.22 2.55 48.97 0.39C52.72 -1.78 50.26 0.06 50.51 0L92.54 24.81ZM16.32 29.82L16.07 69.41C20.54 72.07 37.19 82.01 42.93 85.35C48.67 88.69 49.25 88.77 50.51 89.46L84.32 69.41L84.06 61.95L50.13 80.98L23.78 65.3L23.91 34.45L49.61 19.15L50.64 19.15L67.74 29.69L68.64 29.69L75.06 25.71L75.19 24.81L49.36 10.54L16.32 29.82Z"/> </svg></span><span class="mark">Mark I</span><span class="name">Centurion</span><span class="domain">Cyber Security</span><p class="card-body">Defence and offence in balance, on authorized targets only. Severity lives in the finding, never in the delivery.</p></a>
+      <a class="holo pad agent-card" style="--a: var(--atomix)" href="../atomix/"><span class="emblem"><svg viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false" aria-label="Atomix"> <path d="M50.06 9.57L100 90.43L72.34 89.8L49.19 53L23.9 52.63L50.06 9.57ZM62.45 89.55L41.43 90.18L31.66 75.66L22.03 90.18L0 89.92L19.52 59.76L44.56 60.14L62.45 89.55Z"/> </svg></span><span class="mark">Mark I</span><span class="name">Atomix</span><span class="domain">Health & Wellness</span><p class="card-body">The owner's body, on evidence rather than fads — and it says plainly when the evidence is weak.</p></a>
+    </div>
+    <div class="actions">
+      <a class="btn btn-primary" href="../">All eight agents</a>
+      <a class="btn" href="../../systems/">The systems they run on</a>
+      <a class="btn" href="https://github.com/spedatox/speda-mark6/blob/main/packages/igor/app/profiles/nightcrawler.py">This profile on GitHub</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div><h4>The roster</h4><ul><li><a href="../../agents/">All eight agents</a></li><li><a href="../../agents/speda/">SPEDA — Chief of Staff</a></li><li><a href="../../agents/sentinel/">Sentinel — finance</a></li><li><a href="../../agents/nightcrawler/">NightCrawler — OSINT</a></li><li><a href="../../agents/ultron/">Ultron — academic life</a></li><li><a href="../../agents/centurion/">Centurion — security</a></li><li><a href="../../agents/atomix/">Atomix — health</a></li><li><a href="../../agents/optimus/">Optimus — code</a></li><li><a href="../../agents/orion/">Orion — custodian</a></li></ul></div>
+      <div><h4>The systems</h4><ul><li><a href="../../systems/">All systems</a></li><li><a href="../../systems/legion/">The Legion</a></li><li><a href="../../systems/memory/">Memory & recall</a></li><li><a href="../../systems/automations/">Proactive automations</a></li><li><a href="../../systems/news/">The News Desk</a></li><li><a href="../../systems/forge/">The Forge</a></li><li><a href="../../systems/maps/">Maps & navigation</a></li><li><a href="../../systems/house-party/">House Party Protocol</a></li><li><a href="../../systems/capabilities/">The capability arsenal</a></li></ul></div>
+      <div><h4>The software</h4><ul><li><a href="../../heartbreaker/">Heartbreaker — desktop</a></li><li><a href="../../speda-go/">SPEDA GO — Android</a></li><li><a href="../../igor/">Igor — the backend</a></li><li><a href="../../faq/">Frequently asked</a></li></ul></div>
+      <div><h4>Source</h4><ul><li><a href="https://github.com/spedatox/speda-mark6">speda-mark6 on GitHub</a></li><li><a href="https://github.com/spedatox/speda-go">SPEDA GO repository</a></li><li><a href="https://github.com/spedatox/forge-mark1">The Forge repository</a></li><li><a href="https://github.com/spedatox">All projects by spedatox</a></li></ul></div>
+    </div>
+    <p class="colophon">
+      <span><strong>S.P.E.D.A.</strong> — Specialized Personal Executive Digital Assistant · Mark VI</span>
+      <span>Built by <a href="https://github.com/spedatox">Ahmet Erol Bayrak</a> · Private project, not licensed for redistribution.</span>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
