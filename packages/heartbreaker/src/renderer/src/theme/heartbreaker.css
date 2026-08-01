@@ -534,6 +534,13 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes hbBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+/* Mic actively hearing speech. Deliberately a swell rather than a blink: an
+   open mic and a mic that is picking you up must not look alike, and a blink
+   reads as a warning while a swell reads as reception. */
+@keyframes pulse {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%      { opacity: 0.62; transform: scale(1.12); }
+}
 /* House Party — the roster's signature colors on parade. Animates `color`
    only; consumers point borders/fills/glows at currentColor so one keyframe
    themes every piece of war-room chrome. Order = the ROSTER order. */

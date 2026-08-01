@@ -4,6 +4,7 @@ import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useIsMobile } from '../lib/useIsMobile'
 import { fetchModels, fileToImageBlock, fileToDocBlock, getBudgetMode, setBudgetMode } from '../lib/api'
+import { MicSession, micAvailable, type MicState } from '../lib/mic'
 import type { AppConfig, ModelInfo, ImageBlock, DocBlock, UploadedFile } from '../lib/types'
 
 interface AttachedFile {
@@ -19,6 +20,20 @@ interface Props {
   onSend: (message: string, opts?: { images?: ImageBlock[]; documents?: DocBlock[]; uploads?: UploadedFile[] }) => void
   onStop?: () => void
   config: AppConfig
+  /** In voice mode a finished utterance IS the turn and sends itself. Outside
+   *  it, the same mic dictates into the composer for the owner to edit. */
+  voiceMode?: boolean
+  /** The agent is speaking right now, so mic onset counts as barge-in. */
+  agentSpeaking?: boolean
+  /** Barge-in: the owner started talking over the agent. Fires on onset. */
+  onSpeechStart?: () => void
+  /** Mic state, so the orb can show that it is listening. */
+  onMicState?: (s: MicState) => void
+  /** Filled with a getter for the live input level while the mic is open, and
+   *  nulled when it closes. A ref rather than a value because the orb polls it
+   *  per frame — pushing sixty renders a second through React to move one
+   *  number would cost more than the whole scene does. */
+  micLevelRef?: React.MutableRefObject<(() => number) | null>
 }
 
 function shortModelName(name: string): string {
@@ -439,8 +454,8 @@ function MenuRow({ icon, label, value, valueColor, onClick }: {
   )
 }
 
-function MobileToolsMenu({ budget, listening, isStreaming, onAttach, onToggleBudget, onVoice }: {
-  budget: boolean; listening: boolean; isStreaming: boolean
+function MobileToolsMenu({ budget, listening, onAttach, onToggleBudget, onVoice }: {
+  budget: boolean; listening: boolean
   onAttach: () => void; onToggleBudget: () => void; onVoice: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -524,13 +539,12 @@ function MobileToolsMenu({ budget, listening, isStreaming, onAttach, onToggleBud
             valueColor={budget ? '#5fc78f' : '#d3a04a'}
             onClick={onToggleBudget}
           />
-          {!isStreaming && (
-            <MenuRow
-              icon={<svg width="13" height="13" viewBox="0 0 24 24" fill={listening ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
-              label={listening ? 'Stop listening' : 'Voice input'}
-              onClick={() => { onVoice(); setOpen(false) }}
-            />
-          )}
+          {/* Available while streaming too — that is when barge-in happens. */}
+          <MenuRow
+            icon={<svg width="13" height="13" viewBox="0 0 24 24" fill={listening ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
+            label={listening ? 'Stop listening' : 'Voice input'}
+            onClick={() => { onVoice(); setOpen(false) }}
+          />
         </div>
       )}
     </div>
@@ -570,7 +584,9 @@ function Thumb({ file, alt }: { file: File; alt: string }) {
 }
 
 /* ── Main component ───────────────────────────────────────────────────────── */
-export default function InputBar({ onSend, onStop, config }: Props) {
+export default function InputBar({
+  onSend, onStop, config, voiceMode, agentSpeaking, onSpeechStart, onMicState, micLevelRef,
+}: Props) {
   const { state } = useChatContext()
   const { settings, update } = useSettings()
   const profile = useProfile()
@@ -685,21 +701,81 @@ export default function InputBar({ onSend, onStop, config }: Props) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }
 
-  const handleVoiceInput = () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SR) return
-    if (listening) { setListening(false); return }
-    const recognition = new SR()
-    recognition.lang = 'en-US'
-    recognition.interimResults = false
-    recognition.onresult = (e: { results: { [k: number]: { [k: number]: { transcript: string } } } }) => {
-      setValue(prev => (prev ? prev + ' ' : '') + e.results[0][0].transcript); resize()
+  /* ── Microphone ───────────────────────────────────────────────────────────
+   * Replaces the browser's SpeechRecognition, which could not work here on two
+   * counts: it was pinned to en-US, and Chromium's implementation reaches a
+   * Google endpoint using a key that Electron builds do not carry, so start()
+   * failed silently. This routes through the backend's Azure Speech instead —
+   * the same key that already speaks the replies.
+   *
+   * The mic and the keyboard are peers, never modes. Outside voice mode a
+   * transcript lands in the composer to be edited and sent by hand; inside it,
+   * the utterance IS the turn and goes straight out. Either way the textarea
+   * stays live, so a sentence can be started out loud and finished by typing. */
+  const micRef = useRef<MicSession | null>(null)
+  const [micState, setMicState] = useState<MicState>('off')
+
+  // Read through refs: the mic session outlives any single render, and a
+  // transcript arriving mid-turn must see the CURRENT voice-mode flag rather
+  // than the one captured when the mic was switched on.
+  const voiceModeRef = useRef(!!voiceMode)
+  voiceModeRef.current = !!voiceMode
+  const streamingRef = useRef(state.isStreaming)
+  streamingRef.current = state.isStreaming
+
+  const stopMic = useCallback(() => {
+    micRef.current?.stop()
+    micRef.current = null
+    if (micLevelRef) micLevelRef.current = null
+    setListening(false)
+    setMicState('off')
+  }, [micLevelRef])
+
+  const handleVoiceInput = useCallback(async () => {
+    if (micRef.current) { stopMic(); return }
+    if (!micAvailable()) return
+
+    const session = new MicSession(config, {
+      locale: settings.voiceLocale,
+      onState: s => { setMicState(s); onMicState?.(s) },
+      // Onset, not transcript — see mic.ts. Cutting the agent off is the
+      // owner's most time-critical action in the whole feature.
+      onSpeechStart: () => onSpeechStart?.(),
+      onTranscript: text => {
+        if (voiceModeRef.current) {
+          // In voice mode the utterance is the turn. A transcript that lands
+          // while a turn is still streaming is the tail of a barge-in, and
+          // ChatMain has already cancelled that run, so it sends normally.
+          onSend(text)
+        } else {
+          // Dictation: append and let the owner edit. Appended rather than
+          // replaced so a second sentence does not erase the first.
+          setValue(prev => (prev ? prev.trimEnd() + ' ' : '') + text)
+          setTimeout(resize, 0)
+        }
+      },
+    })
+    micRef.current = session
+    if (micLevelRef) micLevelRef.current = () => session.amplitude()
+    setListening(true)
+    try {
+      await session.start()
+    } catch {
+      // Denied permission or no device. Nothing to say that the absent
+      // recording indicator does not already say.
+      stopMic()
     }
-    recognition.onend  = () => setListening(false)
-    recognition.onerror = () => setListening(false)
-    recognition.start(); setListening(true)
-  }
+  }, [config, settings.voiceLocale, onMicState, onSpeechStart, onSend, resize, stopMic, micLevelRef])
+
+  // The mic has to know when the agent is talking, so speech onset can be read
+  // as an interruption rather than as an ordinary utterance.
+  useEffect(() => { micRef.current?.setAgentSpeaking(!!agentSpeaking) }, [agentSpeaking])
+
+  // Leaving voice mode, or unmounting, releases the device. An input indicator
+  // that outlives its UI is the same class of failure as audio that keeps
+  // playing after the orb is gone.
+  useEffect(() => { if (voiceMode === false) stopMic() }, [voiceMode, stopMic])
+  useEffect(() => () => { micRef.current?.stop() }, [])
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !state.isStreaming
 
@@ -825,7 +901,6 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                 <MobileToolsMenu
                   budget={budget}
                   listening={listening}
-                  isStreaming={state.isStreaming}
                   onAttach={() => fileInputRef.current?.click()}
                   onToggleBudget={toggleBudget}
                   onVoice={handleVoiceInput}
@@ -879,16 +954,33 @@ export default function InputBar({ onSend, onStop, config }: Props) {
                 onSelect={id => update({ model: id })}
               />
 
-              {!isMobile && !state.isStreaming && (
+              {/* Deliberately NOT hidden while streaming: barge-in means
+                  talking over the agent, so the mic has to be reachable at
+                  exactly the moment the old gate removed it. */}
+              {!isMobile && micAvailable() && (
                 <ToolBtn
-                  title={listening ? 'Stop listening' : 'Voice input'}
+                  title={
+                    !listening ? (voiceMode ? 'Speak instead of typing' : 'Voice input — dictate into the composer')
+                    : micState === 'hearing' ? 'Listening — speaking now'
+                    : micState === 'recognizing' ? 'Transcribing…'
+                    : 'Mic on — click to stop'
+                  }
                   onClick={handleVoiceInput}
                   active={listening}
-                  danger={listening}
+                  danger={micState === 'hearing'}
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24"
-                    fill={listening ? 'currentColor' : 'none'}
-                    stroke="currentColor" strokeWidth="2">
+                    fill={micState === 'hearing' ? 'currentColor' : 'none'}
+                    stroke="currentColor" strokeWidth="2"
+                    style={{
+                      // Pulses only while actually hearing speech, so the icon
+                      // distinguishes "mic is on" from "you are being heard" —
+                      // an open mic that looks identical either way is the
+                      // reason people talk to a muted machine.
+                      animation: micState === 'hearing' ? 'pulse 1.1s ease-in-out infinite' : undefined,
+                      opacity: micState === 'recognizing' ? 0.55 : 1,
+                      transition: 'opacity 0.15s',
+                    }}>
                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
                     <line x1="12" y1="19" x2="12" y2="23"/>

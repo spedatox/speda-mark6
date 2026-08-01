@@ -39,9 +39,18 @@ MAX_CHARS = 3000
 _TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
-def configured() -> bool:
-    """Whether voice output is available at all. Callers degrade, never crash."""
-    return bool(settings.azure_speech_key)
+def configured(provider: str | None = None) -> bool:
+    """Whether voice output is available. Callers degrade, never crash.
+
+    With no argument this asks "can anything speak", which is what the client's
+    status check wants — a missing Azure key is no longer the same as having no
+    voice, now that OpenAI can carry it on its own.
+    """
+    if provider == "azure":
+        return bool(settings.azure_speech_key)
+    if provider == "openai":
+        return bool(settings.openai_api_key)
+    return bool(settings.azure_speech_key or settings.openai_api_key)
 
 
 def _endpoint() -> str:
@@ -129,6 +138,65 @@ def build_ssml(text: str, voice: str, locale: str | None = None) -> str:
     )
 
 
+# ── Providers ───────────────────────────────────────────────────────────────
+#
+# Voice refs follow the same shape as model refs everywhere else in this repo
+# (see config.py's "Multi-provider LLM routing"), with one extra segment
+# because a voice needs both an engine and a name:
+#
+#     azure:neural:en-US-BrianMultilingualNeural
+#     openai:gpt-4o-mini-tts:nova
+#
+# A BARE name means Azure, so every ref written before OpenAI existed — the
+# profiles' voice_id, tts_default_voice — keeps working untouched.
+
+_OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech"
+
+# OpenAI's TTS models. gpt-4o-mini-tts is the current one and the only one that
+# accepts `instructions`; tts-1 is faster and cheaper, tts-1-hd cleaner.
+OPENAI_MODELS = ("gpt-4o-mini-tts", "tts-1", "tts-1-hd")
+
+# The full voice set. The last five are gpt-4o-mini-tts only — the older tts-1
+# models silently fall back to alloy for anything they do not know, which reads
+# as "my voice setting is being ignored", so they are filtered per model below.
+_OPENAI_VOICES_BASE = ("alloy", "echo", "fable", "onyx", "nova", "shimmer")
+_OPENAI_VOICES_NEW = ("ash", "ballad", "coral", "sage", "verse")
+
+
+def openai_voices(model: str) -> tuple[str, ...]:
+    """Voices a given OpenAI model actually supports."""
+    if model == "gpt-4o-mini-tts":
+        return _OPENAI_VOICES_BASE + _OPENAI_VOICES_NEW
+    return _OPENAI_VOICES_BASE
+
+
+def parse_voice_ref(ref: str) -> tuple[str, str, str]:
+    """Split a voice ref into (provider, model, voice).
+
+    Accepts the bare Azure voice names that predate multi-provider support, so
+    an unqualified "tr-TR-EmelNeural" still resolves to Azure rather than
+    becoming an error the owner has to go and fix in three places.
+    """
+    parts = (ref or "").split(":")
+    if len(parts) >= 3 and parts[0] == "openai":
+        return "openai", parts[1], ":".join(parts[2:])
+    if len(parts) >= 2 and parts[0] == "azure":
+        return "azure", "neural", ":".join(parts[1:])
+    return "azure", "neural", ref
+
+
+def providers() -> list[str]:
+    """Which engines have a usable credential right now. Drives the picker —
+    an engine with no key must not be offered, because choosing it produces
+    silence rather than an error the owner can act on."""
+    out = []
+    if settings.azure_speech_key:
+        out.append("azure")
+    if settings.openai_api_key:
+        out.append("openai")
+    return out
+
+
 # ── Synthesis ───────────────────────────────────────────────────────────────
 
 class TTSError(RuntimeError):
@@ -147,9 +215,6 @@ async def synthesize(text: str, voice: str | None = None, locale: str | None = N
     key, an empty utterance, or an upstream error. Callers in a streaming path
     should treat a failure as "this sentence stays silent", not as a dead turn.
     """
-    if not configured():
-        raise TTSError("Voice output is not configured — set AZURE_SPEECH_KEY.")
-
     spoken_locale = locale or settings.tts_locale or None
     spoken = strip_for_speech(text, spoken_locale)
     if not spoken:
@@ -157,7 +222,81 @@ async def synthesize(text: str, voice: str | None = None, locale: str | None = N
     if len(spoken) > MAX_CHARS:
         spoken = spoken[:MAX_CHARS]
 
-    voice = voice or settings.tts_default_voice
+    provider, model, name = parse_voice_ref(voice or settings.tts_default_voice)
+    if not configured(provider):
+        raise TTSError(
+            "Voice output is not configured — set AZURE_SPEECH_KEY."
+            if provider == "azure"
+            else "OpenAI voices need OPENAI_API_KEY."
+        )
+    if provider == "openai":
+        return await _openai_synthesize(spoken, model, name, spoken_locale)
+    return await _azure_synthesize(spoken, name, spoken_locale)
+
+
+async def _openai_synthesize(
+    spoken: str, model: str, voice: str, locale: str | None,
+) -> bytes:
+    """OpenAI's speech endpoint. Plain text, no SSML.
+
+    Nothing is escaped here BECAUSE nothing is marked up: the text travels as a
+    JSON string field, so there is no document for generated content to break
+    out of. That is the one real advantage over Azure's SSML, and it is why
+    this path is shorter rather than sloppier.
+
+    The locale is passed as an `instructions` hint on gpt-4o-mini-tts, the only
+    model that accepts it. These models infer language from the text on their
+    own, so this only settles the ambiguous cases — a loanword-heavy Turkish
+    sentence that could plausibly be read with English phonetics.
+    """
+    body: dict = {
+        "model": model,
+        "input": spoken,
+        "voice": voice,
+        "response_format": "mp3",
+    }
+    if model == "gpt-4o-mini-tts" and locale:
+        body["instructions"] = f"Speak naturally in {locale}."
+
+    headers = {
+        "Authorization": f"Bearer {settings.openai_api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.post(_OPENAI_TTS_URL, headers=headers, json=body)
+            resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        detail = {
+            400: "rejected the request (check the voice is one this model supports)",
+            401: "rejected the key",
+            429: "rate-limited the request",
+        }.get(status, f"returned HTTP {status}")
+        logger.warning(
+            "tts_openai_error",
+            extra={"status": status, "model": model, "voice": voice,
+                   "body": exc.response.text[:300]},
+        )
+        raise TTSError(f"OpenAI speech {detail}.") from exc
+    except httpx.HTTPError as exc:
+        logger.warning("tts_transport_error", extra={"error": str(exc), "voice": voice})
+        raise TTSError("Could not reach OpenAI speech.") from exc
+
+    audio = resp.content
+    if not audio:
+        raise TTSError("OpenAI speech returned no audio.")
+    logger.info(
+        "tts_synthesized",
+        extra={"provider": "openai", "model": model, "voice": voice,
+               "chars": len(spoken), "bytes": len(audio)},
+    )
+    return audio
+
+
+async def _azure_synthesize(spoken: str, voice: str, spoken_locale: str | None) -> bytes:
+    """Azure Speech. See build_ssml for why the text is escaped and why the
+    locale is passed explicitly rather than read off the voice name."""
     ssml = build_ssml(spoken, voice, spoken_locale)
 
     headers = {
@@ -201,9 +340,40 @@ async def synthesize(text: str, voice: str | None = None, locale: str | None = N
 
 
 async def list_voices() -> list[dict]:
-    """Voices available to this key's region — used by the settings UI to
-    populate the per-agent voice picker. Returns [] when unconfigured."""
-    if not configured():
+    """Every voice the owner can actually pick, across all configured engines.
+
+    Each entry carries a full `id` ref (provider:model:voice) so the picker
+    never has to reassemble one, and a `provider` so it can group the way the
+    text-model picker does. An engine with no key contributes nothing — a voice
+    that cannot speak must not be offerable.
+    """
+    out: list[dict] = []
+
+    # OpenAI first: a static roster, no network call, so the picker still
+    # populates when Azure's region is unreachable.
+    if configured("openai"):
+        for model in OPENAI_MODELS:
+            for name in openai_voices(model):
+                out.append({
+                    "id": f"openai:{model}:{name}",
+                    "name": name,
+                    "provider": "openai",
+                    "model": model,
+                    # These models are multilingual and infer language from the
+                    # text, so there is no locale to report.
+                    "locale": "",
+                    "gender": "",
+                    "display": f"{name} · {model}",
+                })
+
+    out.extend(await _azure_voices())
+    return out
+
+
+async def _azure_voices() -> list[dict]:
+    """Voices available to this key's region. Returns [] when unconfigured or
+    unreachable — a failed catalogue must not empty the whole picker."""
+    if not configured("azure"):
         return []
     region = settings.azure_speech_region.strip()
     url = f"https://{region}.tts.speech.microsoft.com/cognitiveservices/voices/list"
@@ -219,10 +389,15 @@ async def list_voices() -> list[dict]:
         return []
     return [
         {
+            # Fully qualified, like the OpenAI entries — the picker sends this
+            # back verbatim and never has to know how a ref is assembled.
+            "id": f"azure:{v.get('ShortName')}",
             "name": v.get("ShortName"),
-            "locale": v.get("Locale"),
-            "gender": v.get("Gender"),
-            "display": v.get("LocalName") or v.get("DisplayName"),
+            "provider": "azure",
+            "model": "neural",
+            "locale": v.get("Locale") or "",
+            "gender": v.get("Gender") or "",
+            "display": v.get("LocalName") or v.get("DisplayName") or v.get("ShortName"),
         }
         for v in data
         if v.get("ShortName")

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import VoiceOrb, { type OrbState } from './VoiceOrb'
+import type { MicState } from '../lib/mic'
 
 /**
  * Voice mode's surface: the orb, and the reply as it is being spoken.
@@ -20,6 +21,8 @@ interface Props {
   state: OrbState
   amplitude: () => number
   spectrum?: (out: Float32Array) => void
+  /** The owner's mic level — the orb reacts to both voices. */
+  inputLevel?: () => number
   /** The reply text so far — shown under the orb, a couple of lines at a time. */
   reply: string
   /** What the owner last said, kept small above the orb for context. */
@@ -29,6 +32,10 @@ interface Props {
   onClose: () => void
   /** Cut playback without leaving the mode. */
   onStopSpeaking: () => void
+  /** Mic state, owned by the composer's mic button. Reported here so the status
+   *  line distinguishes an open mic from one that is actually hearing speech —
+   *  identical-looking states are why people talk to a muted machine. */
+  micState: MicState
   /** False when the backend has no Azure key — the mode is unusable, say so
    *  rather than silently never speaking. */
   configured: boolean
@@ -37,8 +44,8 @@ interface Props {
 }
 
 export default function VoiceMode({
-  state, amplitude, spectrum, reply, prompt, locale, onLocale, onClose, onStopSpeaking,
-  configured, agentName, agentId,
+  state, amplitude, spectrum, inputLevel, reply, prompt, locale, onLocale, onClose,
+  onStopSpeaking, micState, configured, agentName, agentId,
 }: Props) {
   // Show the tail of the reply, not the head: while it is being spoken the
   // interesting part is what is being said now.
@@ -53,14 +60,51 @@ export default function VoiceMode({
     setHint(false)
   }, [reply])
 
+  /* ── Size ────────────────────────────────────────────────────────────────
+   * The orb owns the screen when there is nothing to read, and yields only as
+   * much as the reply actually needs. Driven off viewport height rather than a
+   * fixed pixel count so it fills a large display instead of floating in it.
+   * The transition lives on the canvas box (VoiceOrb), which re-reads its own
+   * size every frame — so it scales smoothly rather than jumping. */
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState({ w: 0, h: 0 })
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    // Measured, not derived from innerHeight: this pane sits under the header
+    // and above the composer, so the viewport is a good deal taller than the
+    // room actually available, and sizing off it overflows.
+    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }))
+    ro.observe(el)
+    setBox({ w: el.clientWidth, h: el.clientHeight })
+    return () => ro.disconnect()
+  }, [])
+
+  const speaking = reply.length > 0
+  // Bounded by width as well as height — on a wide, short window the limit is
+  // vertical, on a narrow one it is horizontal, and only the smaller fits.
+  const room = Math.min(box.h || 520, box.w || 520)
+  const orbSize = Math.round(
+    speaking
+      ? Math.max(240, Math.min(440, room * 0.62))
+      : Math.max(300, Math.min(760, room * 0.98)),
+  )
+
+  // The mic outranks the agent's own state while it is hearing speech: during
+  // barge-in both are true at once, and what the owner needs confirmed at that
+  // instant is that they are being heard, not that the agent is still talking.
   const label =
     !configured ? 'VOICE OUTPUT NOT CONFIGURED'
+    : micState === 'hearing' ? 'LISTENING'
+    : micState === 'recognizing' ? 'TRANSCRIBING'
     : state === 'speaking' ? 'SPEAKING'
     : state === 'thinking' ? 'THINKING'
+    : micState === 'listening' ? 'MIC OPEN'
     : 'STANDING BY'
 
   return (
     <div
+      ref={boxRef}
       style={{
         flex: 1, minHeight: 0, position: 'relative',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -122,7 +166,17 @@ export default function VoiceMode({
         </div>
       )}
 
-      <VoiceOrb state={state} amplitude={amplitude} spectrum={spectrum} agentId={agentId} size={400} />
+      {/* The mic outranks the agent's own state, for the same reason the label
+          does: during barge-in both are live at once, and the orb showing that
+          it hears you is the more urgent of the two. */}
+      <VoiceOrb
+        state={micState === 'hearing' ? 'listening' : state}
+        amplitude={amplitude}
+        spectrum={spectrum}
+        inputLevel={inputLevel}
+        agentId={agentId}
+        size={orbSize}
+      />
 
       {/* Status line */}
       <div
@@ -174,8 +228,8 @@ export default function VoiceMode({
           letterSpacing: '0.06em', color: 'var(--hb-icon-dim)', textAlign: 'center',
         }}>
           {configured
-            ? `Type below — ${agentName} answers out loud.`
-            : 'Set AZURE_SPEECH_KEY on the backend to enable spoken replies.'}
+            ? `Type below, or hit the mic and just talk — ${agentName} answers out loud.`
+            : 'Set AZURE_SPEECH_KEY on the backend to enable voice.'}
         </div>
       )}
     </div>

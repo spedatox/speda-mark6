@@ -10,6 +10,7 @@ import { PermissionPrompt } from './InteractionPrompt'
 import AgentMark from './AgentMark'
 import { hasMark } from '../lib/agentMarks'
 import { VoiceSession, voiceStatus } from '../lib/voice'
+import type { MicState } from '../lib/mic'
 import type { OrbState } from './VoiceOrb'
 import type { AppConfig, ImageBlock, DocBlock, UploadedFile, PendingAsk } from '../lib/types'
 
@@ -215,6 +216,11 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
   const [voiceReply, setVoiceReply] = useState('')
   const [voicePrompt, setVoicePrompt] = useState('')
   const [voiceReady, setVoiceReady] = useState(true)
+  // Mic state is tracked separately from the orb's, not folded into it: the two
+  // are genuinely concurrent during barge-in, where the agent is still speaking
+  // at the instant the owner starts. Collapsing them into one enum would make
+  // that moment unrepresentable.
+  const [micState, setMicState] = useState<MicState>('off')
 
   // Read the live locale inside the stream loop without making `send` depend on
   // it — otherwise changing TR/EN mid-turn would rebuild the callback.
@@ -241,6 +247,10 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
   // Stable identity: the orb polls these every frame, so a new function each
   // render would restart its animation loop sixty times a second.
   const voiceAmplitude = useCallback(() => voiceRef.current?.amplitude() ?? 0, [])
+  // The owner's own level, so the orb answers to both voices. Routed through a
+  // ref the composer fills, because the mic device is owned by the mic button.
+  const micLevelRef = useRef<(() => number) | null>(null)
+  const voiceInputLevel = useCallback(() => micLevelRef.current?.() ?? 0, [])
   const voiceSpectrum = useCallback((out: Float32Array) => {
     if (voiceRef.current) voiceRef.current.spectrum(out)
     else out.fill(0)
@@ -573,6 +583,19 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
     abortRef.current?.abort()
   }, [config])
 
+  // ── Barge-in ──────────────────────────────────────────────────────────────
+  // The owner started talking over the agent. Interrupting has to cut BOTH the
+  // audio and the turn producing it: silencing playback alone leaves the
+  // backend generating (and billing for) an answer nobody is listening to any
+  // more, and the queued sentences would resume speaking the moment the next
+  // clip decoded. This is the one thing "stop speaking" in the pulled build did
+  // not do.
+  const bargeIn = useCallback(() => {
+    if (!voiceRef.current && !state.isStreaming) return
+    stopSpeaking()
+    if (state.isStreaming) stop()
+  }, [state.isStreaming, stopSpeaking, stop])
+
   // ── Abort on view switch ──────────────────────────────────────────────────
   // Turns are per-session and DETACHED on the backend (dropping the socket
   // never kills a run) — but the local fetch is a singleton. When the visible
@@ -745,12 +768,14 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
           state={orbState}
           amplitude={voiceAmplitude}
           spectrum={voiceSpectrum}
+          inputLevel={voiceInputLevel}
           reply={voiceReply}
           prompt={voicePrompt}
           locale={settings.voiceLocale}
           onLocale={locale => update({ voiceLocale: locale })}
           onClose={() => onCloseVoice?.()}
           onStopSpeaking={stopSpeaking}
+          micState={micState}
           configured={voiceReady}
           agentName={profile?.name ?? 'SPEDA'}
           agentId={profile?.agentId ?? config.agentId}
@@ -766,7 +791,16 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
         )
       }
       {pendingAsk && <PermissionPrompt ask={pendingAsk} onResolve={resolveAsk} />}
-      <InputBar onSend={send} onStop={stop} config={config} />
+      <InputBar
+        onSend={send}
+        onStop={stop}
+        config={config}
+        voiceMode={!!voiceOpen}
+        agentSpeaking={orbState === 'speaking'}
+        onSpeechStart={bargeIn}
+        onMicState={setMicState}
+        micLevelRef={micLevelRef}
+      />
     </div>
   )
 }

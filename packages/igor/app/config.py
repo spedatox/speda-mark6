@@ -363,6 +363,15 @@ class Settings(BaseSettings):
     # Azure output-format token. MP3 decodes natively in the browser AudioContext
     # and is roughly a tenth the size of PCM over the wire.
     tts_output_format: str = "audio-24khz-48kbitrate-mono-mp3"
+    # The language the OWNER speaks, which is not necessarily the one the agent
+    # speaks back — dictating Turkish and being answered in English is a real
+    # combination, so recognition gets its own setting rather than reusing
+    # tts_locale. Left empty it follows tts_locale, which is the right default
+    # for the common case where both halves of the conversation are one language.
+    # Unlike synthesis there is no multilingual model to fall back on: Azure
+    # decodes the language it is told, and a wrong locale returns confident
+    # nonsense rather than degrading.
+    stt_locale: str = ""
 
     # ── Conversation compaction ──────────────────────────────────────────────
     # On a long chat, older turns are summarized (background, Haiku) so the model

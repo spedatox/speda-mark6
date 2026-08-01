@@ -239,10 +239,11 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         ],
     ),
     ConfigGroup(
-        "voice", "Voice Output",
-        "Azure Speech powers spoken replies. Billing is per character with 0.5M free "
-        "per month; markup is stripped before synthesis, so only spoken words are billed. "
-        "Leave the key empty to disable voice output entirely.",
+        "voice", "Voice",
+        "Azure Speech powers both halves of voice mode — spoken replies and dictation — "
+        "from ONE key. Synthesis bills per character with 0.5M free per month, and markup "
+        "is stripped first so only spoken words are billed; recognition bills per audio hour "
+        "with 5 free per month. Leave the key empty to disable voice entirely.",
         [
             ConfigField("azure_speech_key", "Azure Speech Key", "password", secret=True,
                         requires_restart=_LIVE,
@@ -264,6 +265,11 @@ CONFIG_GROUPS: list[ConfigGroup] = [
             ConfigField("tts_output_format", "Audio Format", "text", requires_restart=_LIVE,
                         help="Azure output-format token. MP3 plays natively in the client.",
                         placeholder="audio-24khz-48kbitrate-mono-mp3"),
+            ConfigField("stt_locale", "Heard Language", "text", requires_restart=_LIVE,
+                        help="Language YOU speak into the mic, e.g. tr-TR. Separate from the "
+                             "spoken language above because dictating Turkish and being answered "
+                             "in English is a real combination. Leave empty to follow it.",
+                        placeholder="tr-TR"),
         ],
     ),
     ConfigGroup(
