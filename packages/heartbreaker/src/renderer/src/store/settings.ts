@@ -15,6 +15,13 @@ export interface AppSettings {
    *  Separate from the voice: the roster uses multilingual voices, which are
    *  named en-US-… whatever language they are actually reading. */
   voiceLocale: string
+  /** Which voice speaks the replies, as a full ref the backend parses —
+   *  "openai:gpt-4o-mini-tts:nova" or "azure:tr-TR-EmelNeural". Deliberately
+   *  separate from `model`: the text engine and the voice engine are unrelated
+   *  choices, and nothing says the agent thinking on Claude should not speak
+   *  with an OpenAI voice. Empty means "whatever the agent's profile or the
+   *  backend default says", which is the behaviour that predates this setting. */
+  voiceModel: string
 }
 
 const DEFAULT: AppSettings = {
@@ -25,6 +32,7 @@ const DEFAULT: AppSettings = {
   userName: '',
   forgeCwd: '',
   voiceLocale: 'en-US',
+  voiceModel: '',
 }
 
 function load(): AppSettings {

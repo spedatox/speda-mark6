@@ -5,6 +5,7 @@ import { useProfile } from './Sidebar'
 import { useIsMobile } from '../lib/useIsMobile'
 import { fetchModels, fileToImageBlock, fileToDocBlock, getBudgetMode, setBudgetMode } from '../lib/api'
 import { MicSession, micAvailable, type MicState } from '../lib/mic'
+import { fetchVoices } from '../lib/voice'
 import type { AppConfig, ModelInfo, ImageBlock, DocBlock, UploadedFile } from '../lib/types'
 
 interface AttachedFile {
@@ -280,10 +281,20 @@ function ProviderRow({ label, count, open, holdsActive, onClick }: {
 }
 
 /* ── Model picker ─────────────────────────────────────────────────────────── */
-function ModelPicker({ models, activeId, onSelect }: {
+/**
+ * Picks the text model AND the voice, on two tabs.
+ *
+ * They share this control rather than getting one each because they are the
+ * same kind of decision — pick an engine, pick a model — and the composer has
+ * no room for a second dropdown. They are separate AXES though: the agent can
+ * think on Claude and speak with an OpenAI voice, and nothing couples them.
+ */
+function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSelectVoice }: {
   models: ModelInfo[]; activeId: string; onSelect: (id: string) => void
+  voices: ModelInfo[]; activeVoiceId: string; onSelectVoice: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState<'text' | 'voice'>('text')
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -302,24 +313,35 @@ function ModelPicker({ models, activeId, onSelect }: {
   // The catalogue runs to a hundred-odd models across seven providers, so the
   // panel lists PROVIDERS and opens exactly one group at a time. Provider order
   // follows the backend's catalogue order.
+  // Whichever tab is showing supplies the list, the selection and the setter,
+  // so everything below is written once instead of twice.
+  const list = tab === 'text' ? models : voices
+  const selectedId = tab === 'text' ? activeId : activeVoiceId
+  const choose = tab === 'text' ? onSelect : onSelectVoice
+
   const groups = useMemo(() => {
     const by = new Map<string, ModelInfo[]>()
-    for (const m of models) {
+    for (const m of list) {
       const p = m.provider || 'anthropic'
-      const list = by.get(p)
-      if (list) list.push(m)
+      const g = by.get(p)
+      if (g) g.push(m)
       else by.set(p, [m])
     }
     return [...by.entries()]
-  }, [models])
-  const activeProvider = active ? (active.provider || 'anthropic') : null
+  }, [list])
+  const activeProvider = tab === 'text'
+    ? (active ? (active.provider || 'anthropic') : null)
+    : (voices.find(v => v.id === activeVoiceId)?.provider ?? null)
   const [expanded, setExpanded] = useState<string | null>(activeProvider)
 
   // Every time the panel opens, land on the pinned model's group rather than
   // wherever the last visit left the accordion.
+  // Also re-runs when the tab changes, so switching to VOICE lands on the
+  // engine the current voice belongs to rather than on a text provider that
+  // has no voices under it.
   useEffect(() => {
     if (open) setExpanded(activeProvider)
-  }, [open, activeProvider])
+  }, [open, tab, activeProvider])
 
   return (
     <div style={{ position: 'relative' }} ref={ref}>
@@ -371,36 +393,61 @@ function ModelPicker({ models, activeId, onSelect }: {
           width: 290,
           overflow: 'hidden',
         }}>
-          {/* panel header */}
+          {/* Panel header, doubling as the tab strip. Text and voice are
+              separate axes, so they get separate lists rather than one merged
+              catalogue where picking a voice would look like changing brains. */}
           <div style={{
-            height: 22, padding: '0 0.6rem',
-            display: 'flex', alignItems: 'center',
+            height: 24, display: 'flex', alignItems: 'stretch',
             background: 'rgba(var(--hb-accent-rgb),0.12)',
             boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
             borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.2)',
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: '0.62rem', fontWeight: 700,
-            letterSpacing: '0.2em', textTransform: 'uppercase',
-            color: 'var(--hb-text-dim)',
           }}>
-            SELECT MODEL
+            {(['text', 'voice'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                style={{
+                  flex: 1, border: 'none', cursor: 'pointer',
+                  background: tab === t ? 'rgba(var(--hb-accent-rgb),0.22)' : 'transparent',
+                  color: tab === t ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
+                  borderBottom: tab === t ? '2px solid var(--hb-cyan)' : '2px solid transparent',
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: '0.62rem', fontWeight: 700,
+                  letterSpacing: '0.2em', textTransform: 'uppercase',
+                  transition: 'background 0.1s, color 0.1s, border-color 0.1s',
+                }}
+              >
+                {t === 'text' ? 'TEXT' : 'VOICE'}
+              </button>
+            ))}
           </div>
           <div style={{ padding: '0.2rem 0', maxHeight: 420, overflowY: 'auto' }}>
-            {groups.map(([provider, list]) => (
+            {groups.length === 0 && (
+              <div style={{
+                padding: '0.8rem 0.9rem',
+                fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+                lineHeight: 1.6, color: 'var(--hb-icon-dim)',
+              }}>
+                {tab === 'voice'
+                  ? 'No voices available. Set AZURE_SPEECH_KEY or OPENAI_API_KEY on the backend.'
+                  : 'No models available.'}
+              </div>
+            )}
+            {groups.map(([provider, items]) => (
               <div key={provider}>
                 <ProviderRow
-                  label={PROVIDER_LABELS[provider] ?? provider}
-                  count={list.length}
+                  label={PROVIDER_LABELS[provider] ?? provider.toUpperCase()}
+                  count={items.length}
                   open={expanded === provider}
                   holdsActive={provider === activeProvider}
                   onClick={() => setExpanded(p => (p === provider ? null : provider))}
                 />
-                {expanded === provider && list.map(m => (
+                {expanded === provider && items.map(m => (
                   <ModelItem
                     key={m.id}
                     model={m}
-                    selected={m.id === activeId}
-                    onSelect={() => { onSelect(m.id); setOpen(false) }}
+                    selected={m.id === selectedId}
+                    onSelect={() => { choose(m.id); setOpen(false) }}
                   />
                 ))}
               </div>
@@ -597,12 +644,17 @@ export default function InputBar({
   const [dragOver, setDragOver]     = useState(false)
   const [listening, setListening]   = useState(false)
   const [models, setModels]         = useState<ModelInfo[]>([])
+  const [voices, setVoices]         = useState<ModelInfo[]>([])
   const [budget, setBudget]         = useState(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragDepth = useRef(0)
 
   useEffect(() => { fetchModels(config).then(setModels).catch(() => {}) }, [config])
+  // The voice catalogue is a separate call: Azure's list is a live per-region
+  // lookup that can fail on its own, and a slow or dead voice endpoint must not
+  // hold up the text models the composer actually needs to function.
+  useEffect(() => { fetchVoices(config).then(setVoices).catch(() => {}) }, [config])
   // Load budget state on mount, and re-sync whenever a turn finishes (SPEDA can
   // toggle it itself via the set_budget_mode tool).
   useEffect(() => { getBudgetMode(config).then(setBudget).catch(() => {}) }, [config])
@@ -952,6 +1004,9 @@ export default function InputBar({
                 models={models}
                 activeId={settings.model}
                 onSelect={id => update({ model: id })}
+                voices={voices}
+                activeVoiceId={settings.voiceModel}
+                onSelectVoice={id => update({ voiceModel: id })}
               />
 
               {/* Deliberately NOT hidden while streaming: barge-in means

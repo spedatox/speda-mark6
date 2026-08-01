@@ -17,7 +17,7 @@
  * in sequence rather than racing them.
  */
 
-import type { AppConfig } from './types'
+import type { AppConfig, ModelInfo } from './types'
 import { authHeaders } from './api'
 
 /** Sentences converting at once. Two is enough to keep playback fed without
@@ -130,6 +130,34 @@ export async function synthesize(
   return res.arrayBuffer()
 }
 
+/**
+ * The voice catalogue, shaped as ModelInfo so the picker can render it with the
+ * same provider grouping and rows it uses for text models — a voice IS a model
+ * choice, and giving it a parallel-but-different UI would be gratuitous.
+ *
+ * Each `id` is a full ref the backend parses (`openai:gpt-4o-mini-tts:nova`,
+ * `azure:tr-TR-EmelNeural`), so the client never assembles one itself.
+ */
+export async function fetchVoices(config: AppConfig): Promise<ModelInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/voice/voices`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    const raw = (await res.json()).voices as Array<Record<string, string>>
+    return (raw ?? []).map(v => ({
+      id: v.id,
+      name: v.display || v.name,
+      // Azure names a locale and a gender; OpenAI voices are multilingual and
+      // are told apart by which engine they run on instead.
+      description: v.provider === 'openai'
+        ? v.model
+        : [v.locale, v.gender].filter(Boolean).join(' · '),
+      provider: v.provider,
+    }))
+  } catch {
+    return []
+  }
+}
+
 export async function voiceStatus(config: AppConfig): Promise<boolean> {
   try {
     const res = await fetch(`${config.apiBase}/voice/status`, { headers: authHeaders(config) })
@@ -177,7 +205,7 @@ export class VoiceSession {
 
   constructor(
     private config: AppConfig,
-    private opts: { agentId?: string; locale?: string } = {},
+    private opts: { agentId?: string; locale?: string; voice?: string } = {},
   ) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const Ctor = window.AudioContext || (window as any).webkitAudioContext
@@ -273,6 +301,9 @@ export class VoiceSession {
         return synthesize(this.config, text, {
           agentId: this.opts.agentId,
           locale: this.opts.locale,
+          // Empty falls through to the agent's profile voice server-side, which
+          // is the behaviour that predates the owner being able to pick one.
+          voice: this.opts.voice || undefined,
           signal: this.abort.signal,
         }).catch(() => null)
       })

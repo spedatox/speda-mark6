@@ -226,6 +226,8 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
   // it — otherwise changing TR/EN mid-turn would rebuild the callback.
   const localeRef = useRef(settings.voiceLocale)
   localeRef.current = settings.voiceLocale
+  const voiceModelRef = useRef(settings.voiceModel)
+  voiceModelRef.current = settings.voiceModel
   const voiceOpenRef = useRef(!!voiceOpen)
   voiceOpenRef.current = !!voiceOpen
 
@@ -343,6 +345,7 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
       const vs = new VoiceSession(config, {
         agentId: config.agentId,
         locale: localeRef.current,
+        voice: voiceModelRef.current,
       })
       vs.onState = setOrbState
       voiceRef.current = vs
