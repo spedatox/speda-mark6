@@ -54,6 +54,7 @@ import com.speda.heartbreaker.domain.MarkdownPrep
 import com.speda.heartbreaker.domain.MathExtract
 import com.speda.heartbreaker.domain.TableColumns
 import com.speda.heartbreaker.domain.MathSpan
+import com.speda.heartbreaker.ui.party.HousePartyBanner
 import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
@@ -212,13 +213,43 @@ private fun carriesMath(node: Node): Boolean {
  */
 @Composable
 private fun Fence(language: String, code: String) {
-    when (language.lowercase()) {
-        "chart" -> ChartBlock(code)
-        "calendar" -> CalendarBlock(code)
-        "map" -> MapBlock(code)
-        "svg" -> SvgBlock(code)
+    val lang = language.lowercase()
+    when {
+        lang == "chart" -> ChartBlock(code)
+        lang == "calendar" -> CalendarBlock(code)
+        lang == "map" -> MapBlock(code)
+        lang == "svg" -> SvgBlock(code)
+        lang == "html" -> HtmlBlock(code)
+        isHppWarning(lang, code) -> HousePartyBanner(code)
         else -> CodeBlockView(language = language, code = code)
     }
+}
+
+/**
+ * Is this fence a House Party authorization card? Ported from Message.tsx.
+ *
+ * The tag is unreliable — the model has written `hpp`, `hpp-warning`, and bare
+ * fences — so match explicit aliases OR detect by content, with content
+ * detection gated to AMBIGUOUS tags. That gate is what stops a real C++ `.hpp`
+ * header from being served up as an authorization banner.
+ */
+private val HPP_ALIASES = setOf("hpp-warning", "house_party", "house-party", "houseparty", "party-warning")
+private val HPP_AMBIGUOUS = setOf("", "hpp", "text", "txt", "plaintext", "md", "markdown")
+
+private fun isHppWarning(lang: String, code: String): Boolean {
+    if (lang in HPP_ALIASES) return true
+    if (lang !in HPP_AMBIGUOUS) return false
+    val trimmed = code.trim()
+    return Regex("""house\s*party\s*protocol""", RegexOption.IGNORE_CASE).containsMatchIn(code) ||
+        Regex("""passphrase\s+to\s+engage""", RegexOption.IGNORE_CASE).containsMatchIn(code) ||
+        (Regex("""authorization\s+required""", RegexOption.IGNORE_CASE).containsMatchIn(code) &&
+            Regex("""prototype""", RegexOption.IGNORE_CASE).containsMatchIn(code)) ||
+        // A compliant model leaves the body near-empty — no prose, just an
+        // optional `objective:` line — so the phrase rules above can never fire
+        // for a well-behaved response. On an already-ambiguous tag this shape is
+        // a safe positive.
+        trimmed.isEmpty() ||
+        Regex("""^objective\s*:\s*.+$""", RegexOption.IGNORE_CASE).matches(trimmed)
 }
 
 /* ── Headings — frosted accent plates with a left rule ───────────────────── */

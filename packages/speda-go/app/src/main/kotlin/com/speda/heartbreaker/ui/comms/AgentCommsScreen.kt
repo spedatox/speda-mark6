@@ -144,7 +144,10 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
                         Modifier
                             .hbGlass(shape = HbGlassShape.Pill, state = if (party) HbGlassState.Tint(palette.amber) else HbGlassState.Default)
                             .clickable(enabled = party) {
-                                scope.launch { party = false; party = api.setHouseParty(config, false) }
+                                // Optimistic, then corrected by what the backend
+                                // actually reports. A null (refused/unreachable)
+                                // leaves the flag exactly as the server has it.
+                                scope.launch { party = false; party = api.setHouseParty(config, false) ?: party }
                             }
                             .padding(horizontal = 8.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,

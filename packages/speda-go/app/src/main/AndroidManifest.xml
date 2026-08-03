@@ -27,6 +27,14 @@
          instead of offering to install it. -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
+        <!-- Dictation into the composer (InputBar's voice input). Package
+             visibility is per-intent on Android 11+, so without this the
+             recognizer can't be resolved and the control would sit there
+             looking enabled and doing nothing. The system dialog owns the mic
+             permission and the UI, so the app declares no RECORD_AUDIO. -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
     </queries>
 
     <application

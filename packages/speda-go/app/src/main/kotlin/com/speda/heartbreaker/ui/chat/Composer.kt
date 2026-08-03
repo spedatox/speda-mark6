@@ -1,5 +1,7 @@
 package com.speda.heartbreaker.ui.chat
 
+import android.content.Intent
+import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -63,8 +65,8 @@ private const val MAX_ATTACHMENTS = 10
 
 /**
  * The composer — port of InputBar.tsx at the mobile breakpoint: an auto-grow
- * field, the "+" overflow (attach / budget / voice land in a later pass), the
- * model picker keeping its own slot, the send/stop control, and the status strip.
+ * field, the "+" overflow (attach sources, budget mode, dictation), the model
+ * picker keeping its own slot, the send/stop control, and the status strip.
  */
 @Composable
 fun Composer(
@@ -75,6 +77,10 @@ fun Composer(
     onModelChange: (String) -> Unit,
     onSend: (String, List<ImageBlock>, List<DocBlock>) -> Unit,
     onStop: () -> Unit,
+    /** Null until the backend has answered — the row shows as unknown, not as
+     *  "full power", so the owner is never told the wrong spend state. */
+    budgetMode: Boolean?,
+    onBudgetToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
@@ -83,6 +89,23 @@ fun Composer(
     var text by remember { mutableStateOf("") }
     var pickerOpen by remember { mutableStateOf(false) }
     var plusOpen by remember { mutableStateOf(false) }
+
+    // Dictation. Routed through the platform's own recognizer activity rather
+    // than a raw SpeechRecognizer: the system dialog carries the mic permission,
+    // the listening UI and the partial-results display, so the app declares no
+    // RECORD_AUDIO and there is no half-built recording surface to maintain.
+    val dictate = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val said = result.data
+            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            ?.firstOrNull()
+            ?.trim()
+            .orEmpty()
+        if (said.isNotEmpty()) {
+            text = if (text.isBlank()) said else "${text.trimEnd()} $said"
+        }
+    }
 
     // Staged attachments, cleared on send.
     val images = remember { mutableStateListOf<ImageBlock>() }
@@ -309,6 +332,30 @@ fun Composer(
                         plusOpen = false
                         pickFiles.launch(arrayOf("*/*"))
                     }
+                    // Dictation — the transcript is APPENDED to whatever is
+                    // already typed, never replaces it (InputBar.tsx does the
+                    // same): speaking a second clause must not wipe the first.
+                    AttachItem("Voice input") {
+                        plusOpen = false
+                        runCatching { dictate.launch(speechIntent()) }
+                    }
+                    // Budget mode. Optimistic in the UI and re-synced after each
+                    // turn by the caller, because SPEDA can flip it itself.
+                    AttachItem(
+                        label = when (budgetMode) {
+                            true -> "Budget mode · FRUGAL"
+                            false -> "Budget mode · FULL"
+                            null -> "Budget mode · —"
+                        },
+                        tint = when (budgetMode) {
+                            true -> palette.green
+                            false -> palette.amberBright
+                            null -> null
+                        },
+                    ) {
+                        plusOpen = false
+                        onBudgetToggle()
+                    }
                 }
             }
         }
@@ -329,9 +376,20 @@ fun Composer(
     }
 }
 
+/**
+ * The dictation intent. `FREE_FORM` because the owner is talking to an
+ * assistant, not filling a field, and the locale follows the device — the same
+ * "speak in whatever you speak" rule the desktop's recognizer uses.
+ */
+private fun speechIntent(): Intent =
+    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+    }
+
 /** One row of the "+" attach menu. */
 @Composable
-private fun AttachItem(label: String, onClick: () -> Unit) {
+private fun AttachItem(label: String, tint: Color? = null, onClick: () -> Unit) {
     val palette = LocalHbPalette.current
     Row(
         Modifier
@@ -341,11 +399,11 @@ private fun AttachItem(label: String, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
-        HbGlyphs.Plus(palette.iconDim, size = 12.dp)
+        HbGlyphs.Plus(tint ?: palette.iconDim, size = 12.dp)
         HbText(
             label,
             style = HbType.headerBar.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.12.em),
-            color = palette.iconBright,
+            color = tint ?: palette.iconBright,
             caps = true,
         )
     }

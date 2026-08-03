@@ -108,11 +108,38 @@ or the build scripts stay compiled against the missing `android {}` DSL.
 - **Cleartext** — `res/xml/network_security_config.xml`: add the prod host only if
   its `apiBase` is plain `http://`.
 
-## Next
+## Status — M2/M3 shipped, M4 in progress
 
-M2 (Rich content) per the plan: markdown renderer + prose styles, code blocks,
-math, chart/calendar fences, WebView widgets, file cards + downloads, image
-attachments + lightbox, doc uploads, voice input + read-aloud.
+The two milestone tables above are historical: M2 (rich content) and M3 (shell,
+settings, systems board) landed, and the sections describing them as future work
+are stale. What is worth reading is the **remaining** gap against the desktop.
+
+### Landed since (M4 — multi-agent theatre)
+
+| Surface | Where | Source of truth |
+|---|---|---|
+| ```html widgets (sealed WebView + injected base styles/resize bridge) | `ui/prose/HtmlBlock.kt` | `WidgetFrame.tsx` |
+| ```hpp-warning salvage banner + alias/content detection | `ui/prose/Prose.kt`, `ui/party/HouseParty.kt` | `Message.tsx`, `HousePartyWarning.tsx` |
+| House Party passphrase modal (`house_party_auth` SSE + banner tap) | `ui/party/HouseParty.kt`, `ui/chat/ChatViewModel.kt` | `HousePartyModal.tsx`, `ChatMain.tsx` |
+| War room 3-state (off/standby/engaged) + 4s backend flag poll | `ui/HeartbreakerRoot.kt` | `App.tsx` |
+| Activation cinematic (engage/standby entrance, stand-down wink-out, ignite-under-cover swap) | `ui/party/PartyActivation.kt` | `PartyActivation.tsx` |
+| Roster strip — per-agent live jewels, done counts, CORES, EXIT/STAND DOWN | `ui/party/PartyRosterStrip.kt` | `PartyRosterStrip.tsx` |
+| Composer budget mode + dictation | `ui/chat/Composer.kt`, `ui/chat/ChatScreen.kt` | `InputBar.tsx` |
+
+**Deliberate delta:** the strip's CORES button opens the **systems board** rather
+than a separate ROSTER CORES window. The board already owns AGENT CORES; a second
+phone-sized modal would give the per-agent pins two places to be edited from.
+Telegram model pins are still board-only.
+
+### Still missing against the desktop
+
+- **Voice mode** — VOX, the 3D orb, spoken replies and the canvas HUD
+  (`VoiceMode.tsx`, `VoiceOrb.tsx`, `VoiceCanvas.tsx`). Postdates the port plan
+  entirely; the orb is Three.js and needs a real Compose/OpenGL port, not a
+  transliteration.
+- **Pending permission asks** — `PendingAsksTray.tsx` / the `permission_request`
+  SSE event. Igor relays a peer's gate to the client; the phone currently ignores
+  the event, so a gated Optimus operation can only be answered from the desktop.
 
 ## Shipping — the downstream mirror and APK releases
 

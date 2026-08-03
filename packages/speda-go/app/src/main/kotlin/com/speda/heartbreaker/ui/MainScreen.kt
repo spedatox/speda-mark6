@@ -28,9 +28,11 @@ fun MainScreen(
     graph: AppGraph,
     uplink: Uplink,
     agentId: String,
-    partyEngaged: Boolean,
+    warMode: WarMode,
     onAgentChange: (String) -> Unit,
-    onPartyToggle: () -> Unit,
+    onEnterWarRoom: () -> Unit,
+    onExitWarRoom: () -> Unit,
+    onPartyEngaged: () -> Unit,
     onResetUplink: () -> Unit,
 ) {
     val haze = rememberHbHazeState()
@@ -74,9 +76,11 @@ fun MainScreen(
                 graph = graph,
                 uplink = uplink,
                 agentId = agentId,
-                partyEngaged = partyEngaged,
+                warMode = warMode,
                 onAgentChange = onAgentChange,
-                onPartyToggle = onPartyToggle,
+                onEnterWarRoom = onEnterWarRoom,
+                onExitWarRoom = onExitWarRoom,
+                onPartyEngaged = onPartyEngaged,
                 onResetUplink = onResetUplink,
                 haze = haze,
                 // statusBarsPadding resolves to 0 while the status bar is hidden

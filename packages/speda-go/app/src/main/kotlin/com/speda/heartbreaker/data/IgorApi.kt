@@ -473,14 +473,29 @@ class IgorApi(
         }.getOrNull() ?: false
     }
 
-    /** UI-side control is STAND DOWN only (engaged=false) — engaging is voice-only,
-     *  passphrase-gated through SPEDA in chat. */
-    suspend fun setHouseParty(config: AppConfig, engaged: Boolean): Boolean = withContext(Dispatchers.IO) {
+    /**
+     * Engage or stand down the House Party Protocol.
+     *
+     * Engaging REQUIRES the passphrase and the backend is the only thing that
+     * judges it (constant-time compare in `routers/agents.py`) — the client never
+     * holds, hashes or checks it, it only carries it. Standing down needs
+     * nothing. A refused passphrase comes back as a non-2xx, which surfaces here
+     * as `null` so the caller can tell "wrong" from "now engaged".
+     */
+    suspend fun setHouseParty(
+        config: AppConfig,
+        engaged: Boolean,
+        passphrase: String? = null,
+    ): Boolean? = withContext(Dispatchers.IO) {
         runCatching {
-            postJson(config, "/agents/house-party", buildJsonObject { put("engaged", engaged) })?.let {
-                json.parseToJsonElement(it).jsonObject["engaged"]?.jsonPrimitive?.booleanOrNull
+            val body = buildJsonObject {
+                put("engaged", engaged)
+                if (!passphrase.isNullOrBlank()) put("passphrase", passphrase)
             }
-        }.getOrNull() ?: engaged
+            postJson(config, "/agents/house-party", body)?.let {
+                json.parseToJsonElement(it).jsonObject["engaged"]?.jsonPrimitive?.booleanOrNull ?: engaged
+            }
+        }.getOrNull()
     }
 
     // ── Online external peers (the Forge link) ───────────────────────────────────

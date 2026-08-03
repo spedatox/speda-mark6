@@ -41,7 +41,12 @@ import com.speda.heartbreaker.designsystem.glass.LocalHazeState
 import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.ui.HudStrip
+import com.speda.heartbreaker.ui.WarMode
 import com.speda.heartbreaker.ui.comms.AgentCommsScreen
+import com.speda.heartbreaker.ui.party.HousePartyAsk
+import com.speda.heartbreaker.ui.party.HousePartyModal
+import com.speda.heartbreaker.ui.party.LocalHousePartyRequest
+import com.speda.heartbreaker.ui.party.PartyRosterStrip
 import com.speda.heartbreaker.ui.settings.SettingsScreen
 import com.speda.heartbreaker.ui.systems.SystemsBoardScreen
 import com.speda.heartbreaker.ui.switcher.AgentSwitcherOverlay
@@ -75,9 +80,11 @@ fun ChatScreen(
     graph: AppGraph,
     uplink: Uplink,
     agentId: String,
-    partyEngaged: Boolean,
+    warMode: WarMode,
     onAgentChange: (String) -> Unit,
-    onPartyToggle: () -> Unit,
+    onEnterWarRoom: () -> Unit,
+    onExitWarRoom: () -> Unit,
+    onPartyEngaged: () -> Unit,
     onResetUplink: () -> Unit,
     haze: dev.chrisbanes.haze.HazeState,
     modifier: Modifier = Modifier,
@@ -96,6 +103,15 @@ fun ChatScreen(
 
     var models by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
     LaunchedEffect(config) { models = graph.api.fetchModels(config) }
+
+    // Budget mode is SHARED state, not a client preference: SPEDA can flip it
+    // itself mid-turn, so the client reads it on entry and re-syncs after every
+    // turn settles rather than trusting its own last write.
+    var budgetMode by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(config) { budgetMode = graph.api.getBudgetMode(config) }
+    LaunchedEffect(config, state.isStreaming) {
+        if (!state.isStreaming) budgetMode = graph.api.getBudgetMode(config)
+    }
 
     // Ambient client context (platform + opt-in location) resolved fresh per turn.
     val locationPermission = rememberLauncherForActivityResult(
@@ -160,6 +176,16 @@ fun ChatScreen(
         }
     }
 
+    // Two sources, one window: the backend's SSE ask, and a tap on a salvaged
+    // hpp-warning banner (which can be raised from deep inside rendered prose,
+    // hence the CompositionLocal rather than a threaded callback).
+    val sseAsk by vm.housePartyAsk.collectAsStateWithLifecycle()
+    var bannerAsk by remember { mutableStateOf<String?>(null) }
+    val housePartyAsk = sseAsk ?: bannerAsk
+
+    CompositionLocalProvider(
+        LocalHousePartyRequest provides { ask -> bannerAsk = ask.objective.orEmpty() },
+    ) {
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().imePadding()) {
             HudStrip(
@@ -175,6 +201,21 @@ fun ChatScreen(
                 sessionTitle = activeTitle,
                 onToggleSidebar = { drawerOpen = true },
             )
+
+            // The war room's own strip, directly under the header exactly as on
+            // the desktop. CORES opens the systems board rather than a second
+            // window: the board already owns AGENT CORES, and duplicating the
+            // per-agent pins into a phone-sized modal would give the roster two
+            // places to be edited from.
+            if (warMode != WarMode.Off) {
+                PartyRosterStrip(
+                    api = graph.api,
+                    config = config,
+                    mode = warMode,
+                    onOpenCores = { boardOpen = true },
+                    onExit = onExitWarRoom,
+                )
+            }
 
             // The transcript is ALSO a backdrop: the header, composer and drawer
             // sit over it, so they must refract the text behind them — that's
@@ -224,6 +265,12 @@ fun ChatScreen(
                 agentName = brand.name,
                 models = models,
                 model = settings.model,
+                budgetMode = budgetMode,
+                onBudgetToggle = {
+                    val next = !(budgetMode ?: false)
+                    budgetMode = next                       // optimistic…
+                    scope.launch { budgetMode = graph.api.setBudgetMode(config, next) }  // …then the truth
+                },
                 onModelChange = { scope.launch { graph.settings.setModel(it) } },
                 onSend = { text, images, docs ->
                     vm.send(
@@ -258,7 +305,7 @@ fun ChatScreen(
             onResetUplink = onResetUplink,
             onOpenSettings = { drawerOpen = false; settingsOpen = true },
             // Moved off the header (note #3) — these live in the profile menu now.
-            onOpenWarRoom = onPartyToggle,
+            onOpenWarRoom = { drawerOpen = false; onEnterWarRoom() },
             onToggleComms = { drawerOpen = false; commsOpen = true },
             onToggleBoard = { drawerOpen = false; boardOpen = true },
         )
@@ -303,6 +350,21 @@ fun ChatScreen(
                 onClose = { switcherOpen = false },
             )
         }
+
+        // HOUSE PARTY PROTOCOL — the passphrase gate. Raised either by the
+        // backend's own `house_party_auth` event (the live flow) or by tapping a
+        // salvaged hpp-warning banner in the transcript.
+        housePartyAsk?.let { objective ->
+            BackHandler { vm.clearHousePartyAsk(); bannerAsk = null }
+            HousePartyModal(
+                api = graph.api,
+                config = config,
+                ask = HousePartyAsk(objective.ifBlank { null }),
+                onClose = { vm.clearHousePartyAsk(); bannerAsk = null },
+                onEngaged = onPartyEngaged,
+            )
+        }
+    }
     }
 }
 
