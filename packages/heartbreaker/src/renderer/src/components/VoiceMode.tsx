@@ -37,6 +37,12 @@ const LOCALES: { id: string; label: string }[] = [
 const CANVAS_TOP = 68
 const CANVAS_BOTTOM = 34
 
+/** How tightly the docked orb is framed. The assembly is built to be seen whole,
+ *  with a dust shell around it that costs a third of the canvas; parked in a
+ *  corner that spare ring is what makes a big box look like a small orb. Pushing
+ *  in crops dust that the screen edge is cutting anyway. */
+const ORB_DOCK_ZOOM = 1.55
+
 /**
  * How much of `text` is safe to render right now.
  *
@@ -112,16 +118,23 @@ export default function VoiceMode({
    * The transition lives on the canvas box (VoiceOrb), which re-reads its own
    * size every frame — so a dock/undock scales smoothly rather than jumping. */
   const boxRef = useRef<HTMLDivElement>(null)
-  const [box, setBox] = useState({ w: 0, h: 0 })
+  // `left`/`top` are the pane's offset inside the WINDOW. The canvas is laid out
+  // in pane space, but the docked orb belongs to the window's corner — which is
+  // below the pane, past the composer — so it needs both frames of reference.
+  const [box, setBox] = useState({ w: 0, h: 0, left: 0, top: 0 })
   useEffect(() => {
     const el = boxRef.current
     if (!el) return
     // Measured, not derived from innerHeight: this pane sits under the header
     // and above the composer, so the viewport is a good deal taller than the
     // room actually available, and sizing off it overflows.
-    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }))
+    const measure = () => {
+      const r = el.getBoundingClientRect()
+      setBox({ w: el.clientWidth, h: el.clientHeight, left: r.left, top: r.top })
+    }
+    const ro = new ResizeObserver(measure)
     ro.observe(el)
-    setBox({ w: el.clientWidth, h: el.clientHeight })
+    measure()
     return () => ro.disconnect()
   }, [])
 
@@ -165,12 +178,27 @@ export default function VoiceMode({
     return () => cancelAnimationFrame(id)
   }, [box.w, animate])
 
-  const bleed = Math.round(orbSize * 0.26)
+  /* Docked, the corner it goes to is the WINDOW's, not the pane's.
+   *
+   * The pane stops above the composer, so anchoring to it parks the orb on a
+   * ledge with a strip of empty screen underneath — flush on the right, floating
+   * on the bottom, which is what "the positioning is even worse" looked like.
+   * The orb is positioned inside the pane, so the window's corner is expressed
+   * in pane coordinates; the app root's own clip is what cuts it at the screen
+   * edge.
+   *
+   * ORB_MARGIN is the empty ring the assembly carries inside its own canvas: at
+   * ORB_DOCK_ZOOM the lit rings and core span ~78% of the frame and the rest is
+   * particle dust. Position the BOX against the corner and the visible orb lands
+   * a long way short of it. Spending that margin — plus a little more, so the lit
+   * edge spills past — is what actually puts the orb IN the corner. */
+  const ORB_MARGIN = 0.11
+  const bleed = Math.round(orbSize * (ORB_MARGIN + 0.09))
   const orbLeft = hasCanvas
-    ? Math.round(box.w - orbSize + bleed)
+    ? Math.round(window.innerWidth - box.left - orbSize + bleed)
     : Math.round((box.w - orbSize) / 2)
   const orbTop = hasCanvas
-    ? Math.round(box.h - orbSize + bleed)
+    ? Math.round(window.innerHeight - box.top - orbSize + bleed)
     : Math.round((box.h - orbSize) / 2) + lift
 
   // The mic outranks the agent's own state while it is hearing speech: during
@@ -312,6 +340,7 @@ export default function VoiceMode({
           amplitude={amplitude}
           spectrum={spectrum}
           inputLevel={inputLevel}
+          zoom={hasCanvas ? ORB_DOCK_ZOOM : 1}
         />
       </div>
 

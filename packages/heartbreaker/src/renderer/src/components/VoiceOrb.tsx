@@ -51,6 +51,11 @@ interface Props {
   /** The OWNER's mic level, 0..1. The orb answers to both voices — being heard
    *  has to look different from being talked at, or the mic is a lie. */
   inputLevel?: () => number
+  /** How tightly the camera frames the assembly. 1 contains everything, dust
+   *  shell included; above that the dust is cropped and the lit rings fill the
+   *  canvas — which is what a docked orb needs to still read as an orb. Eased,
+   *  so changing it is a push-in rather than a cut. */
+  zoom?: number
 }
 
 /* ── Noise ────────────────────────────────────────────────────────────────────
@@ -155,11 +160,15 @@ function readAccent(el: HTMLElement, out: THREE.Color): THREE.Color {
 }
 
 export default function VoiceOrb({
-  state, amplitude, spectrum, inputLevel,
+  state, amplitude, spectrum, inputLevel, zoom = 1,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef(state)
   stateRef.current = state
+  // Read every frame rather than listed as an effect dependency: rebuilding the
+  // whole scene to move the camera would drop the WebGL context on every dock.
+  const zoomRef = useRef(zoom)
+  zoomRef.current = zoom
 
   useEffect(() => {
     const mount = mountRef.current
@@ -195,9 +204,21 @@ export default function VoiceOrb({
     // displacing to ~2.35, and the particle shell at ~2.4. At the 4.15 this
     // first shipped with, half-height was 1.19 and most of the orb was outside
     // the frustum. Change OUTER_EXTENT if a layer is ever pushed further out.
+    //
+    // That framing contains everything, which is right when the orb owns the
+    // screen — but the outer third of it is particle dust, so the LIT assembly
+    // (rings, teeth, core) spans only about half the canvas. Parked in a corner
+    // that reads as a small orb inside a large empty square however big the box
+    // is. `zoom` pulls the camera in and crops the dust, which is no loss at the
+    // edge of the screen where it is being clipped anyway.
     const OUTER_EXTENT = 2.55
-    camera.position.set(0, 0.55, OUTER_EXTENT / Math.tan((32 / 2) * Math.PI / 180))
-    camera.lookAt(0, 0, 0)
+    const HALF_FOV_TAN = Math.tan((32 / 2) * Math.PI / 180)
+    const placeCamera = (z: number) => {
+      camera.position.set(0, 0.55 / z, OUTER_EXTENT / z / HALF_FOV_TAN)
+      camera.lookAt(0, 0, 0)
+    }
+    let zoom = zoomRef.current
+    placeCamera(zoom)
 
     // Seeded from the CSS the orb is mounted in, then re-sampled every frame in
     // the loop below (see readAccent).
@@ -607,6 +628,14 @@ export default function VoiceOrb({
         readAccent(mount, accentTarget)
       }
       accent.lerp(accentTarget, 0.14)
+
+      // Push in / pull out with the dock rather than cutting to it. The rate is
+      // matched by eye to the 0.7s the CSS box takes to fly, so the framing
+      // settles as the orb arrives instead of after it.
+      if (Math.abs(zoomRef.current - zoom) > 0.001) {
+        zoom += (zoomRef.current - zoom) * 0.08
+        placeCamera(zoom)
+      }
 
       // Attack fast, release slow — consonants have to register, but nothing
       // may flicker in the gaps between words.
