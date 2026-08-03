@@ -38,6 +38,10 @@ class ClientContext(BaseModel):
     app_version: str | None = None    # client build, e.g. "0.1.0-m0"
     locale: str | None = None         # BCP-47, e.g. "en-US"
     location: ClientLocation | None = None
+    # The reply will be SPOKEN, not read. A per-turn fact, not a session one —
+    # voice mode is toggled mid-conversation — which is exactly why it rides
+    # here rather than in the cached system prefix.
+    voice: bool = False
 
 
 class ChatRequest(BaseModel):

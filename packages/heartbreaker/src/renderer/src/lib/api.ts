@@ -81,6 +81,10 @@ export interface StreamOpts {
   regenerate?: boolean
   /** Working directory for an external-backend agent (the Forge / Optimus). */
   cwd?: string
+  /** The reply will be SPOKEN. Changes how the backend asks for it to be
+   *  written — prose to be heard, artefacts fenced for the canvas — so it has to
+   *  be known before the turn runs, not filtered out of it afterwards. */
+  voice?: boolean
 }
 
 /**
@@ -118,7 +122,7 @@ export async function* streamChat(
       ...(opts.cwd ? { cwd: opts.cwd } : {}),
       // Surface awareness — tell SPEDA whether this turn came from the desktop
       // app or the web build. (The Android app and Telegram set their own.)
-      client_context: desktopClientContext(),
+      client_context: { ...desktopClientContext(), ...(opts.voice ? { voice: true } : {}) },
     }),
     signal,
   })

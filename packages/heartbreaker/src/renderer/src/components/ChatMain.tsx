@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, fetchWelcome, answerAsk } from '../lib/api'
@@ -212,9 +212,11 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
   // or keystroke that starts one) and torn down when speech ends. Keeping one
   // alive across an idle mode would hold an audio device open for nothing.
   const voiceRef = useRef<VoiceSession | null>(null)
+  // Which assistant bubble the live VoiceSession is speaking for. Speech is
+  // per-turn, so it has to end when that turn leaves the view — see the effect
+  // below.
+  const spokenIdRef = useRef<string | null>(null)
   const [orbState, setOrbState] = useState<OrbState>('idle')
-  const [voiceReply, setVoiceReply] = useState('')
-  const [voicePrompt, setVoicePrompt] = useState('')
   const [voiceReady, setVoiceReady] = useState(true)
   // Mic state is tracked separately from the orb's, not folded into it: the two
   // are genuinely concurrent during barge-in, where the agent is still speaking
@@ -243,8 +245,21 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
   const stopSpeaking = useCallback(() => {
     voiceRef.current?.stop()
     voiceRef.current = null
+    spokenIdRef.current = null
     setOrbState('idle')
   }, [])
+
+  // A turn's speech belongs to that turn's bubble. When the bubble leaves the
+  // transcript — the owner selected another session, or switched agent (which
+  // clears the chat) — the answer being spoken is no longer the answer on
+  // screen, so cut it. Keyed on the message rather than on the session id
+  // because the id is not stable: a fresh chat ADOPTS one when its first turn
+  // finishes, and treating that as a switch would silence the reply mid-word.
+  useEffect(() => {
+    const id = spokenIdRef.current
+    if (!id) return
+    if (!state.messages.some(m => m.id === id)) stopSpeaking()
+  }, [state.messages, stopSpeaking])
 
   // Stable identity: the orb polls these every frame, so a new function each
   // render would restart its animation loop sixty times a second.
@@ -349,9 +364,8 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
       })
       vs.onState = setOrbState
       voiceRef.current = vs
+      spokenIdRef.current = assistantId
       void vs.resume()
-      setVoicePrompt(opts.regenerate ? voicePrompt : text)
-      setVoiceReply('')
       setOrbState('thinking')
     }
 
@@ -439,6 +453,10 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
           regenerate: opts.regenerate,
           // Forge workspace for Optimus jobs; ignored by in-process agents.
           cwd: config.agentId === 'optimus' ? (settings.forgeCwd || undefined) : undefined,
+          // Voice mode is a property of the TURN, not the session: the backend
+          // asks for a spoken answer with its visuals fenced off, instead of a
+          // document that then gets read aloud at the owner.
+          voice: voiceOpenRef.current,
         },
       )) {
         lastActivity = Date.now()
@@ -459,11 +477,10 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
           chunkBuf += delta
           // Feed speech from the RAW delta, not the coalesced buffer: synthesis
           // is gated on sentence boundaries, so it must see every character in
-          // order, independent of how the UI batches its repaints.
-          if (voiceRef.current) {
-            voiceRef.current.feed(delta)
-            setVoiceReply(prev => prev + delta)
-          }
+          // order, independent of how the UI batches its repaints. What the orb
+          // screen SHOWS comes from the store like everything else — see the
+          // voice-surface memos below.
+          voiceRef.current?.feed(delta)
           if (flushHandle == null) flushHandle = requestAnimationFrame(flushChunks)
         } else if (event.type === 'tool') {
           gotTool = true
@@ -523,6 +540,7 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
           // is still queued belongs to an answer that is not coming.
           voiceRef.current?.stop()
           voiceRef.current = null
+          spokenIdRef.current = null
           setOrbState('idle')
           settled = true
           dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: event.data as string } })
@@ -754,6 +772,27 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
 
   const isEmpty = state.messages.length === 0
 
+  /* ── The voice surface's content ──────────────────────────────────────────
+   * Read out of the chat store, NOT accumulated in local state. The mode used
+   * to keep its own copy of the streamed reply, which meant it showed one thing
+   * forever: selecting another session (or another agent) swaps `state.messages`
+   * but could not touch that local string, so the orb screen kept displaying the
+   * previous conversation's answer. Sourcing it here means the mode inherits
+   * every transition the transcript already handles — switch, reattach,
+   * regenerate, delete — for free. */
+  const voiceReply = useMemo(() => {
+    for (let i = state.messages.length - 1; i >= 0; i--) {
+      if (state.messages[i].role === 'assistant') return state.messages[i]
+    }
+    return null
+  }, [state.messages])
+  const voicePrompt = useMemo(() => {
+    for (let i = state.messages.length - 1; i >= 0; i--) {
+      if (state.messages[i].role === 'user') return state.messages[i].content
+    }
+    return ''
+  }, [state.messages])
+
   // Answering is fire-and-forget: the decision goes to Igor, Igor relays it to
   // the peer, and the peer resumes or reports the refusal in its own stream.
   // A failed POST means the ask already expired, which the peer has already
@@ -772,7 +811,8 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
           amplitude={voiceAmplitude}
           spectrum={voiceSpectrum}
           inputLevel={voiceInputLevel}
-          reply={voiceReply}
+          reply={voiceReply?.content ?? ''}
+          streaming={!!voiceReply?.isStreaming}
           prompt={voicePrompt}
           locale={settings.voiceLocale}
           onLocale={locale => update({ voiceLocale: locale })}
@@ -781,7 +821,6 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
           micState={micState}
           configured={voiceReady}
           agentName={profile?.name ?? 'SPEDA'}
-          agentId={profile?.agentId ?? config.agentId}
         />
       ) : isEmpty
         ? <WelcomeView onSend={send} config={config} />

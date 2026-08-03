@@ -1,9 +1,14 @@
 """
 Surface awareness — which channel the owner is speaking from (phone, desktop,
-Telegram, …) and, opt-in, from where. Rendered into a compact one-liner and
-stamped onto the LIVE turn's newest user message only, never persisted — the
+Telegram, voice, …) and, opt-in, from where. Rendered into a compact one-liner
+and stamped onto the LIVE turn's newest user message only, never persisted — the
 same discipline the timestamp uses (SessionManager.stamp_user_content), so the
 cached prompt prefix and the stored history both stay byte-stable.
+
+Mostly this is ambient fact. Voice is the exception: a spoken channel changes how
+the answer must be WRITTEN, so that one carries a directive as well as a fact.
+It belongs here rather than in the system prompt because it is a property of the
+turn, not of the session — see _VOICE_DIRECTIVE.
 
 Every ingestion path (HTTP chat, Telegram gateway) funnels through here so SPEDA
 learns the surface uniformly, no matter how the turn arrived.
@@ -28,10 +33,35 @@ def telegram_context() -> ClientContext:
     return ClientContext(platform="telegram")
 
 
+# Voice mode is not a fact about the device, it is a fact about the CHANNEL: the
+# reply is going to a speech engine, sentence by sentence, while a canvas beside
+# it renders whatever the reply draws. Without this the model writes for a
+# reader — LaTeX, JSON chart specs, tables — and the owner hears a machine
+# reciting `\frac{-b \pm \sqrt{b^2-4ac}}{2a}` out loud.
+#
+# It lives on the per-turn context line rather than in the system prompt for one
+# reason: voice mode is toggled mid-conversation, and a system prefix that
+# changes mid-session invalidates the cached prompt for every turn after it.
+_VOICE_DIRECTIVE = (
+    "in VOICE MODE — this reply is being spoken aloud and rendered on a canvas "
+    "at the same time. Write what you SAY as plain spoken prose: no markdown "
+    "syntax, no LaTeX, no tables, no bullet symbols, and never read out an "
+    "identifier, a URL or raw data. Anything visual — a formula, a chart, a map, "
+    "a table, a diagram — goes in its own fenced block, and each block becomes "
+    "its own window on the canvas. Do not narrate the blocks' contents "
+    "line by line; say what they MEAN and what the owner should notice, the way "
+    "you would if you were standing next to them pointing at a screen"
+)
+
+
 def render_client_context(cc: ClientContext) -> str:
-    """Compact, self-labelled description of where/what the owner is speaking from.
-    Leads with the surface; only the fields the caller actually set appear."""
+    """Compact, self-labelled description of the channel the owner is speaking
+    from. Leads with voice (which changes how to answer) then the surface; only
+    the fields the caller actually set appear."""
     bits: list[str] = []
+    # First, because it changes how the whole answer should be written.
+    if cc.voice:
+        bits.append(_VOICE_DIRECTIVE)
     if cc.platform:
         bits.append(_SURFACE_PHRASE.get(cc.platform.lower(), f"on {cc.platform}"))
     device = " ".join(x for x in [cc.os_version, cc.device] if x)

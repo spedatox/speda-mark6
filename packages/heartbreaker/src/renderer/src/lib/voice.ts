@@ -67,6 +67,47 @@ function isNumericBefore(text: string, dotIndex: number): boolean {
   return seen && (i < 0 || !/[\p{L}]/u.test(text[i]))
 }
 
+/* ── What is speakable ────────────────────────────────────────────────────────
+ * An answer in voice mode carries two kinds of content: prose, which is meant to
+ * be heard, and ARTEFACTS — a chart's JSON, a LaTeX derivation, a block of HTML —
+ * which are meant to be SEEN, on the canvas. Handing an artefact to a speech
+ * engine produces exactly what it sounds like: the owner listening to a machine
+ * recite `{"type":"line","xKey":"x"` and `\frac{-b \pm \sqrt{b^2-4ac}}{2a}`.
+ *
+ * So fenced blocks and display math are dropped from the spoken stream entirely.
+ * They are not summarised or announced here either — what the model SAYS about
+ * its artefacts is the model's job (the backend tells it so in voice mode), and
+ * a client-side stand-in would just be a second, worse narrator. */
+
+/** Strip inline math delimiters. `$a = 1$` is worth hearing as "a = 1"; anything
+ *  with a TeX command in it is a formula, not a value, and is dropped. */
+function inlineMath(line: string): string {
+  return line.replace(/\$([^$\n]+)\$/g, (_, body: string) =>
+    /\\[a-zA-Z]/.test(body) ? '' : body)
+}
+
+/** A row of a pipe table. The table is an artefact — it gets its own window on
+ *  the canvas — and a speech engine handed one says "pipe root pipe value pipe". */
+function isTableRow(t: string): boolean {
+  return t.startsWith('|') && t.endsWith('|') && t.length > 1
+}
+
+/**
+ * Say the words, not the notation. Even with the backend asking for plain spoken
+ * prose, a model will still reach for a heading or a bullet out of habit, and
+ * "hash hash Standard Form" is the same failure as reading LaTeX.
+ */
+function spokenProse(line: string): string {
+  return line
+    .replace(/^\s{0,3}#{1,6}\s+/, '')          // headings
+    .replace(/^\s*[-*+]\s+/, '')               // bullets
+    .replace(/^\s*\d+\.\s+/, '')               // numbered items
+    .replace(/^\s*>\s?/, '')                   // block quotes
+    .replace(/\*\*([^*]+)\*\*/g, '$1')         // bold
+    .replace(/(^|\W)\*([^*\n]+)\*/g, '$1$2')   // italics
+    .replace(/`([^`\n]+)`/g, '$1')             // inline code
+}
+
 /**
  * Split `text` into complete sentences plus the unterminated remainder.
  * The remainder stays buffered until more text arrives or the stream ends —
@@ -187,6 +228,11 @@ export class VoiceSession {
   private analyser: AnalyserNode
   private gain: GainNode
   private buf = ''
+  /** Stream tail below the last newline — not yet judgeable (see feed). */
+  private raw = ''
+  /** Inside a ``` fence / a display-math block: everything here is for the eye. */
+  private inFence = false
+  private inMath = false
   private jobs: Job[] = []
   private playIndex = 0
   private draining = false
@@ -259,23 +305,75 @@ export class VoiceSession {
     }
   }
 
-  /** Feed streamed reply text. Safe to call on every delta. */
+  /**
+   * Feed streamed reply text. Safe to call on every delta.
+   *
+   * Deltas are held until a line is COMPLETE before being judged: a ``` fence
+   * marker, or a `$$`, routinely arrives split across two chunks, and a filter
+   * that decides per-delta would speak the first half of the artefact it exists
+   * to suppress. Lines are the unit because fences and display math are
+   * line-oriented; prose loses nothing by waiting for its newline, since the
+   * sentence splitter is already holding the tail anyway.
+   */
   feed(delta: string): void {
     if (this.stopped || this.ended) return
-    this.buf += delta
-    const { sentences, rest } = splitSentences(this.buf)
-    this.buf = rest
-    for (const s of sentences) this.enqueue(s)
+    this.raw += delta
+    const nl = this.raw.lastIndexOf('\n')
+    if (nl === -1) return
+    const complete = this.raw.slice(0, nl + 1)
+    this.raw = this.raw.slice(nl + 1)
+    this.absorb(this.speakable(complete))
   }
 
   /** The turn is over: speak whatever is left, then stop. */
   finish(): void {
     if (this.stopped || this.ended) return
     this.ended = true
+    // The last line never got its newline; it is only speakable if the stream
+    // did not end inside an artefact.
+    if (this.raw) {
+      this.absorb(this.speakable(this.raw + '\n'))
+      this.raw = ''
+    }
     const tail = this.buf.trim()
     this.buf = ''
     if (tail) this.enqueue(tail)
     if (!this.jobs.length) this.onState('idle')
+  }
+
+  /** Drop everything that belongs on the canvas rather than in the ear. */
+  private speakable(text: string): string {
+    let out = ''
+    for (const line of text.split('\n')) {
+      const t = line.trim()
+      if (this.inFence) {
+        if (t.startsWith('```')) this.inFence = false
+        continue
+      }
+      if (t.startsWith('```')) { this.inFence = true; continue }
+      if (this.inMath) {
+        if (t.includes('$$') || t.includes('\\]')) this.inMath = false
+        continue
+      }
+      if (t.startsWith('$$') || t.startsWith('\\[')) {
+        // A one-line `$$x$$` opens and closes at once.
+        const closed = t.length > 2 && (t.endsWith('$$') || t.endsWith('\\]'))
+        this.inMath = !closed
+        continue
+      }
+      if (isTableRow(t)) continue
+      out += spokenProse(inlineMath(line)) + '\n'
+    }
+    return out
+  }
+
+  /** Hand prose to the sentence splitter and queue whatever completed. */
+  private absorb(text: string): void {
+    if (!text) return
+    this.buf += text
+    const { sentences, rest } = splitSentences(this.buf)
+    this.buf = rest
+    for (const s of sentences) this.enqueue(s)
   }
 
   private enqueue(text: string): void {
@@ -360,6 +458,7 @@ export class VoiceSession {
     this.source = null
     this.jobs = []
     this.buf = ''
+    this.raw = ''
     this.onState('idle')
     void this.ctx.close().catch(() => {})
   }

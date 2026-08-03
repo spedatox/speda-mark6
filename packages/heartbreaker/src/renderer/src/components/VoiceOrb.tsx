@@ -51,10 +51,6 @@ interface Props {
   /** The OWNER's mic level, 0..1. The orb answers to both voices — being heard
    *  has to look different from being talked at, or the mic is a lie. */
   inputLevel?: () => number
-  /** Whoever is speaking. Only used to re-read the theme accent when the agent
-   *  changes — the colour itself still comes from CSS, never from here. */
-  agentId?: string
-  size?: number
 }
 
 /* ── Noise ────────────────────────────────────────────────────────────────────
@@ -139,28 +135,31 @@ function dotTexture(): THREE.Texture {
   return tex
 }
 
-/** Read the theme accent, so the orb matches whichever agent is speaking
- *  without the colour ever being hardcoded here. */
-function accentOf(el: HTMLElement): THREE.Color {
+/**
+ * Read the live theme accent into `out`, so the orb matches whichever agent is
+ * speaking without the colour ever being hardcoded here.
+ *
+ * This is SAMPLED, never latched. Switching agents does not set the accent, it
+ * *animates* it: `profile/theme.ts` rebuilds the whole palette on a rAF loop
+ * over ~500ms (and parades it continuously during House Party). Reading once on
+ * an `agentId` effect — which is what this used to do — samples the very first
+ * frame of that morph, i.e. the colour the OLD agent still had, and then holds
+ * it forever. That is why the orb kept showing the previous agent's colour no
+ * matter how many times you switched.
+ */
+function readAccent(el: HTMLElement, out: THREE.Color): THREE.Color {
   const raw = getComputedStyle(el).getPropertyValue('--hb-accent-rgb').trim()
   const p = raw.split(',').map(s => parseFloat(s))
-  if (p.length !== 3 || p.some(Number.isNaN)) return new THREE.Color(0.28, 0.72, 0.82)
-  return new THREE.Color(p[0] / 255, p[1] / 255, p[2] / 255)
+  if (p.length !== 3 || p.some(Number.isNaN)) return out.setRGB(0.28, 0.72, 0.82)
+  return out.setRGB(p[0] / 255, p[1] / 255, p[2] / 255)
 }
 
 export default function VoiceOrb({
-  state, amplitude, spectrum, inputLevel, agentId, size = 400,
+  state, amplitude, spectrum, inputLevel,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef(state)
   stateRef.current = state
-
-  // Held in a ref and uploaded every frame rather than captured at init: read
-  // once, the orb stays SPEDA's cyan no matter which agent is actually talking.
-  const accentRef = useRef<THREE.Color>(new THREE.Color(0.21, 0.67, 0.79))
-  useEffect(() => {
-    if (mountRef.current) accentRef.current = accentOf(mountRef.current)
-  }, [agentId])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -200,13 +199,18 @@ export default function VoiceOrb({
     camera.position.set(0, 0.55, OUTER_EXTENT / Math.tan((32 / 2) * Math.PI / 180))
     camera.lookAt(0, 0, 0)
 
+    // Seeded from the CSS the orb is mounted in, then re-sampled every frame in
+    // the loop below (see readAccent).
+    const accent = readAccent(mount, new THREE.Color())
+    const accentTarget = accent.clone()
+
     const uniforms: OrbUniforms = {
       uTime: { value: 0 },
       uAmp: { value: 0 },
       uSpeak: { value: 0 },
       uThink: { value: 0 },
       uListen: { value: 0 },
-      uAccent: { value: accentRef.current.clone() },
+      uAccent: { value: accent.clone() },
     }
 
     const disposables: { dispose: () => void }[] = []
@@ -585,6 +589,7 @@ export default function VoiceOrb({
     const WHITE = new THREE.Color(1, 1, 1)
     let amp = 0, speak = 0, think = 0, listen = 0
     let raf = 0
+    let lastAccent = -1
     const t0 = performance.now()
 
     const frame = () => {
@@ -592,6 +597,16 @@ export default function VoiceOrb({
       applySize()
       const t = (performance.now() - t0) / 1000
       const st = stateRef.current
+
+      // Follow the palette. Sampled at ~10Hz — getComputedStyle forces a style
+      // flush, and the theme's own morph is far slower than that — then eased,
+      // so the orb changes colour WITH the rest of the UI instead of snapping
+      // (or, before this, never changing at all).
+      if (t - lastAccent > 0.1) {
+        lastAccent = t
+        readAccent(mount, accentTarget)
+      }
+      accent.lerp(accentTarget, 0.14)
 
       // Attack fast, release slow — consonants have to register, but nothing
       // may flicker in the gaps between words.
@@ -617,7 +632,7 @@ export default function VoiceOrb({
       uniforms.uSpeak.value = speak
       uniforms.uThink.value = think
       uniforms.uListen.value = listen
-      uniforms.uAccent.value.copy(accentRef.current)
+      uniforms.uAccent.value.copy(accent)
 
       // Rings: per-segment length and brightness from its own band. The ORBIT
       // is the group's job (below) — doing it here as well would fight the
@@ -651,7 +666,7 @@ export default function VoiceOrb({
           const idle = 0.45 + 0.55 * seed
           const wave = 0.5 + 0.5 * Math.sin(t * 0.9 + frac * Math.PI * 6 + seed * 4.0)
           const lit = ring.base * (idle + wave * 0.5) + v * 2.2 + listen * 0.18
-          col.copy(accentRef.current).multiplyScalar(lit)
+          col.copy(accent).multiplyScalar(lit)
           // Hot segments push toward white — a monochrome additive render with
           // no white point looks like flat tinted fog however bright it gets.
           col.lerp(WHITE, Math.min(0.55, v * 0.6 + wave * 0.10))
@@ -661,11 +676,11 @@ export default function VoiceOrb({
         if (ring.mesh.instanceColor) ring.mesh.instanceColor.needsUpdate = true
       }
 
-      col.copy(accentRef.current).multiplyScalar(0.34 + amp * 0.26)
+      col.copy(accent).multiplyScalar(0.34 + amp * 0.26)
       for (let i = 0; i < TEETH; i++) teeth.setColorAt(i, col)
       if (teeth.instanceColor) teeth.instanceColor.needsUpdate = true
 
-      haloMat.color.copy(accentRef.current)
+      haloMat.color.copy(accent)
       haloMat.opacity = 0.16 + amp * 0.26 + listen * 0.10
       halo.scale.setScalar(2.1 + amp * 0.55)
 
@@ -712,16 +727,12 @@ export default function VoiceOrb({
     // geometry, shader and texture each time the orb grows or shrinks.
   }, [amplitude, spectrum, inputLevel])
 
-  return (
-    <div
-      ref={mountRef}
-      style={{
-        width: size, height: size, flexShrink: 0, position: 'relative',
-        // Animated rather than snapped: the orb changes size when a reply
-        // starts and ends, and a jump there reads as a glitch. applySize()
-        // re-measures every frame, so the render follows the CSS.
-        transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1), height 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-      }}
-    />
-  )
+  // Fills whatever box the caller gives it, and NOTHING here animates. The
+  // caller owns the orb's geometry — position and size together, as one
+  // animation — because the dock is a single gesture: it flies to the corner
+  // and shrinks on the way. Two independent transitions (a size one here, a
+  // position one there) cannot stay in step, and the mismatch is visible as the
+  // orb arriving before it has finished shrinking. applySize() re-measures every
+  // frame, so the render follows the CSS box wherever it goes.
+  return <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }} />
 }

@@ -592,8 +592,12 @@ function sanitizePartialMarkdown(text: string): string {
  *  renders and skips re-parsing, while only the live tail segment re-parses as
  *  the typewriter advances. Applies the same partial-markdown-safe pipeline
  *  each individual segment gets (sanitize → normalize fences → math) that the
- *  whole message used to get once, since a tool can in principle fire mid-fence. */
-function TextSegment({ text }: { text: string }) {
+ *  whole message used to get once, since a tool can in principle fire mid-fence.
+ *
+ *  Exported because voice mode renders its reply through the SAME pipeline. A
+ *  second markdown path is exactly how the orb screen ended up printing raw
+ *  ```html fences at the owner instead of rendering them. */
+export function TextSegment({ text }: { text: string }) {
   const visible = useMemo(
     () => prepareMath(normalizeCodeFences(sanitizePartialMarkdown(text))),
     [text],
