@@ -22,6 +22,18 @@ export interface AppSettings {
    *  with an OpenAI voice. Empty means "whatever the agent's profile or the
    *  backend default says", which is the behaviour that predates this setting. */
   voiceModel: string
+  /** Where the docked orb sits and how big it is, as the owner put it.
+   *
+   *  `dx`/`dy` are an offset in px from the computed corner (negative moves it
+   *  up and left, off the corner); `scale` multiplies the computed size. All
+   *  three are the owner's, set by dragging and scrolling the orb itself.
+   *
+   *  This exists because "in the corner, and big" is a judgement about a
+   *  specific screen, and no amount of deriving it from viewport arithmetic
+   *  settles it — the thing has an invisible dust halo, sits over a composer,
+   *  and lands differently on every window size. Faster to grab it than to
+   *  describe it. */
+  voiceOrbDock: { dx: number; dy: number; scale: number }
 }
 
 const DEFAULT: AppSettings = {
@@ -33,6 +45,7 @@ const DEFAULT: AppSettings = {
   forgeCwd: '',
   voiceLocale: 'en-US',
   voiceModel: '',
+  voiceOrbDock: { dx: 0, dy: 0, scale: 1 },
 }
 
 function load(): AppSettings {

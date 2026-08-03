@@ -90,11 +90,14 @@ interface Props {
    *  rather than silently never speaking. */
   configured: boolean
   agentName: string
+  /** The owner's own placement for the docked orb — see AppSettings.voiceOrbDock. */
+  dock: { dx: number; dy: number; scale: number }
+  onDock: (dock: { dx: number; dy: number; scale: number }) => void
 }
 
 export default function VoiceMode({
   state, amplitude, spectrum, inputLevel, reply, streaming, prompt, locale, onLocale,
-  onClose, onStopSpeaking, micState, configured, agentName,
+  onClose, onStopSpeaking, micState, configured, agentName, dock, onDock,
 }: Props) {
   const visible = useMemo(() => renderable(reply, streaming), [reply, streaming])
   const hasText = visible.trim().length > 0
@@ -143,7 +146,7 @@ export default function VoiceMode({
   const room = Math.min(box.h || 520, box.w || 520)
   const orbSize = Math.round(
     hasCanvas
-      ? Math.max(300, Math.min(560, room * 0.62))
+      ? Math.max(300, Math.min(560, room * 0.62)) * dock.scale
       : Math.max(280, Math.min(720, room * 0.92)),
   )
 
@@ -195,11 +198,53 @@ export default function VoiceMode({
   const ORB_MARGIN = 0.11
   const bleed = Math.round(orbSize * (ORB_MARGIN + 0.09))
   const orbLeft = hasCanvas
-    ? Math.round(window.innerWidth - box.left - orbSize + bleed)
+    ? Math.round(window.innerWidth - box.left - orbSize + bleed) + dock.dx
     : Math.round((box.w - orbSize) / 2)
   const orbTop = hasCanvas
-    ? Math.round(window.innerHeight - box.top - orbSize + bleed)
+    ? Math.round(window.innerHeight - box.top - orbSize + bleed) + dock.dy
     : Math.round((box.h - orbSize) / 2) + lift
+
+  /* ── The owner's hands ────────────────────────────────────────────────────
+   * Drag the docked orb to place it; scroll over it to size it. Both persist.
+   *
+   * The computed corner above is a DEFAULT, not a verdict. Where the orb should
+   * sit is a judgement about a particular screen — it carries an invisible dust
+   * halo, it shares an edge with the composer, and it lands differently at every
+   * window size — and deriving it from viewport arithmetic has been wrong on
+   * this machine repeatedly. Grabbing it takes a second; describing it does not. */
+  const [dragging, setDragging] = useState(false)
+  // Both gestures read the dock through a ref, never through the render's copy.
+  // A wheel tick landing in the same frame as a drag would otherwise spread a
+  // dock captured BEFORE the drag and quietly undo it — and settings round-trip
+  // through a provider, so "before" can be a frame or two behind.
+  const dockRef = useRef(dock)
+  dockRef.current = dock
+
+  const grabOrb = (e: React.PointerEvent) => {
+    if (!hasCanvas) return
+    e.preventDefault()
+    setDragging(true)
+    const fromX = e.clientX, fromY = e.clientY
+    const base = { ...dockRef.current }
+    const move = (ev: PointerEvent) =>
+      onDock({ ...dockRef.current, dx: base.dx + ev.clientX - fromX, dy: base.dy + ev.clientY - fromY })
+    const up = () => {
+      setDragging(false)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  const sizeOrb = (e: React.WheelEvent) => {
+    if (!hasCanvas) return
+    const cur = dockRef.current
+    // Clamped hard at both ends: an orb scrolled to nothing cannot be grabbed
+    // again, and one scrolled past the ceiling swallows the board.
+    const scale = Math.max(0.5, Math.min(2.6, cur.scale * (e.deltaY < 0 ? 1.06 : 1 / 1.06)))
+    onDock({ ...cur, scale })
+  }
 
   // The mic outranks the agent's own state while it is hearing speech: during
   // barge-in both are true at once, and what the owner needs confirmed at that
@@ -258,8 +303,8 @@ export default function VoiceMode({
         {hasCanvas && (
           <button
             className="hb-btn"
-            onClick={() => setReflow(n => n + 1)}
-            title="Re-pack the windows"
+            onClick={() => { setReflow(n => n + 1); onDock({ dx: 0, dy: 0, scale: 1 }) }}
+            title="Re-pack the windows and put the orb back on its corner"
             style={{ ...chip }}
           >
             REFLOW
@@ -322,10 +367,19 @@ export default function VoiceMode({
           pointerEvents:none so a drag that passes over the dock still belongs to
           the window underneath it. */}
       <div
+        onPointerDown={grabOrb}
+        onWheel={sizeOrb}
+        title={hasCanvas ? 'Drag to place · scroll to size · REFLOW resets' : undefined}
         style={{
-          position: 'absolute', zIndex: 3, pointerEvents: 'none',
+          position: 'absolute', zIndex: 3,
+          // Grabbable only when docked. Centred, it owns the screen and must not
+          // eat the drags meant for the windows underneath it.
+          pointerEvents: hasCanvas ? 'auto' : 'none',
+          cursor: hasCanvas ? (dragging ? 'grabbing' : 'grab') : 'default',
           left: orbLeft, top: orbTop, width: orbSize, height: orbSize,
-          transition: !animate ? 'none' : `
+          // No easing while it is in the owner's hand — a 0.7s tween on a drag
+          // is lag, and it makes the orb feel like it is resisting.
+          transition: !animate || dragging ? 'none' : `
             left 0.7s cubic-bezier(0.65, 0, 0.35, 1),
             top 0.7s cubic-bezier(0.65, 0, 0.35, 1),
             width 0.7s cubic-bezier(0.65, 0, 0.35, 1),

@@ -821,6 +821,8 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
           micState={micState}
           configured={voiceReady}
           agentName={profile?.name ?? 'SPEDA'}
+          dock={settings.voiceOrbDock}
+          onDock={d => update({ voiceOrbDock: d })}
         />
       ) : isEmpty
         ? <WelcomeView onSend={send} config={config} />
