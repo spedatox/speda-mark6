@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import runtime_state
 from app.database import get_db
 from app.schemas.health import HealthIngestRequest
 from app.services import health as health_service
@@ -49,6 +50,37 @@ async def health_status(db: AsyncSession = Depends(get_db)):
     """Sync state for the phone's Settings ▸ HEALTH tab: sample counts per
     metric, last ingest, and the covered day span."""
     return await health_service.status(db)
+
+
+@router.get("/health/freshness")
+async def health_freshness(db: AsyncSession = Depends(get_db)):
+    """Per-metric age of the newest sample against its staleness budget — what
+    tells a briefing whether it may speak in the present tense. Also surfaces
+    any outstanding sync demand so the phone's HEALTH tab can show that Igor
+    asked for data and did not get it."""
+    report = await health_service.freshness(db)
+    return {
+        "metrics": report,
+        "stale": health_service.stale_metrics(report),
+        "demand": runtime_state.get_health_sync_demand(),
+    }
+
+
+@router.get("/health/sync-demand")
+async def health_sync_demand():
+    """Polled by SPEDA GO: is Igor waiting on a sync right now?
+
+    SPEDA GO carries no Firebase, so nothing can wake it from the server side —
+    this is a note left where the app will look (on foreground, and after each
+    scheduled sync). `outstanding` is true only while a demand is unserved; the
+    app should sync immediately when it sees it, which clears it via ingest.
+    """
+    demand = runtime_state.get_health_sync_demand()
+    return {
+        "outstanding": bool(demand and not demand.get("served_at")),
+        "at": demand.get("at", 0),
+        "reason": demand.get("reason", ""),
+    }
 
 
 @router.delete("/health/data")

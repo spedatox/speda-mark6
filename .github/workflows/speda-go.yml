@@ -88,6 +88,20 @@ jobs:
         working-directory: packages/speda-go
         run: gradle --no-daemon :designsystem:testDebugUnitTest :app:testDebugUnitTest
 
+      # google-services.json is build config, not a credential — it ships inside
+      # every APK — so it is committed rather than injected as a secret. But a
+      # release built without it loses Igor's wake channel SILENTLY: Atomix can
+      # then only fall back to the 15-minute poll, and a morning briefing that
+      # needed a sync on the spot reports the link is down instead. Warn loudly.
+      - name: Check push config
+        working-directory: packages/speda-go
+        run: |
+          if [ -f app/google-services.json ]; then
+            echo "push enabled — FCM wake channel will be compiled in"
+          else
+            echo "::warning::app/google-services.json is missing; this APK ships with FCM disabled and Atomix will fall back to the 15-minute demand poll"
+          fi
+
       - name: Assemble signed release APK
         working-directory: packages/speda-go
         env:

@@ -5,6 +5,10 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+if (file("google-services.json").exists()) {
+    apply(plugin = libs.plugins.google.services.get().pluginId)
+}
+
 // Release plumbing. CI (.github/workflows/speda-go-release.yml) injects the build
 // number and the signing material through the environment; a plain local build
 // sees none of it and falls back to versionCode 1 and an unsigned release.
@@ -13,6 +17,19 @@ plugins {
 val baseVersion = providers.gradleProperty("spedaGoVersion").get()
 val buildNumber = providers.environmentVariable("SPEDA_GO_BUILD_NUMBER").orNull?.toIntOrNull()
 val keystoreFile = providers.environmentVariable("SPEDA_GO_KEYSTORE_FILE").orNull
+
+// Push is opt-in at build time, exactly as ultron-core does it (docs/ULTRON_WEAR.md
+// §3). Drop the Firebase console's google-services.json next to this file and the
+// plugin turns on; leave it out and the app still compiles, installs and runs —
+// only the FCM wake channel is dead, and the 15-minute HealthDemandWorker poll
+// covers for it. A build that HARD-required the file would mean nobody could
+// build SPEDA GO without the owner's Firebase project.
+//
+// NOTE: debug builds carry applicationIdSuffix ".debug", and the plugin fails on
+// an applicationId with no matching client in the JSON. Register BOTH
+// com.speda.heartbreaker and com.speda.heartbreaker.debug in the Firebase
+// console, or debug builds will stop working the moment the file lands.
+val pushEnabled = file("google-services.json").exists()
 
 android {
     namespace = "com.speda.heartbreaker"
@@ -27,6 +44,10 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        // Lets the runtime tell "push is switched off in this build" apart from
+        // "Firebase is present but failing", which are very different bugs.
+        buildConfigField("boolean", "PUSH_ENABLED", pushEnabled.toString())
     }
 
     // Personal keystore, single-user app, no Play Store. Present only when the
@@ -102,6 +123,13 @@ dependencies {
     // trickle it to Igor on a WorkManager cadence (docs/ATOMIX_HEALTH_SYNC.md).
     implementation(libs.androidx.health.connect)
     implementation(libs.androidx.work.runtime)
+
+    // FCM: Igor's only way to wake this app. Atomix refuses to brief on stale
+    // biometrics, so without a wake channel a morning briefing can only report
+    // that the link is down. Declared unconditionally — the code must compile
+    // whether or not google-services.json is present; it degrades at runtime.
+    implementation(libs.firebase.messaging)
+    implementation(libs.firebase.installations)
 
     implementation(libs.compose.foundation)
     implementation(libs.compose.ui)

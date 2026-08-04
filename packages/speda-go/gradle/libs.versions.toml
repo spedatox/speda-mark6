@@ -30,6 +30,15 @@ commonmark = "0.24.0"
 androidsvg = "1.4"
 maplibre = "11.8.0"
 
+# FCM — Igor's wake channel (docs/ULTRON_WEAR.md §3, ATOMIX_HEALTH_SYNC.md).
+# messaging 25.1.x is the line that deprecated the whole registration-token API
+# in favour of Firebase Installation IDs; installations is declared explicitly
+# because messaging depends on it as `implementation`, so FirebaseInstallations
+# would not be on our compile classpath transitively.
+googleServices = "4.5.0"
+firebaseMessaging = "25.1.1"
+firebaseInstallations = "19.1.2"
+
 junit = "4.13.2"
 androidxTestJunit = "1.2.1"
 espresso = "3.6.1"
@@ -89,6 +98,10 @@ commonmark-ext-gfm-tables = { group = "org.commonmark", name = "commonmark-ext-g
 commonmark-ext-gfm-strikethrough = { group = "org.commonmark", name = "commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
 commonmark-ext-autolink = { group = "org.commonmark", name = "commonmark-ext-autolink", version.ref = "commonmark" }
 
+# --- Push (Igor → phone wake for an on-demand health sync) ---
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging", version.ref = "firebaseMessaging" }
+firebase-installations = { group = "com.google.firebase", name = "firebase-installations", version.ref = "firebaseInstallations" }
+
 # --- Test ---
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
@@ -101,3 +114,4 @@ android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

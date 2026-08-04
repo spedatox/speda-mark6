@@ -316,3 +316,47 @@ def set_server_active(server: str, active: bool) -> bool:
     _save()
     logger.info("server_active_set", extra={"server": server, "active": active})
     return active
+
+
+# ── Health sync demand ──────────────────────────────────────────────────────
+# A standing request for SPEDA GO to sync Health Connect NOW, rather than on its
+# next ~4h trickle. Atomix raises it when a turn needs data that describes the
+# present (a morning briefing), and the phone clears it by syncing.
+#
+# A flag rather than a push because SPEDA GO carries no Firebase — there is no
+# way to wake the app from the server side, so this is a message left where the
+# phone will find it: the app checks on foreground and after each sync. That
+# means a demand raised while the phone is asleep goes unanswered, which is
+# precisely why the caller must treat the wait as failable rather than assuming
+# fresh data eventually arrives.
+
+def request_health_sync(reason: str = "") -> float:
+    """Raise the demand. Returns the epoch stamp recorded, which the caller can
+    compare against later ingests to tell "the phone answered ME" apart from
+    "a routine sync happened to land"."""
+    import time
+
+    state = _load()
+    stamp = time.time()
+    state["health_sync_demand"] = {"at": stamp, "reason": reason[:120], "served_at": 0}
+    _save()
+    logger.info("health_sync_demanded", extra={"reason": reason[:120]})
+    return stamp
+
+
+def get_health_sync_demand() -> dict:
+    """{at, reason, served_at} — empty dict when nothing is outstanding."""
+    return dict(_load().get("health_sync_demand", {}))
+
+
+def clear_health_sync_demand() -> None:
+    """Called when the phone delivers a batch: the demand has been served."""
+    import time
+
+    state = _load()
+    demand = dict(state.get("health_sync_demand") or {})
+    if not demand or demand.get("served_at"):
+        return
+    demand["served_at"] = time.time()
+    state["health_sync_demand"] = demand
+    _save()

@@ -9,6 +9,7 @@ import com.speda.heartbreaker.data.PlatformContextProvider
 import com.speda.heartbreaker.data.SettingsStore
 import com.speda.heartbreaker.data.UplinkStore
 import com.speda.heartbreaker.health.HealthSyncManager
+import com.speda.heartbreaker.push.PushRegistrar
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -46,4 +47,7 @@ class AppGraph(context: Context) {
 
     /** Atomix health sync — Health Connect → Igor (docs/ATOMIX_HEALTH_SYNC.md). */
     val healthSync: HealthSyncManager = HealthSyncManager(appContext, settings, api)
+
+    /** FCM registration — Igor's wake channel for an on-demand health sync. */
+    val push: PushRegistrar = PushRegistrar(appContext, uplink, api)
 }

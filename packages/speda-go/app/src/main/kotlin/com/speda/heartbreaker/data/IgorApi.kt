@@ -684,6 +684,51 @@ class IgorApi(
         runCatching { deleteRequest(config, "/health/data") != null }.getOrDefault(false)
     }
 
+    /**
+     * Hand Igor this installation's Firebase Installation ID so it can push here.
+     *
+     * FID, not a registration token: firebase-messaging 25.1.x deprecated the
+     * whole token API and the Admin SDKs moved to `Message(fid=…)` to match.
+     * Ultron Wear registers the same way against the same endpoint — the
+     * `platform` field is what keeps a health-sync wake off the watch.
+     */
+    suspend fun registerDevice(
+        config: AppConfig,
+        deviceId: String,
+        platform: String,
+        fid: String,
+    ): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = buildJsonObject {
+                put("device", deviceId)
+                put("platform", platform)
+                put("fid", fid)
+            }
+            postJson(config, "/devices/register", body) != null
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Is Igor waiting on a health sync right now?
+     *
+     * Atomix raises this when a turn needs biometrics that describe the present
+     * — a morning briefing will refuse to report at all rather than pass off a
+     * four-day-old resting heart rate as today's. There is no push channel to
+     * this app, so the demand is a note left on the server and this is the app
+     * going to look. Cheap by design: one small GET, no body worth parsing.
+     *
+     * Returns false on any failure — a server we cannot reach is not a server
+     * asking us for anything, and a demand we miss costs one stale briefing,
+     * while a retry storm costs battery every fifteen minutes forever.
+     */
+    suspend fun healthSyncDemanded(config: AppConfig): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = getString(config, "/health/sync-demand") ?: return@runCatching false
+            json.parseToJsonElement(body).jsonObject["outstanding"]
+                ?.jsonPrimitive?.booleanOrNull ?: false
+        }.getOrDefault(false)
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private fun getString(config: AppConfig, path: String): String? {

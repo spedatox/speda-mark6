@@ -12,15 +12,30 @@ a week of heart-rate readings is thousands of rows for a question that wants
 seven numbers.
 """
 
+import asyncio
 import json
 import logging
 
+from app.core import runtime_state
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal
 from app.services import health as health_service
 from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
+
+# How long a `live` call waits for the phone to answer a sync demand, and how
+# often it re-checks. Twenty-five seconds is chosen against the turn budget, not
+# the phone: an agentic tool call that blocks for a minute is worse than a
+# briefing that reports the link is down.
+_LIVE_WAIT_S = 25.0
+_LIVE_POLL_S = 2.5
+
+# Ranges that make a claim about the present. A stale answer to one of these is
+# not "old data", it is a false statement — "you slept 7h30m" about a night the
+# store has no record of. Trend ranges ('7d', '30d') are exempt: old days are
+# the point of the question.
+_PRESENT_TENSE = {"today", "yesterday"}
 
 _KNOWN_METRICS = [
     "steps",
@@ -102,9 +117,14 @@ class HealthDataSkill(Skill):
         "individual samples instead. Ranges resolve against the owner's LOCAL "
         "calendar, and a night's sleep is filed under the day it STARTED — so "
         "last night's sleep is on yesterday's date when you ask in the morning. "
-        "If nothing has synced yet it says so — tell "
-        "the owner to set the link up in Settings ▸ Health on the Android app "
-        "rather than guessing at numbers."
+        "Every answer carries a `freshness` block giving the age of the newest "
+        "reading per metric; pass live=true for anything describing the present "
+        "(a morning briefing, 'how did I sleep', 'what is my heart rate') and "
+        "the tool will demand a sync from the phone first and REFUSE to answer "
+        "with stale data rather than let you report last week's numbers as "
+        "today's. If nothing has synced yet it says so — tell the owner to set "
+        "the link up in Settings ▸ Health on the Android app rather than "
+        "guessing at numbers."
     )
     read_only = True
     input_schema = {
@@ -138,6 +158,20 @@ class HealthDataSkill(Skill):
                 ),
                 "default": "daily",
             },
+            "live": {
+                "type": "boolean",
+                "description": (
+                    "Set true whenever the answer will describe the owner's "
+                    "CURRENT state — a morning health briefing, 'how did I "
+                    "sleep last night', 'what's my resting heart rate'. The "
+                    "tool then asks the phone to sync before answering and "
+                    "returns a hard error, with no numbers at all, if the data "
+                    "is still too old to describe the present. Leave false for "
+                    "history and trend questions ('how was last month'), where "
+                    "old data is the point rather than a defect."
+                ),
+                "default": False,
+            },
         },
         "required": [],
     }
@@ -153,6 +187,7 @@ class HealthDataSkill(Skill):
             )
         range_spec = str(args.get("range") or "7d")
         granularity = str(args.get("granularity") or "daily").lower()
+        live = bool(args.get("live"))
 
         start, end = health_service.parse_range(range_spec)
         span_days = (end - start).days + 1
@@ -161,7 +196,23 @@ class HealthDataSkill(Skill):
             if unknown else ""
         )
 
+        # The freshness gate. A present-tense question answered from a store the
+        # phone stopped feeding days ago is the failure this exists to prevent:
+        # the briefing reads as current, the numbers are from another week, and
+        # nothing in the output says so.
+        gate_metrics = metrics or _KNOWN_METRICS
+        if live or range_spec.strip().lower() in _PRESENT_TENSE:
+            refusal = await self._freshness_gate(gate_metrics, live=live)
+            if refusal:
+                return refusal
+
         async with AsyncSessionLocal() as db:
+            # Attached to every answer, gate or no gate. A number is only worth
+            # what its age says it is worth, and the caller cannot judge that
+            # from a daily aggregate — 'steps: 1685' looks identical whether it
+            # is today's running total at 08:00 or a dead sensor's last word.
+            fresh_report = await health_service.freshness(db, metrics or _KNOWN_METRICS)
+
             if granularity == "raw":
                 rows = await health_service.raw_rows(db, metrics, start, end)
                 if not rows:
@@ -183,6 +234,7 @@ class HealthDataSkill(Skill):
                 }
                 if len(payload["samples"]) >= 200:
                     payload["truncated"] = "Capped at 200 samples — narrow the range or metric."
+                payload["freshness"] = _freshness_view(fresh_report)
                 if note:
                     payload["note"] = note
                 return json.dumps(payload, ensure_ascii=False)
@@ -225,9 +277,108 @@ class HealthDataSkill(Skill):
         }
         if trends:
             payload["trend_vs_previous_period"] = trends
+        payload["freshness"] = _freshness_view(fresh_report)
         if note:
             payload["note"] = note
         return json.dumps(payload, ensure_ascii=False)
+
+    @staticmethod
+    async def _freshness_gate(metrics: list[str], *, live: bool) -> str | None:
+        """None when the data may describe the present; otherwise the refusal to
+        return INSTEAD of any numbers.
+
+        On `live` the phone is asked to sync first and given a short window to
+        answer. It often cannot — SPEDA GO has no push channel, so a demand
+        raised while the phone is asleep goes unread — and that is the case this
+        is built around: the honest outcome of "I could not get today's data" is
+        an error, not yesterday's data wearing today's date.
+        """
+        async with AsyncSessionLocal() as db:
+            report = await health_service.freshness(db, metrics)
+            stale = health_service.stale_metrics(report)
+            if not stale:
+                return None
+
+            wake: dict = {}
+            if live:
+                wake = await health_service.demand_sync(db, reason="live health query")
+                served = await HealthDataSkill._await_sync()
+                if served:
+                    report = await health_service.freshness(db, metrics)
+                    stale = health_service.stale_metrics(report)
+                    if not stale:
+                        return None
+                logger.info(
+                    "health_live_wake_result",
+                    extra={"woke": wake.get("woke"), "still_stale": stale},
+                )
+
+            store = await health_service.status(db)
+
+        if not store["samples"]:
+            return (
+                "REFUSED — no health data has ever synced. The Health Connect "
+                "link is not set up; the owner enables it in Settings ▸ Health "
+                "in the Android app. Do not produce a health briefing from "
+                "memory, from an earlier turn, or from estimates: say the link "
+                "is down and what to check, and stop there."
+            )
+
+        lines = []
+        for metric in stale:
+            f = report[metric]
+            if f["newest"] is None:
+                lines.append(f"- {metric}: nothing stored at all")
+            else:
+                lines.append(
+                    f"- {metric}: newest reading {f['newest']} "
+                    f"({f['age_hours']}h old, budget {f['budget_hours']}h)"
+                )
+        # Distinguish the two failures for the owner: a phone that was told and
+        # stayed quiet is a sync problem, a phone that was never reachable is a
+        # setup problem, and they have different fixes.
+        if not live:
+            asked = ""
+        elif wake.get("woke"):
+            asked = (
+                "The phone was woken and asked to sync, and did not deliver in "
+                "time. "
+            )
+        else:
+            asked = (
+                "The phone could not even be woken — it is not registered for "
+                "push, or the push was rejected. It will still see the request "
+                "on its next check, within about fifteen minutes. "
+            )
+        return (
+            "REFUSED — the data is too old to describe the present:\n"
+            + "\n".join(lines)
+            + f"\n\n{asked}This is a broken sync, not a health finding. Report "
+            "it as such: tell the owner which metrics stopped arriving and when "
+            "the last reading was, and suggest checking that the watch is worn "
+            "and paired and that SPEDA GO's Health tab still shows the link "
+            "live. Do NOT report the last stored values as if they were "
+            "current, do NOT describe them as 'the most recent data' inside a "
+            "briefing about today, and do NOT fill the gap with estimates. If "
+            "the whole briefing depended on this data, the briefing is the "
+            "sync failure — that is a complete and correct answer.\n\n"
+            f"(Historical figures are still readable for genuinely past-tense "
+            f"questions: call again without live=true and with an explicit past "
+            f"range. Stored data covers {store['first_day']} → {store['last_day']}.)"
+        )
+
+    @staticmethod
+    async def _await_sync() -> bool:
+        """Wait for the phone to serve the outstanding demand. False on timeout."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _LIVE_WAIT_S
+        while loop.time() < deadline:
+            await asyncio.sleep(_LIVE_POLL_S)
+            if runtime_state.get_health_sync_demand().get("served_at"):
+                logger.info("health_live_sync_served")
+                return True
+        logger.warning("health_live_sync_timeout", extra={"waited_s": _LIVE_WAIT_S})
+        return False
 
     @staticmethod
     async def _no_rows(db, metrics: list[str], start, end) -> str:
@@ -270,6 +421,24 @@ class HealthDataSkill(Skill):
                 "so last night's sleep sits on yesterday's date in a morning query."
             )
         return msg
+
+
+def _freshness_view(report: dict) -> dict:
+    """The freshness report as it rides in a tool answer: only metrics that
+    actually have data, plus an explicit `stale` list so the caller does not
+    have to compare ages against budgets itself. Metrics that have never synced
+    are dropped here rather than listed as stale — the owner does not track
+    body fat, and saying so on every reply trains the reader to skim the block."""
+    have = {m: f for m, f in report.items() if f.get("newest")}
+    return {
+        "note": (
+            "Age of the newest reading per metric, in hours. Anything listed "
+            "under `stale` is outside the window in which it can be described "
+            "as current — cite it as of its date, or not at all."
+        ),
+        "metrics": have,
+        "stale": [m for m, f in have.items() if not f.get("fresh")],
+    }
 
 
 def _headline(metric: str, agg: dict) -> float | None:

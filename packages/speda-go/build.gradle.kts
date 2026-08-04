@@ -6,4 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.kotlin.serialization) apply false
+    // Declared here only to put it on the buildscript classpath. The app module
+    // applies it conditionally — see the google-services.json check there.
+    alias(libs.plugins.google.services) apply false
 }

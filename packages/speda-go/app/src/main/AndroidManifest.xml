@@ -66,6 +66,19 @@
             </intent-filter>
         </activity>
 
+        <!-- Igor's wake channel. Data-only messages, so this handler always runs
+             rather than the system tray drawing a notification the owner would
+             have to tap — see SpedaMessagingService. Inert without
+             google-services.json: Firebase never initialises and nothing is
+             ever delivered here. -->
+        <service
+            android:name=".push.SpedaMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <!-- …and Android 14+ routes to this alias instead. Both land on
              MainActivity, which shows the rationale sheet. -->
         <activity-alias

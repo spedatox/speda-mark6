@@ -6,6 +6,9 @@ import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.speda.heartbreaker.data.IgorApi
@@ -166,10 +169,58 @@ class HealthSyncManager(
             ExistingPeriodicWorkPolicy.KEEP,
             request,
         )
+
+        // The demand check — see HealthDemandWorker. Separate schedule because
+        // it answers a different question: the trickle asks "is it time yet",
+        // this asks "is Igor waiting on me". Battery-not-low is deliberately
+        // NOT required here; a briefing that refuses to run is a worse outcome
+        // than one GET on a low battery.
+        val demand = PeriodicWorkRequestBuilder<HealthDemandWorker>(
+            DEMAND_INTERVAL_MINUTES, TimeUnit.MINUTES,
+        )
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                    .build(),
+            )
+            .build()
+        WorkManager.getInstance(appContext).enqueueUniquePeriodicWork(
+            DEMAND_WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            demand,
+        )
+    }
+
+    /**
+     * Sync immediately, out of band with the trickle. What an FCM wake lands on.
+     *
+     * Expedited because Atomix is holding a turn open on the other end: a sync
+     * that arrives after the briefing gave up waiting is worth the same as no
+     * sync at all. RUN_AS_NON_EXPEDITED_WORK_REQUEST is the required fallback
+     * for when the app's expedited quota is spent — it still runs, just queued.
+     *
+     * REPLACE rather than KEEP: a second demand means the first one's data is
+     * already stale, so the newer request should win rather than be dropped.
+     */
+    fun syncNow() {
+        val request = OneTimeWorkRequestBuilder<HealthSyncWorker>()
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                    .build(),
+            )
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .build()
+        WorkManager.getInstance(appContext).enqueueUniqueWork(
+            NOW_WORK_NAME,
+            ExistingWorkPolicy.REPLACE,
+            request,
+        )
     }
 
     fun cancelSchedule() {
         WorkManager.getInstance(appContext).cancelUniqueWork(WORK_NAME)
+        WorkManager.getInstance(appContext).cancelUniqueWork(DEMAND_WORK_NAME)
     }
 
     private fun deviceName(): String =
@@ -177,8 +228,13 @@ class HealthSyncManager(
 
     companion object {
         const val WORK_NAME = "atomix-health-sync"
+        const val DEMAND_WORK_NAME = "atomix-health-demand"
+        const val NOW_WORK_NAME = "atomix-health-sync-now"
         const val BACKFILL_DAYS = 30
         const val SYNC_INTERVAL_HOURS = 4L
+        // WorkManager's floor for periodic work. Anything smaller is silently
+        // clamped to this, so state it rather than pretend to a faster cadence.
+        const val DEMAND_INTERVAL_MINUTES = 15L
         private const val TAG = "HealthSync"
     }
 }

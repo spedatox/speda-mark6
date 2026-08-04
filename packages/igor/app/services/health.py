@@ -16,11 +16,13 @@ import logging
 from collections import defaultdict
 from datetime import date as date_cls
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import runtime_state
+from app.core.clock import owner_today as clock_owner_today
+from app.core.clock import to_owner, utc_now
 from app.models.health_sample import HealthDaily, HealthSample
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,137 @@ _METRIC_KIND: dict[str, str] = {
 
 def metric_kind(metric: str) -> str:
     return _METRIC_KIND.get(metric, INSTANT)
+
+
+# ── Freshness ────────────────────────────────────────────────────────────────
+# How old the NEWEST sample of a metric may be before the data stops describing
+# the present. This is the difference between a briefing and an archive query:
+# reporting a heart rate from four days ago under today's date is not a
+# formatting problem, it is a false statement about the owner's body.
+#
+# The budgets are generous on purpose — they are a staleness alarm, not a sync
+# SLA. The phone trickles roughly every four hours, so anything inside that plus
+# a margin is normal; what these catch is a link that has actually stopped.
+_FRESHNESS_BUDGET_H: dict[str, float] = {
+    # Asked at 08:00 about last night. A session that ended at 07:00 is 1h old;
+    # one from the night before is 25h+ and must not be called "last night".
+    "sleep_session": 20,
+    "heart_rate": 8,
+    "steps": 8,
+    "distance": 8,
+    "exercise_session": 24,
+    # Derived once a day by the watch, and only after a scored sleep.
+    "resting_heart_rate": 36,
+    "oxygen_saturation": 24,
+    # Stepping on a scale is a deliberate act; silence means "didn't weigh in",
+    # not "the link is broken".
+    "weight": 24 * 14,
+    "body_fat": 24 * 14,
+}
+_DEFAULT_BUDGET_H = 24
+
+
+def freshness_budget_h(metric: str) -> float:
+    return _FRESHNESS_BUDGET_H.get(metric, _DEFAULT_BUDGET_H)
+
+
+async def freshness(db: AsyncSession, metrics: list[str] | None = None) -> dict:
+    """Per-metric age of the newest stored sample, and whether it is inside that
+    metric's budget.
+
+    Returns ``{metric: {"newest": iso, "age_hours": float, "fresh": bool,
+    "budget_hours": float}}`` for every metric asked for (or every metric that
+    has ever synced). A metric with no samples at all is reported with
+    ``"newest": None`` and ``fresh: False`` — never omitted, because a caller
+    checking freshness needs "nothing here" to be an answer rather than a gap.
+    """
+    stmt = select(HealthSample.metric, func.max(HealthSample.end_ts)).group_by(
+        HealthSample.metric
+    )
+    if metrics:
+        stmt = stmt.where(HealthSample.metric.in_(metrics))
+    newest = {m: ts for m, ts in (await db.execute(stmt)).all()}
+
+    now = utc_now().replace(tzinfo=None)
+    out: dict[str, dict] = {}
+    for metric in metrics or sorted(newest):
+        ts = newest.get(metric)
+        budget = freshness_budget_h(metric)
+        if ts is None:
+            out[metric] = {
+                "newest": None,
+                "age_hours": None,
+                "fresh": False,
+                "budget_hours": budget,
+            }
+            continue
+        age = max(0.0, (now - ts).total_seconds() / 3600)
+        out[metric] = {
+            "newest": to_owner(ts).isoformat(timespec="minutes"),
+            "age_hours": round(age, 1),
+            "fresh": age <= budget,
+            "budget_hours": budget,
+        }
+    return out
+
+
+def stale_metrics(report: dict) -> list[str]:
+    """The metrics in a ``freshness()`` report that are outside budget."""
+    return [m for m, f in report.items() if not f.get("fresh")]
+
+
+async def demand_sync(db: AsyncSession, reason: str = "") -> dict:
+    """Ask the phone for a sync NOW, and wake it so it hears the asking.
+
+    Two halves, and both are needed. The runtime-state flag is the durable
+    request — SPEDA GO's 15-minute worker reads it, so a demand raised while the
+    phone was unreachable is still served later. The FCM data message is what
+    makes it timely: a briefing waiting twenty-five seconds cannot use an answer
+    that arrives at the next quarter hour.
+
+    Only ``platform="phone"`` devices are woken. The watch is registered in the
+    same table for attendance asks and has no Health Connect data to give.
+
+    Returns ``{"woke": n, "notes": [...]}``. Never raises — a dead push channel
+    means the caller falls back to the flag, not that the turn fails.
+    """
+    runtime_state.request_health_sync(reason=reason)
+
+    from app.services import academic as academic_service
+    from app.services import fcm
+
+    devices = await academic_service.active_devices(db, platform="phone")
+    if not devices:
+        return {"woke": 0, "notes": ["no phone registered for push"]}
+
+    woke = 0
+    notes: list[str] = []
+    for device in devices:
+        try:
+            ok, detail = await fcm.send_data_message(
+                fid=device.fid,
+                data={"type": "health_sync_now", "reason": reason[:120]},
+                priority="high",
+                # Pointless after the waiting turn has given up, and a wake that
+                # lands hours later would sync against a demand already served.
+                ttl_seconds=300,
+            )
+        except Exception as exc:  # noqa: BLE001 — push must not break the turn
+            logger.warning("health_wake_failed", extra={"error": str(exc)})
+            notes.append(f"{device.device_id}: {exc}")
+            continue
+        if ok:
+            woke += 1
+        elif detail == "unregistered":
+            # Reinstalled or data cleared. Retiring it here stops every future
+            # wake burning a request on a device that cannot receive one.
+            await academic_service.deactivate_device(db, device.fid)
+            notes.append(f"{device.device_id}: no longer installed (deactivated)")
+        else:
+            notes.append(f"{device.device_id}: {detail}")
+
+    logger.info("health_sync_wake", extra={"woke": woke, "reason": reason[:120]})
+    return {"woke": woke, "notes": notes}
 
 
 def _to_naive_utc(dt: datetime) -> datetime:
@@ -157,6 +290,11 @@ async def ingest_samples(
         await recompute_daily(db, day, metric)
     await db.commit()
 
+    # The phone has just delivered, so any standing "sync now" demand is served.
+    # Marked even on an all-duplicate batch: the phone did answer, it simply had
+    # nothing new — which is itself the answer a waiting briefing needs.
+    runtime_state.clear_health_sync_demand()
+
     logger.info(
         "health_ingest",
         extra={"accepted": accepted, "duplicates": duplicates, "days": len(touched)},
@@ -232,6 +370,8 @@ async def _retry_ingest(
     for day, metric in touched:
         await recompute_daily(db, day, metric)
     await db.commit()
+
+    runtime_state.clear_health_sync_demand()
 
     logger.info(
         "health_ingest",
@@ -337,13 +477,15 @@ def owner_today() -> date_cls:
     """The owner's LOCAL calendar date. Samples are filed by local day
     (``local_day``), so every range must be resolved in the same frame — UTC
     "today" is the previous local day for the first three hours of every
-    Istanbul morning, which is exactly when the nightly digest runs."""
-    from app.config import settings
+    Istanbul morning, which is exactly when the nightly digest runs.
 
-    try:
-        return owner_today()
-    except Exception:  # noqa: BLE001 — unknown/invalid IANA name
-        return datetime.utcnow().date()
+    Delegates to app.core.clock, the one place that knows what time it is. This
+    function used to call *itself* inside a try/except: the RecursionError was
+    caught by the bare handler and the fallback returned the UTC date, so the
+    very skew the docstring describes was what it actually did, on every call,
+    forever. Keep the delegation — a local reimplementation is how that started.
+    """
+    return clock_owner_today()
 
 
 def parse_range(spec: str, today: date_cls | None = None) -> tuple[date_cls, date_cls]:

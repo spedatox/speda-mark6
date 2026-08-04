@@ -121,6 +121,58 @@ SPEDA GO  ── POST /health/ingest (X-API-Key, batched JSON) ──►  Igor
 - **Battery honesty:** reads are local IPC (cheap); one small HTTPS POST per
   cycle. Target: unmeasurable battery impact.
 
+### 1.2b Freshness — and the wake channel that defends it
+
+A trickle is fine until someone asks a question about *now*. A resting heart
+rate from four days ago, reported under today's date in a morning briefing, is
+not stale data — it is a false statement about the owner's body. So the store
+carries a **staleness budget per metric** (`services/health.py`
+`_FRESHNESS_BUDGET_H`: sleep 20h, heart rate and steps 8h, weight two weeks —
+stepping on a scale is a deliberate act, silence there means "didn't weigh in",
+not "the link is broken").
+
+Three pieces enforce it:
+
+1. **`health_data` refuses.** Called with `live=true`, or with a present-tense
+   range (`today`/`yesterday`), the skill checks freshness *before* reading any
+   numbers and returns a `REFUSED —` string carrying no figures at all when the
+   data is outside budget. There is nothing quotable in the refusal, on purpose.
+   Trend ranges (`7d`, `30d`) are exempt: old days are the point of the question.
+2. **Igor demands a sync.** `services/health.py::demand_sync()` raises a durable
+   flag in `runtime_state` *and* sends a data-only FCM wake
+   (`{"type": "health_sync_now"}`, TTL 300s) to every `platform="phone"` device.
+   The skill then waits ~25s for the phone to deliver; ingest is what clears the
+   demand, so a batch arriving — even an all-duplicate one — releases the wait.
+3. **SPEDA GO answers, two ways.** `SpedaMessagingService` turns the push into an
+   expedited one-shot `HealthSyncWorker` (`HealthSyncManager.syncNow()`). If the
+   push never lands — Doze, a build with no `google-services.json`, a revoked
+   installation — `HealthDemandWorker` polls `GET /health/sync-demand` every 15
+   minutes (WorkManager's floor) and syncs only on a hit. One small GET that
+   almost always answers "no": ~96 requests a day, not 96 syncs.
+
+Every answer, gate or no gate, carries a `freshness` block giving the age of the
+newest reading per metric. `GET /health/freshness` exposes the same view.
+
+**Enabling push** is the manual half, and it mirrors Ultron Wear
+(docs/ULTRON_WEAR.md §3) because it is the *same Firebase project*:
+
+1. Firebase console → the existing project → add an **Android app** for
+   `com.speda.heartbreaker`. Add a second for **`com.speda.heartbreaker.debug`**
+   as well — debug builds carry `applicationIdSuffix ".debug"`, and the
+   google-services plugin fails on an applicationId with no matching client.
+2. Download `google-services.json` → `packages/speda-go/app/google-services.json`
+   and **commit it**. It is build config, not a credential (it ships inside every
+   APK), and CI builds the release from a plain checkout — injecting it as a
+   secret would only add a way for a release to lose push silently. The CI has a
+   `Check push config` step that warns when it is missing.
+3. Nothing to do server-side: `FCM_CREDENTIALS_FILE` is already mounted for
+   Ultron Wear and the same service account sends both.
+
+Without the file the app still compiles, installs and runs — `BuildConfig.
+PUSH_ENABLED` is false, registration is skipped, and the 15-minute poll carries
+the whole load. That degradation is deliberate: nobody should need the owner's
+Firebase project to build SPEDA GO.
+
 ### 1.3 What Atomix does with it (the payoff)
 
 - **Pull:** the owner asks anything — "how did I sleep this week?", "am I

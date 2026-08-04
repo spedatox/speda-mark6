@@ -55,7 +55,8 @@ def test_health_subpaths_are_not_exempt_from_auth():
     # /health is exempt as an EXACT match. If this ever becomes a prefix match,
     # the owner's biometrics become world-readable — hence the explicit test.
     assert "/health" in UNPROTECTED_PATHS
-    for path in ("/health/ingest", "/health/status", "/health/data"):
+    for path in ("/health/ingest", "/health/status", "/health/data",
+                 "/health/freshness", "/health/sync-demand"):
         assert path not in UNPROTECTED_PATHS
         assert not path.startswith(UNPROTECTED_PREFIXES)
 
@@ -353,3 +354,198 @@ class _Passthrough:
 
     async def __aexit__(self, *a):
         return False
+
+
+# ── Freshness contract ──────────────────────────────────────────────────────
+# The failure this guards: a briefing that reports a heart rate from four days
+# ago under today's date. The store is full, every query succeeds, and nothing
+# in the output says the numbers describe another week.
+
+@pytest.mark.asyncio
+async def test_freshness_flags_a_stale_metric_and_passes_a_current_one(db):
+    now = datetime.now(TZ)
+    await hs.ingest_samples(db, [
+        _sample("heart_rate", now - timedelta(hours=1), 64.0, "bpm"),
+        _sample("sleep_session", now - timedelta(days=5), 7.5 * 3600, "s"),
+    ])
+
+    report = await hs.freshness(db, ["heart_rate", "sleep_session"])
+    assert report["heart_rate"]["fresh"] is True
+    assert report["sleep_session"]["fresh"] is False
+    assert report["sleep_session"]["age_hours"] > hs.freshness_budget_h("sleep_session")
+    assert hs.stale_metrics(report) == ["sleep_session"]
+
+
+@pytest.mark.asyncio
+async def test_freshness_reports_never_synced_metrics_rather_than_omitting_them(db):
+    """A caller checking freshness needs "nothing here" to be an answer. An
+    omitted key reads as "not asked about" and is how a missing metric becomes
+    an invented one."""
+    report = await hs.freshness(db, ["steps"])
+    assert report["steps"] == {
+        "newest": None, "age_hours": None, "fresh": False,
+        "budget_hours": hs.freshness_budget_h("steps"),
+    }
+
+
+@pytest.mark.asyncio
+async def test_owner_today_is_local_not_utc():
+    """owner_today() used to call itself; the RecursionError was swallowed and
+    the UTC date returned, so every range resolved in the wrong frame for the
+    first three hours of each Istanbul day."""
+    from app.core import clock
+    assert hs.owner_today() == clock.owner_today()
+
+
+# ── The gate: a stale store must not answer a present-tense question ────────
+# Reproduces the briefing that started this: on 4 August, sleep_session's newest
+# row was 30 July and heart rate's was 1 August. Atomix reported both under
+# today's date, and nothing in the output said the numbers were from last week.
+
+@pytest_asyncio.fixture
+async def skill_db(db, monkeypatch):
+    import app.skills.health_data as hd
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _session():
+        yield db
+
+    monkeypatch.setattr(hd, "AsyncSessionLocal", _session)
+    # The gate's live path waits on a phone that will never answer; keep the
+    # test to the timeout logic rather than the wall clock.
+    monkeypatch.setattr(hd, "_LIVE_WAIT_S", 0.05)
+    monkeypatch.setattr(hd, "_LIVE_POLL_S", 0.01)
+    return db
+
+
+@pytest.mark.asyncio
+async def test_stale_store_refuses_a_live_query_instead_of_reporting_old_vitals(skill_db):
+    from app.skills.health_data import HealthDataSkill
+
+    now = datetime.now(TZ)
+    await hs.ingest_samples(skill_db, [
+        _sample("sleep_session", now - timedelta(days=5), 7.5 * 3600, "s"),
+        _sample("heart_rate", now - timedelta(days=3), 98.0, "bpm"),
+    ])
+
+    out = await HealthDataSkill().execute(
+        {"metrics": ["sleep_session", "heart_rate"], "range": "today", "live": True}, None
+    )
+    assert out.startswith("REFUSED")
+    assert "sleep_session" in out and "heart_rate" in out
+    # The refusal must carry no numbers to report — the whole failure mode was
+    # an agent finding something quotable in the error and quoting it.
+    assert "7.5" not in out and "98" not in out
+    # No device is registered in this DB, so the wake could not be sent at all —
+    # which the refusal must say, because "the phone ignored us" and "we never
+    # reached the phone" have different fixes for the owner.
+    assert "could not even be woken" in out
+
+
+@pytest.mark.asyncio
+async def test_refusal_says_the_phone_was_woken_when_a_device_is_registered(
+    skill_db, monkeypatch,
+):
+    """The other branch: a phone that WAS pushed and still delivered nothing is
+    a sync fault, not a setup fault."""
+    from app.services import academic as academic_service
+    from app.services import fcm
+    from app.skills.health_data import HealthDataSkill
+
+    await academic_service.register_device(skill_db, "pixel", "phone", "fid-123")
+
+    async def _delivered(**kwargs):
+        return True, "delivered"
+
+    monkeypatch.setattr(fcm, "send_data_message", _delivered)
+
+    now = datetime.now(TZ)
+    await hs.ingest_samples(skill_db, [
+        _sample("heart_rate", now - timedelta(days=3), 98.0, "bpm"),
+    ])
+
+    out = await HealthDataSkill().execute(
+        {"metrics": ["heart_rate"], "range": "today", "live": True}, None
+    )
+    assert out.startswith("REFUSED")
+    assert "woken and asked to sync" in out
+
+
+@pytest.mark.asyncio
+async def test_a_delivered_batch_serves_an_outstanding_sync_demand(skill_db):
+    """The handshake the live wait turns on: ingest is what clears the demand,
+    so a phone that answers releases the waiting turn."""
+    from app.core import runtime_state
+
+    runtime_state.request_health_sync(reason="test")
+    assert not runtime_state.get_health_sync_demand().get("served_at")
+
+    now = datetime.now(TZ)
+    await hs.ingest_samples(skill_db, [_sample("steps", now, 120.0, "count")])
+
+    assert runtime_state.get_health_sync_demand().get("served_at")
+
+
+@pytest.mark.asyncio
+async def test_fresh_store_answers_normally_and_states_the_age(skill_db):
+    from app.skills.health_data import HealthDataSkill
+
+    now = datetime.now(TZ)
+    await hs.ingest_samples(skill_db, [
+        _sample("heart_rate", now - timedelta(hours=1), 64.0, "bpm"),
+    ])
+
+    out = await HealthDataSkill().execute(
+        {"metrics": ["heart_rate"], "range": "today", "live": True}, None
+    )
+    payload = json.loads(out)
+    assert payload["freshness"]["stale"] == []
+    assert payload["freshness"]["metrics"]["heart_rate"]["fresh"] is True
+    assert payload["daily"]["heart_rate"]
+
+
+@pytest.mark.asyncio
+async def test_history_questions_are_not_gated_by_freshness(skill_db):
+    """'How was last month' is a past-tense question. Old data is the answer,
+    not a defect — gating it would make the archive unreadable."""
+    from app.skills.health_data import HealthDataSkill
+
+    now = datetime.now(TZ)
+    await hs.ingest_samples(skill_db, [
+        _sample("steps", now - timedelta(days=20), 9000.0, "count"),
+    ])
+
+    out = await HealthDataSkill().execute(
+        {"metrics": ["steps"], "range": "30d"}, None
+    )
+    assert not out.startswith("REFUSED")
+    payload = json.loads(out)
+    assert payload["daily"]["steps"]
+    # …but the age still rides along, so nothing can quote it as current.
+    assert payload["freshness"]["stale"] == ["steps"]
+
+
+@pytest.mark.asyncio
+async def test_empty_store_says_the_link_was_never_set_up(skill_db):
+    from app.skills.health_data import HealthDataSkill
+
+    out = await HealthDataSkill().execute({"range": "today", "live": True}, None)
+    assert out.startswith("REFUSED")
+    assert "has ever synced" in out
+    assert "Settings" in out
+
+
+@pytest.mark.asyncio
+async def test_a_delivered_batch_clears_an_outstanding_sync_demand(skill_db):
+    """Exactly-once in the other direction: the phone answering is what ends the
+    demand, so a demand raised while it was asleep survives until it does."""
+    from app.core import runtime_state
+
+    runtime_state.request_health_sync(reason="test")
+    assert not runtime_state.get_health_sync_demand().get("served_at")
+
+    await hs.ingest_samples(skill_db, [
+        _sample("steps", datetime.now(TZ), 120.0, "count"),
+    ])
+    assert runtime_state.get_health_sync_demand().get("served_at")
