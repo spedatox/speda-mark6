@@ -17,6 +17,7 @@ import logging
 from app.config import settings
 from app.core.context import AgentContext
 from app.core.runtime_state import get_house_party, set_house_party
+from app.schemas.chat import _WINDOWS_PATH
 from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
@@ -81,10 +82,12 @@ class DispatchAgentSkill(Skill):
                 "working_directory": {
                     "type": "string",
                     "description": (
-                        "Optional absolute path for CODING tasks dispatched to "
-                        "Optimus — the directory on Optimus's own machine where the "
-                        "work should happen (a repo or project folder). Omit for "
-                        "non-coding tasks and for every other agent."
+                        "Optional absolute POSIX path for CODING tasks dispatched "
+                        "to Optimus — a directory on the SERVER, where Optimus "
+                        "runs. It is not the owner's computer: never pass a "
+                        "Windows path they mention (C:\\Users\\…), and never "
+                        "assume 'here' means their machine. Omit for non-coding "
+                        "tasks and for every other agent."
                     ),
                 },
             },
@@ -100,6 +103,21 @@ class DispatchAgentSkill(Skill):
         depth = int(context.extra.get("dispatch_depth", 0))
         background = bool(args.get("background", False))
         cwd = (args.get("working_directory") or "").strip() or None
+        # Same guard as ChatRequest.cwd (app/schemas/chat.py): the peer is
+        # server-side POSIX, and a Windows path does not fail there — it becomes
+        # a directory NAMED after the path. Catch it here too, because this is
+        # the path the model fills in and it will happily echo one the owner
+        # spoke ("build it in C:\Users\…").
+        if cwd and (_WINDOWS_PATH.match(cwd) or "\\" in cwd):
+            return (
+                f"Refused: {cwd!r} is a Windows path on the OWNER'S computer. "
+                "Optimus runs on the server and cannot see their filesystem — "
+                "sending this would silently create a directory literally named "
+                "after the path and build there. Either omit working_directory "
+                "(the peer uses its own workspace) or give an absolute POSIX "
+                "path on the server. Then tell the owner where the result "
+                "actually landed and that it is not on their PC."
+            )
         # The room this exchange belongs to: the chat session the owner is
         # watching. On a dispatched agent that is the room it inherited, not its
         # own private session — so a second-hop dispatch still shows up in the
@@ -127,8 +145,11 @@ class DispatchAgentSkill(Skill):
 
 class AgentChannelSkill(Skill):
     name = "read_agent_channel"
-    deferred = True
-    search_keywords = "agent channel messages comms inter-agent conversation roster"
+    # NOT deferred, deliberately (~193 tokens of prefix). Deferring it took its
+    # call count to exactly ZERO for the six days after 2026-07-29 — it had been
+    # used before. This is one of the tools an agent reaches for to CHECK what
+    # actually happened rather than assert it, and a verification tool nobody can
+    # find is worse than a slightly larger prefix.
     description = (
         "Reads the agent network's group channel — the shared conversation log of "
         "every inter-agent dispatch and reply across the whole suite, newest-first "
@@ -170,8 +191,9 @@ class AgentChannelSkill(Skill):
 
 class DispatchStatusSkill(Skill):
     name = "dispatch_status"
-    deferred = True
-    search_keywords = "dispatch agent status ticket result inter-agent"
+    # NOT deferred — same reason as read_agent_channel above. Zero calls in the
+    # six days after deferral. It is how a background dispatch's real outcome is
+    # retrieved, so losing it means the model answers "is X done?" from memory.
     description = (
         "Checks on background dispatches you launched with dispatch_agent "
         "(background=true) — the long-running jobs that keep working after your "
@@ -233,6 +255,60 @@ def _fmt_dispatch(row, brief: bool = False) -> str:
         preview = (row.result or "")[:120].replace("\n", " ")
         return f"{head}: {preview}"
     return f"{head}\n  task: {row.task[:300]}\n  result: {(row.result or '(empty)')[:MAX_RESULT_CHARS]}"
+
+
+# How this tool's one required argument is actually read off the wire.
+#
+# `engaged` is a required boolean, but only Anthropic reliably fills it. Prod has
+# observed `{}` (Gemini) and `{"action": "engage"}` (DeepSeek) on turns where the
+# owner plainly asked to ENGAGE — non-Anthropic providers do not enforce
+# `required`, and the owner has every agent pinned to one of them. Reading a
+# missing `engaged` as False turned each of those calls into a silent STAND-DOWN,
+# and the model, handed a stand-down confirmation, told the owner the opposite.
+#
+# So: understand the shapes the models really emit, and REFUSE when the call
+# carries no intent at all. Never default. Guessing "engage" opens an
+# authorization window the owner never asked for; guessing "stand down" is the
+# bug this replaces. Only an explicit intent may move the flag.
+
+_ENGAGE_WORDS = frozenset({
+    "engage", "engaged", "engaging", "activate", "activated", "assemble",
+    "enable", "enabled", "start", "on", "true", "yes", "1",
+})
+_STAND_DOWN_WORDS = frozenset({
+    "stand down", "standdown", "disengage", "disengaged", "deactivate",
+    "disable", "disabled", "stop", "end", "off", "false", "no", "0",
+})
+# Keys models have used in place of `engaged`. Order matters: the documented
+# name wins when a call somehow carries several.
+_ENGAGED_KEYS = ("engaged", "engage", "action", "state", "status", "mode", "enabled")
+
+
+def _read_engaged(args: dict) -> bool | None:
+    """The call's intent: True = engage, False = stand down, None = not stated.
+
+    None is not a failure to parse — it means the model never expressed a
+    direction, and the caller must refuse rather than pick one.
+    """
+    import re
+
+    if not isinstance(args, dict):
+        return None
+    for key in _ENGAGED_KEYS:
+        if key not in args:
+            continue
+        value = args[key]
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            word = re.sub(r"[\s_-]+", " ", value.strip().lower())
+            if word in _ENGAGE_WORDS:
+                return True
+            if word in _STAND_DOWN_WORDS:
+                return False
+    return None
 
 
 class HousePartySkill(Skill):
@@ -304,7 +380,28 @@ class HousePartySkill(Skill):
                 "task or automation."
             )
 
-        engaged = bool(args.get("engaged", False))
+        # An unstated direction moves nothing. See _read_engaged: the old
+        # `args.get("engaged", False)` silently stood the protocol down whenever a
+        # provider dropped the boolean, which is exactly how an engage request
+        # became a stand-down the model then misreported as success.
+        engaged = _read_engaged(args)
+        if engaged is None:
+            logger.warning(
+                "house_party_intent_missing",
+                # Keys only — a call may carry the passphrase, which never gets logged.
+                extra={
+                    "request_id": context.request_id,
+                    "keys": sorted(args)[:8] if isinstance(args, dict) else "non-dict",
+                },
+            )
+            return (
+                "REFUSED — nothing changed, and the protocol's state is EXACTLY as it "
+                "was: this call did not say whether to engage or stand down. Do not "
+                "tell the owner anything about the protocol's state yet. Call "
+                "house_party again using the parameter name `engaged` literally: "
+                "engaged=true to open the owner's authorization window, engaged=false "
+                "to stand the protocol down. No other parameter name works."
+            )
 
         # Standing down is always safe and needs no passphrase.
         if not engaged:
@@ -314,6 +411,16 @@ class HousePartySkill(Skill):
                 "house_party_toggled_by_agent",
                 extra={"request_id": context.request_id, "from": was, "to": False},
             )
+            if not was:
+                # It was already down. Say so precisely — reporting this as a
+                # completed stand-down is what let a model read "stood down" and
+                # announce "engaged" to the owner.
+                return (
+                    "No change: the House Party Protocol was ALREADY stood down and "
+                    "remains so. It is NOT engaged. Tell the owner exactly that — if "
+                    "they asked you to engage it, you called this tool with the wrong "
+                    "direction; call it again with engaged=true."
+                )
             return (
                 "House Party Protocol stood down. Inter-agent dispatch is back on "
                 "the background tier, broadcast is disabled, and the war room closes."

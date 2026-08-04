@@ -617,9 +617,11 @@ def schedule_background_tasks(
       - semantic embedding of this turn's new messages (self-heals if it fails)
     All open their own DB sessions (never reuse the request session).
     """
+    from app.services.claim_audit import audit_last_turn
     from app.services.compaction import maybe_compact_session
     from app.services.embedding_indexer import embed_session_tail
 
+    background_tasks.add_task(audit_last_turn, session_id, request_id)
     background_tasks.add_task(update_session_log, session_id, request_id, user_id, model)
     background_tasks.add_task(update_session_recap, session_id, request_id, user_id, model)
     background_tasks.add_task(run_daily_maintenance, session_id, request_id, user_id, model)
@@ -638,10 +640,12 @@ async def run_post_turn_tasks(
     session and self-guards; failures are isolated via return_exceptions."""
     import asyncio
 
+    from app.services.claim_audit import audit_last_turn
     from app.services.compaction import maybe_compact_session
     from app.services.embedding_indexer import embed_session_tail
 
     await asyncio.gather(
+        audit_last_turn(session_id, request_id),
         update_session_log(session_id, request_id, user_id, model),
         update_session_recap(session_id, request_id, user_id, model),
         run_daily_maintenance(session_id, request_id, user_id, model),

@@ -12,8 +12,9 @@ from app.skills.base import Skill
 
 class LegionStatusSkill(Skill):
     name = "legion_status"
-    deferred = True
-    search_keywords = "legion worker subagent background task ticket status result"
+    # NOT deferred — see AgentChannelSkill in skills/dispatch.py. Zero calls in
+    # the six days after deferral. Without it a background legionnaire's result
+    # is unreachable, so "is that research done?" gets answered by guessing.
     description = (
         "Checks on background legionnaires you deployed with the Task tool "
         "(run_in_background=true) — Legion workers that keep running after your "

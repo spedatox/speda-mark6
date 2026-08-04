@@ -162,6 +162,27 @@ class AgentOrchestrator:
                     "substance, no preamble, no restating the brief, no sign-off. "
                     "Short and concrete beats long and thorough here."
                 )
+        elif profile.house_party_commander:
+            # State the OFF state explicitly. Without this line the model had no
+            # grounding to contradict itself, and prod showed it announcing
+            # "House Party Protocol engaged. All six agents standing by" on four
+            # consecutive turns without ever calling the tool — the flag was
+            # false throughout. Costs ~70 tokens on a prefix that only changes
+            # when the flag does (rare), which is cheap for a claim the owner
+            # would otherwise have no way to catch.
+            stable_core += (
+                "\n\n## HOUSE PARTY PROTOCOL — NOT ENGAGED\n\n"
+                "The protocol is currently STOOD DOWN. This is the live state, not a "
+                "default: whatever an earlier message in this conversation says, it is "
+                "off right now. Never tell the owner it is engaged, and never speak as "
+                "though the roster is assembled or standing by, unless THIS prompt says "
+                "ACTIVE. Engaging it is not something you can assert — it happens only "
+                "when you call the `house_party` tool with engaged=true and the owner "
+                "then authorizes it in their app. If they ask you to engage it: call "
+                "that tool (search for it by name if it is not in your tools array), "
+                "report exactly what the tool returned, and if the call was refused say "
+                "so plainly rather than claiming success."
+            )
 
         # Budget mode — hard frugality directive (runtime-toggleable, persistent).
         from app.core.runtime_state import get_budget_mode
