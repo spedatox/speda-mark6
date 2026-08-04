@@ -124,6 +124,18 @@ def _apply_additive_migrations(sync_conn) -> None:
             )
         )
 
+    # Live congestion and turn-by-turn ride WITH the geometry, for the same
+    # reason the geometry is here at all: both are indexed against the decoded
+    # polyline and are meaningless apart from it.
+    if "route_geometries" in tables:
+        gcols = {c["name"] for c in insp.get_columns("route_geometries")}
+        if "traffic_json" not in gcols:
+            sync_conn.execute(text("ALTER TABLE route_geometries ADD COLUMN traffic_json TEXT"))
+            logger.info("schema_migrated", extra={"change": "route_geometries.traffic_json"})
+        if "steps_json" not in gcols:
+            sync_conn.execute(text("ALTER TABLE route_geometries ADD COLUMN steps_json TEXT"))
+            logger.info("schema_migrated", extra={"change": "route_geometries.steps_json"})
+
     # A reminder cycle opened by an AGENT (personalised text, composed in a turn)
     # carries no n8n definition, so it has to remember its own buttons and
     # cadence or the tick has nothing to re-ask with.

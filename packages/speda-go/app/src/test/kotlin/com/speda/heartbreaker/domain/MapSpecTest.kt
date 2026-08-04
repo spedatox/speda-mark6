@@ -85,6 +85,74 @@ class MapSpecTest {
     }
 
     @Test
+    fun places_id_alone_is_a_renderable_fence() {
+        // A find_places answer carries no markers and no routes — the whole
+        // result set is one id. It must not be treated as an empty fence.
+        val spec = parseMapSpec("""{ "title": "BARBERS", "places": "pl_1a2b3c4d" }""")!!
+        assertEquals("pl_1a2b3c4d", spec.places)
+    }
+
+    @Test
+    fun parses_route_geometry_payload() {
+        val body = """
+        {
+          "routeId": "r_1a2b3c4d",
+          "polyline": "_p~iF~ps|U_ulLnnqC",
+          "traffic": [
+            { "end": 1, "speed": "NORMAL" },
+            { "start": 1, "end": 2, "speed": "TRAFFIC_JAM" }
+          ],
+          "steps": [
+            { "instruction": "Head north", "distanceM": 240, "maneuver": "DEPART" },
+            { "distanceM": 90 }
+          ]
+        }
+        """.trimIndent()
+
+        val g = parseRouteGeometry(body)!!
+        assertEquals(2, g.traffic.size)
+        // startPolylinePointIndex is omitted by the API when it is 0.
+        assertEquals(0, g.traffic[0].start)
+        assertEquals("TRAFFIC_JAM", g.traffic[1].speed)
+        // A step with no instruction is nothing to show — dropped, not blanked.
+        assertEquals(1, g.steps.size)
+        assertEquals("Head north", g.steps[0].instruction)
+    }
+
+    @Test
+    fun route_geometry_without_a_line_is_null() {
+        // No polyline means nothing to draw. Null keeps the card honest about
+        // it rather than rendering a route card with no route.
+        assertNull(parseRouteGeometry("""{ "routeId": "r_x", "polyline": "" }"""))
+        assertNull(parseRouteGeometry("not json"))
+    }
+
+    @Test
+    fun parses_place_set_and_drops_placeless_rows() {
+        val body = """
+        {
+          "placesId": "pl_1a2b3c4d",
+          "places": [
+            { "name": "Kuafor Emre", "lat": 40.21, "lng": 28.99, "rating": 4.6,
+              "reviews": 231, "openNow": true, "hours": ["Monday: 09:00-20:00"],
+              "phone": "+90 224 000 00 00", "distanceKm": 0.8 },
+            { "name": "No coordinates here" }
+          ]
+        }
+        """.trimIndent()
+
+        val places = parsePlaceSet(body)!!
+        assertEquals(1, places.size)
+        val p = places[0]
+        assertEquals("Kuafor Emre", p.name)
+        assertEquals(4.6, p.rating!!, 1e-9)
+        assertEquals(true, p.openNow)
+        assertEquals(1, p.hours.size)
+        // Absent fields stay null so the card can hide them rather than print em-dashes.
+        assertNull(p.website)
+    }
+
+    @Test
     fun decodes_google_reference_polyline() {
         // Google's canonical example: "_p~iF~ps|U_ulLnnqC_mqNvxq`@" →
         // (38.5,-120.2), (40.7,-120.95), (43.252,-126.453).

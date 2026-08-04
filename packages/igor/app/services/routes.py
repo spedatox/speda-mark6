@@ -6,6 +6,7 @@ the polyline goes from Google to the database to the client, and the model only
 ever holds a reference to it.
 """
 
+import json
 import logging
 import secrets
 from datetime import datetime, timedelta
@@ -53,6 +54,13 @@ async def store(db: AsyncSession, routes: list[dict]) -> list[str]:
                 origin_lng=r.get("origin_lng"),
                 dest_lat=r.get("dest_lat"),
                 dest_lng=r.get("dest_lng"),
+                # Serialised here rather than by the caller so the column's
+                # shape is owned in one place — the client contract in fetch()
+                # below is the only reader.
+                traffic_json=(json.dumps(r["traffic"], ensure_ascii=False)
+                              if r.get("traffic") else None),
+                steps_json=(json.dumps(r["steps"], ensure_ascii=False)
+                            if r.get("steps") else None),
             )
             db.add(row)
             ids.append(row.id)
@@ -73,6 +81,19 @@ async def store(db: AsyncSession, routes: list[dict]) -> list[str]:
         return []
 
 
+def _json_list(raw: str | None) -> list:
+    """Stored JSON → list, never an exception. A corrupt or missing column costs
+    the card its traffic colouring or its step list; it must not cost it the
+    line, which is the part that actually answers the question."""
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    return value if isinstance(value, list) else []
+
+
 async def fetch(db: AsyncSession, route_id: str) -> dict | None:
     """One stored route, shaped for the client's map card."""
     row = (await db.execute(
@@ -88,6 +109,11 @@ async def fetch(db: AsyncSession, route_id: str) -> dict | None:
         "distanceKm": row.distance_km,
         "durationMin": row.duration_min,
         "noTrafficMin": row.no_traffic_min,
+        # Congestion bands over the decoded polyline's point indices, and the
+        # turn list. Empty lists, never null — the clients treat "no traffic
+        # data" and "free-flowing" as different things and must not confuse them.
+        "traffic": _json_list(row.traffic_json),
+        "steps": _json_list(row.steps_json),
         "origin": ({"lat": row.origin_lat, "lng": row.origin_lng}
                    if row.origin_lat is not None else None),
         "destination": ({"lat": row.dest_lat, "lng": row.dest_lng}

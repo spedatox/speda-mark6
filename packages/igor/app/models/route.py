@@ -41,6 +41,19 @@ class RouteGeometry(Base):
     label: Mapped[str] = mapped_column(String(160), default="")
     mode: Mapped[str] = mapped_column(String(16), default="drive")
 
+    # Live congestion along the line: a JSON list of
+    # [{"start": <point idx>, "end": <point idx>, "speed": "NORMAL|SLOW|TRAFFIC_JAM"}]
+    # straight from the Routes API's speedReadingIntervals. Indices address the
+    # DECODED polyline's points, which is why this rides with the geometry and
+    # not with the model — the two are only meaningful together.
+    traffic_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Turn-by-turn: [{"instruction": …, "distanceM": …, "durationMin": …,
+    # "maneuver": …}]. Stored for the same reason as the polyline — it is bulky,
+    # purely mechanical text that gains nothing from passing through a model and
+    # loses accuracy if it does.
+    steps_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     duration_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     no_traffic_min: Mapped[int | None] = mapped_column(Integer, nullable=True)

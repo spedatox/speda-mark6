@@ -14,7 +14,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 from app.database import Base
-from app.skills.navigation import FindPlacesSkill, GetRouteSkill, _dur_min, _maps_dir_link
+from app.services import places as place_store
+from app.skills.navigation import (
+    FindPlacesSkill,
+    GetRouteSkill,
+    _congestion_summary,
+    _dur_min,
+    _maps_dir_link,
+    _place_record,
+    _steps,
+    _traffic_bands,
+)
 
 
 def _ctx(client_location=None, db=None):
@@ -98,6 +108,78 @@ def test_maps_dir_link_shape():
     assert "travelmode=driving" in link
 
 
+def test_traffic_bands_default_missing_start_to_zero():
+    # The Routes API omits startPolylinePointIndex when it is 0. Defaulting it
+    # wrong shifts every colour band along the line.
+    route = {"travelAdvisory": {"speedReadingIntervals": [
+        {"endPolylinePointIndex": 12, "speed": "NORMAL"},
+        {"startPolylinePointIndex": 12, "endPolylinePointIndex": 20, "speed": "TRAFFIC_JAM"},
+        {"startPolylinePointIndex": 20, "speed": "SLOW"},          # no end → unusable
+        {"startPolylinePointIndex": 21, "endPolylinePointIndex": 30, "speed": "WAT"},
+    ]}}
+    bands = _traffic_bands(route)
+    assert bands == [
+        {"start": 0, "end": 12, "speed": "NORMAL"},
+        {"start": 12, "end": 20, "speed": "TRAFFIC_JAM"},
+    ]
+
+
+def test_traffic_bands_absent_is_empty_not_clear():
+    # No data and free-flowing are different answers; the clients rely on the
+    # distinction to decide between a plain line and a green one.
+    assert _traffic_bands({}) == []
+
+
+def test_congestion_summary_weights_by_span():
+    bands = [
+        {"start": 0, "end": 60, "speed": "NORMAL"},
+        {"start": 60, "end": 90, "speed": "SLOW"},
+        {"start": 90, "end": 100, "speed": "TRAFFIC_JAM"},
+    ]
+    assert _congestion_summary(bands) == "60% clear · 30% slow · 10% jammed"
+    assert _congestion_summary([]) == ""
+
+
+def test_steps_flatten_legs_and_drop_instructionless():
+    route = {"legs": [
+        {"steps": [
+            {"navigationInstruction": {"instructions": "Head north", "maneuver": "DEPART"},
+             "distanceMeters": 240, "staticDuration": "60s"},
+            {"distanceMeters": 90},                       # no instruction → nothing to show
+        ]},
+        {"steps": [{"navigationInstruction": {"instructions": "Turn right"}}]},
+    ]}
+    steps = _steps(route)
+    assert [s["instruction"] for s in steps] == ["Head north", "Turn right"]
+    assert steps[0]["distanceM"] == 240 and steps[0]["durationMin"] == 1
+
+
+def test_place_record_drops_empties_and_measures_distance():
+    raw = {
+        "id": "ChIJabc",
+        "displayName": {"text": "Kuaför Emre"},
+        "location": {"latitude": 40.2200, "longitude": 28.9900},
+        "rating": 4.6, "userRatingCount": 231,
+        "currentOpeningHours": {"openNow": True, "weekdayDescriptions": ["Monday: 09:00–20:00"]},
+        "priceLevel": "PRICE_LEVEL_MODERATE",
+        "businessStatus": "OPERATIONAL",
+        "primaryTypeDisplayName": {"text": "Barber shop"},
+    }
+    rec = _place_record(raw, {"lat": 40.2100, "lng": 28.9900})
+    assert rec["name"] == "Kuaför Emre" and rec["placeId"] == "ChIJabc"
+    assert rec["priceLevel"] == "moderate"          # the shouted wire enum is unshouted here
+    assert rec["category"] == "Barber shop"
+    assert rec["openNow"] is True and rec["hours"] == ["Monday: 09:00–20:00"]
+    assert 1.0 < rec["distanceKm"] < 1.3            # ~1.11 km per 0.01° of latitude
+    # An operational business is the unremarkable case — no status field to show.
+    assert "status" not in rec and "website" not in rec
+
+
+def test_place_record_without_coordinates_is_dropped():
+    # A place we cannot put on the map is not a map result.
+    assert _place_record({"displayName": {"text": "Nowhere"}}, None) is None
+
+
 # ── get_route ─────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -116,6 +198,14 @@ async def test_get_route_defaults_origin_to_client_location(monkeypatch, db):
             "duration": "2040s", "staticDuration": "1320s", "distanceMeters": 18400,
             "polyline": {"encodedPolyline": "abcd"}, "description": "D-100",
             "routeLabels": ["DEFAULT_ROUTE"],
+            "travelAdvisory": {"speedReadingIntervals": [
+                {"endPolylinePointIndex": 8, "speed": "NORMAL"},
+                {"startPolylinePointIndex": 8, "endPolylinePointIndex": 10, "speed": "TRAFFIC_JAM"},
+            ]},
+            "legs": [{"steps": [
+                {"navigationInstruction": {"instructions": "Head north on D-100"},
+                 "distanceMeters": 1200},
+            ]}],
         }]
     }
     fake = _FakeClient([_FakeResponse(200, routes_payload)])
@@ -127,17 +217,26 @@ async def test_get_route_defaults_origin_to_client_location(monkeypatch, db):
     )
 
     assert len(fake.calls) == 1
-    method, url, body, _ = fake.calls[0]
+    method, url, body, headers = fake.calls[0]
     assert method == "POST" and "computeRoutes" in url
     assert body["origin"]["location"]["latLng"]["latitude"] == 41.00
     assert body["routingPreference"] == "TRAFFIC_AWARE_OPTIMAL"
+    # Per-segment congestion — what colours the drawn line — is refused by the
+    # API without a traffic-aware preference, so the two always ship together.
+    assert body["extraComputations"] == ["TRAFFIC_ON_POLYLINE"]
+    assert "speedReadingIntervals" in headers["X-Goog-FieldMask"]
     assert "34 min" in out.lower()          # 2040s → 34 min
     assert "+12 min vs no-traffic" in out   # 34 − 22
+    assert "80% clear · 20% jammed" in out  # the shape of it, not just the delay
+    assert "1 turn-by-turn steps" in out
     # The polyline must NOT reach the model — that is the whole fix. It is
     # stored server-side and referenced by id, because a hand-copied polyline
     # that loses one character still parses and still looks like a road.
     assert "abcd" not in out, "the raw geometry must never be handed to the model"
     assert "routeId=r_" in out
+    # …and neither do the turn instructions or the band indices: bulky, purely
+    # mechanical text that only loses accuracy by passing through a model.
+    assert "Head north on D-100" not in out
 
 
 @pytest.mark.asyncio
@@ -265,14 +364,16 @@ async def test_request_denied_reports_as_api_fault_not_bad_place(monkeypatch):
 # ── find_places ───────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_find_places_biases_to_client_location(monkeypatch):
+async def test_find_places_biases_to_client_location(monkeypatch, db):
     places_payload = {
         "places": [{
+            "id": "ChIJkronotrop",
             "displayName": {"text": "Kronotrop"},
             "location": {"latitude": 41.05, "longitude": 29.01},
             "rating": 4.6, "userRatingCount": 320,
             "currentOpeningHours": {"openNow": True},
             "formattedAddress": "Cihangir, İstanbul",
+            "nationalPhoneNumber": "0212 000 00 00",
         }]
     }
     fake = _FakeClient([_FakeResponse(200, places_payload)])
@@ -286,3 +387,53 @@ async def test_find_places_biases_to_client_location(monkeypatch):
     assert body["textQuery"] == "specialty coffee"
     assert body["locationBias"]["circle"]["center"]["latitude"] == 41.03
     assert "Kronotrop" in out and "4.6★" in out and "open now" in out
+
+    # The digest is what the model reasons over; the record is what the card
+    # draws. Contact details and coordinates belong to the card — retyping them
+    # into the answer spends context on something already in hand, and loses a
+    # digit doing it.
+    assert "0212 000 00 00" not in out
+    assert "41.05" not in out
+
+    set_id = out.split('"places": "')[1].split('"')[0]
+    stored = await place_store.fetch(db, set_id)
+    assert stored["places"][0]["phone"] == "0212 000 00 00"
+    assert stored["places"][0]["placeId"] == "ChIJkronotrop"
+    assert stored["places"][0]["distanceKm"] == 2.4
+
+
+@pytest.mark.asyncio
+async def test_find_places_ranking_and_filters(monkeypatch, db):
+    fake = _FakeClient([_FakeResponse(200, {"places": []})])
+    _patch_client(monkeypatch, fake)
+
+    ctx = _ctx(client_location={"lat": 41.03, "lng": 29.00}, db=db)
+    await FindPlacesSkill().execute({
+        "query": "eczane", "rank_by": "distance", "radius_m": 900,
+        "min_rating": 9.0,            # out of range — the API rejects it outright
+        "open_now": True,
+    }, ctx)
+
+    body = fake.calls[0][2]
+    assert body["rankPreference"] == "DISTANCE"
+    assert body["locationBias"]["circle"]["radius"] == 900.0
+    assert body["minRating"] == 5.0
+    assert body["openNow"] is True
+
+
+@pytest.mark.asyncio
+async def test_find_places_without_store_prints_coordinates(monkeypatch):
+    """No DB session → no placesId, so the model must be handed the coordinates
+    it needs to write markers by hand. A map with pins beats no map."""
+    places_payload = {"places": [{
+        "displayName": {"text": "Kronotrop"},
+        "location": {"latitude": 41.05, "longitude": 29.01},
+    }]}
+    fake = _FakeClient([_FakeResponse(200, places_payload)])
+    _patch_client(monkeypatch, fake)
+
+    out = await FindPlacesSkill().execute(
+        {"query": "coffee"}, _ctx(client_location={"lat": 41.03, "lng": 29.00})
+    )
+    assert "placesId" in out and "could NOT be stored" in out
+    assert "41.050000" in out

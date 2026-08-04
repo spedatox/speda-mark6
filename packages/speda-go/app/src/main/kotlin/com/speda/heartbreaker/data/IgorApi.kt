@@ -2,7 +2,11 @@ package com.speda.heartbreaker.data
 
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.ChatMessage
+import com.speda.heartbreaker.domain.MapPlace
+import com.speda.heartbreaker.domain.RouteGeometry
 import com.speda.heartbreaker.domain.Session
+import com.speda.heartbreaker.domain.parsePlaceSet
+import com.speda.heartbreaker.domain.parseRouteGeometry
 import com.speda.heartbreaker.health.HealthIngestRequest
 import com.speda.heartbreaker.health.HealthIngestResult
 import com.speda.heartbreaker.health.HealthSampleDto
@@ -184,21 +188,37 @@ class IgorApi(
     // ── Detached-run coordination ─────────────────────────────────────────────
 
     /**
-     * Real geometry for a route the agent referenced by id.
+     * Real geometry for a route the agent referenced by id — the line, the live
+     * congestion along it, and the turn-by-turn.
      *
-     * The polyline never travels through the model — it is ~500 delta-encoded
+     * None of it travels through the model. The polyline is ~500 delta-encoded
      * characters and a single mistyped one silently redraws the route into a
-     * different valley. The fence carries a ten-character id instead and this
-     * fetches the truth. Null on any failure, which the card renders as a
-     * missing line rather than a wrong one.
+     * different valley; the congestion bands are indexed against that exact
+     * polyline and are meaningless apart from it. The fence carries a
+     * ten-character id instead and this fetches the truth. Null on any failure,
+     * which the card renders as a missing line rather than a wrong one.
      */
-    suspend fun fetchRouteGeometry(config: AppConfig, routeId: String): String? =
+    suspend fun fetchRouteGeometry(config: AppConfig, routeId: String): RouteGeometry? =
         withContext(Dispatchers.IO) {
             runCatching {
-                getString(config, "/navigation/route/$routeId")?.let { body ->
-                    json.parseToJsonElement(body).jsonObject["polyline"]
-                        ?.jsonPrimitive?.contentOrNull
-                }
+                getString(config, "/navigation/route/$routeId")?.let(::parseRouteGeometry)
+            }.getOrNull()
+        }
+
+    /**
+     * The full result set for a place search the agent referenced by id:
+     * name, address, rating, open state, hours, phone, website, coordinates.
+     *
+     * Same rule as routes, for the same reason — a directory copied by hand
+     * loses a digit off a phone number and rounds a rating, and none of it is
+     * worth spending model tokens on twice. Null on failure, which leaves the
+     * card with its routes and no place list rather than pins with invented
+     * names.
+     */
+    suspend fun fetchPlaceSet(config: AppConfig, placesId: String): List<MapPlace>? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                getString(config, "/navigation/places/$placesId")?.let(::parsePlaceSet)
             }.getOrNull()
         }
 

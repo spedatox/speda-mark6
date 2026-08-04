@@ -98,14 +98,27 @@ def test_stamp_is_deterministic():
     # agent answering "what time is it" three hours early. Byte-stability, the
     # property that protects the prompt cache, is unaffected: same instant plus
     # same zone is always the same string.
-    assert a == b == "[2026-06-11 22:40 +03] what time is it"
+    assert a == b == "[Thu 2026-06-11 22:40 +03] what time is it"
+
+
+def test_stamp_names_the_weekday():
+    """The weekday is stated, never left for the model to compute.
+
+    Asked only for "2026-08-04" a model routinely names the wrong day and then
+    reasons confidently from it ("that's a Monday, so the weekend is…"). The day
+    is a fact we hold; three tokens spend it. 2026-08-04 is a TUESDAY.
+    """
+    assert SessionManager.stamp_user_content("", datetime(2026, 8, 4, 9, 0)).startswith("[Tue ")
+    # And it must be the OWNER's day, not UTC's: 22:30 UTC is already tomorrow
+    # in Istanbul, so the weekday has to roll with the local date.
+    assert SessionManager.stamp_user_content("", datetime(2026, 8, 4, 22, 30)).startswith("[Wed ")
 
 
 def test_stamp_list_content_prepends_text_block():
     ts = datetime(2026, 6, 11, 8, 5, 0)
     content = [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "x"}}]
     stamped = SessionManager.stamp_user_content(content, ts)
-    assert stamped[0] == {"type": "text", "text": "[2026-06-11 11:05 +03]"}
+    assert stamped[0] == {"type": "text", "text": "[Thu 2026-06-11 11:05 +03]"}
     assert stamped[1]["type"] == "image"
 
 

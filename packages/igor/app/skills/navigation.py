@@ -25,6 +25,7 @@ from typing import Any
 import httpx
 
 from app.config import settings
+from app.services import places as place_store
 from app.services import routes as route_store
 from app.core.context import AgentContext
 from app.skills.base import Skill
@@ -318,14 +319,21 @@ class GetRouteSkill(Skill):
                     "travelMode": travel_mode,
                     "computeAlternativeRoutes": want_alts,
                 }
-                # Traffic-aware timing only applies to motorised modes.
-                if travel_mode in ("DRIVE", "TWO_WHEELER"):
-                    body["routingPreference"] = "TRAFFIC_AWARE_OPTIMAL"
-
                 field_mask = (
                     "routes.duration,routes.staticDuration,routes.distanceMeters,"
-                    "routes.polyline.encodedPolyline,routes.description,routes.routeLabels"
+                    "routes.polyline.encodedPolyline,routes.description,routes.routeLabels,"
+                    # Turn-by-turn. Stored, never printed — see the polyline note below.
+                    "routes.legs.steps.navigationInstruction,"
+                    "routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration"
                 )
+                # Traffic-aware timing — and the per-segment congestion bands that
+                # colour the drawn line green/amber/red — only apply to motorised
+                # modes, and TRAFFIC_ON_POLYLINE is rejected outright without a
+                # traffic-aware routing preference. Both flags move together.
+                if travel_mode in ("DRIVE", "TWO_WHEELER"):
+                    body["routingPreference"] = "TRAFFIC_AWARE_OPTIMAL"
+                    body["extraComputations"] = ["TRAFFIC_ON_POLYLINE"]
+                    field_mask += ",routes.travelAdvisory.speedReadingIntervals"
                 resp = await client.post(
                     _ROUTES_URL,
                     json=body,
@@ -372,6 +380,11 @@ class GetRouteSkill(Skill):
                 "distance_km": round((r.get("distanceMeters") or 0) / 1000.0, 1),
                 "duration_min": _dur_min(r.get("duration")),
                 "no_traffic_min": _dur_min(r.get("staticDuration")),
+                # Congestion bands and the turn list travel with the geometry
+                # for the same reason it does: they are indexed against the
+                # decoded polyline and are worthless retyped.
+                "traffic": _traffic_bands(r),
+                "steps": _steps(r),
                 "origin_lat": origin["lat"], "origin_lng": origin["lng"],
                 "dest_lat": dest["lat"], "dest_lng": dest["lng"],
             })
@@ -386,19 +399,36 @@ class GetRouteSkill(Skill):
                 f"[{i}] {labels}: {p['distance_km']} km, ~{dur if dur is not None else '?'} min"
                 f"{delay} via {p['label'] or '—'}"
             )
+            # The shape of the congestion, in words — the numbers alone say a trip
+            # is slow, not WHERE or how badly, and "mostly clear with one jam"
+            # versus "slow the whole way" are different answers to "trafik nasıl".
+            congestion = _congestion_summary(p["traffic"])
+            if congestion:
+                lines.append(f"    traffic: {congestion}")
+            if p["steps"]:
+                lines.append(f"    {len(p['steps'])} turn-by-turn steps (held client-side)")
             if i < len(route_ids):
                 lines.append(f"    routeId={route_ids[i]}")
 
         if route_ids:
+            alts = "".join(
+                f', {{"routeId": "{rid}", "durationMin": …, "distanceKm": …, "label": "…"}}'
+                for rid in route_ids[1:]
+            )
             lines.append(
-                "\nRender this as a ```map fence. Give each route its routeId EXACTLY as "
-                "printed above — copy it character for character and invent nothing:\n"
+                "\nRender this as a ```map fence. Give EVERY route above its routeId EXACTLY "
+                "as printed — copy each character for character and invent nothing:\n"
                 '  "routes": [{"routeId": "' + route_ids[0] + '", "primary": true, '
-                '"durationMin": …, "noTrafficMin": …, "distanceKm": …, "label": "…"}]\n'
-                "The client fetches the real geometry from that id; there is no polyline "
-                "for you to write and you must NOT invent one. Mark route 0 primary, include "
-                "durationMin AND noTrafficMin so the traffic delta shows, and set navigate to "
-                "the destination so the owner can tap through to Google Maps."
+                '"durationMin": …, "noTrafficMin": …, "distanceKm": …, "label": "…"}'
+                + alts + "]\n"
+                "The client fetches the real geometry, the live-traffic colouring and the "
+                "turn-by-turn from those ids; there is no polyline for you to write and you "
+                "must NOT invent one. List the alternatives too even when one is clearly "
+                "best — the card turns them into a route switcher the owner can compare and "
+                "pick from, which is the whole point of asking for alternatives. Mark route 0 "
+                "primary, include durationMin AND noTrafficMin on each so the traffic delta "
+                "shows, and set navigate to the destination so the owner can tap through to "
+                "Google Maps."
             )
         else:
             # The store failed. Say so rather than drawing a line from memory.
@@ -415,16 +445,17 @@ class FindPlacesSkill(Skill):
     deferred = True
     search_keywords = "map maps place restaurant cafe shop nearby location address where geocode search place"
     description = (
-        "Searches for places (cafés, pharmacies, gas stations, restaurants, ATMs, "
-        "…) near a point using Google's Places API, to answer 'where can I go for "
-        "X', 'nearest Y', 'best Z around here'. Use it to gather real candidates — "
-        "name, location, rating, whether it's open now, address — then render them "
-        "as markers in a ```map fence and reason about the best options; do NOT "
-        "recite a bare list of coordinates. Do NOT use it for directions to a known "
-        "place (use get_route). Search centres on the owner's current location by "
-        "default. Returns up to the requested number of places with lat/lng, "
-        "rating, open-now status, price level and address — everything needed to "
-        "drop map markers and recommend."
+        "Searches for places (cafés, barbers, pharmacies, gas stations, restaurants, "
+        "ATMs, …) near a point using Google's Places API, to answer 'where can I go "
+        "for X', 'nearest Y', 'best Z around here'. Use it to gather real candidates, "
+        "then put the returned placesId into a ```map fence and reason about the best "
+        "options in prose; do NOT recite a bare list of coordinates. Do NOT use it for "
+        "directions to a known place (use get_route). Search centres on the owner's "
+        "current location by default, and can rank by distance instead of relevance. "
+        "Returns a one-line summary of each hit (name, distance, rating, open state) "
+        "plus a placesId — the client resolves that id into tappable markers carrying "
+        "the full record: address, phone, website, opening hours and a per-place "
+        "navigate action, none of which you need to transcribe."
     )
     read_only = True
     requires_network = True
@@ -449,6 +480,21 @@ class FindPlacesSkill(Skill):
                 "description": "How many places to return (1–20, default 8).",
                 "default": 8,
             },
+            "radius_m": {
+                "type": "integer",
+                "description": "How far out to look, in metres (100–50000, default 5000). Widen it when a first search comes back thin, narrow it for 'right here'.",
+                "default": 5000,
+            },
+            "rank_by": {
+                "type": "string",
+                "enum": ["relevance", "distance"],
+                "description": "'distance' sorts strictly by proximity — use it for 'nearest', 'en yakın'. 'relevance' (default) favours well-rated, well-known places.",
+                "default": "relevance",
+            },
+            "min_rating": {
+                "type": "number",
+                "description": "Drop places rated below this (1.0–5.0). Use for 'best' / 'iyi bir', not for 'nearest'.",
+            },
         },
         "required": ["query"],
     }
@@ -462,6 +508,8 @@ class FindPlacesSkill(Skill):
             return "find_places: a 'query' is required."
         max_results = min(max(int(args.get("max_results", 8) or 8), 1), 20)
         open_now = bool(args.get("open_now", False))
+        radius = float(min(max(int(args.get("radius_m", 5000) or 5000), 100), 50000))
+        rank_by = (args.get("rank_by") or "relevance").strip().lower()
 
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
@@ -471,13 +519,32 @@ class FindPlacesSkill(Skill):
                     body["locationBias"] = {
                         "circle": {
                             "center": {"latitude": centre["lat"], "longitude": centre["lng"]},
-                            "radius": 5000.0,
+                            "radius": radius,
                         }
                     }
+                if rank_by == "distance":
+                    body["rankPreference"] = "DISTANCE"
+                try:
+                    min_rating = float(args["min_rating"])
+                except (KeyError, TypeError, ValueError):
+                    min_rating = None
+                if min_rating is not None:
+                    # The API rejects anything outside 1.0–5.0 outright.
+                    body["minRating"] = min(max(min_rating, 1.0), 5.0)
+                # Everything a place card needs to stand on its own — the owner
+                # asked "find me a barber", and the follow-up is always "which
+                # one, is it open, call them, take me there". Fetching those
+                # fields here costs one request; making the model ask again costs
+                # a turn.
                 field_mask = (
-                    "places.displayName,places.formattedAddress,places.location,"
-                    "places.rating,places.userRatingCount,places.currentOpeningHours.openNow,"
-                    "places.priceLevel,places.googleMapsUri"
+                    "places.id,places.displayName,places.formattedAddress,"
+                    "places.shortFormattedAddress,places.location,"
+                    "places.rating,places.userRatingCount,"
+                    "places.currentOpeningHours.openNow,"
+                    "places.currentOpeningHours.weekdayDescriptions,"
+                    "places.priceLevel,places.googleMapsUri,places.businessStatus,"
+                    "places.nationalPhoneNumber,places.websiteUri,"
+                    "places.primaryTypeDisplayName,places.editorialSummary"
                 )
                 resp = await client.post(
                     _PLACES_URL,
@@ -501,35 +568,115 @@ class FindPlacesSkill(Skill):
             return f"find_places: no results for '{query}'" + (
                 f" near [{centre['lat']:.4f},{centre['lng']:.4f}]." if centre else ".")
 
+        records = [_place_record(p, centre) for p in places]
+        records = [r for r in records if r is not None]
+        if not records:
+            return f"find_places: results for '{query}' had no usable coordinates."
+
+        set_id = await place_store.store(context.db, query, centre, records)
+
         where = f" near [{centre['lat']:.5f},{centre['lng']:.5f}]" if centre else ""
-        lines = [f"PLACES — {len(places)} result(s) for '{query}'{where}:"]
-        for p in places:
-            name = (p.get("displayName") or {}).get("text", "(unnamed)")
-            loc = p.get("location") or {}
-            lat, lng = loc.get("latitude"), loc.get("longitude")
-            rating = p.get("rating")
-            reviews = p.get("userRatingCount")
-            opn = (p.get("currentOpeningHours") or {}).get("openNow")
-            price = p.get("priceLevel")
-            addr = p.get("formattedAddress", "")
+        lines = [f"PLACES — {len(records)} result(s) for '{query}'{where}:"]
+        for r in records:
+            # A one-line digest per place: enough to compare and recommend, and
+            # nothing the client is about to render anyway. The address, phone,
+            # website and hours are deliberately NOT here — they are in the
+            # stored record, one tap away on the card, and printing them would
+            # spend context on text the owner reads off the map instead.
             bits = []
-            if rating is not None:
-                bits.append(f"{rating}★" + (f" ({reviews})" if reviews else ""))
-            if opn is True:
+            if r.get("distanceKm") is not None:
+                bits.append(f"{r['distanceKm']} km")
+            if r.get("rating") is not None:
+                bits.append(f"{r['rating']}★" + (f" ({r['reviews']})" if r.get("reviews") else ""))
+            if r.get("openNow") is True:
                 bits.append("open now")
-            elif opn is False:
+            elif r.get("openNow") is False:
                 bits.append("closed")
-            if price:
-                bits.append(str(price).replace("PRICE_LEVEL_", "").lower())
-            meta = " · ".join(bits)
-            coord = f"[{lat:.6f},{lng:.6f}]" if lat is not None and lng is not None else "[?]"
-            lines.append(f"- {name} {coord}{(' — ' + meta) if meta else ''}\n  {addr}")
-        lines.append("\nDrop these as ```map markers (kind='poi', put the rating/open state in "
-                     "subtitle) and recommend the best fit.")
+            if r.get("priceLevel"):
+                bits.append(r["priceLevel"])
+            if r.get("category"):
+                bits.append(r["category"])
+            lines.append(f"- {r['name']}" + (f" — {' · '.join(bits)}" if bits else ""))
+
+        if set_id:
+            lines.append(
+                "\nRender this as a ```map fence carrying the whole result set by id — "
+                f'copy it exactly:\n  "places": "{set_id}"\n'
+                "The client draws every place as a tappable marker and resolves the full "
+                "record itself (address, phone, website, opening hours, ratings, and a "
+                "per-place NAVIGATE), so do NOT write a markers array for these and do NOT "
+                "retype their details into the fence or into a list below it. Your prose "
+                "should say which one you'd pick and why — one or two sentences — because "
+                "the browsing is what the card is for."
+            )
+        else:
+            # The store failed. Fall back to hand-written markers: fewer fields
+            # and a coordinate each to copy, but a map with pins beats no map.
+            # Coordinates are printed ONLY on this path — on the happy path they
+            # would be context spent on something the client already holds.
+            lines.append(
+                "\nThe result set could NOT be stored, so there is no placesId this turn. "
+                "Write the markers yourself in the ```map fence (kind='poi', name as label, "
+                "rating/open state as subtitle) using these coordinates exactly:"
+            )
+            for r in records:
+                lines.append(f"- {r['name']} [{r['lat']:.6f},{r['lng']:.6f}]")
         return "\n".join(lines)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _place_record(p: dict, centre: dict | None) -> dict | None:
+    """One Places API result → the stored client record (services/places.py).
+
+    None when there are no coordinates — a place we cannot put on the map is not
+    a map result, and letting it through would mean a card with a row that has
+    nowhere to point.
+
+    Missing fields are dropped rather than nulled: Places returns a ragged set
+    (a barber has no website, a chain has no editorial summary) and a card that
+    hides what it doesn't know reads better than one full of em-dashes.
+    """
+    loc = p.get("location") or {}
+    lat, lng = loc.get("latitude"), loc.get("longitude")
+    if lat is None or lng is None:
+        return None
+
+    rec: dict[str, Any] = {
+        "placeId": p.get("id"),
+        "name": (p.get("displayName") or {}).get("text") or "(unnamed)",
+        "lat": lat,
+        "lng": lng,
+    }
+    hours = p.get("currentOpeningHours") or {}
+    optional = {
+        "address": p.get("shortFormattedAddress") or p.get("formattedAddress"),
+        "category": (p.get("primaryTypeDisplayName") or {}).get("text"),
+        "rating": p.get("rating"),
+        "reviews": p.get("userRatingCount"),
+        "openNow": hours.get("openNow"),
+        "hours": hours.get("weekdayDescriptions"),
+        # "PRICE_LEVEL_MODERATE" → "moderate": the wire enum is shouted and
+        # prefixed, and both clients would otherwise strip it themselves.
+        "priceLevel": (str(p["priceLevel"]).replace("PRICE_LEVEL_", "").lower()
+                       if p.get("priceLevel") else None),
+        "phone": p.get("nationalPhoneNumber"),
+        "website": p.get("websiteUri"),
+        "mapsUri": p.get("googleMapsUri"),
+        "summary": (p.get("editorialSummary") or {}).get("text"),
+        # Anything not OPERATIONAL is worth showing — a permanently closed shop
+        # still comes back in results and must not read as a live suggestion.
+        "status": (p.get("businessStatus") if p.get("businessStatus") != "OPERATIONAL" else None),
+    }
+    for key, value in optional.items():
+        if value is not None and value != "" and value != []:
+            rec[key] = value
+    if centre is not None:
+        rec["distanceKm"] = round(
+            place_store.haversine_km(centre["lat"], centre["lng"], lat, lng), 1
+        )
+    return rec
+
 
 def _label(pt: dict) -> str:
     return pt.get("place") or f"[{pt['lat']:.4f},{pt['lng']:.4f}]"
@@ -543,6 +690,89 @@ def _dur_min(dur: Any) -> int | None:
         return round(int(dur[:-1]) / 60)
     except ValueError:
         return None
+
+
+# How congested each band is, in the client's vocabulary. Google's own scale;
+# kept verbatim rather than remapped so the colours the owner sees on our card
+# mean exactly what they mean in Google Maps.
+_SPEEDS = ("NORMAL", "SLOW", "TRAFFIC_JAM")
+
+
+def _traffic_bands(route: dict) -> list[dict]:
+    """travelAdvisory.speedReadingIntervals → [{start, end, speed}].
+
+    Indices address points of the DECODED polyline, so a band is only meaningful
+    beside the geometry it was computed against — which is why both are stored
+    together and neither goes through the model. `startPolylinePointIndex` is
+    omitted by the API when it is 0, hence the default.
+
+    Non-motorised modes get no intervals at all, and that is not an error: it is
+    the difference between "we have no traffic data" (draw the line plain) and
+    "the road is clear" (draw it green), which the clients must keep apart.
+    """
+    intervals = ((route.get("travelAdvisory") or {}).get("speedReadingIntervals") or [])
+    bands: list[dict] = []
+    for iv in intervals:
+        speed = iv.get("speed")
+        end = iv.get("endPolylinePointIndex")
+        if speed not in _SPEEDS or end is None:
+            continue
+        bands.append({
+            "start": int(iv.get("startPolylinePointIndex") or 0),
+            "end": int(end),
+            "speed": speed,
+        })
+    return bands
+
+
+def _congestion_summary(bands: list[dict]) -> str:
+    """Bands → "62% clear · 25% slow · 13% jammed", weighted by span length.
+
+    Point spans, not metres — an approximation, but polyline points are dense
+    where the road bends and sparse on a straight motorway, which is close
+    enough to how long you actually spend in each band.
+    """
+    if not bands:
+        return ""
+    spans = {s: 0 for s in _SPEEDS}
+    for b in bands:
+        spans[b["speed"]] += max(b["end"] - b["start"], 0)
+    total = sum(spans.values())
+    if total <= 0:
+        return ""
+    words = {"NORMAL": "clear", "SLOW": "slow", "TRAFFIC_JAM": "jammed"}
+    return " · ".join(
+        f"{round(100 * spans[s] / total)}% {words[s]}" for s in _SPEEDS if spans[s]
+    )
+
+
+# Enough turns for any real trip; a cap so an intercity route cannot park a
+# thousand rows of "continue straight" in the database.
+_MAX_STEPS = 60
+
+
+def _steps(route: dict) -> list[dict]:
+    """legs[].steps[] → a flat turn list the card can show.
+
+    Flattened across legs deliberately: the owner reads one sequence of turns,
+    and our routes have no waypoints, so the leg boundary carries no meaning here.
+    """
+    steps: list[dict] = []
+    for leg in route.get("legs") or []:
+        for s in leg.get("steps") or []:
+            instruction = (s.get("navigationInstruction") or {})
+            text = instruction.get("instructions")
+            if not text:
+                continue
+            steps.append({
+                "instruction": text,
+                "maneuver": instruction.get("maneuver"),
+                "distanceM": s.get("distanceMeters"),
+                "durationMin": _dur_min(s.get("staticDuration")),
+            })
+            if len(steps) >= _MAX_STEPS:
+                return steps
+    return steps
 
 
 def _maps_dir_link(origin: dict, dest: dict, mode: str) -> str:

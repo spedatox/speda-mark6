@@ -2,20 +2,28 @@ package com.speda.heartbreaker.ui.prose
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.RectF
 import android.location.Geocoder
 import android.net.Uri
 import android.view.MotionEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -26,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -41,6 +50,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -52,14 +62,18 @@ import com.speda.heartbreaker.designsystem.theme.HbPalette
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.MapNavigate
+import com.speda.heartbreaker.domain.MapPlace
 import com.speda.heartbreaker.domain.MapRoute
 import com.speda.heartbreaker.domain.MapSpec
+import com.speda.heartbreaker.domain.RouteGeometry
+import com.speda.heartbreaker.domain.RouteStep
 import com.speda.heartbreaker.domain.decodePolyline
 import com.speda.heartbreaker.domain.looksIncomplete
 import com.speda.heartbreaker.domain.parseMapSpec
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLngBounds
+import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
@@ -67,6 +81,7 @@ import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
@@ -86,24 +101,59 @@ import org.maplibre.android.geometry.LatLng as MlLatLng
 val LocalMessageStreaming = compositionLocalOf { false }
 
 /**
- * Resolves a routeId ("r_1a2b3c4d") into its encoded polyline by asking Igor.
- * Provided at the app root; defaults to "cannot resolve" so previews and tests
- * render the card without a line instead of crashing.
+ * Resolves a routeId ("r_1a2b3c4d") into its geometry, live congestion and turn
+ * list by asking Igor. Provided at the app root; defaults to "cannot resolve" so
+ * previews and tests render the card without a line instead of crashing.
  *
  * This exists because the geometry must never pass through the model: a
  * hand-copied polyline that loses one character still parses, still looks like
  * a road, and quietly ends 19 km from the destination.
  */
-val LocalRouteResolver = compositionLocalOf<suspend (String) -> String?> { { null } }
+val LocalRouteResolver = compositionLocalOf<suspend (String) -> RouteGeometry?> { { null } }
+
+/**
+ * Resolves a placesId ("pl_1a2b3c4d") into the whole find_places result set —
+ * every field the place cards show. Same rule as routes: the model holds a
+ * reference, never the directory.
+ */
+val LocalPlaceResolver = compositionLocalOf<suspend (String) -> List<MapPlace>?> { { null } }
+
+/**
+ * Google's own traffic colours, near enough that the owner reads them without a
+ * key: green is moving, amber is slow, red is stopped. Deliberately NOT the
+ * agent accent — congestion is the one thing on this card that has to mean the
+ * same regardless of which agent is speaking.
+ */
+private val TrafficClear = Color(0xFF3FD08A)
+private val TrafficSlow = Color(0xFFE8B53C)
+private val TrafficJam = Color(0xFFE0533D)
+
+private fun trafficColor(speed: String): Color = when (speed) {
+    "SLOW" -> TrafficSlow
+    "TRAFFIC_JAM" -> TrafficJam
+    else -> TrafficClear
+}
+
+private fun trafficWord(speed: String): String = when (speed) {
+    "SLOW" -> "SLOW"
+    "TRAFFIC_JAM" -> "JAM"
+    else -> "CLEAR"
+}
 
 /**
  * ```map fences — the Stark map card. MapLibre GL Native draws our own dark style
  * (assets/map_style_stark.json, OpenFreeMap vector tiles, no Google Play Services);
- * routes and markers are runtime layers tinted in the active agent's accent, so
- * they render even when tiles are unavailable. Map gestures are disabled by design
- * — the card is a glance, and real interaction hands off to Google Maps via the
- * NAVIGATE / OPEN IN MAPS actions (plan D-M4). Backend get_route supplies encoded
- * polylines + live-traffic timings; the client never holds a Maps key.
+ * routes, congestion bands and place pins are runtime layers tinted in the active
+ * agent's accent, so they render even when tiles are unavailable.
+ *
+ * The card is a working map, not a picture of one: alternative routes switch from
+ * a header strip, the drawn line is coloured by live traffic the way Google's is,
+ * every place found is a tappable pin that opens its own record (address, hours,
+ * phone, website, its own NAVIGATE), and the turn list is one tap away. Handing
+ * off to Google Maps stays available — it is no longer the only thing you can do.
+ *
+ * Backend `get_route` / `find_places` supply everything by id; the client never
+ * holds a Maps key and the model never holds the data.
  */
 @Composable
 fun MapBlock(raw: String, modifier: Modifier = Modifier) {
@@ -119,7 +169,17 @@ fun MapBlock(raw: String, modifier: Modifier = Modifier) {
         value = if (!pending) s else s.copy(
             routes = s.routes.map { r ->
                 if (r.polyline.isNotBlank() || r.routeId == null) r
-                else r.copy(polyline = resolve(r.routeId).orEmpty())
+                else {
+                    val g = resolve(r.routeId)
+                    // The fence's own figures win — they are what the model told
+                    // the owner in prose, and a card disagreeing with the
+                    // sentence above it is worse than one missing a field.
+                    r.copy(
+                        polyline = g?.polyline.orEmpty(),
+                        traffic = g?.traffic.orEmpty(),
+                        steps = g?.steps.orEmpty(),
+                    )
+                }
             },
         )
     }
@@ -136,7 +196,24 @@ fun MapBlock(raw: String, modifier: Modifier = Modifier) {
 private fun MapCard(spec: MapSpec, modifier: Modifier) {
     val palette = LocalHbPalette.current
     val context = LocalContext.current
-    val primary = spec.primaryRoute
+    val resolvePlaces = LocalPlaceResolver.current
+
+    val places by produceState<List<MapPlace>?>(null, spec.places) {
+        value = spec.places?.let { resolvePlaces(it) }
+    }
+
+    // Which route the card is currently about. Starts on the model's pick and
+    // then belongs to the owner — the drawn line, every readout, the turn list
+    // and NAVIGATE all follow this one number.
+    var selected by remember(spec) {
+        mutableIntStateOf(spec.routes.indexOfFirst { it.primary }.coerceAtLeast(0))
+    }
+    var openPlace by remember(places) { mutableStateOf<Int?>(null) }
+    var expanded by remember(spec) { mutableStateOf(false) }
+    var showSteps by remember(spec) { mutableStateOf(false) }
+
+    val active = spec.routes.getOrNull(selected) ?: spec.routes.firstOrNull()
+    val place = openPlace?.let { places?.getOrNull(it) }
 
     Column(
         modifier
@@ -146,26 +223,42 @@ private fun MapCard(spec: MapSpec, modifier: Modifier) {
             .background(Color(0xFF060E16).copy(alpha = 0.6f))
             .border(1.dp, palette.edge, RoundedCornerShape(12.dp)),
     ) {
-        MapHeader(spec.title, primary, palette)
+        MapHeader(spec.title, active, places?.size, palette)
 
-        val mapHeight = (spec.height ?: 240).dp
+        if (spec.routes.size > 1) {
+            RouteTabs(spec.routes, selected, palette) { selected = it }
+        }
+
+        val mapHeight = (if (expanded) 460 else (spec.height ?: 240)).dp
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(mapHeight)
                 .wireframeFallback(palette),
         ) {
-            MapSurface(spec, palette)
+            MapSurface(spec, places, selected, openPlace, palette) { openPlace = it }
+            ExpandChip(expanded, palette, Modifier.align(Alignment.TopStart)) { expanded = !expanded }
         }
 
-        // Coordinates + reverse-geocoded address of the focus point (the nav
-        // target, else the destination marker, else the centre).
-        focusPoint(spec)?.let { (lat, lng) -> CoordinateFooter(lat, lng, palette) }
+        active?.let { if (it.traffic.isNotEmpty()) TrafficBar(it, palette) }
 
-        // Traffic readout for the primary route.
-        primary?.let { TrafficReadout(it, palette) }
+        // The opened record replaces the coordinate footer — both answer "what
+        // is this point", and the record answers it far better.
+        if (place != null) {
+            PlaceDetail(place, context, palette) { openPlace = null }
+        } else {
+            focusPoint(spec)?.let { (lat, lng) -> CoordinateFooter(lat, lng, palette) }
+        }
 
-        MapActionBar(spec, context, palette)
+        places?.takeIf { it.isNotEmpty() }?.let { list ->
+            PlaceList(list, openPlace, palette) { openPlace = if (openPlace == it) null else it }
+        }
+
+        active?.takeIf { it.steps.isNotEmpty() }?.let { r ->
+            StepList(r.steps, showSteps, palette) { showSteps = !showSteps }
+        }
+
+        MapActionBar(spec, place, active, context, palette)
 
         if (spec.autoNavigate && spec.navigate != null) {
             AutoNavigateCountdown(spec.navigate, context, palette)
@@ -175,12 +268,33 @@ private fun MapCard(spec: MapSpec, modifier: Modifier) {
 
 /* ── MapLibre surface ────────────────────────────────────────────────────────── */
 
+/** Live handles to the map, published as state so the effects below can wait for
+ *  the style without polling. */
+private class MapHolder {
+    var map: MapLibreMap? = null
+    var style: Style? by mutableStateOf(null)
+}
+
+private const val PLACES_SRC = "places-src"
+private const val PLACES_LAYER = "places-layer"
+
 @Composable
-private fun MapSurface(spec: MapSpec, palette: HbPalette) {
+private fun MapSurface(
+    spec: MapSpec,
+    places: List<MapPlace>?,
+    selectedRoute: Int,
+    openPlace: Int?,
+    palette: HbPalette,
+    onPlaceClick: (Int?) -> Unit,
+) {
     val accent = palette.accent.toArgb()
     val accentBright = palette.accentBright.toArgb()
     val dim = palette.accentDim.toArgb()
     val mapView = rememberMapViewWithLifecycle()
+    val holder = remember { MapHolder() }
+    // The map is built once; the click listener must still reach the CURRENT
+    // handler, or a tap would open a record from a stale composition.
+    val click by rememberUpdatedState(onPlaceClick)
 
     AndroidView(
         // The factory receives a Context and must RETURN the view; we return the
@@ -202,54 +316,176 @@ private fun MapSurface(spec: MapSpec, palette: HbPalette) {
                 map.uiSettings.isAttributionEnabled = true    // OSM/OpenMapTiles attribution stays
                 map.uiSettings.isLogoEnabled = false
                 map.setStyle(Style.Builder().fromUri("asset://map_style_stark.json")) { style ->
+                    // Every route gets its full layer stack up front — casing,
+                    // line, congestion overlay — and selection only flips
+                    // properties. Tearing sources down on each tap would flicker
+                    // and re-fit the camera under the owner's thumb.
                     runCatching { drawRoutes(style, spec, accent, accentBright, dim) }
                     runCatching { drawMarkers(style, spec, accent, accentBright, dim) }
-                    runCatching { fitCamera(map, spec) }
+                    map.addOnMapClickListener { latLng ->
+                        val hit = placeAt(map, latLng)
+                        click(hit)          // null on empty map → closes the sheet
+                        hit != null
+                    }
+                    holder.map = map
+                    holder.style = style
                 }
             }
             mapView
         },
         modifier = Modifier.fillMaxSize(),  // the parent Box fixes the height
     )
+
+    // Places arrive one fetch after the map. Drawn (and re-drawn on selection)
+    // here rather than in the factory, which runs exactly once.
+    LaunchedEffect(holder.style, places, openPlace) {
+        val style = holder.style ?: return@LaunchedEffect
+        runCatching { drawPlaces(style, places.orEmpty(), openPlace, accent, accentBright) }
+    }
+
+    // Camera: fit once everything that will be drawn is drawn.
+    LaunchedEffect(holder.map, holder.style, places) {
+        val map = holder.map ?: return@LaunchedEffect
+        runCatching { fitCamera(map, spec, places.orEmpty()) }
+    }
+
+    LaunchedEffect(holder.style, selectedRoute) {
+        val style = holder.style ?: return@LaunchedEffect
+        runCatching { applySelection(style, spec, selectedRoute) }
+    }
+
+    // Opened place → bring it into view. Only ever an ease: yanking the camera
+    // while the owner is reading the list is disorienting.
+    LaunchedEffect(openPlace) {
+        val map = holder.map ?: return@LaunchedEffect
+        val p = openPlace?.let { places?.getOrNull(it) } ?: return@LaunchedEffect
+        runCatching { map.easeCamera(CameraUpdateFactory.newLatLng(MlLatLng(p.lat, p.lng)), 420) }
+    }
 }
 
+/** Which place pin (if any) sits under a tap. A generous box, because a fingertip
+ *  is wider than a 7 dp circle. */
+private fun placeAt(map: MapLibreMap, latLng: MlLatLng): Int? {
+    val pt = map.projection.toScreenLocation(latLng)
+    val box = RectF(pt.x - 28f, pt.y - 28f, pt.x + 28f, pt.y + 28f)
+    val hit = map.queryRenderedFeatures(box, PLACES_LAYER).firstOrNull() ?: return null
+    return hit.getNumberProperty("idx")?.toInt()
+}
+
+/**
+ * Every route's layers, built once. Selection later only flips opacity — a
+ * switcher that tore sources down on each tap would flicker and re-fit the
+ * camera under the owner's thumb.
+ *
+ * Laid down in four passes rather than route by route, and that ordering is the
+ * point: a style has no "bring to front", so if route 0's layers were all added
+ * before route 1's, selecting route 0 would leave it drawn UNDERNEATH route 1's
+ * line wherever the two share a road. Every route's dim line goes down first,
+ * then every glow, then every bright line, then every congestion overlay — so
+ * whichever route is selected is on top by construction.
+ */
 private fun drawRoutes(style: Style, spec: MapSpec, accent: Int, accentBright: Int, dim: Int) {
-    // Alternatives first (below), then the primary glow + line on top.
-    val ordered = spec.routes.sortedBy { it.primary }  // false < true → primary last
-    ordered.forEachIndexed { i, route ->
-        val pts = decodePolyline(route.polyline).map { Point.fromLngLat(it.lng, it.lat) }
+    val geometry = spec.routes.map { route ->
+        decodePolyline(route.polyline).map { Point.fromLngLat(it.lng, it.lat) }
+    }
+
+    geometry.forEachIndexed { i, pts ->
         if (pts.size < 2) return@forEachIndexed
-        val src = GeoJsonSource("route-src-$i", LineString.fromLngLats(pts))
-        style.addSource(src)
-        if (route.primary) {
-            style.addLayer(
-                LineLayer("route-glow-$i", "route-src-$i").withProperties(
-                    PropertyFactory.lineColor(accent),
-                    PropertyFactory.lineOpacity(0.28f),
-                    PropertyFactory.lineWidth(11f),
-                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+        style.addSource(GeoJsonSource("route-src-$i", LineString.fromLngLats(pts)))
+        style.addLayer(
+            LineLayer("route-dim-$i", "route-src-$i").withProperties(
+                PropertyFactory.lineColor(dim),
+                PropertyFactory.lineOpacity(0.65f),
+                PropertyFactory.lineWidth(2.5f),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            ),
+        )
+    }
+
+    geometry.forEachIndexed { i, pts ->
+        if (pts.size < 2) return@forEachIndexed
+        style.addLayer(
+            LineLayer("route-glow-$i", "route-src-$i").withProperties(
+                PropertyFactory.lineColor(accent),
+                PropertyFactory.lineOpacity(0f),
+                PropertyFactory.lineWidth(12f),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            ),
+        )
+    }
+
+    geometry.forEachIndexed { i, pts ->
+        if (pts.size < 2) return@forEachIndexed
+        // With congestion data this becomes the casing under the coloured
+        // bands; without it, it IS the route and carries the accent.
+        val hasTraffic = spec.routes[i].traffic.isNotEmpty()
+        style.addLayer(
+            LineLayer("route-line-$i", "route-src-$i").withProperties(
+                PropertyFactory.lineColor(
+                    if (hasTraffic) android.graphics.Color.parseColor("#0A1A22") else accentBright,
                 ),
-            )
-            style.addLayer(
-                LineLayer("route-line-$i", "route-src-$i").withProperties(
-                    PropertyFactory.lineColor(accentBright),
-                    PropertyFactory.lineWidth(4.5f),
-                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                ),
-            )
-        } else {
-            style.addLayer(
-                LineLayer("route-line-$i", "route-src-$i").withProperties(
-                    PropertyFactory.lineColor(dim),
-                    PropertyFactory.lineOpacity(0.7f),
-                    PropertyFactory.lineWidth(2.5f),
-                    PropertyFactory.lineDasharray(arrayOf(2f, 1.5f)),
-                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                ),
-            )
+                PropertyFactory.lineOpacity(0f),
+                PropertyFactory.lineWidth(if (hasTraffic) 7f else 4.5f),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            ),
+        )
+    }
+
+    geometry.forEachIndexed { i, pts ->
+        if (pts.size < 2) return@forEachIndexed
+        // Congestion bands: one feature per band, coloured by its own speed.
+        // Bands index THIS decoded line, so anything out of range is dropped
+        // rather than clamped — a band that doesn't fit came from another route,
+        // and drawing it would paint traffic onto the wrong road.
+        val bands = spec.routes[i].traffic.mapNotNull { b ->
+            val start = b.start.coerceAtLeast(0)
+            val end = b.end.coerceAtMost(pts.lastIndex)
+            if (end <= start) return@mapNotNull null
+            Feature.fromGeometry(LineString.fromLngLats(pts.subList(start, end + 1))).apply {
+                addStringProperty("speed", b.speed)
+            }
         }
+        if (bands.isEmpty()) return@forEachIndexed
+        style.addSource(GeoJsonSource("traffic-src-$i", FeatureCollection.fromFeatures(bands)))
+        style.addLayer(
+            LineLayer("traffic-line-$i", "traffic-src-$i").withProperties(
+                PropertyFactory.lineColor(
+                    Expression.match(
+                        Expression.get("speed"),
+                        Expression.literal("SLOW"), Expression.color(TrafficSlow.toArgb()),
+                        Expression.literal("TRAFFIC_JAM"), Expression.color(TrafficJam.toArgb()),
+                        Expression.color(TrafficClear.toArgb()),   // default: moving
+                    ),
+                ),
+                PropertyFactory.lineWidth(5f),
+                PropertyFactory.lineOpacity(0f),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            ),
+        )
+    }
+}
+
+/** Selection → opacity only. No source churn and no re-ordering, so switching
+ *  routes is instant and the camera never moves under the owner. */
+private fun applySelection(style: Style, spec: MapSpec, selected: Int) {
+    spec.routes.indices.forEach { i ->
+        val on = i == selected
+        style.getLayer("route-dim-$i")?.setProperties(
+            PropertyFactory.lineOpacity(if (on) 0f else 0.65f),
+        )
+        style.getLayer("route-glow-$i")?.setProperties(
+            PropertyFactory.lineOpacity(if (on) 0.26f else 0f),
+        )
+        style.getLayer("route-line-$i")?.setProperties(
+            PropertyFactory.lineOpacity(if (on) 1f else 0f),
+        )
+        style.getLayer("traffic-line-$i")?.setProperties(
+            PropertyFactory.lineOpacity(if (on) 1f else 0f),
+        )
     }
 }
 
@@ -285,10 +521,73 @@ private fun drawMarkers(style: Style, spec: MapSpec, accent: Int, accentBright: 
     )
 }
 
-private fun fitCamera(map: org.maplibre.android.maps.MapLibreMap, spec: MapSpec) {
+/**
+ * Place pins — numbered to match the list below, so "the third one" means the
+ * same thing in the chat, in the list and on the map. Re-set (not rebuilt) when
+ * the opened place changes; the `sel` property is what swells the active pin.
+ */
+private fun drawPlaces(
+    style: Style,
+    places: List<MapPlace>,
+    openPlace: Int?,
+    accent: Int,
+    accentBright: Int,
+) {
+    if (places.isEmpty()) return
+    val features = places.mapIndexed { i, p ->
+        Feature.fromGeometry(Point.fromLngLat(p.lng, p.lat)).apply {
+            addNumberProperty("idx", i)
+            addStringProperty("num", (i + 1).toString())
+            addBooleanProperty("sel", i == openPlace)
+        }
+    }
+    val collection = FeatureCollection.fromFeatures(features)
+    val existing = style.getSourceAs<GeoJsonSource>(PLACES_SRC)
+    if (existing != null) {
+        existing.setGeoJson(collection)
+        return
+    }
+
+    style.addSource(GeoJsonSource(PLACES_SRC, collection))
+    style.addLayer(
+        CircleLayer(PLACES_LAYER, PLACES_SRC).withProperties(
+            PropertyFactory.circleColor(
+                Expression.switchCase(
+                    Expression.get("sel"), Expression.color(accentBright),
+                    Expression.color(accent),
+                ),
+            ),
+            PropertyFactory.circleRadius(
+                Expression.switchCase(
+                    Expression.get("sel"), Expression.literal(13f),
+                    Expression.literal(10f),
+                ),
+            ),
+            PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
+            PropertyFactory.circleStrokeWidth(1.6f),
+            PropertyFactory.circleStrokeOpacity(0.85f),
+        ),
+    )
+    // The number rides in its own symbol layer. Glyphs come from the style's
+    // font endpoint, so offline the circles still stand — the pin is never
+    // dependent on the label.
+    style.addLayer(
+        SymbolLayer("places-num", PLACES_SRC).withProperties(
+            PropertyFactory.textField(Expression.get("num")),
+            PropertyFactory.textFont(arrayOf("Noto Sans Regular")),
+            PropertyFactory.textSize(11f),
+            PropertyFactory.textColor(android.graphics.Color.parseColor("#04121A")),
+            PropertyFactory.textAllowOverlap(true),
+            PropertyFactory.textIgnorePlacement(true),
+        ),
+    )
+}
+
+private fun fitCamera(map: MapLibreMap, spec: MapSpec, places: List<MapPlace>) {
     val pts = buildList {
         spec.markers.forEach { add(MlLatLng(it.lat, it.lng)) }
         spec.routes.forEach { r -> decodePolyline(r.polyline).forEach { add(MlLatLng(it.lat, it.lng)) } }
+        places.forEach { add(MlLatLng(it.lat, it.lng)) }
     }
     // Explicit centre/zoom wins when the model set it. Camera is moved via
     // CameraUpdateFactory — MapLibreMap exposes no public cameraPosition setter.
@@ -343,11 +642,11 @@ private fun rememberMapViewWithLifecycle(): MapView {
     return mapView
 }
 
-/* ── Chrome: header, traffic readout, actions ─────────────────────────────────── */
+/* ── Chrome: header, route switcher, readouts ─────────────────────────────────── */
 
 @Composable
-private fun MapHeader(title: String?, primary: MapRoute?, palette: HbPalette) {
-    if (title.isNullOrBlank() && primary == null) return
+private fun MapHeader(title: String?, primary: MapRoute?, placeCount: Int?, palette: HbPalette) {
+    if (title.isNullOrBlank() && primary == null && placeCount == null) return
     Box(
         Modifier
             .fillMaxWidth()
@@ -364,61 +663,428 @@ private fun MapHeader(title: String?, primary: MapRoute?, palette: HbPalette) {
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             BasicText(text, style = HbType.headerBar.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.2.em))
-            if (primary != null) {
-                val dist = primary.distanceKm?.let { "${fmt(it)} KM" } ?: ""
-                val eta = primary.durationMin?.let { "$it MIN" } ?: ""
-                val readout = listOf(dist, eta).filter { it.isNotBlank() }.joinToString(" · ")
-                if (readout.isNotBlank()) {
-                    BasicText(AnnotatedString(readout), style = HbType.readout.copy(fontSize = 11.sp, letterSpacing = 0.1.em, color = palette.accentBright))
-                }
+            val readout = when {
+                primary != null -> listOf(
+                    primary.distanceKm?.let { "${fmt(it)} KM" }.orEmpty(),
+                    primary.durationMin?.let { "$it MIN" }.orEmpty(),
+                ).filter { it.isNotBlank() }.joinToString(" · ")
+                placeCount != null -> "$placeCount FOUND"
+                else -> ""
+            }
+            if (readout.isNotBlank()) {
+                BasicText(AnnotatedString(readout), style = HbType.readout.copy(fontSize = 11.sp, letterSpacing = 0.1.em, color = palette.accentBright))
             }
         }
     }
     Box(Modifier.fillMaxWidth().height(1.dp).background(palette.accent.copy(alpha = 0.22f)))
 }
 
+/**
+ * The route switcher. Every option get_route returned, side by side with the one
+ * number that decides between them (ETA) and the one that explains it (delay vs
+ * free-flow). Picking one re-draws the map and re-points NAVIGATE — comparing
+ * routes was the whole reason to ask for alternatives, and a card that only ever
+ * showed the winner threw that away.
+ */
 @Composable
-private fun TrafficReadout(route: MapRoute, palette: HbPalette) {
-    val delay = route.trafficDelayMin ?: return
-    val heavy = route.durationMin != null && route.noTrafficMin != null &&
-        route.noTrafficMin > 0 && delay.toFloat() / route.noTrafficMin > 0.25f
+private fun RouteTabs(routes: List<MapRoute>, selected: Int, palette: HbPalette, onSelect: (Int) -> Unit) {
+    val fastest = routes.indices.minByOrNull { routes[it].durationMin ?: Int.MAX_VALUE }
     Row(
-        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        BasicText(
-            AnnotatedString("TRAFFIC +$delay MIN"),
-            style = HbType.readout.copy(
-                fontSize = 11.sp, letterSpacing = 0.12.em,
-                color = if (heavy) palette.amber else palette.textDim,
-            ),
-        )
-        route.label?.let {
-            BasicText(AnnotatedString("· ${it.uppercase(Locale.getDefault())}"),
-                style = HbType.readout.copy(fontSize = 10.sp, color = palette.textFaint))
+        routes.forEachIndexed { i, r ->
+            val on = i == selected
+            val delay = r.trafficDelayMin
+            val heavy = delay != null && (r.noTrafficMin ?: 0) > 0 &&
+                delay.toFloat() / r.noTrafficMin!! > 0.25f
+            Column(
+                Modifier
+                    .widthIn(min = 116.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(if (on) palette.accent.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.03f))
+                    .border(
+                        1.dp,
+                        palette.accent.copy(alpha = if (on) 0.5f else 0.16f),
+                        RoundedCornerShape(7.dp),
+                    )
+                    .clickable { onSelect(i) }
+                    .padding(horizontal = 9.dp, vertical = 6.dp),
+            ) {
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    BasicText(
+                        AnnotatedString(r.durationMin?.toString() ?: "?"),
+                        style = HbType.readout.copy(
+                            fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                            color = if (on) palette.accentBright else palette.textDim,
+                        ),
+                    )
+                    BasicText(
+                        AnnotatedString("MIN"),
+                        style = HbType.readout.copy(
+                            fontSize = 9.sp, letterSpacing = 0.12.em,
+                            color = if (on) palette.accentBright else palette.textDim,
+                        ),
+                    )
+                    if (i == fastest && routes.size > 1) {
+                        BasicText(
+                            AnnotatedString("FASTEST"),
+                            style = HbType.readout.copy(fontSize = 8.sp, letterSpacing = 0.1.em, color = TrafficClear),
+                        )
+                    }
+                }
+                val sub = listOfNotNull(
+                    r.distanceKm?.let { "${fmt(it)} km" },
+                    r.label?.takeIf { it.isNotBlank() },
+                ).joinToString(" · ").ifBlank { "ROUTE" }
+                BasicText(
+                    AnnotatedString(sub),
+                    style = HbType.readout.copy(fontSize = 10.sp, color = palette.textFaint),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                if (delay != null && delay > 0) {
+                    BasicText(
+                        AnnotatedString("+$delay MIN TRAFFIC"),
+                        style = HbType.readout.copy(
+                            fontSize = 9.sp, letterSpacing = 0.08.em,
+                            color = if (heavy) palette.amber else palette.textFaint,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The congestion bar: the same green/amber/red as the line, as one proportional
+ * strip. It answers "how bad, and is it bad the whole way or in one place" at a
+ * glance — which the +N MIN number alone never could.
+ */
+@Composable
+private fun TrafficBar(route: MapRoute, palette: HbPalette) {
+    val spans = remember(route) {
+        val acc = linkedMapOf("NORMAL" to 0, "SLOW" to 0, "TRAFFIC_JAM" to 0)
+        route.traffic.forEach { b ->
+            val key = if (acc.containsKey(b.speed)) b.speed else "NORMAL"
+            acc[key] = (acc[key] ?: 0) + (b.end - b.start).coerceAtLeast(0)
+        }
+        acc.filterValues { it > 0 }
+    }
+    val total = spans.values.sum()
+    if (total <= 0) return
+    val delay = route.trafficDelayMin
+    val heavy = delay != null && (route.noTrafficMin ?: 0) > 0 &&
+        delay.toFloat() / route.noTrafficMin!! > 0.25f
+
+    Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            spans.forEach { (speed, span) ->
+                Box(Modifier.weight(span.toFloat()).fillMaxSize().background(trafficColor(speed)))
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(top = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            spans.forEach { (speed, span) ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.size(7.dp).clip(RoundedCornerShape(2.dp)).background(trafficColor(speed)))
+                    BasicText(
+                        AnnotatedString("${Math.round(100f * span / total)}% ${trafficWord(speed)}"),
+                        style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.1.em, color = palette.textFaint),
+                    )
+                }
+            }
+            if (delay != null && delay > 0) {
+                BasicText(
+                    AnnotatedString("+$delay MIN VS FREE-FLOW"),
+                    style = HbType.readout.copy(
+                        fontSize = 10.sp, letterSpacing = 0.1.em,
+                        color = if (heavy) palette.amber else palette.textDim,
+                    ),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun MapActionBar(spec: MapSpec, context: Context, palette: HbPalette) {
+private fun ExpandChip(expanded: Boolean, palette: HbPalette, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .padding(8.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFF060E16).copy(alpha = 0.72f))
+            .border(1.dp, palette.accent.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        BasicText(
+            AnnotatedString(if (expanded) "⤡ SHRINK" else "⤢ EXPAND"),
+            style = HbType.headerBar.copy(
+                fontSize = 10.sp, letterSpacing = 0.14.em,
+                fontWeight = FontWeight.Bold, color = palette.accentBright,
+            ),
+        )
+    }
+}
+
+/* ── Places ──────────────────────────────────────────────────────────────────── */
+
+/** Rating, open state, distance, price — the line that decides between two
+ *  otherwise identical results. */
+@Composable
+private fun PlaceMeta(p: MapPlace, palette: HbPalette) {
+    val text = buildAnnotatedString {
+        var first = true
+        fun sep() { if (!first) append("  ·  "); first = false }
+        val rating = p.rating
+        if (rating != null) {
+            sep()
+            val stars = String.format(Locale.US, "%.1f★", rating) +
+                (p.reviews?.let { " ($it)" } ?: "")
+            withStyle(SpanStyle(color = palette.accentBright)) { append(stars) }
+        }
+        val open = p.openNow
+        if (open != null) {
+            sep()
+            withStyle(SpanStyle(color = if (open) TrafficClear else palette.amber)) {
+                append(if (open) "OPEN" else "CLOSED")
+            }
+        }
+        p.distanceKm?.let { sep(); append("${fmt(it)} km") }
+        p.priceLevel?.let { sep(); append(it) }
+        val status = p.status
+        if (status != null) {
+            sep()
+            withStyle(SpanStyle(color = palette.amber)) {
+                append(status.replace('_', ' ').lowercase(Locale.getDefault()))
+            }
+        }
+    }
+    if (text.isEmpty()) return
+    BasicText(text, style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.06.em, color = palette.textFaint))
+}
+
+/**
+ * The result list. Numbered to match the pins, and tapping a row is the same
+ * gesture as tapping its pin. Not scrollable on purpose — a nested scroller
+ * inside the transcript fights the transcript for the same drag, and a search
+ * returns twenty results at most.
+ */
+@Composable
+private fun PlaceList(places: List<MapPlace>, open: Int?, palette: HbPalette, onSelect: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
+        places.forEachIndexed { i, p ->
+            val on = i == open
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (on) palette.accent.copy(alpha = 0.14f) else Color.Transparent)
+                    .clickable { onSelect(i) }
+                    .padding(horizontal = 6.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(if (on) palette.accentBright else palette.accent.copy(alpha = 0.28f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    BasicText(
+                        AnnotatedString("${i + 1}"),
+                        style = HbType.readout.copy(
+                            fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            color = if (on) Color(0xFF04121A) else palette.accentBright,
+                        ),
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    BasicText(
+                        AnnotatedString(p.name),
+                        style = HbType.readout.copy(
+                            fontSize = 13.sp,
+                            color = if (on) Color.White else palette.textDim,
+                        ),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    PlaceMeta(p, palette)
+                }
+            }
+        }
+    }
+}
+
+/** The opened record: everything needed before deciding to go, and the actions to
+ *  act on it — call, open the site, see it on Google. */
+@Composable
+private fun PlaceDetail(p: MapPlace, context: Context, palette: HbPalette, onClose: () -> Unit) {
+    var hoursOpen by remember(p.placeId, p.name) { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(palette.accent.copy(alpha = 0.09f))
+            .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f)) {
+                BasicText(
+                    AnnotatedString(p.name),
+                    style = HbType.headerBar.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                )
+                p.category?.let {
+                    BasicText(
+                        AnnotatedString(it.uppercase(Locale.getDefault())),
+                        style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.1.em, color = palette.accent),
+                    )
+                }
+                PlaceMeta(p, palette)
+                p.address?.let {
+                    BasicText(AnnotatedString(it), style = HbType.readout.copy(fontSize = 11.sp, color = palette.textDim))
+                }
+                p.summary?.let {
+                    BasicText(AnnotatedString(it), style = HbType.readout.copy(fontSize = 11.sp, color = palette.textFaint))
+                }
+            }
+            Box(Modifier.clickable(onClick = onClose).padding(4.dp)) {
+                BasicText(AnnotatedString("✕"), style = HbType.readout.copy(fontSize = 13.sp, color = palette.textFaint))
+            }
+        }
+
+        if (p.hours.isNotEmpty()) {
+            Box(Modifier.clickable { hoursOpen = !hoursOpen }.padding(top = 6.dp)) {
+                BasicText(
+                    AnnotatedString(if (hoursOpen) "▾ HOURS" else "▸ HOURS"),
+                    style = HbType.readout.copy(
+                        fontSize = 10.sp, letterSpacing = 0.12.em,
+                        fontWeight = FontWeight.Bold, color = palette.accent,
+                    ),
+                )
+            }
+            if (hoursOpen) {
+                Column(Modifier.padding(top = 3.dp)) {
+                    p.hours.forEach {
+                        BasicText(AnnotatedString(it), style = HbType.readout.copy(fontSize = 11.sp, color = palette.textDim))
+                    }
+                }
+            }
+        }
+
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            p.phone?.let { phone ->
+                ActionChip("☏ $phone", filled = false, palette = palette) {
+                    // ACTION_DIAL, not ACTION_CALL: the number lands in the
+                    // dialler and the owner decides. No permission, no surprise
+                    // call from a mis-tap on a map card.
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_DIAL, Uri.parse("tel:${phone.filter { it.isDigit() || it == '+' }}")),
+                        )
+                    }
+                }
+            }
+            p.website?.let { url ->
+                ActionChip("⧉ WEBSITE", filled = false, palette = palette) { openUrl(context, url) }
+            }
+            p.mapsUri?.let { url ->
+                ActionChip("◎ GOOGLE PAGE", filled = false, palette = palette) { openUrl(context, url) }
+            }
+        }
+    }
+}
+
+/* ── Turn-by-turn ────────────────────────────────────────────────────────────── */
+
+/** The turn list, collapsed by default: the card answers "how long" first, and
+ *  "which way, exactly" only when asked. */
+@Composable
+private fun StepList(steps: List<RouteStep>, open: Boolean, palette: HbPalette, onToggle: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Box(Modifier.clickable(onClick = onToggle)) {
+            BasicText(
+                AnnotatedString(
+                    "${if (open) "▾" else "▸"} ${steps.size} ${if (steps.size == 1) "STEP" else "STEPS"}",
+                ),
+                style = HbType.readout.copy(
+                    fontSize = 11.sp, letterSpacing = 0.14.em,
+                    fontWeight = FontWeight.Bold, color = palette.accent,
+                ),
+            )
+        }
+        if (!open) return
+        steps.forEachIndexed { i, s ->
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                BasicText(
+                    AnnotatedString("${i + 1}"),
+                    style = HbType.readout.copy(fontSize = 10.sp, color = palette.textFaint),
+                    modifier = Modifier.width(18.dp),
+                )
+                BasicText(
+                    AnnotatedString(s.instruction),
+                    style = HbType.readout.copy(fontSize = 11.5.sp, color = palette.textDim),
+                    modifier = Modifier.weight(1f),
+                )
+                BasicText(
+                    AnnotatedString(fmtDistance(s.distanceM)),
+                    style = HbType.readout.copy(fontSize = 10.sp, color = palette.textFaint),
+                )
+            }
+        }
+    }
+}
+
+/* ── Actions ─────────────────────────────────────────────────────────────────── */
+
+@Composable
+private fun MapActionBar(
+    spec: MapSpec,
+    place: MapPlace?,
+    active: MapRoute?,
+    context: Context,
+    palette: HbPalette,
+) {
+    // NAVIGATE targets whatever the card is currently about: an opened place
+    // first, then the fence's own target, then a destination marker. Naming it
+    // matters once a place is open — an unlabelled NAVIGATE would be a coin
+    // flip. An ORIGIN marker is never a fallback: a places card carries one for
+    // "you are here", and offering to navigate the owner to where they already
+    // stand is worse than offering nothing.
+    val target: MapNavigate? = place?.let { MapNavigate(it.lat, it.lng, active?.mode ?: "drive", it.name) }
+        ?: spec.navigate
+        ?: spec.markers.firstOrNull { it.kind == "destination" }?.let { MapNavigate(it.lat, it.lng) }
+        ?: spec.markers.firstOrNull { it.kind != "origin" }?.let { MapNavigate(it.lat, it.lng) }
+    if (target == null) return
+
+    val label = place?.let { "▸ NAVIGATE · ${it.name.uppercase(Locale.getDefault())}" } ?: "▸ NAVIGATE"
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        spec.navigate?.let { nav ->
-            ActionChip("▸ NAVIGATE", filled = true, palette = palette, modifier = Modifier.weight(1f)) {
-                launchNavigation(context, nav)
-            }
+        ActionChip(label, filled = true, palette = palette, modifier = Modifier.weight(1f)) {
+            launchNavigation(context, target)
         }
-        val openTarget = spec.navigate ?: spec.markers.firstOrNull { it.kind == "destination" }
-            ?.let { MapNavigate(it.lat, it.lng) }
-            ?: spec.markers.firstOrNull()?.let { MapNavigate(it.lat, it.lng) }
-        openTarget?.let { t ->
-            ActionChip("⧉ OPEN IN MAPS", filled = false, palette = palette, modifier = Modifier.weight(1f)) {
-                openInMaps(context, t)
-            }
+        ActionChip("⧉ OPEN IN MAPS", filled = false, palette = palette, modifier = Modifier.weight(1f)) {
+            openInMaps(context, target)
         }
     }
 }
@@ -437,7 +1103,7 @@ private fun ActionChip(
             .background(if (filled) palette.accent.copy(alpha = 0.16f) else Color.Transparent)
             .border(1.dp, palette.accent.copy(alpha = if (filled) 0.45f else 0.25f), RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         BasicText(
@@ -446,6 +1112,7 @@ private fun ActionChip(
                 fontSize = 11.sp, letterSpacing = 0.14.em, fontWeight = FontWeight.Bold,
                 color = if (filled) palette.accentBright else palette.textDim,
             ),
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -583,9 +1250,20 @@ private fun openInMaps(context: Context, t: MapNavigate) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 }
 
+private fun openUrl(context: Context, url: String) {
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+}
+
 private fun webMode(mode: String): String = when (mode) {
     "walk" -> "walking"; "bicycle" -> "bicycling"; "transit" -> "transit"; else -> "driving"
 }
 
 private fun fmt(v: Double): String =
     if (v == v.toLong().toDouble()) v.toLong().toString() else String.format(Locale.US, "%.1f", v)
+
+/** "1.4 km" / "600 m" — metres below a kilometre, where the turn actually is. */
+private fun fmtDistance(metres: Int?): String = when {
+    metres == null -> ""
+    metres >= 1000 -> String.format(Locale.US, "%.1f km", metres / 1000.0)
+    else -> "$metres m"
+}

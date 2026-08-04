@@ -55,19 +55,19 @@ as a **```map** block. It renders as a Stark FUI map panel (dark basemap in the 
 accent, glowing markers, route lines with a live-traffic readout, and a one-tap NAVIGATE
 that opens Google Maps).
 
+**A route** — every option `get_route` returned, each by its `routeId`:
+
 ```map
 {
   "title": "ROUTE_HOME",
-  "center": { "lat": 41.043, "lng": 29.009 },
-  "zoom": 12,
   "markers": [
-    { "lat": 41.043, "lng": 29.009, "label": "YOU",   "kind": "origin" },
-    { "lat": 41.111, "lng": 29.021, "label": "HOME",  "kind": "destination" }
+    { "lat": 41.043, "lng": 29.009, "label": "YOU",  "kind": "origin" },
+    { "lat": 41.111, "lng": 29.021, "label": "HOME", "kind": "destination" }
   ],
   "routes": [
-    { "polyline": "<encodedPolyline>", "label": "VIA D-100", "durationMin": 34,
+    { "routeId": "r_1a2b3c4d", "label": "VIA D-100", "durationMin": 34,
       "noTrafficMin": 22, "distanceKm": 18.4, "mode": "drive", "primary": true },
-    { "polyline": "<encodedPolyline>", "label": "VIA COAST", "durationMin": 41,
+    { "routeId": "r_5e6f7a8b", "label": "VIA COAST", "durationMin": 41,
       "noTrafficMin": 35, "distanceKm": 21.0, "mode": "drive" }
   ],
   "navigate": { "lat": 41.111, "lng": 29.021, "mode": "drive", "label": "HOME" },
@@ -75,24 +75,44 @@ that opens Google Maps).
 }
 ```
 
+**Places** — the whole `find_places` result set by its `placesId`:
+
+```map
+{
+  "title": "BARBERS_NEARBY",
+  "places": "pl_1a2b3c4d",
+  "markers": [ { "lat": 40.212, "lng": 28.995, "label": "YOU", "kind": "origin" } ]
+}
+```
+
 - `center` / `zoom` optional — the client auto-fits the markers + routes when omitted.
-- `markers[].kind`: `origin | destination | poi | pin` (chooses the glyph + colour).
-  Put a POI's rating / open state in `subtitle`.
-- `routes[].polyline` is the **encoded polyline string** straight from `get_route` — never
-  expand it into a coordinate array. Copy `durationMin`, `noTrafficMin`, `distanceKm`,
-  `mode` from the tool output; the client renders `noTrafficMin` vs `durationMin` as the
-  traffic delta. Mark exactly ONE route `primary: true`.
-  **Copy the polyline byte-for-byte and do NOT escape it.** Encoded polylines contain
-  backslashes (`...KgB\}KJeC...`) — leave them exactly as the tool printed them. The
-  client un-mangles that field itself. If you "helpfully" escape or re-encode it, the
-  route drawn on the map is silently the wrong shape.
+- **`routes[].routeId`** comes straight from `get_route` — copy it character for character.
+  The client fetches the real geometry, the live-traffic colouring and the turn-by-turn
+  from that id. There is no polyline for you to write; never invent one. (Fences written
+  before routeIds existed carry an inline `polyline` instead — still supported, still never
+  hand-written.)
+- **List EVERY route the tool returned, not just the best one.** The card turns them into a
+  route switcher: the owner taps between them and the line, the ETA, the traffic and the
+  NAVIGATE target all follow the selection. One route means nothing to compare. Mark exactly
+  ONE `primary: true` — your recommendation, and what the card opens on.
+  Copy `durationMin`, `noTrafficMin`, `distanceKm`, `label` and `mode` per route; the client
+  renders `noTrafficMin` vs `durationMin` as the traffic delta.
+- **`places`** is the `placesId` from `find_places` — one string, the entire result set. The
+  client draws each place as a tappable marker and resolves its own record (address, phone,
+  website, opening hours, rating, per-place NAVIGATE). When you pass `places`, do NOT also
+  write those POIs into `markers` and do NOT retype their details in prose — say which one
+  you'd pick and why, and let the card carry the rest.
+- `markers[].kind`: `origin | destination | poi | pin` (chooses the glyph + colour). Use
+  `markers` for the owner's own position, an origin/destination, or a single named point —
+  a plain "where is X" needs one marker and no tool at all. Put a hand-written POI's rating
+  / open state in `subtitle`.
 - `navigate` present ⇒ the NAVIGATE button shows and opens Google Maps to that point/mode.
 - `autoNavigate: true` **only** when the owner explicitly commanded navigation this turn
   ("take me there", "navigate", "yol tarifi başlat") — it makes the client open Google
   Maps automatically after a short visible countdown. Otherwise `false`.
 - Same anti-redundancy rule as the calendar: the block IS the answer. One summary line
   above it ("Evine en hızlı yol D-100 üzerinden, 34 dk — trafik 12 dk ekliyor:") is good;
-  a second text list of the same routes/coordinates is not.
+  a second text list of the same routes/places/coordinates is not.
 
 ### Data charts → use `chart` blocks
 

@@ -15,8 +15,11 @@ import com.speda.heartbreaker.designsystem.glass.LocalHazeState
 import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.designsystem.glass.rememberHbHazeState
 import com.speda.heartbreaker.ui.chat.ChatScreen
+import com.speda.heartbreaker.ui.prose.LocalPlaceResolver
 import com.speda.heartbreaker.ui.prose.LocalRouteResolver
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.domain.MapPlace
+import com.speda.heartbreaker.domain.RouteGeometry
 
 /**
  * The configured shell root: the ambient void is the single Haze source that all
@@ -61,8 +64,16 @@ fun MainScreen(
             // Declared explicitly rather than inferred: a lambda literal only
             // converts to a suspend type when the expected type is unambiguous,
             // and through remember's type parameter it is not.
-            val fn: suspend (String) -> String? = { routeId ->
+            val fn: suspend (String) -> RouteGeometry? = { routeId ->
                 graph.api.fetchRouteGeometry(routeConfig, routeId)
+            }
+            fn
+        }
+        // Place searches follow the same rule as routes: the fence carries one
+        // id and the records are fetched here.
+        val resolvePlaces = remember(routeConfig) {
+            val fn: suspend (String) -> List<MapPlace>? = { placesId ->
+                graph.api.fetchPlaceSet(routeConfig, placesId)
             }
             fn
         }
@@ -71,6 +82,7 @@ fun MainScreen(
             LocalHazeState provides haze,
             LocalAmbientHazeState provides ambientHaze,
             LocalRouteResolver provides resolveRoute,
+            LocalPlaceResolver provides resolvePlaces,
         ) {
             ChatScreen(
                 graph = graph,

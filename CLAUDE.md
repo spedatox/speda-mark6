@@ -202,6 +202,8 @@ speda-mark-vi/
     │   ├── web_watch.py         # POST /web/watch/{scan,ack} — n8n's LLM-free page-change probe
     │   │                        #   + GET /web/watch, DELETE /web/watch/{id} — owner-facing list/reset
     │   ├── memory.py
+    │   ├── navigation.py        # GET /navigation/route/{id}, /navigation/places/{id} — what the
+    │   │                        #   map card resolves its geometry, traffic and POI records from
     │   ├── news.py
     │   ├── telegram.py
     │   └── health.py
@@ -241,13 +243,17 @@ speda-mark-vi/
     │   ├── health.py            # Atomix health-sample ingestion
     │   ├── mail_watch.py        # Gmail domain scan + SPEDA-Seen labelling (no LLM) — see "Cheap probes"
     │   ├── web_watch.py         # Page fetch + line-level publish diff (no LLM) — see "Cheap probes"
+    │   ├── routes.py, places.py # Map-card stores — geometry + congestion + turns, and
+    │   │                        #   find_places result sets. Served by routers/navigation.py
+    │   │                        #   as GET /navigation/{route,places}/{id}; the fence carries the id.
     │   ├── forge_peer.py, sandbox_launcher.py   # External backend (Forge) process/session bridge
     │   ├── pending_asks.py      # Permission asks relayed from external peers
     │   ├── telegram.py
     │   └── n8n.py, n8n_api.py   # Webhook auth (X-N8N-Secret), n8n REST client
     ├── models/                  # ORM models — one file per table (user, session, message, agent,
     │                            # agent_message, automation, health_sample, memory/memory_file/memory_revision,
-    │                            # message_embedding, news_item/news_quota/news_watch, notification, tool_call)
+    │                            # message_embedding, news_item/news_quota/news_watch, notification, tool_call,
+    │                            # route/place — map payloads the model references by id, never retypes)
     ├── schemas/
     │   ├── chat.py, sse.py, agent.py, trigger.py, health.py
     ├── websocket/

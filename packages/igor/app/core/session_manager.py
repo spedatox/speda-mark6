@@ -11,6 +11,13 @@ from app.models.message import Message
 
 logger = logging.getLogger(__name__)
 
+# Fixed English weekday names, indexed by datetime.weekday() (Monday = 0).
+# Deliberately NOT strftime("%a"): that reads the process locale, so the same
+# instant could render "Tue" on one host and "Sal"/"Di" on another — and a stamp
+# whose bytes depend on the environment breaks the byte-stability the prompt
+# cache is built on. See stamp_user_content.
+_WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
 
 class SessionManager:
     # Per-session loaded-toolset memory: once a server is loaded via use_toolset
@@ -202,13 +209,20 @@ class SessionManager:
         to slip on). The conversion is deterministic — fixed created_at + fixed
         zone — so the stamp stays byte-stable and the cache still holds. Changing
         the owner timezone re-renders history once; that is the only churn.
+
+        The WEEKDAY is spelled out, and that is not decoration. Given only
+        "2026-08-04" a model has to run a calendar algorithm in its head to name
+        the day, and it gets it wrong often and confidently — calling a Tuesday
+        "Monday", then reasoning about "the weekend" or "tomorrow's meeting" from
+        that wrong footing. The day of the week is a fact we already hold; it
+        costs three tokens to state and removes an entire class of error.
         """
         aware = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
         try:
             aware = aware.astimezone(ZoneInfo(settings.owner_timezone))
         except Exception:  # unknown/invalid IANA name → leave as UTC
             pass
-        ts = aware.strftime("[%Y-%m-%d %H:%M %Z]")
+        ts = f"[{_WEEKDAYS[aware.weekday()]} " + aware.strftime("%Y-%m-%d %H:%M %Z]")
         if isinstance(content, str):
             return f"{ts} {content}" if content else ts
         return [{"type": "text", "text": ts}, *content]

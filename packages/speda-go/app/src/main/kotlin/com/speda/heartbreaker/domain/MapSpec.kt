@@ -28,6 +28,58 @@ data class MapMarker(
     val subtitle: String? = null,
 )
 
+/**
+ * One congestion band, addressing points of the DECODED polyline — so it is only
+ * meaningful beside the geometry it was computed against, which is why both
+ * arrive from the same fetch and neither passes through the model.
+ *
+ * [speed] is Google's own scale, kept verbatim: NORMAL | SLOW | TRAFFIC_JAM.
+ */
+data class TrafficBand(val start: Int, val end: Int, val speed: String)
+
+/** One turn. [distanceM] is how far to drive BEFORE performing it. */
+data class RouteStep(
+    val instruction: String,
+    val maneuver: String? = null,
+    val distanceM: Int? = null,
+    val durationMin: Int? = null,
+)
+
+/**
+ * One place from a `find_places` result set, fetched whole by placesId.
+ *
+ * Everything past name/lat/lng is optional because Places returns a ragged set
+ * (a barber has no website, a chain has no editorial summary) — the card hides
+ * what it doesn't know rather than printing em-dashes.
+ */
+data class MapPlace(
+    val name: String,
+    val lat: Double,
+    val lng: Double,
+    val placeId: String? = null,
+    val address: String? = null,
+    val category: String? = null,
+    val summary: String? = null,
+    val status: String? = null,
+    val rating: Double? = null,
+    val reviews: Int? = null,
+    val openNow: Boolean? = null,
+    val hours: List<String> = emptyList(),
+    val priceLevel: String? = null,
+    val phone: String? = null,
+    val website: String? = null,
+    val mapsUri: String? = null,
+    val distanceKm: Double? = null,
+)
+
+/** What GET /navigation/route/{id} hands back: the parts of a route no model
+ *  may retype — the line, the congestion along it, and the turns. */
+data class RouteGeometry(
+    val polyline: String,
+    val traffic: List<TrafficBand> = emptyList(),
+    val steps: List<RouteStep> = emptyList(),
+)
+
 data class MapRoute(
     /**
      * The drawn geometry. Empty when the fence referenced [routeId] instead —
@@ -45,6 +97,10 @@ data class MapRoute(
     val distanceKm: Double? = null,
     val mode: String = "drive",
     val primary: Boolean = false,
+    /** Filled in by the [routeId] fetch, never by the model. Empty means "no
+     *  traffic data" — which is not the same as "the road is clear". */
+    val traffic: List<TrafficBand> = emptyList(),
+    val steps: List<RouteStep> = emptyList(),
 ) {
     /** Congestion delay in minutes, when both timings are present and positive. */
     val trafficDelayMin: Int?
@@ -68,6 +124,9 @@ data class MapSpec(
     val navigate: MapNavigate? = null,
     val autoNavigate: Boolean = false,
     val height: Int? = null,
+    /** placesId — an entire find_places result set, resolved client-side. The
+     *  fence carries one string; the records never pass through the model. */
+    val places: String? = null,
 ) {
     /** The route drawn in the accent (marked primary, else the first). */
     val primaryRoute: MapRoute?
@@ -122,6 +181,8 @@ fun parseMapSpec(raw: String): MapSpec? = runCatching {
             MapNavigate(lat, lng, (n.str("mode") ?: "drive").lowercase(), n.str("label")) else null
     }
 
+    val places = o.str("places")?.takeIf { it.isNotBlank() }
+
     MapSpec(
         title = o.str("title"),
         center = center,
@@ -131,7 +192,74 @@ fun parseMapSpec(raw: String): MapSpec? = runCatching {
         navigate = navigate,
         autoNavigate = o.boolv("autoNavigate") ?: false,
         height = o.intv("height"),
-    ).takeIf { it.markers.isNotEmpty() || it.routes.isNotEmpty() || it.center != null }
+        places = places,
+    ).takeIf {
+        it.markers.isNotEmpty() || it.routes.isNotEmpty() || it.center != null || it.places != null
+    }
+}.getOrNull()
+
+/* ── Igor payloads (never model-written; see app/models/route.py, place.py) ──── */
+
+/** GET /navigation/route/{id} → geometry + congestion + turns. Null when the
+ *  body isn't what we expect, which the card draws as a missing line rather
+ *  than a wrong one. */
+fun parseRouteGeometry(raw: String): RouteGeometry? = runCatching {
+    val o = LenientJson.parseToJsonElement(raw) as? JsonObject ?: return null
+    val polyline = o.str("polyline").orEmpty()
+    if (polyline.isBlank()) return null
+    RouteGeometry(
+        polyline = polyline,
+        traffic = (o["traffic"] as? JsonArray).orEmptyArr().mapNotNull { el ->
+            val b = el as? JsonObject ?: return@mapNotNull null
+            val start = b.intv("start") ?: 0
+            val end = b.intv("end") ?: return@mapNotNull null
+            val speed = b.str("speed") ?: return@mapNotNull null
+            TrafficBand(start, end, speed)
+        },
+        steps = (o["steps"] as? JsonArray).orEmptyArr().mapNotNull { el ->
+            val s = el as? JsonObject ?: return@mapNotNull null
+            val instruction = s.str("instruction")?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
+            RouteStep(
+                instruction = instruction,
+                maneuver = s.str("maneuver"),
+                distanceM = s.intv("distanceM"),
+                durationMin = s.intv("durationMin"),
+            )
+        },
+    )
+}.getOrNull()
+
+/** GET /navigation/places/{id} → the result set. A place with no coordinates is
+ *  dropped: it cannot be put on the map, and a list row pointing nowhere is
+ *  worse than one fewer result. */
+fun parsePlaceSet(raw: String): List<MapPlace>? = runCatching {
+    val o = LenientJson.parseToJsonElement(raw) as? JsonObject ?: return null
+    (o["places"] as? JsonArray).orEmptyArr().mapNotNull { el ->
+        val p = el as? JsonObject ?: return@mapNotNull null
+        val lat = p.dbl("lat") ?: return@mapNotNull null
+        val lng = p.dbl("lng") ?: return@mapNotNull null
+        MapPlace(
+            name = p.str("name") ?: "(unnamed)",
+            lat = lat, lng = lng,
+            placeId = p.str("placeId"),
+            address = p.str("address"),
+            category = p.str("category"),
+            summary = p.str("summary"),
+            status = p.str("status"),
+            rating = p.dbl("rating"),
+            reviews = p.intv("reviews"),
+            openNow = p.boolv("openNow"),
+            hours = (p["hours"] as? JsonArray).orEmptyArr().mapNotNull {
+                (it as? JsonPrimitive)?.content
+            },
+            priceLevel = p.str("priceLevel"),
+            phone = p.str("phone"),
+            website = p.str("website"),
+            mapsUri = p.str("mapsUri"),
+            distanceKm = p.dbl("distanceKm"),
+        )
+    }
 }.getOrNull()
 
 /* ── JsonObject scalar helpers (null-soft) ───────────────────────────────────── */

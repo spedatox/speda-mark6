@@ -19,6 +19,7 @@ from app.models.academic import AttendanceEntry, CourseSlot, Device, TermConfig
 from app.models.reminder import ReminderCycle
 from app.models.reminder_definition import ReminderDefinition
 from app.models.route import RouteGeometry
+from app.models.place import PlaceSet
 
 __all__ = [
     "User", "Session", "Message", "Memory", "MemoryFile", "MemoryRevision",
@@ -27,5 +28,5 @@ __all__ = [
     "NewsItem", "NewsWatch", "NewsQuota",
     "HealthSample", "HealthDaily",
     "CourseSlot", "TermConfig", "AttendanceEntry", "Device",
-    "ReminderCycle", "ReminderDefinition", "RouteGeometry",
+    "ReminderCycle", "ReminderDefinition", "RouteGeometry", "PlaceSet",
 ]
