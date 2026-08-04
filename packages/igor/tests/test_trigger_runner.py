@@ -99,10 +99,16 @@ async def _fire(db, *, payload, output_mode="push", engine=None, bots=None, post
         turns=turns, session_manager=sm, telegram_bots=bots,
         agent_proxy=agent_proxy, ws_manager=ws_manager,
     )
-    for _ in range(50):                      # let the detached turn settle
+    # Let the detached turn settle. Generous on purpose: the loop exits the
+    # instant the registry drains, so a healthy run still costs ~20ms and only
+    # a genuinely stuck turn ever spends the full budget. At the old 1s ceiling
+    # the suite flaked under parallel load — the turn was fine, the wait wasn't.
+    for _ in range(500):
         await asyncio.sleep(0.02)
         if not turns.active():
             break
+    else:
+        raise AssertionError("turn did not settle within 10s")
     return started, session_id, bots
 
 
@@ -273,3 +279,77 @@ async def test_undeliverable_push_falls_back_to_a_notification_row(db):
     assert len(rows) == 1
     assert rows[0].source_agent == "atomix"
     assert "Slept 7h12m" in rows[0].body
+
+
+# ── Delivery takes the answer, not the narration ────────────────────────────
+# The regression: a briefing arrived on Telegram opening with "let me get the
+# free news first" and "RSS store is empty, moving to deep dive". Those are the
+# model's between-tool asides — fine in the transcript next to the tool cards
+# they explain, stage directions when pushed to a phone with neither.
+
+def _narrating_engine(preamble, answer):
+    async def run(ctx):
+        yield SSEEvent(SSEEventType.START, {}, ctx.session_id, ctx.request_id)
+        yield SSEEvent(SSEEventType.CHUNK, preamble, ctx.session_id, ctx.request_id)
+        yield SSEEvent(SSEEventType.TOOL, {"id": "t1", "name": "news_deep_dive", "input": {}},
+                       ctx.session_id, ctx.request_id)
+        yield SSEEvent(SSEEventType.CHUNK, answer, ctx.session_id, ctx.request_id)
+        yield SSEEvent(SSEEventType.DONE, answer, ctx.session_id, ctx.request_id)
+    return run
+
+
+@pytest.mark.asyncio
+async def test_push_delivers_only_the_text_written_after_the_last_tool(db):
+    preamble = "Once ucretsiz haberleri alayim.\n\nRSS store bos.\n\n"
+    answer = "Gunluk Briefing — 4 Agustos\n\nEnflasyon Temmuz'da hizlandi."
+    _, _, bots = await _fire(
+        db, payload={"job": "morning_brief"},
+        engine=_narrating_engine(preamble, answer),
+    )
+    assert bots.sent, "nothing was delivered"
+    _, delivered = bots.sent[-1]
+    assert delivered == answer
+    assert "RSS store" not in delivered
+
+
+@pytest.mark.asyncio
+async def test_transcript_keeps_the_narration_the_push_dropped(db):
+    """Delivery is a view, not a redaction — the session must still show the
+    whole turn, or the tool cards lose the text that explains them."""
+    preamble = "Simdi takvime bakayim.\n\n"
+    answer = "Bugun tek etkinlik var."
+    _, session_id, _ = await _fire(
+        db, payload={"job": "morning_brief"},
+        engine=_narrating_engine(preamble, answer),
+    )
+    row = (await db.execute(
+        select(Message).where(Message.session_id == session_id, Message.role == "assistant")
+    )).scalars().first()
+    stored = "".join(
+        b["text"] for b in row.content if b.get("type") == "text"
+    )
+    assert stored == preamble + answer
+
+
+@pytest.mark.asyncio
+async def test_push_falls_back_to_the_full_turn_when_nothing_follows_the_tool(db):
+    """A turn that ends right after a tool call has no closing segment.
+    Delivering nothing is worse than delivering the narration."""
+    async def run(ctx):
+        yield SSEEvent(SSEEventType.CHUNK, "Checked, all clear.", ctx.session_id, ctx.request_id)
+        yield SSEEvent(SSEEventType.TOOL, {"id": "t1", "name": "system_info", "input": {}},
+                       ctx.session_id, ctx.request_id)
+        yield SSEEvent(SSEEventType.DONE, "", ctx.session_id, ctx.request_id)
+    _, _, bots = await _fire(db, payload={"job": "x"}, engine=run)
+    assert bots.sent[-1][1] == "Checked, all clear."
+
+
+@pytest.mark.asyncio
+async def test_push_keeps_the_failure_marker_a_broken_turn_was_stamped_with(db):
+    """The marker is appended after the last tool, so it must survive the slice
+    — a briefing that broke off half-way has to arrive saying so."""
+    _, _, bots = await _fire(
+        db, payload={"job": "x"}, engine=_engine("Partial answer.", error=True),
+    )
+    assert bots.sent, "a failed turn still delivers what it had"
+    assert "Partial answer." in bots.sent[-1][1]

@@ -1155,6 +1155,99 @@ def _usage_from(u) -> Usage:
 
 # ── Streaming ────────────────────────────────────────────────────────────────
 
+_THINK_OPEN = "<think>"
+_THINK_CLOSE = "</think>"
+
+
+def _partial_tail(text: str, tag: str) -> int:
+    """Length of the longest suffix of `text` that is a proper prefix of `tag` —
+    i.e. how much of the buffer might still turn out to be a split tag."""
+    for n in range(min(len(tag) - 1, len(text)), 0, -1):
+        if text.endswith(tag[:n]):
+            return n
+    return 0
+
+
+class _ReasoningFilter:
+    """Keeps a model's thinking out of its answer.
+
+    Reasoning reaches us on two different channels and only one of them is
+    safe. Providers that follow DeepSeek's convention put it on its own
+    `reasoning_content` delta field, which we simply never read into the text.
+    Others — GLM, Ollama, and anything proxied through a generic OpenAI-compat
+    gateway — inline it into `content` wrapped in `<think>…</think>`, where it
+    is indistinguishable from the answer unless someone strips it. Persisted, it
+    becomes conversation history, so the next turn reads the model's own
+    scratchpad back as dialogue.
+
+    Streaming makes this stateful: a tag can be split across chunk boundaries
+    ("<thi" / "nk>"), so the filter holds back any tail that could still become
+    one and releases it once it cannot.
+    """
+
+    def __init__(self) -> None:
+        self._buf = ""
+        self._inside = False
+        self._emitted = False
+        self.reasoning: list[str] = []
+
+    def feed(self, delta: str) -> str:
+        """Visible text from this delta. Thinking is diverted to .reasoning."""
+        self._buf += delta
+        out: list[str] = []
+        while True:
+            if self._inside:
+                idx = self._buf.find(_THINK_CLOSE)
+                if idx == -1:
+                    keep = _partial_tail(self._buf, _THINK_CLOSE)
+                    cut = len(self._buf) - keep
+                    self.reasoning.append(self._buf[:cut])
+                    self._buf = self._buf[cut:]
+                    break
+                self.reasoning.append(self._buf[:idx])
+                self._buf = self._buf[idx + len(_THINK_CLOSE):]
+                self._inside = False
+            else:
+                idx = self._buf.find(_THINK_OPEN)
+                if idx == -1:
+                    keep = _partial_tail(self._buf, _THINK_OPEN)
+                    cut = len(self._buf) - keep
+                    out.append(self._buf[:cut])
+                    self._buf = self._buf[cut:]
+                    break
+                out.append(self._buf[:idx])
+                self._buf = self._buf[idx + len(_THINK_OPEN):]
+                self._inside = True
+        text = "".join(out)
+        if text:
+            self._emitted = True
+        return text
+
+    def flush(self) -> str:
+        """Whatever is still held back at end of stream.
+
+        An unterminated `<think>` means the model was cut off mid-thought, so
+        there is no answer to deliver. If it never produced any visible text at
+        all, the held-back remainder is released anyway and logged: a truncated
+        turn is a failure either way, and one that arrives visibly wrong is far
+        easier to diagnose than one that silently delivers nothing.
+        """
+        rest, self._buf = self._buf, ""
+        if not self._inside:
+            return rest
+        self.reasoning.append(rest)
+        if self._emitted:
+            return ""
+        # Nothing visible was ever produced, so the diverted text is all there
+        # is. It has already been drained out of the buffer chunk by chunk, so
+        # salvage the accumulation rather than the (empty) remainder.
+        salvage = "".join(self.reasoning)
+        logger.warning(
+            "reasoning_block_unterminated",
+            extra={"chars": len(salvage)},
+        )
+        return salvage
+
 
 class _OpenAICompatStream:
     """Chat-completions stream exposing the Anthropic stream surface the
@@ -1170,6 +1263,7 @@ class _OpenAICompatStream:
         self._finish: str | None = None
         self._usage = Usage()
         self._consumed = False
+        self._reasoning = _ReasoningFilter()
 
     async def open(self) -> None:
         params = dict(self._params, stream=True)
@@ -1197,9 +1291,15 @@ class _OpenAICompatStream:
             delta = choice.delta
             if delta is None:
                 continue
+            # DeepSeek-convention providers stream thinking on its own field.
+            # Collect it for logging only — it must never reach the text.
+            if (thought := getattr(delta, "reasoning_content", None)):
+                self._reasoning.reasoning.append(thought)
             if delta.content:
-                self._text.append(delta.content)
-                yield delta.content
+                visible = self._reasoning.feed(delta.content)
+                if visible:
+                    self._text.append(visible)
+                    yield visible
             for tc in delta.tool_calls or []:
                 # `index` is what pairs an argument delta with the call it
                 # belongs to. Gemini's bridge can omit it; without a fallback
@@ -1226,6 +1326,17 @@ class _OpenAICompatStream:
                         acc["name"] = tc.function.name
                     if tc.function.arguments:
                         acc["arguments"] += tc.function.arguments
+        if (tail := self._reasoning.flush()):
+            self._text.append(tail)
+            yield tail
+        if self._reasoning.reasoning:
+            logger.debug(
+                "reasoning_stripped",
+                extra={
+                    "provider": self._provider,
+                    "chars": sum(len(r) for r in self._reasoning.reasoning),
+                },
+            )
         self._consumed = True
 
     async def get_final_message(self) -> LLMMessage:

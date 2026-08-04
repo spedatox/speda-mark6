@@ -57,6 +57,43 @@ def _extract_meta(content) -> dict:
     return {}
 
 
+def final_answer_text(content) -> str:
+    """The closing answer of an assistant turn — the text emitted AFTER the last
+    tool call — rather than everything the turn said.
+
+    An agentic turn interleaves two very different kinds of text. Between tool
+    calls the model narrates what it is about to do ("RSS store is empty, moving
+    to deep dive"); after the last tool returns it writes the actual answer.
+    Both are streamed live, and both are persisted as one text block, because
+    the chat UI wants the whole thing — the narration is what makes a long turn
+    watchable, and it is interleaved with tool cards via `afterChars`.
+
+    A delivered message is the opposite case. A briefing pushed to Telegram has
+    no tool cards, no live stream and no reader watching the work happen — the
+    narration arrives as a preamble of stage directions on top of the report,
+    which is exactly how a scheduled briefing ends up opening with "let me get
+    the free news first". So delivery takes this slice, and the transcript keeps
+    the full text.
+
+    The offset comes from the last tool's `afterChars` (stamped at save time by
+    TurnRegistry._persist), so no new persisted field is needed and turns saved
+    before this existed still resolve correctly. Falls back to the full text
+    whenever the slice would be empty — a turn that ended right after a tool
+    call has no closing segment, and delivering nothing is worse than delivering
+    the narration.
+    """
+    full = _extract_text(content).strip()
+    tools = _extract_meta(content).get('tools') or []
+    offsets = [
+        t['afterChars'] for t in tools
+        if isinstance(t, dict) and isinstance(t.get('afterChars'), int)
+    ]
+    if not offsets:
+        return full
+    tail = _extract_text(content)[max(offsets):].strip()
+    return tail or full
+
+
 def rows_from_messages(messages: list[Message]) -> list[dict]:
     """Shape stored user/assistant Message rows into the plain dicts the UI
     renders for a session's message list."""

@@ -928,3 +928,51 @@ async def test_identical_read_only_calls_run_once_per_turn():
     await r.execute("writing_thing", {"q": "x"}, ctx)
     await r.execute("counting_thing", {"q": "a"}, ctx)
     assert len(calls) == 4
+
+
+# ── Reasoning must not become dialogue ──────────────────────────────────────
+# GLM, Ollama and generic OpenAI-compat gateways inline the model's thinking
+# into `content` wrapped in <think>…</think>. Persisted, it becomes history —
+# and the next turn reads the model's own scratchpad back as something it said.
+
+from app.services.llm_client import _ReasoningFilter
+
+
+def _filter(deltas):
+    f = _ReasoningFilter()
+    visible = "".join(f.feed(d) for d in deltas)
+    visible += f.flush()
+    return visible, "".join(f.reasoning)
+
+
+def test_think_block_is_stripped_from_the_answer():
+    assert _filter(["<think>which tool</think>The answer."]) == ("The answer.", "which tool")
+
+
+def test_tag_split_across_chunk_boundaries_is_still_caught():
+    """The whole reason this is a state machine: a stream can put "<thi" in one
+    chunk and "nk>" in the next, and a per-chunk regex sees neither."""
+    visible, hidden = _filter(["<thi", "nk>hid", "den</thi", "nk>Vis", "ible"])
+    assert visible == "Visible"
+    assert hidden == "hidden"
+
+
+def test_text_without_tags_passes_through_untouched():
+    assert _filter(["Just an answer."]) == ("Just an answer.", "")
+
+
+def test_multiple_think_blocks_are_all_removed():
+    assert _filter(["a<think>b</think>c<think>d</think>e"]) == ("ace", "bd")
+
+
+def test_unterminated_think_is_salvaged_rather_than_delivering_nothing():
+    """A model cut off mid-thought produced no answer. Releasing the fragment
+    is visibly wrong and diagnosable; an empty push is neither."""
+    visible, _ = _filter(["<think>cut off mid-th"])
+    assert visible == "cut off mid-th"
+
+
+def test_unterminated_think_after_real_text_keeps_only_the_text():
+    visible, hidden = _filter(["The answer.<think>now let me also"])
+    assert visible == "The answer."
+    assert "now let me also" in hidden

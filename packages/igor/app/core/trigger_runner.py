@@ -38,6 +38,7 @@ from app.core.clock import owner_now
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal
 from app.models.message import Message
+from app.services.chat_history import final_answer_text
 
 logger = logging.getLogger(__name__)
 
@@ -322,8 +323,10 @@ async def _deliver(
     """Post-run delivery: stamp the automation, then push if asked.
 
     The text comes back out of the DB rather than off a stream, so what the
-    owner is sent is exactly what the transcript shows — including the runner's
-    marker when a turn broke off early.
+    owner is sent is the turn the transcript shows — including the runner's
+    marker when a turn broke off early. Not all of it, though: delivery takes
+    the turn's closing answer only, never the between-tool narration that
+    precedes it (see chat_history.final_answer_text).
     """
     async with AsyncSessionLocal() as db:
         automation_name = payload.get("automation")
@@ -356,8 +359,13 @@ async def _deliver(
 
 
 async def _last_assistant_text(db: AsyncSession, session_id: int) -> str:
-    """The text of the newest assistant message in the session, flattened out of
-    its content blocks (tool/file meta blocks carry no text and are skipped)."""
+    """What gets delivered for the newest assistant turn: its closing answer,
+    with the model's between-tool narration left behind in the transcript.
+
+    A briefing is written after the last tool returns; everything before that is
+    the agent talking to itself about which tool to reach for next. On a push
+    there is no stream and no tool disclosure to give that text a context, so it
+    lands in Telegram as a preamble of stage directions above the report."""
     row = (
         await db.execute(
             select(Message)
@@ -368,15 +376,9 @@ async def _last_assistant_text(db: AsyncSession, session_id: int) -> str:
     ).scalars().first()
     if row is None:
         return ""
-    content = row.content
-    if isinstance(content, str):
-        return content.strip()
-    parts = [
-        b.get("text", "")
-        for b in (content or [])
-        if isinstance(b, dict) and b.get("type") == "text"
-    ]
-    return "".join(parts).strip()
+    if isinstance(row.content, str):
+        return row.content.strip()
+    return final_answer_text(row.content)
 
 
 async def _store_notification(
