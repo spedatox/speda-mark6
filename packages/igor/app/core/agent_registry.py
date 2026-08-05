@@ -31,7 +31,12 @@ class AgentRegistry:
         registration: AgentRegistration,
         db: AsyncSession,
     ) -> None:
-        await self._ws_manager.connect(registration.agent_id, websocket)
+        await self._ws_manager.connect(
+            registration.agent_id, websocket,
+            host=registration.host,
+            platform=registration.platform,
+            roots=tuple(registration.roots),
+        )
 
         status = AgentStatus(
             agent_id=registration.agent_id,
@@ -46,9 +51,25 @@ class AgentRegistry:
         await self._persist(db, registration.agent_id, "online", registration.capabilities)
         logger.info("agent_online", extra={"agent_id": registration.agent_id})
 
-    async def deregister(self, agent_id: str, db: AsyncSession) -> None:
+    async def deregister(
+        self, agent_id: str, db: AsyncSession, host: str | None = None
+    ) -> None:
+        """Drop one machine's connection.
+
+        The agent only goes offline once its LAST machine is gone — Optimus
+        with a laptop peer that slept is still online on the server, and
+        marking it offline there would send its turns to the in-process
+        fallback while a perfectly good peer was still attached.
+        """
+        await self._ws_manager.disconnect(agent_id, host)
+        if self._ws_manager.is_connected(agent_id):
+            logger.info(
+                "agent_host_offline",
+                extra={"agent_id": agent_id, "host": host,
+                       "remaining": self._ws_manager.hosts(agent_id)},
+            )
+            return
         self._online.pop(agent_id, None)
-        await self._ws_manager.disconnect(agent_id)
         await self._persist(db, agent_id, "offline")
         logger.info("agent_offline", extra={"agent_id": agent_id})
 

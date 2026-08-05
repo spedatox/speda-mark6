@@ -1,11 +1,4 @@
-import re
-
 from pydantic import BaseModel, field_validator
-
-# A drive-letter path ("C:\…", "D:/…") or a UNC share ("\\server\share"). Both
-# are meaningless to the server-side peer and, worse, do not fail on POSIX —
-# see ChatRequest._cwd_must_be_posix for what that cost.
-_WINDOWS_PATH = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\)")
 
 
 class ImageAttachment(BaseModel):
@@ -81,34 +74,26 @@ class ChatRequest(BaseModel):
 
     @field_validator("cwd")
     @classmethod
-    def _cwd_must_be_posix(cls, value: str | None) -> str | None:
-        """Refuse a Windows path — the peer is always server-side POSIX.
+    def _cwd_is_blank_or_a_path(cls, value: str | None) -> str | None:
+        """Normalise only. WHICH paths are legal is not decidable here.
 
-        On 2026-08-04 the owner picked a folder in the desktop file dialog and
-        asked Optimus to build a site "here". The literal string
-        `C:\\Users\\AREL TARIM\\Downloads\\Yeni klasör` was forwarded to a Linux
-        process, where both `\\` and `:` are legal filename characters — so
-        nothing errored. mkdir created ONE directory with that entire path as
-        its name under /opt/forge-mk1, the site built cleanly inside it, and the
-        owner was told it was done. Silent success on the wrong machine is the
-        worst available outcome, so the path is rejected here at the edge where
-        every client (desktop, SPEDA GO, Telegram) goes through it.
+        This used to refuse every Windows path outright, because the only peer
+        was server-side POSIX and a Windows string does not fail on Linux — it
+        becomes a directory NAMED after the path (see app/core/peer_routing.py
+        for the 2026-08-04 incident). That guard was correct then and wrong the
+        moment a peer runs on the owner's PC, where `C:\\Users\\…` is exactly
+        the right answer.
+
+        A schema has no access to app.state and therefore cannot know which
+        machines are attached or what they cover, so the decision moved to
+        peer_routing.resolve(), which is called with the live peer list on both
+        paths that reach a peer: ExternalAgentProxy.run for chat turns and
+        AgentDispatcher._run_external for dispatched tasks. A path no connected
+        peer claims is refused there, by name, instead of being sent anywhere.
         """
         if value is None:
             return None
-        path = value.strip()
-        if not path:
-            return None
-        if _WINDOWS_PATH.match(path) or "\\" in path:
-            raise ValueError(
-                "That looks like a Windows path from your own PC "
-                f"({path!r}), but Optimus runs on the server — it has no access "
-                "to your machine's filesystem. Give it an absolute POSIX path on "
-                "the server (e.g. /opt/forge-mk1/workspaces/my-site), or leave "
-                "the directory unset to use the peer's own workspace and collect "
-                "the result from there."
-            )
-        return path
+        return value.strip() or None
 
 
 class ChatResponse(BaseModel):

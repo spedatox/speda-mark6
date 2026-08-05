@@ -12,6 +12,16 @@ class AgentRegistration(BaseModel):
     status: str = "online"
     model_preference: str = "haiku"
 
+    # Which MACHINE this peer runs on. One agent may attach from several at
+    # once (Optimus on the server and on the owner's PC) and is still one
+    # agent — same profile, same memory, same sessions. These three fields are
+    # what let the backend route a turn to the right machine; see
+    # app/core/peer_routing.py. All default so a peer that sends none of them
+    # behaves exactly as before: one linux host, accepting any POSIX path.
+    host: str = "default"        # distinguishes peers of the SAME agent
+    platform: str = "linux"      # "linux" | "windows" — how to validate a path
+    roots: list[str] = []        # directories this peer will work in; [] = any
+
 
 class AgentStatus(BaseModel):
     agent_id: str

@@ -26,6 +26,7 @@ import uuid
 from typing import AsyncGenerator
 
 from app.core.context import AgentContext
+from app.core.peer_routing import resolve
 from app.schemas.sse import SSEEvent, SSEEventType
 from app.websocket.manager import WebSocketManager
 
@@ -92,8 +93,8 @@ class ExternalAgentProxy:
 
     def __init__(self, ws_manager: WebSocketManager) -> None:
         self._ws = ws_manager
-        self._pending: dict[str, asyncio.Queue] = {}   # chat_id → event queue
-        self._owner: dict[str, str] = {}               # chat_id → agent_id
+        self._pending: dict[str, asyncio.Queue] = {}          # chat_id → event queue
+        self._owner: dict[str, tuple[str, str]] = {}          # chat_id → (agent_id, host)
 
     # ── Frame ingress (called from the agents WebSocket route) ──────────────
 
@@ -106,11 +107,17 @@ class ExternalAgentProxy:
         queue.put_nowait(event)
         return True
 
-    def fail_agent(self, agent_id: str) -> None:
-        """Peer disconnected: terminate every chat it owned with an ERROR so no
-        stream hangs until the idle timeout."""
-        for chat_id, owner in list(self._owner.items()):
-            if owner != agent_id:
+    def fail_agent(self, agent_id: str, host: str | None = None) -> None:
+        """A peer disconnected: terminate every chat it owned with an ERROR so
+        no stream hangs until the idle timeout.
+
+        Scoped to one machine when `host` is given. An agent attached from two
+        machines has in-flight turns on each, and killing the server's turns
+        because a laptop closed its lid would fail work that is still running
+        perfectly well.
+        """
+        for chat_id, (owner, owner_host) in list(self._owner.items()):
+            if owner != agent_id or (host is not None and owner_host != host):
                 continue
             queue = self._pending.get(chat_id)
             if queue is not None:
@@ -125,10 +132,34 @@ class ExternalAgentProxy:
     async def run(self, context: AgentContext) -> AsyncGenerator[SSEEvent, None]:
         """Proxy one chat turn to the external peer, yielding SSEEvents."""
         agent_id = context.agent_id
+        cwd = context.extra.get("cwd")
+
+        # Which machine runs this turn. The directory picks the peer, so the
+        # owner selecting a folder is the whole interaction — and a folder no
+        # connected peer covers is refused HERE rather than sent somewhere it
+        # would silently succeed (app/core/peer_routing.py).
+        decision = resolve(self._ws.peers(agent_id), cwd)
+        if not decision.ok:
+            logger.warning(
+                "external_chat_unroutable",
+                extra={"request_id": context.request_id, "agent_id": agent_id,
+                       "cwd": cwd},
+            )
+            yield SSEEvent(
+                type=SSEEventType.START, data="",
+                session_id=context.session_id, request_id=context.request_id,
+            )
+            yield SSEEvent(
+                type=SSEEventType.ERROR, data=decision.error,
+                session_id=context.session_id, request_id=context.request_id,
+            )
+            return
+
+        host = decision.host
         chat_id = str(uuid.uuid4())
         queue: asyncio.Queue = asyncio.Queue()
         self._pending[chat_id] = queue
-        self._owner[chat_id] = agent_id
+        self._owner[chat_id] = (agent_id, host or "")
         terminal_seen = False
 
         try:
@@ -141,9 +172,9 @@ class ExternalAgentProxy:
                 # The user's explicit UI model pick, if any — None lets the
                 # peer apply its own model policy (Rule 10: no model IDs here).
                 "model": context.extra.get("user_model"),
-                "cwd": context.extra.get("cwd"),
+                "cwd": cwd,
                 "system_prompt": None,
-            })
+            }, host)
             yield SSEEvent(
                 type=SSEEventType.START, data="",
                 session_id=context.session_id, request_id=context.request_id,
@@ -199,6 +230,6 @@ class ExternalAgentProxy:
                 try:
                     await self._ws.send(agent_id, {
                         "type": "chat_cancel", "chat_id": chat_id,
-                    })
+                    }, host)
                 except Exception:  # noqa: BLE001 — best-effort by design
                     pass

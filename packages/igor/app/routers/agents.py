@@ -250,10 +250,16 @@ async def agent_websocket(
 
     await websocket.accept()
 
+    # The machine this connection speaks for. Captured from the handshake so
+    # teardown drops only THIS peer — an agent attached from the server and the
+    # owner's PC must not lose both because one laptop slept.
+    host: str | None = None
+
     try:
         # Wait for registration message
         data = await websocket.receive_json()
         registration = AgentRegistration(**data)
+        host = registration.host
 
         await agent_registry.register(websocket, registration, db)
 
@@ -304,11 +310,14 @@ async def agent_websocket(
                 )
 
     except WebSocketDisconnect:
-        agent_proxy.fail_agent(agent_id)
+        agent_proxy.fail_agent(agent_id, host)
         pending_asks.drop_agent(agent_id)
-        await agent_registry.deregister(agent_id, db)
+        await agent_registry.deregister(agent_id, db, host)
     except Exception as e:
-        logger.error("agent_ws_error", extra={"agent_id": agent_id, "error": str(e)})
-        agent_proxy.fail_agent(agent_id)
+        logger.error(
+            "agent_ws_error",
+            extra={"agent_id": agent_id, "host": host, "error": str(e)},
+        )
+        agent_proxy.fail_agent(agent_id, host)
         pending_asks.drop_agent(agent_id)
-        await agent_registry.deregister(agent_id, db)
+        await agent_registry.deregister(agent_id, db, host)

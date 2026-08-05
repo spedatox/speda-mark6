@@ -17,7 +17,6 @@ import logging
 from app.config import settings
 from app.core.context import AgentContext
 from app.core.runtime_state import get_house_party, set_house_party
-from app.schemas.chat import _WINDOWS_PATH
 from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
@@ -103,21 +102,13 @@ class DispatchAgentSkill(Skill):
         depth = int(context.extra.get("dispatch_depth", 0))
         background = bool(args.get("background", False))
         cwd = (args.get("working_directory") or "").strip() or None
-        # Same guard as ChatRequest.cwd (app/schemas/chat.py): the peer is
-        # server-side POSIX, and a Windows path does not fail there — it becomes
-        # a directory NAMED after the path. Catch it here too, because this is
-        # the path the model fills in and it will happily echo one the owner
-        # spoke ("build it in C:\Users\…").
-        if cwd and (_WINDOWS_PATH.match(cwd) or "\\" in cwd):
-            return (
-                f"Refused: {cwd!r} is a Windows path on the OWNER'S computer. "
-                "Optimus runs on the server and cannot see their filesystem — "
-                "sending this would silently create a directory literally named "
-                "after the path and build there. Either omit working_directory "
-                "(the peer uses its own workspace) or give an absolute POSIX "
-                "path on the server. Then tell the owner where the result "
-                "actually landed and that it is not on their PC."
-            )
+        # No platform check here. Which paths are legal depends on the machines
+        # currently attached — Optimus may be running on the server AND on the
+        # owner's PC, where `C:\Users\…` is the correct answer rather than the
+        # bug it used to be. AgentDispatcher._run_external resolves the path
+        # against the live peer list and refuses by name if nothing covers it
+        # (app/core/peer_routing.py), so a guard here could only be wrong in
+        # one direction or the other.
         # The room this exchange belongs to: the chat session the owner is
         # watching. On a dispatched agent that is the room it inherited, not its
         # own private session — so a second-hop dispatch still shows up in the

@@ -41,6 +41,7 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.core.context import AgentContext
+from app.core.peer_routing import resolve
 from app.core.runtime_state import get_house_party
 from app.database import AsyncSessionLocal
 from app.models.agent_message import AgentMessage
@@ -262,6 +263,10 @@ class AgentDispatcher:
             if status in ("offline", "error") and profile is not None:
                 # Peer vanished between the presence check and the send —
                 # degrade to the in-process profile rather than failing.
+                # "refused" is deliberately absent: that status means the work
+                # named a directory no connected peer covers, and running it
+                # in-process would put it on the server anyway (see
+                # _run_external / app/core/peer_routing.py).
                 result, status, session_id = await self._run_in_process(
                     profile=profile, from_agent=from_agent, task=task,
                     user_id=user_id, request_id=request_id, depth=depth,
@@ -548,6 +553,19 @@ class AgentDispatcher:
                 "that name is connected. Do not retry until it comes online.",
                 "offline",
             )
+        # Which machine. A peer may be attached from several (the server and
+        # the owner's PC) and is still one agent; the working directory picks
+        # which one runs this task. A directory nobody covers is refused now,
+        # not after EXTERNAL_CODING_TIMEOUT_S, and never by falling through to
+        # a peer that would silently succeed elsewhere.
+        decision = resolve(self._ws_manager.peers(to_agent), cwd)
+        if not decision.ok:
+            # "refused", NOT "error": an error means "the peer failed, try the
+            # in-process profile", and falling back here would run the task on
+            # the server after the owner asked for a directory on their PC —
+            # the exact silent-success-elsewhere this refusal exists to stop.
+            return decision.error, "refused"
+        host = decision.host
         # Coding peers need room for multi-step tool loops; everything else
         # keeps the tight default so a dead peer can't stall its caller long.
         timeout = EXTERNAL_CODING_TIMEOUT_S if to_agent == "optimus" else EXTERNAL_TIMEOUT_S
@@ -562,7 +580,7 @@ class AgentDispatcher:
                 "task": task,
                 "cwd": cwd,
                 "permission_mode": None,
-            })
+            }, host)
             result, status = await asyncio.wait_for(fut, timeout)
             return str(result)[:MAX_RESULT_CHARS], status
         except asyncio.TimeoutError:
