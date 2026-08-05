@@ -414,7 +414,8 @@ async def skill_db(db, monkeypatch):
     monkeypatch.setattr(hd, "AsyncSessionLocal", _session)
     # The gate's live path waits on a phone that will never answer; keep the
     # test to the timeout logic rather than the wall clock.
-    monkeypatch.setattr(hd, "_LIVE_WAIT_S", 0.05)
+    monkeypatch.setattr(hd, "_LIVE_WAIT_INTERACTIVE_S", 0.05)
+    monkeypatch.setattr(hd, "_LIVE_WAIT_AUTOMATED_S", 0.05)
     monkeypatch.setattr(hd, "_LIVE_POLL_S", 0.01)
     return db
 
@@ -549,3 +550,48 @@ async def test_a_delivered_batch_clears_an_outstanding_sync_demand(skill_db):
         _sample("steps", datetime.now(TZ), 120.0, "count"),
     ])
     assert runtime_state.get_health_sync_demand().get("served_at")
+
+
+# ── The wake budget ─────────────────────────────────────────────────────────
+# Regression, 2026-08-05: the 08:00 health briefing demanded a sync at
+# 05:00:16Z, gave up at 05:00:41Z on the flat 25s budget, and the phone
+# delivered 4,210 samples at 05:02:18Z — 97 seconds too late. The owner had
+# worn the watch all day and synced that morning; the briefing announced a link
+# outage anyway. Nobody was waiting on that turn: it was an n8n cron with
+# output_mode="push", so the 25s budget was protecting a spinner that did not
+# exist.
+
+
+def _ctx(output_mode: str, triggered_by: str = "n8n"):
+    from app.core.context import AgentContext
+
+    return AgentContext(
+        agent_id="atomix", user_id=1, session_id=1, request_id="req",
+        triggered_by=triggered_by, trigger_payload={}, output_mode=output_mode,
+        model="m", system_prompt="", conversation_history=[], db=None,
+        timezone="Europe/Istanbul",
+    )
+
+
+def test_an_interactive_turn_keeps_the_short_budget():
+    """The owner is watching a spinner — do not hang on it."""
+    from app.skills.health_data import _LIVE_WAIT_INTERACTIVE_S, _wake_budget
+
+    assert _wake_budget(_ctx("respond", "user")) == _LIVE_WAIT_INTERACTIVE_S
+
+
+@pytest.mark.parametrize("mode", ["push", "silent"])
+def test_an_automated_run_waits_far_longer(mode):
+    """Nobody is waiting, and the alternative is a worthless briefing."""
+    from app.skills.health_data import _LIVE_WAIT_AUTOMATED_S, _wake_budget
+
+    assert _wake_budget(_ctx(mode)) == _LIVE_WAIT_AUTOMATED_S
+
+
+def test_the_automated_budget_outlasts_a_real_phone_wake():
+    """122s was the observed demand→delivery latency. The budget must clear it."""
+    from app.skills.health_data import _LIVE_WAIT_AUTOMATED_S
+
+    assert _LIVE_WAIT_AUTOMATED_S > 122, (
+        "the budget is shorter than the wake that caused this regression"
+    )

@@ -30,6 +30,23 @@ async def list_automations(db: AsyncSession = Depends(get_db)):
     return {"automations": await manager.list_automations(db)}
 
 
+@router.get("/automations/drift")
+async def workflow_drift():
+    """Cheap probe: is n8n running the workflows the repo says it is?
+
+    `drift: []` means everything matches — n8n's gate node stops the branch on
+    an empty return, so a clean check costs one HTTP call and zero tokens. A
+    non-empty list is worth an actual notification: a shipped workflow whose
+    live copy has drifted keeps running silently, which is how a briefing spent
+    a week rendering the format its committed intent had already banned.
+    """
+    from app.services import n8n_drift
+    from app.services.n8n_api import N8nClient
+
+    drift = await n8n_drift.scan(N8nClient())
+    return {"drift": drift, "in_sync": not drift}
+
+
 @router.post("/automations/{automation_id}/toggle")
 async def toggle_automation(automation_id: int, body: dict, db: AsyncSession = Depends(get_db)):
     try:

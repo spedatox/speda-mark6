@@ -25,10 +25,24 @@ from app.skills.base import Skill
 logger = logging.getLogger(__name__)
 
 # How long a `live` call waits for the phone to answer a sync demand, and how
-# often it re-checks. Twenty-five seconds is chosen against the turn budget, not
-# the phone: an agentic tool call that blocks for a minute is worse than a
-# briefing that reports the link is down.
-_LIVE_WAIT_S = 25.0
+# often it re-checks. The budget is set by WHO IS WAITING, because the cost of
+# blocking is entirely different in the two cases.
+#
+# Interactive: the owner is watching a spinner. Twenty-five seconds is already
+# a long time to stare at one, and a briefing that says the link is down beats
+# a tool call that hangs.
+#
+# Automated (n8n cron → push/silent): NOBODY is waiting. Blocking costs nothing
+# and the alternative is a worthless briefing. On 2026-08-05 the 08:00 health
+# briefing demanded a sync at 05:00:16Z, gave up at 05:00:41Z, and the phone
+# delivered 4,210 samples at 05:02:18Z — 97 seconds after the wait expired. The
+# owner had worn the watch all day and synced that morning; the briefing still
+# reported a link outage, and every staleness figure in it was correct for the
+# instant it ran. Waking a sleeping phone, reading Health Connect and uploading
+# a batch takes minutes, so the automated budget is set against that, not
+# against a spinner nobody is looking at.
+_LIVE_WAIT_INTERACTIVE_S = 25.0
+_LIVE_WAIT_AUTOMATED_S = 180.0
 _LIVE_POLL_S = 2.5
 
 # Ranges that make a claim about the present. A stale answer to one of these is
@@ -36,6 +50,18 @@ _LIVE_POLL_S = 2.5
 # store has no record of. Trend ranges ('7d', '30d') are exempt: old days are
 # the point of the question.
 _PRESENT_TENSE = {"today", "yesterday"}
+
+
+def _wake_budget(context) -> float:
+    """How long this turn may block waiting for the phone.
+
+    Keyed on whether a human is actually watching. `output_mode="respond"` is
+    the only mode where someone is: push and silent are delivered after the
+    fact, so the turn is free to take the minutes a real phone wake needs.
+    """
+    if getattr(context, "output_mode", "respond") == "respond":
+        return _LIVE_WAIT_INTERACTIVE_S
+    return _LIVE_WAIT_AUTOMATED_S
 
 _KNOWN_METRICS = [
     "steps",
@@ -202,7 +228,9 @@ class HealthDataSkill(Skill):
         # nothing in the output says so.
         gate_metrics = metrics or _KNOWN_METRICS
         if live or range_spec.strip().lower() in _PRESENT_TENSE:
-            refusal = await self._freshness_gate(gate_metrics, live=live)
+            refusal = await self._freshness_gate(
+                gate_metrics, live=live, wait_s=_wake_budget(context),
+            )
             if refusal:
                 return refusal
 
@@ -283,14 +311,17 @@ class HealthDataSkill(Skill):
         return json.dumps(payload, ensure_ascii=False)
 
     @staticmethod
-    async def _freshness_gate(metrics: list[str], *, live: bool) -> str | None:
+    async def _freshness_gate(
+        metrics: list[str], *, live: bool, wait_s: float = _LIVE_WAIT_INTERACTIVE_S,
+    ) -> str | None:
         """None when the data may describe the present; otherwise the refusal to
         return INSTEAD of any numbers.
 
-        On `live` the phone is asked to sync first and given a short window to
-        answer. It often cannot — SPEDA GO has no push channel, so a demand
-        raised while the phone is asleep goes unread — and that is the case this
-        is built around: the honest outcome of "I could not get today's data" is
+        On `live` the phone is asked to sync first and given `wait_s` to answer
+        (see _wake_budget — an automated run waits far longer than an
+        interactive one). It may still not answer: a phone that is asleep with
+        FCM unavailable never reads the demand. That case is the one this is
+        built around — the honest outcome of "I could not get today's data" is
         an error, not yesterday's data wearing today's date.
         """
         async with AsyncSessionLocal() as db:
@@ -302,7 +333,7 @@ class HealthDataSkill(Skill):
             wake: dict = {}
             if live:
                 wake = await health_service.demand_sync(db, reason="live health query")
-                served = await HealthDataSkill._await_sync()
+                served = await HealthDataSkill._await_sync(wait_s)
                 if served:
                     report = await health_service.freshness(db, metrics)
                     stale = health_service.stale_metrics(report)
@@ -310,7 +341,10 @@ class HealthDataSkill(Skill):
                         return None
                 logger.info(
                     "health_live_wake_result",
-                    extra={"woke": wake.get("woke"), "still_stale": stale},
+                    extra={
+                        "woke": wake.get("woke"), "still_stale": stale,
+                        "waited_s": wait_s, "served": served,
+                    },
                 )
 
             store = await health_service.status(db)
@@ -368,16 +402,16 @@ class HealthDataSkill(Skill):
         )
 
     @staticmethod
-    async def _await_sync() -> bool:
+    async def _await_sync(wait_s: float = _LIVE_WAIT_INTERACTIVE_S) -> bool:
         """Wait for the phone to serve the outstanding demand. False on timeout."""
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + _LIVE_WAIT_S
+        deadline = loop.time() + wait_s
         while loop.time() < deadline:
             await asyncio.sleep(_LIVE_POLL_S)
             if runtime_state.get_health_sync_demand().get("served_at"):
                 logger.info("health_live_sync_served")
                 return True
-        logger.warning("health_live_sync_timeout", extra={"waited_s": _LIVE_WAIT_S})
+        logger.warning("health_live_sync_timeout", extra={"waited_s": wait_s})
         return False
 
     @staticmethod
