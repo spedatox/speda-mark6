@@ -37,6 +37,11 @@ services:
       DATABASE_URL: sqlite+aiosqlite:////root/.speda/speda.db
       PLAYWRIGHT_MCP_URL: http://playwright-mcp:3000
       SANDBOX_URL: http://sandbox:9000
+      # Hisar over the container network, never the public hostname — this is
+      # an internal call and should not leave the box. HISAR_MACHINE_TOKEN is
+      # NOT set here: it is a secret and lives in packages/igor/.env, holding
+      # the same value Hisar's own env file gives the hisar service.
+      HISAR_BASE_URL: http://hisar:8600
     volumes:
       - /tmp/speda_outputs:/tmp/speda_outputs
       # Host dir holding speda.db → container's data dir. A directory (not the

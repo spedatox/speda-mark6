@@ -89,6 +89,7 @@ async def lifespan(app: FastAPI):
     from app.skills.sandbox import RunCommandSkill, DeliverFileSkill
     from app.skills.toolsets import UseToolsetSkill
     from app.skills.documents import DocumentsSkill
+    from app.skills.hisar import HisarSkill
     from app.skills.save_file import SaveFileSkill
     from app.skills.memory import MemorySkill
     from app.skills.news import (
@@ -119,6 +120,7 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(SendTelegramFileSkill(telegram_bots))
     await registry.register_skill(DocumentsSkill())
     await registry.register_skill(SaveFileSkill())
+    await registry.register_skill(HisarSkill())
     await registry.register_skill(SystemSkill())
     await registry.register_skill(SystemOpsSkill())   # Orion-only (restricted_to)
     await registry.register_skill(BudgetModeSkill())

@@ -244,6 +244,14 @@ class Settings(BaseSettings):
     # n8n is the sole scheduling/automation organ (CLAUDE.md). SPEDA is a CONTROL
     # PLANE over its REST API — it composes/lists/toggles workflows but never
     # schedules anything internally. Default host is the docker-compose service.
+    # ── Hisar: the owner's own cloud filesystem ──────────────────────────────
+    # Reached over the container network, not the public hostname — this is an
+    # internal call and should not leave the box. The machine token is the same
+    # HISAR_MACHINE_TOKEN the Hisar container holds; it grants read across the
+    # vault and write only under /SPEDA and /Forge (server/auth.py there).
+    hisar_base_url: str = "http://hisar:8600"
+    hisar_machine_token: str = ""
+
     n8n_api_url: str = "http://n8n:5678"
     n8n_api_key: str = ""   # n8n → Settings → n8n API → create key
     # URL n8n uses to call BACK into SPEDA's /trigger endpoint. Internal compose
