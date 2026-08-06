@@ -17,15 +17,10 @@ from app.skills.hisar import HisarSkill
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["hisar"])
 
-# Reuse the same skill instance the orchestrator uses, but stateless: list/read
-# actions need no AgentContext beyond a request_id for logging.
+# The same client the agents use, so the owner's picker shows exactly what
+# their agents see and a directory chosen here is valid input for the tool they
+# call. `entries()` needs no AgentContext — it is a plain read.
 HISAR = HisarSkill()
-
-
-class _Ctx:
-    """Minimal context stub — HisarSkill.execute() only reads request_id."""
-    def __init__(self, request_id: str):
-        self.request_id = request_id
 
 
 @router.get("/hisar/dirs")
@@ -47,25 +42,24 @@ async def hisar_dirs(request: Request, path: str = "/"):
             detail="Hisar is not configured on this deployment (no machine token).",
         )
 
-    ctx = _Ctx(request_id=str(id(request)))
+    target = path.strip() or "/"
     try:
-        raw = await HISAR._list(path.strip() or "/")
+        entries = await HISAR.entries(target)
     except Exception as e:
         logger.warning(
             "hisar_dirs_failed",
-            extra={"path": path, "error": str(e)},
+            extra={"path": target, "error": str(e)},
         )
         raise HTTPException(
             status_code=502,
-            detail=f"Hisar did not answer for {path!r}. The vault may be unreachable.",
+            detail=f"Hisar did not answer for {target!r}. The vault may be unreachable.",
         )
 
-    # Parse the skill's listing output ("/path\n  name/  \n  other/") → ["name", "other"]
-    dirs: list[str] = []
-    for line in raw.splitlines():
-        stripped = line.strip()
-        if stripped.endswith("/") and not stripped.startswith("…"):  # skip "… and N more"
-            dirs.append(stripped.rstrip("/"))
+    # Straight from the data. Recovering this by parsing the skill's RENDERED
+    # listing put an entry named "" at the top of every root listing, because
+    # the header line `/` also ends in a slash — a blank row in the picker,
+    # on the first screen it shows.
+    dirs = [e["name"] for e in entries if HISAR.is_dir(e) and e.get("name")]
 
     # Sort: leading underscore/prefix (SPEDA/, Forge/) first, then alpha.
     dirs.sort(key=lambda d: (not d.startswith(("SPEDA", "Forge", "Projects", "Documents")), d.lower()))

@@ -186,3 +186,54 @@ def test_the_description_says_when_not_to_use_it():
     assert "save_file" in d
     assert "/SPEDA" in d and "/Forge" in d
     assert "delete" in d.lower()
+
+
+# ── the desktop's vault picker ───────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_a_root_listing_has_no_nameless_directory(monkeypatch):
+    """The picker's first screen showed a blank row.
+
+    It was recovering directories by parsing the skill's RENDERED listing and
+    taking every line ending in "/" — but the header line of a root listing is
+    "/", which also ends in one. Structure now comes from the data.
+    """
+    from app.routers.hisar import HISAR
+
+    skill = _skill(monkeypatch, lambda *a: _resp(json={"entries": [
+        {"name": "Desktop", "kind": "dir"},
+        {"name": "SPEDA", "kind": "dir"},
+        {"name": "Timeline 1.mov", "kind": "file", "size": 22681894},
+    ]}))
+    monkeypatch.setattr(HISAR, "_client_marker", None, raising=False)
+
+    entries = await skill.entries("/")
+    dirs = [e["name"] for e in entries if skill.is_dir(e) and e.get("name")]
+
+    assert dirs == ["Desktop", "SPEDA"]
+    assert "" not in dirs
+
+
+@pytest.mark.asyncio
+async def test_files_are_not_offered_as_directories(monkeypatch):
+    """It is a directory picker; a .mov is not somewhere work can happen."""
+    skill = _skill(monkeypatch, lambda *a: _resp(json={"entries": [
+        {"name": "notes.md", "kind": "file", "size": 12},
+    ]}))
+    entries = await skill.entries("/Documents")
+    assert [e for e in entries if skill.is_dir(e)] == []
+
+
+@pytest.mark.parametrize("entry,expected", [
+    ({"kind": "dir"}, True),
+    ({"is_dir": True}, True),
+    ({"type": "dir"}, True),
+    ({"kind": "file"}, False),
+    ({}, False),
+])
+def test_directoriness_is_asked_in_one_place(entry, expected):
+    """Hisar has spelled this three ways across versions. Every caller that
+    re-derives it is a place one spelling gets forgotten."""
+    from app.skills.hisar import HisarSkill
+    assert HisarSkill.is_dir(entry) is expected

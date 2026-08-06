@@ -143,22 +143,37 @@ class HisarSkill(Skill):
 
     # ── actions ─────────────────────────────────────────────────────────────
 
-    async def _list(self, path: str) -> str:
+    async def entries(self, path: str) -> list[dict]:
+        """The raw listing, as data.
+
+        Public and structured because more than the model consumes it: the
+        desktop's vault picker needs directories, and recovering those by
+        parsing the rendered text below is how a picker ends up showing a blank
+        row named "" — the header line `/` also ends in a slash. Formatting
+        belongs at the edge; everything upstream of it works on the data.
+        """
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             r = await client.get(f"{settings.hisar_base_url}/files/list",
                                  params={"path": path}, headers=_headers())
             r.raise_for_status()
             body = r.json()
+        return body.get("entries") or []
 
-        entries = body.get("entries") or []
+    @staticmethod
+    def is_dir(entry: dict) -> bool:
+        """Hisar has spelled this three ways across versions; ask once, here."""
+        return bool(entry.get("is_dir") or entry.get("kind") == "dir"
+                    or entry.get("type") == "dir")
+
+    async def _list(self, path: str) -> str:
+        entries = await self.entries(path)
         if not entries:
             return f"{path} is empty."
 
         lines = []
         for e in entries[:_MAX_ENTRIES]:
-            is_dir = e.get("is_dir") or e.get("kind") == "dir" or e.get("type") == "dir"
             name = e.get("name", "?")
-            if is_dir:
+            if self.is_dir(e):
                 lines.append(f"  {name}/")
             else:
                 size = _fmt_size(e.get("size"))
