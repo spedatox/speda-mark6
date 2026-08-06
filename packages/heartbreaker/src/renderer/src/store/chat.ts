@@ -42,6 +42,7 @@ export type ChatAction =
   | { type: 'SET_STATUS'; payload: { id: string; status: string } }
   | { type: 'TAG_MESSAGE_SESSION'; payload: { id: string; sessionId: number } }
   | { type: 'ADD_TOOL'; payload: { id: string; tool: import('../lib/types').ToolBadge } }
+  | { type: 'SUBAGENT'; payload: { id: string; event: Record<string, unknown> } }
   | { type: 'SET_TOOL_RESULT'; payload: { id: string; toolId: string; result: string } }
   | { type: 'ADD_FILE'; payload: { id: string; file: import('../lib/types').FileMeta } }
   | { type: 'FINISH_MESSAGE'; payload: { id: string; sessionId: number } }
@@ -140,6 +141,56 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             : m
         ),
       }
+
+    case 'SUBAGENT': {
+      // One reducer case for every phase, because they all fold into the same
+      // run keyed by id — several delegations can be in flight at once and
+      // their frames interleave.
+      const e = action.payload.event as {
+        id: string; agent?: string; label?: string; phase?: string
+        prompt?: string; text?: string; tool?: string; input?: unknown
+        result?: string; report?: string; ok?: boolean
+      }
+      if (!e?.id) return state
+      return {
+        ...state,
+        messages: state.messages.map(m => {
+          if (m.id !== action.payload.id) return m
+          const runs = m.subagents ?? []
+          const i = runs.findIndex(r => r.id === e.id)
+          const run: import('../lib/types').SubagentRun = i >= 0
+            ? { ...runs[i], steps: [...runs[i].steps] }
+            : { id: e.id, agent: e.agent ?? '', label: e.label ?? '',
+                running: true, steps: [] }
+
+          if (e.phase === 'started') {
+            run.prompt = e.prompt
+            run.running = true
+          } else if (e.phase === 'text' && e.text) {
+            const last = run.steps[run.steps.length - 1]
+            // Coalesce streamed deltas into one step rather than one per token.
+            if (last?.kind === 'text') last.text = (last.text ?? '') + e.text
+            else run.steps.push({ kind: 'text', text: e.text })
+          } else if (e.phase === 'tool') {
+            run.steps.push({ kind: 'tool', tool: e.tool, input: e.input })
+          } else if (e.phase === 'tool_result') {
+            for (let k = run.steps.length - 1; k >= 0; k--) {
+              if (run.steps[k].kind === 'tool' && run.steps[k].result === undefined) {
+                run.steps[k] = { ...run.steps[k], result: e.result }
+                break
+              }
+            }
+          } else if (e.phase === 'finished') {
+            run.running = false
+            run.ok = e.ok !== false
+            run.report = e.report
+          }
+
+          const next = i >= 0 ? runs.map((r, k) => (k === i ? run : r)) : [...runs, run]
+          return { ...m, subagents: next }
+        }),
+      }
+    }
 
     case 'SET_TOOL_RESULT':
       return {

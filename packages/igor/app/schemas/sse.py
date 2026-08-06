@@ -10,6 +10,11 @@ class SSEEventType(str, Enum):
     FILE = "file"     # a downloadable file SPEDA produced this turn
     PERMISSION_REQUEST = "permission_request"  # a peer's gate is asking the owner
     HOUSE_PARTY_AUTH = "house_party_auth"      # open the HPP authorization window
+    # A coding peer delegated part of its turn. Its own channel, never terminal:
+    # a subagent finishing is not the turn finishing, and its report is not the
+    # answer. Carries {id, agent, label, phase, ...} so a client can group
+    # concurrent runs and fold each one away.
+    SUBAGENT = "subagent"
     DONE = "done"
     ERROR = "error"
 

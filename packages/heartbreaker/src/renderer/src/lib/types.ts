@@ -13,6 +13,36 @@ export interface ToolBadge {
   afterChars?: number
 }
 
+/** One step a delegated agent took, for the subagent panel. */
+export interface SubagentStep {
+  kind: 'tool' | 'text'
+  tool?: string
+  input?: unknown
+  result?: string
+  text?: string
+}
+
+/**
+ * One delegation a coding peer (Optimus, Centurion) made during a turn.
+ *
+ * It lives beside the message rather than inside `content` on purpose: a
+ * subagent's work is NOT the answer. Streaming its report as prose is what made
+ * a delegate's write-up appear as Optimus's own reply, and forwarding its
+ * completion as the turn's `done` closed the stream while the peer was still
+ * working. This is the channel that lets the work be shown — foldable, and
+ * ignorable — without it ever being mistaken for the response.
+ */
+export interface SubagentRun {
+  id: string
+  agent: string       // explore | review | general
+  label: string       // what the delegation is FOR, not which specialist ran it
+  prompt?: string
+  running: boolean
+  ok?: boolean
+  report?: string
+  steps: SubagentStep[]
+}
+
 export interface ImageBlock {
   media_type: string
   data: string   // base64, no data: prefix
@@ -57,6 +87,10 @@ export interface ChatMessage {
   role: Role
   content: string
   tools: ToolBadge[]
+  /** Delegations this turn made. Live-only: the backend does not persist them,
+   *  because the report the model actually acted on is already stored as the
+   *  `task` tool's result. */
+  subagents?: SubagentRun[]
   isStreaming: boolean
   isError: boolean
   errorNote?: string  // error banner text — kept SEPARATE from content so an

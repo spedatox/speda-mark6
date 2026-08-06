@@ -49,6 +49,10 @@ _EVENT_MAP = {
     "tool": SSEEventType.TOOL,
     "tool_result": SSEEventType.TOOL_RESULT,
     "permission_request": SSEEventType.PERMISSION_REQUEST,
+    # Deliberately absent from _TERMINAL below: a delegation ending is not the
+    # turn ending. Forwarding a child's `done` as the turn's `done` is what
+    # closed the stream mid-turn while the peer kept working.
+    "subagent": SSEEventType.SUBAGENT,
     "done": SSEEventType.DONE,
     "error": SSEEventType.ERROR,
 }

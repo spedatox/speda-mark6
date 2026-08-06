@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import type { ChatMessage, FileMeta, ToolBadge } from '../lib/types'
+import { SubagentPanel } from './SubagentPanel'
 import { useChatContext } from '../store/chat'
 import { downloadFile } from '../lib/api'
 import CodeBlock from './CodeBlock'
@@ -1075,10 +1076,17 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
               )
             })}
           </div>
-        ) : message.isStreaming ? (
-          // Nothing at all has streamed yet — show the natural-language working indicator
+        ) : message.isStreaming && !message.subagents?.length ? (
+          // Nothing at all has streamed yet — show the natural-language working
+          // indicator. Suppressed while a delegation is open, which is a better
+          // and more specific answer to "is anything happening".
           <WorkingStatus tools={message.tools} status={message.status} />
         ) : null}
+
+        {/* What this turn delegated. Deliberately OUTSIDE the prose block: a
+            subagent's report is not the answer, and rendering it inline is what
+            made a delegate's write-up read as Optimus's own reply. */}
+        {message.subagents?.length ? <SubagentPanel runs={message.subagents} /> : null}
 
         {message.isError && (
           <div style={{

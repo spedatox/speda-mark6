@@ -494,6 +494,11 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
         } else if (event.type === 'tool_result') {
           const d = event.data as { id: string; result: string }
           dispatch({ type: 'SET_TOOL_RESULT', payload: { id: assistantId, toolId: d.id, result: d.result } })
+        } else if (event.type === 'subagent') {
+          // A coding peer delegated part of this turn. It goes to its own panel,
+          // never into `content`: a delegate's report is not the answer, and its
+          // completion is not the turn's.
+          dispatch({ type: 'SUBAGENT', payload: { id: assistantId, event: event.data as Record<string, unknown> } })
         } else if (event.type === 'permission_request') {
           // A peer's gate stopped an irreversible operation. The card replaces
           // nothing and blocks nothing — the peer is already counting down and
@@ -694,6 +699,8 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
           } else if (event.type === 'tool_result') {
             const d = event.data as { id: string; result: string }
             dispatch({ type: 'SET_TOOL_RESULT', payload: { id: assistantId, toolId: d.id, result: d.result } })
+          } else if (event.type === 'subagent') {
+            dispatch({ type: 'SUBAGENT', payload: { id: assistantId, event: event.data as Record<string, unknown> } })
           } else if (event.type === 'permission_request') {
             // A peer's gate stopped an irreversible operation. The card replaces
             // nothing and blocks nothing — the peer is already counting down and
