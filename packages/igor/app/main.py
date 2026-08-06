@@ -204,11 +204,17 @@ async def lifespan(app: FastAPI):
     from app.core.agent_registry import AgentRegistry
     from app.core.external_proxy import ExternalAgentProxy
     from app.services.pending_asks import PendingAsks
+    from app.skills.memory import MemoryRecallCache
     from app.websocket.manager import WebSocketManager
+
+    # Constructed here rather than at 7 because the external proxy needs it too:
+    # an external peer runs the owner's turn, so it must know what the owner's
+    # in-process agents know. One instance for the process (Rule 6).
+    memory_cache = MemoryRecallCache()
 
     ws_manager = WebSocketManager()
     agent_registry = AgentRegistry(ws_manager)
-    agent_proxy = ExternalAgentProxy(ws_manager)
+    agent_proxy = ExternalAgentProxy(ws_manager, memory_cache)
     pending_asks = PendingAsks(ws_manager)
 
     # ── 5. Session Manager ─────────────────────────────────────────────────────
@@ -219,12 +225,11 @@ async def lifespan(app: FastAPI):
     # ── 7. Orchestrator (reuses the client already injected into the registry) ──
     # Profiles were constructed at 2.5 — the dispatch skill's schema needed them.
     from app.core.orchestrator import AgentOrchestrator
-    from app.skills.memory import MemoryRecallCache
     from app.services.welcome import WelcomeCache
 
     # One instance each for the process (Rule 6) — threaded into the
     # orchestrator/router instead of living as bare module globals.
-    memory_cache = MemoryRecallCache()
+    # (memory_cache is built at 4, above — the external proxy needs it.)
     welcome_cache = WelcomeCache()
     orchestrator = AgentOrchestrator(registry, llm_client, profiles, memory_cache)
 

@@ -28,6 +28,7 @@ from typing import AsyncGenerator
 from app.core.context import AgentContext
 from app.core.peer_routing import resolve
 from app.schemas.sse import SSEEvent, SSEEventType
+from app.skills.memory import recall_for_context
 from app.websocket.manager import WebSocketManager
 
 logger = logging.getLogger(__name__)
@@ -91,8 +92,9 @@ def _normalize_tool_result(data: object) -> dict:
 class ExternalAgentProxy:
     """Correlates proxied chat streams over the shared agent WebSocket."""
 
-    def __init__(self, ws_manager: WebSocketManager) -> None:
+    def __init__(self, ws_manager: WebSocketManager, memory_cache=None) -> None:
         self._ws = ws_manager
+        self._memory_cache = memory_cache
         self._pending: dict[str, asyncio.Queue] = {}          # chat_id → event queue
         self._owner: dict[str, tuple[str, str]] = {}          # chat_id → (agent_id, host)
 
@@ -126,6 +128,28 @@ class ExternalAgentProxy:
                     "data": f"{agent_id.title()} disconnected mid-stream. "
                             "The task may be incomplete.",
                 })
+
+    async def _memory_block(self, context: AgentContext) -> str:
+        """The owner's memory, as the orchestrator would assemble it.
+
+        Best-effort by design: memory is context, not the turn. A recall that
+        fails should cost the peer some background knowledge, never the job the
+        owner actually asked for — so this returns "" and logs rather than
+        raising into the stream.
+        """
+        if self._memory_cache is None or context.db is None:
+            return ""
+        try:
+            return await recall_for_context(
+                context.user_id, context.db, context.agent_id,
+                cache=self._memory_cache,
+            ) or ""
+        except Exception as e:  # noqa: BLE001 — see docstring
+            logger.warning(
+                "external_memory_recall_failed",
+                extra={"request_id": context.request_id, "error": str(e)},
+            )
+            return ""
 
     # ── Engine (same contract as AgentOrchestrator.run) ─────────────────────
 
@@ -174,6 +198,14 @@ class ExternalAgentProxy:
                 "model": context.extra.get("user_model"),
                 "cwd": cwd,
                 "system_prompt": None,
+                # What the owner's in-process agents know about them. Until
+                # this was sent, an external peer ran the owner's turns knowing
+                # the conversation and nothing about the owner — every
+                # preference and standing fact stopped at the socket. The peer
+                # prepends it as a fragment and keeps its own identity, so this
+                # is not a system prompt by another name (Rule 2 stands: the
+                # orchestrator still owns that, and sends None above).
+                "memory_block": await self._memory_block(context),
             }, host)
             yield SSEEvent(
                 type=SSEEventType.START, data="",
