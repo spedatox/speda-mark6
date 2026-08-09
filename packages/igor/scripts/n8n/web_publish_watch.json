@@ -19,7 +19,10 @@
       "name": "Every 30 minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "notes": "Offset minutes (7 and 37) rather than 0/30 on purpose: university sites are at their most fragile exactly on the hour, when every other scraper in the country hits them.\n\nEvery page in the watch list is checked on this one schedule. For a result page you are actively waiting on, */5 is fine — scanning stays free either way; a tighter cadence only costs politeness to the site."
     },
     {
@@ -30,7 +33,10 @@
       "name": "Watch list",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [520, 300],
+      "position": [
+        520,
+        300
+      ],
       "notes": "⚙️ EDIT HERE — this is the whole configuration surface. One { … } block per page, in the WATCHES array at the top. The comment block above it documents every field.\n\nEach entry becomes one item, and every node downstream runs once per item, so watching ten pages needs no other change.\n\nSafe to leave empty: no items means the run ends here, green, having done nothing."
     },
     {
@@ -66,8 +72,14 @@
       "name": "Igor: scan pages",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [800, 300],
-      "notes": "THE CHEAP HALF — runs once per page in the watch list, and takes all its settings from there. Nothing to edit here.\n\nIgor fetches each page, strips it to visible text (links kept as 'text [href]', so a newly posted PDF arrives with its URL) and diffs it against the last snapshot SPEDA was actually told about. The FIRST scan of a new watch_id returns 'baseline' and reports nothing — otherwise the entire page would count as new.\n\nneverError: one dead site must not fail the run and take the other pages down with it. The gate inspects each response instead."
+      "position": [
+        800,
+        300
+      ],
+      "notes": "THE CHEAP HALF — runs once per page in the watch list, and takes all its settings from there. Nothing to edit here.\n\nIgor fetches each page, strips it to visible text (links kept as 'text [href]', so a newly posted PDF arrives with its URL) and diffs it against the last snapshot SPEDA was actually told about. The FIRST scan of a new watch_id returns 'baseline' and reports nothing — otherwise the entire page would count as new.\n\nneverError: one dead site must not fail the run and take the other pages down with it. The gate inspects each response instead.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -77,7 +89,10 @@
       "name": "Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1080, 300],
+      "position": [
+        1080,
+        300
+      ],
       "notes": "The cost boundary — everything downstream spends money, everything upstream does not. Pages that did not change are dropped here, and on a normal run that is all of them, so the branch stops with no items.\n\nstore.broken holds one flag PER watch_id in the workflow's static data, so a broken site warns once, not every 30 minutes, and one broken site does not mute the others.\n\npairedItem is set explicitly so the ack node further down can find its own page's fingerprint."
     },
     {
@@ -108,7 +123,10 @@
       "name": "Igor: trigger agent",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1360, 300],
+      "position": [
+        1360,
+        300
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
@@ -147,25 +165,71 @@
       "name": "Igor: ack snapshot",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1640, 300],
-      "notes": "Commits each scanned page as its new baseline, so the next scan diffs against what the agent was actually told about and never re-reports it. This is what stops the same announcement pushing every 30 minutes.\n\n$('Gate').item — not .first() — so with several pages changing at once each ack commits ITS OWN page.\n\nDeliberately AFTER the trigger: committing first would lose a publication whenever the notify call failed. The cost of this ordering is a possible duplicate push if the trigger succeeds and this call fails; that is the right trade for 'never miss the exam results'.\n\nReturns 'stale' and commits nothing if the page changed again in between — the next poll then reports both changes together. On the blind-watch alert path the fingerprint is empty and this is a no-op."
+      "position": [
+        1640,
+        300
+      ],
+      "notes": "Commits each scanned page as its new baseline, so the next scan diffs against what the agent was actually told about and never re-reports it. This is what stops the same announcement pushing every 30 minutes.\n\n$('Gate').item — not .first() — so with several pages changing at once each ack commits ITS OWN page.\n\nDeliberately AFTER the trigger: committing first would lose a publication whenever the notify call failed. The cost of this ordering is a possible duplicate push if the trigger succeeds and this call fails; that is the right trade for 'never miss the exam results'.\n\nReturns 'stale' and commits nothing if the page changed again in between — the next poll then reports both changes together. On the blind-watch alert path the fingerprint is empty and this is a no-op.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     }
   ],
   "connections": {
     "Every 30 minutes": {
-      "main": [[{ "node": "Watch list", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Watch list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Watch list": {
-      "main": [[{ "node": "Igor: scan pages", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Igor: scan pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Igor: scan pages": {
-      "main": [[{ "node": "Gate", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Gate": {
-      "main": [[{ "node": "Igor: trigger agent", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Igor: trigger agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Igor: trigger agent": {
-      "main": [[{ "node": "Igor: ack snapshot", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Igor: ack snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {

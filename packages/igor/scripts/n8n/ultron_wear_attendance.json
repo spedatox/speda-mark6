@@ -19,7 +19,10 @@
       "name": "Every 5 min, weekday teaching hours",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "notes": "*/5 6-19 * * 1-5 in the OWNER'S timezone — set n8n's generic timezone (or this workflow's Settings ▸ Timezone) to Europe/Istanbul, or this fires three hours off and every question arrives during a different lecture.\n\nWeekdays only and 06:00–19:59 only: outside those hours there is no lecture to ask about, and each firing is a cheap DB query but not a free one."
     },
     {
@@ -61,8 +64,14 @@
       "name": "Igor: ask-pending",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [520, 300],
-      "notes": "window_minutes=20 must stay BELOW the watch's local fallback grace period (FallbackAskScheduler.GRACE_MINUTES = 15 + travel). If this window were the wider of the two, the watch would ask locally first and this push would arrive as a duplicate for an already-answered occurrence — harmless (the watch drops it) but noisy.\n\nneverError: a 5xx from Igor must not mark the workflow failed and spam the error workflow every 5 minutes. The response is inspected below instead."
+      "position": [
+        520,
+        300
+      ],
+      "notes": "window_minutes=20 must stay BELOW the watch's local fallback grace period (FallbackAskScheduler.GRACE_MINUTES = 15 + travel). If this window were the wider of the two, the watch would ask locally first and this push would arrive as a duplicate for an already-answered occurrence — harmless (the watch drops it) but noisy.\n\nneverError: a 5xx from Igor must not mark the workflow failed and spam the error workflow every 5 minutes. The response is inspected below instead.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -89,7 +98,10 @@
       "name": "Question delivered?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [780, 300],
+      "position": [
+        780,
+        300
+      ],
       "notes": "status is one of: idle (nothing ended — the common case), sent, no_devices, failed."
     },
     {
@@ -101,7 +113,10 @@
       "name": "Log delivery",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1040, 200],
+      "position": [
+        1040,
+        200
+      ],
       "notes": "Replace with a Telegram/Slack node if you want visibility while testing. Once it works this is noise — the watch buzzing is the notification."
     },
     {
@@ -110,20 +125,51 @@
       "name": "Nothing to ask",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1040, 400]
+      "position": [
+        1040,
+        400
+      ]
     }
   ],
   "connections": {
     "Every 5 min, weekday teaching hours": {
-      "main": [[{ "node": "Igor: ask-pending", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Igor: ask-pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Igor: ask-pending": {
-      "main": [[{ "node": "Question delivered?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Question delivered?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Question delivered?": {
       "main": [
-        [{ "node": "Log delivery", "type": "main", "index": 0 }],
-        [{ "node": "Nothing to ask", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Log delivery",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing to ask",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },

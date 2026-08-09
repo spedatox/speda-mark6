@@ -76,7 +76,10 @@
         800,
         300
       ],
-      "notes": "THE CHEAP HALF — runs once per rule, taking all its settings from the list. Nothing to edit here.\n\nIgor queries `from:<domain> -label:<label> newer_than:2d` against the owner's Gmail using the connection from Settings ▸ Google Workspace, then re-checks each hit's From header strictly. No LLM, so a quiet mailbox costs nothing.\n\nneverError: one failing rule must not fail the run and take the others with it. The gate inspects each response."
+      "notes": "THE CHEAP HALF — runs once per rule, taking all its settings from the list. Nothing to edit here.\n\nIgor queries `from:<domain> -label:<label> newer_than:2d` against the owner's Gmail using the connection from Settings ▸ Google Workspace, then re-checks each hit's From header strictly. No LLM, so a quiet mailbox costs nothing.\n\nneverError: one failing rule must not fail the run and take the others with it. The gate inspects each response.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -166,7 +169,10 @@
         1640,
         300
       ],
-      "notes": "Labels exactly the messages just handed to the agent, so the next scan skips them. This is what stops the same mail pushing every 10 minutes. Unread state is untouched — the mail still looks new in the inbox.\n\n$('Gate').item — not .first() — so when two rules both find mail, each ack labels ITS OWN messages.\n\nDeliberately AFTER the trigger: labelling first would lose a message whenever the notify call failed. On the blind-watch alert path message_ids is empty and this is a no-op."
+      "notes": "Labels exactly the messages just handed to the agent, so the next scan skips them. This is what stops the same mail pushing every 10 minutes. Unread state is untouched — the mail still looks new in the inbox.\n\n$('Gate').item — not .first() — so when two rules both find mail, each ack labels ITS OWN messages.\n\nDeliberately AFTER the trigger: labelling first would lose a message whenever the notify call failed. On the blind-watch alert path message_ids is empty and this is a no-op.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     }
   ],
   "connections": {

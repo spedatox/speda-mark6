@@ -61,7 +61,10 @@
         800,
         300
       ],
-      "notes": "fullResponse so the gate can read the STATUS CODE rather than guess from the body — a 500 that returns valid JSON must still count as down.\n\nneverError so a refused connection produces an item to inspect instead of failing the run; a health check that dies when the thing it checks dies is not a health check."
+      "notes": "fullResponse so the gate can read the STATUS CODE rather than guess from the body — a 500 that returns valid JSON must still count as down.\n\nneverError so a refused connection produces an item to inspect instead of failing the run; a health check that dies when the thing it checks dies is not a health check.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -112,7 +115,10 @@
         1360,
         300
       ],
-      "notes": "One turn per transition. The recovery intent explicitly forbids investigating — otherwise 'it's back' turns into a five-tool post-mortem nobody asked for.\n\nIf Igor itself is what went down, this call fails too and no push arrives. That is unavoidable from inside the stack, and it is why the down-detection here is a convenience rather than a guarantee."
+      "notes": "One turn per transition. The recovery intent explicitly forbids investigating — otherwise 'it's back' turns into a five-tool post-mortem nobody asked for.\n\nIf Igor itself is what went down, this call fails too and no push arrives. That is unavoidable from inside the stack, and it is why the down-detection here is a convenience rather than a guarantee.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     }
   ],
   "connections": {
