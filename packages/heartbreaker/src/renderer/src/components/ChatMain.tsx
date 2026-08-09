@@ -18,6 +18,21 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10)
 }
 
+/** Rebuild API image blocks from a user bubble's display `data:` URLs, so
+ *  retrying a turn the backend never received resends its pictures instead of
+ *  quietly dropping them. Attached DOCUMENTS cannot be recovered this way —
+ *  state keeps only their chips, never the bytes — so such a retry resends the
+ *  text alone, exactly as edit-and-resend already does. */
+function imageBlocksFrom(urls?: string[]): ImageBlock[] | undefined {
+  if (!urls?.length) return undefined
+  const blocks: ImageBlock[] = []
+  for (const url of urls) {
+    const m = /^data:([^;]+);base64,(.+)$/.exec(url)
+    if (m) blocks.push({ media_type: m[1], data: m[2] })
+  }
+  return blocks.length ? blocks : undefined
+}
+
 function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppConfig }) {
   const profile = useProfile()
   const { settings } = useSettings()
@@ -567,7 +582,7 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
       settled = true
       if (timedOut) {
         // Precise, phase-specific reason built by the watchdog — never filler.
-        dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: timeoutReason || 'The backend went silent and the request timed out.' } })
+        dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: timeoutReason || 'The backend went silent and the request timed out.', unsent: !gotStart } })
       } else if (err instanceof Error && err.name === 'AbortError') {
         // User-initiated stop — keep whatever streamed so far.
         dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: state.activeSessionId ?? 0 } })
@@ -578,7 +593,10 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
         dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId,
           error: net
             ? "Couldn't reach the backend — network error. Is the API server running and reachable from this host?"
-            : err.message } })
+            : err.message,
+          // No START event means the turn never landed: whatever the reason, the
+          // prompt was not stored and Try again has to send it again.
+          unsent: !gotStart } })
       }
     } finally {
       finalizeFlush()  // safety: never leave buffered text undelivered
@@ -762,6 +780,20 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
     if (idx <= 0) return
     const userMsg = st.messages[idx - 1]
     if (!userMsg || userMsg.role !== 'user') return
+
+    // A turn that died before the backend acknowledged it left NOTHING stored —
+    // its prompt exists only in this list. Regenerating would re-run the
+    // PREVIOUS exchange and confidently answer the wrong question, so retrying
+    // one means resending: drop the local pair and send the prompt afresh.
+    if (st.messages[idx].unsent) {
+      dispatch({ type: 'TRUNCATE_FROM', payload: { id: userMsg.id } })
+      sendRef.current?.(userMsg.content, {
+        keepMessages: idx - 1,
+        images: imageBlocksFrom(userMsg.images),
+      })
+      return
+    }
+
     dispatch({ type: 'TRUNCATE_FROM', payload: { id: assistantId } })
     sendRef.current?.('', { keepMessages: idx, regenerate: true })
   }, [dispatch])

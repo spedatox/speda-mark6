@@ -46,7 +46,7 @@ export type ChatAction =
   | { type: 'SET_TOOL_RESULT'; payload: { id: string; toolId: string; result: string } }
   | { type: 'ADD_FILE'; payload: { id: string; file: import('../lib/types').FileMeta } }
   | { type: 'FINISH_MESSAGE'; payload: { id: string; sessionId: number } }
-  | { type: 'ERROR_MESSAGE'; payload: { id: string; error: string } }
+  | { type: 'ERROR_MESSAGE'; payload: { id: string; error: string; unsent?: boolean } }
   | { type: 'UPDATE_SESSION_TITLE'; payload: { sessionId: number; title: string } }
   | { type: 'DELETE_MESSAGE'; payload: { id: string } }
   | { type: 'TRUNCATE_FROM'; payload: { id: string } }
@@ -241,7 +241,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             // Preserve everything already streamed (text + tools); attach the
             // error as a SEPARATE banner. A mid-turn host restart or dropped
             // connection must never vaporize the response the owner was reading.
-            ? { ...m, isStreaming: false, isError: true, errorNote: action.payload.error, status: undefined }
+            ? {
+                ...m, isStreaming: false, isError: true,
+                errorNote: action.payload.error, status: undefined,
+                // Whether the backend ever took delivery of this turn — what
+                // decides if Try again resends the prompt or regenerates.
+                unsent: action.payload.unsent ?? false,
+              }
             : m
         ),
       }

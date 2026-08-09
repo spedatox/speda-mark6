@@ -65,7 +65,6 @@ references/
 caddy-sites/*
 !caddy-sites/.gitkeep
 packages/igor/scripts/tts_samples/
-
 # Forge scratch: session state, allowlist, and worktrees an agent created here
 .forge/
 .forge-worktrees/

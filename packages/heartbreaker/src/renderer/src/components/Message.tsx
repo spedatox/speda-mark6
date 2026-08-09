@@ -412,6 +412,31 @@ function StreamingCursor() {
   )
 }
 
+/** The retry affordance on a failed turn. Labelled rather than icon-only, and
+ *  always visible — an error banner is the one place the owner should not have
+ *  to go hunting on hover for the way out. */
+function RetryBtn({ onClick }: { onClick: () => void }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
+        padding: '0.3rem 0.625rem', borderRadius: '0.375rem',
+        border: '1px solid rgba(248,113,113,0.35)',
+        background: hover ? 'rgba(248,113,113,0.16)' : 'rgba(248,113,113,0.06)',
+        color: '#f87171', fontSize: '0.8rem', fontWeight: 500,
+        cursor: 'pointer', transition: 'background 0.1s',
+      }}
+    >
+      <IconRefresh />
+      Try again
+    </button>
+  )
+}
+
 function ActionBtn({
   title, onClick, color, children,
 }: { title: string; onClick: () => void; color?: string; children: React.ReactNode }) {
@@ -1097,6 +1122,15 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
             marginTop: message.content || message.tools.length ? '0.5rem' : 0,
           }}>
             {message.errorNote || message.content || 'Something went wrong.'}
+            {/* Retry lives INSIDE the banner and is never hover-gated: a failed
+                turn is exactly where the owner needs this button, and the hover
+                action bar below is gated on `content` — which a turn that died
+                before streaming anything does not have. */}
+            {onRegenerate && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <RetryBtn onClick={onRegenerate} />
+              </div>
+            )}
           </div>
         )}
 

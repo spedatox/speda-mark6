@@ -322,6 +322,17 @@ class SessionManager:
             return 0
         from sqlalchemy import delete as _delete
 
+        from app.models.message_embedding import MessageEmbedding
+
+        # Semantic-recall rows point AT these messages with a real foreign key
+        # (and SQLite runs with foreign_keys=ON), so deleting the messages while
+        # their embeddings still exist raises "FOREIGN KEY constraint failed" —
+        # a 500 that the desktop client reports as an unreachable backend. Clear
+        # the derived vectors first: an embedding of a message that no longer
+        # exists is not something recall should ever be able to return anyway.
+        await db.execute(
+            _delete(MessageEmbedding).where(MessageEmbedding.message_id.in_(ids))
+        )
         await db.execute(_delete(Message).where(Message.id.in_(ids)))
         await db.commit()
         logger.info(

@@ -1,4 +1,5 @@
 import logging
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -400,21 +401,6 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json" if docs_enabled else None,
     )
 
-    # ── Global exception handler — never leak internals ─────────────────────────
-    # Any unhandled exception is logged in full server-side and returned to the
-    # caller as a generic 500. Prevents stack traces / paths / SQL from leaking
-    # through endpoints. HTTPExceptions keep their intended status/detail.
-    from fastapi.responses import JSONResponse as _JSONResponse
-
-    @app.exception_handler(Exception)
-    async def _unhandled(request, exc):  # noqa: ANN001
-        logger.error(
-            "unhandled_exception",
-            extra={"path": request.url.path, "error": str(exc)},
-            exc_info=exc,
-        )
-        return _JSONResponse(status_code=500, content={"detail": "Internal server error"})
-
     # ── CORS — locked down ──────────────────────────────────────────────────────
     # The API is header-authenticated (Bearer / X-API-Key), which browsers never
     # attach cross-origin automatically, so CSRF risk is low — but we still refuse
@@ -434,14 +420,51 @@ def create_app() -> FastAPI:
     if DESKTOP_ORIGIN not in origins:
         origins.append(DESKTOP_ORIGIN)
 
+    LOCAL_ORIGIN_RE = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
+    allow_origin_regex = LOCAL_ORIGIN_RE.pattern if settings.debug else None
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$" if settings.debug else None,
+        allow_origin_regex=allow_origin_regex,
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-N8N-Secret"],
     )
+
+    # ── Global exception handler — never leak internals ─────────────────────────
+    # Any unhandled exception is logged in full server-side and returned to the
+    # caller as a generic 500. Prevents stack traces / paths / SQL from leaking
+    # through endpoints. HTTPExceptions keep their intended status/detail.
+    #
+    # It carries the CORS header itself, which CORSMiddleware cannot do for it:
+    # Starlette runs the error handler in ServerErrorMiddleware, OUTSIDE the whole
+    # middleware stack, so a 500 leaves without Access-Control-Allow-Origin and a
+    # browser client discards it unread — the desktop app then reports a genuine
+    # server error as "couldn't reach the backend", which sends every diagnosis
+    # after the wrong thing. A 500 must arrive as a 500.
+    from fastapi.responses import JSONResponse as _JSONResponse
+
+    def _cors_headers(request) -> dict[str, str]:  # noqa: ANN001
+        origin = request.headers.get("origin")
+        if not origin:
+            return {}
+        if origin in origins or (allow_origin_regex and LOCAL_ORIGIN_RE.match(origin)):
+            return {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
+        return {}
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request, exc):  # noqa: ANN001
+        logger.error(
+            "unhandled_exception",
+            extra={"path": request.url.path, "error": str(exc)},
+            exc_info=exc,
+        )
+        return _JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+            headers=_cors_headers(request),
+        )
 
     # Middleware (Starlette applies these in REVERSE registration order, so the
     # LAST added runs FIRST: security headers wrap everything, then auth gates

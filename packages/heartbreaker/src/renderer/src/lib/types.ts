@@ -96,6 +96,11 @@ export interface ChatMessage {
   errorNote?: string  // error banner text — kept SEPARATE from content so an
                       // error (network drop, host restart) never erases what
                       // already streamed
+  /** The turn died before the backend acknowledged it (no `start` event), so the
+   *  user message it belongs to was never persisted server-side. Retrying such a
+   *  turn has to RESEND that message, not regenerate on a history that never
+   *  received it — see handleRegenerate in ChatMain. */
+  unsent?: boolean
   images?: string[]   // data: URLs for display in the user bubble
   files?: FileMeta[]  // downloadable files SPEDA produced
   uploads?: UploadedFile[]  // non-image files the user attached (display chips)
