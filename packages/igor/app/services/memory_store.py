@@ -30,22 +30,40 @@ MEMORY_ROOT = "/memories"
 # The closed set of files the owner may view AND edit from the systems board.
 # One question per file; anything outside this set is either system-internal
 # (dot-prefixed, e.g. /memories/.audit/) or a stray that Orion folds back in.
+# This list was written from docs/MEMORY_ARCHITECTURE.md's declared taxonomy and
+# was wrong: the real store has fourteen files, and the five it did not know about
+# were invisible to every gate, every migration and every audit. `wellness.md`
+# alone is 25 KB of the owner's training data that no part of the system was
+# protecting. The set below is the store as it actually is
+# (docs/MEMORY_ARCHITECTURE_V4.md §2) — keep it that way, and add a file here the
+# same day it is created.
 CANONICAL_FILES: dict[str, str] = {
+    # ── Shared, cross-agent ──────────────────────────────────────────────────
     "/memories/current.md": "What is true in the owner's life right now",
-    "/memories/owner.md": "Who he is and his biography before Mark VI existed",
-    "/memories/dossier.md": "Observed preferences — what he likes, dislikes, wants and how",
-    "/memories/projects.md": "What he is building and where each effort stands",
-    "/memories/social.md": "Who matters to him — Who block + timestamped Events per person",
-    "/memories/sessions.md": "Gym log, day by day (Atomix's domain)",
-    "/memories/history.md": "Mark VI-era states that have ended (demotions only)",
-    "/memories/log.md": "Rolling one-line session summaries",
-    # Sentinel's source-of-truth ledger. It post-dates the §2 table but is a
-    # first-class domain file exactly like sessions.md: seeded by
-    # skills/memory.py::INITIAL_FILES and wired as an agent source in
-    # AGENT_SOURCE_DEFAULTS. It belongs in the canonical set — leaving it out
-    # made it a "stray" that the taxonomy gate would refuse to recreate.
-    "/memories/finance.md": "Accounts, income, recurring expenses, budgets, holdings (Sentinel's domain)",
+    "/memories/owner.md": "Who he is — biography in chapters, plus employment history",
+    "/memories/dossier.md": "Observed preferences, behavioural prohibitions, trusted contacts",
+    "/memories/history.md": "Mark VI-era states that have ended",
+    "/memories/social.md": "People, grouped by category — Who block + dated Events each",
+    "/memories/projects.md": "Every project, with Status/Stack/Architecture/Team",
+    "/memories/log.md": "Rolling one-line session summaries (system-written)",
+    # ── Agent-owned domain files ─────────────────────────────────────────────
+    # Ownership here is not aspirational: the revision trail shows academic.md
+    # written by ultron 19 times and nobody else, wellness.md by atomix 11 of 12,
+    # finance.md by sentinel 23 of 32. The store organised itself this way; this
+    # records it so the gate can enforce it.
+    "/memories/finance.md": "Monthly ledger — incomes, expenses, debts, schedules (Sentinel)",
+    "/memories/wellness.md": "Training protocol, athlete profile and session log (Atomix)",
+    "/memories/academic.md": "Academic calendar, course materials, standing (Ultron)",
+    "/memories/kpss.md": "KPSS 2026 exam preparation tracker (Ultron)",
+    "/memories/cybersec.md": "Cybersecurity learning journey (Centurion)",
+    "/memories/ops.md": "Runbook and action log for the host (Orion)",
 }
+
+# Superseded by wellness.md, which is the same document continued — identical
+# section structure (SYSTEM DIRECTIVES / ATHLETE PROFILE / PROGRAM / LOG) and
+# newer. Kept out of the canonical set so the gate stops treating it as live, and
+# removable through DELETE /memory/files once the owner is ready.
+RETIRED_FILES: frozenset[str] = frozenset({"/memories/sessions.md"})
 
 # System-internal trails Orion writes but the owner does not edit. Dot-prefixed
 # so they never enter the injection set or the canonical-file rule.
@@ -189,6 +207,53 @@ async def commit_file(
         extra={"user_id": user_id, "path": path, "request_id": request_id},
     )
     return file
+
+
+async def delete_file(
+    db: AsyncSession, *, user_id: int, path: str, request_id: str = ""
+) -> str:
+    """
+    Remove a memory file, recording its full content in the revision trail first.
+
+    The owner's only sanctioned way to retire a document. "Delete" here is a
+    bookkeeping operation, not a destruction: the `before` of the recorded
+    revision holds every byte, and `restore_revision` brings it back — which is
+    why this is safe in a way that a hand-written DELETE against production
+    would not be.
+
+    Refuses canonical files. Retiring one of those is a schema change
+    (`CANONICAL_FILES` and the routing that depends on it), not a click, and a
+    file that agents are still told to write would simply be recreated empty.
+    """
+    from sqlalchemy import delete as sql_delete
+
+    from app.models.memory_file import MemoryFile as _MF
+
+    if path in CANONICAL_FILES:
+        raise ValueError(
+            f"{path} is a canonical memory file. Remove it from CANONICAL_FILES "
+            f"first — otherwise agents are still routed to it and it comes back empty."
+        )
+
+    file = await _get_file(db, user_id, path)
+    if file is None:
+        raise KeyError(path)
+
+    before = file.content
+    await db.execute(
+        sql_delete(_MF).where(_MF.user_id == user_id, _MF.path == path)
+    )
+    await record_revision(
+        db, user_id=user_id, path=path, author="owner",
+        action="delete", before=before, after="", request_id=request_id,
+    )
+    await db.commit()
+    logger.info(
+        "memory_file_deleted",
+        extra={"user_id": user_id, "path": path, "bytes": len(before),
+               "request_id": request_id},
+    )
+    return before
 
 
 async def list_revisions(

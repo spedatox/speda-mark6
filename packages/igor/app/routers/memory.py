@@ -165,6 +165,28 @@ async def set_memory_source(body: SourceAssign, request: Request, db: AsyncSessi
     return {"agent_id": body.agent_id, "source": source_file_for(body.agent_id)}
 
 
+@router.delete("/memory/files")
+async def delete_memory_file(path: str, db: AsyncSession = Depends(get_db)):
+    """
+    Retire a memory file the owner no longer wants.
+
+    Reversible: the file's full content is written to the revision trail before
+    it goes, so `POST /memory/files/restore` brings it back byte for byte.
+    Canonical files are refused — retiring one is a schema change, and a file
+    agents are still routed to would just be recreated empty.
+    """
+    request_id = str(uuid.uuid4())
+    try:
+        content = await memory_store.delete_file(
+            db, user_id=_USER_ID, path=path, request_id=request_id
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"No such memory file: {path}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"deleted": path, "bytes": len(content), "recoverable": True}
+
+
 @router.get("/memory/files/revisions")
 async def memory_revisions(path: str, db: AsyncSession = Depends(get_db)):
     """Newest-first revision history for one file — feeds the per-file history

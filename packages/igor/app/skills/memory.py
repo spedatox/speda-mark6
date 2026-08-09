@@ -104,34 +104,41 @@ cross-reference._
 - [YYYY-MM-DD] most recent thing concerning them (newest first).
 -->
 """,
-    "/memories/sessions.md": """\
-# Sessions — training log
+    # sessions.md is retired — wellness.md is the same document continued. It is
+    # deliberately absent here: leaving it in meant `ensure_seeded` recreated it
+    # on the next turn after any deletion, which is why removing a file has to
+    # start with removing its seed.
+    "/memories/wellness.md": """\
+# Wellness — training protocol and log
 
-_Gym log, day by day. Atomix is the only writer; other agents read. Program-level
-facts ("6 days/week, cutting for the wedding") belong in current.md, not here.
-Orion compresses entries older than ~4 weeks into weekly summaries._
+_Atomix is the only writer; other agents read. Program-level life context
+("cutting for the wedding") belongs in current.md, not here._
 
-## Equipment
+## 1. SYSTEM DIRECTIVES & OUTPUT RULES
 
-_What the gym actually has — racks, bars, machines, cables, dumbbell range — plus
-what is missing, broken, or always occupied. Atomix asks; never assumes._
+_How programs are created, logged and delivered. Read first._
 
-## Benchmarks
+## 2. ATHLETE PROFILE & STATUS
 
-_Current working loads / bests per main lift, dated. Updated in place as they move._
+_Strengths, weak points, injuries and limitations. Updated in place._
 
-## Profile
+## 3. ACTIVE PROGRAM & BENCHMARKS
 
-_Strengths, weak points, injuries and limitations, movements he likes and hates._
+_Current split and working loads per main lift, dated._
 
-## Log
+## 4. GYM ENVIRONMENT & EQUIPMENT
+
+_What the gym actually has, and what is missing, broken or always occupied.
+Atomix asks; never assumes._
+
+## 5. LOG
 
 _One entry per session, newest first:_
 
 <!-- Schema — copy per session:
-### YYYY-MM-DD — <split> · <duration> · RPE <n>
-- <exercise> <sets>x<reps> @ <load> (<delta vs last>) — <note>
-- Notes: <deviations, pain, skipped sets, substitutions, energy>
+### YYYY-MM-DD — <split> · <status>
+- <exercise> <sets> × <reps> @ <load> — <note>
+- **Note:** <deviations, pain, skipped sets, substitutions, energy>
 -->
 """,
     "/memories/log.md": """\
@@ -193,9 +200,20 @@ PRELOAD_FILES = [
 # source file from the desktop Configuration tab (runtime_state.get_agent_sources,
 # which overrides this map per agent). Atomix owns the gym log, Sentinel the
 # finance ledger (docs/MEMORY_ARCHITECTURE.md §2.1).
+# Which agent owns which document. Not a preference — the revision trail shows
+# this is already how the store behaves (academic.md written by ultron 19 times
+# and nobody else, wellness.md by atomix 11 of 12, finance.md by sentinel 23 of
+# 32). Recording it makes it enforceable instead of merely true so far.
+#
+# atomix moved from sessions.md to wellness.md: they are the same document
+# continued — identical section structure, wellness.md newer and larger — and
+# sessions.md is retired (memory_store.RETIRED_FILES).
 AGENT_SOURCE_DEFAULTS: dict[str, str] = {
-    "atomix": "/memories/sessions.md",
+    "atomix": "/memories/wellness.md",
     "sentinel": "/memories/finance.md",
+    "ultron": "/memories/academic.md",
+    "centurion": "/memories/cybersec.md",
+    "orion": "/memories/ops.md",
 }
 
 
