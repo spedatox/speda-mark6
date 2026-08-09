@@ -582,6 +582,8 @@ export interface MemoryStatus {
     status: 'pending' | 'running' | 'done' | 'failed'
     attempts: number
     last_error: string | null
+    /** Written by the running rebuild itself, so a long job reports where it is. */
+    progress?: { done: number; total: number; stored: number } | null
   } | null
   observations: number
   by_origin: Record<string, number>

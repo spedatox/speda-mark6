@@ -92,6 +92,22 @@ def _entry(obs: Observation, *, show_observer: bool = True) -> str:
     return f"{line}  <sub>({' · '.join(extras)})</sub>"
 
 
+def _fact_lines(text: str) -> int:
+    """Count real content entries in a memory file.
+
+    Bullets only, and not the `- _(none recorded)_` placeholders the renderers
+    emit for an empty section — those are structure, not knowledge. This is what
+    `commit_rendered`'s blanking interlock measures, so it has to distinguish a
+    file that says nothing from a file that has nothing.
+    """
+    count = 0
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith(("- ", "* ")) and not stripped[2:].lstrip().startswith("_"):
+            count += 1
+    return count
+
+
 def _person(subject: str) -> str:
     return subject.split(":", 1)[1] if ":" in subject else subject
 
@@ -492,11 +508,42 @@ async def commit_rendered(
     }
 
     changed: list[str] = []
+    skipped: list[str] = []
     for path, text in sorted(rendered.items()):
         current = existing.get(path)
         if current is not None and current.content == text:
             continue
         before = current.content if current else ""
+
+        # SAFETY INTERLOCK — never replace a file that has content with a render
+        # that has none.
+        #
+        # This runs from the post-turn queue, so on the first turn after a deploy
+        # it fires against whatever the record happens to hold. If the record is
+        # empty — a fresh install, a failed seed, a migration that has not been
+        # run yet — the honest render of every surface is "nothing recorded yet",
+        # and writing that would erase the owner's real memory on his first
+        # message. It is recoverable from the revision trail, but a system that
+        # needs its own audit log to undo what it did on boot is not one to trust
+        # with the only copy.
+        #
+        # Emptiness here means "no fact lines", not "no bytes": every render has
+        # a header and a note even when it has nothing to say.
+        if _fact_lines(text) == 0 and _fact_lines(before) > 0:
+            skipped.append(path)
+            logger.error(
+                "memory_render_refused_blanking",
+                extra={
+                    "user_id": user_id,
+                    "path": path,
+                    "stored_facts": _fact_lines(before),
+                    "reason": (
+                        "the record holds nothing for this surface — refusing to "
+                        "overwrite existing memory. Run the rebuild."
+                    ),
+                },
+            )
+            continue
         if current is None:
             db.add(MemoryFile(user_id=user_id, path=path, content=text))
         else:
@@ -513,6 +560,11 @@ async def commit_rendered(
         await db.commit()
     logger.info(
         "memory_surfaces_rendered",
-        extra={"user_id": user_id, "request_id": request_id, "changed": changed},
+        extra={
+            "user_id": user_id,
+            "request_id": request_id,
+            "changed": changed,
+            "refused": skipped,
+        },
     )
     return changed

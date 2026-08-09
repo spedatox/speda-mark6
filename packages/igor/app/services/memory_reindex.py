@@ -51,7 +51,20 @@ BATCH_CHARS = 12_000
 
 # Extraction calls in flight. The provider rate limiter governs the real rate;
 # this only stops a long history from opening hundreds of sockets at once.
-CONCURRENCY = 3
+CONCURRENCY = 6
+
+# Hard ceiling on one extraction call. Without this a single unanswered request
+# holds its concurrency slot forever and the whole rebuild stalls behind it —
+# which is exactly what happened on the first real run: four hours, zero rows,
+# no error. A batch that times out is skipped, not retried into the same hang.
+BATCH_TIMEOUT_SECONDS = 120
+
+# Batches extracted before results are written. The first implementation
+# gathered EVERY batch and wrote once at the end, so a large history showed no
+# progress at all until it finished — and a crash at 95% lost everything.
+# Writing in chunks makes progress visible in the record itself and makes the
+# job resumable in practice: whatever landed stays landed.
+WRITE_CHUNK = 10
 
 # Per-batch ceiling on what one stretch of conversation may claim. A batch that
 # yields thirty "facts" has started transcribing rather than distilling.
@@ -438,26 +451,69 @@ async def seed_from_files(
 
 # ── Step 3: derive from history ───────────────────────────────────────────────
 
+async def _record_progress(
+    request_id: str, done: int, total: int, stored: int
+) -> None:
+    """Write "batch N of M" onto the queue row driving this rebuild.
+
+    Matched by `request_id`, which is unique per job, so no handler signature has
+    to carry a job id around. Best-effort: a failure to report progress must
+    never stop the work it is reporting on.
+    """
+    if not request_id:
+        return
+    try:
+        from app.models.background_job import BackgroundJob
+
+        async with AsyncSessionLocal() as db:
+            job = (
+                await db.execute(
+                    select(BackgroundJob).where(
+                        BackgroundJob.request_id == request_id,
+                        BackgroundJob.kind == "memory_reindex",
+                    )
+                )
+            ).scalars().first()
+            if job is None:
+                return
+            job.payload = {
+                **(job.payload or {}),
+                "progress": {"done": done, "total": total, "stored": stored},
+            }
+            await db.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.debug("reindex_progress_write_failed", extra={"error": str(e)})
+
+
 async def _extract_batch(model: str, period: str, transcript: str) -> list[dict]:
     """One extraction call. Returns proposals; never raises."""
     from app.services.llm_client import LLMClient
 
     try:
-        resp = await LLMClient().create_message(
-            model=model,
-            system=_EXTRACT_SYSTEM,
-            messages=[{
-                "role": "user",
-                "content": _EXTRACT_PROMPT.format(
-                    period=period,
-                    domains=", ".join(DOMAINS),
-                    max_items=MAX_PER_BATCH,
-                    transcript=transcript,
-                ),
-            }],
-            max_tokens=2048,
+        resp = await asyncio.wait_for(
+            LLMClient().create_message(
+                model=model,
+                system=_EXTRACT_SYSTEM,
+                messages=[{
+                    "role": "user",
+                    "content": _EXTRACT_PROMPT.format(
+                        period=period,
+                        domains=", ".join(DOMAINS),
+                        max_items=MAX_PER_BATCH,
+                        transcript=transcript,
+                    ),
+                }],
+                max_tokens=2048,
+            ),
+            timeout=BATCH_TIMEOUT_SECONDS,
         )
         raw = resp.content[0].text if resp.content else ""
+    except asyncio.TimeoutError:
+        logger.warning(
+            "memory_extract_timeout",
+            extra={"period": period, "seconds": BATCH_TIMEOUT_SECONDS},
+        )
+        return []
     except Exception as e:  # noqa: BLE001
         logger.warning("memory_extract_failed", extra={"period": period, "error": str(e)})
         return []
@@ -508,27 +564,45 @@ async def derive_from_history(user_id: int, model: str, request_id: str = "") ->
         async with semaphore:
             return await _extract_batch(model, period, transcript)
 
-    # All extraction happens with no DB session held (Honcho's rule) — results
-    # are collected, then written in one pass.
-    results = await asyncio.gather(
-        *(_one(period, text) for period, text in batches), return_exceptions=True
-    )
+    # Extract in chunks and write after each one. Extraction still holds no DB
+    # session (Honcho's rule) — the session opens only between chunks — but the
+    # record now grows as the job runs instead of appearing all at once at the
+    # end, so "is this working?" is answerable by looking at it.
+    stored_total, rejected_total, timed_out = 0, 0, 0
+    for start in range(0, len(batches), WRITE_CHUNK):
+        chunk = batches[start : start + WRITE_CHUNK]
+        results = await asyncio.gather(
+            *(_one(period, text) for period, text in chunk), return_exceptions=True
+        )
+        for proposals in results:
+            if isinstance(proposals, BaseException):
+                timed_out += 1
+                continue
+            if not proposals:
+                continue
+            async with AsyncSessionLocal() as db:
+                stored, rejections = await record_observations(
+                    db,
+                    user_id=user_id,
+                    observer="orion",
+                    proposals=proposals,
+                    request_id=request_id,
+                    origin="reindex",
+                )
+            stored_total += len(stored)
+            rejected_total += len(rejections)
 
-    stored_total, rejected_total = 0, 0
-    for proposals in results:
-        if isinstance(proposals, BaseException) or not proposals:
-            continue
-        async with AsyncSessionLocal() as db:
-            stored, rejections = await record_observations(
-                db,
-                user_id=user_id,
-                observer="orion",
-                proposals=proposals,
-                request_id=request_id,
-                origin="reindex",
-            )
-        stored_total += len(stored)
-        rejected_total += len(rejections)
+        done = min(start + WRITE_CHUNK, len(batches))
+        await _record_progress(request_id, done, len(batches), stored_total)
+        logger.info(
+            "memory_reindex_progress",
+            extra={
+                "request_id": request_id,
+                "batch": done,
+                "of": len(batches),
+                "stored": stored_total,
+            },
+        )
 
     logger.info(
         "memory_reindex_derived",
@@ -537,6 +611,7 @@ async def derive_from_history(user_id: int, model: str, request_id: str = "") ->
             "batches": len(batches),
             "stored": stored_total,
             "rejected": rejected_total,
+            "failed_batches": timed_out,
         },
     )
     return {

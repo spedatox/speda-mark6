@@ -166,7 +166,13 @@ async def memory_status(request: Request) -> JSONResponse:
     total = sum(by_origin.values())
 
     if job and job["status"] in ("pending", "running"):
-        verdict = "Rebuilding — recorded facts will keep climbing until it finishes."
+        p = job.get("progress")
+        verdict = (
+            f"Rebuilding — batch {p['done']} of {p['total']}, "
+            f"{p['stored']} fact(s) derived so far."
+            if p
+            else "Rebuilding — reading your history. Facts appear as batches complete."
+        )
     elif total == 0:
         verdict = "The record is empty. Run the rebuild before trusting memory."
     elif thin:

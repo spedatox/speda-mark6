@@ -199,6 +199,9 @@ async def latest_job(kind: str, user_id: int) -> dict | None:
         "last_error": job.last_error or None,
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+        # Written by the running job itself (memory_reindex._record_progress), so
+        # a long rebuild reports where it is rather than only that it is alive.
+        "progress": (job.payload or {}).get("progress"),
     }
 
 

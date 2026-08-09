@@ -912,12 +912,35 @@ export default function SettingsModal({ config, onClose }: Props) {
                         )}
                       </div>
                       <div style={{
-                        color: memory.thin_compositions.length > 0 || memory.observations === 0
-                          ? 'var(--hb-red)'
-                          : memory.at_risk_facts > 0 ? 'var(--hb-amber, #d9a441)' : 'var(--hb-green)',
+                        color: memory.job?.status === 'running' || memory.job?.status === 'pending'
+                          ? 'var(--hb-cyan-bright)'
+                          : memory.thin_compositions.length > 0 || memory.observations === 0
+                            ? 'var(--hb-red)'
+                            : memory.at_risk_facts > 0 ? 'var(--hb-amber, #d9a441)' : 'var(--hb-green)',
                       }}>
                         {memory.verdict}
                       </div>
+
+                      {/* A long rebuild has to show movement, not just a spinner —
+                          the first real run sat at a flat count for hours because
+                          nothing was written until the very end. */}
+                      {memory.job?.progress && (
+                        <div style={{ marginTop: '0.45rem' }}>
+                          <div style={{
+                            height: '3px', borderRadius: '2px',
+                            background: 'var(--border)', overflow: 'hidden',
+                          }}>
+                            <div style={{
+                              height: '100%',
+                              width: `${Math.round(
+                                (memory.job.progress.done / Math.max(memory.job.progress.total, 1)) * 100
+                              )}%`,
+                              background: 'var(--hb-cyan-bright)',
+                              transition: 'width 0.4s ease',
+                            }} />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
