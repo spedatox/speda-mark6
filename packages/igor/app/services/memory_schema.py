@@ -230,6 +230,23 @@ def check_write(
 
     hard: list[str] = []
 
+    # ── The verifier (app/services/memory_verify.py) ─────────────────────────
+    # Delta-only: a document with pre-existing problems must stay editable or
+    # nothing could ever be repaired. Errors this write ADDS are refused;
+    # warnings ride back as advice on a successful write.
+    from app.services.memory_verify import introduced_by
+
+    new_findings = introduced_by(path, before, after)
+    hard.extend(
+        f"{f.message} ({f.rule}"
+        + (f", line {f.line}" if f.line else "")
+        + f"). {f.fix}"
+        for f in new_findings if f.severity == "error"
+    )
+    verifier_warnings = [
+        f"{f.message} — {f.fix}" for f in new_findings if f.severity == "warning"
+    ]
+
     # 1. The taxonomy is closed (§2). A brand-new top-level file is the exact
     #    move that produced the v1 drift ("new file types were added ad hoc").
     if is_create and not is_canonical(path):
@@ -268,7 +285,7 @@ def check_write(
             + "\n\nFix the content and write again. Nothing was saved."
         )
 
-    warnings = _soft_warnings(path, after)
+    warnings = verifier_warnings + _soft_warnings(path, after)
     if hard and is_owner:
         # Ground truth lands regardless; Orion re-files it and the trail records why.
         warnings = [f"(owner commit, accepted as-is) {h}" for h in hard] + warnings

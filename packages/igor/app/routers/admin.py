@@ -198,6 +198,25 @@ async def memory_status(request: Request) -> JSONResponse:
     })
 
 
+@router.get("/memory/verify")
+async def memory_verify(request: Request) -> JSONResponse:
+    """
+    Check every memory document against its declared grammar
+    (docs/MEMORY_ARCHITECTURE_V4.md §3.3). Read-only — it repairs nothing.
+
+    This is the mechanism whose absence let a corrupted generation sit in
+    academic.md for three weeks, a paragraph live above the H1 in current.md, and
+    ops.md route agents to a directory renamed months ago. Orion runs it nightly;
+    it is exposed here so the owner can see the same report on demand.
+    """
+    from app.database import AsyncSessionLocal
+    from app.services.memory_verify import verify_all
+
+    async with AsyncSessionLocal() as db:
+        report = await verify_all(db, _USER_ID)
+    return JSONResponse(report)
+
+
 @router.post("/memory/render")
 async def memory_render(request: Request) -> JSONResponse:
     """
