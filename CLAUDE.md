@@ -59,6 +59,16 @@ Agent name, personality, system prompt template, tool allowlist, and model polic
 **11. Every tool description is a minimum of 3–4 sentences.**
 State: what the tool does, when to use it, when NOT to use it, and what it returns. This is the most critical factor in Claude's tool selection accuracy per Anthropic's own documentation. A one-line description makes a good tool unusable. Enforce this at skill authoring time, not at runtime.
 
+**11a. Memory has ONE write path: the observation record.**
+A durable fact enters via `record_observation` and nowhere else. The markdown
+files under `/memories` are derived — six rendered mechanically
+(`services/memory_render.py`), two composed by Orion with verified citations
+(`services/memory_compose.py`). Never write a memory file directly from a skill,
+service or router; `memory_schema.check_write` refuses it. A fact stops being
+current by acquiring a `valid_until`, never by being moved or deleted, and a
+changed value is linked with `superseded_by` rather than overwritten. Full
+contract: `docs/MEMORY_ARCHITECTURE_V3.md`.
+
 **12. All endpoints require authentication.**
 `AuthMiddleware` validates the **`X-API-Key`** header on every request before any router logic runs, comparing it in constant time against `SPEDA_API_KEY` (from the environment). The n8n trigger endpoint additionally validates `X-N8N-Secret`. The only unauthenticated paths are `/health` and `/oauth/google/callback`. Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are disabled outside `DEBUG`. There is no public data endpoint.
 
@@ -192,7 +202,7 @@ speda-mark-vi/
     │   ├── chat.py              # POST /chat[/{agent_id}] (SSE), WS /ws — Flutter user-facing
     │   ├── trigger.py           # POST /trigger/{agent_id} — n8n webhook
     │   ├── agents.py            # GET /agents, House Party toggle, agent WebSocket presence
-    │   ├── admin.py             # DELETE /admin/outputs — temp file cleanup (called by n8n)
+    │   ├── admin.py             # /admin/outputs, /admin/tasks/drain, /admin/memory/{shadow,render,compose,reindex}
     │   ├── automations.py
     │   ├── config.py            # Owner-facing settings UI, backed by config_schema.py
     │   ├── connections.py       # OAuth connections (Google, Notion)
@@ -210,6 +220,7 @@ speda-mark-vi/
     ├── skills/
     │   ├── base.py              # Skill ABC
     │   ├── memory.py            # Memory tool + recall_for_context/recall_sessions_for_context + MemoryRecallCache
+    │   ├── observations.py      # record_observation / search_memory / forget_observation (the sourced-fact layer)
     │   ├── dispatch.py          # dispatch_agent / house_party tools
     │   ├── osint.py             # NightCrawler's threat-intel lookups (IP/URL/hash/breach/dark-web/crypto)
     │   ├── navigation.py
@@ -235,6 +246,13 @@ speda-mark-vi/
     ├── services/
     │   ├── anthropic_client.py, llm_client.py   # Multi-provider LLM routing (llm_client) + model catalog
     │   ├── memory.py, memory_store.py           # Post-turn tasks (title/recap/compaction), revision log
+    │   ├── memory_schema.py     # Write gate for /memories — refuses hand edits to derived files
+    │   ├── observations.py      # THE RECORD: evidence ladder, subject/domain routing, validity, supersession
+    │   ├── memory_render.py     # The six derived surfaces — pure function, no model, plus shadow-mode diff
+    │   ├── memory_compose.py    # owner.md + current.md — prose from the record, citations verified
+    │   ├── memory_reindex.py    # Seed from pre-v3 files + rebuild the record from raw history
+    │   ├── surprisal.py         # Which observations deserve attention — novelty + near-duplicate detection
+    │   ├── task_queue.py        # Durable post-turn work (background_jobs) — enqueue/drain/recover, NOT a scheduler
     │   ├── attachments.py       # Upload text extraction + build_user_content (turn content-block assembly)
     │   ├── chat_history.py      # rows_from_messages — stored-message → UI-row shaping
     │   ├── errors.py            # friendly_provider_error — cross-provider error translation
@@ -252,7 +270,8 @@ speda-mark-vi/
     │   └── n8n.py, n8n_api.py   # Webhook auth (X-N8N-Secret), n8n REST client
     ├── models/                  # ORM models — one file per table (user, session, message, agent,
     │                            # agent_message, automation, health_sample, memory/memory_file/memory_revision,
-    │                            # message_embedding, news_item/news_quota/news_watch, notification, tool_call,
+    │                            # message_embedding, observation, background_job,
+    │                            # news_item/news_quota/news_watch, notification, tool_call,
     │                            # route/place — map payloads the model references by id, never retypes)
     ├── schemas/
     │   ├── chat.py, sse.py, agent.py, trigger.py, health.py
@@ -341,6 +360,10 @@ Example n8n trigger payloads:
 
 **Temp file cleanup:** n8n runs a daily scheduled workflow that calls `DELETE /admin/outputs`. This endpoint clears files in `/tmp/speda_outputs/` older than 24 hours. The endpoint requires the `X-API-Key` header. Do not implement any other cleanup mechanism.
 
+**Background job sweep:** post-turn work (session log, recap, title, compaction, embedding) is committed to the `background_jobs` table before it runs and drained inline, so a failure or a restart leaves something to retry from instead of losing the work silently (`app/services/task_queue.py`). n8n calls `POST /admin/tasks/drain` hourly to pick up whatever inline draining and startup recovery could not.
+
+The queue is **not** a scheduler and must not become one. It owns *whether work happened*; n8n still owns *when to come and ask*. Nothing in it fires at a time — `run_after` only withholds a failing job from the very next drain, and something external always has to invoke it.
+
 Do not implement any internal scheduler. Do not add cron logic to the backend. Ever.
 
 ### Cheap probes — a poll must not cost a turn
@@ -371,7 +394,8 @@ The Legion is the sub-agent worker system (`app/legion/`). Wire name of the tool
 - SPEDA decides when to deploy legionnaires. The user does not configure this.
 - Single loop for: lookups, reminders, calendar actions, short questions, any task completable in 1–3 tool calls.
 - The Legion for: research, briefings, multi-source synthesis, any task requiring 3+ independent sources.
-- Legionnaires ↔ effort: `scout` (pre-filter) `"low"` · `researcher` `"medium"` · `analyst` (synthesis) `"high"` · `judge` `"low"` · `general` `"inherit"`.
+- Legionnaires ↔ effort: `scout` (pre-filter) `"low"` · `researcher` `"medium"` · `analyst` (synthesis) `"high"` · `judge` `"low"` · `archivist` (deep memory recall) `"medium"` · `general` `"inherit"`.
+- A legionnaire may declare `tool_scope` — an EXACT tool allowlist, narrower than the `read_only` bucket. Use it for specialists whose job is a handful of tools (`archivist` sees only the three recall tools): a worker that cannot see a tool cannot be tempted to misuse it, and does not pay for its description on every iteration.
 - Worker models resolve provider-agnostically: low/medium effort → `profile.background_model(parent_model)` (cheap tier, same provider); high/inherit → the parent model. Never hardcode worker model IDs in core (Rule 10). `LEGION_MODEL_OVERRIDE` (legacy alias `SUB_AGENT_MODEL`) pins all workers when set.
 - The judge legionnaire runs on briefings and reports only. Not on routine actions.
 - When legionnaires are deployed, SPEDA informs the user which workers ran. One sentence per worker.

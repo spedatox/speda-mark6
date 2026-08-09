@@ -24,21 +24,48 @@ async def index_history_endpoint(
     force: bool = False,
 ):
     """
-    One-time: mine durable facts about the owner from the entire conversation
-    history and write a consolidated profile to /memories/history.md.
-    Runs in the background. Pass ?force=true to re-index.
-    """
-    from app.services.history_indexer import index_history
+    Rebuild the memory record from the entire conversation history (v3 §6).
 
-    # History indexing is an owner-level (cross-agent) job — run it on the cheap
-    # tier of whatever the default agent is ROUTED to, not on a hardcoded
-    # profile field: pinning that agent to another provider must move this job
-    # with it instead of leaving it billing Anthropic.
+    This is the settings panel's "Index history" button. It used to run
+    `services/history_indexer.py`, which mined a prose profile and wrote it
+    straight into /memories/history.md. Under v3 that would be actively harmful:
+    history.md is a RENDERED file, so the profile would be silently wiped by the
+    next render, and history.md is now specifically the file for facts that have
+    STOPPED being true — exactly the wrong home for a biography.
+
+    So it now runs the v3 pipeline: seed the pre-v3 files into the record (first
+    run only, bullets AND prose), derive the rest from history, re-render the
+    surfaces. Safe to press twice — only reproducible rows are replaced, and a
+    second press while one is running is a no-op.
+
+    Queued rather than run inline: it is a long job and the durable queue is what
+    makes its outcome visible afterwards. Poll GET /admin/memory/status.
+    """
+    from app.services.task_queue import drain, enqueue_one
+
+    # Owner-level (cross-agent) job — run it on the cheap tier of whatever the
+    # default agent is ROUTED to, not a hardcoded profile field: pinning that
+    # agent to another provider must move this job with it.
     profile = request.app.state.profiles.default
     model = profile.background_model(profile.allocate_model("user"))
     request_id = str(uuid.uuid4())
-    background_tasks.add_task(index_history, 1, request_id, model, force)
-    return JSONResponse({"accepted": True, "message": "History indexing started in background"})
+
+    job_id = await enqueue_one(
+        kind="memory_reindex", user_id=1, model=model, request_id=request_id
+    )
+    if job_id is None:
+        return JSONResponse({
+            "accepted": False,
+            "message": "A reindex is already running. Watch its progress in memory status.",
+        })
+
+    background_tasks.add_task(drain)
+    logger.info("memory_reindex_queued", extra={"request_id": request_id, "job_id": job_id})
+    return JSONResponse({
+        "accepted": True,
+        "job_id": job_id,
+        "message": "Rebuilding memory from your whole history. This takes a few minutes.",
+    })
 
 
 @router.post("/index-embeddings")

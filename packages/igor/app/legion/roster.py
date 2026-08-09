@@ -47,6 +47,14 @@ class LegionnaireDef:
     # MCP servers a read-only worker may use (research surfaces). Ignored when
     # read_only is False.
     mcp_servers: frozenset = frozenset({"tavily", "exa"})
+    # EXACT tool allowlist, when this worker needs a narrow surface rather than
+    # "everything read-only". `read_only=True` is a broad bucket — it keeps every
+    # read-only skill the parent had, which for a specialist is dozens of tools
+    # it will never call and pays for on every iteration. Naming the handful it
+    # actually needs is what makes a focused worker cheap AND accurate: a worker
+    # that cannot see `news_headlines` cannot be tempted to answer a memory
+    # question with a web search. None = no extra narrowing.
+    tool_scope: frozenset | None = None
 
 
 _CONTRACT = (
@@ -119,6 +127,51 @@ LEGION_ROSTER: dict[str, LegionnaireDef] = {
         max_iterations=8,
         read_only=True,
     ),
+    "archivist": LegionnaireDef(
+        worker_id="archivist",
+        when_to_use=(
+            "deep MEMORY work — multi-hop questions about the owner's own history "
+            "that need many searches across observations and past conversations"
+        ),
+        system_prompt=(
+            "You are an archivist in the Legion, Igor's worker corps. Your subject "
+            "is the OWNER'S OWN RECORD — what he has said, decided, preferred and "
+            "changed his mind about across every past conversation — and nothing "
+            "else. You have no access to the web and no way to look anything up "
+            "about the outside world; if the task needs that, say so and stop.\n\n"
+            "Work the three surfaces deliberately, because they answer different "
+            "questions:\n"
+            "- `search_memory` — the distilled, sourced facts the roster has "
+            "recorded. Start here. Use mode='chain' to see what a claim rests on, "
+            "mode='established' for what several conversations agree on.\n"
+            "- `recall_conversations` — what was actually SAID, by meaning. Pass "
+            "after/before to bound a period; that pairing is how you establish when "
+            "a position changed rather than merely that two positions exist.\n"
+            "- `search_history` — exact wording, when you already know the literal "
+            "string.\n\n"
+            "Search repeatedly and from different angles before concluding: one "
+            "query that returns little means your phrasing missed, not that the "
+            "record is empty. Distinguish what you FOUND from what you INFERRED, "
+            "and cite the observation id or the session and date behind every "
+            "substantive claim so the agent deploying you can verify it. If the "
+            "record genuinely does not answer the question, say that plainly — an "
+            "invented recollection about the owner's own life is the worst thing "
+            "you can return. "
+            + _CONTRACT
+        ),
+        effort="medium",
+        max_iterations=12,
+        read_only=True,
+        # Narrow on purpose: recall only. The archivist reports; the agent that
+        # actually talked to the owner decides what gets written to memory, so
+        # the observer of record is never an anonymous worker.
+        tool_scope=frozenset({
+            "search_memory",
+            "recall_conversations",
+            "search_history",
+        }),
+        mcp_servers=frozenset(),
+    ),
     "general": LegionnaireDef(
         worker_id="general",
         when_to_use="anything that doesn't fit the specialists — full parent toolset, parent-grade model",
@@ -183,14 +236,18 @@ def build_tool_definition() -> dict:
         "name": "Task",
         "description": (
             "Deploys The Legion: isolated, billed worker agents (legionnaires) for "
-            "heavy research and synthesis. This is EXPENSIVE and RARE — deploy ONLY "
-            "when the owner explicitly asked for a deep/thorough research report AND "
-            "it genuinely needs 6+ independent searches across distinct subtopics. "
+            "heavy research, synthesis, and deep recall. This is EXPENSIVE and RARE — "
+            "deploy ONLY when the owner explicitly asked for a deep/thorough research "
+            "report AND it genuinely needs 6+ independent searches across distinct "
+            "subtopics, or when a question about the owner's OWN history needs many "
+            "searches across his past conversations to answer (the `archivist`). "
             "Do NOT use it for news, current events, quick facts, lookups, writes, "
             "reminders, or anything completable with a handful of direct tool calls — "
             "handle those yourself in the main loop; running several searches "
-            "yourself is preferred over deploying a worker. When in doubt, do NOT "
-            "deploy. Pick the right legionnaire:\n"
+            "yourself is preferred over deploying a worker. One `search_memory` or "
+            "`recall_conversations` call answers most memory questions and is always "
+            "the first move; the archivist is for when several of them would not. "
+            "When in doubt, do NOT deploy. Pick the right legionnaire:\n"
             f"{legionnaire_lines}\n"
             "Deploy several in ONE message for parallel fan-out (e.g. one researcher "
             "per subtopic, then one analyst over their findings). Each worker is "

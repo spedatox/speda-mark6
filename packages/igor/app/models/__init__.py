@@ -6,6 +6,8 @@ from app.models.memory import Memory
 from app.models.memory_file import MemoryFile
 from app.models.memory_revision import MemoryRevision
 from app.models.message_embedding import MessageEmbedding
+from app.models.observation import Observation
+from app.models.background_job import BackgroundJob
 from app.models.agent import AgentRecord
 from app.models.agent_message import AgentMessage
 from app.models.tool_call import ToolCall
@@ -23,7 +25,7 @@ from app.models.place import PlaceSet
 
 __all__ = [
     "User", "Session", "Message", "Memory", "MemoryFile", "MemoryRevision",
-    "MessageEmbedding",
+    "MessageEmbedding", "Observation", "BackgroundJob",
     "AgentRecord", "AgentMessage", "ToolCall", "Notification", "Automation",
     "NewsItem", "NewsWatch", "NewsQuota",
     "HealthSample", "HealthDaily",

@@ -92,6 +92,11 @@ async def lifespan(app: FastAPI):
     from app.skills.hisar import HisarSkill
     from app.skills.save_file import SaveFileSkill
     from app.skills.memory import MemorySkill
+    from app.skills.observations import (
+        ForgetObservationSkill,
+        RecordObservationSkill,
+        SearchMemorySkill,
+    )
     from app.skills.news import (
         NewsDeepDiveSkill,
         NewsHeadlinesSkill,
@@ -111,6 +116,13 @@ async def lifespan(app: FastAPI):
 
     await registry.register_skill(ReadSkillSkill())
     await registry.register_skill(MemorySkill())
+    # The observation tier — the sourced, addressable facts beneath the memory
+    # files. Registered next to the memory tool because they are one capability
+    # with two layers: the file is what gets read, the observation is what can be
+    # traced. See app/skills/observations.py.
+    await registry.register_skill(RecordObservationSkill())
+    await registry.register_skill(SearchMemorySkill())
+    await registry.register_skill(ForgetObservationSkill())
     await registry.register_skill(SearchHistorySkill())
     await registry.register_skill(SemanticSearchSkill())
     await registry.register_skill(TTSSkill())
@@ -327,12 +339,22 @@ async def lifespan(app: FastAPI):
 
     await sweep_stale_dispatches()
 
+    # ── 11. Recover post-turn work the previous process did not finish ────────
+    # Same reasoning as the dispatch sweep, one layer down: background_jobs left
+    # "running" at boot died with the last process. Unlike dispatches these are
+    # retryable, so they go back on the queue and a detached drain works through
+    # them while the app serves requests. See app/services/task_queue.py.
+    from app.services.task_queue import recover_on_startup
+
+    reclaimed_jobs = await recover_on_startup()
+
     logger.info(
         "startup_complete",
         extra={
             "tools_registered": len(registry.list_tools()),
             "api_key_set": settings.speda_api_key != "dev-key",
             "anthropic_key_set": settings.anthropic_api_key != "not-set",
+            "jobs_reclaimed": reclaimed_jobs,
         },
     )
 

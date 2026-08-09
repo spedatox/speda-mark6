@@ -196,3 +196,191 @@ async def restore_memory_file(body: RevisionRestore, db: AsyncSession = Depends(
     except KeyError:
         raise HTTPException(status_code=404, detail="No such revision.")
     return _serialize(file)
+
+
+# ── The record itself (v3 §5) ─────────────────────────────────────────────────
+# The owner edits FACTS, not markdown. Six of the eight files are rendered and
+# two are composed, so an edit to their text would be overwritten on the next
+# render — silently. These endpoints are where a correction actually sticks, and
+# they are what the DATA_BANKS panel drives instead of a textarea.
+
+
+class ObservationIn(BaseModel):
+    content: str
+    domain: str
+    subject: str = "owner"
+    valid_from: str | None = None
+    valid_until: str | None = None
+    supersedes: int | None = None
+
+
+class ObservationEnd(BaseModel):
+    valid_until: str | None = None
+
+
+def _serialize_observation(o) -> dict:
+    return {
+        "id": o.id,
+        "content": o.content,
+        "subject": o.subject,
+        "domain": o.domain,
+        "level": o.level,
+        "observer": o.observer,
+        "origin": o.origin,
+        "valid_from": o.valid_from.isoformat() if o.valid_from else None,
+        "valid_until": o.valid_until.isoformat() if o.valid_until else None,
+        "superseded_by": o.superseded_by,
+        "reinforcement_count": o.reinforcement_count,
+        "source_ids": list(o.source_ids or []),
+        "session_id": o.session_id,
+        "created_at": o.created_at.isoformat() if o.created_at else None,
+        # Where this fact shows up — so the panel can group by surface and the
+        # owner sees the same organisation he reads in the files.
+        "surface": _target_file(o),
+    }
+
+
+def _target_file(o) -> str:
+    from app.services.observations import target_file
+
+    return target_file(o)
+
+
+@router.get("/memory/observations")
+async def list_observations(
+    subject: str | None = None,
+    domain: str | None = None,
+    surface: str | None = None,
+    live_only: bool = False,
+    limit: int = 500,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    The record behind the files — what the roster believes about the owner.
+
+    Filterable by subject, domain, or the surface a fact renders into, so the
+    panel can show "everything behind dossier.md" and let the owner correct it at
+    the source. Ended facts are included by default and carry their end date;
+    hiding them would recreate the v2 problem of history being invisible.
+    """
+    from app.models.observation import Observation
+    from app.services.observations import normalize_subject
+
+    stmt = select(Observation).where(
+        Observation.user_id == _USER_ID, Observation.deleted_at.is_(None)
+    )
+    if subject:
+        stmt = stmt.where(Observation.subject == normalize_subject(subject))
+    if domain:
+        stmt = stmt.where(Observation.domain == domain)
+    if live_only:
+        stmt = stmt.where(Observation.valid_until.is_(None))
+    stmt = stmt.order_by(Observation.created_at.desc()).limit(min(limit, 2000))
+
+    rows = (await db.execute(stmt)).scalars().all()
+    out = [_serialize_observation(o) for o in rows]
+    if surface:
+        out = [o for o in out if o["surface"] == surface]
+    return out
+
+
+@router.post("/memory/observations")
+async def create_observation(body: ObservationIn, db: AsyncSession = Depends(get_db)):
+    """
+    Record a fact as the owner. `observer="owner"`, `origin="owner"` — ground
+    truth (§4.3): it outranks agent observations and no re-index ever regenerates
+    or removes it.
+
+    Pass `supersedes` to correct an existing fact rather than contradict it: the
+    old row is closed out with an end date and a pointer here, so the previous
+    value stays answerable and the correction stays reversible.
+    """
+    from app.services.observations import ObservationRejected, record_observations, supersede
+
+    request_id = str(uuid.uuid4())
+    try:
+        stored, rejections = await record_observations(
+            db,
+            user_id=_USER_ID,
+            observer="owner",
+            proposals=[body.model_dump(exclude={"supersedes"}) | {"level": "explicit"}],
+            request_id=request_id,
+            origin="owner",
+        )
+    except ObservationRejected as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if rejections:
+        raise HTTPException(status_code=400, detail=rejections[0])
+    if not stored:
+        raise HTTPException(status_code=400, detail="Nothing was recorded.")
+
+    if body.supersedes:
+        await supersede(
+            db, user_id=_USER_ID, old_id=body.supersedes, new_id=stored[0].id
+        )
+    logger.info(
+        "owner_observation_recorded",
+        extra={"request_id": request_id, "id": stored[0].id},
+    )
+    return _serialize_observation(stored[0])
+
+
+@router.post("/memory/observations/{observation_id}/end")
+async def end_observation(
+    observation_id: int, body: ObservationEnd, db: AsyncSession = Depends(get_db)
+):
+    """
+    Mark a fact as no longer true, without replacing it.
+
+    This is how something leaves the present tense: current.md stops showing it
+    and history.md starts, with no text moved anywhere. Distinct from deleting —
+    the fact remains true of the past, which is exactly what history is for.
+    """
+    from datetime import date as _date
+
+    from app.models.observation import Observation
+    from app.services.observations import _parse_day
+
+    obs = (
+        await db.execute(
+            select(Observation).where(
+                Observation.id == observation_id,
+                Observation.user_id == _USER_ID,
+                Observation.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if obs is None:
+        raise HTTPException(status_code=404, detail="No such observation.")
+    if obs.domain == "biography":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "A biography fact cannot be ended — the past does not expire. "
+                "If it was wrong, delete it; if it described a state, correct the "
+                "domain."
+            ),
+        )
+    obs.valid_until = _parse_day(body.valid_until, "valid_until") or _date.today()
+    obs.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return _serialize_observation(obs)
+
+
+@router.delete("/memory/observations/{observation_id}")
+async def delete_observation(observation_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Demote a fact out of the record — for something that was never true, not for
+    something that stopped being true (use /end for that).
+
+    Soft, per §3.4: the row stays readable in the audit trail and only leaves
+    recall and the rendered surfaces.
+    """
+    from app.services.observations import soft_delete_observations
+
+    count = await soft_delete_observations(
+        db, user_id=_USER_ID, observation_ids=[observation_id]
+    )
+    if not count:
+        raise HTTPException(status_code=404, detail="No such live observation.")
+    return {"demoted": count}

@@ -136,6 +136,39 @@ def _apply_additive_migrations(sync_conn) -> None:
             sync_conn.execute(text("ALTER TABLE route_geometries ADD COLUMN steps_json TEXT"))
             logger.info("schema_migrated", extra={"change": "route_geometries.steps_json"})
 
+    # v3 memory: what a fact is ABOUT and WHEN it was true (see
+    # docs/MEMORY_ARCHITECTURE_V3.md §3). Added to a table that may already exist
+    # from the v2-amendment build, so every column is guarded individually.
+    # `path` is deliberately NOT dropped — a leftover nullable column is harmless
+    # and dropping one is not an additive change.
+    if "observations" in tables:
+        ocols = {c["name"] for c in insp.get_columns("observations")}
+        for name, ddl in (
+            ("subject", "VARCHAR(128) DEFAULT 'owner'"),
+            ("domain", "VARCHAR(32) DEFAULT 'state'"),
+            ("valid_from", "DATE"),
+            ("valid_until", "DATE"),
+            ("superseded_by", "INTEGER"),
+            ("origin", "VARCHAR(16) DEFAULT 'live'"),
+        ):
+            if name not in ocols:
+                sync_conn.execute(
+                    text(f"ALTER TABLE observations ADD COLUMN {name} {ddl}")
+                )
+                logger.info("schema_migrated", extra={"change": f"observations.{name}"})
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_observations_render "
+                "ON observations (user_id, subject, domain, valid_until)"
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_observations_validity "
+                "ON observations (user_id, valid_until)"
+            )
+        )
+
     # A reminder cycle opened by an AGENT (personalised text, composed in a turn)
     # carries no n8n definition, so it has to remember its own buttons and
     # cadence or the tick has nothing to re-ask with.

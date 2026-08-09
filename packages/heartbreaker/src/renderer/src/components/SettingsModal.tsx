@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
 import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
-import type { ConnectionInfo, AutomationInfo, AutomationsStatus } from '../lib/api'
+import { memoryStatus } from '../lib/api'
+import type { ConnectionInfo, AutomationInfo, AutomationsStatus, MemoryStatus } from '../lib/api'
 import RemindersTab from './RemindersTab'
 import type { AppConfig } from '../lib/types'
 import ConfigTab from './ConfigTab'
@@ -32,6 +33,7 @@ export default function SettingsModal({ config, onClose }: Props) {
 
   const [indexStatus, setIndexStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [indexMsg, setIndexMsg] = useState('')
+  const [memory, setMemory] = useState<MemoryStatus | null>(null)
 
   // ── Connections ───────────────────────────────────────────────────────────
   const [conns, setConns] = useState<ConnectionInfo[]>([])
@@ -146,17 +148,52 @@ export default function SettingsModal({ config, onClose }: Props) {
     loadConns()
   }
 
+  // The rebuild runs on the backend's durable job queue, so the button's job is
+  // to start it and then keep showing the verdict — a bare "started in the
+  // background" would leave the one thing worth reading (whether anything is at
+  // risk) invisible. Polling stops on its own when the job settles.
+  const pollMemory = useCallback(async () => {
+    try {
+      const s = await memoryStatus(config)
+      setMemory(s)
+      const running = s.job?.status === 'pending' || s.job?.status === 'running'
+      setIndexStatus(running ? 'running' : s.job?.status === 'failed' ? 'error' : 'done')
+      setIndexMsg(
+        s.job?.status === 'failed'
+          ? `Rebuild failed after ${s.job.attempts} attempt(s): ${s.job.last_error ?? 'unknown error'}`
+          : `${s.observations} fact(s) recorded — ${s.verdict}`
+      )
+      return running
+    } catch {
+      return false
+    }
+  }, [config])
+
+  useEffect(() => {
+    if (indexStatus !== 'running') return
+    const t = setInterval(() => { void pollMemory() }, 5000)
+    return () => clearInterval(t)
+  }, [indexStatus, pollMemory])
+
+  // Show where memory stands as soon as the tab is opened, without pressing
+  // anything — an empty record is worth knowing about before it is needed.
+  useEffect(() => {
+    if (tab === 'data') void pollMemory()
+  }, [tab, pollMemory])
+
   const handleIndex = async () => {
     if (indexStatus === 'running') return
     setIndexStatus('running')
-    setIndexMsg('Indexing started — mining facts from past conversations (background)…')
+    setIndexMsg('Rebuilding memory from your whole history…')
     try {
       const res = await indexHistory(config)
-      setIndexStatus('done')
-      setIndexMsg(res.message || 'Indexing started in the background.')
+      if (!res.accepted) {
+        setIndexMsg(res.message)
+      }
+      await pollMemory()
     } catch (e) {
       setIndexStatus('error')
-      setIndexMsg(e instanceof Error ? e.message : 'Indexing failed')
+      setIndexMsg(e instanceof Error ? e.message : 'Rebuild failed')
     }
   }
 
@@ -845,13 +882,45 @@ export default function SettingsModal({ config, onClose }: Props) {
                 {/* Index past conversations */}
                 <div>
                   <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-                    Index past conversations
+                    Rebuild memory from history
                   </label>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.875rem', lineHeight: 1.55 }}>
-                    One-time: mine durable facts about you from your entire history (Haiku),
-                    consolidate them, and write a profile to memory so SPEDA actually knows you.
-                    Runs in the background; ~a couple of minutes, ~$2 once.
+                    Mines durable facts about you from your entire conversation history and
+                    rebuilds the memory record from them. Safe to run more than once: anything
+                    you wrote yourself is preserved and only re-derived facts are replaced.
+                    Runs in the background; a few minutes.
                   </p>
+
+                  {/* The record's state, shown without pressing anything — an empty
+                      record is worth knowing about before it is needed. */}
+                  {memory && (
+                    <div style={{
+                      marginBottom: '0.875rem', padding: '0.7rem 0.85rem',
+                      border: '1px solid var(--border)', borderRadius: '6px',
+                      fontSize: '0.78rem', lineHeight: 1.5,
+                      color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)',
+                    }}>
+                      <div style={{ color: 'var(--text-primary)', marginBottom: '0.3rem' }}>
+                        {memory.observations} fact(s) recorded
+                        {Object.keys(memory.by_origin).length > 0 && (
+                          <span style={{ color: 'var(--text-muted)' }}>
+                            {'  ·  '}
+                            {Object.entries(memory.by_origin)
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join('  ')}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{
+                        color: memory.thin_compositions.length > 0 || memory.observations === 0
+                          ? 'var(--hb-red)'
+                          : memory.at_risk_facts > 0 ? 'var(--hb-amber, #d9a441)' : 'var(--hb-green)',
+                      }}>
+                        {memory.verdict}
+                      </div>
+                    </div>
+                  )}
+
                   <button
                     className="hb-btn hb-btn-tint"
                     onClick={handleIndex}
@@ -861,7 +930,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                       fontSize: '0.84rem', fontWeight: 600, letterSpacing: '0.04em',
                     }}
                   >
-                    {indexStatus === 'running' ? 'Indexing…' : 'Index history'}
+                    {indexStatus === 'running' ? 'Rebuilding…' : 'Rebuild memory'}
                   </button>
                   {indexMsg && (
                     <p style={{

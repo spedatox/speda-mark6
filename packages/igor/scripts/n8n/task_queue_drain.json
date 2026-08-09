@@ -1,0 +1,79 @@
+{
+  "name": "Igor — background job sweep",
+  "meta": {
+    "description": "Retries post-turn work that failed every inline attempt or was orphaned by a container restart (app/services/task_queue.py). Costs nothing on a healthy system: the queue is drained inline after every turn, so this normally claims zero jobs and returns immediately. It is the third of the three drains — inline, on startup, and here — and the only one that runs when nobody is talking to Igor."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "20 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "drain-cron",
+      "name": "Hourly at :20",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "Hourly, offset to :20 so it does not land on the same minute as the briefings (:00) or Orion's audit (04:00) and queue behind them.\n\nHourly rather than every few minutes because the queue's own backoff is measured in minutes (2, 15, 60): a job that just failed is not due yet, so checking more often only costs HTTP calls. Hourly rather than daily because a failed session title should be recoverable the same afternoon, not tomorrow.\n\nThis is a plain HTTP call with no model behind it — the cheap-probe rule (README) is satisfied: the poll is free, and only a job that actually needs running spends anything."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://app:8000/admin/tasks/drain",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "drain-call",
+      "name": "Igor: drain job queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 30000,
+      "notes": "Returns {claimed, succeeded, failed, reclaimed, queue:{...}} — an empty claim is the healthy result, not silence.\n\nWatch `queue.failed`. A job reaches that state only after exhausting every retry, so a non-zero count is a real bug someone has to look at, not a transient. It never clears itself: `failed` is terminal by design, because a job that silently un-fails would hide the fault that caused it.\n\nOnly X-API-Key here, not X-N8N-Secret — /admin endpoints take the API key alone (the double-header rule covers the /trigger and probe surfaces, which read owner data). Matches the existing DELETE /admin/outputs workflow.\n\nThe 2-minute timeout covers a backlog whose handlers make LLM calls. If it times out the jobs stay claimed and the next sweep's reclaim pass recovers them — nothing is lost by a slow drain."
+    }
+  ],
+  "connections": {
+    "Hourly at :20": {
+      "main": [
+        [
+          {
+            "node": "Igor: drain job queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "pinData": {}
+}

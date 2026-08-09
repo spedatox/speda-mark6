@@ -1,0 +1,86 @@
+{
+  "name": "Orion — nightly memory audit",
+  "meta": {
+    "description": "The scheduler half of docs/MEMORY_ARCHITECTURE.md §3.3. Orion's audit procedure has always existed in his prompt (app/prompts/agents/orion/02_audit.md) but nothing ever fired it, so passes 1-4 and 6 — boundary sweep, demotion, dedup, compression, audit report — never ran and memory hygiene was nobody's job in practice. This workflow is what makes the custodian a custodian. One turn a night, silent."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 4 * * *"
+            }
+          ]
+        }
+      },
+      "id": "audit-cron",
+      "name": "Nightly at 04:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "04:00 Europe/Istanbul (the workflow timezone below is explicit — do not rely on the container's TZ, which has silently shifted schedules in this system before).\n\nThe hour matters: the audit reads the day's session log and recent exchanges, so it must run AFTER the day it is auditing and BEFORE the owner's 08:00 briefings, which read current.md. 04:00 sits in the gap.\n\nUnlike the watch workflows this has no cheap probe in front of it, and that is correct — there is no deterministic question to ask. 'Has memory drifted' is a judgement, and CLAUDE.md's cheap-probe rule says judgement belongs in the turn, not the probe. One turn a night is the whole cost."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://app:8000/trigger/orion",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"payload\": { \"type\": \"cron\", \"job\": \"memory_audit\", \"event\": \"memory_audit\", \"automation\": \"Orion — nightly memory audit\", \"intent\": \"Run the nightly memory audit. Execute all passes IN ORDER exactly as your audit procedure specifies: (1) boundary sweep against the routing tree, (2) demotion with the epoch test, (3) dedup and normalise dates, (4) compression of sessions.md and social.md, (5) refresh current.md and dossier.md, (6) consolidate the observation store, (7) append the report to /memories/.audit/log.md. Work from evidence: read the files you are auditing and verify a fact against what was actually said before you move it. Move, merge, timestamp and compress existing text only — never author a new fact about the owner, and never revert an owner commit. If a pass finds nothing to do, say so in the report and move on. Notify the owner ONLY if a structural change occurred; a routine no-op night gets a log line and nothing else.\" }, \"output_mode\": \"silent\" }) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "run-audit",
+      "name": "Igor: Orion audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 60000,
+      "notes": "output_mode 'silent' — the audit runs and is stored, nothing is pushed. Orion decides for himself whether the night warrants a notification and sends it from inside the turn (pass 6/7). A push on every no-op night would train the owner to ignore the one night that mattered.\n\nThe 10-minute timeout is deliberate: this is a long multi-pass turn walking eight files with the memory tool, not a briefing. Do not lower it to the 20s the briefing workflows use — the turn would be cut off mid-demotion, with a fact removed from its source file and not yet written to its destination.\n\nRetries (3, a minute apart) cover the 503 the trigger returns when the turn registry is at capacity. Missing a night is not catastrophic — the next night's sweep picks up whatever drifted — but retrying is nearly free at 04:00.\n\nTO TEST WITHOUT WAITING: execute the node manually. It costs one real turn and writes real memory changes, so read /memories/.audit/log.md afterwards to see what it did."
+    }
+  ],
+  "connections": {
+    "Nightly at 04:00": {
+      "main": [
+        [
+          {
+            "node": "Igor: Orion audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "pinData": {}
+}

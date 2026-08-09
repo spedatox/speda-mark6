@@ -160,6 +160,13 @@ class LegionRunner:
             )
             if t["name"] not in WORKER_EXCLUDED_TOOLS
         ]
+
+        # An exact allowlist wins over the read-only bucket and is applied first:
+        # a specialist worker should see the handful of tools its job needs, not
+        # every read-only tool the parent happened to have loaded.
+        if worker.tool_scope is not None:
+            return [t for t in tools if t["name"] in worker.tool_scope]
+
         if not worker.read_only:
             return tools
 

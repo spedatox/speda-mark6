@@ -1,4 +1,20 @@
 """
+SUPERSEDED — do not wire this back up. Use app/services/memory_reindex.py.
+
+This mined a prose profile and wrote it straight into /memories/history.md. Under
+v3 that is actively harmful on two counts: history.md is now a RENDERED file, so
+anything written here is wiped by the next render, and history.md is specifically
+the file for facts that have STOPPED being true — the wrong home for a biography
+even if the write survived. It also writes MemoryFile directly, bypassing the
+schema gate that would otherwise refuse it.
+
+`POST /admin/index-history` (the settings panel's rebuild button) now runs the v3
+pipeline instead. Nothing calls the code below. It is kept only so the extraction
+prompt remains readable while the replacement beds in; delete it once
+memory_reindex has run against real data.
+
+--- original docstring follows ---
+
 One-time history indexer.
 
 Mines durable facts about the owner from the entire imported conversation

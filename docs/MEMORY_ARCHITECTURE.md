@@ -1,8 +1,12 @@
 # Mark VI Memory Architecture — v2 ("Orion Charter")
 
-Status: **DESIGN** — approved scope: strict file boundaries, the Orion custodian
-agent, and owner-committed edits from the systems board. This document is the
+Status: **IMPLEMENTED** — strict file boundaries, the Orion custodian agent, and
+owner-committed edits from the systems board are all built. This document is the
 contract; implementation follows it exactly.
+
+> **Amended by v3 (§7): the observation layer.** The file law below is unchanged
+> and remains the primary surface. v3 adds a second, addressable layer beneath it
+> and moves enforcement of the file law from prose into code. Read §7 last.
 
 ---
 
@@ -351,3 +355,98 @@ procedure (§3.3) and guardrails (§3.4) as his identity documents.
 
 Each step is independently shippable; the file law (steps 1–3) delivers value
 before Orion exists, and Orion delivers value before `system_ops` does.
+
+**Step 7 shipped late.** Steps 1–6 landed; step 7 did not, and for a while
+nothing fired Orion's audit at all — his procedure existed in
+`prompts/agents/orion/02_audit.md` and no workflow called it, so passes 1–4 and 6
+never ran and the current/dossier refresh kept running as an anonymous background
+job attributed to a custodian that was never invoked. The workflow is now
+`scripts/n8n/memory_audit.json` (04:00 nightly, `output_mode: silent`), and the
+background refresh has been demoted to a 36-hour fallback that defers to whoever
+wrote the file last. **The workflow must be imported and active** or five of the
+seven passes still do not happen.
+
+---
+
+## 7. The Observation Layer (v3)
+
+The file law solves *where a fact lives*. It does not solve *where a fact came
+from*. A line in `dossier.md` reading "wants totals before breakdowns" cannot be
+traced to the conversation that produced it, cannot be told apart from a line
+someone guessed at, and cannot be ranked against a fact five separate agents have
+independently noticed. Rewriting the file — which Orion does every night —
+destroys whatever provenance the prose happened to carry.
+
+v3 adds a second layer, ported from Honcho's observation model
+(`plastic-labs/honcho`) and reconciled with the file law rather than replacing it.
+
+### 7.1 The two layers
+
+| | Files (`/memories/*.md`) | Observations (`observations` table) |
+|---|---|---|
+| Role | The narrative the owner recognises | The addressable fact beneath it |
+| Read by | Injected into every turn | `search_memory`, on demand |
+| Written by | `memory` tool, owner commits, Orion | `record_observation` |
+| Cost | Paid on every request | Paid only when searched |
+| Strength | Cheap, cacheable, human-editable | Sourced, dedupable, rankable, traceable |
+
+Neither is redundant. Honcho makes the same split (a peer *card* that is injected,
+*observations* that are searched) and it is the right one: what is cheap to carry
+and what is precise to query are different data shapes.
+
+### 7.2 The evidence ladder
+
+Every observation declares its level, and every level above the first must cite
+what it rests on — enforced in `app/services/observations.py`, not in the prompt:
+
+| Level | Requires |
+|---|---|
+| `explicit` | nothing — he said it |
+| `deductive` | 1+ `source_ids` **and** readable `premises` |
+| `inductive` | 2+ `source_ids`, 2+ `sources`, a `pattern_type`, a `confidence` |
+| `contradiction` | 2+ `source_ids` and `sources` (both sides) |
+
+A rejection returns an actionable message and saves nothing. This is what makes
+`get_reasoning_chain`-style traversal meaningful: a premise later found wrong can
+be walked forward to everything derived from it.
+
+Re-recording an identical fact reinforces the existing row rather than duplicating
+it, so repetition becomes a ranking signal (`mode='established'`). Convergence
+between *different* observers is the strongest signal the store holds.
+
+Deletion is soft, per §3.4. `forget_observation` removes a fact from recall and
+leaves the row readable.
+
+### 7.3 The file law, enforced in code
+
+`app/services/memory_schema.py` moves the §2 contract out of prose:
+
+- the taxonomy is closed — a `create` outside the canonical set is rejected;
+- `dossier.md` entries must carry their `[YYYY-MM-DD, agent_id]` stamp and the
+  file must keep its four sections;
+- `social.md` sections must carry a `**Who:**` block and an `**Events:**` log;
+- injected files have a byte cap, since four of them are billed on every request
+  for every agent;
+- relative dates and non-ISO dates return warnings on the write that introduced
+  them, rather than waiting for Orion to find them.
+
+Two rules keep this safe against a live store. Only **newly-introduced**
+violations block: a write is checked as a delta, so existing mess never blocks an
+unrelated edit and enforcement could be switched on before any cleanup had
+happened. And the **owner is never blocked** (§4.3) — his commits are inspected,
+logged for Orion to re-file, and saved verbatim.
+
+### 7.4 Recall
+
+Four rungs, cheapest first: injected context → `search_memory` (distilled facts)
+→ `recall_conversations` (what was said, by meaning, with optional date bounds)
+→ `search_history` (exact wording). `search_memory` and `recall_conversations`
+answer different questions — what is *true* of him versus what was *said* — and
+when they disagree the transcript is the evidence and the observation is the
+claim.
+
+`recall_conversations` returns each hit with the turns either side of it, merges
+hits that land close together in one session, and accepts `after`/`before` on the
+semantic pass. That last point is not a convenience: "what did we most recently
+decide about X" needs meaning and time in one query, and running them separately
+answers neither half.

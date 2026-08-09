@@ -23,6 +23,7 @@ from sqlalchemy import select, delete as sql_delete
 
 from app.core.context import AgentContext
 from app.models.memory_file import MemoryFile
+from app.services.memory_schema import MemorySchemaViolation, check_write
 from app.services.memory_store import record_revision
 from app.skills.base import Skill
 
@@ -218,6 +219,25 @@ def _validate_path(path: str) -> str | None:
 
 
 # ── Formatting helpers ────────────────────────────────────────────────────────
+
+def _schema_note(
+    *, path: str, before: str, after: str, is_create: bool, agent_id: str
+) -> str:
+    """Run the pending write past the file law (app/services/memory_schema.py).
+
+    Raises MemorySchemaViolation when the write would newly break it — the caller
+    returns that message verbatim as the tool result and saves nothing. Otherwise
+    returns advisory warnings to append to a successful result, so the agent
+    learns the rule on the write that nearly broke it rather than a day later in
+    Orion's audit log.
+    """
+    warnings = check_write(
+        path=path, before=before, after=after, is_create=is_create, author=agent_id
+    )
+    if not warnings:
+        return ""
+    return "\n\nNote:\n  - " + "\n  - ".join(warnings)
+
 
 def _format_file_with_lines(path: str, content: str) -> str:
     lines = content.splitlines()
@@ -627,6 +647,14 @@ class MemorySkill(Skill):
             return f"Error: File {path} already exists. Use str_replace to update it."
 
         content = args.get("file_text", "")
+        try:
+            note = _schema_note(
+                path=path, before="", after=content,
+                is_create=True, agent_id=context.agent_id,
+            )
+        except MemorySchemaViolation as e:
+            return str(e)
+
         db.add(MemoryFile(
             user_id=user_id,
             path=path,
@@ -639,7 +667,7 @@ class MemorySkill(Skill):
         )
         await db.commit()
         logger.info("memory_file_created", extra={"user_id": user_id, "path": path})
-        return f"File created successfully at: {path}"
+        return f"File created successfully at: {path}{note}"
 
     async def _str_replace(self, path: str, args: dict, context: AgentContext) -> str:
         user_id, db = context.user_id, context.db
@@ -672,7 +700,16 @@ class MemorySkill(Skill):
             )
 
         before = file.content
-        file.content = file.content.replace(old_str, new_str, 1)
+        candidate = file.content.replace(old_str, new_str, 1)
+        try:
+            note = _schema_note(
+                path=path, before=before, after=candidate,
+                is_create=False, agent_id=context.agent_id,
+            )
+        except MemorySchemaViolation as e:
+            return str(e)
+
+        file.content = candidate
         file.updated_at = datetime.now(timezone.utc)
         await record_revision(
             db, user_id=user_id, path=path, author=context.agent_id,
@@ -683,7 +720,7 @@ class MemorySkill(Skill):
 
         # Return snippet around the change
         snippet = _format_file_with_lines(path, file.content)
-        return f"The memory file has been edited.\n{snippet}"
+        return f"The memory file has been edited.\n{snippet}{note}"
 
     async def _insert(self, path: str, args: dict, context: AgentContext) -> str:
         user_id, db = context.user_id, context.db
@@ -710,7 +747,16 @@ class MemorySkill(Skill):
 
         before = file.content
         lines.insert(insert_line, insert_text.rstrip("\n"))
-        file.content = "\n".join(lines)
+        candidate = "\n".join(lines)
+        try:
+            note = _schema_note(
+                path=path, before=before, after=candidate,
+                is_create=False, agent_id=context.agent_id,
+            )
+        except MemorySchemaViolation as e:
+            return str(e)
+
+        file.content = candidate
         file.updated_at = datetime.now(timezone.utc)
         await record_revision(
             db, user_id=user_id, path=path, author=context.agent_id,
@@ -718,7 +764,7 @@ class MemorySkill(Skill):
             request_id=context.request_id,
         )
         await db.commit()
-        return f"The file {path} has been edited."
+        return f"The file {path} has been edited.{note}"
 
     async def _delete(self, path: str, context: AgentContext) -> str:
         user_id, db = context.user_id, context.db
@@ -731,6 +777,23 @@ class MemorySkill(Skill):
         file = result.scalar_one_or_none()
         if file is None:
             return f"Error: The path {path} does not exist."
+
+        # The canonical set is closed in BOTH directions: nothing may be added to
+        # it and none of its members may be removed from it. Deleting one would
+        # not lose the content — it is versioned — but it would leave the routing
+        # tree pointing at a file that no longer exists, and the next agent with a
+        # fact for it has nowhere legal to put it. `delete` exists for the tail of
+        # a demotion: fold a STRAY file's content into the canonical file that
+        # should have held it, then remove the stray.
+        from app.services.memory_schema import is_canonical
+
+        if is_canonical(path):
+            return (
+                f"Error: `{path}` is one of the canonical memory files and cannot be "
+                f"deleted — the taxonomy is closed in both directions. To empty it, "
+                f"demote its contents to the right file per the routing tree and leave "
+                f"the file itself in place with its header."
+            )
 
         before = file.content
         await db.execute(

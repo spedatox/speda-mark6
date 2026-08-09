@@ -1,0 +1,798 @@
+"""
+Observation store — the provenance-carrying substrate beneath /memories.
+
+Rule 1 (no logic in routers) and the tier boundaries both apply: the skills in
+app/skills/observations.py are thin argument-shaping wrappers; every rule about
+what a valid observation IS lives here.
+
+The design is ported from Honcho's observation model (plastic-labs/honcho,
+src/utils/agent_tools.py) and adapted to Mark VI:
+
+  - Honcho keys observations by an (observer, observed) peer pair. Mark VI is
+    single-owner, so `observed` is always the owner and only `observer` (the
+    agent_id) is stored — but it stays, because eight agents observing one owner
+    is exactly the case where attribution matters.
+  - Honcho enforces the evidence ladder in the TOOL SCHEMA with JSON-Schema
+    if/then. We enforce it here as well, in Python, because a schema constraint
+    is advisory across providers (Rule 8's wire format is Anthropic's, but the
+    same skills run on OpenAI/Gemini/Ollama through llm_client) and a deduction
+    that arrives with no premises must be rejected on every one of them.
+  - Deletion is soft. docs/MEMORY_ARCHITECTURE.md §3.4 is explicit that owner
+    knowledge is demoted, never destroyed; the observation store follows the
+    same law rather than inventing a second one.
+
+Deduplication is by exact normalized content per (user, observer, level): a
+re-observed fact bumps `reinforcement_count` and refreshes provenance instead of
+creating a near-duplicate row. This is what makes "what does he consistently
+want?" answerable — repetition becomes a ranking signal rather than noise.
+"""
+
+import logging
+from datetime import datetime, timezone
+
+import numpy as np
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.observation import Observation
+
+logger = logging.getLogger(__name__)
+
+# ── What a fact is ABOUT (v3 §3.1) ────────────────────────────────────────────
+
+# The domain vocabulary. Closed, like the file taxonomy it replaces — but it
+# classifies the FACT rather than its destination, which is why it is shorter:
+# "which of eight files" collapses into "what kind of thing is this", and the
+# file falls out of that plus the subject plus the validity.
+DOMAINS: tuple[str, ...] = (
+    "biography",   # who someone is — durable, non-expiring background
+    "preference",  # what the owner likes, dislikes, wants, and in what manner
+    "state",       # something true of the owner's life right now
+    "project",     # a project's status or progress
+    "training",    # a gym session or training fact (Atomix's domain)
+    "finance",     # an account, figure, budget or holding (Sentinel's domain)
+    "event",       # a dated thing that happened, usually to another person
+)
+
+SUBJECT_KINDS: tuple[str, ...] = ("owner", "person", "project")
+
+
+def normalize_subject(raw: str) -> str:
+    """Canonical subject string: `owner`, `person:<Name>`, `project:<Name>`.
+
+    Identity drift is the subject-side version of the file drift v2 fought:
+    "person:Zeynep", "person: zeynep" and "person:Zeynep  " are three people as
+    far as a renderer is concerned, and social.md would grow three sections for
+    one person. Normalizing at the boundary is cheaper than reconciling later —
+    and `record_observations` additionally reuses the exact spelling of an
+    existing subject that differs only in case, so the FIRST spelling wins and
+    the roster converges on it instead of drifting apart.
+    """
+    text = " ".join((raw or "").split()).strip()
+    if not text:
+        return "owner"
+    if ":" not in text:
+        return "owner" if text.lower() == "owner" else f"person:{text}"
+    kind, _, name = text.partition(":")
+    kind = kind.strip().lower()
+    name = " ".join(name.split()).strip()
+    if kind == "owner" or not name:
+        return "owner"
+    if kind not in SUBJECT_KINDS:
+        kind = "person"
+    return f"{kind}:{name}"
+
+
+# ── The evidence ladder ───────────────────────────────────────────────────────
+
+LEVELS: tuple[str, ...] = ("explicit", "deductive", "inductive", "contradiction")
+
+PATTERN_TYPES: tuple[str, ...] = (
+    "preference",
+    "behavior",
+    "personality",
+    "tendency",
+    "correlation",
+)
+
+CONFIDENCE_LEVELS: tuple[str, ...] = ("high", "medium", "low")
+
+# Per-observation length cap. Honcho caps peer-card entries at 200 chars to stop
+# evidence-bundle dumps; an observation carries more than a card entry but must
+# still be ONE fact, not a paragraph of narrative that can never be deduped.
+MAX_CONTENT_LENGTH = 600
+
+# Minimum source counts per level — the structural half of the ladder.
+_MIN_SOURCES: dict[str, int] = {
+    "deductive": 1,
+    "inductive": 2,
+    "contradiction": 2,
+}
+
+MAX_SEARCH_CANDIDATES = 20_000  # perf guard on the brute-force scan
+
+
+class ObservationRejected(Exception):
+    """A proposed observation violated the evidence ladder.
+
+    Raised with a message written FOR THE MODEL — it is returned as the tool
+    result, so it must say precisely what was missing and how to fix it. A
+    rejection the model cannot act on just becomes a retry loop.
+    """
+
+
+# ── Validation ────────────────────────────────────────────────────────────────
+
+def _parse_day(value, field: str):
+    """Accept a date, a datetime, or 'YYYY-MM-DD'. Reject anything else loudly.
+
+    A relative or malformed date silently coerced to None would make a fact look
+    permanently true, which is the one error the temporal model cannot survive.
+    """
+    from datetime import date as _date
+
+    if value in (None, "", "null"):
+        return None
+    if isinstance(value, _date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    text = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    raise ObservationRejected(
+        f"Rejected: `{field}` must be an absolute date as YYYY-MM-DD — got "
+        f"'{text}'. Relative dates ('last month', 'in the spring') stop being "
+        f"true the moment they are stored; work out the actual date first."
+    )
+
+
+def validate_observation(
+    *,
+    content: str,
+    level: str,
+    subject: str = "owner",
+    domain: str = "state",
+    valid_from=None,
+    valid_until=None,
+    source_ids: list | None = None,
+    premises: list | None = None,
+    sources: list | None = None,
+    pattern_type: str | None = None,
+    confidence: str | None = None,
+) -> dict:
+    """
+    Check one proposed observation and return it normalized. Raises
+    ObservationRejected with an actionable message otherwise.
+
+    This is form-only validation, deliberately. Whether the CLAIM is true is the
+    prompt's problem; whether a deduction was handed its premises is ours, and
+    that is the half a prompt cannot reliably enforce.
+    """
+    text = (content or "").strip()
+    if not text:
+        raise ObservationRejected("Rejected: `content` was empty. State the fact in one sentence.")
+    if len(text) > MAX_CONTENT_LENGTH:
+        raise ObservationRejected(
+            f"Rejected: `content` is {len(text)} characters, over the "
+            f"{MAX_CONTENT_LENGTH} cap. One observation is ONE fact — split it, "
+            f"or record the durable part and drop the narration."
+        )
+
+    lvl = (level or "explicit").strip().lower()
+    if lvl not in LEVELS:
+        raise ObservationRejected(
+            f"Rejected: unknown level '{level}'. Use one of: {', '.join(LEVELS)}."
+        )
+
+    ids = [int(i) for i in (source_ids or []) if str(i).strip().lstrip("-").isdigit()]
+    prem = [str(p).strip() for p in (premises or []) if str(p).strip()]
+    srcs = [str(s).strip() for s in (sources or []) if str(s).strip()]
+
+    article = "an" if lvl[0] in "aeiou" else "a"
+    required = _MIN_SOURCES.get(lvl, 0)
+    if required:
+        if len(ids) < required:
+            raise ObservationRejected(
+                f"Rejected: {article} '{lvl}' observation requires at least {required} "
+                f"`source_ids` (the id of each observation it rests on) — got "
+                f"{len(ids)}. Search first with `search_memory`, then cite the "
+                f"ids it returns. If you cannot cite sources, record this as "
+                f"'explicit' instead."
+            )
+        # The human-readable half: deductive calls them premises, the other two
+        # call them sources. Requiring both halves is what keeps a recall result
+        # self-explaining without a second lookup per source.
+        if lvl == "deductive" and len(prem) < required:
+            raise ObservationRejected(
+                f"Rejected: a 'deductive' observation requires at least {required} "
+                f"`premises` — the readable text of each source you cited."
+            )
+        if lvl in ("inductive", "contradiction") and len(srcs) < required:
+            raise ObservationRejected(
+                f"Rejected: {article} '{lvl}' observation requires at least {required} "
+                f"`sources` — the readable evidence text behind the pattern."
+            )
+
+    ptype = (pattern_type or "").strip().lower() or None
+    conf = (confidence or "").strip().lower() or None
+
+    if lvl == "inductive":
+        if ptype not in PATTERN_TYPES:
+            raise ObservationRejected(
+                f"Rejected: an 'inductive' observation requires `pattern_type` — "
+                f"one of: {', '.join(PATTERN_TYPES)}."
+            )
+        if conf not in CONFIDENCE_LEVELS:
+            raise ObservationRejected(
+                "Rejected: an 'inductive' observation requires `confidence` — "
+                "'high' for 5+ sources, 'medium' for 3-4, 'low' for 2."
+            )
+    else:
+        # Qualifiers are meaningless off the inductive level; drop rather than
+        # reject, so a model that over-fills the schema still gets its fact in.
+        ptype = conf = None
+
+    # ── What it is about, and when it was true ───────────────────────────────
+    subj = normalize_subject(subject)
+
+    dom = (domain or "").strip().lower()
+    if dom not in DOMAINS:
+        raise ObservationRejected(
+            f"Rejected: unknown domain '{domain}'. Use one of: {', '.join(DOMAINS)}. "
+            f"Pick by what the fact IS, not where you want it filed — biography "
+            f"(who someone is), preference (what he likes/wants and how), state "
+            f"(true of his life now), project, training, finance, event "
+            f"(a dated thing that happened)."
+        )
+
+    v_from = _parse_day(valid_from, "valid_from")
+    v_until = _parse_day(valid_until, "valid_until")
+    if v_from and v_until and v_until < v_from:
+        raise ObservationRejected(
+            f"Rejected: valid_until ({v_until}) is before valid_from ({v_from})."
+        )
+
+    # A biographical constant that has "ended" is a category error: the owner's
+    # past does not stop having happened. If it stopped applying, it was a state.
+    if dom == "biography" and v_until is not None:
+        raise ObservationRejected(
+            "Rejected: a 'biography' fact cannot have a `valid_until` — the past "
+            "does not expire, our record of it only sharpens. If this describes "
+            "something that STOPPED being true, it was a 'state', not biography; "
+            "record it as domain='state' with the end date."
+        )
+
+    return {
+        "content": text,
+        "level": lvl,
+        "subject": subj,
+        "domain": dom,
+        "valid_from": v_from,
+        "valid_until": v_until,
+        "source_ids": ids,
+        "premises": prem,
+        "sources": srcs,
+        "pattern_type": ptype,
+        "confidence": conf,
+    }
+
+
+# ── Write path ────────────────────────────────────────────────────────────────
+
+async def _embed_content(text: str) -> bytes | None:
+    """Best-effort embedding. Never raises: an unembedded observation is still a
+    recorded one, and embed_pending_observations() heals it on the next pass."""
+    from app.services.embeddings import embed_texts
+
+    try:
+        vec = (await embed_texts([text]))[0]
+        return vec.tobytes()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("observation_embed_failed", extra={"error": str(e)})
+        return None
+
+
+async def _converge_subject(db: AsyncSession, user_id: int, subject: str) -> str:
+    """Reuse the existing spelling of a subject that differs only in case.
+
+    The first spelling of a name wins and everything after it converges on that,
+    so the roster cannot end up with three sections for one person just because
+    three agents capitalised differently. Only applies to named subjects — the
+    owner is a constant.
+    """
+    if subject == "owner" or ":" not in subject:
+        return subject
+    kind, _, name = subject.partition(":")
+    rows = (
+        await db.execute(
+            select(Observation.subject)
+            .where(
+                Observation.user_id == user_id,
+                Observation.subject.startswith(f"{kind}:"),
+            )
+            .distinct()
+        )
+    ).scalars().all()
+    for existing in rows:
+        if existing.lower() == subject.lower():
+            return existing
+    return subject
+
+
+async def supersede(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    old_id: int,
+    new_id: int,
+    ended: "date | None" = None,
+) -> bool:
+    """Close out an observation that a newer one replaces (v3 §3.2).
+
+    Sets `valid_until` and `superseded_by` on the old row rather than editing or
+    deleting it, so the previous value stays answerable and the correction stays
+    reversible. Returns False if either row is missing.
+    """
+    from datetime import date as _date
+
+    old = (
+        await db.execute(
+            _live(user_id).where(Observation.id == old_id)
+        )
+    ).scalar_one_or_none()
+    new = (
+        await db.execute(
+            _live(user_id).where(Observation.id == new_id)
+        )
+    ).scalar_one_or_none()
+    if old is None or new is None or old.id == new.id:
+        return False
+
+    old.valid_until = ended or new.valid_from or _date.today()
+    old.superseded_by = new.id
+    old.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    logger.info(
+        "observation_superseded",
+        extra={"old_id": old.id, "new_id": new.id, "ended": str(old.valid_until)},
+    )
+    return True
+
+
+async def record_observations(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    observer: str,
+    proposals: list[dict],
+    session_id: int | None = None,
+    message_ids: list | None = None,
+    request_id: str = "",
+    origin: str = "live",
+) -> tuple[list[Observation], list[str]]:
+    """
+    Validate and persist a batch of observations.
+
+    Returns (stored, rejections). A batch is NOT all-or-nothing: valid members
+    land even when siblings are rejected, and the rejection strings go back to
+    the model so it can re-file the failures. Losing four good facts because the
+    fifth lacked a premise would be the worse failure.
+
+    A duplicate (same normalized content, observer and level, still live) is not
+    inserted again — it reinforces the existing row. Repetition becomes rank.
+    """
+    stored: list[Observation] = []
+    rejections: list[str] = []
+
+    for proposal in proposals:
+        try:
+            clean = validate_observation(
+                content=proposal.get("content", ""),
+                level=proposal.get("level", "explicit"),
+                subject=proposal.get("subject", "owner"),
+                domain=proposal.get("domain", "state"),
+                valid_from=proposal.get("valid_from"),
+                valid_until=proposal.get("valid_until"),
+                source_ids=proposal.get("source_ids"),
+                premises=proposal.get("premises"),
+                sources=proposal.get("sources"),
+                pattern_type=proposal.get("pattern_type"),
+                confidence=proposal.get("confidence"),
+            )
+        except ObservationRejected as e:
+            rejections.append(str(e))
+            continue
+
+        clean["subject"] = await _converge_subject(db, user_id, clean["subject"])
+
+        existing = (
+            await db.execute(
+                select(Observation).where(
+                    Observation.user_id == user_id,
+                    Observation.observer == observer,
+                    Observation.level == clean["level"],
+                    Observation.subject == clean["subject"],
+                    Observation.content == clean["content"],
+                    Observation.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+
+        if existing is not None:
+            existing.reinforcement_count += 1
+            existing.updated_at = datetime.now(timezone.utc)
+            if session_id is not None:
+                existing.session_id = session_id
+            if message_ids:
+                merged = list(existing.message_ids or []) + list(message_ids)
+                # Keep the tail: recent provenance is what recall pulls context from.
+                existing.message_ids = merged[-20:]
+            stored.append(existing)
+            continue
+
+        obs = Observation(
+            user_id=user_id,
+            observer=observer,
+            content=clean["content"],
+            level=clean["level"],
+            subject=clean["subject"],
+            domain=clean["domain"],
+            valid_from=clean["valid_from"],
+            valid_until=clean["valid_until"],
+            source_ids=clean["source_ids"],
+            premises=clean["premises"],
+            sources=clean["sources"],
+            pattern_type=clean["pattern_type"],
+            confidence=clean["confidence"],
+            session_id=session_id,
+            message_ids=list(message_ids or []),
+            request_id=request_id,
+            origin=origin,
+            embedding=await _embed_content(clean["content"]),
+        )
+        db.add(obs)
+        stored.append(obs)
+
+    if stored:
+        await db.commit()
+        for obs in stored:
+            await db.refresh(obs)
+
+    logger.info(
+        "observations_recorded",
+        extra={
+            "request_id": request_id,
+            "observer": observer,
+            "stored": len(stored),
+            "rejected": len(rejections),
+        },
+    )
+    return stored, rejections
+
+
+async def soft_delete_observations(
+    db: AsyncSession, *, user_id: int, observation_ids: list[int], request_id: str = ""
+) -> int:
+    """Demote observations out of recall without destroying them (§3.4)."""
+    if not observation_ids:
+        return 0
+    rows = (
+        await db.execute(
+            select(Observation).where(
+                Observation.user_id == user_id,
+                Observation.id.in_(observation_ids),
+                Observation.deleted_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    now = datetime.now(timezone.utc)
+    for obs in rows:
+        obs.deleted_at = now
+    if rows:
+        await db.commit()
+    logger.info(
+        "observations_demoted",
+        extra={"request_id": request_id, "count": len(rows)},
+    )
+    return len(rows)
+
+
+# ── Routing: which surface a fact renders into (v3 §4) ───────────────────────
+
+def target_file(obs: Observation) -> str:
+    """The single surface this observation appears on.
+
+    **This function is total.** Every live observation renders somewhere; there
+    is no path that returns nothing. A fact that rendered nowhere would be
+    invisible to the owner while still counting as recorded, which is precisely
+    the "silently lost" failure the whole v3 design exists to make impossible —
+    so the last line is an unconditional fallback, not a default that happens to
+    catch the common case.
+
+    Order matters. Validity is checked FIRST: anything that has stopped being
+    true belongs in history.md regardless of what it is about, because that file
+    answers "what used to be so" for every subject at once.
+    """
+    if obs.valid_until is not None:
+        return "/memories/history.md"
+    if obs.subject.startswith("person:"):
+        return "/memories/social.md"
+    if obs.subject.startswith("project:"):
+        return "/memories/projects.md"
+    if obs.domain == "preference":
+        return "/memories/dossier.md"
+    if obs.domain == "training":
+        return "/memories/sessions.md"
+    if obs.domain == "finance":
+        return "/memories/finance.md"
+    if obs.domain == "biography":
+        return "/memories/owner.md"
+    return "/memories/current.md"
+
+
+# ── Read path ─────────────────────────────────────────────────────────────────
+
+def _live(user_id: int):
+    return (
+        select(Observation)
+        .where(Observation.user_id == user_id, Observation.deleted_at.is_(None))
+    )
+
+
+async def search_observations(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    query: str,
+    limit: int = 15,
+    level: str | None = None,
+    observer: str | None = None,
+    subject: str | None = None,
+    domain: str | None = None,
+    as_of=None,
+    live_only: bool = False,
+    after: datetime | None = None,
+    before: datetime | None = None,
+) -> list[tuple[Observation, float]]:
+    """
+    Semantic search over observations, newest-biased and optionally filtered.
+
+    Scoring is a plain dot product over L2-normalized vectors — the same
+    brute-force approach app/services/embeddings.py justifies for messages.
+    Honcho reaches for pgvector HNSW here; at this store's scale (SQLite in
+    production, one owner, observations numbering in the thousands rather than
+    the millions) an index would cost more complexity than it buys latency, and
+    it would not survive the SQLite/Postgres split this project runs across.
+
+    Returns (observation, score) pairs, highest first. Rows whose embedding is
+    missing are skipped by the vector pass — call embed_pending_observations()
+    to heal them.
+    """
+    from app.services.embeddings import embed_texts
+
+    from sqlalchemy import or_
+
+    stmt = _live(user_id)
+    if level:
+        stmt = stmt.where(Observation.level == level)
+    if observer:
+        stmt = stmt.where(Observation.observer == observer)
+    if subject:
+        stmt = stmt.where(Observation.subject == normalize_subject(subject))
+    if domain:
+        stmt = stmt.where(Observation.domain == domain)
+    if live_only:
+        stmt = stmt.where(Observation.valid_until.is_(None))
+    if as_of is not None:
+        # What was true ON that day: started by then, and had not yet ended.
+        # This is the query that replaces reading a demoted file to work out
+        # when a position changed.
+        day = _parse_day(as_of, "as_of")
+        stmt = stmt.where(
+            or_(Observation.valid_from.is_(None), Observation.valid_from <= day),
+            or_(Observation.valid_until.is_(None), Observation.valid_until > day),
+        )
+    if after:
+        stmt = stmt.where(Observation.created_at >= after)
+    if before:
+        stmt = stmt.where(Observation.created_at < before)
+    stmt = stmt.order_by(Observation.created_at.desc()).limit(MAX_SEARCH_CANDIDATES)
+
+    rows = list((await db.execute(stmt)).scalars().all())
+    if not rows:
+        return []
+
+    embedded = [o for o in rows if o.embedding]
+    if not embedded:
+        return [(o, 0.0) for o in rows[:limit]]
+
+    query_vec = (await embed_texts([query]))[0]
+    matrix = np.stack([np.frombuffer(o.embedding, dtype=np.float32) for o in embedded])
+    scores = matrix @ query_vec
+
+    order = np.argsort(-scores)[:limit]
+    return [(embedded[int(i)], float(scores[int(i)])) for i in order]
+
+
+async def recent_observations(
+    db: AsyncSession, *, user_id: int, limit: int = 15, observer: str | None = None
+) -> list[Observation]:
+    stmt = _live(user_id)
+    if observer:
+        stmt = stmt.where(Observation.observer == observer)
+    stmt = stmt.order_by(Observation.created_at.desc()).limit(limit)
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def most_reinforced_observations(
+    db: AsyncSession, *, user_id: int, limit: int = 15
+) -> list[Observation]:
+    """The owner's most established facts — what several conversations agree on.
+    Honcho's `get_most_derived_observations`, ranked by reinforcement."""
+    stmt = (
+        _live(user_id)
+        .order_by(Observation.reinforcement_count.desc(), Observation.updated_at.desc())
+        .limit(limit)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def reasoning_chain(
+    db: AsyncSession, *, user_id: int, observation_id: int, direction: str = "both"
+) -> dict:
+    """
+    Walk one step of the derivation graph around an observation.
+
+    `premises` returns what it rests on (its source_ids); `conclusions` returns
+    what rests on IT (rows citing it). This is what turns "he is cutting weight"
+    from an assertion into an argument — and what lets a wrong premise be traced
+    to everything it poisoned before any of it is acted on.
+    """
+    root = (
+        await db.execute(
+            _live(user_id).where(Observation.id == observation_id)
+        )
+    ).scalar_one_or_none()
+    if root is None:
+        return {"root": None, "premises": [], "conclusions": []}
+
+    premises: list[Observation] = []
+    if direction in ("premises", "both") and root.source_ids:
+        ids = [int(i) for i in root.source_ids]
+        premises = list(
+            (await db.execute(_live(user_id).where(Observation.id.in_(ids))))
+            .scalars()
+            .all()
+        )
+
+    conclusions: list[Observation] = []
+    if direction in ("conclusions", "both"):
+        # source_ids is a JSON list; a portable containment test across SQLite and
+        # Postgres means filtering in Python. The candidate set is bounded to
+        # derived rows only, which is a small fraction of the store.
+        derived = list(
+            (
+                await db.execute(
+                    _live(user_id).where(Observation.level != "explicit")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        conclusions = [
+            o for o in derived if observation_id in [int(i) for i in (o.source_ids or [])]
+        ]
+
+    return {"root": root, "premises": premises, "conclusions": conclusions}
+
+
+# ── Self-healing ──────────────────────────────────────────────────────────────
+
+async def embed_pending_observations(user_id: int, request_id: str = "") -> int:
+    """
+    Embed observations stored while the embedding provider was unavailable.
+
+    Same self-healing contract as embedding_indexer.backfill_embeddings: always
+    processes whatever is pending, so it is safe to re-run at any time. Opens its
+    own DB session — it runs off the request path.
+    """
+    from app.database import AsyncSessionLocal
+    from app.services.embeddings import embed_texts
+
+    stored = 0
+    try:
+        async with AsyncSessionLocal() as db:
+            rows = list(
+                (
+                    await db.execute(
+                        _live(user_id)
+                        .where(Observation.embedding.is_(None))
+                        .order_by(Observation.created_at.asc())
+                        .limit(256)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not rows:
+                return 0
+            # One batched call, then one commit — the DB session is not held open
+            # across the network hop's full duration by accident: the call is the
+            # only await between the read and the write, and both are cheap.
+            vectors = await embed_texts([o.content for o in rows])
+            for obs, vec in zip(rows, vectors):
+                obs.embedding = vec.tobytes()
+                stored += 1
+            await db.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "observation_backfill_failed",
+            extra={"request_id": request_id, "error": str(e)},
+        )
+        return stored
+
+    logger.info(
+        "observations_embedded",
+        extra={"request_id": request_id, "stored": stored},
+    )
+    return stored
+
+
+# ── Formatting for tool results ───────────────────────────────────────────────
+
+def format_observation(obs: Observation, *, score: float | None = None) -> str:
+    """
+    One observation rendered for a model to reason over.
+
+    The id is rendered as `[id:N]` because that is what the model must pass back
+    as a `source_id` when it derives something from this fact — Honcho's format,
+    kept because it survives the round trip through every provider's tokenizer
+    without being mistaken for prose.
+    """
+    bits = [f"[id:{obs.id}]", f"({obs.level}"]
+    if obs.pattern_type:
+        bits[-1] += f"/{obs.pattern_type}"
+    if obs.confidence:
+        bits[-1] += f", {obs.confidence} confidence"
+    bits[-1] += ")"
+    head = " ".join(bits)
+
+    meta = [obs.subject, obs.domain, obs.observer, obs.created_at.strftime("%Y-%m-%d")]
+    # Validity is shown only when it is not "still true" — the common case needs
+    # no annotation, and a superseded fact must never read as current.
+    if obs.valid_until is not None:
+        span = f"until {obs.valid_until}"
+        if obs.valid_from:
+            span = f"{obs.valid_from} → {obs.valid_until}"
+        meta.append(f"ENDED ({span})")
+        if obs.superseded_by:
+            meta.append(f"replaced by id:{obs.superseded_by}")
+    elif obs.valid_from:
+        meta.append(f"since {obs.valid_from}")
+    if obs.reinforcement_count > 1:
+        meta.append(f"seen {obs.reinforcement_count}×")
+    if score is not None:
+        meta.append(f"score {score:.2f}")
+
+    line = f"{head} {obs.content}\n    — {' · '.join(meta)}"
+    if obs.source_ids:
+        line += f"\n    derived from: {', '.join(f'id:{i}' for i in obs.source_ids)}"
+    return line
+
+
+def format_observations(
+    scored: list[tuple[Observation, float]] | list[Observation], header: str
+) -> str:
+    if not scored:
+        return f"{header}: nothing recorded yet."
+    lines = [f"{header} ({len(scored)}):", ""]
+    for item in scored:
+        if isinstance(item, tuple):
+            lines.append(format_observation(item[0], score=item[1]))
+        else:
+            lines.append(format_observation(item))
+    return "\n".join(lines)

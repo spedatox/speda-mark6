@@ -25,12 +25,23 @@ majority of runs.
 | `service_health_check.json` | Services going down / coming back | a service changes state |
 | `persistent_reminders.json` | *(nothing — it asks)* | never; asking and answering are free |
 | `daily_briefings.json` | *(nothing — it schedules)* | **every firing, by design** |
+| `memory_audit.json` | *(nothing — it schedules)* | **once a night, by design** |
+| `task_queue_drain.json` | Post-turn work that failed or was orphaned | only when a job actually needs re-running |
 | `ultron_wear_attendance.json` | A lecture ending unanswered | never; it pushes to the watch directly |
 
-`daily_briefings.json` is the deliberate exception: you are asking an agent to
-go and do work, so of course it costs a turn. Keep watchers out of it. Anything
-shaped like *"check whether X happened"* belongs in one of the watch templates,
-where checking is free.
+`daily_briefings.json` and `memory_audit.json` are the deliberate exceptions: you
+are asking an agent to go and do work, so of course it costs a turn. Keep watchers
+out of them. Anything shaped like *"check whether X happened"* belongs in one of
+the watch templates, where checking is free.
+
+**`memory_audit.json` is not optional.** It is the only thing that fires Orion's
+nightly custodian pass (`docs/MEMORY_ARCHITECTURE.md` §3.3). Without it imported
+and active, the boundary sweep, demotions, dedup, compression, observation
+consolidation and audit report simply never run — memory drifts and nothing
+notices. It has no config node to edit; import and activate it. There is a
+fallback in the backend that refreshes current.md and dossier.md if nothing has
+touched them in 36 hours, but that covers two of the seven passes and exists only
+so an unimported workflow does not go unnoticed forever.
 
 ---
 
@@ -40,7 +51,8 @@ where checking is free.
 2. **Edit the one config node.** Each workflow has exactly one, and its name
    tells you (`Mail list`, `Watch list`, `Reminder list`, `Briefing list`,
    `Service list`). Everything is a plain JS array of objects at the top of the
-   node; the comment block above it documents every field.
+   node; the comment block above it documents every field. (`memory_audit.json`
+   is the exception — it has no config node. Import and activate.)
 3. **Activate.** All of them are safe to activate with an empty list — they do
    nothing until you add an entry.
 
@@ -109,3 +121,8 @@ container from `docker-compose.yml` (sourced from `packages/igor/.env` by
 | `POST /academic/ask-pending` | *(the watch answers)* | Ultron Wear |
 
 All require `X-API-Key` **and** `X-N8N-Secret`. None of them run a model.
+
+The `/admin` endpoints are a separate surface and take `X-API-Key` alone —
+`DELETE /admin/outputs` (temp-file cleanup) and `POST /admin/tasks/drain`
+(background job sweep). They touch Igor's own housekeeping, not the owner's mail
+or browsing targets, which is why they do not carry the second header.

@@ -26,66 +26,18 @@ from app.database import AsyncSessionLocal
 from app.models.memory_file import MemoryFile
 from app.models.message import Message
 from app.models.session import Session
-from app.services.memory_store import record_revision
 
 logger = logging.getLogger(__name__)
 
 LOG_PATH = "/memories/log.md"
 CURRENT_PATH = "/memories/current.md"
-DOSSIER_PATH = "/memories/dossier.md"
+OWNER_PATH = "/memories/owner.md"
 LOG_MAX_ENTRIES = 30   # keep the rolling log bounded
 
-_CURRENT_PROMPT = """\
-Today is {date}.
-
-Below is the previous "current" snapshot, the recent session log, and the active
-projects file. Produce an UPDATED snapshot of what is genuinely current in the
-owner's life as of today — ongoing work, active concerns, near-term plans.
-
-Rules:
-- Move anything finished, resolved, or stale OUT. Do not carry it forward.
-- Never present an old or completed item as if it were new.
-- 3-7 short bullet points. Date-stamp time-sensitive items, e.g. "(as of {date})".
-- Return ONLY the bullet list. No header, no preamble.
-
-PREVIOUS SNAPSHOT:
-{previous}
-
-RECENT SESSION LOG:
-{log}
-
-ACTIVE PROJECTS:
-{projects}"""
-
-_DOSSIER_PROMPT = """\
-You maintain the dossier on the owner — a working model of his PREFERENCES: what he
-likes, dislikes, and wants, and in what manner. It captures observations made while
-talking to him — both preferences he STATED outright and patterns you INFER from
-how he reacts (corrections, pushback, frustration, praise, what he engages with vs.
-ignores).
-
-This is about his PREFERENCES only. Facts about his life, biography, or current
-situation do NOT belong here — leave those out.
-
-Below is the existing dossier and recent raw exchanges. Update it.
-
-Rules:
-- Record both stated preferences and well-supported inferences. Do not invent or
-  over-read a single message.
-- Keep each section tight — a few sharp bullets, not paragraphs.
-- Carry forward still-valid prior observations; drop ones that no longer hold.
-- Preserve any existing `[YYYY-MM-DD, agent_id]` attribution tags on entries.
-- Return the dossier body with exactly these four sections and nothing else:
-  ## Likes / responds well to
-  ## Dislikes / friction
-  ## Wants — and in what manner
-  ## Open questions
-
-EXISTING DOSSIER:
-{dossier}
-
-RECENT EXCHANGES:
-{exchanges}"""
+# The current.md and dossier.md prompts that used to live here are gone. The
+# snapshot is composed from the record by app/services/memory_compose.py, and the
+# dossier is rendered from preference observations with no model at all
+# (docs/MEMORY_ARCHITECTURE_V3.md §4).
 
 _TITLE_PROMPT = """\
 Generate a short title (3-6 words) for this conversation.
@@ -343,33 +295,26 @@ async def _get_file(db: AsyncSession, user_id: int, path: str) -> "MemoryFile | 
     return result.scalar_one_or_none()
 
 
-async def _recent_exchanges(db: AsyncSession, user_id: int, days: int = 2, cap: int = 50) -> str:
-    """Plain-text dump of the user's recent user/assistant messages for analysis."""
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-    result = await db.execute(
-        select(Message)
-        .join(Session, Message.session_id == Session.id)
-        .where(Session.user_id == user_id, Message.created_at >= since)
-        .order_by(Message.created_at.desc())
-        .limit(cap)
-    )
-    rows = list(reversed(result.scalars().all()))
-    lines: list[str] = []
-    for m in rows:
-        if m.role not in ("user", "assistant"):
-            continue
-        content = m.content
-        if isinstance(content, list):
-            text = " ".join(
-                b.get("text", "") for b in content
-                if isinstance(b, dict) and b.get("type") == "text"
-            )
-        else:
-            text = str(content)
-        text = text.strip().replace("\n", " ")
-        if text:
-            lines.append(f"[{m.role}] {text[:600]}")
-    return "\n".join(lines)
+# How long a snapshot file may go untouched before this fallback refreshes it.
+# Orion's nightly audit (scripts/n8n/memory_audit.json, Pass 5) is the PRIMARY
+# owner of these two files — this task only steps in when he has been silent for
+# longer than a night, which means either the audit workflow is not imported or
+# it has been failing. Guarding on the file's own updated_at (rather than the old
+# "_Last updated: <today>_" prose stamp) is what makes deference automatic: any
+# writer counts, Orion and in-conversation agent writes alike, so the fallback
+# never overwrites fresher work and never double-writes against the audit.
+_SNAPSHOT_FALLBACK_HOURS = 36
+
+
+def _stale(file: "MemoryFile | None", hours: int) -> bool:
+    if file is None:
+        return True
+    if file.updated_at is None:
+        return True
+    stamp = file.updated_at
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - stamp > timedelta(hours=hours)
 
 
 async def run_daily_maintenance(
@@ -379,114 +324,42 @@ async def run_daily_maintenance(
     model: str,
 ) -> None:
     """
-    Once per day: refresh /memories/current.md (recency snapshot) and
-    /memories/dossier.md (inferred behavioural model). Self-guards on the
-    "Last updated" date stamp in current.md so it runs at most once per day.
-    """
-    from app.services.llm_client import LLMClient
-    from app.skills.memory import ensure_seeded
+    Fallback composition of the two narrative surfaces (owner.md, current.md).
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    Under v3 these are the only memory files a model still writes, and Orion owns
+    them in his nightly audit (docs/MEMORY_ARCHITECTURE_V3.md §4.2). This is the
+    safety net beneath that: it composes only when NEITHER file has been written
+    in _SNAPSHOT_FALLBACK_HOURS, which on a healthy system means never — one
+    cheap SELECT per turn and nothing else.
+
+    dossier.md is absent from this function on purpose. It used to be rewritten
+    here from recent exchanges; it is now rendered from the preference
+    observations and needs no model at all.
+    """
+    from app.services.memory_compose import compose
+    from app.skills.memory import ensure_seeded
 
     try:
         async with AsyncSessionLocal() as db:
             await ensure_seeded(user_id, db)
-
             current = await _get_file(db, user_id, CURRENT_PATH)
-            # Guard: already refreshed today?
-            if current and f"_Last updated: {today}_" in current.content:
+            owner = await _get_file(db, user_id, OWNER_PATH)
+            if not _stale(current, _SNAPSHOT_FALLBACK_HOURS) or not _stale(
+                owner, _SNAPSHOT_FALLBACK_HOURS
+            ):
                 return
 
-            log = await _get_file(db, user_id, LOG_PATH)
-            projects = await _get_file(db, user_id, "/memories/projects.md")
-            dossier = await _get_file(db, user_id, DOSSIER_PATH)
-            exchanges = await _recent_exchanges(db, user_id)
+        logger.info(
+            "compose_fallback_engaged",
+            extra={
+                "request_id": request_id,
+                "reason": f"both narrative files untouched for over {_SNAPSHOT_FALLBACK_HOURS}h",
+            },
+        )
+        report = await compose(user_id, model, request_id=request_id)
+        logger.info("compose_fallback_done", extra={"request_id": request_id, **report})
 
-            client = LLMClient()
-
-            # ── Refresh current.md ────────────────────────────────────────────
-            try:
-                resp = await client.create_message(
-                    model=model,
-                    system="You maintain a concise recency snapshot. Follow instructions exactly.",
-                    messages=[{
-                        "role": "user",
-                        "content": _CURRENT_PROMPT.format(
-                            date=today,
-                            previous=(current.content if current else "")[:2000],
-                            log=(log.content if log else "")[:2000],
-                            projects=(projects.content if projects else "")[:1500],
-                        ),
-                    }],
-                    max_tokens=512,
-                )
-                bullets = (resp.content[0].text.strip() if resp.content else "")
-                if bullets:
-                    new_current = (
-                        "# Current — what's active right now\n\n"
-                        f"_Last updated: {today}_\n\n"
-                        f"{bullets}\n"
-                    )
-                    before = current.content if current else ""
-                    if current:
-                        current.content = new_current
-                        current.updated_at = datetime.now(timezone.utc)
-                    else:
-                        db.add(MemoryFile(user_id=user_id, path=CURRENT_PATH, content=new_current))
-                    # Attributed to Orion — the custodian owns maintenance, so the
-                    # snapshot refresh is no longer an anonymous background write.
-                    await record_revision(
-                        db, user_id=user_id, path=CURRENT_PATH, author="orion",
-                        action="audit", before=before, after=new_current,
-                        request_id=request_id,
-                    )
-                    await db.commit()
-                    logger.info("current_brief_refreshed", extra={"request_id": request_id})
-            except Exception as e:
-                logger.error("current_brief_error", extra={"request_id": request_id, "error": str(e)})
-
-            # ── Update dossier.md ─────────────────────────────────────────────
-            if exchanges:
-                try:
-                    resp = await client.create_message(
-                        model=model,
-                        system="You maintain a precise behavioural dossier. Follow instructions exactly.",
-                        messages=[{
-                            "role": "user",
-                            "content": _DOSSIER_PROMPT.format(
-                                dossier=(dossier.content if dossier else "")[:3000],
-                                exchanges=exchanges[:6000],
-                            ),
-                        }],
-                        max_tokens=1024,
-                    )
-                    body = (resp.content[0].text.strip() if resp.content else "")
-                    if body and "##" in body:
-                        new_dossier = (
-                            "# Dossier — what we've observed about how he wants to be treated\n\n"
-                            "_The agents' working model of the owner's preferences — what he "
-                            "likes, dislikes, and wants, and in what manner. Stated and inferred. "
-                            "Agents learn from it and act on it silently; never cited to him._\n\n"
-                            f"_Last updated: {today}_\n\n"
-                            f"{body}\n"
-                        )
-                        before_dossier = dossier.content if dossier else ""
-                        if dossier:
-                            dossier.content = new_dossier
-                            dossier.updated_at = datetime.now(timezone.utc)
-                        else:
-                            db.add(MemoryFile(user_id=user_id, path=DOSSIER_PATH, content=new_dossier))
-                        await record_revision(
-                            db, user_id=user_id, path=DOSSIER_PATH, author="orion",
-                            action="audit", before=before_dossier, after=new_dossier,
-                            request_id=request_id,
-                        )
-                        await db.commit()
-                        logger.info("dossier_updated", extra={"request_id": request_id})
-                except Exception as e:
-                    logger.error("dossier_error", extra={"request_id": request_id, "error": str(e)})
-
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error("daily_maintenance_error", extra={"request_id": request_id, "error": str(e)})
 
 
@@ -609,41 +482,74 @@ def schedule_background_tasks(
     model: str,
 ) -> None:
     """
-    Schedule post-turn background work:
+    Schedule post-turn background work (Rule 7 — never inside the SSE generator):
       - session log update (every turn)
-      - daily maintenance: current brief + dossier (self-guards to once/day)
+      - rolling episodic recap (advances a watermark)
+      - snapshot fallback: current brief + dossier (self-guards on 36h staleness)
       - title generation (first turn only — idempotent)
       - conversation compaction (self-guards on the token threshold)
-      - semantic embedding of this turn's new messages (self-heals if it fails)
-    All open their own DB sessions (never reuse the request session).
-    """
-    from app.services.claim_audit import audit_last_turn
-    from app.services.compaction import maybe_compact_session
-    from app.services.embedding_indexer import embed_session_tail
+      - semantic embedding of this turn's new messages
+      - embedding of any observation stored while the provider was down
 
-    background_tasks.add_task(audit_last_turn, session_id, request_id)
-    background_tasks.add_task(update_session_log, session_id, request_id, user_id, model)
-    background_tasks.add_task(update_session_recap, session_id, request_id, user_id, model)
-    background_tasks.add_task(run_daily_maintenance, session_id, request_id, user_id, model)
-    background_tasks.add_task(generate_title, session_id, request_id, model)
-    background_tasks.add_task(maybe_compact_session, session_id, request_id, model)
-    background_tasks.add_task(embed_session_tail, session_id, request_id, user_id)
+    The work is committed to the background_jobs queue first, then drained — so a
+    failure or a restart leaves a durable record to retry from instead of losing
+    the work silently. See app/services/task_queue.py.
+    """
+    background_tasks.add_task(run_post_turn_tasks, session_id, request_id, user_id, model)
 
 
 async def run_post_turn_tasks(
     session_id: int, request_id: str, user_id: int, model: str
 ) -> None:
-    """Detached equivalent of schedule_background_tasks: runs the same post-turn
-    work as plain asyncio tasks (no FastAPI BackgroundTasks). Used by the turn
-    runner, whose completion happens AFTER the HTTP response has closed, so it
-    cannot rely on response-scoped BackgroundTasks. Each task opens its own DB
-    session and self-guards; failures are isolated via return_exceptions."""
+    """
+    Enqueue this turn's post-turn work, then execute it immediately.
+
+    Both callers land here: the request path via `schedule_background_tasks`, and
+    the detached turn runner, whose completion happens AFTER the HTTP response has
+    closed and so cannot rely on response-scoped BackgroundTasks.
+
+    Enqueue-then-drain rather than fire-and-forget. The latency is the same — the
+    same handlers run on the same loop, right now — but the intention is on disk
+    first, so anything that fails is retried on a later drain (n8n's nightly
+    sweep, or the next startup) instead of vanishing into a `return_exceptions`
+    list nobody reads.
+
+    If the enqueue itself fails, the work still runs directly: durability is an
+    improvement over the old behaviour and must never become a way to lose more
+    than it did.
+    """
+    from app.services.task_queue import drain, enqueue_post_turn
+
+    queued = await enqueue_post_turn(
+        session_id=session_id, request_id=request_id, user_id=user_id, model=model
+    )
+    if queued:
+        await drain()
+        return
+
+    await _run_post_turn_directly(session_id, request_id, user_id, model)
+
+
+async def _run_post_turn_directly(
+    session_id: int, request_id: str, user_id: int, model: str
+) -> None:
+    """Pre-queue fallback: run the post-turn set as plain concurrent tasks.
+
+    Reached only when the queue could not be written to — a queue outage must not
+    also stop the work from being attempted. Failures are swallowed per task, as
+    they were before the queue existed.
+    """
     import asyncio
 
     from app.services.claim_audit import audit_last_turn
     from app.services.compaction import maybe_compact_session
     from app.services.embedding_indexer import embed_session_tail
+    from app.services.observations import embed_pending_observations
 
+    logger.warning(
+        "post_turn_queue_bypassed",
+        extra={"request_id": request_id, "session_id": session_id},
+    )
     await asyncio.gather(
         audit_last_turn(session_id, request_id),
         update_session_log(session_id, request_id, user_id, model),
@@ -652,5 +558,6 @@ async def run_post_turn_tasks(
         generate_title(session_id, request_id, model),
         maybe_compact_session(session_id, request_id, model),
         embed_session_tail(session_id, request_id, user_id),
+        embed_pending_observations(user_id, request_id),
         return_exceptions=True,
     )

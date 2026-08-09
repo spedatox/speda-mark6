@@ -564,9 +564,35 @@ export async function importChats(
 
 export async function indexHistory(
   config: AppConfig
-): Promise<{ accepted: boolean; message: string }> {
+): Promise<{ accepted: boolean; job_id?: number; message: string }> {
   const res = await fetch(`${config.apiBase}/admin/index-history`, {
     method: 'POST',
+    headers: authHeaders(config),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => `HTTP ${res.status}`)
+    throw new Error(text)
+  }
+  return res.json()
+}
+
+export interface MemoryStatus {
+  job: {
+    id: number
+    status: 'pending' | 'running' | 'done' | 'failed'
+    attempts: number
+    last_error: string | null
+  } | null
+  observations: number
+  by_origin: Record<string, number>
+  at_risk_facts: number
+  thin_compositions: string[]
+  verdict: string
+}
+
+/** Where the memory record stands. Cheap (no model call) — safe to poll. */
+export async function memoryStatus(config: AppConfig): Promise<MemoryStatus> {
+  const res = await fetch(`${config.apiBase}/admin/memory/status`, {
     headers: authHeaders(config),
   })
   if (!res.ok) {

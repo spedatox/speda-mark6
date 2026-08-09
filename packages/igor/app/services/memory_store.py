@@ -39,6 +39,12 @@ CANONICAL_FILES: dict[str, str] = {
     "/memories/sessions.md": "Gym log, day by day (Atomix's domain)",
     "/memories/history.md": "Mark VI-era states that have ended (demotions only)",
     "/memories/log.md": "Rolling one-line session summaries",
+    # Sentinel's source-of-truth ledger. It post-dates the §2 table but is a
+    # first-class domain file exactly like sessions.md: seeded by
+    # skills/memory.py::INITIAL_FILES and wired as an agent source in
+    # AGENT_SOURCE_DEFAULTS. It belongs in the canonical set — leaving it out
+    # made it a "stray" that the taxonomy gate would refuse to recreate.
+    "/memories/finance.md": "Accounts, income, recurring expenses, budgets, holdings (Sentinel's domain)",
 }
 
 # System-internal trails Orion writes but the owner does not edit. Dot-prefixed
@@ -59,11 +65,23 @@ class MemoryConflict(Exception):
 
 
 def is_owner_editable(path: str) -> bool:
-    """Any markdown file under /memories is owner-editable from the board — the
-    canonical set PLUS any file the owner or an agent adds later (e.g.
-    finance.md). The only exclusions are the dot-prefixed system trails
-    (`.audit/…`), which Orion writes and the owner does not touch."""
+    """Whether the board may edit this file's TEXT directly.
+
+    Under v3 the answer is no for most of them, and that is the point: a derived
+    file's text is regenerated from the record, so an edit to it would survive
+    exactly until the next render and then vanish — silently, which is worse than
+    refusing it. The owner still edits all of this knowledge; he edits the FACTS
+    behind it (`/memory/observations`), which is the one place a correction
+    sticks. See docs/MEMORY_ARCHITECTURE_V3.md §5.
+
+    Only the system trails and any non-derived file remain text-editable.
+    """
+    from app.services.memory_compose import COMPOSED_FILES
+    from app.services.memory_render import RENDERED_FILES
+
     if path.startswith(AUDIT_ROOT) or "/." in path:
+        return False
+    if path in RENDERED_FILES or path in COMPOSED_FILES:
         return False
     return path.startswith(MEMORY_ROOT + "/") and path.endswith(".md")
 
@@ -124,6 +142,22 @@ async def commit_file(
     """
     file = await _get_file(db, user_id, path)
     before = file.content if file else ""
+
+    # Inspect against the file law but never block: §4.3 makes owner writes
+    # ground truth. Violations are logged so Orion's audit picks them up and
+    # re-files the content without altering a word of it. Imported lazily —
+    # memory_schema imports this module for the canonical set.
+    from app.services.memory_schema import check_write
+
+    schema_notes = check_write(
+        path=path, before=before, after=content,
+        is_create=file is None, author="owner",
+    )
+    if schema_notes:
+        logger.info(
+            "memory_owner_commit_schema_notes",
+            extra={"user_id": user_id, "path": path, "notes": schema_notes},
+        )
 
     # Concurrency guard — only meaningful for an existing file.
     if file is not None and expected_updated_at is not None:
