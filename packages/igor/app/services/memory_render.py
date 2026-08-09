@@ -37,16 +37,35 @@ from app.services.observations import target_file
 
 logger = logging.getLogger(__name__)
 
-# Files this module owns end to end. current.md and owner.md are absent on
-# purpose — see the module docstring.
-RENDERED_FILES: tuple[str, ...] = (
-    "/memories/dossier.md",
-    "/memories/sessions.md",
-    "/memories/finance.md",
-    "/memories/projects.md",
-    "/memories/social.md",
-    "/memories/history.md",
-)
+# ── DERIVATION IS OFF (docs/MEMORY_ARCHITECTURE_V4.md §1) ────────────────────
+#
+# This was the six-file set rendered from the observation record. It is empty
+# because rendering was measured against the owner's real files and every single
+# one came out worse than what it replaced:
+#
+#   finance.md   15 KB of monthly ledgers with 71 table rows -> 56 loose
+#                sentences. Every figure survived; every relationship between
+#                them — which month, which statement, which repayment schedule —
+#                did not.
+#   dossier.md   six sections including "Explicit prohibitions" (hard behavioural
+#                rules that govern how agents answer) collapsed into one heading
+#                called "General", indistinguishable from a mild preference.
+#   social.md    top-level headings were CATEGORIES (Professional, Personal), not
+#                people; they became two fictional persons and the real people
+#                were buried inside them as text.
+#   projects.md  24 project sections with Features/Tech Stack/Team flattened.
+#
+# The mistake was not the file list. It was assuming one shape — a flat list of
+# atomic attributed facts — describes all of memory. It describes one quarter of
+# it (v4 §2). Structure is information: a month heading over an income table is
+# not decoration around the facts, it IS the fact that those figures belong to
+# that month.
+#
+# The record itself is not affected and keeps every property it earned — it is
+# now the semantic INDEX over these documents rather than their source (v4 §3.4).
+# Re-enable a file here only once it has a declared shape and a renderer that
+# reproduces that shape; `compare_to_stored` is how you check before flipping.
+RENDERED_FILES: tuple[str, ...] = ()
 
 # sessions.md compression thresholds (v2 §2.2, now a rendering rule rather than
 # an edit Orion has to perform). Raw detail is never the durable asset; the trend
@@ -332,6 +351,12 @@ async def render_all(
     branch is ever added without a renderer, the assertion below fails loudly
     rather than dropping the facts on the floor.
     """
+    # Derivation is off (see RENDERED_FILES). Returning nothing here makes every
+    # caller a no-op — commit_rendered writes nothing, the post-turn job does
+    # nothing — without any of them needing to know why.
+    if not RENDERED_FILES:
+        return {}
+
     day = today or date.today()
     rows = list(
         (

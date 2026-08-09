@@ -40,7 +40,23 @@ logger = logging.getLogger(__name__)
 
 OWNER_PATH = "/memories/owner.md"
 CURRENT_PATH = "/memories/current.md"
-COMPOSED_FILES: tuple[str, ...] = (OWNER_PATH, CURRENT_PATH)
+
+# ── COMPOSITION IS OFF, for the same reason rendering is (v4 §1) ─────────────
+#
+# owner.md is a 15 KB narrative in chapters — "Origins", "The Uludağ Years",
+# "The Istanbul Summer (2024)". Composing it from the record would rewrite a life
+# story from whatever facts happened to be extracted, and the record does not yet
+# hold enough of it: the seed's bullet parser could not read prose at all, so the
+# biography entered the record only through a best-effort model pass.
+#
+# Empty means `compose` runs only when an operator asks for it explicitly
+# (POST /admin/memory/compose) and never from the post-turn fallback. Re-enable a
+# path here when the record demonstrably backs it — `compare_to_stored` reports
+# the backing count per composed file.
+COMPOSED_FILES: tuple[str, ...] = ()
+
+# The paths themselves, for the shadow report and the admin endpoint.
+COMPOSABLE_PATHS: tuple[str, ...] = (OWNER_PATH, CURRENT_PATH)
 
 _CITATION = re.compile(r"<!--\s*ids?:\s*([\d,\s]+)\s*-->", re.I)
 

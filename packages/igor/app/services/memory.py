@@ -336,8 +336,14 @@ async def run_daily_maintenance(
     here from recent exchanges; it is now rendered from the preference
     observations and needs no model at all.
     """
-    from app.services.memory_compose import compose
+    from app.services.memory_compose import COMPOSED_FILES, compose
     from app.skills.memory import ensure_seeded
+
+    # Composition is off (memory_compose.COMPOSED_FILES). While it is, this
+    # fallback must not run at all: it would rewrite owner.md and current.md from
+    # a record that does not yet hold enough of them.
+    if not COMPOSED_FILES:
+        return
 
     try:
         async with AsyncSessionLocal() as db:
