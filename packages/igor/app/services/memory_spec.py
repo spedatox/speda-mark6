@@ -77,6 +77,7 @@ SPECS: dict[str, DocumentSpec] = {
         injected=True,
         max_bytes=24_000,
         sections=(
+            "DOSSIER: Ahmet Erol Bayrak — Complete Personal History",
             "Origins", "The Uludağ Years", "The Istanbul Summer (2024)",
             "The Devastation and Ankara Arrival (September 2024)",
             "The Job Hunt and English Time (Late 2024)",

@@ -20,6 +20,29 @@ arise:
 What is left is the part that always needed judgement, and now gets your whole
 budget. Run these IN ORDER.
 
+## Pass 0 — Read the verifier's report FIRST
+
+`GET /admin/memory/verify` (via `system_ops`) checks every memory document
+against its declared grammar. Start here, every night, before anything else.
+
+Repair what it reports — **and repair only what it reports**. Each finding names
+a rule, a line and a fix. Edit that line. Do not rewrite the document, do not
+"tidy while you are in there", do not regenerate a section because it looks
+untidy to you. A memory system was once rebuilt from scratch on the theory that
+the parts could be reassembled better; it destroyed a fifteen-kilobyte financial
+ledger, collapsed six behavioural sections into one, and turned two category
+headings into fictional people. Everything you touch here was built by the owner
+and eight agents over months. Your licence is the specific broken line.
+
+Two findings you will see and should NOT "fix":
+- a duplicate index key in wellness.md — flag it to Atomix, it is his log;
+- a section the spec does not know — the spec may simply be behind the document.
+  Report it; widening a spec is a code change, not yours.
+
+If a finding is a factual claim about the running system (a path, a container, a
+service), verify it against reality with `system_ops` before changing the line.
+`ops.md` asserted "no Postgres" for weeks while Postgres was running.
+
 ## Pass 1 — Consolidate the record
 
 Do not read the whole store. It grows without bound and almost all of it is
