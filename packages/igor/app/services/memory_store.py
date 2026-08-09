@@ -53,8 +53,7 @@ CANONICAL_FILES: dict[str, str] = {
     # records it so the gate can enforce it.
     "/memories/finance.md": "Monthly ledger — incomes, expenses, debts, schedules (Sentinel)",
     "/memories/wellness.md": "Training protocol, athlete profile and session log (Atomix)",
-    "/memories/academic.md": "Academic calendar, course materials, standing (Ultron)",
-    "/memories/kpss.md": "KPSS 2026 exam preparation tracker (Ultron)",
+    "/memories/academic.md": "Academic calendar, KPSS prep, course materials, standing (Ultron)",
     "/memories/cybersec.md": "Cybersecurity learning journey (Centurion)",
     "/memories/ops.md": "Runbook and action log for the host (Orion)",
 }
@@ -63,7 +62,10 @@ CANONICAL_FILES: dict[str, str] = {
 # section structure (SYSTEM DIRECTIVES / ATHLETE PROFILE / PROGRAM / LOG) and
 # newer. Kept out of the canonical set so the gate stops treating it as live, and
 # removable through DELETE /memory/files once the owner is ready.
-RETIRED_FILES: frozenset[str] = frozenset({"/memories/sessions.md"})
+RETIRED_FILES: frozenset[str] = frozenset({
+    "/memories/sessions.md",   # wellness.md is the same document continued
+    "/memories/kpss.md",       # merged into academic.md as its KPSS 2026 section
+})
 
 # System-internal trails Orion writes but the owner does not edit. Dot-prefixed
 # so they never enter the injection set or the canonical-file rule.
