@@ -171,12 +171,15 @@ SPECS: dict[str, DocumentSpec] = {
         owner_agent="atomix",
         index_pattern=r"^\d{4}-\d{2}-\d{2}",
         index_level=3,
+        # Section names are copied from the document, not from what they ought to
+        # be called. A spec written from memory rather than from the file fires
+        # false errors, and a verifier that cries wolf gets switched off.
         sections=(
             "1. SYSTEM DIRECTIVES & OUTPUT RULES", "2. ATHLETE PROFILE & STATUS",
             "3. ACTIVE PROGRAM & BENCHMARKS", "4. GYM ENVIRONMENT & EQUIPMENT",
-            "5. LOG",
+            "5. LOG (Chronological)",
         ),
-        required=("5. LOG",),
+        required=("5. LOG (Chronological)",),
         max_bytes=60_000,
         notes="Sessions are `### YYYY-MM-DD — <split> · <status>` under `## 5. LOG`, newest first.",
     ),

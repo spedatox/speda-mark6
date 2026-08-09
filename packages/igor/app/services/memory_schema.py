@@ -230,6 +230,30 @@ def check_write(
 
     hard: list[str] = []
 
+    # ── Ownership: an agent writes its own document, not a colleague's ───────
+    #
+    # Declared in memory_spec from the revision trail, and until now only
+    # declared. The trail shows it was already breached: speda wrote finance.md
+    # six times and ops.md once — documents owned by sentinel and orion. That is
+    # not vandalism, it is an agent being helpful in a lane it does not know, and
+    # it is how a ledger acquires rows in a format its owner does not maintain.
+    #
+    # Reading stays open to everyone; only writing is scoped. The owner and Orion
+    # are exempt — the first is ground truth, the second is the custodian whose
+    # whole job is repairing other people's documents.
+    from app.services.memory_spec import owner_of
+
+    document_owner = owner_of(path)
+    if document_owner and author not in (document_owner, "owner", "orion"):
+        raise MemorySchemaViolation(
+            f"Write rejected — `{path}` belongs to {document_owner}, not to you.\n\n"
+            f"Nothing was saved. If the fact is yours to record, put it in your own "
+            f"document or in the shared ones (current.md, social.md, projects.md, "
+            f"dossier.md). If it genuinely belongs here, hand it to {document_owner} "
+            f"with `dispatch_agent` — a ledger kept by one hand stays readable, and "
+            f"one kept by five does not."
+        )
+
     # ── The verifier (app/services/memory_verify.py) ─────────────────────────
     # Delta-only: a document with pre-existing problems must stay editable or
     # nothing could ever be repaired. Errors this write ADDS are refused;
