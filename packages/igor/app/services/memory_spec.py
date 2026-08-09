@@ -58,6 +58,18 @@ class DocumentSpec:
     index_pattern: str | None = None
     # Heading level the index lives at.
     index_level: int = 2
+    # For ledgers whose index sits below a fixed parent — wellness.md's sessions
+    # live at `### YYYY-MM-DD` under `## 5. LOG (Chronological)`, not at the top.
+    index_parent: str | None = None
+    # How entries are carried under an index key: a markdown table with fixed
+    # columns, or dated bullets. `ledger_append` needs to know which, because
+    # appending a table row to a bullet log produces something no reader expects.
+    entry_style: str = "bullets"          # "table" | "bullets"
+    # Column headers per sub-section, for table ledgers. A row with the wrong
+    # number of cells is the ledger equivalent of a type error.
+    columns: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # Sub-sections a table ledger keeps under each index key.
+    entry_sections: tuple[str, ...] = ()
     # Byte ceiling. Injected files are billed on every request, so theirs is
     # tighter than a file only read on demand.
     max_bytes: int = 60_000
@@ -155,6 +167,13 @@ SPECS: dict[str, DocumentSpec] = {
         owner_agent="sentinel",
         index_pattern=r"^\d{4}-\d{2}$",
         index_level=2,
+        entry_style="table",
+        entry_sections=("Incomes", "Expenses", "Debts"),
+        columns={
+            "Incomes": ("Date", "Source", "Amount (TL)", "Notes"),
+            "Expenses": ("Date", "Item", "Amount (TL)", "Notes"),
+            "Debts": ("Debt", "Amount (TL)", "Status", "Notes"),
+        },
         sections=(
             "Monthly structure", "Notes", "Scholarships & Loans (Reference)",
             "BLACKWALNUT — Continuous Wealth Strategies",
@@ -172,6 +191,8 @@ SPECS: dict[str, DocumentSpec] = {
         owner_agent="atomix",
         index_pattern=r"^\d{4}-\d{2}-\d{2}",
         index_level=3,
+        index_parent="5. LOG (Chronological)",
+        entry_style="bullets",
         # Section names are copied from the document, not from what they ought to
         # be called. A spec written from memory rather than from the file fires
         # false errors, and a verifier that cries wolf gets switched off.
@@ -218,6 +239,8 @@ SPECS: dict[str, DocumentSpec] = {
                   "Part 2: Action Log"),
         index_pattern=r"^\d{4}-\d{2}-\d{2}",
         index_level=3,
+        index_parent="Part 2: Action Log",
+        entry_style="bullets",
         max_bytes=32_000,
         notes=(
             "Operational facts go stale silently and are then acted on. Every "

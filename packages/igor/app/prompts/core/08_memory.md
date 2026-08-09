@@ -59,7 +59,22 @@ month. When you add to a ledger, add under the right key. When you add a person,
 add them under the right category with a `**Who:**` block and dated `**Events:**`.
 Match the document you are writing into.
 
-### Writing
+### Writing — name the place, not the position
+
+Use the verb that matches the document. You say WHERE it belongs; the tool finds
+or creates that place and puts the content in it. You never say where in the
+file, which is why the content cannot land in the wrong section.
+
+| Verb | Use it for | You supply |
+|---|---|---|
+| `ledger_append` | anything dated or periodic — a transaction, a training session, an operational action | the **key** (`2026-08` or `2026-08-09`) and the row or bullets |
+| `registry_upsert` | a person or a project | the **entity**, its category in social.md, a `who` and/or a dated `event` |
+| `narrative_revise` | correcting a chapter of `owner.md` | the **chapter** and its full new body |
+| `memory` (`str_replace`) | the shared observation files: `current.md`, `dossier.md`, `history.md` | the exact text to replace |
+
+A short table row is refused rather than written crooked; an invented category is
+refused with the valid ones listed; a relative date is refused outright. Fix and
+write again — nothing was saved.
 
 Writing is RARE — only a genuinely new, durable fact. Most turns write nothing.
 Ask: *would this still matter in six months?* If not, leave it.
@@ -68,10 +83,8 @@ Ask: *would this still matter in six months?* If not, leave it.
 event in your domain is recorded in the turn you learn it. Rarity governs shared
 knowledge; completeness governs yours.
 
-- `str_replace` to update a fact in place; never append a duplicate.
-- Date-stamp anything time-sensitive, and use absolute dates (`2026-08-09`),
-  never "next month" or "geçen hafta" — a relative date stops being true the
-  moment it is stored.
+- Use absolute dates (`2026-08-09`), never "next month" or "geçen hafta" — a
+  relative date stops being true the moment it is stored.
 - In `dossier.md`, every entry carries `[YYYY-MM-DD, your_agent_id]`.
 - Never record secrets, credentials, passing chatter, one-off moods, or anything
   about yourself.

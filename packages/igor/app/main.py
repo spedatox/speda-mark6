@@ -92,6 +92,11 @@ async def lifespan(app: FastAPI):
     from app.skills.hisar import HisarSkill
     from app.skills.save_file import SaveFileSkill
     from app.skills.memory import MemorySkill
+    from app.skills.memory_write import (
+        LedgerAppendSkill,
+        NarrativeReviseSkill,
+        RegistryUpsertSkill,
+    )
     from app.skills.observations import (
         ForgetObservationSkill,
         RecordObservationSkill,
@@ -120,6 +125,11 @@ async def lifespan(app: FastAPI):
     # files. Registered next to the memory tool because they are one capability
     # with two layers: the file is what gets read, the observation is what can be
     # traced. See app/skills/observations.py.
+    # Shape-aware writes: the agent names a month, a date, a person or a chapter,
+    # and the placement follows from it. See app/skills/memory_write.py.
+    await registry.register_skill(LedgerAppendSkill())
+    await registry.register_skill(RegistryUpsertSkill())
+    await registry.register_skill(NarrativeReviseSkill())
     await registry.register_skill(RecordObservationSkill())
     await registry.register_skill(SearchMemorySkill())
     await registry.register_skill(ForgetObservationSkill())
