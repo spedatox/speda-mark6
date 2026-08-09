@@ -165,28 +165,40 @@ async def memory_status(request: Request) -> JSONResponse:
     thin = [r["path"] for r in report if r.get("warning")]
     total = sum(by_origin.values())
 
+    # What this verdict may and may not claim changed when derivation was turned
+    # off. The record is now a SEARCH INDEX beside the documents, not the thing
+    # they are built from — so "every file is reproducible from the record" is no
+    # longer a meaningful statement, and leaving it in would be exactly the kind
+    # of false green light that let a bad migration through in the first place.
+    from app.services.memory_render import RENDERED_FILES
+
     if job and job["status"] in ("pending", "running"):
         p = job.get("progress")
         verdict = (
-            f"Rebuilding — batch {p['done']} of {p['total']}, "
-            f"{p['stored']} fact(s) derived so far."
+            f"Rebuilding the search index — batch {p['done']} of {p['total']}, "
+            f"{p['stored']} fact(s) so far. Your documents are not affected."
             if p
-            else "Rebuilding — reading your history. Facts appear as batches complete."
+            else "Rebuilding the search index. Your documents are not affected."
+        )
+    elif not RENDERED_FILES:
+        # The honest statement: this number describes searchability, nothing else.
+        verdict = (
+            f"{total} fact(s) indexed for semantic search. The documents under "
+            f"/memories are the record itself and are not derived from this — "
+            f"rebuilding the index is optional and cannot touch them. "
+            f"Run GET /admin/memory/verify for document health."
         )
     elif total == 0:
-        verdict = "The record is empty. Run the rebuild before trusting memory."
+        verdict = "The index is empty — semantic recall will find nothing until it is built."
     elif thin:
         verdict = (
             f"Needs attention: {', '.join(p.split('/')[-1] for p in thin)} hold prose "
-            f"the record cannot rebuild. Run the rebuild again."
+            f"the record cannot rebuild."
         )
     elif at_risk:
-        verdict = f"{at_risk} fact(s) exist only in the files, not in the record."
+        verdict = f"{at_risk} fact(s) exist only in the files, not in the index."
     else:
-        verdict = (
-            "Healthy — every file is reproducible from the record. "
-            "Read owner.md and current.md once after a rebuild to check the prose."
-        )
+        verdict = f"{total} fact(s) indexed; every derived file is reproducible."
 
     return JSONResponse({
         "job": job,
