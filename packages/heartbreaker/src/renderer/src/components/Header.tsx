@@ -6,6 +6,21 @@ import HisarBrowser from './HisarBrowser'
 import type { AppConfig } from '../lib/types'
 
 /**
+ * THE DECK BAR — the chat column's title row, plus the floating icon rail.
+ *
+ * This replaced the old 40px header plate. In the deck the chrome does not sit
+ * in a bar across the top: the session title reads inline over the transcript,
+ * a single status pill states whether the agent is working, and the mode
+ * switches float as glass tiles at the top-right — directly above the telemetry
+ * column they sit over. Nothing here draws a background of its own; the bar is
+ * transparent and the tiles are the only material.
+ *
+ * The readouts the old header carried (message count, token spend, QUERY
+ * COMPLETE) moved to the telemetry column, which is where the rest of the
+ * session's instrumentation now lives.
+ */
+
+/**
  * FORGE LINK — engine indicator for Optimus. When the standalone Forge peer is
  * connected the chat is running on it (full agentic execution in the Cell);
  * when it is offline Optimus answers from its in-process profile. A quiet jewel
@@ -58,7 +73,7 @@ function ForgeLink({ config, agentId }: { config: AppConfig; agentId: string }) 
           {online ? 'FORGE LINK' : 'IN-PROCESS'}
         </span>
         <span className="hb-query-box" style={{
-          display: 'flex', alignItems: 'center', gap: 6, height: 22,
+          display: 'flex', alignItems: 'center', gap: 6, height: 24,
           maxWidth: 200, padding: '0 0.2rem 0 0.45rem',
         }}>
           <button
@@ -103,30 +118,139 @@ function ForgeLink({ config, agentId }: { config: AppConfig; agentId: string }) 
   )
 }
 
-/** 847 → "847", 1_240 → "1.2k", 12_400 → "12k", 1_240_000 → "1.24M".
- *  Keeps the readout a fixed narrow width as a long chat's counts grow.
- *  The 999_500 cut-off (not 1_000_000) is deliberate: above it the rounded
- *  thousands would render as "1000k" instead of rolling over to "1.00M". */
-function compactTokens(n: number): string {
-  if (n < 1000) return String(n)
-  if (n < 999_500) {
-    const k = n / 1000
-    return `${k < 10 ? k.toFixed(1) : Math.round(k)}k`
-  }
-  const m = n / 1_000_000
-  return `${m < 10 ? m.toFixed(2) : m.toFixed(1)}M`
-}
-
-function IconBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
+/**
+ * A rail tile. 44px glass square on the --r-tile corner. `active` is the ONLY
+ * thing that brings colour in: an inactive rail is neutral glass, matching the
+ * rule that the accent marks state rather than decorating chrome.
+ */
+function RailTile({ active, onClick, title, children }: {
+  active?: boolean
+  onClick: () => void
+  title: string
+  children: React.ReactNode
+}) {
   return (
     <button
-      className="hb-btn"
+      className={active ? 'hb-btn hb-tile glass-active' : 'hb-btn hb-tile'}
       onClick={onClick}
       title={title}
-      style={{ width: 30, height: 26, flexShrink: 0 }}
+      style={{
+        width: 44, height: 44, flexShrink: 0,
+        color: active ? 'var(--hb-cyan-bright)' : 'var(--hb-icon-bright)',
+        ...(active ? { background: 'linear-gradient(160deg, rgba(var(--hb-accent-rgb),0.26), rgba(var(--hb-accent-rgb),0.08))' } : {}),
+      }}
     >
       {children}
     </button>
+  )
+}
+
+export interface RailProps {
+  boardOpen?: boolean
+  onToggleBoard?: () => void
+  commsOpen?: boolean
+  onToggleComms?: () => void
+  voiceOpen?: boolean
+  onToggleVoice?: () => void
+  /** The right telemetry column — permanent by default, collapsible. */
+  telemetryOpen?: boolean
+  onToggleTelemetry?: () => void
+  /** True when the app IS the war room (standby or engaged takeover). While
+   *  true the roster strip carries the exit control, so the rail's war-room
+   *  tile hides. */
+  inWarRoom?: boolean
+  onOpenWarRoom?: () => void
+}
+
+/**
+ * THE RAIL — the deck's mode switches, floating at the window's top-right.
+ *
+ * Rendered by Layout as a direct child of the deck root, NOT inside the chat
+ * column: the column clips its overflow, which would pin the rail to the
+ * column's right edge instead of the window's. Floating it here is what puts
+ * it directly above the telemetry column, and what keeps it reachable when
+ * that column is folded away — it holds the control that unfolds it.
+ */
+export function DeckRail({
+  boardOpen, onToggleBoard, commsOpen, onToggleComms,
+  voiceOpen, onToggleVoice, telemetryOpen, onToggleTelemetry,
+  inWarRoom, onOpenWarRoom,
+}: RailProps) {
+  return (
+    <div style={{
+      position: 'absolute', top: 20, right: 20, zIndex: 30,
+      display: 'flex', gap: 8,
+    }}>
+      {!inWarRoom && onOpenWarRoom && (
+        <RailTile
+          onClick={onOpenWarRoom}
+          title="Enter the war room — brief SPEDA and stage the roster (protocol stays offline until engaged)"
+        >
+          {/* Command table — the roster converging on a centre point */}
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <circle cx="12" cy="12" r="3" />
+            <circle cx="12" cy="3.5" r="1.6" /><circle cx="19.5" cy="16.5" r="1.6" /><circle cx="4.5" cy="16.5" r="1.6" />
+            <line x1="12" y1="5.1" x2="12" y2="9" />
+            <line x1="18.1" y1="15.6" x2="14.6" y2="13.5" />
+            <line x1="5.9" y1="15.6" x2="9.4" y2="13.5" />
+          </svg>
+        </RailTile>
+      )}
+
+      {onToggleComms && (
+        <RailTile
+          active={commsOpen}
+          onClick={onToggleComms}
+          title={commsOpen ? 'Close agent comms' : 'Open inter-agent comms traffic'}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <circle cx="5" cy="12" r="2.4"/><circle cx="19" cy="5" r="2.4"/><circle cx="19" cy="19" r="2.4"/>
+            <line x1="7.2" y1="11" x2="16.8" y2="5.9"/><line x1="7.2" y1="13" x2="16.8" y2="18.1"/>
+          </svg>
+        </RailTile>
+      )}
+
+      {onToggleTelemetry && (
+        <RailTile
+          active={telemetryOpen}
+          onClick={onToggleTelemetry}
+          title={telemetryOpen ? 'Hide the telemetry column' : 'Show the telemetry column'}
+        >
+          {/* Pulse trace, not the bar meter. The four-bar glyph is an audio
+              equaliser to anyone who has used a media player, so it belongs to
+              voice; a running trace is what telemetry actually looks like. */}
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <path d="M4 12h4l2.5 6 3-12 2.5 6h4"/>
+          </svg>
+        </RailTile>
+      )}
+
+      {onToggleBoard && (
+        <RailTile
+          active={boardOpen}
+          onClick={onToggleBoard}
+          title={boardOpen ? 'Close systems board' : 'Open systems board'}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+          </svg>
+        </RailTile>
+      )}
+
+      {onToggleVoice && (
+        <RailTile
+          active={voiceOpen}
+          onClick={onToggleVoice}
+          title={voiceOpen ? 'Leave voice mode' : 'Voice mode — replies are spoken aloud'}
+        >
+          {/* The equaliser bars — this is the one people read as "audio". */}
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <path d="M4 15V9M9 18V6M14 14v-4M19 16v-8"/>
+          </svg>
+        </RailTile>
+      )}
+    </div>
   )
 }
 
@@ -135,209 +259,79 @@ interface Props {
   agentId: string
   sidebarOpen?: boolean
   onToggleSidebar?: () => void
-  boardOpen?: boolean
-  onToggleBoard?: () => void
-  commsOpen?: boolean
-  onToggleComms?: () => void
-  voiceOpen?: boolean
-  onToggleVoice?: () => void
-  /** True when the app IS the war room (standby or engaged takeover). While
-   *  true the strip under the header carries the exit control, so the header
-   *  WAR ROOM button hides. */
-  inWarRoom?: boolean
-  onOpenWarRoom?: () => void
+  /** Width the title row must keep clear on its right so the floating rail,
+   *  which is not in this flow, never lands on top of a long session title. */
+  railClearance?: number
 }
 
 export default function Header({
-  config, agentId,
-  sidebarOpen, onToggleSidebar, boardOpen, onToggleBoard,
-  commsOpen, onToggleComms, voiceOpen, onToggleVoice, inWarRoom, onOpenWarRoom,
+  config, agentId, sidebarOpen, onToggleSidebar, railClearance = 0,
 }: Props) {
   const { state } = useChatContext()
   const activeSession = state.sessions.find(s => s.id === state.activeSessionId)
-  const hasMessages = state.messages.length > 0
 
   return (
-    <header className="hb-seam-b" style={{
-      height: 40, flexShrink: 0,
-      display: 'flex', alignItems: 'center', gap: '0.6rem',
-      padding: '0 0.85rem',
-      // Structural plate: zero tint, pure frost; fading hairline seam at its base
-      background: 'transparent',
-      backdropFilter: 'var(--hb-holo-blur)',
-      WebkitBackdropFilter: 'var(--hb-holo-blur)',
+    <div style={{
+      height: 64, flexShrink: 0,
+      display: 'flex', alignItems: 'center', gap: 14,
+      padding: '0 4px 0 30px',
       position: 'relative', zIndex: 10,
     }}>
       {!sidebarOpen && onToggleSidebar && (
-        <IconBtn onClick={onToggleSidebar} title="Open panel">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <button
+          className="hb-btn hb-tile"
+          onClick={onToggleSidebar}
+          title="Open panel"
+          style={{ width: 36, height: 36, flexShrink: 0 }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
             <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
           </svg>
-        </IconBtn>
+        </button>
       )}
 
-      {/* Section marker — "MONITOR No. 1" style */}
-      <span className="hb-label hb-hide-sm" style={{ color: 'var(--hb-cyan)', whiteSpace: 'nowrap' }}>
-        MONITOR <span style={{ color: 'var(--hb-text-faint)' }}>No. 1</span>
+      {/* Session title — reads inline over the deck, no plate behind it */}
+      <span
+        title={activeSession?.title || undefined}
+        style={{
+          fontFamily: 'var(--font-ui)', fontSize: 22, fontWeight: 600,
+          letterSpacing: '0.02em', color: 'var(--hb-text)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          maxWidth: '46%', flexShrink: 1, minWidth: 0,
+        }}
+      >
+        {activeSession?.title || 'New conversation'}
       </span>
 
-      {/* Magnifier — the reference search glyph */}
-      <svg className="hb-hide-sm" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="2" style={{ color: 'var(--hb-text-faint)', flexShrink: 0 }}>
-        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-      </svg>
-
-      {/* Active session title — the ":ANTON VANKO" query box */}
-      <span className="hb-query-box" style={{
-        fontSize: '0.76rem', height: 22, maxWidth: '40%',
-        overflow: 'hidden',
-      }}>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {activeSession?.title || 'NEW LINK'}
+      {/* Live state — the pill appears only while the agent is actually working,
+          so a settled deck stays quiet. */}
+      {state.isStreaming && (
+        <span className="glass-round" style={{
+          display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0,
+          height: 28, padding: '0 12px 0 10px',
+          background: 'linear-gradient(160deg, rgba(var(--hb-accent-rgb),0.18), rgba(var(--hb-accent-rgb),0.05))',
+          border: '1px solid rgba(var(--hb-accent-rgb),0.3)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16)',
+          fontSize: 13, color: 'var(--hb-cyan-bright)',
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: 'var(--hb-cyan)', boxShadow: '0 0 8px var(--hb-cyan)',
+            animation: 'hbPulse 1.4s ease-in-out infinite',
+          }} />
+          Responding
         </span>
-      </span>
+      )}
 
-
-      {/* Spacer */}
-      <div style={{ flex: 1 }} />
+      <div style={{ flex: 1, minWidth: 0 }} />
 
       {/* Forge link — Optimus engine state + workspace (Optimus only) */}
       <ForgeLink config={config} agentId={agentId} />
 
-      {/* Right readout cluster — real session state */}
-      <span className="hb-readout hb-hide-sm" style={{ fontSize: '0.62rem', color: 'var(--hb-text-faint)' }}>
-        MSGS {String(state.messages.length).padStart(3, '0')}
-      </span>
-
-      {/* Token spend for this link — prompt tokens in, completion tokens out,
-          summed over every turn and every provider. Hidden until the session
-          has actually spent something, so a fresh chat isn't cluttered. */}
-      {(state.tokenUsage.input > 0 || state.tokenUsage.output > 0) && (
-        <span
-          className="hb-readout hb-hide-sm"
-          title={`Tokens this chat — in: ${state.tokenUsage.input.toLocaleString()} · `
-            + `out: ${state.tokenUsage.output.toLocaleString()}\n`
-            + 'Input counts the whole prompt each turn: system, memory, tools and history.'}
-          style={{ fontSize: '0.62rem', color: 'var(--hb-text-faint)' }}
-        >
-          TOK <span style={{ color: 'var(--hb-text-dim)' }}>↑{compactTokens(state.tokenUsage.input)}</span>
-          {' '}<span style={{ color: 'var(--hb-text-dim)' }}>↓{compactTokens(state.tokenUsage.output)}</span>
-        </span>
-      )}
-      {state.isStreaming ? (
-        <span className="hb-hide-sm" style={{
-          display: 'flex', alignItems: 'center', gap: 5,
-          fontFamily: "var(--font-mono)", fontSize: '0.62rem',
-          letterSpacing: '0.1em', color: 'var(--hb-amber-bright)',
-        }}>
-          <span style={{
-            width: 6, height: 6, display: 'inline-block',
-            background: 'var(--hb-amber-bright)',
-            animation: 'hbBlink 0.8s step-end infinite',
-          }} />
-          PROCESSING
-        </span>
-      ) : (
-        <span className="hb-hide-sm" style={{
-          fontFamily: "var(--font-mono)", fontSize: '0.62rem',
-          letterSpacing: '0.1em',
-          color: hasMessages ? 'var(--hb-amber)' : 'var(--hb-text-faint)',
-        }}>
-          {hasMessages ? 'QUERY COMPLETE' : 'STANDBY'}
-        </span>
-      )}
-
-      {/* War room — a profile takeover, not a window. The button enters it
-          (branded STANDBY cinematic); once inside, the roster strip under the
-          header owns the exit/stand-down, so this hides in standby AND engaged. */}
-      {!inWarRoom && onOpenWarRoom && (
-        <button
-          className="hb-btn"
-          onClick={onOpenWarRoom}
-          title="Enter the war room — brief SPEDA and stage the roster (protocol stays offline until engaged)"
-          style={{
-            height: 24, padding: '0 0.55rem', gap: '0.4rem', flexShrink: 0,
-            fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
-            letterSpacing: '0.16em',
-          }}
-        >
-          {/* Command-table glyph — the roster converging on a center point */}
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="3" />
-            <circle cx="12" cy="3.5" r="1.6" /><circle cx="19.5" cy="16.5" r="1.6" /><circle cx="4.5" cy="16.5" r="1.6" />
-            <line x1="12" y1="5.1" x2="12" y2="9" />
-            <line x1="18.1" y1="15.6" x2="14.6" y2="13.5" />
-            <line x1="5.9" y1="15.6" x2="9.4" y2="13.5" />
-          </svg>
-          WAR ROOM
-        </button>
-      )}
-
-      {/* Inter-agent comms tray toggle */}
-      {onToggleComms && (
-        <button
-          className={commsOpen ? 'hb-btn hb-btn-tint' : 'hb-btn'}
-          onClick={onToggleComms}
-          title={commsOpen ? 'Close agent comms' : 'Open inter-agent comms traffic'}
-          style={{
-            height: 24, padding: '0 0.5rem', gap: '0.35rem', flexShrink: 0,
-            ...(commsOpen ? { color: 'var(--hb-amber-bright)' } : {}),
-            fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
-            letterSpacing: '0.16em',
-          }}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="5" cy="12" r="2.4"/><circle cx="19" cy="5" r="2.4"/><circle cx="19" cy="19" r="2.4"/>
-            <line x1="7.2" y1="11" x2="16.8" y2="5.9"/><line x1="7.2" y1="13" x2="16.8" y2="18.1"/>
-          </svg>
-          COMMS
-        </button>
-      )}
-
-      {/* Voice mode — the orb takes over the transcript; the composer stays,
-          so the owner still types and the answer comes back out loud. */}
-      {onToggleVoice && (
-        <button
-          className={voiceOpen ? 'hb-btn hb-btn-tint' : 'hb-btn'}
-          onClick={onToggleVoice}
-          title={voiceOpen ? 'Leave voice mode' : 'Voice mode — replies are spoken aloud'}
-          style={{
-            height: 24, padding: '0 0.5rem', gap: '0.35rem', flexShrink: 0,
-            ...(voiceOpen ? { color: 'var(--hb-cyan-bright)' } : {}),
-            fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
-            letterSpacing: '0.16em',
-          }}
-        >
-          {/* Waveform — three bars rising out of a centre line */}
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="5" y1="9" x2="5" y2="15" />
-            <line x1="12" y1="4" x2="12" y2="20" />
-            <line x1="19" y1="9" x2="19" y2="15" />
-          </svg>
-          VOX
-        </button>
-      )}
-
-      {/* Systems board toggle */}
-      {onToggleBoard && (
-        <button
-          className={boardOpen ? 'hb-btn hb-btn-tint' : 'hb-btn'}
-          onClick={onToggleBoard}
-          title={boardOpen ? 'Close systems board' : 'Open systems board'}
-          style={{
-            height: 24, padding: '0 0.5rem', gap: '0.35rem', flexShrink: 0,
-            ...(boardOpen ? { color: 'var(--hb-amber-bright)' } : {}),
-            fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem', fontWeight: 700,
-            letterSpacing: '0.16em',
-          }}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-            <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-          </svg>
-          SYS
-        </button>
-      )}
-    </header>
+      {/* The rail is NOT here — it floats above the telemetry column, out of
+          this column's clipped overflow. Layout renders <DeckRail/>. This
+          keeps the space it occupies clear so a long title never runs under it. */}
+      <div style={{ width: railClearance, flexShrink: 0 }} />
+    </div>
   )
 }

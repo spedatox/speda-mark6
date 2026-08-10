@@ -14,17 +14,23 @@ import AgentModelPicker from './AgentModelPicker'
 import GlassSelect from './GlassSelect'
 
 /**
- * SYSTEMS BOARD — the "PERIODIC 56A." tactical overlay, mapped onto real data.
+ * SYSTEMS BOARD — the deep view of the deck's instrumentation.
  *
- * Reference → function:
- *   Periodic table grid   → model routing matrix (tiles switch the active
- *                           model) + toolset matrix (tiles toggle MCP servers)
- *   IP address navigator  → uplink telemetry + per-server network node list
- *   Palladium gauge       → live ITPM prompt-prefix token budget
- *   Holographic radar     → RTT trace sparkline from the /health probe
- *   File archive rows     → session data banks
+ * What is on it:
+ *   Model routing matrix  → tiles per provider; clicking one routes the agent.
+ *                           Exactly one tile is ever lit, and it takes the
+ *                           accent — this is a state readout, not a palette.
+ *   Uplink + network nodes→ /health telemetry and the per-server token load
+ *   Token budget          → the live ITPM prompt-prefix budget
+ *   RTT trace             → sparkline from the /health probe
+ *   Data banks            → session archive + the memory files, owner-editable
  *
- * Every value on this board comes from the backend. Nothing is set dressing.
+ * The right telemetry column on the chat deck (TelemetryColumn.tsx) is the
+ * glanceable half of this; keep the two saying the same thing.
+ *
+ * Every value on this board comes from the backend. Nothing is set dressing —
+ * the old header's "SYSTEMS 56A. / MODE 3Dx. 78A / ver 17" instrument markings
+ * were invented and have been removed for exactly that reason.
  */
 
 
@@ -59,19 +65,30 @@ function Panel({ title, light, right, pad = true, style, children }: {
   style?: React.CSSProperties
   children: React.ReactNode
 }) {
+  // The header is a LABEL, not a bar. The old filled title plate meant every
+  // panel on the board opened with a saturated stripe, and eight of those read
+  // as eight alarms. A panel should announce itself once, quietly, and let its
+  // contents be the loud part. `light` survives as an emphasis hint only.
   return (
     <section className="hb-holo" style={{
       position: 'relative', display: 'flex', flexDirection: 'column',
       minHeight: 0, minWidth: 0,
       overflow: 'hidden',
+      padding: '16px 18px',
       ...style,
     }}>
-      <header className={light ? 'hb-head-light' : 'hb-head-cyan'}
-        style={{ flexShrink: 0, justifyContent: 'space-between' }}>
-        <span>{title}</span>
+      <header style={{
+        flexShrink: 0, display: 'flex', alignItems: 'baseline',
+        justifyContent: 'space-between', gap: 10, marginBottom: 12,
+      }}>
+        <span style={{
+          fontFamily: UI, fontSize: '0.84rem', fontWeight: 600,
+          letterSpacing: '0.16em', textTransform: 'uppercase',
+          color: light ? 'var(--hb-text)' : 'var(--hb-text-dim)',
+        }}>{title}</span>
         {right}
       </header>
-      <div style={{ flex: 1, overflow: 'auto', minHeight: 0, padding: pad ? '0.5rem 0.55rem' : 0 }}>
+      <div style={{ flex: 1, overflow: 'auto', minHeight: 0, marginInline: pad ? 0 : '-18px' }}>
         {children}
       </div>
     </section>
@@ -81,15 +98,18 @@ function Panel({ title, light, right, pad = true, style, children }: {
 /* ── Telemetry key/value row — the "IPv4 Adress: DENY" list style ─────────── */
 function KV({ k, v, color, alt }: { k: string; v: React.ReactNode; color?: string; alt?: boolean }) {
   return (
+    // `alt` used to paint every other row with an accent wash — zebra striping
+    // that fought the glass underneath it. The rows are legible on their own;
+    // the prop stays so call sites need no edit, and now does nothing.
     <div style={{
-      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8,
-      padding: '0.22rem 0.35rem',
-      background: alt ? 'rgba(var(--hb-accent-rgb),0.04)' : 'transparent',
-      fontFamily: MONO, fontSize: '0.6rem', letterSpacing: '0.05em',
+      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10,
+      padding: '5px 0',
+      fontSize: '0.875rem',
     }}>
-      <span style={{ color: 'var(--hb-icon)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{k}</span>
+      <span style={{ color: 'var(--hb-text-dim)', whiteSpace: 'nowrap' }}>{k}</span>
       <span style={{
-        color: color || 'var(--hb-text-dim)', textAlign: 'right',
+        color: color || 'var(--hb-text)', textAlign: 'right',
+        fontVariantNumeric: 'tabular-nums',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{v}</span>
     </div>
@@ -108,45 +128,43 @@ function ModelTile({ m, idx, active, onSelect }: {
       onClick={onSelect}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      // Only the ROUTED model is coloured, and it takes the accent — the tile
+      // grid is a state readout, so exactly one tile should ever be lit. It was
+      // amber-on-orange before, which read as a warning rather than a selection.
       style={{
-        width: 58, height: 58, position: 'relative', flexShrink: 0,
+        width: 76, height: 76, position: 'relative', flexShrink: 0,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 4,
         cursor: 'pointer',
-        border: `1px solid ${active ? 'rgba(242,183,92,0.8)' : hover ? 'rgba(var(--hb-accent-rgb),0.75)' : 'rgba(var(--hb-accent-rgb),0.4)'}`,
+        border: `1px solid ${active
+          ? 'rgba(var(--hb-accent-rgb),0.5)'
+          : hover ? 'var(--hb-edge-bright)' : 'var(--hb-edge)'}`,
         background: active
-          ? 'rgba(216, 110, 62, 0.3)'
+          ? 'linear-gradient(160deg, rgba(var(--hb-accent-rgb),0.24), rgba(var(--hb-accent-rgb),0.08))'
           : hover
-          ? 'rgba(var(--hb-accent-rgb), 0.28)'
-          : 'rgba(var(--hb-cyan-dim-rgb), 0.18)',
+          ? 'var(--glass-sheen-hi)'
+          : 'var(--glass-sheen)',
         backdropFilter: 'var(--hb-holo-blur)',
         WebkitBackdropFilter: 'var(--hb-holo-blur)',
         boxShadow: active
-          ? 'inset 0 1px 0 0 rgba(255,210,160,0.35)'
-          : 'inset 0 1px 0 0 rgba(255,255,255,0.15)',
+          ? 'inset 0 1px 0 0 rgba(255,255,255,0.2), 0 0 20px rgba(var(--hb-accent-rgb),0.2)'
+          : 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
         transition: 'border-color 0.12s, background 0.12s, box-shadow 0.12s',
       }}
     >
       <span style={{
-        position: 'absolute', top: 2, left: 4,
-        fontFamily: MONO, fontSize: '0.48rem',
-        color: active ? 'rgba(255,220,180,0.8)' : 'rgba(154,219,232,0.65)',
-      }}>
-        {String(idx + 1).padStart(2, '0')}
-      </span>
-      <span style={{
-        fontFamily: UI, fontWeight: 600, fontSize: '1.18rem', lineHeight: 1,
-        color: active ? '#ffd9a8' : '#bfe6f2',
-        textShadow: active ? '0 0 8px rgba(232,150,74,0.4)' : '0 0 8px rgba(var(--hb-cyan-bright-rgb),0.25)',
+        fontFamily: UI, fontWeight: 700, fontSize: '1rem', lineHeight: 1,
+        color: active ? '#eaf3f7' : 'var(--hb-text)',
       }}>
         {symbolOf(m.name)}
       </span>
       <span style={{
-        marginTop: 3, maxWidth: 52,
-        fontFamily: MONO, fontSize: '0.42rem', letterSpacing: '0.04em',
-        color: active ? 'rgba(255,225,190,0.75)' : 'rgba(154,200,215,0.6)',
+        maxWidth: 66,
+        fontSize: '0.625rem',
+        color: active ? 'var(--hb-cyan-bright)' : 'var(--hb-text-faint)',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
-        {m.name.toUpperCase()}
+        {m.name}
       </span>
     </button>
   )
@@ -232,7 +250,7 @@ function Spark({ samples }: { samples: number[] }) {
     return (
       <div style={{
         height: H, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.18em', color: 'var(--hb-icon-dim)',
+        fontSize: '0.8125rem', color: 'var(--hb-text-faint)',
       }}>
         AWAITING TELEMETRY_
       </div>
@@ -405,51 +423,83 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
   return (
     <div style={{
-      position: 'fixed', top: 22, bottom: 4, left: 0, right: 0, zIndex: 500,
+      position: 'fixed', inset: 0, zIndex: 500,
       display: 'grid',
       // Mobile collapses the tactical grid into one scrollable column;
       // panel order follows source order (uplink → matrix → budget → banks).
-      gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : '218px 1fr 232px',
+      // The deck draws these rails at a fixed 300/268, which only works at its
+      // own 1920. Fixed rails on a 1400 window ate the middle column down to
+      // ~230px and folded the routing matrix into a single stack. So they are
+      // ranges: the rails give their width back to the matrix as the window
+      // narrows, and the matrix keeps a floor of its own.
+      gridTemplateColumns: isMobile
+        ? 'minmax(0, 1fr)'
+        : 'minmax(220px, 300px) minmax(340px, 1fr) minmax(200px, 268px)',
       // Bottom track is fr-based so EXTEND can animate it: the knowledge bank
       // rises to ~80% of the board while the tactical grid compresses upward.
-      gridTemplateRows: isMobile ? 'auto' : `34px 1fr ${banksWide ? '4.4fr' : '0.28fr'}`,
+      gridTemplateRows: isMobile ? 'auto' : `44px 1fr ${banksWide ? '4.4fr' : '0.28fr'}`,
       transition: 'grid-template-rows 0.5s cubic-bezier(0.22, 0.9, 0.3, 1)',
       overflowY: isMobile ? 'auto' : undefined,
-      gap: 8, padding: 10,
-      background: 'rgba(4, 9, 12, 0.5)',
-      backdropFilter: 'blur(6px)',
-      WebkitBackdropFilter: 'blur(6px)',
+      gap: 16, padding: '10px 24px 24px',
+      background: 'rgba(5, 7, 10, 0.55)',
+      backdropFilter: 'blur(8px)',
+      WebkitBackdropFilter: 'blur(8px)',
       animation: 'fadeIn 0.18s ease',
     }}>
 
-      {/* ── Title plate — "PERIODIC 56A." convention ─────────────────────── */}
-      <div className="hb-head-light" style={{ gridColumn: '1 / -1', minHeight: 0, gap: '0.7rem' }}>
-        <span style={{ fontSize: '0.82rem' }}>SYSTEMS 56A.</span>
-        <span className="hb-hide-sm" style={{
-          fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.1em',
-          color: 'var(--hb-icon)', textTransform: 'none',
+      {/* ── Board header ───────────────────────────────────────────────────
+          The old plate read "SYSTEMS 56A. / MODE / 3Dx. 78A / ver 17 · MK VI"
+          — invented instrument markings on a board whose whole point is that
+          every number on it is real. Replaced with what is actually true: what
+          this board is, and the live registered-tool count. */}
+      <div style={{
+        gridColumn: '1 / -1', minHeight: 0,
+        display: 'flex', alignItems: 'center', gap: 14,
+      }}>
+        <span className="hb-tile" style={{
+          width: 38, height: 38, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'linear-gradient(160deg, rgba(var(--hb-accent-rgb),0.2), rgba(var(--hb-accent-rgb),0.06))',
+          border: '1px solid rgba(var(--hb-accent-rgb),0.32)',
         }}>
-          MODE / 3Dx. 78A
-        </span>
-        <span style={{ flex: 1 }} />
-        <span className="hb-hide-sm" style={{ fontFamily: MONO, fontSize: '0.56rem', color: 'var(--hb-icon)', textTransform: 'none' }}>
-          ver 17 · MK VI
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--hb-cyan-bright)" strokeWidth="1.5" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+          </svg>
         </span>
         <span style={{
-          width: 7, height: 14, background: 'rgba(217,156,68,0.5)',
-          border: '1px solid rgba(242,183,92,0.7)',
-          boxShadow: 'inset 0 1px 0 rgba(255,230,190,0.35)',
-        }} />
+          fontFamily: UI, fontSize: '1.32rem', fontWeight: 600,
+          letterSpacing: '0.06em', color: 'var(--hb-text)',
+        }}>
+          Systems
+        </span>
+        <span className="hb-hide-sm" style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>
+          Model routing · toolsets · bandwidth
+        </span>
+        <span style={{ flex: 1 }} />
+        {health.tools != null && (
+          <span className="glass-round" style={{
+            display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
+            height: 30, padding: '0 14px',
+            background: 'rgba(79, 163, 119, 0.1)',
+            border: '1px solid rgba(79, 163, 119, 0.3)',
+            fontSize: '0.8125rem', color: '#8fdcb3',
+          }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: 'var(--hb-green)', boxShadow: '0 0 6px var(--hb-green)',
+            }} />
+            {health.tools} tools registered
+          </span>
+        )}
         <button
+          className="hb-btn hb-tile"
           onClick={onClose}
           title="Close (Esc)"
-          style={{
-            border: 'none', background: 'transparent', cursor: 'pointer',
-            color: 'var(--hb-icon-dim)', display: 'flex', alignItems: 'center', padding: '0 2px',
-          }}
+          style={{ width: 38, height: 38, flexShrink: 0 }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M18 6L6 18M6 6l12 12"/>
           </svg>
         </button>
       </div>
@@ -457,27 +507,27 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
       {/* ── Left column — uplink telemetry + network nodes ───────────────── */}
       {/* overflow hidden: when the knowledge bank extends, the compressed row
           clips these panels instead of letting them spill over the bank */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'hidden' }}>
-        <Panel title="UPLINK_STATUS" style={{ flexShrink: 0, animation: 'hbRise 0.4s 0.05s ease both' }}>
-          <KV k="LINK" v={health.online ? 'ONLINE' : 'DENY'}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0, overflow: 'hidden' }}>
+        <Panel title="Uplink" style={{ flexShrink: 0, animation: 'hbRise 0.4s 0.05s ease both' }}>
+          <KV k="Link" v={health.online ? 'Online' : 'Offline'}
               color={health.online ? 'var(--hb-green)' : 'var(--hb-red)'} />
-          <KV k="HOST" v={config.apiBase.replace(/^https?:\/\//, '')} alt />
+          <KV k="Host" v={config.apiBase.replace(/^https?:\/\//, '')} alt />
           <KV k="RTT" v={health.latencyMs != null ? `${health.latencyMs}ms` : '--'}
               color={health.latencyMs != null && health.latencyMs < 400 ? 'var(--hb-green)' : 'var(--hb-amber)'} />
-          <KV k="TOOLS REG." v={health.tools ?? '--'} alt />
-          <KV k="SESSIONS" v={String(state.sessions.length).padStart(3, '0')} />
-          <KV k="BUDGET MODE" v={budgetMode ? 'ENGAGED' : 'OFF'}
+          <KV k="Tools registered" v={health.tools ?? '--'} alt />
+          <KV k="Sessions" v={String(state.sessions.length).padStart(3, '0')} />
+          <KV k="Budget mode" v={budgetMode ? 'Engaged' : 'Off'}
               color={budgetMode ? 'var(--hb-amber)' : 'var(--hb-text-faint)'} alt />
-          <KV k="OLLAMA NODE" v={ollamaUp ? 'LOCAL ACTIVE' : 'NOT DETECTED'}
+          <KV k="Ollama node" v={ollamaUp ? 'Local active' : 'Not detected'}
               color={ollamaUp ? 'var(--hb-green)' : 'var(--hb-text-faint)'} />
-          <KV k="FORGE LINK" v={forgePeer ? 'OPTIMUS · MK II' : 'IN-PROCESS'}
+          <KV k="Forge link" v={forgePeer ? 'Optimus · Mk II' : 'In-process'}
               color={forgePeer ? 'var(--hb-green)' : 'var(--hb-text-faint)'} alt />
         </Panel>
 
-        <Panel title="NETWORK_NODES" style={{ flex: 1, animation: 'hbRise 0.4s 0.12s ease both' }}>
+        <Panel title="Connected servers" style={{ flex: 1, animation: 'hbRise 0.4s 0.12s ease both' }}>
           {servers.length === 0 ? (
-            <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: 'var(--hb-icon-dim)', padding: '0.3rem 0.35rem' }}>
-              // NO NODES
+            <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)', padding: '4px 0' }}>
+              No servers connected
             </p>
           ) : servers.map((c, i) => (
             <div key={c.server} style={{
@@ -494,9 +544,9 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               }}>
                 {c.label}
               </span>
-              <span style={{ fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.06em',
+              <span style={{ fontSize: '0.8125rem',
                 color: !c.connected ? 'var(--hb-red)' : c.active ? 'var(--hb-cyan)' : 'var(--hb-icon)' }}>
-                {!c.connected ? 'MEDIA DISCONNECTED' : c.active ? `LINKED · ${c.tools} TOOLS` : 'STANDBY'}
+                {!c.connected ? 'disconnected' : c.active ? `linked · ${c.tools} tools` : 'standby'}
               </span>
             </div>
           ))}
@@ -504,32 +554,20 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
       </div>
 
       {/* ── Center — the routing matrix ──────────────────────────────────── */}
-      <Panel title="CORE ROUTING_MATRIX" pad={false}
-        right={<span style={{ fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.08em', textTransform: 'none' }}>
-          {models.length} CORES · {servers.length} SHARDS
+      <Panel title="Model routing matrix" pad={false}
+        right={<span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>
+          {providers.length} providers · {models.length} models
         </span>}
         style={{ animation: 'hbRise 0.45s 0.08s ease both' }}
       >
-        <div style={{ position: 'relative', padding: '0.7rem 0.75rem', minHeight: '100%' }}>
-          {/* faint oversized designation — "B.12" */}
-          <span className="hb-num-thin" aria-hidden style={{
-            position: 'absolute', right: 14, bottom: 4,
-            fontSize: '5.4rem', color: 'rgba(var(--hb-cyan-bright-rgb),0.05)', pointerEvents: 'none',
-          }}>
-            B.12
-          </span>
-
+        {/* The "B.12" watermark that used to sit bottom-right is gone: an
+            oversized invented designation is the exact set dressing this board
+            is not allowed to carry. */}
+        <div style={{ position: 'relative', padding: '4px 2px', minHeight: '100%' }}>
           {models.length === 0 && (
-            <div style={{
-              width: 120, padding: '0.8rem 0',
-              border: '1px solid rgba(var(--hb-accent-rgb),0.3)',
-              background: 'rgba(var(--hb-cyan-dim-rgb),0.25)',
-              textAlign: 'center',
-              fontFamily: UI, fontSize: '0.72rem', fontWeight: 700,
-              letterSpacing: '0.2em', color: 'var(--hb-icon)',
-            }}>
-              NOT FOUND
-            </div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)', padding: '4px 0' }}>
+              No model catalogue — no provider keys are configured on this server.
+            </p>
           )}
 
           {providers.map(p => {
@@ -541,11 +579,14 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                 <p
                   onClick={() => toggleProvider(p)}
                   title={open ? `Collapse ${p}` : `Expand ${p} — ${group.length} models`}
+                  // The provider that holds the routed model takes the accent;
+                  // the rest sit back. Deck label scale, not 0.55rem mono.
                   style={{
-                    fontFamily: MONO, fontSize: '0.55rem', letterSpacing: '0.22em',
-                    color: holdsActive ? 'var(--hb-cyan-bright)' : 'var(--hb-cyan)',
-                    marginBottom: '0.35rem', cursor: 'pointer', userSelect: 'none',
-                    display: 'flex', alignItems: 'center', gap: '0.4rem',
+                    fontFamily: UI, fontSize: '0.78rem', fontWeight: 600,
+                    letterSpacing: '0.12em', textTransform: 'uppercase',
+                    color: holdsActive ? 'var(--hb-cyan)' : 'var(--hb-text-dim)',
+                    marginBottom: 10, cursor: 'pointer', userSelect: 'none',
+                    display: 'flex', alignItems: 'center', gap: 7,
                   }}
                 >
                   <span style={{
@@ -553,11 +594,8 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                     transform: open ? 'rotate(90deg)' : 'none',
                     transition: 'transform 120ms ease',
                   }}>{'›'}</span>
-                  {'>>:'} {PROVIDER_TAGS[p] ?? p.toUpperCase()}_
-                  <span style={{ color: 'rgba(var(--hb-cyan-rgb),0.55)' }}>{group.length}</span>
-                  {!open && holdsActive && (
-                    <span style={{ color: 'var(--hb-amber)' }}>{'●'}</span>
-                  )}
+                  {PROVIDER_TAGS[p] ?? p.toUpperCase()}
+                  <span style={{ color: 'var(--hb-text-faint)', fontWeight: 500 }}>{group.length}</span>
                 </p>
                 {open && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
@@ -575,10 +613,11 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           {servers.length > 0 && (
             <div>
               <p style={{
-                fontFamily: MONO, fontSize: '0.55rem', letterSpacing: '0.22em',
-                color: 'var(--hb-amber)', marginBottom: '0.35rem',
+                fontFamily: UI, fontSize: '0.78rem', fontWeight: 600,
+                letterSpacing: '0.12em', textTransform: 'uppercase',
+                color: 'var(--hb-text-dim)', marginBottom: 10,
               }}>
-                {'>>:'} CONTEXT SHARDS_ MCP TOOLSETS
+                MCP toolsets
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {servers.map((c, i) => (
@@ -592,37 +631,47 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           {agentInfos.length > 0 && (
             <div style={{ marginTop: '0.85rem' }}>
               <p style={{
-                fontFamily: MONO, fontSize: '0.55rem', letterSpacing: '0.22em',
-                color: 'var(--hb-cyan)', marginBottom: '0.35rem',
+                fontFamily: UI, fontSize: '0.78rem', fontWeight: 600,
+                letterSpacing: '0.12em', textTransform: 'uppercase',
+                color: 'var(--hb-text-dim)', marginBottom: 10,
               }}>
-                {'>>:'} AGENT CORES_ PER-AGENT MODEL ROUTING
+                Per-agent model routing
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {agentInfos.map(info => (
-                  <div key={info.agent_id} className="hb-glass-xs" style={{
-                    width: 148, padding: '0.35rem 0.4rem',
-                    display: 'flex', flexDirection: 'column', gap: 4,
-                    border: `1px solid ${info.override ? `${agentColor(info.agent_id)}66` : 'rgba(var(--hb-accent-rgb),0.2)'}`,
-                    background: 'rgba(20, 42, 52, 0.15)',
+                  // A pin card is a glass row, not a coloured box. The agent's
+                  // colour lands on a 6px dot and its monogram — enough to find
+                  // your agent, without eight saturated rims competing across
+                  // the grid the way the old per-agent borders did.
+                  <div key={info.agent_id} className="hb-glass-sm" style={{
+                    width: 176, padding: '10px 12px',
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                    border: `1px solid ${info.override ? 'var(--hb-edge-bright)' : 'var(--hb-edge)'}`,
+                    background: 'var(--glass-sheen), var(--glass-fill)',
                     backdropFilter: 'var(--hb-holo-blur)',
                     WebkitBackdropFilter: 'var(--hb-holo-blur)',
                   }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{
-                        fontFamily: UI, fontWeight: 700, fontSize: '0.62rem',
+                        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                        background: agentColor(info.agent_id),
+                        boxShadow: `0 0 6px ${agentColor(info.agent_id)}`,
+                      }} />
+                      <span style={{
+                        fontFamily: UI, fontWeight: 700, fontSize: '0.78rem',
                         color: agentColor(info.agent_id), letterSpacing: '0.08em',
                       }}>
                         {monogram(info.agent_id)}
                       </span>
                       <span style={{
-                        fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.08em',
-                        color: 'var(--hb-text-dim)', textTransform: 'uppercase',
+                        fontSize: '0.8125rem', color: 'var(--hb-text)',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
-                        {info.agent_id}
+                        {info.name}
                       </span>
                     </span>
                     <AgentModelPicker
+                      large
                       info={info}
                       models={models}
                       onPin={async m => {
@@ -643,15 +692,16 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           {legionInfos.length > 0 && (
             <div style={{ marginTop: '0.85rem' }}>
               <p style={{
-                fontFamily: MONO, fontSize: '0.55rem', letterSpacing: '0.22em',
-                color: 'var(--hb-amber)', marginBottom: '0.35rem',
+                fontFamily: UI, fontSize: '0.78rem', fontWeight: 600,
+                letterSpacing: '0.12em', textTransform: 'uppercase',
+                color: 'var(--hb-text-dim)', marginBottom: 10,
               }}>
-                {'>>:'} LEGION CORES_ PER-WORKER MODEL ROUTING
+                Per-worker model routing (the Legion)
               </p>
               {legionInfos[0].deployment_pin && (
                 <p style={{
-                  fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.1em',
-                  color: 'var(--hb-amber-bright)', marginBottom: '0.35rem',
+                  fontSize: '0.8125rem',
+                  color: 'var(--hb-cyan-bright)', marginBottom: 10,
                 }}>
                   LEGION_MODEL_OVERRIDE={legionInfos[0].deployment_pin} — every worker is
                   pinned there; these selectors stay inert until it is cleared.
@@ -659,28 +709,33 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {legionInfos.map(info => (
-                  <div key={info.worker_id} className="hb-glass-xs" style={{
-                    width: 148, padding: '0.35rem 0.4rem',
-                    display: 'flex', flexDirection: 'column', gap: 4,
-                    border: `1px solid ${info.override ? 'var(--hb-amber)' : 'rgba(var(--hb-accent-rgb),0.2)'}`,
-                    background: 'rgba(20, 42, 52, 0.15)',
+                  <div key={info.worker_id} className="hb-glass-sm" style={{
+                    width: 176, padding: '10px 12px',
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                    border: `1px solid ${info.override ? 'var(--hb-edge-bright)' : 'var(--hb-edge)'}`,
+                    background: 'var(--glass-sheen), var(--glass-fill)',
                     backdropFilter: 'var(--hb-holo-blur)',
                     WebkitBackdropFilter: 'var(--hb-holo-blur)',
                   }}>
                     <span style={{
-                      fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.08em',
-                      color: 'var(--hb-text-dim)', textTransform: 'uppercase',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8,
+                      overflow: 'hidden', whiteSpace: 'nowrap',
                     }}>
-                      {info.worker_id} · {info.effort}
+                      <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text)', textTransform: 'capitalize' }}>
+                        {info.worker_id}
+                      </span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--hb-text-faint)', flexShrink: 0 }}>
+                        {info.effort}
+                      </span>
                     </span>
                     <GlassSelect
+                      large
                       value={info.override ?? ''}
                       options={[
-                        { value: '', label: `EFFORT (${info.derived_from})` },
+                        { value: '', label: `Effort — ${info.derived_from}` },
                         ...models.map(m => ({
                           value: m.id,
-                          label: m.name.toUpperCase(),
+                          label: m.name,
                           group: m.provider ?? 'anthropic',
                         })),
                       ]}
@@ -703,56 +758,63 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
       </Panel>
 
       {/* ── Right column — token budget + response trace ─────────────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, overflow: 'hidden' }}>
-        <Panel title="TOKEN_BUDGET" style={{ flexShrink: 0, animation: 'hbRise 0.4s 0.16s ease both' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '0.2rem 0.1rem 0.45rem' }}>
-            <span className="hb-num-thin" style={{ fontSize: '2.6rem', color: gaugeColor }}>
-              {pct}<span style={{ fontSize: '1.1rem' }}>%</span>
-            </span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0, overflow: 'hidden' }}>
+        <Panel title="Context budget" style={{ flexShrink: 0, animation: 'hbRise 0.4s 0.16s ease both' }}>
+          {/* The deck's budget block: the figure leads, the limit sits beside
+              it, one bar underneath. The old version made the PERCENTAGE the
+              hero next to a stacked "PREFIX / SATURATION" caption, which is a
+              derived number shouting over the real one. */}
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 }}>
             <span style={{
-              fontFamily: UI, fontSize: '0.56rem', fontWeight: 700,
-              letterSpacing: '0.16em', color: 'var(--hb-icon)', lineHeight: 1.5,
+              fontFamily: UI, fontSize: '1.9rem', fontWeight: 600,
+              color: gaugeColor, fontVariantNumeric: 'tabular-nums', lineHeight: 1,
             }}>
-              PREFIX<br/>SATURATION
+              {budgetTokens.used >= 1000
+                ? `${(budgetTokens.used / 1000).toFixed(1)}k`
+                : budgetTokens.used}
+            </span>
+            <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-faint)' }}>
+              / {(budgetTokens.limit / 1000).toFixed(0)}k ITPM
             </span>
           </div>
-          <SegBar pct={pct} color={gaugeColor} />
-          <p style={{
-            fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.06em',
-            color: 'var(--hb-icon)', margin: '0.35rem 0 0.6rem',
-          }}>
-            ~{budgetTokens.used.toLocaleString()} / {budgetTokens.limit.toLocaleString()} ITPM
+          <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+            <span style={{ display: 'block', height: '100%', width: `${pct}%`, background: gaugeColor }} />
+          </div>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', margin: '10px 0 14px' }}>
+            Tool definitions carried on every prompt
           </p>
+
           {[...servers].sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(s => (
-            <div key={s.server} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-              <span style={{
-                width: 64, flexShrink: 0, fontFamily: MONO, fontSize: '0.5rem',
-                color: s.active ? 'var(--hb-icon-bright)' : 'var(--hb-icon-dim)', textTransform: 'uppercase',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                {s.server}
-              </span>
-              <span style={{ flex: 1, height: 4, background: 'rgba(var(--hb-accent-rgb),0.1)' }}>
+            <div key={s.server} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', marginBottom: 5 }}>
+                <span style={{
+                  color: s.active ? 'var(--hb-text)' : 'var(--hb-text-dim)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {s.label}
+                </span>
+                <span style={{ color: 'var(--hb-text-faint)', flexShrink: 0, marginLeft: 8, fontVariantNumeric: 'tabular-nums' }}>
+                  {s.active ? `${(s.tokens / 1000).toFixed(1)}k tok` : 'standby'}
+                </span>
+              </div>
+              <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
                 <span style={{
                   display: 'block', height: '100%',
-                  width: `${Math.round((s.tokens / maxServerTokens) * 100)}%`,
-                  background: s.active ? 'rgba(var(--hb-cyan-bright-rgb),0.6)' : 'rgba(var(--hb-accent-rgb),0.25)',
+                  width: s.active ? `${Math.round((s.tokens / maxServerTokens) * 100)}%` : '0%',
+                  background: 'var(--hb-cyan)',
                 }} />
-              </span>
-              <span style={{ width: 30, flexShrink: 0, textAlign: 'right', fontFamily: MONO, fontSize: '0.5rem', color: 'var(--hb-icon)' }}>
-                {(s.tokens / 1000).toFixed(1)}K
-              </span>
+              </div>
             </div>
           ))}
         </Panel>
 
-        <Panel title="RESPONSE_TRACE" style={{ flex: 1, animation: 'hbRise 0.4s 0.22s ease both' }}>
+        <Panel title="Response trace" style={{ flex: 1, animation: 'hbRise 0.4s 0.22s ease both' }}>
           <Spark samples={rtt} />
           <div style={{
             display: 'flex', justifyContent: 'space-between',
-            fontFamily: MONO, fontSize: '0.52rem', color: 'var(--hb-icon)', marginTop: 4,
+            fontSize: '0.8125rem', color: 'var(--hb-text-faint)', marginTop: 8,
           }}>
-            <span>RTT / 4s PROBE</span>
+            <span>RTT · 4s probe</span>
             <span style={{ color: 'var(--hb-cyan-bright)' }}>
               {health.latencyMs != null ? `${health.latencyMs}ms` : '--'}
             </span>
@@ -761,25 +823,25 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
       </div>
 
       {/* ── Bottom band — knowledge bank: what SPEDA knows about the owner ─ */}
-      <Panel title="DATA_BANKS // KNOWLEDGE" light pad={false}
+      <Panel title="Memory files" light pad={false}
         right={
           <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.08em', color: 'var(--hb-icon)', textTransform: 'none' }}>
-              {memFiles.length} FILES
+            <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>
+              {memFiles.length} files
             </span>
             <button
               onClick={() => setBanksWide(w => !w)}
               title={banksWide ? 'Retract (Esc)' : 'Extend the knowledge bank'}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5,
+                display: 'flex', alignItems: 'center', gap: 6,
                 border: 'none', background: 'transparent', cursor: 'pointer',
                 padding: '0 2px',
-                fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.14em',
-                color: banksWide ? 'var(--hb-amber)' : 'var(--hb-icon)',
+                fontSize: '0.8125rem',
+                color: banksWide ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
                 transition: 'color 0.15s',
               }}
             >
-              {banksWide ? 'RETRACT_' : 'EXTEND_'}
+              {banksWide ? 'Retract' : 'Extend'}
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
                 style={{ transform: banksWide ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s cubic-bezier(0.22, 0.9, 0.3, 1)' }}>
                 <polyline points="6 14 12 8 18 14" />
@@ -790,14 +852,9 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         style={{ gridColumn: '1 / -1', animation: 'hbRise 0.45s 0.26s ease both' }}
       >
         {memFiles.length === 0 ? (
-          <div style={{
-            margin: '0.8rem', width: 160, padding: '0.8rem 0',
-            border: '1px solid rgba(var(--hb-accent-rgb),0.3)', background: 'rgba(var(--hb-cyan-dim-rgb),0.25)',
-            textAlign: 'center', fontFamily: UI, fontSize: '0.72rem', fontWeight: 700,
-            letterSpacing: '0.2em', color: 'var(--hb-icon)',
-          }}>
-            NO RECORDS
-          </div>
+          <p style={{ margin: '4px 18px', fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>
+            No memory files yet — nothing has been written to the record.
+          </p>
         ) : (
           <div style={{
             display: 'flex', minHeight: 0,
@@ -810,25 +867,35 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               borderRight: '1px solid rgba(var(--hb-accent-rgb),0.14)',
             }}>
               {memFiles.map(f => {
-                const name = (f.path.split('/').pop() || f.path).replace(/\.md$/, '').toUpperCase()
+                // The filename as it actually is — these are real .md files on
+                // the server, and SHOUTING them in mono made a list of eight
+                // documents read like a register of alarm codes.
+                const name = f.path.split('/').pop() || f.path
                 const sel = f.path === memPath
                 return (
                   <button
                     key={f.path}
                     onClick={() => setMemPath(f.path)}
+                    className={sel ? 'hb-row hb-row-active' : 'hb-row'}
                     style={{
-                      width: '100%', padding: '0.3rem 0.55rem',
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      border: 'none', cursor: 'pointer', textAlign: 'left',
-                      borderLeft: sel ? '2px solid var(--hb-amber)' : '2px solid transparent',
-                      background: sel ? 'rgba(217,156,68,0.1)' : 'transparent',
-                      fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.08em',
-                      color: sel ? '#f2b75c' : 'var(--hb-icon)',
-                      transition: 'background 0.1s, color 0.1s, border-color 0.1s',
+                      width: '100%', padding: '9px 12px', marginBottom: 2,
+                      display: 'flex', alignItems: 'center', gap: 9,
+                      cursor: 'pointer', textAlign: 'left',
+                      fontSize: '0.875rem',
+                      color: sel ? 'var(--hb-text)' : 'var(--hb-text-dim)',
+                      fontWeight: sel ? 500 : 400,
                     }}
                   >
-                    <span style={{ color: sel ? 'var(--hb-amber)' : 'var(--hb-icon-dim)' }}>▸</span>
-                    {name}
+                    {/* document glyph — same family as the deck's rail icons */}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                      style={{ flexShrink: 0, color: sel ? 'var(--hb-cyan)' : 'var(--hb-icon-dim)' }}>
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {name}
+                    </span>
                   </button>
                 )
               })}
@@ -843,31 +910,33 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               {(() => {
                 const file = selFile
                 if (!file) return null
+                // Real buttons on the deck's control corner, not 0.5rem mono
+                // chips with a hand-rolled 3px radius.
                 const btn = {
-                  fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.12em',
-                  padding: '0.15rem 0.5rem', cursor: 'pointer',
-                  background: 'transparent', color: 'var(--hb-icon)',
-                  border: '1px solid rgba(var(--hb-accent-rgb),0.28)', borderRadius: 3,
+                  fontSize: '0.8125rem', letterSpacing: 0,
+                  height: 30, padding: '0 13px', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center',
+                  color: 'var(--hb-text-dim)',
                 } as const
                 const toolbar = (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center', marginBottom: 4, columnSpan: 'all' }}>
-                    {saveMsg && <span style={{ fontFamily: MONO, fontSize: '0.5rem', color: 'var(--hb-amber)', marginRight: 'auto' }}>{saveMsg}</span>}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center', marginBottom: 10, columnSpan: 'all' }}>
+                    {saveMsg && <span style={{ fontSize: '0.8125rem', color: 'var(--hb-cyan-bright)', marginRight: 'auto' }}>{saveMsg}</span>}
                     {file.updated_at && !editing && !revs && (
-                      <span style={{ fontFamily: MONO, fontSize: '0.5rem', color: 'var(--hb-icon-dim)' }}>LAST WRITE {fmtDate(file.updated_at)}</span>
+                      <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>Last write {fmtDate(file.updated_at)}</span>
                     )}
                     {file.editable && !editing && !revs && (
                       <>
-                        <button style={btn} onClick={openHistory}>HISTORY</button>
-                        <button style={btn} onClick={startEdit}>EDIT</button>
+                        <button className="hb-btn" style={btn} onClick={openHistory}>History</button>
+                        <button className="hb-btn" style={btn} onClick={startEdit}>Edit</button>
                       </>
                     )}
                     {editing && (
                       <>
-                        <button style={btn} onClick={() => setEditing(false)} disabled={saving}>CANCEL</button>
-                        <button style={{ ...btn, color: '#f2b75c', borderColor: 'var(--hb-amber)' }} onClick={commitEdit} disabled={saving}>{saving ? 'SAVING…' : 'COMMIT'}</button>
+                        <button className="hb-btn" style={btn} onClick={() => setEditing(false)} disabled={saving}>Cancel</button>
+                        <button className="hb-btn hb-btn-tint" style={{ ...btn, color: 'var(--hb-cyan-bright)' }} onClick={commitEdit} disabled={saving}>{saving ? 'Saving…' : 'Commit'}</button>
                       </>
                     )}
-                    {revs && <button style={btn} onClick={() => setRevs(null)}>CLOSE</button>}
+                    {revs && <button className="hb-btn" style={btn} onClick={() => setRevs(null)}>Close</button>}
                   </div>
                 )
 
@@ -882,7 +951,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                         width: '100%', minHeight: banksWide ? '46vh' : 200, resize: 'vertical',
                         background: 'rgba(0,0,0,0.28)', color: 'var(--hb-text-dim)',
                         border: '1px solid rgba(var(--hb-accent-rgb),0.28)', borderRadius: 4,
-                        fontFamily: MONO, fontSize: '0.72rem', lineHeight: 1.5, padding: '0.5rem 0.6rem',
+                        fontSize: '0.875rem', lineHeight: 1.6, padding: '12px 14px',
                       }}
                     />
                   </div>
@@ -891,12 +960,12 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                 if (revs) return (
                   <div style={{ columnSpan: 'all' }}>
                     {toolbar}
-                    {revs.length === 0 && <p style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)' }}>// NO REVISIONS YET</p>}
+                    {revs.length === 0 && <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>No revisions yet</p>}
                     {revs.map(r => (
                       <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.2rem 0', borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.08)' }}>
-                        <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)', minWidth: 118 }}>{fmtDate(r.created_at)}</span>
-                        <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: r.author === 'owner' ? '#f2b75c' : 'var(--hb-cyan)', minWidth: 64 }}>{r.author}</span>
-                        <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon)', flex: 1 }}>{r.action}</span>
+                        <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', minWidth: 118 }}>{fmtDate(r.created_at)}</span>
+                        <span style={{ fontSize: '0.8125rem', color: r.author === 'owner' ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)', minWidth: 64 }}>{r.author}</span>
+                        <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-dim)', flex: 1 }}>{r.action}</span>
                         <button style={btn} onClick={() => doRestore(r.id)}>RESTORE</button>
                       </div>
                     ))}
@@ -906,8 +975,8 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                 if (!file.content.trim()) return (
                   <>
                     {toolbar}
-                    <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: 'var(--hb-icon-dim)', padding: '0.3rem 0' }}>
-                      // EMPTY — SPEDA HAS NOT WRITTEN HERE YET
+                    <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)', padding: '4px 0' }}>
+                      Empty — nothing has been written to this file yet.
                     </p>
                   </>
                 )

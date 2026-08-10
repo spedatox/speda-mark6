@@ -7,10 +7,11 @@ import { useIsMobile } from '../lib/useIsMobile'
 import { fetchMessages } from '../lib/api'
 import { loadMessages, saveMessages } from '../store/messageCache'
 import Sidebar from './Sidebar'
-import Header from './Header'
+import Header, { DeckRail } from './Header'
 import ChatMain from './ChatMain'
 import SettingsModal from './SettingsModal'
 import SystemsBoard from './SystemsBoard'
+import TelemetryColumn from './TelemetryColumn'
 import CommsTray from './CommsTray'
 import PartyRosterStrip from './PartyRosterStrip'
 import RosterModelWindow from './RosterModelWindow'
@@ -77,7 +78,16 @@ export default function Layout({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // The right telemetry column. Permanent by default — it is the glanceable
+  // half of the Systems Board — but collapsible from the rail, because two
+  // 280px columns is a lot of horizontal room on a laptop.
+  const telemetryOpen = settings.telemetryOpen !== false
+
   const isMobile = useIsMobile()
+  // Rail geometry, stated once: five 44px tiles on 8px gaps, one of which
+  // (war room) hides inside the war room itself.
+  const railTiles = inWarRoom ? 4 : 5
+  const railWidth = railTiles * 44 + (railTiles - 1) * 8
   // Mobile drawer state is session-local and starts closed — the drawer only
   // ever opens from an explicit tap on the header menu button.
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -108,7 +118,7 @@ export default function Layout({
   }, [dispatch])
 
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: 'var(--bg-primary)' }}>
+    <div style={{ position: 'relative', display: 'flex', height: '100%', overflow: 'hidden', background: 'var(--bg-primary)' }}>
       {/* Mobile drawer backdrop — full glassmorphic blur sheet; tap to dismiss */}
       {isMobile && drawerOpen && (
         <div
@@ -135,20 +145,23 @@ export default function Layout({
         switchAgent={switchAgent}
       />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+      {/* The chat column. Inset on all four sides so it reads as an island
+          floating on the void rather than a pane bolted to the window edge —
+          the telemetry column supplies its own right margin, so this one only
+          closes the gap when the column is folded away. */}
+      <div style={{
+        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0,
+        margin: isMobile ? 0 : `20px ${telemetryOpen ? 0 : 20}px 20px 0`,
+      }}>
         <Header
           config={config}
           agentId={profile.agentId}
           sidebarOpen={isMobile ? false : sidebarOpen}
           onToggleSidebar={() => (isMobile ? setDrawerOpen(true) : update({ sidebarOpen: !sidebarOpen }))}
-          boardOpen={boardOpen}
-          onToggleBoard={() => setBoardOpen(v => !v)}
-          commsOpen={commsOpen}
-          onToggleComms={() => setCommsOpen(v => !v)}
-          voiceOpen={voiceOpen}
-          onToggleVoice={() => setVoiceOpen(v => !v)}
-          inWarRoom={inWarRoom}
-          onOpenWarRoom={onEnterWarRoom}
+          // The rail floats over this row's right end when the telemetry column
+          // is folded away; while it is open the column already holds that
+          // space, so the title row needs none.
+          railClearance={isMobile || telemetryOpen ? 0 : railWidth}
         />
         {inWarRoom && (
           <PartyRosterStrip
@@ -163,8 +176,33 @@ export default function Layout({
           onSelectSession={handleSelectSession}
           voiceOpen={voiceOpen && !isMobile}
           onCloseVoice={() => setVoiceOpen(false)}
+          partyEngaged={partyEngaged}
         />
       </div>
+
+      {/* Right island — telemetry. Starts below the rail's row so the floating
+          tiles clear it, exactly as the deck has it. */}
+      {!isMobile && telemetryOpen && (
+        <div style={{ display: 'flex', flexDirection: 'column', paddingTop: 84 }}>
+          <TelemetryColumn config={config} agentId={profile.agentId} open />
+        </div>
+      )}
+
+      {/* The mode switches — floated over the deck, above the telemetry column */}
+      {!isMobile && (
+        <DeckRail
+          boardOpen={boardOpen}
+          onToggleBoard={() => setBoardOpen(v => !v)}
+          commsOpen={commsOpen}
+          onToggleComms={() => setCommsOpen(v => !v)}
+          voiceOpen={voiceOpen}
+          onToggleVoice={() => setVoiceOpen(v => !v)}
+          telemetryOpen={telemetryOpen}
+          onToggleTelemetry={() => update({ telemetryOpen: !telemetryOpen })}
+          inWarRoom={inWarRoom}
+          onOpenWarRoom={onEnterWarRoom}
+        />
+      )}
 
       {boardOpen && <SystemsBoard config={config} onClose={() => setBoardOpen(false)} />}
       {commsOpen && <CommsTray config={config} onClose={() => setCommsOpen(false)} />}

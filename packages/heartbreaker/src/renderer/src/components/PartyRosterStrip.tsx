@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchAgentComms } from '../lib/api'
 import type { AgentCommEntry } from '../lib/api'
 import type { AppConfig } from '../lib/types'
-import { ROSTER } from '../lib/agents'
-import { Avatar } from './CommBubble'
+import { PARTY_ROSTER } from '../lib/agents'
+import { AvatarStack } from './CommBubble'
 
 const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
@@ -51,90 +51,84 @@ export default function PartyRosterStrip({ config, engaged, onExit, onOpenConfig
     return c
   }, [partyEntries])
 
+  // Who is actually in the room: whoever the protocol has traffic with, plus
+  // the commander. Falls back to the full roster before anything has happened.
+  const present = useMemo(() => {
+    const s = new Set<string>()
+    for (const e of partyEntries) { s.add(e.from_agent); s.add(e.to_agent) }
+    s.delete('all')
+    return s.size > 1 ? PARTY_ROSTER.filter(id => s.has(id)) : PARTY_ROSTER
+  }, [partyEntries])
+
   return (
-    <div className="hb-holo" style={{
-      display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
-      margin: '0.45rem 0.6rem 0', padding: '0.32rem 0.65rem',
+    // The war room's bar, per the deck: a 70px header that states the grade,
+    // shows the room, and holds the only two controls that matter here.
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0,
+      height: 70, padding: '0 30px',
+      borderBottom: '1px solid rgba(255,255,255,0.06)',
       overflowX: 'auto',
       animation: 'hbRise 0.4s ease both',
     }}>
-      <span className="hb-round" style={{
-        width: 7, height: 7, flexShrink: 0,
-        background: 'var(--accent)',
-        boxShadow: '0 0 8px var(--accent)',
-        animation: engaged ? 'hbBlink 1.6s ease-in-out infinite' : 'none',
-      }} />
-      <span style={{
-        fontFamily: UI, fontSize: '0.68rem', fontWeight: 700,
-        letterSpacing: '0.16em', textTransform: 'uppercase',
-        color: 'var(--accent-hover)', whiteSpace: 'nowrap', flexShrink: 0,
+      <span className="glass-round" style={{
+        display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0,
+        height: 34, padding: '0 14px 0 10px',
+        background: 'rgba(217,156,68,0.12)',
+        border: '1px solid rgba(242,183,92,0.4)',
+        fontSize: '0.845rem', fontWeight: 600, letterSpacing: '0.06em',
+        color: 'var(--hb-amber-bright)',
       }}>
-        House Party Protocol
+        <span style={{
+          width: 7, height: 7, borderRadius: '50%',
+          background: 'var(--hb-amber-bright)', boxShadow: '0 0 8px var(--hb-amber-bright)',
+          animation: engaged ? 'hbPulse 1.4s ease-in-out infinite' : 'none',
+        }} />
+        {engaged ? 'House Party — Full Grade' : 'War Room — Standby'}
       </span>
+
+      {/* max 7 — SPEDA and the Superior Six, the whole party. Clipping at 6
+          left a "+1" hanging off the end of a roster that always fits. */}
+      <AvatarStack ids={present} size={38} max={7} />
+
       <span className="hb-hide-sm" style={{
-        fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.1em',
-        color: 'var(--hb-icon)', whiteSpace: 'nowrap',
+        fontSize: '0.875rem', color: 'var(--hb-text-dim)', whiteSpace: 'nowrap', flexShrink: 0,
       }}>
-        {engaged ? 'ALL HANDS · FULL GRADE' : 'STANDBY · ROSTER HELD'}
+        {working.size > 0
+          ? `${working.size} working`
+          : `${present.length} agent${present.length === 1 ? '' : 's'}${engaged ? ' · all online' : ' · held'}`}
       </span>
 
       <span style={{ flex: 1, minWidth: 8 }} />
 
-      {ROSTER.map(id => {
-        const busy = working.has(id)
-        return (
-          <span
-            key={id}
-            title={`${id.toUpperCase()} — ${busy ? 'working' : 'standby'}${doneCount[id] ? ` · ${doneCount[id]} done` : ''}`}
-            style={{ position: 'relative', flexShrink: 0, opacity: busy ? 1 : 0.6 }}
-          >
-            <Avatar id={id} size={22} />
-            <span className="hb-round" style={{
-              position: 'absolute', right: -1, bottom: -1, width: 7, height: 7,
-              background: busy ? 'var(--hb-amber)' : 'var(--hb-icon-dim)',
-              boxShadow: busy ? '0 0 6px rgba(242,183,92,0.9)' : 'none',
-              border: '1px solid rgba(4,9,12,0.8)',
-              animation: busy ? 'hbBlink 1.6s ease-in-out infinite' : 'none',
-            }} />
-          </span>
-        )
-      })}
-
-      <span className="hb-hide-sm" style={{
-        fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.1em',
-        color: working.size > 0 ? 'var(--hb-amber)' : 'var(--hb-icon)',
-        whiteSpace: 'nowrap', flexShrink: 0,
-      }}>
-        {working.size > 0 ? `${working.size} WORKING` : engaged ? 'CHANNEL OPEN' : 'STANDBY'}
-      </span>
-
       <button
-        className="hb-btn"
+        className="hb-btn glass-round"
         onClick={onOpenConfig}
         title="Roster cores — configure every agent's model"
         style={{
-          height: 22, padding: '0 0.55rem', gap: '0.35rem', flexShrink: 0,
-          fontFamily: UI, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.14em',
+          height: 36, padding: '0 18px', gap: 8, flexShrink: 0,
+          fontSize: '0.875rem', color: 'var(--hb-text-dim)',
         }}
       >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
           <circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
         </svg>
-        CORES
+        Roster
       </button>
 
       <button
-        className="hb-btn hb-btn-tint"
+        className="glass-round"
         onClick={onExit}
         title={engaged
           ? 'Stand down — end the protocol, dispatches return to the background tier'
           : 'Exit the war room — return to SPEDA'}
         style={{
-          height: 22, padding: '0 0.6rem', color: '#e8a196', flexShrink: 0,
-          fontFamily: UI, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.16em',
+          height: 36, padding: '0 18px', flexShrink: 0, cursor: 'pointer',
+          background: 'rgba(216,72,60,0.12)',
+          border: '1px solid rgba(216,72,60,0.35)',
+          fontSize: '0.875rem', fontWeight: 600, color: '#e5897c',
         }}
       >
-        {engaged ? 'STAND DOWN' : 'EXIT'}
+        {engaged ? 'Stand Down' : 'Exit'}
       </button>
     </div>
   )

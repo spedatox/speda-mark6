@@ -1,12 +1,16 @@
 /* ════════════════════════════════════════════════════════════════════════════
    SPEDA MARK VI — FUI design system
-   Reference: Iron Man 2 holographic UI (Prologue / Jayse Hansen)
+   Reference: the Heartbreaker design deck, Tur 11 (12a "Chat deck").
 
    Principles:
-   - Desaturated petrol-blue + steel-grey on near-black. Restraint over neon.
-   - Hairline 1px borders, corner brackets, ruler ticks. Precision, not bloom.
-   - Sharp rectangular panels. No rounded glowing cards.
-   - Tiny technical typography: caps, letter-spaced labels, monospace numerics.
+   - Steel-blue on near-black. Restraint over neon.
+   - The material is glass, not a coloured box: a near-white frost lit across
+     its face, a neutral 1px rim, a deep soft drop. Colour is reserved for the
+     things that MEAN something — the active row, your own message, a live
+     status, a focused field. Everything structural stays neutral.
+   - Generously rounded slabs that float as inset islands, not edge-to-edge
+     plates. The radius scale below is the whole vocabulary.
+   - Tiny technical typography: caps, letter-spaced labels, tabular numerics.
    - Glow is minimal and cold. Information density reads as instrumentation.
    ════════════════════════════════════════════════════════════════════════════ */
 
@@ -46,59 +50,65 @@
      their own JetBrains/Fira monospace in CodeBlock.tsx. */
   --font-mono:    'Inter', -apple-system, 'Segoe UI', sans-serif;                 /* labels/readouts */
 
-  /* ── Core palette ─────────────────────────────────────────────────────── */
-  --hb-void:        #04080a;   /* deepest background */
-  --hb-base:        #060c0f;   /* base background */
-  --hb-petrol:      #0b1a22;   /* panel fill base */
-  --hb-steel:       #13303b;   /* raised surface */
-  --hb-line:        rgba(var(--hb-accent-rgb), 0.26);  /* hairline border */
-  --hb-line-bright: rgba(var(--hb-accent-rgb), 0.55); /* active border */
-  --hb-cyan:        #36abca;   /* primary accent — desaturated, cold */
-  --hb-cyan-bright: #5fcce6;   /* active accent */
-  --hb-cyan-dim:    #1d5d70;   /* dim accent */
+  /* ── Core palette ─────────────────────────────────────────────────────────
+     These are only the boot-time defaults. applyTheme() (profile/theme.ts)
+     overwrites every one of them on :root at startup and on every agent swap,
+     re-hued to the active brand — so edit the STRUCTURE here and in the
+     BASE_HEX / BASE_RGBA tables there together, never one alone. */
+  --hb-void:        #05070a;   /* deepest background */
+  --hb-base:        #080b10;   /* base background */
+  --hb-petrol:      #0e1319;   /* panel fill base */
+  --hb-steel:       #161d26;   /* raised surface */
+  --hb-line:        rgba(219, 230, 236, 0.08);        /* structural hairline — neutral */
+  --hb-line-bright: rgba(var(--hb-accent-rgb), 0.30); /* active border — carries the brand */
+  --hb-cyan:        #7fa4c4;   /* primary accent — steel-blue, cold */
+  --hb-cyan-bright: #a9c6dc;   /* active accent */
+  --hb-cyan-dim:    #5b7691;   /* dim accent — still readable on the void */
   /* Raw accent triplets — applyTheme() overrides these per agent so every
      rgba(var(--hb-…-rgb), A) in the UI recolours with the brand. */
-  --hb-accent-rgb:      54, 171, 202;
-  --hb-cyan-bright-rgb: 95, 204, 230;
-  --hb-cyan-dim-rgb:    29, 93, 112;
+  --hb-accent-rgb:      127, 164, 196;
+  --hb-cyan-bright-rgb: 169, 198, 220;
+  --hb-cyan-dim-rgb:    91, 118, 145;
   /* Dim icon scale — inactive chrome icons. Re-hued per agent. */
-  --hb-icon:        #3a6472;
-  --hb-icon-dim:    #2e5260;
-  --hb-icon-bright: #5d7f8a;
+  --hb-icon:        #7c8f9b;
+  --hb-icon-dim:    #5d6f7a;
+  --hb-icon-bright: #93a6b1;
   --hb-amber:        #d99c44;  /* Stark orange — selection, folders, timestamps */
   --hb-amber-bright: #f2b75c;  /* active orange */
   --hb-amber-dim:    rgba(217,156,68,0.14); /* orange fill */
   --hb-red:         #c84a3a;   /* alert */
   --hb-green:       #4fa377;   /* nominal */
-  --hb-text:        #cadbe2;   /* primary text — cool light */
-  --hb-text-dim:    #7a96a1;   /* secondary */
-  --hb-text-faint:  #46626d;   /* muted / captions */
+  --hb-text:        #dbe6ec;   /* primary text — cool light */
+  --hb-text-dim:    #93a6b1;   /* secondary */
+  --hb-text-faint:  #5d6f7a;   /* muted / captions */
   /* White header bars — "IP ADDRESS BOOK" / "SEARCH CONFIGURATION" style */
   --hb-bar-light:      linear-gradient(180deg, #edf3f5 0%, #cfdade 55%, #b9c9cf 100%);
   --hb-bar-light-text: #16242c;
-  /* Cyan filled header bars — "_FROM A DHCP SERVER" style */
-  --hb-bar-cyan:       linear-gradient(180deg, #43aecd 0%, #2b85a3 70%, #226e88 100%);
-  --hb-bar-cyan-text:  #eafaff;
+  /* Accent-filled header bars — rebuilt per brand by applyTheme(). */
+  --hb-bar-cyan:       linear-gradient(180deg, #a9c6dc 0%, #7fa4c4 70%, #5b7691 100%);
+  --hb-bar-cyan-text:  #eef3f6;
 
-  /* ── Liquid glass (iOS-26 reference grade) ────────────────────────────────
-     The material is a thick frosted slab, not a tint: a milky cool-white
-     fill gives the glass visible body over the dark void, deep blur frosts
-     what passes through, and the slab is rimmed by light — a bright specular
-     catch on top, a fainter one underneath (the slab's thickness), and a
-     soft drop that lifts it off the background. Still zero gradient fills. */
-  --hb-edge:        rgba(var(--hb-accent-rgb), 0.22); /* lit glass rim */
-  --hb-edge-bright: rgba(var(--hb-accent-rgb), 0.55); /* focused / hovered rim */
+  /* ── Liquid glass ─────────────────────────────────────────────────────────
+     The material is a thick frosted slab, not a tint: a near-white frost gives
+     the glass visible body over the dark void, deep blur frosts what passes
+     through, and the slab is rimmed by light — a specular catch along the top
+     and a deep soft drop that lifts it off the background.
+
+     The resting rim is NEUTRAL WHITE, not the accent. A pane of glass does not
+     take the colour of what it frames; making the rim brand-coloured is what
+     turned every panel into a tinted box. --hb-edge-bright (accent) is the
+     focused/active rim, and that is where the brand shows. */
+  --hb-edge:        rgba(255, 255, 255, 0.10);        /* resting glass rim — neutral */
+  --hb-edge-bright: rgba(var(--hb-accent-rgb), 0.40); /* focused / hovered rim */
   --hb-holo-fill:   var(--glass-tint);          /* re-hued frost (follows the agent) */
-  --hb-holo-blur:   blur(28px) saturate(140%);  /* the frost itself */
+  --hb-holo-blur:   blur(38px) saturate(160%);  /* the frost itself */
   --hb-holo-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.25),   /* top specular catch */
-    inset 0 -1px 0 0 rgba(255, 255, 255, 0.07),  /* bottom rim — slab thickness */
-    0 8px 32px rgba(0, 0, 0, 0.35);              /* soft lift off the void */
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.16),   /* top specular catch */
+    0 24px 60px rgba(0, 0, 0, 0.5);              /* deep, soft lift off the void */
   /* Focused / hovered — brighter catch, same construction */
   --hb-holo-shadow-active:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.4),
-    inset 0 -1px 0 0 rgba(255, 255, 255, 0.1),
-    0 8px 32px rgba(0, 0, 0, 0.4);
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.24),
+    0 24px 60px rgba(0, 0, 0, 0.55);
 
   /* ── ONE unified glass material (the single .glass recipe) ─────────────────
      Every glass component — buttons, dropdowns, panels, headers, chips, the
@@ -109,24 +119,35 @@
      dark occluding base (nested backdrop roots cancel a child's blur, so the
      fill must occlude on its own) with a milky tint layered on top. Rounded
      corners per the reference. Tint/active/amber are thin modifiers on top. */
-  --glass-menu:     rgba(10, 20, 27, 0.94);        /* opaque fill for dropdowns/menus */
-  --glass-r:        14px;                          /* unified rounded corner */
-  --glass-r-pill:   9999px;                        /* .glass-round opt-in */
-  --glass-fill:     rgba(8, 16, 24, 0.62);         /* occluding dark base */
-  --glass-tint:     rgba(190, 215, 235, 0.06);     /* milky cool-white wash */
-  --glass-tint-hi:  rgba(190, 215, 235, 0.13);     /* hover wash */
+  --glass-menu:     rgba(11, 16, 22, 0.95);        /* opaque fill for dropdowns/menus */
+  --glass-fill:     rgba(7, 11, 17, 0.42);         /* occluding dark base */
+  --glass-tint:     rgba(230, 238, 246, 0.07);     /* frost — lit face */
+  --glass-tint-2:   rgba(230, 238, 246, 0.02);     /* frost — shaded face */
+  --glass-tint-hi:  rgba(230, 238, 246, 0.12);     /* hover wash */
+  /* The slab is lit ACROSS its face at 160deg, not washed flat. Two stops. */
+  --glass-sheen:    linear-gradient(160deg, var(--glass-tint), var(--glass-tint-2));
+  --glass-sheen-hi: linear-gradient(160deg, var(--glass-tint-hi), var(--glass-tint));
   --glass-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.28),     /* top specular streak */
-    inset 1px 0 0 0 rgba(255, 255, 255, 0.10),     /* left light edge */
-    inset 0 -1px 0 0 rgba(255, 255, 255, 0.06),    /* bottom rim (slab body) */
-    inset 0 0 2px 1px rgba(255, 255, 255, 0.05),   /* inner glass glow */
-    0 8px 32px rgba(0, 0, 0, 0.35);                /* soft lift off the void */
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.16),     /* top specular streak */
+    0 24px 60px rgba(0, 0, 0, 0.5);                /* deep, soft lift off the void */
   --glass-shadow-active:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.42),
-    inset 1px 0 0 0 rgba(255, 255, 255, 0.16),
-    inset 0 -1px 0 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 3px 1px rgba(255, 255, 255, 0.07),
-    0 10px 34px rgba(0, 0, 0, 0.42);
+    inset 0 1.5px 0 0 rgba(255, 255, 255, 0.24),
+    0 24px 60px rgba(0, 0, 0, 0.55);
+
+  /* ── Radius scale — the rounded world ─────────────────────────────────────
+     Five stops, straight off the reference deck. Every rounded surface in the
+     app picks one of these; nothing invents its own number.
+       island  full-height columns, modal shells, the standing panels
+       card    message bubbles, chart/tool cards, inline blocks
+       ctl     rows, list items, buttons, the composer's inner controls
+       tile    icon tiles, small square affordances, chips with a glyph
+       pill    status pills, tags, anything fully round */
+  --r-island:       26px;
+  --r-card:         22px;
+  --r-ctl:          16px;
+  --r-tile:         14px;
+  --glass-r:        var(--r-card);                 /* default glass corner */
+  --glass-r-pill:   9999px;                        /* .glass-round opt-in */
 
   /* ── Map the app's existing variables onto the FUI palette ───────────────
      The ported components reference these — redefining them reskins the whole
@@ -147,8 +168,8 @@
   --border:         var(--hb-line);
   --border-focus:   var(--hb-line-bright);
 
-  --scrollbar-thumb:       rgba(70, 140, 160, 0.32);
-  --scrollbar-thumb-hover: rgba(90, 175, 200, 0.55);
+  --scrollbar-thumb:       rgba(var(--hb-accent-rgb), 0.28);
+  --scrollbar-thumb-hover: rgba(var(--hb-cyan-bright-rgb), 0.55);
 
   --accent:        var(--hb-cyan);
   --accent-hover:  var(--hb-cyan-bright);
@@ -158,25 +179,30 @@
 
   --shadow-lg: 0 0 0 1px rgba(var(--hb-accent-rgb),0.18), 0 18px 50px rgba(0,0,0,0.6);
 
-  /* 268 not 248 — the header now leads with the agent's logo, and the longest
-     brand ("NightCrawler Mark III") needs the extra room to keep its model
-     number off the truncation edge. */
-  --sidebar-width: 268px;
+  /* 280 to match the reference deck's standing columns — and the longest brand
+     ("NightCrawler Mark III") needs the room to keep its model number off the
+     truncation edge. The right telemetry column is the same width. */
+  --sidebar-width: 280px;
 
-  /* Sharp world — radii collapse to 0 */
-  --radius-bubble: 0; --radius-input: 0; --radius-card: 0;
-  --radius-sm: 0; --radius-xs: 0;
+  /* Legacy aliases from the ported components — mapped onto the scale above so
+     a component that still asks for --radius-card gets the right corner. */
+  --radius-bubble: var(--r-card); --radius-input: var(--r-ctl); --radius-card: var(--r-card);
+  --radius-sm: var(--r-tile); --radius-xs: 8px;
 }
 
-/* ── Reset — chrome stays structurally sharp (0px grounds the app window);
-   glass layers opt into the 4px micro-radius below. ─────────────────────── */
+/* ── Reset ────────────────────────────────────────────────────────────────
+   The blanket `border-radius: 0 !important` stays for now: it is the only
+   thing keeping ~69 stray inline radii across 21 ported components from
+   surfacing all at once at whatever value they happened to be written at.
+   Rounding is therefore OPT-IN, via the scale below or the .glass material.
+   This reset comes OFF once the last screen has been converted onto the
+   tokens — that is the final step of the revamp, not this one. */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0 !important; }
 .hb-round, .hb-round * { border-radius: 9999px !important; }   /* opt-out for gauges/dials */
-/* Liquid-glass radius scale (per iOS-26 reference) — chrome bars stay 0px */
-.hb-glass     { border-radius: 16px !important; }
-.hb-glass-top { border-radius: 16px 16px 0 0 !important; }
-.hb-glass-sm  { border-radius: 12px !important; }
-.hb-glass-xs  { border-radius: 9px !important; }
+/* The radius scale opt-ins (.hb-island / .hb-glass / -sm / -xs / .hb-tile) are
+   declared AFTER the .glass material further down — that rule also sets a
+   radius, and at equal specificity the later declaration is the one that wins.
+   Declaring them here as well would silently lose to it. */
 
 /* Etched-glass seams — structural boundaries with physical light behavior.
    A real glass edge has TWO lines, not a colored stroke: a light-catching
@@ -249,20 +275,138 @@
 .hb-query-box,
 .hb-chip-amber {
   border-radius: var(--glass-r) !important;
-  background:
-    linear-gradient(var(--glass-tint), var(--glass-tint)),
-    var(--glass-fill);
+  background: var(--glass-sheen), var(--glass-fill);
   backdrop-filter: var(--hb-holo-blur);
   -webkit-backdrop-filter: var(--hb-holo-blur);
   border: 1px solid var(--hb-edge);
   box-shadow: var(--glass-shadow);
 }
 
+/* ── The radius scale, applied ──────────────────────────────────────────────
+   Order matters and is the whole reason these sit here rather than up with the
+   reset: every rule in this group has the same specificity as the .glass base
+   above, so the LAST matching declaration wins. Widest first, tightest last —
+   an element carrying both .hb-glass and .hb-tile is a tile. */
+.hb-island    { border-radius: var(--r-island) !important; }
+.hb-glass     { border-radius: var(--r-card) !important; }
+.hb-glass-top { border-radius: var(--r-card) var(--r-card) 0 0 !important; }
+/* Controls take the tighter corner — a 22px button reads as a lozenge, and the
+   deck's buttons, fields and header plates are all on the 16px stop. */
+.hb-btn, .hb-field, .hb-head-light, .hb-head-cyan, .hb-head-glass, .hb-panel-head,
+.hb-glass-sm {
+  border-radius: var(--r-ctl) !important;
+}
+/* Square glyph affordances — list rows and the deck rail's tiles. */
+.hb-glass-xs, .hb-tile { border-radius: var(--r-tile) !important; }
+
+/* ── Code palette ───────────────────────────────────────────────────────────
+   react-syntax-highlighter ships vscDarkPlus, which is VS Code's purple/pink
+   scheme — it fights the steel deck every time a code block appears. These
+   overrides retint its tokens onto the deck's four working colours (the same
+   set the reference deck uses): steel-blue for keywords and structure, plain
+   text for identifiers, amber for literals, green for strings and additions.
+   Only the hues change; the theme's weights and italics are left alone. */
+.hb-code .token.keyword,
+.hb-code .token.builtin,
+.hb-code .token.class-name,
+.hb-code .token.tag,
+.hb-code .token.selector,
+.hb-code .token.important,
+.hb-code .token.atrule      { color: var(--hb-cyan) !important; }
+
+.hb-code .token.function,
+.hb-code .token.attr-name,
+.hb-code .token.property    { color: var(--hb-cyan-bright) !important; }
+
+.hb-code .token.string,
+.hb-code .token.char,
+.hb-code .token.attr-value,
+.hb-code .token.inserted    { color: #8fd39a !important; }
+
+.hb-code .token.number,
+.hb-code .token.boolean,
+.hb-code .token.constant,
+.hb-code .token.symbol,
+.hb-code .token.regex       { color: var(--hb-amber) !important; }
+
+.hb-code .token.comment,
+.hb-code .token.prolog,
+.hb-code .token.doctype,
+.hb-code .token.cdata       { color: var(--hb-text-faint) !important; font-style: italic; }
+
+.hb-code .token.operator,
+.hb-code .token.punctuation,
+.hb-code .token.entity,
+.hb-code .token.url         { color: var(--hb-text-dim) !important; background: none !important; }
+
+.hb-code .token.deleted     { color: #e88a7c !important; }
+
+/* ── The owner's own message ────────────────────────────────────────────────
+   The one bubble that carries the accent — it is how you find your side of the
+   conversation without reading a word — and the one corner that is not
+   uniform: the bottom-right is cut back to a 6px tail, pointing at the sender.
+   Layered on .hb-holo, so it inherits the frost and only overrides the wash,
+   the rim and that corner. */
+.hb-bubble-user {
+  border-radius: var(--r-card) var(--r-card) 6px var(--r-card) !important;
+  background: linear-gradient(160deg,
+    rgba(var(--hb-accent-rgb), 0.16), rgba(var(--hb-accent-rgb), 0.05));
+  border: 1px solid rgba(var(--hb-accent-rgb), 0.26);
+}
+
+/* ── Embedded widgets opt out of code typography ────────────────────────────
+   Rich blocks (calendar, map, chart) are returned from react-markdown's `code`
+   component, so they are mounted INSIDE `.prose code` and silently inherit
+   JetBrains Mono at 0.82em. Correct for a code span, wrong for a rendered
+   widget — it is what made calendar events read as shrunken monospace. An
+   element's own declaration always beats an inherited one, so this wins
+   wherever the widget is mounted, without fighting specificity. */
+.hb-widget {
+  font-family: var(--font-read);
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--hb-text);
+  background: none;
+  white-space: normal;
+}
+
+/* ── Inter-agent bubbles ────────────────────────────────────────────────────
+   Same tail idea as the owner's own message, mirrored: an agent speaking into
+   the channel gets the notch on its avatar side, so a thread reads as a
+   conversation rather than a stack of identical cards. */
+.hb-bubble-agent      { border-radius: var(--r-ctl) var(--r-ctl) var(--r-ctl) 4px !important; }
+.hb-bubble-agent-mine { border-radius: var(--r-ctl) var(--r-ctl) 4px var(--r-ctl) !important; }
+
+/* ── House Party group chat ─────────────────────────────────────────────────
+   The war room is a ROOM: the owner speaks on the right, every agent answers
+   on the left under its own name. Slightly larger bubbles than the 1:1 deck
+   because a group thread is read at a distance, scanning for who said what. */
+.hb-party-owner { border-radius: 17px 17px 5px 17px !important; }
+.hb-party-agent { border-radius: 16px 16px 16px 5px !important; }
+
+/* ── Sidebar list rows ──────────────────────────────────────────────────────
+   The conversation list is a quiet stack: only the row you are in draws a
+   surface, and it draws a NEUTRAL one. Colour in the sidebar belongs to the
+   action (new conversation), not to the selection — otherwise every screen has
+   two things shouting at once. */
+.hb-row {
+  border-radius: var(--r-tile) !important;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.hb-row:hover { background: var(--glass-tint); }
+.hb-row-active {
+  background: var(--glass-sheen);
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
 /* ── Glass modifiers — thin state layers on the single material ─────────────
    Placed AFTER the base so they win the cascade for the same properties.
    .glass-tint reads its accent from `color` (set inline / by the component). */
 .glass-round { border-radius: var(--glass-r-pill) !important; }
-.glass-sm    { border-radius: 9px !important; }
+.glass-sm    { border-radius: var(--r-tile) !important; }
 
 .glass-tint, .hb-btn-tint {
   border-color: color-mix(in srgb, currentColor 55%, transparent);
@@ -304,8 +448,9 @@
 .glass-ghost:hover { background: var(--glass-tint); }
 
 html, body, #root { height: 100%; overflow: hidden; }
-/* leave room for the fixed HUD top strip + bottom ruler */
-#root { padding-top: 22px; padding-bottom: 4px; }
+/* The 22px/4px reservation for the fixed HUD strip + bottom ruler is gone with
+   the strip itself — the deck's islands supply their own 20px inset. */
+#root { padding: 0; }
 
 body {
   font-family: 'Rajdhani', 'Saira', -apple-system, 'Segoe UI', sans-serif;
@@ -314,8 +459,13 @@ body {
   line-height: 1.5;
   letter-spacing: 0.01em;
   color: var(--hb-text);
-  /* Static deep base — carbon-black flowing into midnight blue */
-  background: linear-gradient(160deg, #03070a 0%, #060d14 38%, #08131d 62%, #040a10 100%);
+  /* The void the glass islands float on. A wide, very low-opacity accent bloom
+     falls from above the viewport so the top of the deck is where the light is
+     coming from — that is what the panels' top specular catch is catching. */
+  background:
+    radial-gradient(1300px 900px at 50% -12%, rgba(var(--hb-accent-rgb), 0.10), transparent 60%),
+    linear-gradient(175deg, var(--hb-void) 0%, var(--hb-base) 45%, var(--hb-petrol) 75%, var(--hb-void) 100%);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none;
@@ -433,9 +583,7 @@ body {
 }
 .hb-btn:hover:not(:disabled) {
   border-color: var(--hb-edge-bright);
-  background:
-    linear-gradient(var(--glass-tint-hi), var(--glass-tint-hi)),
-    var(--glass-fill);
+  background: var(--glass-sheen-hi), var(--glass-fill);
   color: var(--hb-text);
   box-shadow: var(--glass-shadow-active);
 }
@@ -450,11 +598,11 @@ body {
 .hb-btn-ghost {
   display: inline-flex; align-items: center; justify-content: center;
   border: none; background: transparent; cursor: pointer;
-  border-radius: 8px !important;
+  border-radius: var(--r-tile) !important;
   color: var(--hb-icon-dim);
   transition: background 0.12s, color 0.12s;
 }
-.hb-btn-ghost:hover { background: rgba(190, 215, 235, 0.08); color: var(--hb-text-dim); }
+.hb-btn-ghost:hover { background: var(--glass-tint-hi); color: var(--hb-text-dim); }
 
 /* Fluid-glass input / textarea field — shared glass material, lit focus rim */
 .hb-field {
@@ -534,6 +682,9 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes hbBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+/* Live-state swell — the "responding" pill's dot. A swell, not a blink: a blink
+   reads as a warning, and the agent working is not a warning. */
+@keyframes hbPulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
 /* Mic actively hearing speech. Deliberately a swell rather than a blink: an
    open mic and a mic that is picking you up must not look alike, and a blink
    reads as a warning while a swell reads as reception. */
@@ -544,20 +695,22 @@ body {
 /* House Party — the roster's signature colors on parade. Animates `color`
    only; consumers point borders/fills/glows at currentColor so one keyframe
    themes every piece of war-room chrome. Order = the ROSTER order. */
+/* Seven stops — SPEDA and the Superior Six. Orion is not on the parade: it is
+   the system's own custodian, not a House Party participant. Mirrors
+   PARTY_ROSTER (lib/agents) and PARTY_COLORS (profile/theme). */
 @keyframes hbPartyCycle {
-  0%, 100% { color: #36abca; }  /* speda */
-  12.5%    { color: #d99c44; }  /* sentinel */
-  25%      { color: #9165e6; }  /* nightcrawler */
-  37.5%    { color: #8a93a6; }  /* ultron */
-  50%      { color: #d8483c; }  /* centurion */
-  62.5%    { color: #3fae74; }  /* atomix */
-  75%      { color: #2f4f8f; }  /* optimus */
-  87.5%    { color: #e0703a; }  /* orion */
+  0%, 100% { color: #7fa4c4; }  /* speda */
+  14.28%   { color: #d99c44; }  /* sentinel */
+  28.57%   { color: #9165e6; }  /* nightcrawler */
+  42.86%   { color: #8a93a6; }  /* ultron */
+  57.14%   { color: #d8483c; }  /* centurion */
+  71.43%   { color: #3fae74; }  /* atomix */
+  85.71%   { color: #2f4f8f; }  /* optimus */
 }
 .hb-party-cycle { animation: hbPartyCycle 21s linear infinite; }
 /* GlassSelect option rows — hover wash on the liquid-glass dropdown */
 .hb-glass-opt { transition: background 0.1s ease; }
-.hb-glass-opt:hover { background: rgba(190, 215, 235, 0.07) !important; }
+.hb-glass-opt:hover { background: var(--glass-tint) !important; }
 .hb-party-rim {
   animation: hbPartyCycle 21s linear infinite;
   border-color: currentColor !important;
@@ -623,7 +776,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   padding: 0 0.75rem 0 0.65rem;
   margin: 1.6rem 0 0.6rem;
   background: rgba(var(--hb-accent-rgb), 0.12);
-  border-radius: 10px !important;
+  border-radius: var(--r-ctl) !important;
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 0 rgba(255, 255, 255, 0.06);
   border-left: 2px solid var(--hb-cyan);
   font-family: 'Rajdhani', sans-serif;
@@ -649,7 +802,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   padding: 0 0.7rem 0 0.6rem;
   margin: 1.5rem 0 0.5rem;
   background: rgba(var(--hb-accent-rgb), 0.1);
-  border-radius: 9px !important;
+  border-radius: var(--r-tile) !important;
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.17), inset 0 -1px 0 0 rgba(255, 255, 255, 0.05);
   border-left: 3px solid var(--hb-cyan);
   font-family: 'Rajdhani', sans-serif !important;
@@ -669,7 +822,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   padding: 0 0.65rem 0 0.6rem;
   margin: 1.2rem 0 0.4rem;
   background: rgba(var(--hb-accent-rgb), 0.07);
-  border-radius: 8px !important;
+  border-radius: var(--r-tile) !important;
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.13);
   border-left: 2px solid rgba(var(--hb-accent-rgb),0.6);
   font-family: 'Rajdhani', sans-serif !important;
@@ -686,7 +839,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
   padding: 0 0.6rem 0 0.55rem;
   margin: 1rem 0 0.3rem;
   background: rgba(var(--hb-accent-rgb), 0.05);
-  border-radius: 7px !important;
+  border-radius: 10px !important;
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
   border-left: 2px solid rgba(var(--hb-accent-rgb),0.4);
   font-family: 'Rajdhani', sans-serif;
@@ -922,10 +1075,14 @@ input[type=range]::-webkit-slider-thumb {
    holographic dossier voice: cyan uppercase headers, ▸ fact bullets, italic
    notes — while now honouring the full syntax (bold, links, code, tables,
    blockquotes, nested + task lists, rules) instead of a 3-case line parser. */
+/* This is the owner's own dossier — prose a person sits and READS, not a
+   readout to glance at. It was set at 0.74rem (≈12px) with 1.45 leading, which
+   is caption size for body copy. It reads at reading size now, in the reading
+   face, with reading leading. */
 .hb-mem-md {
-  font-family: 'SamsungOne', 'Inter', sans-serif;
-  font-size: 0.74rem;
-  line-height: 1.45;
+  font-family: var(--font-read);
+  font-size: 0.875rem;
+  line-height: 1.65;
   color: var(--hb-text-dim);
   overflow-wrap: anywhere;
 }
@@ -936,30 +1093,30 @@ input[type=range]::-webkit-slider-thumb {
 .hb-mem-md h4, .hb-mem-md h5, .hb-mem-md h6 {
   font-family: 'Rajdhani', sans-serif;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--hb-cyan);
-  margin: 0.55rem 0 0.2rem;
+  margin: 1.1rem 0 0.4rem;
   break-after: avoid;
 }
-.hb-mem-md h1 { font-size: 0.74rem; }
-.hb-mem-md h2 { font-size: 0.66rem; }
+.hb-mem-md h1 { font-size: 1rem; }
+.hb-mem-md h2 { font-size: 0.905rem; }
 .hb-mem-md h3, .hb-mem-md h4, .hb-mem-md h5, .hb-mem-md h6 {
-  font-size: 0.62rem;
-  color: var(--hb-cyan-dim);
-  letter-spacing: 0.16em;
+  font-size: 0.84rem;
+  color: var(--hb-text-dim);
+  letter-spacing: 0.14em;
 }
 
-.hb-mem-md p { margin: 0.14rem 0; break-inside: avoid; }
+.hb-mem-md p { margin: 0.45rem 0; break-inside: avoid; }
 .hb-mem-md strong { color: var(--hb-text); font-weight: 700; }
 .hb-mem-md em { color: var(--hb-icon); font-style: italic; }
 .hb-mem-md a { color: var(--hb-cyan-bright); text-decoration: underline; text-underline-offset: 2px; }
 
-.hb-mem-md ul, .hb-mem-md ol { margin: 0.1rem 0; padding-left: 0; list-style: none; }
+.hb-mem-md ul, .hb-mem-md ol { margin: 0.35rem 0; padding-left: 0; list-style: none; }
 .hb-mem-md li {
   position: relative;
-  padding-left: 0.95rem;
-  margin: 0.1rem 0;
+  padding-left: 1.15rem;
+  margin: 0.25rem 0;
   break-inside: avoid;
 }
 .hb-mem-md ul > li::before {

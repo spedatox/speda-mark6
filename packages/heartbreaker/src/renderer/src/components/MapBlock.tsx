@@ -480,7 +480,7 @@ function MapPanel({ title, route, placeCount, children }: {
     : placeCount != null ? `${placeCount} FOUND` : ''
 
   return (
-    <div className="hb-glass-sm" style={{
+    <div className="hb-glass-sm hb-widget" style={{
       position: 'relative', background: 'rgba(6, 14, 22, 0.6)',
       backdropFilter: 'var(--hb-holo-blur)', WebkitBackdropFilter: 'var(--hb-holo-blur)',
       border: '1px solid var(--hb-edge)', boxShadow: 'var(--hb-holo-shadow)',
@@ -548,15 +548,15 @@ function RouteTabs({ routes, selected, onSelect }: {
               <span style={{ fontSize: '0.92rem', fontWeight: 700 }}>
                 {r.durationMin != null ? r.durationMin : '?'}
               </span>
-              <span style={{ fontSize: '0.62rem', letterSpacing: '0.12em' }}>MIN</span>
+              <span style={{ fontSize: '0.8125rem', letterSpacing: '0.12em' }}>MIN</span>
               {i === fastest && routes.length > 1 && (
-                <span style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: TRAFFIC_COLORS.NORMAL }}>
+                <span style={{ fontSize: '0.78rem', letterSpacing: '0.1em', color: TRAFFIC_COLORS.NORMAL }}>
                   FASTEST
                 </span>
               )}
             </div>
             <div style={{
-              fontSize: '0.64rem', letterSpacing: '0.06em', color: 'var(--hb-text-faint)',
+              fontSize: '0.8125rem', letterSpacing: '0.06em', color: 'var(--hb-text-faint)',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>
               {[r.distanceKm != null ? `${r.distanceKm} km` : '', r.label || '']
@@ -564,7 +564,7 @@ function RouteTabs({ routes, selected, onSelect }: {
             </div>
             {delay != null && delay > 0 && (
               <div style={{
-                fontSize: '0.6rem', letterSpacing: '0.08em',
+                fontSize: '0.78rem', letterSpacing: '0.08em',
                 color: heavy ? 'var(--hb-amber)' : 'var(--hb-text-faint)',
               }}>+{delay} MIN TRAFFIC</div>
             )}
@@ -818,27 +818,29 @@ function MapCanvas({ spec, places, selectedRoute, openPlace, onPlaceClick, expan
 
   return (
     <div style={{ position: 'relative', height, margin: '0 0.25rem', transition: 'height 0.2s ease' }}>
-      {/* Stark wireframe behind the map — a dead tile server still reads as design. */}
+      {/* Ground behind the map, so a dead tile server still reads as design.
+          This was a 28px wireframe GRID — a banned prop, and the one piece of
+          set dressing the map still carried. The deck draws the same idea as a
+          flat dark ground, which the canvas covers anyway when it loads. */}
       <div style={{
-        position: 'absolute', inset: 0,
-        backgroundImage:
-          'linear-gradient(rgba(var(--hb-accent-rgb),0.06) 1px, transparent 1px),' +
-          'linear-gradient(90deg, rgba(var(--hb-accent-rgb),0.06) 1px, transparent 1px)',
-        backgroundSize: '28px 28px', pointerEvents: 'none',
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: 'linear-gradient(160deg, var(--hb-petrol), var(--hb-void))',
       }} />
       <div ref={containerRef} style={{ position: 'absolute', inset: 0, borderRadius: 4, overflow: 'hidden' }} />
       {!failed && (
         <button
           onClick={onToggleExpand}
           title={expanded ? 'Collapse map' : 'Expand map'}
+          className="glass-round"
           style={{
-            position: 'absolute', left: 8, top: 8, zIndex: 2, cursor: 'pointer',
-            padding: '0.25rem 0.5rem', borderRadius: 6,
-            background: 'rgba(6,14,22,0.72)', border: '1px solid rgba(var(--hb-accent-rgb),0.35)',
-            color: 'var(--hb-cyan-bright)', fontFamily: "'Rajdhani', sans-serif",
-            fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.14em',
+            position: 'absolute', left: 20, top: 20, zIndex: 2, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 8, height: 34, padding: '0 14px',
+            background: 'linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02))',
+            border: '1px solid rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+            color: 'var(--hb-text)', fontSize: '0.845rem',
           }}
-        >{expanded ? '⤡ SHRINK' : '⤢ EXPAND'}</button>
+        >{expanded ? 'Shrink' : 'Expand'}</button>
       )}
       {failed && (
         // The wireframe behind still reads as design, so this stays a quiet
@@ -848,9 +850,9 @@ function MapCanvas({ spec, places, selectedRoute, openPlace, onPlaceClick, expan
           position: 'absolute', inset: 0, display: 'flex',
           alignItems: 'center', justifyContent: 'center', textAlign: 'center',
           padding: '0 1rem', fontFamily: "'Rajdhani', sans-serif",
-          fontSize: '0.7rem', letterSpacing: '0.1em', color: 'var(--hb-text-faint)',
+          fontSize: '0.875rem', letterSpacing: '0.1em', color: 'var(--hb-text-faint)',
         }}>
-          MAP // CANVAS UNAVAILABLE<br />{failed.slice(0, 90)}
+          Map canvas unavailable<br />{failed.slice(0, 90)}
         </div>
       )}
     </div>
@@ -884,7 +886,7 @@ function TrafficBar({ route }: { route: MapRoute }): React.ReactElement | null {
       </div>
       <div style={{
         display: 'flex', gap: 10, marginTop: 5, flexWrap: 'wrap',
-        fontSize: '0.64rem', letterSpacing: '0.1em', color: 'var(--hb-text-faint)',
+        fontSize: '0.8125rem', letterSpacing: '0.1em', color: 'var(--hb-text-faint)',
       }}>
         {(['NORMAL', 'SLOW', 'TRAFFIC_JAM'] as const).map(s => spans[s] > 0 && (
           <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -920,7 +922,7 @@ function CoordinateFooter({ lat, lng }: { lat: number; lng: number }): React.Rea
           {lat.toFixed(5)}, {lng.toFixed(5)}
         </span>
         {address && (
-          <span style={{ color: 'var(--hb-text-dim)', fontSize: '0.7rem' }}>{address}</span>
+          <span style={{ color: 'var(--hb-text-dim)', fontSize: '0.875rem' }}>{address}</span>
         )}
       </div>
     </div>
@@ -947,7 +949,7 @@ function placeMeta(p: MapPlace): React.ReactElement {
   if (p.priceLevel) bits.push(<span key="p">{p.priceLevel}</span>)
   if (p.status) bits.push(<span key="s" style={{ color: 'var(--hb-amber)' }}>{p.status.replace(/_/g, ' ').toLowerCase()}</span>)
   return (
-    <span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', fontSize: '0.66rem', letterSpacing: '0.06em', color: 'var(--hb-text-faint)' }}>
+    <span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', fontSize: '0.8125rem', letterSpacing: '0.06em', color: 'var(--hb-text-faint)' }}>
       {bits}
     </span>
   )
@@ -985,7 +987,7 @@ function PlaceList({ places, open, onSelect }: {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: on ? 'var(--hb-cyan-bright)' : 'rgba(var(--hb-accent-rgb),0.28)',
               color: on ? '#04121a' : 'var(--hb-cyan-bright)',
-              fontSize: '0.6rem', fontWeight: 700, marginTop: 1,
+              fontSize: '0.78rem', fontWeight: 700, marginTop: 1,
             }}>{i + 1}</span>
             <span style={{ minWidth: 0, lineHeight: 1.3 }}>
               <span style={{
@@ -1016,16 +1018,16 @@ function PlaceDetail({ place, onClose }: { place: MapPlace; onClose: () => void 
         <div style={{ flex: 1, minWidth: 0, lineHeight: 1.35 }}>
           <div style={{ color: '#fff', fontSize: '0.92rem', fontWeight: 700 }}>{place.name}</div>
           {place.category && (
-            <div style={{ fontSize: '0.66rem', letterSpacing: '0.1em', color: 'var(--hb-cyan)', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: '0.8125rem', letterSpacing: '0.1em', color: 'var(--hb-cyan)', textTransform: 'uppercase' }}>
               {place.category}
             </div>
           )}
           <div style={{ marginTop: 2 }}>{placeMeta(place)}</div>
           {place.address && (
-            <div style={{ marginTop: 3, fontSize: '0.7rem', color: 'var(--hb-text-dim)' }}>{place.address}</div>
+            <div style={{ marginTop: 3, fontSize: '0.875rem', color: 'var(--hb-text-dim)' }}>{place.address}</div>
           )}
           {place.summary && (
-            <div style={{ marginTop: 3, fontSize: '0.7rem', color: 'var(--hb-text-faint)' }}>{place.summary}</div>
+            <div style={{ marginTop: 3, fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>{place.summary}</div>
           )}
         </div>
         <button onClick={onClose} title="Close" style={{
@@ -1039,10 +1041,10 @@ function PlaceDetail({ place, onClose }: { place: MapPlace; onClose: () => void 
           <button onClick={() => setHoursOpen(v => !v)} style={{
             cursor: 'pointer', background: 'transparent', border: 'none', padding: 0,
             color: 'var(--hb-cyan)', fontFamily: "'Rajdhani', sans-serif",
-            fontSize: '0.64rem', letterSpacing: '0.12em', fontWeight: 700,
+            fontSize: '0.8125rem', letterSpacing: '0.12em', fontWeight: 700,
           }}>{hoursOpen ? '▾ HOURS' : '▸ HOURS'}</button>
           {hoursOpen && (
-            <div style={{ marginTop: 3, fontSize: '0.68rem', color: 'var(--hb-text-dim)', lineHeight: 1.5 }}>
+            <div style={{ marginTop: 3, fontSize: '0.845rem', color: 'var(--hb-text-dim)', lineHeight: 1.5 }}>
               {place.hours.map((h, i) => <div key={i}>{h}</div>)}
             </div>
           )}
@@ -1074,7 +1076,7 @@ function StepList({ steps, open, onToggle }: {
       <button onClick={onToggle} style={{
         cursor: 'pointer', background: 'transparent', border: 'none', padding: 0,
         color: 'var(--hb-cyan)', fontFamily: "'Rajdhani', sans-serif",
-        fontSize: '0.66rem', letterSpacing: '0.14em', fontWeight: 700,
+        fontSize: '0.8125rem', letterSpacing: '0.14em', fontWeight: 700,
       }}>{open ? '▾' : '▸'} {steps.length} {steps.length === 1 ? 'STEP' : 'STEPS'}</button>
       {open && (
         <ol style={{
@@ -1086,13 +1088,13 @@ function StepList({ steps, open, onToggle }: {
               display: 'flex', gap: 8, padding: '3px 0',
               borderTop: i ? '1px solid rgba(var(--hb-accent-rgb),0.10)' : 'none',
             }}>
-              <span style={{ flex: '0 0 auto', width: 20, color: 'var(--hb-text-faint)', fontSize: '0.66rem' }}>
+              <span style={{ flex: '0 0 auto', width: 20, color: 'var(--hb-text-faint)', fontSize: '0.8125rem' }}>
                 {i + 1}
               </span>
               <span style={{ flex: 1, fontSize: '0.72rem', color: 'var(--hb-text-dim)', lineHeight: 1.35 }}>
                 {s.instruction}
               </span>
-              <span style={{ flex: '0 0 auto', fontSize: '0.64rem', color: 'var(--hb-text-faint)' }}>
+              <span style={{ flex: '0 0 auto', fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>
                 {fmtDistance(s.distanceM)}
               </span>
             </li>
@@ -1143,7 +1145,7 @@ function ParseError({ raw }: { raw: string }): React.ReactElement {
       margin: '0.75rem 0', padding: '0.6rem 0.75rem',
       background: 'rgba(200,74,58,0.09)', border: '1px solid rgba(200,74,58,0.35)',
       fontFamily: "'Rajdhani', sans-serif", fontSize: '0.72rem', letterSpacing: '0.05em', color: '#c84a3a',
-    }}>MAP // PARSE ERROR<div style={{ color: 'var(--hb-text-faint)', marginTop: 4 }}>{raw.slice(0, 120)}</div></div>
+    }}>Map — could not parse<div style={{ color: 'var(--hb-text-faint)', marginTop: 4 }}>{raw.slice(0, 120)}</div></div>
   )
 }
 
@@ -1152,7 +1154,7 @@ function Materializing(): React.ReactElement {
     <div className="hb-glass-sm" style={{
       margin: '0.75rem 0', padding: '0.6rem 0.75rem', border: '1px solid var(--hb-edge)',
       background: 'rgba(6,14,22,0.55)', fontFamily: "'Rajdhani', sans-serif",
-      fontSize: '0.68rem', letterSpacing: '0.14em', color: 'var(--hb-text-faint)',
-    }}>MAP // MATERIALIZING</div>
+      fontSize: '0.845rem', letterSpacing: '0.14em', color: 'var(--hb-text-faint)',
+    }}>Building the map…</div>
   )
 }

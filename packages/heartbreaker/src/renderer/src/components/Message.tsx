@@ -175,6 +175,46 @@ function toolSummary(tool: ToolBadge): { verb: string; target?: string } {
   }
 }
 
+/* ── Chain-row helpers ──────────────────────────────────────────────────────
+ * The chain shows what the machine actually did: the tool's own name, the one
+ * argument that identifies the call, and what came back. Not a prose paraphrase
+ * — when a step goes wrong you want the real name to search for. */
+
+/** The single most identifying argument, rendered as `(key: value)`. */
+function primaryArg(tool: ToolBadge): string | null {
+  const inp = (tool.input && typeof tool.input === 'object')
+    ? tool.input as Record<string, unknown> : {}
+  const keys = Object.keys(inp)
+  if (!keys.length) return null
+  // Preference order: the arg a human would recognise the call by.
+  const preferred = ['path', 'file_path', 'command', 'query', 'question', 'url',
+                     'name', 'action', 'agent_id', 'prompt']
+  const key = preferred.find(k => inp[k] != null && inp[k] !== '') ?? keys[0]
+  const raw = inp[key]
+  let val = typeof raw === 'string' ? raw : JSON.stringify(raw)
+  if (val == null) return null
+  if (key === 'path' || key === 'file_path') val = shortPath(val)
+  if (val.length > 44) val = val.slice(0, 44) + '…'
+  return `(${key}: ${val})`
+}
+
+/** A short right-aligned "what came back", taken from the real result text. */
+function resultSummary(tool: ToolBadge): string | null {
+  if (!tool.result) return null
+  const first = tool.result.split('\n').find(l => l.trim()) ?? ''
+  const t = first.trim()
+  if (!t) return null
+  return t.length > 38 ? t.slice(0, 38) + '…' : t
+}
+
+/** Done / running / failed — read off the result, never invented. */
+function stepState(tool: ToolBadge, live: boolean): 'running' | 'failed' | 'done' {
+  if (live && !tool.result) return 'running'
+  const r = (tool.result ?? '').toLowerCase()
+  if (/^(error|traceback|exception)\b/.test(r) || r.includes('error:')) return 'failed'
+  return 'done'
+}
+
 // Red/green line diff. edit_file passes old→new; write_file passes new only.
 function DiffBlock({ removed, added }: { removed?: string; added?: string }) {
   const rows: { sign: '+' | '-'; text: string }[] = []
@@ -203,22 +243,32 @@ function DiffBlock({ removed, added }: { removed?: string; added?: string }) {
 }
 
 // Command + its output (exit code / stdout live in the result string).
+// The deck renders execution as a real terminal slab: an inset dark well, not
+// two loose lines of 10px text. Echoed command in the prompt colour, output in
+// reading grey — the same shape the sandbox step uses.
+const TERMINAL_WELL: React.CSSProperties = {
+  borderRadius: 12,
+  background: 'rgba(0, 0, 0, 0.35)',
+  border: '1px solid rgba(255, 255, 255, 0.06)',
+  padding: '12px 14px',
+  fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace",
+  fontSize: '0.8125rem',
+  lineHeight: 1.65,
+  overflow: 'auto',
+}
+
 function CommandBlock({ command, result }: { command?: string; result?: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+    <div className="hb-well" style={{ ...TERMINAL_WELL, maxHeight: 300 }}>
       {command && (
-        <div style={{
-          fontFamily: 'var(--font-mono)', fontSize: '0.64rem', color: 'var(--hb-cyan-bright)',
-          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        }}>
-          <span style={{ color: 'var(--hb-icon-dim)' }}>$ </span>{command}
+        <div style={{ color: 'var(--hb-green)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          <span style={{ opacity: 0.6 }}>$ </span>{command}
         </div>
       )}
       {result && (
         <pre style={{
-          margin: 0, fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
-          color: 'var(--hb-icon-bright)', lineHeight: 1.5, whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word', maxHeight: 260, overflow: 'auto',
+          margin: command ? '6px 0 0' : 0, font: 'inherit',
+          color: 'var(--hb-text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
         }}>{result}</pre>
       )}
     </div>
@@ -239,34 +289,66 @@ function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
   const hasDetail = isEdit || isWrite || isCmd || !!tool.result || Object.keys(inp).length > 0
   const pending = live && !tool.result
 
+  const state = stepState(tool, live)
+  const arg = primaryArg(tool)
+  const summary = resultSummary(tool)
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       <button
         onClick={() => hasDetail && setOpen(v => !v)}
         style={{
-          display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%',
-          background: 'transparent', border: 'none', padding: '0.22rem 0',
+          display: 'flex', alignItems: 'center', gap: 11, width: '100%',
+          background: 'transparent', border: 'none', padding: '8px 0',
           cursor: hasDetail ? 'pointer' : 'default', textAlign: 'left',
-          fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--hb-text-dim)',
+          fontSize: '0.875rem', color: 'var(--hb-text-dim)',
         }}
       >
-        {pending
-          ? <Spinner />
-          : <span style={{
-              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-              background: 'var(--hb-cyan-dim)',
-            }} />}
-        <span style={{ color: 'var(--hb-icon-bright)', flexShrink: 0 }}>{verb}</span>
-        {target && (
+        {/* Status glyph — a tick when it landed, a ring while it runs, a cross
+            when the result came back an error. Three states, one column. */}
+        {state === 'running' ? (
           <span style={{
-            color: 'var(--hb-text-dim)', overflow: 'hidden', textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap', flex: 1, minWidth: 0,
-          }}>{target}</span>
+            width: 15, height: 15, borderRadius: '50%', flexShrink: 0,
+            border: '1.5px solid rgba(var(--hb-accent-rgb),0.25)',
+            borderTopColor: 'var(--hb-cyan)',
+            animation: 'spin 0.7s linear infinite',
+          }} />
+        ) : state === 'failed' ? (
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--hb-red)"
+            strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}>
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        ) : (
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--hb-green)"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+        )}
+
+        {/* The tool's real name — searchable when something goes wrong. */}
+        <span style={{ color: 'var(--hb-text)', flexShrink: 0 }}>{tool.name}</span>
+        {arg && (
+          <span style={{
+            color: 'var(--hb-text-faint)', overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap', minWidth: 0,
+          }}>{arg}</span>
+        )}
+
+        <span style={{ flex: 1, minWidth: 8 }} />
+
+        {summary && (
+          <span
+            title={verb + (target ? ` — ${target}` : '')}
+            style={{
+              color: 'var(--hb-text-faint)', flexShrink: 0, maxWidth: '38%',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}
+          >{summary}</span>
         )}
         {hasDetail && (
-          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
             style={{
-              flexShrink: 0, opacity: 0.5, marginLeft: target ? 0 : 'auto',
+              flexShrink: 0, opacity: 0.45,
               transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s',
             }}>
             <polyline points="6 9 12 15 18 9"/>
@@ -274,7 +356,9 @@ function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
         )}
       </button>
       {open && hasDetail && (
-        <div style={{ padding: '0.35rem 0 0.55rem 1rem', animation: 'fadeIn 0.15s ease' }}>
+        // Indented to clear the status column, exactly as the deck nests a
+        // sandbox run under the step that launched it.
+        <div style={{ margin: '0 0 10px 26px', animation: 'fadeIn 0.15s ease' }}>
           {isEdit ? (
             <DiffBlock
               removed={typeof inp.old_string === 'string' ? inp.old_string : undefined}
@@ -296,19 +380,81 @@ function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
   )
 }
 
+/**
+ * THE TOOL CHAIN — one card per run of steps, not a bracketed gutter.
+ *
+ * The deck treats a chain of tool calls as a single object the answer refers
+ * to: a titled card that states how many steps ran and whether they are still
+ * running, with the steps as rows inside it and each row's detail nesting
+ * underneath. It collapses to its header once you have read it.
+ *
+ * There is deliberately NO elapsed-time readout in the header even though the
+ * reference deck shows one ("5 adım · 14.2 sn") — ToolBadge carries no
+ * timestamps, so a duration here would be invented.
+ */
 function ToolFeed({ tools, streaming }: { tools: ToolBadge[]; streaming: boolean }) {
+  const [open, setOpen] = useState(true)
   if (!tools.length) return null
+
+  const liveIdx = streaming ? tools.length - 1 : -1
+  const running = streaming && !tools[tools.length - 1].result
+  const failed = tools.filter(t => stepState(t, false) === 'failed').length
+
   return (
-    <div style={{
-      marginBottom: '0.7rem', padding: '0.45rem 0.75rem',
-      borderLeft: '2px solid rgba(var(--hb-accent-rgb),0.28)',
-      background: 'rgba(6,14,20,0.4)', borderRadius: '0 0.4rem 0.4rem 0',
-      display: 'flex', flexDirection: 'column', gap: '0.05rem',
+    <div className="hb-glass-sm" style={{
+      margin: '0 0 4px', overflow: 'hidden',
+      border: '1px solid var(--hb-edge)',
+      background: 'var(--glass-sheen), var(--glass-fill)',
+      backdropFilter: 'blur(24px) saturate(160%)',
+      WebkitBackdropFilter: 'blur(24px) saturate(160%)',
       animation: 'fadeSlideIn 0.15s ease',
     }}>
-      {tools.map((t, i) => (
-        <ToolRow key={t.id} tool={t} live={streaming && i === tools.length - 1} />
-      ))}
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+          padding: '12px 16px', cursor: 'pointer', textAlign: 'left',
+          background: 'transparent', border: 'none',
+          borderBottom: open ? '1px solid rgba(255,255,255,0.06)' : 'none',
+        }}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--hb-cyan)"
+          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+        <span style={{
+          fontFamily: "'Rajdhani', sans-serif", fontSize: '0.875rem', fontWeight: 600,
+          letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--hb-text-dim)',
+        }}>
+          {tools.length} step{tools.length === 1 ? '' : 's'}
+          {running && ' · running'}
+        </span>
+        {failed > 0 && (
+          <span style={{ fontSize: '0.8125rem', color: 'var(--hb-red)' }}>
+            {failed} failed
+          </span>
+        )}
+        <span style={{ flex: 1 }} />
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--hb-text-faint)"
+          strokeWidth="1.5" style={{
+            flexShrink: 0,
+            transform: open ? 'none' : 'rotate(180deg)', transition: 'transform 0.18s',
+          }}>
+          <polyline points="6 15 12 9 18 15"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '6px 16px 14px' }}>
+          {tools.map((t, i) => (
+            <div key={t.id} style={{
+              borderBottom: i === tools.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.04)',
+            }}>
+              <ToolRow tool={t} live={i === liveIdx} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -674,6 +820,21 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 }
 
 /* ── File card — glassmorphism download card for produced files ──────────── */
+/** Gradient per file type for the delivery card's icon tile. Semantic colour —
+ *  it identifies the artefact, so it is exempt from the neutral-chrome rule the
+ *  way the agent signature colours are. */
+const FILE_TINTS: Record<string, [string, string]> = {
+  pdf:     ['#e88a7c', '#a9463a'],
+  docx:    ['#7fa4c4', '#3d5872'],
+  doc:     ['#7fa4c4', '#3d5872'],
+  pptx:    ['#e0a86c', '#a06b32'],
+  xlsx:    ['#7fc79f', '#3f7a5c'],
+  csv:     ['#7fc79f', '#3f7a5c'],
+  png:     ['#a9c6dc', '#5b7691'],
+  jpg:     ['#a9c6dc', '#5b7691'],
+  default: ['#a9c6dc', '#5b7691'],
+}
+
 function fmtBytes(b: number): string {
   if (b < 1024) return `${b} B`
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`
@@ -693,69 +854,74 @@ function FileCard({ file }: { file: FileMeta }) {
     finally { setBusy(false) }
   }
 
+  const tint = FILE_TINTS[(file.kind || '').toLowerCase()] ?? FILE_TINTS.default
+
   return (
     <div
-      className="hb-holo"
+      className="hb-glass-sm"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         position: 'relative',
-        display: 'flex', alignItems: 'center', gap: '0.75rem',
-        padding: '0.7rem 0.8rem',
-        maxWidth: 420,
-        borderColor: hover ? 'var(--hb-edge-bright)' : 'var(--hb-edge)',
-        boxShadow: hover ? 'var(--hb-holo-shadow-active)' : undefined,
-        transition: 'border-color 0.15s, box-shadow 0.15s',
+        display: 'flex', alignItems: 'center', gap: 16,
+        padding: '16px 20px',
+        maxWidth: 520,
+        // A delivered file is the ANSWER, not a footnote — it carries the
+        // accent rim, unlike the neutral chain card above it.
+        border: `1px solid rgba(var(--hb-accent-rgb),${hover ? 0.44 : 0.28})`,
+        background: 'linear-gradient(160deg, rgba(var(--hb-accent-rgb),0.12), rgba(var(--hb-accent-rgb),0.03))',
+        backdropFilter: 'var(--hb-holo-blur)',
+        WebkitBackdropFilter: 'var(--hb-holo-blur)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18), 0 16px 40px rgba(0,0,0,0.35)',
+        transition: 'border-color 0.15s',
       }}
     >
-      {/* doc glyph in a tinted square */}
-      <div className="hb-glass-xs" style={{
-        width: 38, height: 38, flexShrink: 0,
+      {/* Type tile — the one place a file's own colour is allowed in, so a PDF
+          is findable in a long transcript at a glance. */}
+      <div style={{
+        width: 52, height: 52, flexShrink: 0, borderRadius: 15,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(var(--hb-accent-rgb),0.14)', border: '1px solid rgba(var(--hb-accent-rgb),0.28)',
-        color: 'var(--hb-cyan-bright)',
+        background: `linear-gradient(160deg, ${tint[0]}, ${tint[1]})`,
+        boxShadow: `0 8px 20px ${tint[1]}59, inset 0 1px 0 rgba(255,255,255,0.3)`,
       }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff"
+          strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+          <path d="M14 3v5h5"/><path d="M9 15h6M9 12h3"/>
         </svg>
       </div>
 
       {/* title + meta */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontFamily: 'var(--font-read)', fontSize: '0.88rem', fontWeight: 600,
-          color: 'var(--text-primary)',
+          fontFamily: 'var(--font-read)', fontSize: '1rem', fontWeight: 600,
+          color: 'var(--hb-text)',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>{file.title}</div>
-        <div style={{
-          fontFamily: "var(--font-mono)", fontSize: '0.62rem',
-          letterSpacing: '0.06em', color: 'var(--text-muted)', marginTop: '2px',
-        }}>{file.kind} · {fmtBytes(file.size)}</div>
+        <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginTop: 2 }}>
+          {file.kind} · {fmtBytes(file.size)}
+        </div>
       </div>
 
-      {/* download button — amber action chip, like the reference tags */}
       <button
         onClick={onDownload}
         title="Download"
-        className="hb-glass-xs"
+        className="glass-round"
         style={{
-          flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.4rem',
-          padding: '0.4rem 0.7rem',
-          border: '1px solid rgba(242,183,92,0.45)',
-          background: busy ? 'rgba(217,156,68,0.1)' : 'rgba(217,156,68,0.16)',
-          backdropFilter: 'var(--hb-holo-blur)',
-          WebkitBackdropFilter: 'var(--hb-holo-blur)',
-          color: '#f6d9a8', cursor: busy ? 'default' : 'pointer',
-          fontFamily: "'Rajdhani',sans-serif", fontSize: '0.72rem', fontWeight: 700,
-          letterSpacing: '0.1em', textTransform: 'uppercase',
-          boxShadow: 'inset 0 1px 0 0 rgba(255,225,180,0.3)',
-          transition: 'background 0.15s',
+          flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8,
+          height: 38, padding: '0 18px',
+          border: '1px solid rgba(255,255,255,0.18)',
+          background: 'linear-gradient(160deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03))',
+          backdropFilter: 'blur(20px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3)',
+          color: 'var(--hb-text)', cursor: busy ? 'default' : 'pointer',
+          fontSize: '0.875rem', fontWeight: 600,
         }}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>
         </svg>
         {busy ? '…' : 'Download'}
       </button>
@@ -1034,11 +1200,11 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                 </div>
               )}
               {message.content && (
-                <div className="hb-holo" style={{
-                  padding: '0.6rem 0.95rem',
-                  color: '#dfeef4', fontSize: '0.9375rem',
+                <div className="hb-holo hb-bubble-user" style={{
+                  padding: '14px 20px',
+                  color: 'var(--hb-text)', fontSize: '1rem',
                   fontFamily: 'var(--font-read)',
-                  lineHeight: 1.65, whiteSpace: 'pre-wrap', userSelect: 'text',
+                  lineHeight: 1.6, whiteSpace: 'pre-wrap', userSelect: 'text',
                   // Break long unbroken strings (URLs, tokens, JSON) so they wrap
                   // inside the bubble instead of stretching it past its max-width.
                   overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%',

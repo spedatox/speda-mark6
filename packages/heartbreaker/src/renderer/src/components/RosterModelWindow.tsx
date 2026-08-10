@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchAgentModels, fetchModels, pinAgentModel, pinTelegramModel } from '../lib/api'
 import type { AgentModelInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
-import { ROSTER } from '../lib/agents'
+import { PARTY_ROSTER } from '../lib/agents'
 import { Avatar } from './CommBubble'
 import AgentModelPicker from './AgentModelPicker'
 
@@ -122,7 +122,7 @@ export default function RosterModelWindow({ config, onClose }: {
 
       {/* Roster list */}
       <div style={{ overflowY: 'auto', minHeight: 0, padding: '0.3rem 0' }}>
-        {ROSTER.map((id, i) => {
+        {PARTY_ROSTER.map((id, i) => {
           const info = infos.find(a => a.agent_id === id)
           return (
             <div key={id} style={{

@@ -2,7 +2,7 @@
  * ════════════════════════════════════════════════════════════════════════════
  *  THE colour system. One accent in → the ENTIRE palette out, re-hued.
  *
- *  The Stark theme is a single cool-petrol hue (~195°) spanning everything:
+ *  The Stark theme is a single steel-blue hue (~208°) spanning everything:
  *  the near-black backgrounds, the glass rims, the text, the dim icon scale and
  *  the bright accent. This module takes a brand's accent, reads its HUE, and
  *  regenerates the whole token set at that hue — keeping each token's original
@@ -64,7 +64,7 @@ function mix(hex: string, target: string, t: number): string {
 }
 
 const WHITE = '#ffffff'
-const VOID = '#04080a'
+const VOID = '#05070a'
 
 /** Re-hue a base colour to `hue`, preserving its saturation & lightness. */
 function rehue(baseHex: string, hue: number): Rgb {
@@ -76,31 +76,49 @@ function rehue(baseHex: string, hue: number): Rgb {
 // agent's hue at runtime. This is the whole UI: backgrounds, surfaces, text,
 // lines, glass rims and the dim icon scale.
 const BASE_HEX: Record<string, string> = {
-  '--hb-void': '#04080a', '--hb-base': '#060c0f', '--hb-petrol': '#0b1a22', '--hb-steel': '#13303b',
-  '--hb-text': '#cadbe2', '--hb-text-dim': '#7a96a1', '--hb-text-faint': '#46626d',
-  '--bg-code': '#08151b', '--bg-code-header': '#0a1d25',
-  '--hb-icon': '#3a6472', '--hb-icon-dim': '#2e5260', '--hb-icon-bright': '#5d7f8a',
+  '--hb-void': '#05070a', '--hb-base': '#080b10', '--hb-petrol': '#0e1319', '--hb-steel': '#161d26',
+  '--hb-text': '#dbe6ec', '--hb-text-dim': '#93a6b1', '--hb-text-faint': '#5d6f7a',
+  '--bg-code': '#0a0f15', '--bg-code-header': '#0e141b',
+  '--hb-icon': '#7c8f9b', '--hb-icon-dim': '#5d6f7a', '--hb-icon-bright': '#93a6b1',
 }
 // rgba tokens — [base colour for hue/sat/light, alpha].
+//
+// NOTE on where colour is allowed to land. The reference deck is neutral where
+// the material is structural (panel rims, separators, the frost itself) and
+// accent-coloured only where the UI is saying something — the active row, the
+// user's own bubble, a focused field, a live status pill. So the near-neutral
+// bases below (#e6eef6, #dbe6ec) re-hue to almost nothing on purpose: they stay
+// white-ish for every agent. The saturated bases carry the brand.
 const BASE_RGBA: Record<string, [string, number]> = {
-  '--hb-line': ['#5fa5bc', 0.26], '--hb-line-bright': ['#6ec8e4', 0.55],
-  '--hb-edge': ['#96cdf5', 0.22], '--hb-edge-bright': ['#aae1ff', 0.55],
-  '--bg-sidebar': ['#081217', 0.72], '--bg-hover': ['#4696af', 0.12], '--bg-input': ['#08141a', 0.66],
-  '--bg-user-bubble': ['#183844', 0.46], '--scrollbar-thumb': ['#468ca0', 0.32], '--scrollbar-thumb-hover': ['#5aafc8', 0.55],
-  // Unified glass material — the frost re-hues with the agent so glass reads in
-  // the brand colour (amber on Sentinel, red on Centurion), not a fixed blue.
-  // Tint = light milky wash (high L, re-hued); fill = dark occluding base.
-  '--glass-tint': ['#bed7eb', 0.06], '--glass-tint-hi': ['#bed7eb', 0.13],
-  '--glass-fill': ['#081018', 0.62],
+  // Structural hairline stays neutral; the *bright* line is the accent one.
+  '--hb-line': ['#dbe6ec', 0.08], '--hb-line-bright': ['#7fa4c4', 0.30],
+  // --hb-edge (the resting panel rim) is deliberately NOT here: it is a fixed
+  // neutral white rim defined once in heartbreaker.css. Re-hueing it was what
+  // made every panel read as a coloured box instead of a pane of glass.
+  '--hb-edge-bright': ['#a9c6dc', 0.40],
+  '--bg-sidebar': ['#0a0e14', 0.55], '--bg-hover': ['#bed7eb', 0.06], '--bg-input': ['#0a0e14', 0.50],
+  '--bg-user-bubble': ['#7fa4c4', 0.16], '--scrollbar-thumb': ['#7fa4c4', 0.28], '--scrollbar-thumb-hover': ['#a9c6dc', 0.55],
+  // Unified glass material — a near-white frost with only a whisper of brand in
+  // it. Two stops so the slab can be lit across its face (160deg) rather than
+  // washed flat; --glass-tint is also used on its own for ghost hovers.
+  '--glass-tint': ['#e6eef6', 0.07], '--glass-tint-2': ['#e6eef6', 0.02],
+  '--glass-tint-hi': ['#e6eef6', 0.12],
+  // Dark occluding base. Kept because nested backdrop roots cancel a child's
+  // blur, but much lighter than before so the white frost above it is what the
+  // eye actually reads.
+  '--glass-fill': ['#070b11', 0.42],
   // Floating menus/dropdowns sit inside backdrop roots (composer, sidebar) where
   // their own blur is cancelled, so they need a near-opaque fill to occlude the
   // content behind them. Re-hued like the rest.
-  '--glass-menu': ['#0a141b', 0.94],
+  '--glass-menu': ['#0b1016', 0.95],
 }
 
-/** Derive the bright (active) and dim shades from a single accent. */
+/** Derive the bright (active) and dim shades from a single accent.
+ *  The dim stop is a *readable* shade, not a shadow — it labels secondary
+ *  routing rows and inactive chips, so it has to survive on the near-black
+ *  base. 0.62 toward the void crushed it into the background. */
 export function deriveAccents(accent: string): { accent: string; bright: string; dim: string } {
-  return { accent, bright: mix(accent, WHITE, 0.28), dim: mix(accent, VOID, 0.62) }
+  return { accent, bright: mix(accent, WHITE, 0.32), dim: mix(accent, VOID, 0.32) }
 }
 
 /** Build every CSS custom property the UI uses, re-hued to the brand accent. */
@@ -193,10 +211,12 @@ export function stopPartyCycle(): void {
 
 // ROSTER order, colours mirroring lib/agents AGENT_COLORS — inlined here so
 // the theme engine keeps zero imports from component-land.
+// Orion is NOT in the parade: it is Mark VI's own custodian, not part of the
+// House Party. Keep this in step with PARTY_ROSTER in lib/agents.
 const PARTY_COLORS = [
-  '#36abca', /* speda */ '#d99c44', /* sentinel */ '#9165e6', /* nightcrawler */
+  '#7fa4c4', /* speda */ '#d99c44', /* sentinel */ '#9165e6', /* nightcrawler */
   '#8a93a6', /* ultron */ '#d8483c', /* centurion */ '#3fae74', /* atomix */
-  '#2f4f8f', /* optimus */ '#e0703a', /* orion */
+  '#2f4f8f', /* optimus */
 ]
 
 /**

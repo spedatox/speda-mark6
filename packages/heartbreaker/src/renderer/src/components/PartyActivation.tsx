@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { ROSTER, agentColor } from '../lib/agents'
+import { PARTY_ROSTER, agentColor } from '../lib/agents'
 import AgentMark from './AgentMark'
 
 const MONO = "var(--font-mono)"
@@ -102,11 +102,11 @@ export default function PartyActivation({ mode, onIgnite, onDone }: {
   // Copy differs by mode; the ENTER animation is identical for both entrances.
   const directive = mode === 'engage'
     ? '// DIRECTIVE CONFIRMED — "TAKE \'EM TO CHURCH"'
-    : '// WAR ROOM ONLINE — ROSTER ON STATION'
+    : '// WAR ROOM ONLINE — PARTY_ROSTER ON STATION'
   const subtitle = mode === 'engage' ? 'Protocol' : 'Standby'
   const closer = mode === 'engage'
     ? 'ALL HANDS ONLINE — CHANNEL OPEN'
-    : 'ROSTER ON STATION — STANDBY HELD'
+    : 'PARTY_ROSTER ON STATION — STANDBY HELD'
 
   const engage = entering
 
@@ -192,7 +192,7 @@ export default function PartyActivation({ mode, onIgnite, onDone }: {
             display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
             gap: 'clamp(1.1rem, 3.4vw, 2.4rem)', maxWidth: 'min(1120px, 94vw)',
           }}>
-            {ROSTER.map((id, i) => {
+            {PARTY_ROSTER.map((id, i) => {
               const d = 1.05 + i * 0.18
               const c = agentColor(id)
               return (
@@ -249,10 +249,10 @@ export default function PartyActivation({ mode, onIgnite, onDone }: {
             display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
             gap: 'clamp(0.9rem, 2.6vw, 1.6rem)', maxWidth: 'min(900px, 92vw)',
           }}>
-            {ROSTER.map((id, i) => (
+            {PARTY_ROSTER.map((id, i) => (
               <span key={id} style={{
                 display: 'flex',
-                animation: `hbHppWink 0.4s ease ${0.35 + (ROSTER.length - 1 - i) * 0.09}s both`,
+                animation: `hbHppWink 0.4s ease ${0.35 + (PARTY_ROSTER.length - 1 - i) * 0.09}s both`,
               }}>
                 <CineMark id={id} size={MARK_SM} />
               </span>

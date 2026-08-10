@@ -147,7 +147,7 @@ function ChartPanel({ title, children }: { title?: string; children: React.React
   const sub  = idx > -1 ? title!.slice(idx)    : ''
 
   return (
-    <div className="hb-glass-sm" style={{
+    <div className="hb-glass-sm hb-widget" style={{
       position: 'relative',
       background: 'rgba(6, 14, 22, 0.55)',
       backdropFilter: 'var(--hb-holo-blur)',

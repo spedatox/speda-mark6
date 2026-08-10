@@ -3,7 +3,7 @@ import { fetchAgentComms, getHouseParty, setHouseParty } from '../lib/api'
 import type { AgentCommEntry } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import { useIsMobile } from '../lib/useIsMobile'
-import { Bubble } from './CommBubble'
+import { Bubble, AvatarStack } from './CommBubble'
 
 /**
  * AGENT_COMMS — the inter-agent traffic tray.
@@ -60,6 +60,8 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
   }
 
   const live = entries.filter(e => e.status === 'running').length
+  // Who is actually talking in this channel, newest participants first.
+  const inChannel = Array.from(new Set(entries.flatMap(e => [e.from_agent, e.to_agent]))).filter(a => a !== 'all')
 
   useEffect(() => {
     const el = feedRef.current
@@ -80,68 +82,51 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
         transition: 'width 0.45s cubic-bezier(0.22, 0.9, 0.3, 1)',
       }}
     >
-      <header className="hb-head-glass" style={{ flexShrink: 0, justifyContent: 'space-between', gap: 10 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          AGENT_COMMS // TRAFFIC
-          {live > 0 && (
-            <span style={{
-              fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.1em',
-              color: 'var(--hb-amber)', textTransform: 'none',
-            }}>
-              {live} LIVE
-            </span>
-          )}
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            className={party ? 'hb-btn hb-btn-tint' : 'hb-btn'}
-            onClick={standDown}
-            title={party
-              ? 'STAND DOWN — end the House Party Protocol'
-              : "Engaged only by telling SPEDA: 'House Party Protocol'"}
-            style={{
-              gap: 5, height: 18, padding: '0 6px',
-              ...(party ? { color: 'var(--hb-amber-bright)' } : {}),
-              cursor: party ? 'pointer' : 'default',
-              fontFamily: UI, fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.14em',
-            }}
-          >
-            <span style={{
-              width: 5, height: 5, borderRadius: '50%',
-              background: party ? 'var(--hb-amber)' : 'var(--hb-icon-dim)',
-              boxShadow: party ? '0 0 6px rgba(242,183,92,0.8)' : 'none',
-            }} />
-            {party ? 'HPP · STAND DOWN' : 'HPP OFFLINE'}
-          </button>
-          <button
-            onClick={() => setWide(w => !w)}
-            title={wide ? 'Retract (Esc)' : 'Extend the traffic console'}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 2px',
-              fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.14em',
-              color: wide ? 'var(--hb-amber)' : 'var(--hb-icon)', transition: 'color 0.15s',
-            }}
-          >
-            {wide ? 'RETRACT_' : 'EXTEND_'}
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-              style={{ transform: wide ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s cubic-bezier(0.22, 0.9, 0.3, 1)' }}>
-              <polyline points="6 14 12 8 18 14" />
-            </svg>
-          </button>
-          <button
-            onClick={onClose}
-            title="Close (Esc)"
-            style={{
-              border: 'none', background: 'transparent', cursor: 'pointer',
-              color: 'var(--hb-icon-dim)', display: 'flex', alignItems: 'center', padding: 0,
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </span>
+      {/* Header — the deck's group-window bar: who is in the channel, what it
+          is, and how many are live. It used to read "AGENT_COMMS // TRAFFIC",
+          which named the endpoint rather than the conversation. */}
+      <header style={{
+        height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12,
+        padding: '0 18px', borderBottom: '1px solid rgba(255,255,255,0.07)',
+      }}>
+        {inChannel.length > 0 && <AvatarStack ids={inChannel} size={28} max={4} />}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: UI, fontSize: '0.94rem', fontWeight: 600,
+            letterSpacing: '0.04em', color: 'var(--hb-text)',
+          }}>
+            Agent traffic
+          </div>
+          <div style={{
+            fontSize: '0.78rem',
+            color: live > 0 ? 'var(--hb-green)' : 'var(--hb-text-faint)',
+          }}>
+            {live > 0 ? `${live} working` : `${entries.length} exchange${entries.length === 1 ? '' : 's'}`}
+          </div>
+        </div>
+        <button
+          onClick={() => setWide(w => !w)}
+          title={wide ? 'Retract (Esc)' : 'Extend the traffic console'}
+          style={{
+            border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 2px',
+            fontSize: '0.8125rem', letterSpacing: '0.06em', flexShrink: 0,
+            color: wide ? 'var(--hb-cyan-bright)' : 'var(--hb-cyan)', transition: 'color 0.15s',
+          }}
+        >
+          {wide ? 'Retract' : 'Expand'}
+        </button>
+        <button
+          onClick={onClose}
+          title="Close (Esc)"
+          style={{
+            border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0,
+            color: 'var(--hb-text-faint)', display: 'flex', alignItems: 'center', padding: 0,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
       </header>
 
       <div
@@ -159,17 +144,52 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
       >
         {entries.length === 0 ? (
           <p style={{
-            padding: '0.6rem 0.1rem', margin: 0,
-            fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em',
-            color: 'var(--hb-icon-dim)',
+            padding: '10px 2px', margin: 0,
+            fontSize: '0.875rem', color: 'var(--hb-text-faint)',
           }}>
             {loaded
-              ? '// NO TRAFFIC — DISPATCHES BETWEEN AGENTS WILL APPEAR HERE'
-              : '// LINKING…'}
+              ? 'No traffic yet — dispatches between agents appear here.'
+              : 'Linking…'}
           </p>
         ) : entries.map(e => (
           <Bubble key={e.id} e={e} compact={!wide} />
         ))}
+      </div>
+
+      {/* Footer — protocol state, and how to raise it. Standing down is a
+          control; engaging is deliberately NOT, because the passphrase gate
+          lives with SPEDA (see the House Party section of CLAUDE.md). */}
+      <div style={{
+        flexShrink: 0, padding: '12px 16px 16px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+      }}>
+        <button
+          className="glass-round"
+          onClick={standDown}
+          disabled={!party}
+          title={party
+            ? 'Stand down — end the House Party Protocol'
+            : "Engaged only by telling SPEDA: 'House Party Protocol'"}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, height: 28, padding: '0 12px',
+            background: 'rgba(217,156,68,0.08)',
+            border: '1px solid rgba(217,156,68,0.28)',
+            fontSize: '0.78rem', color: party ? 'var(--hb-amber-bright)' : '#d3a04a',
+            cursor: party ? 'pointer' : 'default',
+          }}
+        >
+          <span style={{
+            width: 5, height: 5, borderRadius: '50%',
+            background: party ? 'var(--hb-amber-bright)' : 'var(--hb-icon-dim)',
+            boxShadow: party ? '0 0 6px rgba(242,183,92,0.8)' : 'none',
+          }} />
+          {party ? 'House Party live — stand down' : 'House Party offline'}
+        </button>
+        {!party && (
+          <span style={{ fontSize: '0.78rem', color: 'var(--hb-text-faint)', whiteSpace: 'nowrap' }}>
+            say “House Party Protocol”
+          </span>
+        )}
       </div>
     </section>
   )

@@ -7,6 +7,10 @@ export interface AppSettings {
   systemPrompt: string
   temperature: number
   sidebarOpen: boolean
+  /** The deck's right telemetry column. Defaults on — it is the glanceable
+   *  half of the Systems Board — but two 280px columns is a lot of horizontal
+   *  room, so the rail can fold it away. */
+  telemetryOpen: boolean
   userName: string
   /** Working directory sent to the Forge for Optimus jobs (Cell workspace +
    *  Graphify root). Empty = the peer's own default workspace. */
@@ -41,6 +45,7 @@ const DEFAULT: AppSettings = {
   systemPrompt: '',
   temperature: 0.7,
   sidebarOpen: true,
+  telemetryOpen: true,
   userName: '',
   forgeCwd: '',
   voiceLocale: 'en-US',

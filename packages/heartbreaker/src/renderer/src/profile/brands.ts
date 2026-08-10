@@ -23,7 +23,7 @@ export const BRANDS: Record<string, Brand> = {
   speda: {
     agentId: 'speda', name: 'SPEDA', modelNumber: 'Mark VI', userName: 'Ahmet Erol',
     tagline: 'Main Assistant',
-    avatarInitial: 'S', accent: '#36abca',
+    avatarInitial: 'S', accent: '#7fa4c4',
   },
   ultron: {
     agentId: 'ultron', name: 'Ultron', modelNumber: 'Mark III', userName: 'Ahmet Erol',

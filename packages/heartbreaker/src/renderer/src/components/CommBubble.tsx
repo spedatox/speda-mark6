@@ -31,12 +31,43 @@ function LiveElapsed({ since }: { since: string }) {
 const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
 
+/**
+ * Stand-in geometry for the two ids with no wordmark art: Orion (an orbit —
+ * the custodian circling the system) and the war room / all-hands channel (the
+ * roster converging on a point, the same figure the deck's rail uses).
+ *
+ * These are MARKS, not letters. Two-letter placeholder tiles were tried and
+ * rejected by the owner: a roster of "SP / CT / AT / NC" reads like a spreadsheet
+ * of initials, and the whole point of the agent identities is that you know them
+ * by their sigil.
+ */
+function FallbackGlyph({ id, size }: { id: string; size: number }) {
+  const s = Math.round(size * 0.62)
+  if (id === 'warroom' || id === 'all') {
+    return (
+      <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+        <circle cx="12" cy="12" r="3" />
+        <circle cx="12" cy="3.5" r="1.6" /><circle cx="19.5" cy="16.5" r="1.6" /><circle cx="4.5" cy="16.5" r="1.6" />
+        <line x1="12" y1="5.1" x2="12" y2="9" />
+        <line x1="18.1" y1="15.6" x2="14.6" y2="13.5" />
+        <line x1="5.9" y1="15.6" x2="9.4" y2="13.5" />
+      </svg>
+    )
+  }
+  // Orion — an orbit around a core.
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" />
+      <ellipse cx="12" cy="12" rx="9.5" ry="5" transform="rotate(-28 12 12)" />
+    </svg>
+  )
+}
+
 export function Avatar({ id, size = 26 }: { id: string; size?: number }) {
   const c = agentColor(id)
   // The agent's own mark, bare — it fills the box with no ring or plate around
   // it. Below ~28px the glass finish's bloom swallows the geometry, so small
-  // chips get the flat cut. Agents with no art yet (orion, warroom, all) fall
-  // back to the initial, which does need a ring to read as an avatar.
+  // chips get the flat cut.
   if (hasMark(id)) {
     return (
       <AgentMark agentId={id} size={size} finish={size >= 28 ? 'glass' : 'flat'}
@@ -44,17 +75,53 @@ export function Avatar({ id, size = 26 }: { id: string; size?: number }) {
     )
   }
   return (
-    <span style={{
-      width: size, height: size, flexShrink: 0, borderRadius: '50%',
+    <span className="hb-tile" style={{
+      width: size, height: size, flexShrink: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: `${c}12`,
-      border: `1px solid ${c}59`,
+      background: `linear-gradient(160deg, ${c}33, ${c}0d)`,
+      border: `1px solid ${c}52`,
       color: c,
-      fontFamily: UI, fontWeight: 800, fontSize: size * 0.52,
-      letterSpacing: 0, lineHeight: 1,
     }}>
-      {id.charAt(0).toUpperCase()}
+      <FallbackGlyph id={id} size={size} />
     </span>
+  )
+}
+
+/**
+ * Overlapping roster stack — who is in this channel, at a glance. Used by the
+ * comms tray header and the House Party bar. Each mark sits in a tile rimmed
+ * in the page colour so the overlap reads as depth rather than a smear.
+ */
+export function AvatarStack({ ids, size = 28, max = 5 }: {
+  ids: string[]; size?: number; max?: number
+}) {
+  const shown = ids.slice(0, max)
+  const rest = ids.length - shown.length
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+      {shown.map((id, i) => (
+        <span
+          key={id}
+          title={id}
+          className="hb-tile"
+          style={{
+            width: size, height: size, flexShrink: 0,
+            marginLeft: i === 0 ? 0 : -Math.round(size * 0.29),
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: `linear-gradient(160deg, ${agentColor(id)}3d, ${agentColor(id)}0f)`,
+            border: '1.5px solid var(--hb-void)',
+            zIndex: shown.length - i,
+          }}
+        >
+          <Avatar id={id} size={Math.round(size * 0.66)} />
+        </span>
+      ))}
+      {rest > 0 && (
+        <span style={{ marginLeft: 8, fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>
+          +{rest}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -117,22 +184,26 @@ export function Bubble({ e, mine = false, compact = false }: {
   const showTask = open || e.task.length <= clip ? e.task : e.task.slice(0, clip) + '…'
   const result = e.result ?? ''
   const showResult = open || result.length <= clip ? result : result.slice(0, clip) + '…'
-  const bodyFont = compact ? '0.7rem' : '0.76rem'
+  // Body copy sits at reading size. It was 0.7rem/0.76rem — 11px — for text
+  // that is full sentences of agent output, which is a caption pretending to
+  // be a message.
+  const bodyFont = compact ? '0.875rem' : '0.905rem'
 
   return (
     <div style={{
-      display: 'flex', gap: 8, padding: '0.3rem 0',
+      display: 'flex', gap: 12, padding: '5px 0',
       flexDirection: mine ? 'row-reverse' : 'row',
+      alignItems: 'flex-start',
       animation: 'hbRise 0.3s ease both',
     }}>
-      <Avatar id={e.from_agent} size={compact ? 22 : 26} />
+      <Avatar id={e.from_agent} size={compact ? 28 : 34} />
       <div
-        className="hb-glass-sm"
+        className={mine ? 'hb-bubble-agent-mine' : 'hb-bubble-agent'}
         style={{
           maxWidth: compact ? '88%' : 'min(72%, 640px)',
-          padding: compact ? '0.4rem 0.55rem 0.45rem' : '0.45rem 0.6rem 0.5rem',
-          border: `1px solid ${from}44`,
-          background: `${from}0d`,
+          padding: compact ? '10px 13px' : '11px 15px',
+          border: `1px solid ${from}33`,
+          background: `${from}14`,
           backdropFilter: 'var(--hb-holo-blur)',
           WebkitBackdropFilter: 'var(--hb-holo-blur)',
           boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
@@ -140,8 +211,8 @@ export function Bubble({ e, mine = false, compact = false }: {
       >
         {/* meta line: SPEDA ▸ SENTINEL · 06:13:42 · HP · copy/expand controls */}
         <div style={{
-          display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 3,
-          fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.08em',
+          display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6,
+          fontSize: '0.78rem', letterSpacing: '0.02em',
         }}>
           <span style={{ color: from, fontWeight: 700 }}>{e.from_agent.toUpperCase()}</span>
           <span style={{ color: 'var(--hb-icon-dim)' }}>▸</span>
@@ -160,11 +231,11 @@ export function Bubble({ e, mine = false, compact = false }: {
               title={open ? 'Collapse' : 'Show the full exchange'}
               style={{
                 border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
-                fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.12em',
-                color: open ? 'var(--hb-amber)' : 'var(--hb-icon)',
+                fontSize: '0.78rem',
+                color: open ? 'var(--hb-cyan-bright)' : 'var(--hb-text-faint)',
               }}
             >
-              {open ? 'LESS_' : 'MORE_'}
+              {open ? 'Less' : 'More'}
             </button>
           )}
         </div>
@@ -174,21 +245,29 @@ export function Bubble({ e, mine = false, compact = false }: {
 
         {/* the reply, nested — the target agent answering in the thread */}
         {e.status === 'running' ? (
-          <p style={{
-            margin: '0.4rem 0 0', fontFamily: MONO, fontSize: '0.56rem',
-            letterSpacing: '0.12em', color: 'var(--hb-amber)',
+          // A spinning ring in the target agent's colour, not a blinking word.
+          // The deck's running state is the same ring the tool chain uses, so
+          // "something is working" looks identical everywhere in the app.
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            marginTop: 8, fontSize: bodyFont, color: 'var(--hb-text-dim)',
           }}>
-            {e.to_agent.toUpperCase()} WORKING<span style={{ animation: 'hbBlink 1.1s ease-in-out infinite' }}>…</span>
+            <span style={{
+              width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+              border: `1.5px solid ${to}4d`, borderTopColor: to,
+              animation: 'spin 0.7s linear infinite',
+            }} />
+            {e.to_agent} is working…
             {' '}<LiveElapsed since={e.created_at} />
-          </p>
+          </div>
         ) : result && (
           <div style={{
-            marginTop: '0.45rem', paddingLeft: '0.55rem',
+            marginTop: 10, paddingLeft: 10,
             borderLeft: `2px solid ${failed ? 'var(--hb-red)' : to}`,
           }}>
             <div style={{
-              display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2,
-              fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.08em',
+              display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4,
+              fontSize: '0.78rem',
             }}>
               <span style={{ color: to, fontWeight: 700 }}>{e.to_agent.toUpperCase()}</span>
               {failed && <span style={{ color: 'var(--hb-red)' }}>{e.status.toUpperCase()}</span>}

@@ -120,31 +120,25 @@ function SessionItem({ session, active, onSelect, config, running }: {
       ) : (
         <button
           onClick={onSelect}
+          // The row you are in draws a surface; the rest of the stack stays
+          // quiet. Material and states live in .hb-row / .hb-row-active so the
+          // list shares the deck's one recipe (see heartbreaker.css).
+          className={active ? 'hb-row hb-row-active' : 'hb-row'}
           style={{
             width: '100%',
-            padding: '0.5rem 0.7rem',
-            // Flat, sharp list row (no glass slab/rounding) — the phone-book
-            // highlighted-entry look. Selected row goes AMBER.
-            border: `1px solid ${active ? 'rgba(242,183,92,0.3)' : 'transparent'}`,
-            borderLeft: active ? '2px solid var(--hb-amber)' : hover ? '2px solid rgba(var(--hb-accent-rgb),0.35)' : '2px solid transparent',
-            background: active
-              ? 'rgba(217, 156, 68, 0.12)'
-              : hover
-              ? 'rgba(var(--hb-accent-rgb),0.07)'
-              : 'transparent',
-            color: active ? '#f3e2c4' : hover ? 'var(--hb-text)' : 'var(--hb-text-dim)',
+            padding: '10px 14px',
+            color: active ? 'var(--hb-text)' : hover ? 'var(--hb-text)' : 'var(--hb-text-dim)',
             cursor: 'pointer',
-            fontSize: '0.875rem',
+            fontSize: '0.905rem',
             fontFamily: "'SamsungOne','Inter',sans-serif",
-            fontWeight: active ? 600 : 400,
+            fontWeight: active ? 500 : 400,
             lineHeight: 1.45,
             textAlign: 'left',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: 'block',
-            transition: 'background 0.12s, color 0.12s, border-color 0.12s',
-            paddingRight: lit ? '3.75rem' : '0.7rem',
+            paddingRight: lit ? '3.75rem' : '14px',
           }}
         >
           {displayTitle || 'New conversation'}
@@ -220,35 +214,21 @@ function ActionIcon({ title, onClick, hoverColor, children }: {
 
 /* ── Group label ──────────────────────────────────────────────────────────── */
 function GroupLabel({ label }: { label: string }) {
+  // A date divider, nothing more. The old version carried a ">>:" sigil and a
+  // fading accent rule — decoration competing with the list it was labelling.
+  // The deck's labels are plain caps and get out of the way.
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: '0.5rem',
-      padding: '0.6rem 0.85rem 0.25rem',
-      marginBottom: '1px',
+      fontFamily: "'Rajdhani', sans-serif",
+      fontSize: '0.75rem',
+      fontWeight: 600,
+      letterSpacing: '0.18em',
+      textTransform: 'uppercase',
+      color: 'var(--hb-icon-dim)',
+      padding: '0.85rem 14px 0.5rem',
+      whiteSpace: 'nowrap',
     }}>
-      <span style={{
-        fontFamily: "var(--font-mono)",
-        fontSize: '0.6rem',
-        color: 'rgba(var(--hb-accent-rgb),0.55)',
-        whiteSpace: 'nowrap',
-      }}>
-        {'>>:'}
-      </span>
-      <span style={{
-        fontFamily: "'Rajdhani', sans-serif",
-        fontSize: '0.7rem',
-        fontWeight: 700,
-        letterSpacing: '0.18em',
-        textTransform: 'uppercase',
-        color: 'rgba(160,200,215,0.6)',
-        whiteSpace: 'nowrap',
-      }}>
-        {label}
-      </span>
-      <span style={{
-        flex: 1, height: '1px',
-        background: 'linear-gradient(90deg, rgba(var(--hb-accent-rgb),0.28), rgba(var(--hb-accent-rgb),0.03))',
-      }} />
+      {label}
     </div>
   )
 }
@@ -258,34 +238,34 @@ function NewChatBtn({ onClick }: { onClick: () => void }) {
   const [hover, setHover] = useState(false)
   return (
     <button
-      className="hb-seam-b"
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       title="New conversation"
+      // The sidebar's one accented surface. It is the only ACTION in a column
+      // that is otherwise a list, so it is the only thing here allowed to carry
+      // the brand — the selected row stays neutral on purpose. The class is
+      // what supplies the corner: the global reset flattens inline radii.
+      className="hb-glass-sm"
       style={{
-        width: '100%',
-        padding: '0.5rem 0.85rem',
-        display: 'flex', alignItems: 'center', gap: '0.55rem',
-        border: 'none',
-        background: hover ? 'rgba(var(--hb-accent-rgb),0.08)' : 'transparent',
-        color: hover ? 'var(--hb-text)' : 'var(--hb-icon-bright)',
+        width: '100%', height: 44,
+        padding: '0 14px',
+        display: 'flex', alignItems: 'center', gap: '0.65rem',
+        border: `1px solid rgba(var(--hb-accent-rgb), ${hover ? 0.44 : 0.28})`,
+        background: `linear-gradient(160deg, rgba(var(--hb-accent-rgb),${hover ? 0.24 : 0.16}), rgba(var(--hb-accent-rgb),0.05))`,
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14)',
+        color: 'var(--hb-text)',
         cursor: 'pointer',
-        transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+        transition: 'background 0.15s, border-color 0.15s',
         textAlign: 'left',
       }}
     >
       {/* plus icon */}
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="2" style={{ flexShrink: 0, color: hover ? 'var(--hb-cyan)' : 'var(--hb-icon-dim)' }}>
-        <line x1="12" y1="5" x2="12" y2="19"/>
-        <line x1="5" y1="12" x2="19" y2="12"/>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--hb-cyan-bright)"
+        strokeWidth="1.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
+        <path d="M12 5v14M5 12h14"/>
       </svg>
-      <span style={{
-        fontFamily: "'Rajdhani',sans-serif",
-        fontSize: '0.76rem', fontWeight: 600,
-        letterSpacing: '0.14em', textTransform: 'uppercase',
-      }}>
+      <span style={{ fontSize: '0.905rem', fontWeight: 500 }}>
         New conversation
       </span>
     </button>
@@ -761,11 +741,11 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
   const groups = useMemo(() => groupSessions(filtered), [filtered])
 
   return (
-    <aside className="hb-seam-r" style={mobile ? {
+    <aside className={mobile ? 'hb-seam-r' : (isOpen ? 'hb-holo hb-island' : undefined)} style={mobile ? {
       // Off-canvas drawer — fixed under the HUD strip, slides in from the left
       // as a fully frosted glass sheet. Stays mounted off-screen so the slide
       // animates both ways.
-      position: 'fixed', top: 22, bottom: 4, left: 0, zIndex: 9001,
+      position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 9001,
       width: 'min(84vw, 330px)', minWidth: 0, height: 'auto',
       background: 'rgba(8, 14, 20, 0.55)',
       backdropFilter: 'var(--hb-holo-blur)',
@@ -778,14 +758,12 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
     } : {
       width: isOpen ? 'var(--sidebar-width)' : '0px',
       minWidth: isOpen ? 'var(--sidebar-width)' : '0px',
-      height: '100%',
-      // Reading-hierarchy tint: a touch denser than the floating cards so the
-      // conversation list sits back; etched boundary on the right (hb-seam-r).
-      background: 'rgba(6, 11, 19, 0.2)',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
+      // A floating island, not a wall: inset on all four sides so the void
+      // shows around it and the glass has an edge to catch light on. Material
+      // comes from .hb-holo — the class list above — so this only owns layout.
+      margin: isOpen ? '20px 0 20px 20px' : 0,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      transition: 'width 0.2s ease, min-width 0.2s ease',
+      transition: 'width 0.2s ease, min-width 0.2s ease, margin 0.2s ease',
       flexShrink: 0,
     }}>
       <div style={{ width: mobile ? '100%' : 'var(--sidebar-width)', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -808,11 +786,13 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
           />
         )}
 
-        {/* New chat */}
-        <NewChatBtn onClick={onNewChat} />
+        {/* New chat — inset to the column's 16px gutter, like everything below */}
+        <div style={{ padding: '0 16px 6px' }}>
+          <NewChatBtn onClick={onNewChat} />
+        </div>
 
         {/* Session list */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem 0.4rem 0.5rem' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem 16px 0.5rem' }}>
           {groups.length === 0 ? (
             <div style={{
               padding: '2rem 0.85rem 1rem',
@@ -825,7 +805,7 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
                 color: 'var(--hb-icon-dim)',
                 textTransform: 'uppercase',
               }}>
-                {search ? '// No results' : '// No sessions'}
+                {search ? 'No results' : 'No sessions yet'}
               </p>
             </div>
           ) : (

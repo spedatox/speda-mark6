@@ -4,6 +4,8 @@
     { "name": "hb-web", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "packages/heartbreaker", "run", "web:dev"], "port": 5273 },
     { "name": "map-harness", "runtimeExecutable": "npx", "runtimeArgs": ["--prefix", "packages/heartbreaker", "vite", "--config", "packages/heartbreaker/vite.mapharness.config.ts"], "port": 5373 },
     { "name": "striker-web", "runtimeExecutable": "C:/Program Files/nodejs/npm.cmd", "runtimeArgs": ["--prefix", "packages/striker", "run", "web:dev"], "port": 5173 },
-    { "name": "seo-site", "runtimeExecutable": ".venv/Scripts/python.exe", "runtimeArgs": ["-m", "http.server", "4820", "--directory", "site"], "port": 4820 }
+    { "name": "seo-site", "runtimeExecutable": ".venv/Scripts/python.exe", "runtimeArgs": ["-m", "http.server", "4820", "--directory", "site"], "port": 4820 },
+    { "name": "igor", "runtimeExecutable": ".venv/Scripts/python.exe", "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--app-dir", "packages/igor"], "port": 8000 },
+    { "name": "igor-webdev", "runtimeExecutable": ".venv/Scripts/python.exe", "runtimeArgs": ["-c", "import os,sys;os.environ['CORS_ALLOWED_ORIGINS']='http://localhost:5273,http://localhost:5274';sys.path.insert(0,'packages/igor');import uvicorn;uvicorn.run('app.main:app',port=8000)"], "port": 8000 }
   ]
 }

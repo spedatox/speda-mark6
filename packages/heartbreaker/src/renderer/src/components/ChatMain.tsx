@@ -4,6 +4,7 @@ import { useSettings } from '../store/settings'
 import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, fetchWelcome, answerAsk } from '../lib/api'
 import { useProfile } from './Sidebar'
 import MessageList from './MessageList'
+import PartyStream from './PartyStream'
 import InputBar from './InputBar'
 import VoiceMode from './VoiceMode'
 import { PermissionPrompt } from './InteractionPrompt'
@@ -39,10 +40,12 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
   const hour = new Date().getHours()
   const salutation = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
   const displayName = settings.userName.trim() || profile?.userName || ''
-  // House Party takeover — the hero speaks protocol, not pleasantries.
+  // House Party takeover — the hero speaks protocol, not pleasantries. It
+  // states the roster's readiness rather than greeting the owner, because by
+  // the time this screen exists the room is already assembled.
   const isWarroom = profile?.agentId === 'warroom'
   const fullGreeting = (isWarroom
-    ? (displayName ? `All hands on deck, ${displayName}` : 'All hands on deck')
+    ? 'Superior Six is Assembled and ready.'
     : (displayName ? `${salutation}, ${displayName}` : salutation)
   ).toUpperCase()
 
@@ -68,7 +71,16 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
   const [remark, setRemark] = useState('')
   const [remarkTyped, setRemarkTyped] = useState('')
   useEffect(() => {
-    if (isWarroom || !profile?.agentId) return
+    if (!profile?.agentId) return
+    // The war room's line is FIXED. Everywhere else the remark is a
+    // memory-aware one-liner from the cheapest model, but here it states how
+    // the protocol works, and that must read the same every single time — it
+    // is a briefing, not a greeting, and a model-written variant would make
+    // the rules of the room look negotiable.
+    if (isWarroom) {
+      setRemark('All agents will work on one single task under the leadership of SPEDA.')
+      return
+    }
     let alive = true
     fetchWelcome(config, profile.agentId).then(t => { if (alive) setRemark(t) })
     return () => { alive = false }
@@ -101,18 +113,18 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
     }}>
       {/* Clock + date — compact, top of the stack */}
       <p className="hb-num-thin" style={{
-        fontSize: 'clamp(1.6rem, 7vw, 3.2rem)', color: 'var(--hb-text)',
-        marginBottom: '0.15rem', whiteSpace: 'nowrap',
-        textShadow: '0 0 30px rgba(var(--hb-accent-rgb), 0.15)',
+        fontSize: 'clamp(1.6rem, 7vw, 4rem)', color: 'var(--hb-text)',
+        marginBottom: '0.25rem', whiteSpace: 'nowrap',
+        textShadow: '0 0 44px rgba(var(--hb-accent-rgb), 0.22)',
         animation: 'hbRise 0.5s ease both',
       }}>
         {clock}
       </p>
       <p style={{
         fontFamily: "'Rajdhani', sans-serif",
-        fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.3em',
+        fontSize: '0.84rem', fontWeight: 600, letterSpacing: '0.32em',
         color: 'var(--hb-text-faint)',
-        marginBottom: '2rem',
+        marginBottom: '1.4rem',
         animation: 'fadeIn 0.4s 0.1s ease both',
       }}>
         {dateLine}
@@ -139,20 +151,24 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
         marginBottom: '0.5rem',
         animation: 'fadeSlideIn 0.5s 0.15s ease both',
       }}>
+        {/* The wordmark carries the agent's accent — it IS the brand statement,
+            and a white hero reads as generic. (Tried white per the deck; the
+            owner called it, and they are right: this screen is the one place
+            the colour should be unmissable.) */}
         <span style={{
           fontFamily: "'Rajdhani', sans-serif",
-          fontSize: 'clamp(2.4rem, 10vw, 5rem)', fontWeight: 800,
-          letterSpacing: '0.3em', textTransform: 'uppercase',
+          fontSize: 'clamp(2.4rem, 10vw, 6rem)', fontWeight: 700,
+          letterSpacing: '0.14em', textTransform: 'uppercase',
           color: 'var(--hb-cyan)',
-          textShadow: '0 0 40px rgba(var(--hb-accent-rgb), 0.3)',
+          textShadow: '0 0 60px rgba(var(--hb-accent-rgb), 0.32)',
           lineHeight: 1,
         }}>
           {profile?.name}
         </span>
         <span style={{
           fontFamily: "'Rajdhani', sans-serif",
-          fontSize: 'clamp(1.2rem, 4.5vw, 2.2rem)', fontWeight: 700,
-          letterSpacing: '0.24em', textTransform: 'uppercase',
+          fontSize: 'clamp(1.2rem, 4.5vw, 2.75rem)', fontWeight: 500,
+          letterSpacing: '0.1em', textTransform: 'uppercase',
           color: 'var(--hb-cyan-dim)',
           lineHeight: 1,
         }}>
@@ -163,9 +179,9 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
       {/* Domain tagline */}
       <p data-brand-text style={{
         fontFamily: "var(--font-mono)",
-        fontSize: '0.68rem', letterSpacing: '0.22em', textTransform: 'uppercase',
+        fontSize: '0.97rem', letterSpacing: '0.24em', textTransform: 'uppercase',
         color: 'var(--hb-text-faint)',
-        marginBottom: '2.2rem',
+        marginBottom: '2.75rem',
         animation: 'fadeIn 0.4s 0.25s ease both',
       }}>
         {profile?.tagline}
@@ -174,15 +190,16 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
       {/* Greeting typewriter — below the agent identity */}
       <h1 style={{
         fontFamily: "'Rajdhani', sans-serif",
-        fontSize: 'clamp(1.1rem, 4.5vw, 1.7rem)', fontWeight: 500, color: '#ecf6f9',
-        textAlign: 'center', letterSpacing: '0.22em',
-        minHeight: '2.3rem',
+        fontSize: 'clamp(1.3rem, 4.5vw, 2.4rem)', fontWeight: 600, color: 'var(--hb-text)',
+        textAlign: 'center', letterSpacing: '0.12em',
+        minHeight: '3.1rem',
       }}>
         {typed}
         <span style={{
           display: 'inline-block', width: '0.5em', height: '0.95em',
-          background: 'rgba(var(--hb-cyan-bright-rgb),0.55)', marginLeft: '3px',
+          background: 'var(--hb-cyan)', marginLeft: '5px',
           verticalAlign: 'text-bottom',
+          boxShadow: '0 0 8px var(--hb-cyan)',
           opacity: done ? 0 : 1,
           transition: 'opacity 0.5s',
           animation: done ? 'none' : 'blink 0.8s step-end infinite',
@@ -193,10 +210,12 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
           Reserves no space until it exists, so the layout never jumps. */}
       {remarkTyped && (
         <p style={{
-          fontFamily: "'Rajdhani', sans-serif",
-          fontSize: 'clamp(0.82rem, 2.6vw, 1.05rem)', fontWeight: 400,
-          letterSpacing: '0.08em', color: 'var(--hb-text-dim)',
-          textAlign: 'center', maxWidth: 640, marginTop: '0.6rem',
+          // Reads as a sentence, not a readout: the remark is the one piece of
+          // prose on this screen, so it drops the HUD letter-spacing.
+          fontFamily: 'var(--font-read)',
+          fontSize: 'clamp(0.95rem, 2.6vw, 1.2rem)', fontWeight: 400,
+          letterSpacing: '0.02em', color: 'var(--hb-text-dim)',
+          textAlign: 'center', maxWidth: 680, marginTop: '0.9rem',
           lineHeight: 1.5, animation: 'fadeIn 0.5s ease both',
         }}>
           {remarkTyped}
@@ -208,13 +227,15 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
 
 interface Props {
   config: AppConfig
+  /** House Party is ENGAGED — the transcript becomes the group room. */
+  partyEngaged?: boolean
   onSelectSession: (sessionId: number) => Promise<void>
   /** Voice mode replaces the transcript with the orb; the composer stays. */
   voiceOpen?: boolean
   onCloseVoice?: () => void
 }
 
-export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVoice }: Props) {
+export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVoice, partyEngaged }: Props) {
   const { state, dispatch } = useChatContext()
   const { settings, update } = useSettings()
   const profile = useProfile()
@@ -863,7 +884,13 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
           dock={settings.voiceOrbDock}
           onDock={d => update({ voiceOrbDock: d })}
         />
-      ) : isEmpty
+      ) : partyEngaged
+        // House Party takes over the transcript, not just its colours: while
+        // the protocol is live this is a room with the whole roster in it, so
+        // the 1:1 list is replaced by the group stream. Everything else — the
+        // composer, sending, streaming, re-attach — is unchanged underneath.
+        ? <PartyStream config={config} />
+        : isEmpty
         ? <WelcomeView onSend={send} config={config} />
         : (
           <MessageList

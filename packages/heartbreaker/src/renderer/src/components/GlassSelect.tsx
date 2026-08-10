@@ -113,7 +113,7 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
         title={title}
         className={large ? 'hb-glass-xs' : undefined}
         style={large ? {
-          width: '100%', height: 30, padding: '0 6px 0 11px',
+          width: '100%', height: 32, padding: '0 8px 0 12px',
           display: 'flex', alignItems: 'center', gap: 6,
           // Full liquid-glass trigger — occluding fill + specular catch, tinted
           // rim when pinned. Reads as a proper control, not a flat mono bar.
@@ -123,7 +123,7 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
             : 'linear-gradient(var(--glass-tint), var(--glass-tint)), var(--glass-menu)',
           boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.16), 0 2px 10px rgba(0,0,0,0.22)',
           color: active ? tint : 'var(--hb-text-dim)',
-          fontFamily: UI, fontSize: '0.74rem', fontWeight: 600, letterSpacing: '0.04em',
+          fontFamily: UI, fontSize: '0.8125rem', fontWeight: 600, letterSpacing: '0.03em',
           cursor: 'pointer', transition: 'border-color 0.12s, background 0.12s, color 0.12s',
         } : {
           width: '100%', height: 18, padding: '0 4px',
@@ -187,7 +187,7 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
                     borderLeft: `2px solid ${selected ? tint : 'transparent'}`,
                     color: selected ? tint : 'var(--hb-text-dim)',
                     fontFamily: large ? UI : MONO,
-                    fontSize: large ? '0.74rem' : '0.56rem',
+                    fontSize: large ? '0.8125rem' : '0.56rem',
                     fontWeight: large ? 600 : 400,
                     letterSpacing: large ? '0.03em' : '0.08em',
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -249,7 +249,7 @@ export default function GlassSelect({ value, options, onChange, tint, active = f
                           borderLeft: `2px solid ${selected ? tint : 'transparent'}`,
                           color: selected ? tint : 'var(--hb-text-dim)',
                           fontFamily: large ? UI : MONO,
-                          fontSize: large ? '0.74rem' : '0.56rem',
+                          fontSize: large ? '0.8125rem' : '0.56rem',
                           fontWeight: large ? 600 : 400,
                           letterSpacing: large ? '0.03em' : '0.08em',
                           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',

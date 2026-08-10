@@ -12,10 +12,10 @@ const BASE_STYLES = `
     -webkit-font-smoothing: antialiased;
   }
   :root {
-    --bg-primary: #060c0f; --bg-sidebar: #0b1a22;
-    --bg-hover: rgba(70,150,175,0.12); --bg-active: rgba(var(--hb-accent-rgb),0.16);
+    --bg-primary: #080b10; --bg-sidebar: #0e1319;
+    --bg-hover: rgba(190,215,235,0.06); --bg-active: rgba(var(--hb-accent-rgb),0.16);
     --text-primary: var(--hb-text); --text-secondary: var(--hb-text-dim); --text-muted: var(--hb-text-faint);
-    --border: rgba(var(--hb-accent-rgb),0.26); --border-focus: rgba(var(--hb-accent-rgb),0.55);
+    --border: rgba(219,230,236,0.08); --border-focus: rgba(var(--hb-accent-rgb),0.30);
     --accent: var(--hb-cyan); --accent-hover: var(--hb-cyan-bright);
   }
 </style>`

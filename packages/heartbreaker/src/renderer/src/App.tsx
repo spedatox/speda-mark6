@@ -12,7 +12,6 @@ import {
 import { WARROOM_PROFILE } from './profile/warroom'
 import type { AppProfile } from './profile/types'
 import Layout from './components/Layout'
-import HudFrame from './components/HudFrame'
 import NeuralBackground from './components/NeuralBackground'
 import PartyActivation from './components/PartyActivation'
 import PendingAsksTray from './components/PendingAsksTray'
@@ -251,7 +250,12 @@ function AppInner() {
     <ChatContext.Provider value={{ state, dispatch }}>
       <ProfileContext.Provider value={profile}>
         <NeuralBackground />
-        <HudFrame />
+        {/* HudFrame (the fixed top telemetry strip) is deliberately NOT mounted.
+            Every readout it carried — host, link state, RTT, tool count, active
+            model, session count — now lives in the deck's telemetry column,
+            where it is readable rather than 10px tall, and the clock is on the
+            welcome screen. It also drew corner brackets, which the design
+            contract bans. The component is kept on disk for reference. */}
         <Layout
           profile={profile}
           config={config}
