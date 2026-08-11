@@ -3,8 +3,9 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
-import type { ChatMessage, FileMeta, ToolBadge } from '../lib/types'
+import type { ChatMessage, FileMeta, ToolBadge, SubagentRun } from '../lib/types'
 import { SubagentPanel } from './SubagentPanel'
+import SubagentDetailView from './SubagentDetailView'
 import { useChatContext } from '../store/chat'
 import { downloadFile } from '../lib/api'
 import CodeBlock from './CodeBlock'
@@ -979,6 +980,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(message.content)
   const [lightbox, setLightbox] = useState<string | null>(null)
+  const [selectedSubagent, setSelectedSubagent] = useState<SubagentRun | null>(null)
 
   // ── Typewriter reveal (rAF, steady pacing) ───────────────────────────────
   // A requestAnimationFrame loop reveals characters at a brisk STEADY rate with a
@@ -1282,7 +1284,19 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
         {/* What this turn delegated. Deliberately OUTSIDE the prose block: a
             subagent's report is not the answer, and rendering it inline is what
             made a delegate's write-up read as Optimus's own reply. */}
-        {message.subagents?.length ? <SubagentPanel runs={message.subagents} /> : null}
+        {message.subagents?.length ? (
+          <SubagentPanel runs={message.subagents} onSelect={setSelectedSubagent} />
+        ) : null}
+
+        {/* Subagent detail view — full-screen chat-like thread for one delegation.
+            Rendered at the Message level so it overlays the entire chat, not just
+            the message bubble. Only one open at a time. */}
+        {selectedSubagent && (
+          <SubagentDetailView
+            run={selectedSubagent}
+            onClose={() => setSelectedSubagent(null)}
+          />
+        )}
 
         {message.isError && (
           <div style={{

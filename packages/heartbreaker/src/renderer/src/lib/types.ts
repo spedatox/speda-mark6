@@ -168,7 +168,7 @@ export interface PendingAsk {
 
 export interface SSEEvent {
   type: 'start' | 'chunk' | 'tool' | 'tool_result' | 'file' | 'done' | 'error'
-      | 'permission_request' | 'house_party_auth'
+      | 'permission_request' | 'house_party_auth' | 'subagent'
   data: unknown
   session_id: number
   request_id: string
