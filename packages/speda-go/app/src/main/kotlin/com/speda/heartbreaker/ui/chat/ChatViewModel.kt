@@ -301,8 +301,8 @@ class ChatViewModel(
                     softLanding = true,   // a dropped reattach leaves partial text, no error
                 ) { }
                 settled = true
-            } catch (_: CancellationException) {
-                throw _
+            } catch (e: CancellationException) {
+                throw e
             } finally {
                 if (runId == run.requestId) runId = null
                 // No terminal seen → we left mid-run; forget the id so returning re-attaches.
