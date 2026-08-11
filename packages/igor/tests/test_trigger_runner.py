@@ -13,7 +13,6 @@ Runs against a real in-memory SQLite with the real SessionManager and the real
 TurnRegistry; only the engine (orchestrator) and the Telegram channel are fakes.
 """
 
-import asyncio
 from datetime import date, datetime
 
 import pytest
@@ -51,6 +50,31 @@ async def db(maker, monkeypatch):
         yield session
 
 
+@pytest.fixture(autouse=True)
+def post_turn_calls(monkeypatch):
+    """Stub the post-turn tasks and record the calls.
+
+    They are the chat path's work (session log, recap, title, compaction,
+    embeddings) and are tested there. Left real, they open their own sessions
+    against the *configured* database — `~/.speda/speda.db`, the owner's actual
+    dev data, which no unit test should touch — and reach for a model. They also
+    sit between the run and the settle hook every test here asserts on: measured
+    3.2s to settle with them, 0.02s without.
+
+    Yields the recorded calls so a test can assert the runner still fires them.
+    """
+    calls: list[tuple] = []
+
+    async def _stub(session_id, request_id, user_id, model):
+        calls.append((session_id, request_id, user_id, model))
+
+    import app.services.memory as memory_mod
+
+    # run_post_turn_tasks is imported inside on_complete; patch at source.
+    monkeypatch.setattr(memory_mod, "run_post_turn_tasks", _stub)
+    return calls
+
+
 class _Profile:
     agent_id = "atomix"
 
@@ -84,31 +108,29 @@ def _engine(text="Slept 7h12m, resting HR 54.", error=False):
     return run
 
 
-async def _fire(db, *, payload, output_mode="push", engine=None, bots=None, post=None,
+async def _fire(db, *, payload, output_mode="push", engine=None, bots=None,
                 profile=None, agent_proxy=None, ws_manager=None):
+    """Fire a triggered turn and return once it has actually settled.
+
+    The turn is detached, and everything asserted below — the persisted rows,
+    the push, the notification fallback — lands inside that task. So we wait on
+    the task itself. This used to poll `active()` on a fixed 1s sleep budget,
+    which made every assertion a race the test only usually won: the same two
+    tests failed at random once the suite had ~170 other tests behind it.
+    """
     sm = SessionManager()
     turns = TurnRegistry(sm)
     bots = bots or _Bots()
-    if post is not None:
-        # run_post_turn_tasks is imported inside on_complete; patch at source.
-        import app.services.memory as memory_mod
-        memory_mod.run_post_turn_tasks = post
     started, session_id = await tr.start_trigger_turn(
         db=db, profile=profile or _Profile(), payload=payload, output_mode=output_mode,
         request_id="req-1", orchestrator=type("O", (), {"run": staticmethod(engine or _engine())})(),
         turns=turns, session_manager=sm, telegram_bots=bots,
         agent_proxy=agent_proxy, ws_manager=ws_manager,
     )
-    # Let the detached turn settle. Generous on purpose: the loop exits the
-    # instant the registry drains, so a healthy run still costs ~20ms and only
-    # a genuinely stuck turn ever spends the full budget. At the old 1s ceiling
-    # the suite flaked under parallel load — the turn was fine, the wait wasn't.
-    for _ in range(500):
-        await asyncio.sleep(0.02)
-        if not turns.active():
-            break
-    else:
-        raise AssertionError("turn did not settle within 10s")
+    assert started is not None, "registry refused the turn — nothing ran"
+    # Bounded only so a genuinely hung turn fails loudly instead of hanging the
+    # suite; it is not a settling budget, and a slow machine cannot exhaust it.
+    assert await turns.wait(started, timeout=30)
     return started, session_id, bots
 
 
@@ -244,6 +266,21 @@ async def test_an_offline_peer_falls_back_to_the_in_process_profile(db):
         ws_manager=type("W", (), {"is_connected": lambda self, a: False})(),
     )
     assert bots.sent == [("optimus", "Slept 7h12m, resting HR 54.")]
+
+
+async def test_post_turn_tasks_run_on_the_background_model(db, post_turn_calls):
+    """The stub above is only safe if the runner is still wiring them up: a
+    triggered turn gets the same session log, recap and embeddings a chat turn
+    does, on the cheap tier rather than the turn's own model."""
+    _, session_id, _ = await _fire(db, payload={"job": "morning_brief"})
+    assert post_turn_calls == [(session_id, "req-1", 1, "test-bg-model")]
+
+
+async def test_a_failed_run_skips_post_turn_work(db, post_turn_calls):
+    """A half-turn must not be titled, recapped or embedded as if it completed —
+    delivery still happens (below), post-turn work does not."""
+    await _fire(db, payload={"job": "morning_brief"}, engine=_engine(error=True))
+    assert post_turn_calls == []
 
 
 # ── Delivery ─────────────────────────────────────────────────────────────────

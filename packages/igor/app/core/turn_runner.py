@@ -13,6 +13,7 @@ Contract:
   - subscribe()  — replay the buffer, then tail live events. Unsubscribing (a
                    dropped connection) NEVER affects the run.
   - active()     — list running turns (for re-attach discovery).
+  - wait()       — block until a turn has settled (not used by the app itself).
   - cancel()     — the ONLY thing that stops a run; persists the partial answer.
 
 One instance lives on app.state.turns (Rule 6), created in the lifespan.
@@ -338,6 +339,25 @@ class TurnRegistry:
                 "idle_s": round(now - t.last_event_at, 1),
             })
         return out
+
+    async def wait(self, request_id: str, *, timeout: float | None = None) -> bool:
+        """Block until a turn has fully settled — result persisted, post-turn work
+        done, settle hook run. Returns False if the id is unknown (never started,
+        or already evicted past the grace window), True once the run has ended.
+        Raises TimeoutError if the turn outlives `timeout`.
+
+        The app never waits on a detached turn — not waiting is the whole point.
+        This exists for anything that genuinely needs the END of a run (tests,
+        tooling): a check that only passes when it wins a race against the
+        registry is worse than no check. The task is shielded, so a timeout here
+        does not stop the run — cancel() remains the only thing that does.
+        """
+        turn = self._turns.get(request_id)
+        if turn is None:
+            return False
+        if turn.task is not None and not turn.done:
+            await asyncio.wait_for(asyncio.shield(turn.task), timeout)
+        return True
 
     async def cancel(self, request_id: str) -> bool:
         """Cancel a running turn. The run's CancelledError handler persists the

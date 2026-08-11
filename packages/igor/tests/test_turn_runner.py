@@ -207,6 +207,38 @@ async def test_active_and_cap():
     assert reg.active() == []  # finished turns are not "active"
 
 
+async def test_wait_returns_only_after_the_turn_has_settled():
+    """The deterministic alternative to sleeping and hoping: when wait() returns,
+    persistence and the post-turn hook have already run."""
+    sm = _FakeSM()
+    reg = turn_runner.TurnRegistry(sm)
+    completed = []
+    rid = reg.start(context=_ctx("w1"), engine_factory=_slow_engine,
+                    format_error=str, on_complete=lambda: _set(completed))
+    assert await reg.wait(rid, timeout=10) is True
+    assert len(sm.saved) == 1 and completed == [True]
+    assert reg.active() == []
+    assert await reg.wait(rid, timeout=10) is True      # idempotent once done
+
+
+async def test_wait_on_an_unknown_turn_reports_it_instead_of_hanging():
+    reg = turn_runner.TurnRegistry(_FakeSM())
+    assert await reg.wait("never-started", timeout=10) is False
+
+
+async def test_wait_timing_out_does_not_kill_the_run():
+    """A timeout is the waiter giving up, not a cancel — cancel() stays the only
+    thing that stops a turn, so the run must still complete and persist."""
+    sm = _FakeSM()
+    reg = turn_runner.TurnRegistry(sm)
+    rid = reg.start(context=_ctx("w2"), engine_factory=_slow_engine,
+                    format_error=str, on_complete=None)
+    with pytest.raises(asyncio.TimeoutError):
+        await reg.wait(rid, timeout=0.01)
+    assert await reg.wait(rid, timeout=10) is True
+    assert sm.saved[0][2][0]["text"] == "part0 part1 part2 part3 part4 "
+
+
 def _set(lst):
     async def _f():
         lst.append(True)
