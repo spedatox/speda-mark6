@@ -229,6 +229,41 @@ async def memory_verify(request: Request) -> JSONResponse:
     return JSONResponse(report)
 
 
+@router.post("/memory/split")
+async def memory_split(request: Request) -> JSONResponse:
+    """
+    Split the registry monoliths into one file per entity
+    (memory_spec.COLLECTIONS): projects.md → /memories/projects/<name>.md,
+    social.md → /memories/social/<category>/<name>.md.
+
+    **Dry run by default.** Pass `{"apply": true}` to write. The dry run is not a
+    formality — its `sections_seen` histogram is the only honest source for
+    filling in `CollectionSpec.sections`, which is deliberately left empty until
+    the real 38 KB document has been read rather than guessed at.
+
+    The operation only ever CREATES files. The source document is neither edited
+    nor deleted, so its preamble is not lost and reverting is deleting what this
+    added. Retiring the original is a separate decision for the owner once the
+    folder reads correctly.
+    """
+    from app.database import AsyncSessionLocal
+    from app.services.memory_split import split_all
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 — an empty body means a dry run
+        pass
+
+    apply = bool(body.get("apply"))
+    request_id = getattr(request.state, "request_id", "") or "admin-split"
+    async with AsyncSessionLocal() as db:
+        report = await split_all(
+            db, _USER_ID, dry_run=not apply, request_id=request_id
+        )
+    return JSONResponse(report)
+
+
 @router.post("/memory/render")
 async def memory_render(request: Request) -> JSONResponse:
     """

@@ -83,9 +83,6 @@ def _ledger_paths() -> str:
     return ", ".join(p.split("/")[-1] for p, s in SPECS.items() if s.kind == "ledger")
 
 
-def _registry_paths() -> str:
-    return ", ".join(p.split("/")[-1] for p, s in SPECS.items() if s.kind == "registry")
-
 
 class LedgerAppendSkill(Skill):
     name = "ledger_append"
@@ -164,33 +161,40 @@ class LedgerAppendSkill(Skill):
 class RegistryUpsertSkill(Skill):
     name = "registry_upsert"
     description = (
-        "Create or update one person, project or tracked entity in a registry document — "
-        f"the registries are {_registry_paths()}. Use it whenever you learn something "
-        "about a specific person or project: `who` sets or replaces their description, "
-        "`event` adds a dated entry to their log, newest first. A new entity is created "
-        "with the full required shape, so a person can never end up here without a Who "
-        "block, and never at the heading level reserved for categories. Do NOT use it for "
-        "periodic records like a transaction or a training session (that is "
-        "`ledger_append`), and do NOT invent a category — social.md's categories are fixed. "
-        "Returns confirmation, or which categories are valid if you named one that is not."
+        "Create or update one person or one project. Every person and every project has "
+        "its OWN file (`/memories/social/<category>/<name>.md`, "
+        "`/memories/projects/<name>.md`), and this tool works out which file that is from "
+        "the name you give it — you never pass a path, and you never need to know how the "
+        "filename is spelled. Use it whenever you learn something about a specific person "
+        "or project: `who` sets or replaces their description, `event` adds a dated entry "
+        "to their log, newest first; if they have no file yet one is created with the full "
+        "required shape, so a person can never end up recorded without a Who block. Do NOT "
+        "use it for periodic records like a transaction or a training session (that is "
+        "`ledger_append`), and do NOT invent a category — the categories are fixed. "
+        "Returns confirmation and the file written, or which categories are valid if you "
+        "named one that is not."
     )
     read_only = False
     input_schema = {
         "type": "object",
         "properties": {
-            "path": {
+            "kind": {
                 "type": "string",
-                "description": "The registry, e.g. /memories/social.md or /memories/projects.md.",
+                "enum": ["person", "project"],
+                "description": "Whether this is a person or a project.",
             },
             "entity": {
                 "type": "string",
-                "description": "The person or project. Use their existing spelling if they are already recorded.",
+                "description": (
+                    "The person's or project's name. Use their existing spelling if they "
+                    "are already recorded — a different spelling creates a second file."
+                ),
             },
             "category": {
                 "type": "string",
                 "description": (
-                    "For social.md only, which group they belong to: Professional, "
-                    "Siberay Board or Personal. Required there; ignored elsewhere."
+                    "For a person only, which group they belong to: Professional, "
+                    "Siberay Board or Personal. Required there; ignored for a project."
                 ),
             },
             "who": {
@@ -209,20 +213,34 @@ class RegistryUpsertSkill(Skill):
                 "description": "The event's date, YYYY-MM-DD. Defaults to today.",
             },
         },
-        "required": ["path", "entity"],
+        "required": ["kind", "entity"],
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
-        path = (args.get("path") or "").strip()
-        if spec_for(path) is None:
-            return f"`{path}` is not a known memory document."
+        from app.services.memory_spec import collection_by_root, member_path
+
+        kind = (args.get("kind") or "").strip().lower()
+        roots = {"person": "/memories/social", "project": "/memories/projects"}
+        if kind not in roots:
+            return "`kind` must be either 'person' or 'project'."
+        coll = collection_by_root(roots[kind])
+
+        entity = (args.get("entity") or "").strip()
+        if not entity:
+            return "`entity` is required — who or what is this about?"
+
+        try:
+            path = member_path(coll, entity, args.get("category") or None)
+        except ValueError as e:
+            return str(e)
+
+        # A missing file is the normal case for a new entity, not an error: the
+        # folder IS the taxonomy entry, so one more file in it is expected.
         file = await _load(context, path)
-        if file is None:
-            return f"`{path}` does not exist."
+        before = file.content if file else ""
         try:
             after = registry_upsert(
-                file.content, path=path,
-                entity=(args.get("entity") or "").strip(),
+                before, path=path, entity=entity,
                 category=(args.get("category") or None),
                 who=(args.get("who") or None),
                 event=(args.get("event") or None),
@@ -230,7 +248,7 @@ class RegistryUpsertSkill(Skill):
             )
         except WriteRejected as e:
             return str(e)
-        return await _commit(context, path, file.content, after, "registry_upsert")
+        return await _commit(context, path, before, after, "registry_upsert")
 
 
 class NarrativeReviseSkill(Skill):

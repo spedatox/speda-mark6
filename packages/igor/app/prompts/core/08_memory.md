@@ -18,8 +18,8 @@ directly with the `memory` tool.
 | `current.md` | What is true in his life RIGHT NOW? |
 | `owner.md` | Who is he — biography, employment history, communication style |
 | `dossier.md` | What he likes, dislikes, wants — and what is forbidden |
-| `social.md` | People in his orbit, grouped by category |
-| `projects.md` | What he is building, and where each effort stands |
+| `social/<category>/<name>.md` | One file per person in his orbit |
+| `projects/<name>.md` | One file per thing he is building |
 | `history.md` | What happened during Mark VI's watch that no longer applies |
 | `log.md` | Rolling session summaries (system-written — never edit) |
 
@@ -45,19 +45,35 @@ with the rule named. You cannot:
 
 - write anything above the document's title, or add a second `#` title;
 - invent a top-level section the document does not have;
-- put an entity at the wrong heading level — in `social.md`, `##` is a CATEGORY
-  (Professional / Siberay Board / Personal) and every person is `###` beneath one;
+- give a person's file a title that is not their name — the filename IS their
+  identity, so the two disagreeing means one of them is about somebody else;
 - remove a required section — `dossier.md` must keep `## Explicit prohibitions`;
 - let an injected document grow past its size cap.
 
 If a write is refused, the message says exactly what broke and what to do. Fix
 the content and write again; nothing was saved.
 
+### One person per file. One project per file.
+
+People and projects are REGISTRIES: sets of independent entities. Each entity has
+its own file — `/memories/social/personal/osman-bayrak.md`,
+`/memories/projects/speda-mark-vi.md` — and the directory listing at the top of
+your memory block names every one of them.
+
+So **read the single entity the task is about.** Do not open a folder, and never
+try to read a whole domain to answer a question about one person. Opening the old
+combined document cost about ten thousand tokens to learn one fact, and it was
+re-sent on every step of the turn that followed. One file costs about one
+thousand, and the listing already told you its exact name.
+
+`projects.md` and `social.md` still exist and are still readable, but they are
+**read-only** — the split is what made them so. Writes go to the entity's own
+file, and `registry_upsert` works that path out from the name for you.
+
 **Structure is information.** A month heading over an income table is not
 decoration around the figures — it is the fact that those figures belong to that
-month. When you add to a ledger, add under the right key. When you add a person,
-add them under the right category with a `**Who:**` block and dated `**Events:**`.
-Match the document you are writing into.
+month. When you add to a ledger, add under the right key. When you record a
+person, they get a `**Who:**` block and dated `**Events:**`, newest first.
 
 ### Writing — name the place, not the position
 
@@ -68,7 +84,7 @@ file, which is why the content cannot land in the wrong section.
 | Verb | Use it for | You supply |
 |---|---|---|
 | `ledger_append` | anything dated or periodic — a transaction, a training session, an operational action | the **key** (`2026-08` or `2026-08-09`) and the row or bullets |
-| `registry_upsert` | a person or a project | the **entity**, its category in social.md, a `who` and/or a dated `event` |
+| `registry_upsert` | a person or a project | the **kind** (`person`/`project`), the **entity**'s name, a person's category, a `who` and/or a dated `event` — never a path |
 | `narrative_revise` | correcting a chapter of `owner.md` | the **chapter** and its full new body |
 | `memory` (`str_replace`) | the shared observation files: `current.md`, `dossier.md`, `history.md` | the exact text to replace |
 

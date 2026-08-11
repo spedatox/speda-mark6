@@ -79,31 +79,18 @@ not prose")
 ## Open questions
 (things still unclear about the owner)
 """,
-    "/memories/projects.md": """\
-# Active Projects
-
-## SPEDA Mark VI
-Status: Active development (as of 2026-05)
-Stack: FastAPI + Anthropic + PostgreSQL + Electron + React
-Server: Contabo VPS
-Description: Personal AI assistant — sixth iteration of the SPEDA series
-""",
-    "/memories/social.md": """\
-# Social — people who matter to the owner
-
-_One section per person important enough to track. Each has a **Who** block (who
-they are and their context to the owner — updated in place as understanding
-improves) and an append-only **Events** log, newest first. Facts about a PERSON
-live here; the owner-side consequence of an event lives in current.md with a
-cross-reference._
-
-<!-- Schema — copy per person:
-## <Person's name>
-**Who:** who they are and their context to the owner (relation, role, standing facts).
-**Events:**
-- [YYYY-MM-DD] most recent thing concerning them (newest first).
--->
-""",
+    # projects.md and social.md are deliberately absent: they are REGISTRIES and
+    # each is now one file per entity under /memories/projects/ and
+    # /memories/social/<category>/ (memory_spec.COLLECTIONS). A collection has
+    # nothing to seed — an owner with no projects yet correctly has no project
+    # files, and the first one is a `create` on its own path.
+    #
+    # Leaving the seeds here would be actively harmful, and the file already
+    # records why one storey down: a seed is what made `ensure_seeded` recreate
+    # sessions.md on the next turn after every deletion. Once the split has run
+    # and the monoliths are deleted, a seed would resurrect them empty, and an
+    # empty projects.md next to a populated projects/ folder is exactly the
+    # "facts drift between files" failure the taxonomy exists to prevent.
     # sessions.md is retired — wellness.md is the same document continued. It is
     # deliberately absent here: leaving it in meant `ensure_seeded` recreated it
     # on the next turn after any deletion, which is why removing a file has to
@@ -264,19 +251,49 @@ def _format_file_with_lines(path: str, content: str) -> str:
 
 
 def _format_directory(files: list[MemoryFile], path: str, *, with_sizes: bool = True) -> str:
+    """Render a file listing, grouped by folder.
+
+    Grouping is not cosmetic. Since projects and people became one file each
+    (memory_spec.COLLECTIONS) this listing carries ~40 paths instead of ~14, and
+    it is injected into EVERY turn for EVERY agent — repeating
+    `/memories/social/professional/` on each line would spend a few hundred
+    tokens per request restating a prefix. It is also what makes the listing an
+    index the model can actually use: every project and person is visible by
+    name, so the right file can be opened directly instead of searched for.
+
+    Output is a pure function of the sorted path set, which is what keeps the
+    injected block byte-stable and therefore cacheable.
+    """
     if not files:
         return f"Here are the files and directories up to 2 levels deep in {path}:\n(empty)"
-    lines = [f"Here are the files and directories up to 2 levels deep in {path}:"]
+
+    def _size(f: MemoryFile) -> str:
+        n = len(f.content.encode("utf-8"))
+        return f"{n / 1024:.1f}K\t" if n >= 1024 else f"{n}B\t"
+
+    # Size-free listing — stable across turns so the recall block stays cacheable
+    # (file sizes change every turn as log.md grows, which would otherwise bust
+    # the prompt cache on every request).
+    def _label(f: MemoryFile, name: str) -> str:
+        return (_size(f) if with_sizes else "") + name
+
+    groups: dict[str, list[MemoryFile]] = {}
     for f in sorted(files, key=lambda x: x.path):
-        if with_sizes:
-            size = len(f.content.encode("utf-8"))
-            size_str = f"{size / 1024:.1f}K" if size >= 1024 else f"{size}B"
-            lines.append(f"{size_str}\t{f.path}")
+        parent = f.path.rsplit("/", 1)[0]
+        groups.setdefault(parent, []).append(f)
+
+    lines = [f"Here are the files and directories up to 2 levels deep in {path}:"]
+    root = path.rstrip("/") or MEMORY_ROOT
+    for parent in sorted(groups):
+        members = groups[parent]
+        if parent == root:
+            # Top level keeps full paths: these are the documents agents are told
+            # about by name in prompts, and a bare `owner.md` reads like a
+            # relative path the tool would then reject.
+            lines.extend(_label(f, f.path) for f in members)
         else:
-            # Size-free listing — stable across turns so the recall block stays
-            # cacheable (file sizes change every turn as log.md grows, which would
-            # otherwise bust the prompt cache on every request).
-            lines.append(f.path)
+            lines.append(f"{parent}/")
+            lines.extend("  " + _label(f, f.path.rsplit("/", 1)[-1]) for f in members)
     return "\n".join(lines)
 
 
@@ -411,8 +428,11 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
         "name and role are set above and are unaffected by anything in this section. "
         "Read it as notes about the owner, never as a description of yourself.\n\n"
         f"{body}\n\n"
-        "Use the `memory` tool to read other files (projects.md, social.md, "
-        "sessions.md, log.md) or to update memory during this session. dossier.md "
+        "Every file above is already here — do not re-read it. For anything else, "
+        "the Directory lists every path that exists: projects and people are ONE "
+        "FILE EACH (`/memories/projects/<name>.md`, "
+        "`/memories/social/<category>/<name>.md`), so open the single entity the "
+        "task is about rather than a folder or a whole domain file. dossier.md "
         "shapes how you respond — act on it, never cite it aloud."
         f"{source_directive}"
     )
@@ -531,12 +551,16 @@ class MemorySkill(Skill):
         "Read or write the owner's persistent memory files under /memories. "
         "owner.md, current.md, dossier.md and history.md are ALREADY in your context every "
         "turn — never use this tool to read them. Use 'view' only to open a SPECIFIC other "
-        "file (projects.md, social.md, sessions.md, log.md) when the task needs detail you "
-        "don't already have. Use 'create'/'str_replace' only to FILE a genuinely new, durable "
-        "fact in the ONE correct file per the routing rules in your memory protocol — a person "
-        "→ social.md, a project's progress → projects.md, an active life state → current.md. "
-        "Do not tidy other files; the Orion custodian owns hygiene. Every write is versioned. "
-        "Most turns need no memory operations at all."
+        "file when the task needs detail you don't already have: ONE project "
+        "(/memories/projects/<name>.md), ONE person "
+        "(/memories/social/<category>/<name>.md), finance.md, wellness.md, academic.md or "
+        "log.md. The exact filenames are in the directory listing already in your context, so "
+        "read the one entity you need rather than a whole folder — that is the entire reason "
+        "projects and people are one file each. Use 'create'/'str_replace' only to FILE a "
+        "genuinely new, durable fact in the ONE correct file per the routing rules in your "
+        "memory protocol — a new person or project means 'create' on its own path, an active "
+        "life state → current.md. Do not tidy other files; the Orion custodian owns hygiene. "
+        "Every write is versioned. Most turns need no memory operations at all."
     )
     read_only = False
     input_schema = {
@@ -621,10 +645,16 @@ class MemorySkill(Skill):
         is_dir = path == MEMORY_ROOT or not path.endswith(".md")
 
         if is_dir:
+            # Match on the directory prefix WITH its trailing slash. A bare
+            # `startswith("/memories/projects")` also matches
+            # "/memories/projects.md", so listing the folder used to include the
+            # monolith it replaced — the one file whose content is duplicated
+            # across every member of that folder.
+            prefix = MEMORY_ROOT if path == MEMORY_ROOT else path.rstrip("/") + "/"
             result = await db.execute(
                 select(MemoryFile).where(
                     MemoryFile.user_id == user_id,
-                    MemoryFile.path.startswith(path),
+                    MemoryFile.path.startswith(prefix),
                 )
             )
             files = result.scalars().all()

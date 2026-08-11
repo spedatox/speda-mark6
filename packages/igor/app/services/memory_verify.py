@@ -326,6 +326,57 @@ def check_stale_references(path: str, text: str, spec: DocumentSpec) -> list[Fin
     return findings
 
 
+def check_member_title(path: str, text: str, spec: DocumentSpec) -> list[Finding]:
+    """In a collection, the filename IS the entity's identity — so the H1 has to
+    agree with it.
+
+    This is the split's replacement for `heading_levels`. In a single 27 KB
+    document the question was "is this heading a person or a category", and
+    getting it wrong produced a person called "Professional" with 21 facts
+    attached. Here the question is a string comparison against the path, and a
+    person renamed in their own document without the file being renamed shows up
+    immediately instead of quietly becoming a second person.
+    """
+    from app.services.memory_spec import collection_for, slugify
+
+    coll = collection_for(path)
+    if coll is None:
+        return []
+
+    stem = path.rsplit("/", 1)[-1][:-3]
+    h1 = next((t for _, lvl, t in _headings(text) if lvl == 1), None)
+    if h1 is None:
+        return []          # check_document_frame already reports the missing H1
+
+    if slugify(h1) != stem:
+        return [Finding(
+            path, "member_title", "warning",
+            f"The title {h1!r} slugifies to {slugify(h1)!r} but the file is "
+            f"{stem!r}. The filename is this {coll.entity_noun}'s identity, so "
+            f"the two disagreeing means one of them is about somebody else.",
+            line=1,
+            fix=f"Rename the file to `{coll.root}/"
+                + (f"{path.split('/')[-2]}/" if coll.depth == 2 else "")
+                + f"{slugify(h1)}.md`, or correct the title.",
+        )]
+    return []
+
+
+def check_superseded(path: str, text: str, spec: DocumentSpec) -> list[Finding]:
+    """A document that has been split but not yet removed."""
+    if not spec.superseded_by:
+        return []
+    return [Finding(
+        path, "superseded", "info",
+        f"This document has been split into one file per entity under "
+        f"`{spec.superseded_by}/`. It is read-only for agents and kept only so "
+        f"nothing is lost while the migration finishes.",
+        fix=f"Run the split, confirm `{spec.superseded_by}/` is complete, then "
+            f"retire this file (remove it from CANONICAL_FILES, DEFAULT_FILES "
+            f"and SPECS, and delete it from the systems board).",
+    )]
+
+
 def check_size(path: str, text: str, spec: DocumentSpec) -> list[Finding]:
     size = len(text.encode("utf-8"))
     if size <= spec.max_bytes:
@@ -345,6 +396,8 @@ _CHECKS = (
     check_document_frame,
     check_sections,
     check_heading_levels,
+    check_member_title,
+    check_superseded,
     check_ledger_index,
     check_stale_references,
     check_size,

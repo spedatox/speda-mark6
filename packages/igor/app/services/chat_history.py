@@ -45,15 +45,25 @@ def _extract_meta(content) -> dict:
         return {}
     for block in content:
         if isinstance(block, dict) and block.get('type') == '_speda_meta':
-            return {
+            meta = {
                 'tools': block.get('tools', []),
                 'files': block.get('files', []),
                 'uploads': block.get('uploads', []),
-                # Provenance for a turn the owner did not write (an n8n
-                # automation opening a session). The UI attributes the bubble to
-                # the trigger instead of to them.
+                # Provenance for a turn the owner did not write — an n8n
+                # automation, or another agent dispatching a task, opening a
+                # session. The UI attributes the bubble to the sender instead of
+                # to them.
                 'trigger': block.get('trigger'),
             }
+            # What the BUBBLE should show, when that differs from the text blocks
+            # the model reads: the user's own message rather than the wall of
+            # extracted upload text, the dispatched task rather than its routing
+            # preamble. Carried through only when present — an absent key means
+            # "show the real text", and defaulting it to '' silently blanked
+            # every reloaded upload bubble.
+            if 'text' in block:
+                meta['text'] = block['text']
+            return meta
     return {}
 
 
@@ -102,11 +112,13 @@ def rows_from_messages(messages: list[Message]) -> list[dict]:
         if m.role not in ('user', 'assistant'):
             continue
         meta = _extract_meta(m.content)
-        # For a user turn with document uploads, the real text blocks hold the
-        # extracted file contents; the bubble must show only the user's own
-        # message, which was stashed in the meta block at save time.
-        if m.role == 'user' and meta.get('uploads'):
-            content_text = meta.get('text', '')
+        # A user turn whose real text blocks are not what the bubble should show:
+        # document uploads (the blocks hold the extracted file contents) and an
+        # inter-agent dispatch (the blocks hold the routing preamble and the
+        # agent channel). Both stash the display text in the meta block at save
+        # time; see _extract_meta.
+        if m.role == 'user' and 'text' in meta:
+            content_text = meta['text']
         else:
             content_text = _extract_text(m.content)
         row = {

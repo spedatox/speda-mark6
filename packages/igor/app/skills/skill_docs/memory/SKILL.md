@@ -31,23 +31,26 @@ other files on demand; write back when you learn something durable.
   manner. LEARN from it and act on it silently; never cite it. (preloaded)
 - `history.md` — things that began and ended during Mark VI's watch (since
   2026-05) and no longer apply — demotions only. (preloaded)
-- `projects.md` — what he's building and where each effort stands
-- `social.md` — people who matter: each has a Who block + timestamped Events log
-- `sessions.md` — the gym log, day by day (Atomix writes it)
+- `projects/<name>.md` — ONE FILE PER PROJECT: what he's building, where it stands
+- `social/<category>/<name>.md` — ONE FILE PER PERSON: a Who block + a timestamped
+  Events log. Categories: `professional`, `siberay-board`, `personal`
+- `wellness.md` — the gym log, day by day (Atomix writes it)
 - `log.md` — rolling one-line session summaries
 
 The **epoch line** (Mark VI's birth, 2026-05) divides owner.md from history.md:
 pre-Mark-VI context → owner.md; Mark-VI-era states that have ended → history.md.
 
-Do not create files outside this set. File a new fact into the ONE file that fits
-(see the routing rules in your memory protocol). Hygiene across files is Orion's
-job, not yours — don't reorganise other files in passing.
+Do not create files outside this set — except inside `projects/` and `social/`,
+where a new file IS how a new project or person is recorded. File a new fact into
+the ONE file that fits (see the routing rules in your memory protocol). Hygiene
+across files is Orion's job, not yours — don't reorganise other files in passing.
 
 ## Examples
 
-Read the projects file before discussing work:
+Read ONE project before discussing work — never the whole folder. The directory
+listing in your context already gives you the exact filename:
 ```json
-{ "command": "view", "path": "/memories/projects.md" }
+{ "command": "view", "path": "/memories/projects/speda-mark-vi.md" }
 ```
 
 Update a fact in place (never append a duplicate):
@@ -57,12 +60,17 @@ Update a fact in place (never append a duplicate):
   "new_str": "Cutting for the wedding (as of 2026-07-06)" }
 ```
 
-Add a person section (Who block + Events log), or append an event to one:
+Append an event to one person — their file, and `**Events:**` is unique inside it
+because the file holds exactly one person:
 ```json
-{ "command": "str_replace", "path": "/memories/social.md",
+{ "command": "str_replace", "path": "/memories/social/personal/osman-bayrak.md",
   "old_str": "**Events:**",
   "new_str": "**Events:**\n- [2026-07-06] Venue confirmed" }
 ```
+
+Prefer `registry_upsert` for people and projects — it works out the filename from
+the name, creates the file with the right shape if it is new, and keeps events
+newest-first without you anchoring on anything.
 
 File an observed preference into the dossier (attributed + dated):
 ```json

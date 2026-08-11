@@ -71,14 +71,15 @@ export interface FileMeta {
   url: string    // e.g. /files/report.pdf
 }
 
-/** Provenance for a turn the owner did not write — an n8n automation opening a
- *  session. Present only on such turns; the bubble is attributed to the trigger
- *  instead of to the owner. */
+/** Provenance for a turn the owner did not write — an n8n automation, or
+ *  another agent dispatching a task, opening a session. Present only on such
+ *  turns; the bubble is attributed to the sender instead of to the owner. */
 export interface TriggerMeta {
-  source: string        // "n8n"
-  label: string         // human name of the automation ("Morning brief")
-  job?: string
+  source: string        // "n8n" | "legion" | "agent" (inter-agent dispatch)
+  label: string         // human name of the sender ("Morning brief", "Dispatch from SENTINEL")
+  job?: string          // "dispatch" | "house party dispatch" | the automation's job
   automation?: string
+  from_agent?: string   // agent_id of the dispatching agent (source === "agent")
   output_mode?: string  // "push" | "silent"
 }
 

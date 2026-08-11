@@ -251,6 +251,19 @@ def registry_upsert(
     if not entity.strip():
         raise WriteRejected("`entity` is required — who or what is this about?")
 
+    # One entity per file: the entity is the H1, there is no category heading to
+    # find and no sibling to accidentally write into. Most of the machinery below
+    # exists to locate an entity inside a 27 KB document and to keep it at the
+    # right heading level among its peers — questions that stop existing once the
+    # file IS the entity.
+    from app.services.memory_spec import collection_for
+
+    coll = collection_for(path)
+    if coll is not None:
+        return _member_upsert(
+            text, coll=coll, entity=entity.strip(), who=who, event=event, when=when,
+        )
+
     level = spec.entity_level or 2
     lines = text.splitlines()
     scope = (0, len(lines))
@@ -311,6 +324,65 @@ def registry_upsert(
             lines.insert(eend, "")
             lines.insert(eend + 1, "**Events:**")
             lines.insert(eend + 2, bullet)
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _member_upsert(
+    text: str, *, coll, entity: str, who: str | None,
+    event: str | None, when: str | None,
+) -> str:
+    """Upsert inside a collection member, where the entity is the document.
+
+    A collection whose members carry declared markers (people: `**Who:**` /
+    `**Events:**`) gets that full shape on creation, for the same reason the
+    monolith version did — the schema is the writer, not something the writer is
+    asked to remember. A collection with no declared markers (projects, whose
+    real section names are still being read off the migration rather than
+    guessed) gets its title and its content, and nothing invented around it.
+    """
+    stamp = when or date.today().isoformat()
+    if event and not re.match(r"^\d{4}-\d{2}-\d{2}$", stamp):
+        raise WriteRejected(
+            f"`when` must be an absolute date as YYYY-MM-DD — got {stamp!r}."
+        )
+
+    has_markers = bool(coll.markers)
+    lines = text.splitlines() if text.strip() else []
+
+    if not lines:
+        frame = [f"# {entity}", ""]
+        if has_markers:
+            frame += ["**Who:** " + (who or "_(not yet established)_"), "", "**Events:**"]
+            who = None
+        elif who:
+            frame += [who, ""]
+            who = None
+        lines = frame
+
+    if who:
+        if has_markers:
+            for i, line in enumerate(lines):
+                if line.startswith("**Who:**"):
+                    lines[i] = "**Who:** " + who
+                    break
+            else:
+                at = 1 if lines and lines[0].startswith("# ") else 0
+                lines[at:at] = ["", "**Who:** " + who]
+        else:
+            at = 1 if lines and lines[0].startswith("# ") else 0
+            lines[at:at] = ["", who]
+
+    if event:
+        bullet = f"- [{stamp}] {event}"
+        for i, line in enumerate(lines):
+            if line.startswith("**Events:**"):
+                lines.insert(i + 1, bullet)      # newest first
+                break
+        else:
+            while lines and not lines[-1].strip():
+                lines.pop()
+            lines += ["", "**Events:**" if has_markers else "## Log", bullet]
 
     return "\n".join(lines).rstrip() + "\n"
 

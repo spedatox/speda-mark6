@@ -82,7 +82,20 @@ class MemorySchemaViolation(Exception):
 
 
 def is_canonical(path: str) -> bool:
-    return path in CANONICAL_FILES
+    """Whether this path is a legitimate place for owner knowledge.
+
+    The taxonomy stays closed — a brand-new top-level file is still the move
+    that produced the v1 drift. It is closed over a set of DOCUMENTS *and* a set
+    of COLLECTIONS: a new file inside `/memories/projects/` is not a new kind of
+    document, it is one more instance of a kind that already has a spec. Without
+    this branch the closed-taxonomy rule below rejects every project and every
+    person the owner ever acquires again.
+    """
+    if path in CANONICAL_FILES:
+        return True
+    from app.services.memory_spec import collection_for
+
+    return collection_for(path) is not None
 
 
 def is_system_path(path: str) -> bool:
@@ -90,7 +103,15 @@ def is_system_path(path: str) -> bool:
 
 
 def max_bytes_for(path: str) -> int:
-    return INJECTED_FILE_MAX_BYTES if path in _INJECTED_PATHS else ONDEMAND_FILE_MAX_BYTES
+    """The cap for one path. Injected files are billed on every request by every
+    agent, so theirs is tightest; a collection member is one entity and has no
+    business being large, which is the point of splitting the registry at all."""
+    if path in _INJECTED_PATHS:
+        return INJECTED_FILE_MAX_BYTES
+    from app.services.memory_spec import collection_for
+
+    coll = collection_for(path)
+    return coll.max_bytes if coll else ONDEMAND_FILE_MAX_BYTES
 
 
 # ── Per-file structural checks ────────────────────────────────────────────────
@@ -115,7 +136,14 @@ def _dossier_violations(content: str) -> list[str]:
 
 
 def _social_violations(content: str) -> list[str]:
-    """Each `## Person` section carries a Who block and an Events log (§2.2)."""
+    """Each person section carries a Who block and an Events log (§2.2).
+
+    People live at `###` — `##` is the CATEGORY level (memory_spec: social.md is
+    `entity_level=3`). This walked `##` and so asked "Professional", "Personal"
+    and "Siberay Board" for a `**Who:**` block they were never meant to have.
+    Delta-checking hid it: the noise was pre-existing on every write, so it never
+    blocked anything and never surfaced.
+    """
     problems: list[str] = []
     # Walk lines rather than splitting: a split loses the heading text, and the
     # person's name is what makes the violation message actionable.
@@ -123,10 +151,15 @@ def _social_violations(content: str) -> list[str]:
     body: list[str] = []
     blocks: list[tuple[str, str]] = []
     for line in content.splitlines():
-        if line.startswith("## "):
+        if line.startswith("### "):
             if current:
                 blocks.append((current, "\n".join(body)))
-            current, body = line[3:].strip(), []
+            current, body = line[4:].strip(), []
+        elif line.startswith("## "):
+            # A new category closes the person before it.
+            if current:
+                blocks.append((current, "\n".join(body)))
+            current, body = None, []
         elif current:
             body.append(line)
     if current:
@@ -161,6 +194,36 @@ def _current_violations(content: str) -> list[str]:
     return []
 
 
+def _member_violations(path: str, content: str) -> list[str]:
+    """One entity, one file — the markers its collection says every member has.
+
+    Cheaper to enforce than the monolith version was: there is exactly one entity
+    per file, so a missing `**Who:**` is unambiguous. In the 27 KB document the
+    same question depended on correctly telling a category heading from a person
+    heading, which is precisely what nothing did reliably.
+    """
+    from app.services.memory_spec import collection_for
+
+    coll = collection_for(path)
+    if coll is None or not coll.markers:
+        return []
+
+    name = path.rsplit("/", 1)[-1][:-3]
+    for line in content.splitlines():
+        if line.startswith("# "):
+            name = line[2:].strip()
+            break
+
+    problems = []
+    for marker in coll.markers:
+        if marker not in content:
+            problems.append(
+                f"{path} ({coll.entity_noun} {name!r}) has no `{marker}` block — "
+                f"every {coll.entity_noun} file needs one. {coll.notes}"
+            )
+    return problems
+
+
 _FILE_CHECKS = {
     "/memories/dossier.md": _dossier_violations,
     "/memories/social.md": _social_violations,
@@ -170,7 +233,9 @@ _FILE_CHECKS = {
 
 def _structural_violations(path: str, content: str) -> list[str]:
     check = _FILE_CHECKS.get(path)
-    return check(content) if check else []
+    if check:
+        return check(content)
+    return _member_violations(path, content)
 
 
 def _soft_warnings(path: str, content: str) -> list[str]:
@@ -254,6 +319,39 @@ def check_write(
             f"one kept by five does not."
         )
 
+    # ── A split registry is written in its new home, not its old one ─────────
+    #
+    # Deployment is GitOps, so this code reaches prod before anyone runs the
+    # split, and the two stores would otherwise be writable at the same time.
+    # That is the v1 failure exactly — "facts drift between files" — and it is
+    # worse here because both files would look authoritative.
+    #
+    # Freezing the monolith on DEPLOY rather than on migration closes the window
+    # completely: new knowledge only ever has one home, whether or not the split
+    # has run yet. Reads keep working, so nothing is lost in the meantime.
+    # Orion is exempt because repairing documents is his job, and the owner is
+    # never blocked (§4.3).
+    from app.services.memory_spec import collection_from_monolith, member_path
+
+    superseded = collection_from_monolith(path)
+    if superseded is not None and author not in ("owner", "orion"):
+        if superseded.depth == 2:
+            example = f"{superseded.root}/<category>/<name>.md"
+            groups = f" Categories: {', '.join(superseded.groups)}." if superseded.groups else ""
+        else:
+            example = member_path(superseded, "Example Name")
+            groups = ""
+        raise MemorySchemaViolation(
+            f"Write rejected — `{path}` has been split into one file per "
+            f"{superseded.entity_noun} under `{superseded.root}/`, and is now "
+            f"read-only. Nothing was saved.\n\n"
+            f"Write the {superseded.entity_noun}'s own file instead: `{example}`."
+            f"{groups} Use `create` if it does not exist yet — the folder is part "
+            f"of the taxonomy, so a new {superseded.entity_noun} there is expected, "
+            f"not a new file type. Reading `{path}` still works while the "
+            f"migration finishes."
+        )
+
     # ── The verifier (app/services/memory_verify.py) ─────────────────────────
     # Delta-only: a document with pre-existing problems must stay editable or
     # nothing could ever be repaired. Errors this write ADDS are refused;
@@ -274,14 +372,37 @@ def check_write(
     # 1. The taxonomy is closed (§2). A brand-new top-level file is the exact
     #    move that produced the v1 drift ("new file types were added ad hoc").
     if is_create and not is_canonical(path):
-        hard.append(
-            f"The /memories taxonomy is closed — `{path}` is not one of the eight "
-            f"canonical files. Route this fact into the file that answers its "
-            f"question: a person → social.md, a project → projects.md, an active "
-            f"life state → current.md, an observed preference → dossier.md, "
-            f"pre-Mark-VI biography → owner.md. If it genuinely needs a new file, "
-            f"the owner creates it from the systems board."
+        from app.services.memory_spec import COLLECTIONS
+
+        # A path that ALMOST landed in a collection is the common miss — a person
+        # filed under a category that does not exist. Say which categories do,
+        # rather than reciting the whole taxonomy at someone who had the right
+        # idea and the wrong folder.
+        near = next(
+            (c for c in COLLECTIONS if path.startswith(c.root + "/")), None
         )
+        if near is not None:
+            detail = (
+                f"`{path}` is inside `{near.root}` but not where a {near.entity_noun} "
+                f"goes. The shape is `{near.root}/"
+                + ("<category>/" if near.depth == 2 else "")
+                + "<slug>.md`"
+                + (
+                    f", and the categories are: {', '.join(near.groups)}."
+                    if near.groups else "."
+                )
+            )
+        else:
+            detail = (
+                f"`{path}` is not a canonical memory file. Route this fact into the "
+                f"file that answers its question: a person → `/memories/social/"
+                f"<category>/<name>.md`, a project → `/memories/projects/<name>.md`, "
+                f"an active life state → current.md, an observed preference → "
+                f"dossier.md, pre-Mark-VI biography → owner.md. If it genuinely "
+                f"needs a new top-level file, the owner creates it from the "
+                f"systems board."
+            )
+        hard.append(f"The /memories taxonomy is closed — {detail}")
 
     # 2. Size. Only enforced on GROWTH — an already-oversized file must stay
     #    editable, or Orion could never compress it back under the cap.

@@ -22,6 +22,14 @@ task is sent as a `task_dispatch` frame (optionally carrying a working
 directory for coding work) and the result awaited on a correlated
 `task_result` frame.
 
+A dispatched run is a REAL, READABLE CONVERSATION on the target agent, exactly
+as an n8n-triggered run is (app/core/trigger_runner.py): the incoming task is
+persisted as the opening user turn — attributed to the calling agent, never to
+the owner — the session is named at launch, and the reply is persisted with its
+tool calls. Before this, the run created a session row and streamed into a
+throwaway list, so the owner found a "New conversation" in the target's sidebar
+that opened empty while the work itself only survived as a comms-tray ticket.
+
 Every dispatch — and its result — is logged to the agent_messages table for the
 comms tray (GET /agents/comms). Telemetry writes are best-effort: a logging
 failure never fails the dispatch itself.
@@ -105,6 +113,39 @@ async def channel_transcript(
             tag = "" if r.status == "ok" else f" [{r.status.upper()}]"
             lines.append(f"         └ {r.to_agent.upper()}{tag}: {result}")
     return "\n".join(lines)
+
+
+def session_title(from_agent: str, task: str) -> str:
+    """Name a dispatched session from who sent it and what they asked, at launch.
+
+    Set up front rather than left to generate_title, for the same reason a
+    triggered run names itself (trigger_runner.session_title): the owner opens
+    the target agent's sidebar and must be able to tell an incoming dispatch
+    from their own conversations without clicking each one. An untitled session
+    renders as "New conversation", which is what sent them looking in the first
+    place.
+    """
+    snippet = " ".join(task.split())[:64]
+    return f"{from_agent.upper()} → {snippet}"[:255]
+
+
+def dispatch_meta(from_agent: str, house_party: bool) -> dict:
+    """Display-only provenance for the opening turn of a dispatched session,
+    carried in the `_speda_meta` block the UI already recovers on reload
+    (services/chat_history.py, Heartbreaker's Message.tsx).
+
+    The owner did not write this turn — another agent did — and a bubble
+    attributed to them would be a lie the next reader has no way to catch. Same
+    contract as an automation's seed, with `source="agent"` instead of "n8n" and
+    the caller named in `from_agent`. `_clean` strips the block before the
+    history goes back to the model, so it costs nothing in the prompt.
+    """
+    return {
+        "source": "agent",
+        "from_agent": from_agent,
+        "label": f"Dispatch from {from_agent.upper()}",
+        "job": "house party dispatch" if house_party else "dispatch",
+    }
 
 
 async def sweep_stale_dispatches() -> int:
@@ -472,12 +513,46 @@ class AgentDispatcher:
             "(oldest first). Use it for context and continuity; do not repeat "
             f"work already answered here:\n{channel}"
         ) if channel else ""
+        seed = (
+            f"Inter-agent dispatch from {from_agent.upper()}. Complete "
+            "the task below and reply with the result — your answer "
+            f"goes back to {from_agent.upper()}, not to the owner, so "
+            "skip greetings and pleasantries and lead with the "
+            "substance. Be complete but compact."
+            f"{channel_block}\n\n"
+            f"TASK: {task}"
+        )
         try:
             async with AsyncSessionLocal() as db:
                 session = await self._session_manager.get_or_create(
                     db=db, user_id=user_id, triggered_by="agent",
                     model_used=model, agent_id=profile.agent_id,
                 )
+                if session.title is None:
+                    session.title = session_title(from_agent, task)
+                    await db.commit()
+
+                # Persist FIRST, then read the history back — the order chat and
+                # the trigger runner both use. The seed is stamped from its own
+                # created_at rather than by hand, so the transcript the owner
+                # opens is byte-identical to the prompt the model saw. (That
+                # stamp is also how a dispatched agent knows what day it is: the
+                # system prompt carries no clock, and an unstamped turn left
+                # date-scoped tools querying a hallucinated window.)
+                #
+                # `text` in the meta block is what the BUBBLE shows: the task the
+                # caller actually sent, not the routing preamble and the whole
+                # agent-channel scrollback the model needs to read.
+                await self._session_manager.save_message(db, session.id, "user", [
+                    {"type": "text", "text": seed},
+                    {
+                        "type": "_speda_meta",
+                        "trigger": dispatch_meta(from_agent, house_party),
+                        "text": task,
+                    },
+                ])
+                history = await self._session_manager.load_history(db, session.id)
+
                 context = AgentContext(
                     agent_id=profile.agent_id,
                     user_id=user_id,
@@ -488,26 +563,7 @@ class AgentDispatcher:
                     output_mode="silent",
                     model=model,
                     system_prompt="",
-                    conversation_history=[{
-                        "role": "user",
-                        # Timestamp-stamped like a chat turn: the system prompt
-                        # tells the agent the newest user message's stamp is the
-                        # current time, and a synthetic turn has no DB row to
-                        # derive one from. Without it a dispatched agent runs
-                        # with no idea what day it is and date-scoped tools
-                        # (health_data, calendar, news) get queried on a
-                        # hallucinated window.
-                        "content": self._session_manager.stamp_user_content(
-                            f"Inter-agent dispatch from {from_agent.upper()}. Complete "
-                            "the task below and reply with the result — your answer "
-                            f"goes back to {from_agent.upper()}, not to the owner, so "
-                            "skip greetings and pleasantries and lead with the "
-                            "substance. Be complete but compact."
-                            f"{channel_block}\n\n"
-                            f"TASK: {task}",
-                            datetime.utcnow(),
-                        ),
-                    }],
+                    conversation_history=history,
                     db=db,
                     timezone=settings.owner_timezone,
                     extra={
@@ -522,11 +578,40 @@ class AgentDispatcher:
 
                 chunks: list[str] = []
                 errors: list[str] = []
-                async for event in self._orchestrator.run(context):
-                    if event.type == SSEEventType.CHUNK and isinstance(event.data, str):
-                        chunks.append(event.data)
-                    elif event.type == SSEEventType.ERROR:
-                        errors.append(str(event.data))
+                tools: list[dict] = []
+                files: list[dict] = []
+                chars = 0  # stamped onto each tool as afterChars, so a reloaded
+                # transcript interleaves tool cards where they actually fired
+                # (same contract as TurnRegistry._persist)
+                try:
+                    async for event in self._orchestrator.run(context):
+                        if event.type == SSEEventType.CHUNK and isinstance(event.data, str):
+                            chunks.append(event.data)
+                            chars += len(event.data)
+                        elif event.type == SSEEventType.ERROR:
+                            errors.append(str(event.data))
+                        elif event.type == SSEEventType.TOOL:
+                            d = event.data if isinstance(event.data, dict) else {}
+                            tools.append({
+                                "id": d.get("id"), "name": d.get("name"),
+                                "input": d.get("input"), "afterChars": chars,
+                            })
+                        elif event.type == SSEEventType.TOOL_RESULT:
+                            d = event.data if isinstance(event.data, dict) else {}
+                            for t in tools:
+                                if t.get("id") == d.get("id"):
+                                    t["result"] = d.get("result")
+                                    break
+                        elif event.type == SSEEventType.FILE:
+                            files.append(event.data)
+                except BaseException:
+                    # Including cancellation: a run that did real work before it
+                    # broke off must leave the work behind, not an empty session.
+                    await self._save_reply(db, session.id, chunks, tools, files, request_id)
+                    raise
+                await self._save_reply(
+                    db, session.id, chunks, tools, files, request_id, errors=errors,
+                )
 
                 text = "".join(chunks).strip()[:MAX_RESULT_CHARS]
                 if text:
@@ -540,6 +625,36 @@ class AgentDispatcher:
                 extra={"request_id": request_id, "to": profile.agent_id, "error": str(e)},
             )
             return f"Dispatch to {profile.agent_id} failed: {e}", "error", None
+
+    async def _save_reply(
+        self, db, session_id: int, chunks: list[str], tools: list[dict],
+        files: list[dict], request_id: str, errors: list[str] | None = None,
+    ) -> None:
+        """Persist the dispatched agent's answer as a normal assistant turn.
+
+        Mirrors TurnRegistry._persist, including its judgement call: a turn that
+        ran tools counts as work even with no text, and dropping it would erase
+        what the agent did from a transcript the owner can open. Best-effort —
+        the dispatch's own result is already on its way back to the caller, so a
+        persistence failure is logged, never raised."""
+        full = "".join(chunks)
+        if errors:
+            # The reply reads as finished otherwise; the transcript has to show
+            # it broke off, and this guarantees there is something to persist
+            # even when nothing streamed before the failure.
+            full += f"\n\n_[turn ended early — error: {'; '.join(errors)[:500]}]_"
+        if not (full or tools or files):
+            return
+        content: list = [{"type": "text", "text": full}]
+        if tools or files:
+            content.append({"type": "_speda_meta", "tools": tools, "files": files})
+        try:
+            await self._session_manager.save_message(db, session_id, "assistant", content)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "dispatch_persist_failed",
+                extra={"request_id": request_id, "session_id": session_id, "error": str(e)},
+            )
 
     # ── External (WebSocket peer) path ───────────────────────────────────────
 

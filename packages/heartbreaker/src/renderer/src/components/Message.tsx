@@ -1176,8 +1176,13 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                   <IconBolt />
                   <span>{message.trigger.label}</span>
                   <span style={{ opacity: 0.55 }}>
-                    · {message.trigger.source}
-                    {message.trigger.output_mode ? ` · ${message.trigger.output_mode}` : ''}
+                    {/* An inter-agent dispatch already names its sender in the
+                        label, so repeating "· agent · silent" after it says
+                        nothing a reader didn't just read. Only the House Party
+                        variant adds anything. */}
+                    {message.trigger.source === 'agent'
+                      ? (message.trigger.job === 'house party dispatch' ? '· house party' : '')
+                      : `· ${message.trigger.source}${message.trigger.output_mode ? ` · ${message.trigger.output_mode}` : ''}`}
                   </span>
                 </div>
               )}
