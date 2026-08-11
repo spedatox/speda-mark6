@@ -207,6 +207,10 @@ class ChatViewModel(
                     assistantId = assistantId,
                     fallbackSessionId = sessionAtSend ?: 0,
                     watchdogModel = opts.model ?: "",
+                    reattach = {
+                        val rid = runId
+                        if (rid != null) api.attachStream(cfg, rid) else null
+                    },
                 ) { doneSessionId ->
                     refreshSessions()
                     pollTitle(doneSessionId, cfg)
@@ -290,12 +294,15 @@ class ChatViewModel(
                     assistantId = assistantId,
                     fallbackSessionId = sessionId,
                     watchdogModel = null, // attach has no watchdog
+                    reattach = {
+                        val rid = runId
+                        if (rid != null) api.attachStream(cfg, rid) else null
+                    },
+                    softLanding = true,   // a dropped reattach leaves partial text, no error
                 ) { }
                 settled = true
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // network drop on the attach — leave the streamed text; run lives on
+            } catch (_: CancellationException) {
+                throw _
             } finally {
                 if (runId == run.requestId) runId = null
                 // No terminal seen → we left mid-run; forget the id so returning re-attaches.
@@ -324,6 +331,15 @@ class ChatViewModel(
      * frame) and, when [watchdogModel] is non-null, the phase-specific watchdog.
      * Dispatches the terminal (done/error) and finalizes a stream that closes
      * without one. Rethrows cancellation after finalizing (keeps streamed text).
+     *
+     * When [reattach] is non-null and a transient network error drops the stream,
+     * the consumer automatically reconnects via the factory (up to
+     * [MAX_REATTACH] times) instead of surfacing an error — the turn keeps
+     * running server-side and [attachStream] picks up where it left off.
+     *
+     * [softLanding] suppresses the error dispatch when all reattach attempts are
+     * exhausted (the attach itself uses this: a dropped reattach just leaves the
+     * partial text rather than showing an error).
      */
     private suspend fun collectStream(
         flow: Flow<SseEvent>,
@@ -331,6 +347,8 @@ class ChatViewModel(
         fallbackSessionId: Int,
         watchdogModel: String?,
         onDone: suspend (Int) -> Unit,
+        reattach: (suspend () -> Flow<SseEvent>?)? = null,
+        softLanding: Boolean = false,
     ) = coroutineScope {
         val scope = this
         val pending = StringBuilder()
@@ -372,87 +390,112 @@ class ChatViewModel(
             null
         }
 
-        try {
-            flow.collect { event ->
-                lastActivity = System.currentTimeMillis()
-                when (event.type) {
-                    "start" -> {
-                        gotStart = true
-                        runId = event.requestId
-                        if (event.sessionId != 0) {
-                            turnSessionId = event.sessionId
-                            dispatch(ChatAction.TagMessageSession(assistantId, event.sessionId))
+        var currentFlow = flow
+        var reattachAttempts = 0
+
+        while (true) {
+            try {
+                currentFlow.collect { event ->
+                    lastActivity = System.currentTimeMillis()
+                    when (event.type) {
+                        "start" -> {
+                            gotStart = true
+                            runId = event.requestId
+                            if (event.sessionId != 0) {
+                                turnSessionId = event.sessionId
+                                dispatch(ChatAction.TagMessageSession(assistantId, event.sessionId))
+                            }
+                            dispatch(ChatAction.SetStatus(assistantId, "Thinking"))
                         }
-                        dispatch(ChatAction.SetStatus(assistantId, "Thinking"))
-                    }
-                    "chunk" -> {
-                        gotContent = true
-                        strOf(event.data)?.let { pending.append(it) }
-                    }
-                    "tool" -> {
-                        gotTool = true
-                        flush() // charsSoFar must reflect everything seen before this tool
-                        MessageJson.toolFrom(event.data)?.let {
-                            dispatch(ChatAction.AddTool(assistantId, it.copy(afterChars = charsSoFar)))
+                        "chunk" -> {
+                            gotContent = true
+                            strOf(event.data)?.let { pending.append(it) }
                         }
-                    }
-                    "tool_result" -> {
-                        (event.data as? JsonObject)?.let { o ->
-                            val id = strOf(o["id"])
-                            if (id != null) dispatch(ChatAction.SetToolResult(assistantId, id, strOf(o["result"]).orEmpty()))
+                        "tool" -> {
+                            gotTool = true
+                            flush() // charsSoFar must reflect everything seen before this tool
+                            MessageJson.toolFrom(event.data)?.let {
+                                dispatch(ChatAction.AddTool(assistantId, it.copy(afterChars = charsSoFar)))
+                            }
                         }
-                    }
-                    "file" -> MessageJson.fileFrom(event.data)?.let { dispatch(ChatAction.AddFile(assistantId, it)) }
-                    // The backend is asking the owner to authorize House Party.
-                    // A real event, not a marker in the text — so the passphrase
-                    // ask never enters the transcript (and never gets re-read
-                    // out of history later).
-                    "house_party_auth" ->
-                        _housePartyAsk.value = strOf((event.data as? JsonObject)?.get("objective")).orEmpty()
-                    "done" -> {
-                        flush(); settled = true
-                        dispatch(ChatAction.FinishMessage(assistantId, event.sessionId))
-                        onDone(event.sessionId)
-                    }
-                    "error" -> {
-                        flush(); settled = true
-                        dispatch(ChatAction.ErrorMessage(assistantId, strOf(event.data) ?: "The turn failed."))
+                        "tool_result" -> {
+                            (event.data as? JsonObject)?.let { o ->
+                                val id = strOf(o["id"])
+                                if (id != null) dispatch(ChatAction.SetToolResult(assistantId, id, strOf(o["result"]).orEmpty()))
+                            }
+                        }
+                        "file" -> MessageJson.fileFrom(event.data)?.let { dispatch(ChatAction.AddFile(assistantId, it)) }
+                        // The backend is asking the owner to authorize House Party.
+                        // A real event, not a marker in the text — so the passphrase
+                        // ask never enters the transcript (and never gets re-read
+                        // out of history later).
+                        "house_party_auth" ->
+                            _housePartyAsk.value = strOf((event.data as? JsonObject)?.get("objective")).orEmpty()
+                        "done" -> {
+                            flush(); settled = true
+                            dispatch(ChatAction.FinishMessage(assistantId, event.sessionId))
+                            onDone(event.sessionId)
+                        }
+                        "error" -> {
+                            flush(); settled = true
+                            dispatch(ChatAction.ErrorMessage(assistantId, strOf(event.data) ?: "The turn failed."))
+                        }
                     }
                 }
+                // Stream closed without a terminal — finalize so the bubble never sticks.
+                if (!settled) { flush(); settled = true; dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId)) }
+                break
+            } catch (e: CancellationException) {
+                flush()
+                if (timedOut) {
+                    dispatch(ChatAction.ErrorMessage(assistantId, timeoutReason.ifEmpty { "The backend went silent and the request timed out." }))
+                } else if (!settled) {
+                    // User-initiated stop or a view switch — keep whatever streamed.
+                    dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
+                }
+                throw e
+            } catch (e: java.net.SocketException) {
+                if (reattach != null && reattachAttempts < MAX_REATTACH) {
+                    reattachAttempts++
+                    gotContent = false; gotTool = false
+                    lastActivity = System.currentTimeMillis()
+                    dispatch(ChatAction.SetStatus(assistantId, "Reconnecting…"))
+                    val newFlow = reattach()
+                    if (newFlow != null) { currentFlow = newFlow; continue }
+                }
+                flush(); settled = true
+                if (softLanding) {
+                    dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
+                } else {
+                    dispatch(ChatAction.ErrorMessage(assistantId,
+                        "Couldn't reach the backend — network error. Is the API server running and reachable from this host?"))
+                }
+                break
+            } catch (e: Exception) {
+                val msg = e.message.orEmpty()
+                val net = NET_ERROR.containsMatchIn(msg)
+                if (net && reattach != null && reattachAttempts < MAX_REATTACH) {
+                    reattachAttempts++
+                    gotContent = false; gotTool = false
+                    lastActivity = System.currentTimeMillis()
+                    dispatch(ChatAction.SetStatus(assistantId, "Reconnecting…"))
+                    val newFlow = reattach()
+                    if (newFlow != null) { currentFlow = newFlow; continue }
+                }
+                flush(); settled = true
+                if (net && softLanding) {
+                    dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
+                } else {
+                    dispatch(ChatAction.ErrorMessage(assistantId,
+                        if (net) "Couldn't reach the backend — network error. Is the API server running and reachable from this host?"
+                        else msg.ifEmpty { "The request failed." }))
+                }
+                break
             }
-            // Stream closed without a terminal — finalize so the bubble never sticks.
-            if (!settled) { flush(); settled = true; dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId)) }
-        } catch (e: CancellationException) {
-            flush()
-            if (timedOut) {
-                dispatch(ChatAction.ErrorMessage(assistantId, timeoutReason.ifEmpty { "The backend went silent and the request timed out." }))
-            } else if (!settled) {
-                // User-initiated stop or a view switch — keep whatever streamed.
-                dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
-            }
-            throw e
-        } catch (e: java.net.SocketException) {
-            // Android surfaces network transitions / socket aborts as
-            // "Software caused connection abort" — surface a friendly
-            // message the same way we do for other transient network errors.
-            flush(); settled = true
-            dispatch(
-                ChatAction.ErrorMessage(
-                    assistantId,
-                    "Couldn't reach the backend — network error. Is the API server running and reachable from this host?",
-                ),
-            )
-        } catch (e: Exception) {
-            flush(); settled = true
-            val msg = e.message.orEmpty()
-            val net = NET_ERROR.containsMatchIn(msg)
-            dispatch(
-                ChatAction.ErrorMessage(
-                    assistantId,
-                    if (net) "Couldn't reach the backend — network error. Is the API server running and reachable from this host?"
-                    else msg.ifEmpty { "The request failed." },
-                ),
-            )
+        }
+        // The finally block below runs once, after the loop exits or the scope is cancelled.
+        try {
+            // no-op — the block below is the actual finally
         } finally {
             watchdog?.cancel(); flusher.cancel(); flush()
         }
@@ -467,6 +510,12 @@ class ChatViewModel(
     private fun makeId(): String = UUID.randomUUID().toString().replace("-", "").take(8)
 
     private companion object {
+        /** Max automatic reattach attempts when the SSE stream drops on a
+         * transient network error (mobile network handoff, brief disconnection).
+         * The turn keeps running server-side; each attempt calls [IgorApi.attachStream]
+         * to pick up where it left off. */
+        const val MAX_REATTACH = 3
+
         val NET_ERROR = Regex(
             "failed to fetch|networkerror|load failed|err_connection|unable to resolve|connection refused|timeout|timed out|connection abort|software caused|socketexception|econnreset|broken pipe",
             RegexOption.IGNORE_CASE,
