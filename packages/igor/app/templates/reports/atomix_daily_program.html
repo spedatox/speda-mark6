@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<!-- ATOMIX · DAILY PROGRAM ─ fork per session day. Single A4 page.
+     Editorial performance-dossier layout: full-bleed dark masthead (angled cut),
+     Barlow Condensed display (sporty, jersey-number feel) + DejaVu Sans/Mono for
+     body & data. All fonts are local files under skills/fonts/ — no CDN, no
+     internet dependency, safe to render on the server. -->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Günlük Antrenman Programı — Atomix</title>
+<style>
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans.ttf");font-weight:400}
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans-Bold.ttf");font-weight:700}
+@font-face{font-family:S;src:url("../../skills/fonts/DejaVuSans-Oblique.ttf");font-style:italic}
+@font-face{font-family:M;src:url("../../skills/fonts/DejaVuSansMono.ttf")}
+@font-face{font-family:BC;src:url("../../skills/fonts/BarlowCondensed-Medium.ttf");font-weight:500}
+@font-face{font-family:BC;src:url("../../skills/fonts/BarlowCondensed-Bold.ttf");font-weight:700}
+@font-face{font-family:BC;src:url("../../skills/fonts/BarlowCondensed-ExtraBold.ttf");font-weight:800}
+
+:root{
+  --paper:#faf8f1;--ink:#15170f;--ink-soft:#5c5f51;--hair:#e2ded0;
+  --a:#3fae74;--a-deep:#1d6b46;--a-tint:#e6f2ea;--a-line:#c9e2d3;
+  --amber:#a8571f;--amber-tint:#f8ece0;--amber-line:#e3c19c;
+}
+*{box-sizing:border-box}
+html{font-size:9.7pt}
+body{font-family:S,sans-serif;color:var(--ink);line-height:1.5;margin:0;-webkit-font-smoothing:antialiased}
+h1,h2{margin:0}
+p{margin:0}
+ul{margin:0;padding-left:0;list-style:none}
+
+@page{size:A4;margin:0}
+@media screen{
+  body{background:#dcd7c6;padding:12mm 0 26mm}
+  .sheet{width:210mm;min-height:283mm;margin:0 auto;background:var(--paper);
+    box-shadow:0 3mm 14mm rgba(15,20,10,.22)}
+}
+@media print{ html{font-size:9.4pt} }
+
+/* ══ MASTHEAD ═════════════════════════════════════════════════════════ */
+.masthead{position:relative;overflow:hidden;background:var(--ink);color:var(--paper);
+  padding:11mm 15mm 13mm;clip-path:polygon(0 0,100% 0,100% 88%,0 100%)}
+.masthead .ghost{position:absolute;right:-20mm;top:-18mm;width:120mm;height:120mm;opacity:.055;fill:var(--paper)}
+.mh-eyebrow{position:relative;display:flex;justify-content:space-between;align-items:center;margin-bottom:9mm}
+.brand{font-family:M,monospace;font-size:7.4pt;letter-spacing:.26em;text-transform:uppercase;
+  display:inline-flex;align-items:center;gap:2.2mm;color:#cfe9da}
+.brand .dot{width:1.7mm;height:1.7mm;border-radius:50%;background:var(--a);display:inline-block}
+.brand .slash{color:var(--a);opacity:.85}
+.doc-code{font-family:M,monospace;font-size:7.2pt;letter-spacing:.05em;color:#a9b39c}
+.mh-main{position:relative;display:flex;align-items:center;gap:7.5mm}
+.mh-main svg.mark{width:32mm;height:32mm;flex:none}
+.mh-copy h1{font-family:BC,S,sans-serif;font-weight:800;text-transform:uppercase;font-size:40pt;
+  line-height:.92;letter-spacing:.002em;color:var(--paper)}
+.mh-meta{margin-top:4.5mm;font-family:M,monospace;font-size:8pt;letter-spacing:.03em;
+  color:#d6dbc7;display:flex;align-items:center;gap:2.6mm}
+.mh-meta i{font-style:normal;color:var(--a)}
+
+/* ══ CONTENT GRID ═════════════════════════════════════════════════════ */
+.content{padding:0 15mm 11mm}
+.blk{display:flex;gap:6mm;padding:6mm 0;border-top:.6pt solid var(--hair)}
+.blk:first-child{border-top:none;padding-top:9mm}
+.side{width:23mm;flex:none}
+.idx{display:block;font-family:BC,S,sans-serif;font-weight:800;font-size:27pt;
+  line-height:1;color:rgba(29,107,70,.28)}
+.side h2{margin-top:2mm;font-family:S,sans-serif;font-weight:700;font-size:8.2pt;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink)}
+.main{flex:1;min-width:0}
+
+/* ── goal pull-quote ──────────────────────────────────────────────── */
+.quote{background:var(--a-tint);border-left:2.8pt solid var(--a);padding:4.2mm 5.5mm;
+  font-family:BC,S,sans-serif;font-weight:500;font-size:15pt;
+  line-height:1.28;color:var(--ink)}
+
+/* ── plain lists (warm-up / finisher) ─────────────────────────────── */
+.plain li{position:relative;padding-left:4.4mm;font-size:8.9pt;margin-bottom:1.8mm}
+.plain li::before{content:"";position:absolute;left:0;top:.72em;width:1.7mm;height:1.7mm;background:var(--a)}
+.finisher{font-size:9.4pt;font-weight:500}
+
+/* ── main work table ───────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:8.6pt}
+thead tr{border-top:1.6pt solid var(--a)}
+th{font:600 6.6pt M,monospace;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-soft);text-align:left;padding:2.2mm 3mm 2mm 0;border-bottom:1pt solid var(--ink)}
+th.load,td.load{text-align:right}
+th:last-child,td:last-child{padding-right:0}
+td{padding:2.6mm 3mm 2.6mm 0;border-bottom:.4pt solid var(--hair);vertical-align:middle}
+tbody tr:nth-child(even){background:#f2efe3}
+tr{break-inside:avoid}
+.badge{display:inline-flex;align-items:center;justify-content:center;width:5.4mm;height:5.4mm;
+  border:1pt solid var(--a-deep);border-radius:50%;font:700 7pt M,monospace;color:var(--a-deep)}
+.ex{font-weight:700}
+.load{font-family:M,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cue{color:var(--ink-soft);font-size:8pt;font-style:italic}
+
+/* ── rules / caution panel ────────────────────────────────────────── */
+.rules{position:relative;background:var(--amber-tint);border:.7pt solid var(--amber-line);
+  border-radius:1mm;padding:5.5mm 5.5mm 4.6mm}
+.rules::after{content:"DİKKAT";position:absolute;top:-3.4mm;right:6mm;background:var(--amber);
+  color:#fff;font:700 6.4pt M,monospace;letter-spacing:.15em;padding:1.5mm 3mm;
+  border-radius:.8mm;transform:rotate(2deg);box-shadow:0 1mm 2.2mm rgba(30,15,0,.25)}
+.rules li{display:flex;align-items:flex-start;gap:2.8mm;font-size:8.8pt;margin-bottom:2.2mm}
+.rules li:last-child{margin-bottom:0}
+.rules li .tri{flex:none;margin-top:.55em;width:3mm;height:2.7mm;background:var(--amber);
+  clip-path:polygon(50% 0,100% 100%,0 100%)}
+
+/* ══ FOOTER ═══════════════════════════════════════════════════════════ */
+.ft{margin:2mm 15mm 0;padding:3.6mm 0 10mm;border-top:1pt solid var(--ink);
+  display:flex;justify-content:space-between;align-items:center;
+  font-family:M,monospace;font-size:7.2pt;letter-spacing:.04em;color:var(--ink-soft)}
+.ft .ticks{flex:1;height:2.4mm;margin:0 8mm;
+  background:repeating-linear-gradient(90deg,var(--hair) 0 1pt,transparent 1pt 2.6mm);opacity:.9}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<!-- ══ MASTHEAD ═══════════════════════════════════════════════════════ -->
+<div class="masthead">
+  <svg class="ghost" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M50.06 9.57L100 90.43L72.34 89.8L49.19 53L23.9 52.63L50.06 9.57ZM62.45 89.55L41.43 90.18L31.66 75.66L22.03 90.18L0 89.92L19.52 59.76L44.56 60.14L62.45 89.55Z"/>
+  </svg>
+  <div class="mh-eyebrow">
+    <span class="brand"><i class="dot"></i>ATOMIX <span class="slash">/</span> PERFORMANS KOÇU</span>
+    <span class="doc-code">ATX-DLY-2026-08-10</span>
+  </div>
+  <div class="mh-main">
+    <svg class="mark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" fill="none" role="img" aria-label="Atomix">
+      <defs>
+        <clipPath id="ax-clip"><path d="M50.06 9.57L100 90.43L72.34 89.8L49.19 53L23.9 52.63L50.06 9.57ZM62.45 89.55L41.43 90.18L31.66 75.66L22.03 90.18L0 89.92L19.52 59.76L44.56 60.14L62.45 89.55Z"/></clipPath>
+        <linearGradient id="ax-sheen" x1="0.08" y1="0" x2="0.62" y2="1">
+          <stop offset="0" stop-color="#fff" stop-opacity="0.62"/>
+          <stop offset="0.42" stop-color="#fff" stop-opacity="0.10"/>
+          <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+        </linearGradient>
+        <radialGradient id="ax-bloom" cx="0.28" cy="0.20" r="0.8">
+          <stop offset="0" stop-color="#fff" stop-opacity="0.42"/>
+          <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+        </radialGradient>
+        <filter id="ax-lift" x="-35%" y="-35%" width="170%" height="170%">
+          <feDropShadow dx="0" dy="1.6" stdDeviation="2.4" flood-color="#000" flood-opacity="0.36"/>
+          <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#3fae74" flood-opacity="0.5"/>
+        </filter>
+      </defs>
+      <g filter="url(#ax-lift)">
+        <path d="M50.06 9.57L100 90.43L72.34 89.8L49.19 53L23.9 52.63L50.06 9.57ZM62.45 89.55L41.43 90.18L31.66 75.66L22.03 90.18L0 89.92L19.52 59.76L44.56 60.14L62.45 89.55Z" fill="#3fae74" fill-opacity="0.94"/>
+        <g clip-path="url(#ax-clip)">
+          <rect width="100" height="100" fill="url(#ax-sheen)"/>
+          <rect width="100" height="100" fill="url(#ax-bloom)"/>
+        </g>
+        <path d="M50.06 9.57L100 90.43L72.34 89.8L49.19 53L23.9 52.63L50.06 9.57ZM62.45 89.55L41.43 90.18L31.66 75.66L22.03 90.18L0 89.92L19.52 59.76L44.56 60.14L62.45 89.55Z" fill="none" stroke="#fff" stroke-opacity="0.42" stroke-width="1.1" stroke-linejoin="round"/>
+      </g>
+    </svg>
+    <div class="mh-copy">
+      <h1>Günlük Antrenman<br>Programı</h1>
+      <div class="mh-meta"><span>Pazartesi</span><i>·</i><span>Hafta 3</span><i>·</i><span>10 Ağustos 2026</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CONTENT ══════════════════════════════════════════════════════════ -->
+<div class="content">
+
+  <div class="blk">
+    <div class="side"><span class="idx">01</span><h2>Hedef</h2></div>
+    <div class="main">
+      <div class="quote">"Göğüs önceliği; vertigosuz leg press dönüşü ve kontrollü çekiş hacmi."</div>
+    </div>
+  </div>
+
+  <div class="blk">
+    <div class="side"><span class="idx">02</span><h2>Isınma</h2></div>
+    <div class="main">
+      <ul class="plain">
+        <li>Koşu bandı 8 dk</li>
+        <li>Dinamik hareketlilik: kalça açıcılar, omuz daireleri</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="blk">
+    <div class="side"><span class="idx">03</span><h2>Ana&nbsp;Çalışma</h2></div>
+    <div class="main">
+      <table>
+        <thead>
+          <tr><th></th><th>Hareket</th><th class="load">Set × Tekrar</th><th>Not</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="badge">1</span></td><td class="ex">DB Flat Bench Press</td><td class="load">3 × 11 @ 12 kg DB</td><td class="cue">Son 3 × 10'a tekrar ilerlemesi; göğüs öncelikli</td></tr>
+          <tr><td><span class="badge">2</span></td><td class="ex">Leg Press</td><td class="load">3 × 10 @ 60 kg</td><td class="cue">Vertigo veya diz kapağı basıncı olursa hemen bırak</td></tr>
+          <tr><td><span class="badge">3</span></td><td class="ex">Horizontal Leg Curl</td><td class="load">3 × 12 @ 20 kg</td><td class="cue">Kontrollü dönüş; kalça minderden kalkmasın</td></tr>
+          <tr><td><span class="badge">4</span></td><td class="ex">Seated Cable Row</td><td class="load">3 × 12 @ 27 kg</td><td class="cue">Stack sıçradığı için yük değil tekrar ilerlemesi</td></tr>
+          <tr><td><span class="badge">5</span></td><td class="ex">Lateral Raise</td><td class="load">2 × 12 @ 2.5 kg DB</td><td class="cue">Savurma yok; omuz tamamen rahat kalmalı</td></tr>
+          <tr><td><span class="badge">6</span></td><td class="ex">Triceps Pushdown</td><td class="load">2 × 12 @ hafif stack</td><td class="cue">Dirsek tendonunda rahatsızlık olursa çıkar</td></tr>
+          <tr><td><span class="badge">7</span></td><td class="ex">Ab Machine / Cable Crunch</td><td class="load">3 × 12</td><td class="cue">Kontrollü tekrar</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="blk">
+    <div class="side"><span class="idx">04</span><h2>Bitirici</h2></div>
+    <div class="main"><p class="finisher">Kolay yüzme 20 dk — rahat tempo</p></div>
+  </div>
+
+  <div class="blk">
+    <div class="side"><span class="idx">05</span><h2>Kurallar</h2></div>
+    <div class="main">
+      <ul class="rules">
+        <li><span class="tri"></span>Vertigo başlarsa leg press'i bırak; leg extension 3 × 10 @ 35 kg'a geç</li>
+        <li><span class="tri"></span>Keskin omuz veya dirsek ağrısında ilgili hareketi hemen bırak</li>
+        <li><span class="tri"></span>Overhead press, RDL ve direkt biceps izolasyonu yok</li>
+        <li><span class="tri"></span>Listelenen yüklerin üzerine çıkma</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ FOOTER ═══════════════════════════════════════════════════════════ -->
+<div class="ft">
+  <span>ATOMIX — SPEDA MARK VI HEALTH SPECIALIST</span>
+  <span class="ticks"></span>
+  <span>2026-08-10</span>
+</div>
+
+</div>
+</body>
+</html>
