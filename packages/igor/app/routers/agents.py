@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
@@ -292,6 +293,18 @@ async def agent_websocket(
                 agent_proxy.deliver(
                     str(message.get("chat_id", "")), message.get("event") or {}
                 )
+            elif msg_type == "memory_request":
+                # The peer is reading or writing the owner's memory. It runs the
+                # same MemorySkill every in-process agent uses, so an external
+                # agent cannot reach around the file law by being external
+                # (app/services/peer_memory.py). Answered on its own task: the
+                # peer is parked on this inside one tool dispatch, and blocking
+                # the receive loop on a database round trip would stall every
+                # other frame on the socket behind it — including the chat_event
+                # stream of the very turn that is waiting.
+                asyncio.create_task(
+                    _answer_memory(websocket, agent_id, message)
+                )
             elif msg_type == "permission_request":
                 # The peer's safety gate stopped an irreversible operation and
                 # wants the owner's decision (app/services/pending_asks.py).
@@ -321,3 +334,25 @@ async def agent_websocket(
         agent_proxy.fail_agent(agent_id, host)
         pending_asks.drop_agent(agent_id)
         await agent_registry.deregister(agent_id, db, host)
+
+
+async def _answer_memory(websocket: WebSocket, agent_id: str, frame: dict) -> None:
+    """Run one peer memory command and send the answer back down the socket.
+
+    Six lines and no decisions — `run_memory_command` holds all of it (Rule 1).
+    This exists only because the send has to happen off the receive loop and a
+    bare `create_task` needs something to call.
+
+    A send that fails is logged and dropped: the socket is already gone, the
+    peer's own timeout will fire, and there is nothing left here to tell.
+    """
+    from app.services.peer_memory import run_memory_command
+
+    response = await run_memory_command(agent_id, frame)
+    try:
+        await websocket.send_json(response)
+    except Exception as e:  # noqa: BLE001 — see docstring
+        logger.warning(
+            "peer_memory_response_undeliverable",
+            extra={"agent_id": agent_id, "error": str(e)},
+        )
