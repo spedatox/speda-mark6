@@ -10,6 +10,7 @@ import com.speda.heartbreaker.data.SettingsStore
 import com.speda.heartbreaker.data.UplinkStore
 import com.speda.heartbreaker.health.HealthSyncManager
 import com.speda.heartbreaker.push.PushRegistrar
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -34,10 +35,14 @@ class AppGraph(context: Context) {
 
     // Streaming client — reads idle for the length of a turn; the watchdog owns
     // liveness, so read/call timeouts are disabled (plan §4.1).
+    // retryOnConnectionFailure lets OkHttp transparently retry when the mobile
+    // network transitions (WiFi ↔ cellular) drop the socket mid-turn.
     private val streamClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .callTimeout(0, TimeUnit.MILLISECONDS)
+        .retryOnConnectionFailure(true)
+        .connectionPool(ConnectionPool(2, 30, TimeUnit.SECONDS))
         .build()
 
     val health: HealthPoller = HealthPoller(restClient)

@@ -431,6 +431,17 @@ class ChatViewModel(
                 dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
             }
             throw e
+        } catch (e: java.net.SocketException) {
+            // Android surfaces network transitions / socket aborts as
+            // "Software caused connection abort" — surface a friendly
+            // message the same way we do for other transient network errors.
+            flush(); settled = true
+            dispatch(
+                ChatAction.ErrorMessage(
+                    assistantId,
+                    "Couldn't reach the backend — network error. Is the API server running and reachable from this host?",
+                ),
+            )
         } catch (e: Exception) {
             flush(); settled = true
             val msg = e.message.orEmpty()
@@ -457,7 +468,7 @@ class ChatViewModel(
 
     private companion object {
         val NET_ERROR = Regex(
-            "failed to fetch|networkerror|load failed|err_connection|unable to resolve|connection refused|timeout|timed out",
+            "failed to fetch|networkerror|load failed|err_connection|unable to resolve|connection refused|timeout|timed out|connection abort|software caused|socketexception|econnreset|broken pipe",
             RegexOption.IGNORE_CASE,
         )
     }
