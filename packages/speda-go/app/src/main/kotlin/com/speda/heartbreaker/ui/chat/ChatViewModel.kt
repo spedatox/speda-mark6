@@ -346,9 +346,9 @@ class ChatViewModel(
         assistantId: String,
         fallbackSessionId: Int,
         watchdogModel: String?,
-        onDone: suspend (Int) -> Unit,
         reattach: (suspend () -> Flow<SseEvent>?)? = null,
         softLanding: Boolean = false,
+        onDone: suspend (Int) -> Unit,
     ) = coroutineScope {
         val scope = this
         val pending = StringBuilder()
