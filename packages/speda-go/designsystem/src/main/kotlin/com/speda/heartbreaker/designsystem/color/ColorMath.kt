@@ -28,7 +28,7 @@ internal object ColorMath {
     data class Hsl(val h: Double, val s: Double, val l: Double)
 
     private const val WHITE = "#ffffff"
-    private const val VOID = "#04080a"
+    private const val VOID = "#05070a"
 
     fun hexToRgb(hex: String): Rgb {
         val h = hex.removePrefix("#")
