@@ -16,7 +16,8 @@ import { useEffect, useState } from 'react'
 import {
   getReminders, saveReminder, deleteReminder, getReminderHistory,
 } from '../lib/api'
-import type { AppConfig, ReminderDefinition, ReminderCycleInfo } from '../lib/api'
+import type { ReminderDefinition, ReminderCycleInfo } from '../lib/api'
+import type { AppConfig } from '../lib/types'
 
 const AGENTS = ['speda', 'atomix', 'ultron', 'sentinel', 'nightcrawler', 'centurion', 'orion']
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -27,21 +28,25 @@ const blank = (): ReminderDefinition => ({
   every_minutes: 5, max_asks: 10, enabled: true,
 })
 
+/* Same field, label and chip the settings pane uses everywhere else — this tab
+   is one of its eight panes, not a separate form. Radii come from classes:
+   the theme's blanket reset outranks any inline borderRadius. */
 const input: React.CSSProperties = {
-  background: 'rgba(0,0,0,0.25)', border: '1px solid var(--hb-edge)',
-  borderRadius: 6, color: 'var(--hb-text)', padding: '0.45rem 0.6rem',
-  fontSize: '0.85rem', fontFamily: 'inherit', width: '100%',
+  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.09)',
+  color: 'var(--hb-text)', padding: '0 14px', height: 44,
+  fontSize: '0.9375rem', fontFamily: 'var(--font-read)', width: '100%',
+  outline: 'none',
 }
 const label: React.CSSProperties = {
-  fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase',
-  color: 'var(--hb-text-faint)', marginBottom: '0.3rem', display: 'block',
+  fontSize: '0.845rem', color: 'var(--hb-text-dim)',
+  marginBottom: '0.5rem', display: 'block',
 }
 const chip = (active: boolean): React.CSSProperties => ({
-  padding: '0.3rem 0.55rem', borderRadius: 6, cursor: 'pointer',
-  fontSize: '0.7rem', letterSpacing: '0.06em',
-  border: `1px solid ${active ? 'var(--hb-accent)' : 'var(--hb-edge)'}`,
-  background: active ? 'color-mix(in srgb, var(--hb-accent) 18%, transparent)' : 'transparent',
-  color: active ? 'var(--hb-accent-bright)' : 'var(--hb-text-dim)',
+  padding: '0 13px', height: 30, display: 'inline-flex', alignItems: 'center',
+  cursor: 'pointer', fontSize: '0.845rem',
+  border: `1px solid ${active ? 'rgba(var(--hb-accent-rgb),0.32)' : 'rgba(255,255,255,0.08)'}`,
+  background: active ? 'rgba(var(--hb-accent-rgb),0.12)' : 'var(--glass-sheen)',
+  color: active ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
 })
 
 /** "1,3,5" ⇄ the day chips. "*" means every day. */

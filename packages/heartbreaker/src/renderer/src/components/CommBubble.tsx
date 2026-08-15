@@ -23,13 +23,15 @@ function LiveElapsed({ since }: { since: string }) {
  * Shared fluid-glass chat pieces for inter-agent traffic — used by both the
  * AGENT_COMMS tray and the House Party war room so the whole comms surface
  * speaks the same Mark VI hologram language: liquid-glass slabs with the
- * agent's signature rim, monogram avatars, replies threaded under the task.
+ * agent's signature rim and its own mark.
+ *
+ * Both surfaces render a ROOM. Every agent speaks for itself, on one timeline,
+ * in the order things actually happened — a dispatch and the reply to it are
+ * two messages from two agents, never one card with the answer folded inside.
  * Message bodies render markdown (agents write it) inside `.prose`, which also
  * re-enables text selection so messages can be copied.
  */
 
-const MONO = "var(--font-mono)"
-const UI = "'Rajdhani', sans-serif"
 
 /**
  * Stand-in geometry for the two ids with no wordmark art: Orion (an orbit —
@@ -170,123 +172,302 @@ export function CopyBtn({ text, tint }: { text: string; tint: string }) {
   )
 }
 
-export function Bubble({ e, mine = false, compact = false }: {
-  e: AgentCommEntry
-  mine?: boolean
+/* ════════════════════════════════════════════════════════════════════════════
+   THE ROOM — one grammar for every surface where agents talk to each other.
+
+   These pieces started in PartyStream (the war room). They live here now
+   because the comms tray needs the same grammar: a dispatch and its reply are
+   two agents speaking, not one record with an answer folded inside it. The
+   tray used to render the reply nested under the task behind a left rule —
+   which reads as a transaction log, and puts the answer somewhere the eye
+   does not look for one.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+const FAILED = ['error', 'timeout', 'offline', 'refused']
+
+/** A working agent — the same ring the tool chain and the deck use. */
+export function Working({ id, label }: { id: string; label: string }) {
+  const c = agentColor(id)
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+      <span style={{
+        width: 13, height: 13, borderRadius: '50%', flexShrink: 0,
+        border: `1.5px solid ${c}4d`, borderTopColor: c,
+        animation: 'spin 0.7s linear infinite',
+      }} />
+      {label}
+    </span>
+  )
+}
+
+export function Divider({ text }: { text: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <span className="glass-round" style={{
+        padding: '5px 14px',
+        background: 'rgba(255,255,255,0.03)', border: 'none',
+        fontSize: '0.78rem', letterSpacing: '0.1em', textTransform: 'uppercase',
+        color: 'var(--hb-text-faint)',
+      }}>
+        {text}
+      </span>
+    </div>
+  )
+}
+
+/** The owner's own line — right-aligned, neutral, tail on the right. */
+export function OwnerSay({ text }: { text: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div className="hb-party-owner" style={{
+        maxWidth: '64%', padding: '11px 17px',
+        background: 'rgba(198,218,235,0.07)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        fontSize: '0.94rem', lineHeight: 1.55, color: '#e7f0f5',
+        whiteSpace: 'pre-wrap',
+      }}>
+        {text}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One participant's line: mark, name, bubble.
+ *
+ * `head={false}` continues the same agent's run — the mark and the name drop
+ * away and the tail squares off, so a burst from one agent reads as one turn
+ * of speech. `compact` is the tray cut of the same grammar, not a different
+ * one: smaller mark, tighter bubble, everything else identical.
+ */
+export function AgentSay({ id, commander, compact = false, head = true, badge, foot, children }: {
+  id: string
+  /** The commander's own bubble carries the accent; the roster answers neutral. */
+  commander?: boolean
   compact?: boolean
+  head?: boolean
+  badge?: React.ReactNode
+  foot?: React.ReactNode
+  children: React.ReactNode
 }) {
-  const [open, setOpen] = useState(false)
-  const from = agentColor(e.from_agent)
-  const to = agentColor(e.to_agent)
-  const failed = ['error', 'timeout', 'offline'].includes(e.status)
-  const clip = compact ? 200 : 420
-  const clipped = e.task.length > clip || (e.result ?? '').length > clip
-  const showTask = open || e.task.length <= clip ? e.task : e.task.slice(0, clip) + '…'
-  const result = e.result ?? ''
-  const showResult = open || result.length <= clip ? result : result.slice(0, clip) + '…'
-  // Body copy sits at reading size. It was 0.7rem/0.76rem — 11px — for text
-  // that is full sentences of agent output, which is a caption pretending to
-  // be a message.
-  const bodyFont = compact ? '0.875rem' : '0.905rem'
+  const c = agentColor(id)
+  const tile = compact ? 28 : 36
 
   return (
-    <div style={{
-      display: 'flex', gap: 12, padding: '5px 0',
-      flexDirection: mine ? 'row-reverse' : 'row',
-      alignItems: 'flex-start',
-      animation: 'hbRise 0.3s ease both',
-    }}>
-      <Avatar id={e.from_agent} size={compact ? 28 : 34} />
-      <div
-        className={mine ? 'hb-bubble-agent-mine' : 'hb-bubble-agent'}
-        style={{
-          maxWidth: compact ? '88%' : 'min(72%, 640px)',
-          padding: compact ? '10px 13px' : '11px 15px',
-          border: `1px solid ${from}33`,
-          background: `${from}14`,
-          backdropFilter: 'var(--hb-holo-blur)',
-          WebkitBackdropFilter: 'var(--hb-holo-blur)',
-          boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
-        }}
-      >
-        {/* meta line: SPEDA ▸ SENTINEL · 06:13:42 · HP · copy/expand controls */}
-        <div style={{
-          display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6,
-          fontSize: '0.78rem', letterSpacing: '0.02em',
+    <div style={{ display: 'flex', gap: compact ? 9 : 12, alignItems: 'flex-start' }}>
+      {head ? (
+        <span className="hb-tile" style={{
+          width: tile, height: tile, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: `linear-gradient(160deg, ${c}38, ${c}0d)`,
+          border: `1px solid ${c}57`,
         }}>
-          <span style={{ color: from, fontWeight: 700 }}>{e.from_agent.toUpperCase()}</span>
-          <span style={{ color: 'var(--hb-icon-dim)' }}>▸</span>
-          <span style={{ color: to, fontWeight: 700 }}>{e.to_agent.toUpperCase()}</span>
-          <span style={{ color: 'var(--hb-icon-dim)' }}>{fmtCommTime(e.created_at)}</span>
-          {e.protocol === 'house_party' && <span style={{ color: 'var(--hb-amber)' }}>HP</span>}
-          {e.kind === 'broadcast' && <span style={{ color: 'var(--hb-amber)' }}>BROADCAST</span>}
-          <span style={{ flex: 1 }} />
-          <CopyBtn
-            tint={from}
-            text={result ? `${e.task}\n\n--- ${e.to_agent.toUpperCase()} ---\n${result}` : e.task}
-          />
+          <Avatar id={id} size={Math.round(tile * 0.61)} />
+        </span>
+      ) : (
+        <span style={{ width: tile, flexShrink: 0 }} />
+      )}
+
+      <div style={{ minWidth: 0, flex: compact ? 1 : undefined }}>
+        {head && (
+          <div style={{
+            fontSize: compact ? '0.78rem' : '0.8125rem', color: c,
+            marginBottom: 4, fontWeight: 600, textTransform: 'capitalize',
+          }}>
+            {id}
+          </div>
+        )}
+        <div
+          className={head ? 'hb-party-agent' : 'hb-party-agent-mid'}
+          style={{
+            maxWidth: compact ? '100%' : 560, padding: compact ? '9px 13px' : '11px 16px',
+            background: commander ? 'rgba(var(--hb-accent-rgb),0.09)' : 'rgba(255,255,255,0.03)',
+            border: `1px solid ${commander ? 'rgba(var(--hb-accent-rgb),0.22)' : 'rgba(255,255,255,0.06)'}`,
+            fontSize: compact ? '0.875rem' : '0.94rem', lineHeight: 1.6,
+            color: commander ? 'var(--hb-text)' : 'var(--hb-text-dim)',
+          }}
+        >
+          {badge}
+          {children}
+          {foot}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── The transcript ──────────────────────────────────────────────────────── */
+
+/** One line in the room: an agent said something at a moment in time. */
+export interface CommMsg {
+  key: string
+  agent: string
+  text: string
+  at: number                // epoch ms — what the timeline sorts on
+  seq: number               // a task precedes its own reply on an identical ms
+  outbound: boolean         // an order going out (tinted) vs work coming back
+  running?: boolean
+  since?: string
+  failed?: boolean
+  status?: string
+  durationMs?: number | null
+  party?: boolean
+  broadcast?: boolean
+  copyText: string
+}
+
+function epoch(iso: string): number {
+  return new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z').getTime()
+}
+
+/**
+ * Flatten dispatch records into a single chronological transcript.
+ *
+ * A record carries BOTH halves of an exchange, which is right for a
+ * transaction log and wrong for a chat: the reply belongs to the agent that
+ * wrote it, at the moment it arrived. So one record becomes up to two
+ * messages — the task from `from_agent` at `created_at`, the reply from
+ * `to_agent` at `created_at + duration_ms` (the only arrival time the record
+ * gives us). A dispatch still running contributes a live placeholder instead,
+ * so the room shows someone working rather than a gap.
+ */
+export function commMessages(entries: AgentCommEntry[]): CommMsg[] {
+  const out: CommMsg[] = []
+  for (const e of entries) {
+    const started = epoch(e.created_at)
+    const result = e.result ?? ''
+    const failed = FAILED.includes(e.status)
+
+    out.push({
+      key: `${e.id}:task`, agent: e.from_agent, text: e.task,
+      at: started, seq: 0, outbound: true,
+      party: e.protocol === 'house_party', broadcast: e.kind === 'broadcast',
+      copyText: result ? `${e.task}\n\n--- ${e.to_agent.toUpperCase()} ---\n${result}` : e.task,
+    })
+
+    if (e.status === 'running') {
+      out.push({
+        key: `${e.id}:working`, agent: e.to_agent, text: '',
+        at: started, seq: 1, outbound: false,
+        running: true, since: e.created_at, copyText: '',
+      })
+    } else if (result || failed) {
+      out.push({
+        key: `${e.id}:reply`, agent: e.to_agent, text: result || e.status,
+        at: started + (e.duration_ms ?? 0), seq: 1, outbound: false,
+        failed, status: e.status, durationMs: e.duration_ms,
+        copyText: result || e.status,
+      })
+    }
+  }
+  return out.sort((a, b) => a.at - b.at || a.seq - b.seq || a.key.localeCompare(b.key))
+}
+
+/** A quiet stretch earns a separator, the way any chat client marks one. */
+const GAP_MS = 5 * 60 * 1000
+
+function clock(at: number): string {
+  const d = new Date(at)
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function CommLine({ m, head, compact }: { m: CommMsg; head: boolean; compact: boolean }) {
+  const [open, setOpen] = useState(false)
+  const c = agentColor(m.agent)
+  const clip = compact ? 260 : 520
+  const clipped = m.text.length > clip
+  const body = open || !clipped ? m.text : m.text.slice(0, clip) + '…'
+
+  return (
+    <AgentSay
+      id={m.agent}
+      commander={m.outbound}
+      compact={compact}
+      head={head}
+      badge={head && m.broadcast ? (
+        <span style={{
+          display: 'block', fontSize: '0.78rem', letterSpacing: '0.1em',
+          textTransform: 'uppercase', color: 'var(--hb-amber)', marginBottom: 5,
+        }}>
+          All hands
+        </span>
+      ) : undefined}
+      foot={m.running ? undefined : (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, marginTop: 5,
+          fontSize: '0.72rem', color: 'var(--hb-text-faint)',
+        }}>
           {clipped && (
             <button
               onClick={() => setOpen(o => !o)}
-              title={open ? 'Collapse' : 'Show the full exchange'}
+              title={open ? 'Collapse' : 'Show the full message'}
               style={{
                 border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
-                fontSize: '0.78rem',
+                fontSize: '0.72rem',
                 color: open ? 'var(--hb-cyan-bright)' : 'var(--hb-text-faint)',
               }}
             >
               {open ? 'Less' : 'More'}
             </button>
           )}
+          <span style={{ flex: 1 }} />
+          {m.durationMs != null && <span>{(m.durationMs / 1000).toFixed(1)}s</span>}
+          <span>{fmtCommTime(new Date(m.at).toISOString())}</span>
+          <CopyBtn tint={c} text={m.copyText} />
         </div>
+      )}
+    >
+      {m.running ? (
+        <Working id={m.agent} label="working…" />
+      ) : m.failed ? (
+        <span style={{ color: '#e88a7c' }}>
+          {m.status}{m.text && m.text !== m.status ? `: ${body}` : ''}
+        </span>
+      ) : (
+        <CommMarkdown text={body} size="inherit" />
+      )}
+      {m.running && m.since && (
+        <span style={{ marginLeft: 8, color: 'var(--hb-text-faint)' }}>
+          <LiveElapsed since={m.since} />
+        </span>
+      )}
+    </AgentSay>
+  )
+}
 
-        {/* the dispatch (task) */}
-        <CommMarkdown text={showTask} size={bodyFont} />
+/**
+ * The transcript. Groups consecutive messages from one agent and drops a time
+ * chip whenever the room went quiet, so a long scrollback reads as a
+ * conversation with pauses in it rather than one undifferentiated column.
+ */
+export function CommFeed({ entries, compact = false }: {
+  entries: AgentCommEntry[]
+  compact?: boolean
+}) {
+  const msgs = commMessages(entries)
+  let prevAgent = ''
+  let prevAt = 0
 
-        {/* the reply, nested — the target agent answering in the thread */}
-        {e.status === 'running' ? (
-          // A spinning ring in the target agent's colour, not a blinking word.
-          // The deck's running state is the same ring the tool chain uses, so
-          // "something is working" looks identical everywhere in the app.
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            marginTop: 8, fontSize: bodyFont, color: 'var(--hb-text-dim)',
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 4 : 8 }}>
+      {msgs.map(m => {
+        const gap = prevAt > 0 && m.at - prevAt > GAP_MS
+        const head = gap || m.agent !== prevAgent
+        const chip = prevAt === 0 || gap
+        prevAgent = m.agent
+        prevAt = m.at
+        return (
+          <div key={m.key} style={{
+            display: 'flex', flexDirection: 'column', gap: 8,
+            marginTop: head && !chip ? 8 : 0,
+            animation: 'hbRise 0.3s ease both',
           }}>
-            <span style={{
-              width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-              border: `1.5px solid ${to}4d`, borderTopColor: to,
-              animation: 'spin 0.7s linear infinite',
-            }} />
-            {e.to_agent} is working…
-            {' '}<LiveElapsed since={e.created_at} />
+            {chip && <Divider text={clock(m.at)} />}
+            <CommLine m={m} head={head} compact={compact} />
           </div>
-        ) : result && (
-          <div style={{
-            marginTop: 10, paddingLeft: 10,
-            borderLeft: `2px solid ${failed ? 'var(--hb-red)' : to}`,
-          }}>
-            <div style={{
-              display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4,
-              fontSize: '0.78rem',
-            }}>
-              <span style={{ color: to, fontWeight: 700 }}>{e.to_agent.toUpperCase()}</span>
-              {failed && <span style={{ color: 'var(--hb-red)' }}>{e.status.toUpperCase()}</span>}
-              {e.duration_ms != null && (
-                <span style={{ color: 'var(--hb-icon-dim)' }}>{(e.duration_ms / 1000).toFixed(1)}s</span>
-              )}
-            </div>
-            {failed ? (
-              <p style={{
-                margin: 0, fontFamily: "'SamsungOne','Inter',sans-serif",
-                fontSize: bodyFont, lineHeight: 1.45, color: '#d98a7a',
-                whiteSpace: 'pre-wrap', userSelect: 'text',
-              }}>{showResult}</p>
-            ) : (
-              <CommMarkdown text={showResult} size={bodyFont} />
-            )}
-          </div>
-        )}
-      </div>
+        )
+      })}
     </div>
   )
 }

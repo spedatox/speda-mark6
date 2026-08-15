@@ -3,7 +3,7 @@ import { fetchAgentComms, getHouseParty, setHouseParty } from '../lib/api'
 import type { AgentCommEntry } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import { useIsMobile } from '../lib/useIsMobile'
-import { Bubble, AvatarStack } from './CommBubble'
+import { CommFeed, AvatarStack } from './CommBubble'
 
 /**
  * AGENT_COMMS — the inter-agent traffic tray.
@@ -16,7 +16,6 @@ import { Bubble, AvatarStack } from './CommBubble'
  * Party Protocol stand-down control.
  */
 
-const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
 const POLL_MS = 3000
 
@@ -151,9 +150,9 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
               ? 'No traffic yet — dispatches between agents appear here.'
               : 'Linking…'}
           </p>
-        ) : entries.map(e => (
-          <Bubble key={e.id} e={e} compact={!wide} />
-        ))}
+        ) : (
+          <CommFeed entries={entries} compact={!wide} />
+        )}
       </div>
 
       {/* Footer — protocol state, and how to raise it. Standing down is a

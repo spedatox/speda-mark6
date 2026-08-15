@@ -370,6 +370,11 @@
   background: none;
   white-space: normal;
 }
+/* Rounding for a surface that must NOT take the glass material — an <iframe>
+   or an inline SVG host, where a fill and a rim would sit on top of the thing
+   being rendered. The blanket reset means the corner has to come from a class
+   even when nothing else about the element is glass. */
+.hb-widget-round { border-radius: var(--r-card) !important; }
 
 /* ── Inter-agent bubbles ────────────────────────────────────────────────────
    Same tail idea as the owner's own message, mirrored: an agent speaking into
@@ -384,6 +389,10 @@
    because a group thread is read at a distance, scanning for who said what. */
 .hb-party-owner { border-radius: 17px 17px 5px 17px !important; }
 .hb-party-agent { border-radius: 16px 16px 16px 5px !important; }
+/* A message CONTINUING the same agent's run loses the notch — the tail marks
+   who started speaking, and repeating it on every line breaks one turn of
+   speech into three separate announcements. */
+.hb-party-agent-mid { border-radius: 16px !important; }
 
 /* ── Sidebar list rows ──────────────────────────────────────────────────────
    The conversation list is a quiet stack: only the row you are in draws a
@@ -697,7 +706,12 @@ body {
    themes every piece of war-room chrome. Order = the ROSTER order. */
 /* Seven stops — SPEDA and the Superior Six. Orion is not on the parade: it is
    the system's own custodian, not a House Party participant. Mirrors
-   PARTY_ROSTER (lib/agents) and PARTY_COLORS (profile/theme). */
+   PARTY_ROSTER (lib/agents) and PARTY_COLORS (profile/theme).
+
+   The 6.3s lap is 900ms per agent and MUST match MS_PER_STOP in theme.ts —
+   this keyframe themes the war-room chrome while startPartyCycle drives the
+   palette, and if the two lap lengths differ they slide out of phase and the
+   rim ends up a different agent's colour than the background. */
 @keyframes hbPartyCycle {
   0%, 100% { color: #7fa4c4; }  /* speda */
   14.28%   { color: #d99c44; }  /* sentinel */
@@ -707,12 +721,12 @@ body {
   71.43%   { color: #3fae74; }  /* atomix */
   85.71%   { color: #2f4f8f; }  /* optimus */
 }
-.hb-party-cycle { animation: hbPartyCycle 21s linear infinite; }
+.hb-party-cycle { animation: hbPartyCycle 6.3s linear infinite; }
 /* GlassSelect option rows — hover wash on the liquid-glass dropdown */
 .hb-glass-opt { transition: background 0.1s ease; }
 .hb-glass-opt:hover { background: var(--glass-tint) !important; }
 .hb-party-rim {
-  animation: hbPartyCycle 21s linear infinite;
+  animation: hbPartyCycle 6.3s linear infinite;
   border-color: currentColor !important;
 }
 @keyframes hbFlicker {
@@ -994,14 +1008,51 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
 }
 
 /* Range input — FUI slider */
+/* ── Inset wells ─────────────────────────────────────────────────────────────
+   A terminal transcript or a diff is sunk INTO the message, not floated on it:
+   a dark occluding fill behind a hairline, rounded on the control stop. The
+   components already carry `.hb-well` and set the fill inline; this is the
+   corner, which an inline value cannot supply against the blanket reset. */
+.hb-well { border-radius: var(--r-tile) !important; }
+
+/* ── Settings pane ───────────────────────────────────────────────────────────
+   Eight tabs, each written at a different time, each reaching for its own
+   corner radius — and the blanket reset above means an inline borderRadius in
+   any of them silently does nothing anyway. So the pane states the shape once,
+   here, and every field inside it inherits: controls take the tile corner, and
+   an unclassed button (the chips the tabs build from bare style objects) is a
+   pill. A tab that wants something else says so with a class, which then wins
+   by being more specific than `:not([class])`. */
+.hb-settings input:not([type=range]),
+.hb-settings textarea,
+.hb-settings select        { border-radius: var(--r-tile) !important; }
+.hb-settings button:not([class]) { border-radius: 9999px !important; }
+
+/* ── Slider ──────────────────────────────────────────────────────────────────
+   A 6px track with a lit round knob, per the reference settings pane. It was a
+   2px hairline with a 10×14 square nub — readable as an instrument tick, but
+   nearly invisible as something you are meant to grab, and impossible to hit
+   accurately on a trackpad. */
 input[type=range] {
   -webkit-appearance: none; appearance: none;
-  height: 2px; background: rgba(var(--hb-accent-rgb),0.25); outline: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px !important;
+  background: rgba(255,255,255,0.08);
+  outline: none;
+  cursor: pointer;
 }
 input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 10px; height: 14px;
-  background: var(--hb-cyan); cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(8,16,20,0.8);
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #e8f0f6, var(--hb-cyan-bright));
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.6);
+}
+input[type=range]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.6),
+              0 0 0 3px rgba(var(--hb-accent-rgb),0.35);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

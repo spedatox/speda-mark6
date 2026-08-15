@@ -222,10 +222,11 @@ function DiffBlock({ removed, added }: { removed?: string; added?: string }) {
   if (added != null)   for (const l of added.split('\n'))   rows.push({ sign: '+', text: l })
   if (!rows.length) return null
   return (
-    <div style={{
-      fontFamily: 'var(--font-mono)', fontSize: '0.63rem', lineHeight: 1.55,
-      borderRadius: '0.4rem', overflow: 'hidden', maxHeight: 340, overflowY: 'auto',
-      border: '1px solid rgba(var(--hb-accent-rgb),0.14)',
+    <div className="hb-well" style={{
+      fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace",
+      fontSize: '0.8125rem', lineHeight: 1.6,
+      overflow: 'hidden', maxHeight: 340, overflowY: 'auto',
+      border: '1px solid rgba(255,255,255,0.06)',
     }}>
       {rows.map((r, i) => (
         <div key={i} style={{
@@ -287,7 +288,6 @@ function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
   const isCmd   = tool.name === 'run_command'
     || (tool.name === 'system_ops' && action !== 'read_file' && action !== 'write_file')
   const hasDetail = isEdit || isWrite || isCmd || !!tool.result || Object.keys(inp).length > 0
-  const pending = live && !tool.result
 
   const state = stepState(tool, live)
   const arg = primaryArg(tool)
@@ -878,8 +878,11 @@ function FileCard({ file }: { file: FileMeta }) {
     >
       {/* Type tile — the one place a file's own colour is allowed in, so a PDF
           is findable in a long transcript at a glance. */}
-      <div style={{
-        width: 52, height: 52, flexShrink: 0, borderRadius: 15,
+      {/* The corner has to come from the class: the theme's blanket
+          `border-radius: 0 !important` outranks any inline value, so the
+          tile was rendering as a hard square. */}
+      <div className="hb-tile" style={{
+        width: 52, height: 52, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: `linear-gradient(160deg, ${tint[0]}, ${tint[1]})`,
         boxShadow: `0 8px 20px ${tint[1]}59, inset 0 1px 0 rgba(255,255,255,0.3)`,

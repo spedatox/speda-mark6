@@ -5,8 +5,7 @@ import { useChatContext } from '../store/chat'
 import { fetchAgentComms } from '../lib/api'
 import type { AgentCommEntry } from '../lib/api'
 import type { AppConfig, ChatMessage } from '../lib/types'
-import { agentColor } from '../lib/agents'
-import { Avatar } from './CommBubble'
+import { AgentSay, Divider, OwnerSay, Working } from './CommBubble'
 
 /**
  * THE HOUSE PARTY TRANSCRIPT — the war room as an actual group chat.
@@ -32,95 +31,6 @@ import { Avatar } from './CommBubble'
 
 const POLL_MS = 2500
 const MD_PLUGINS = [remarkGfm]
-
-/** One participant's line: mark, name, bubble. */
-function AgentSay({ id, commander, children }: {
-  id: string
-  /** The commander's own bubble carries the accent; the roster answers neutral. */
-  commander?: boolean
-  children: React.ReactNode
-}) {
-  const c = agentColor(id)
-  return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-      <span className="hb-tile" style={{
-        width: 36, height: 36, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: `linear-gradient(160deg, ${c}38, ${c}0d)`,
-        border: `1px solid ${c}57`,
-      }}>
-        <Avatar id={id} size={22} />
-      </span>
-      <div style={{ minWidth: 0 }}>
-        <div style={{
-          fontSize: '0.8125rem', color: c, marginBottom: 4, fontWeight: 600,
-          textTransform: 'capitalize',
-        }}>
-          {id}
-        </div>
-        <div
-          className="hb-party-agent"
-          style={{
-            maxWidth: 560, padding: '11px 16px',
-            background: commander ? 'rgba(var(--hb-accent-rgb),0.09)' : 'rgba(255,255,255,0.03)',
-            border: `1px solid ${commander ? 'rgba(var(--hb-accent-rgb),0.22)' : 'rgba(255,255,255,0.06)'}`,
-            fontSize: '0.94rem', lineHeight: 1.6,
-            color: commander ? 'var(--hb-text)' : 'var(--hb-text-dim)',
-          }}
-        >
-          {children}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** A working agent — the same ring the tool chain and comms tray use. */
-function Working({ id, label }: { id: string; label: string }) {
-  const c = agentColor(id)
-  return (
-    <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-      <span style={{
-        width: 13, height: 13, borderRadius: '50%', flexShrink: 0,
-        border: `1.5px solid ${c}4d`, borderTopColor: c,
-        animation: 'spin 0.7s linear infinite',
-      }} />
-      {label}
-    </span>
-  )
-}
-
-function Divider({ text }: { text: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'center' }}>
-      <span className="glass-round" style={{
-        padding: '5px 14px',
-        background: 'rgba(255,255,255,0.03)', border: 'none',
-        fontSize: '0.78rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-        color: 'var(--hb-text-faint)',
-      }}>
-        {text}
-      </span>
-    </div>
-  )
-}
-
-/** The owner's own line — right-aligned, neutral, tail on the right. */
-function OwnerSay({ text }: { text: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-      <div className="hb-party-owner" style={{
-        maxWidth: '64%', padding: '11px 17px',
-        background: 'rgba(198,218,235,0.07)',
-        border: '1px solid rgba(255,255,255,0.07)',
-        fontSize: '0.94rem', lineHeight: 1.55, color: '#e7f0f5',
-        whiteSpace: 'pre-wrap',
-      }}>
-        {text}
-      </div>
-    </div>
-  )
-}
 
 export default function PartyStream({ config, commanderId = 'speda' }: {
   config: AppConfig
