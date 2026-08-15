@@ -71,6 +71,25 @@ def set_house_party(value: bool) -> bool:
     return bool(value)
 
 
+# ── Lockdown Protocol ───────────────────────────────────────────────────────
+# When engaged, the host's exposed inbound ports (SSH, the app's raw port) are
+# sealed by firewall rules — see app/services/lockdown.py, which owns the actual
+# containment and is the only thing that should move this flag. Persisted so a
+# restart mid-incident re-applies the rules rather than silently reopening the
+# ports while every client still shows LOCKDOWN ACTIVE.
+
+def get_lockdown() -> bool:
+    return bool(_load().get("lockdown", False))
+
+
+def set_lockdown(value: bool) -> bool:
+    state = _load()
+    state["lockdown"] = bool(value)
+    _save()
+    logger.warning("lockdown_set", extra={"engaged": bool(value)})
+    return bool(value)
+
+
 # ── Per-agent model overrides ───────────────────────────────────────────────
 # The owner can pin any agent to a specific model ref ("provider:model", bare =
 # Anthropic) from the UI. An override replaces the profile's interactive AND

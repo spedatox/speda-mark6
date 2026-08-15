@@ -166,8 +166,11 @@ export interface PendingAsk {
 }
 
 export interface SSEEvent {
+  // `subagent` — a coding peer took part of the turn; ChatMain routes it to the
+  // subagent panel. It was missing from this union, so both handlers for it
+  // were flagged as unreachable comparisons against events that "cannot occur".
   type: 'start' | 'chunk' | 'tool' | 'tool_result' | 'file' | 'done' | 'error'
-      | 'permission_request' | 'house_party_auth'
+      | 'subagent' | 'permission_request' | 'house_party_auth' | 'lockdown_auth'
   data: unknown
   session_id: number
   request_id: string

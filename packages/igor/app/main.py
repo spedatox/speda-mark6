@@ -193,6 +193,11 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(AgentChannelSkill())
     await registry.register_skill(DispatchStatusSkill())
     await registry.register_skill(HousePartySkill())
+    # Emergency inbound containment. Owner-only by construction (the skill
+    # refuses any non-user trigger) — see app/skills/lockdown.py.
+    from app.skills.lockdown import LockdownProtocolSkill
+
+    await registry.register_skill(LockdownProtocolSkill())
     # Legion background-ticket retrieval (Tier 0's async mode companion).
     from app.skills.legion import LegionStatusSkill
     await registry.register_skill(LegionStatusSkill())
@@ -358,6 +363,14 @@ async def lifespan(app: FastAPI):
     from app.services.task_queue import recover_on_startup
 
     reclaimed_jobs = await recover_on_startup()
+
+    # ── 12. Re-apply containment if the Lockdown Protocol is engaged ──────────
+    # Firewall rules live in the kernel, not on disk. A restart during an
+    # incident would otherwise reopen the sealed ports while every client still
+    # displayed LOCKDOWN ACTIVE. No-op when the flag is clear.
+    from app.services.lockdown import reconcile_on_startup
+
+    await reconcile_on_startup()
 
     logger.info(
         "startup_complete",

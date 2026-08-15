@@ -28,6 +28,8 @@ from app.schemas.agent import (
     HousePartyState,
     LegionModelInfo,
     LegionModelSet,
+    LockdownSet,
+    LockdownState,
     PendingAskEntry,
 )
 from fastapi import Depends, HTTPException
@@ -190,6 +192,54 @@ async def house_party_toggle(body: HousePartySet):
             logger.warning("house_party_engage_denied_ui", extra={"reason": "missing" if not supplied else "bad"})
             raise HTTPException(status_code=403, detail="Invalid authorization passphrase.")
     return HousePartyState(engaged=set_house_party(body.engaged))
+
+
+@router.get("/agents/lockdown", response_model=LockdownState)
+async def lockdown_state():
+    """Current Lockdown Protocol state, plus what the host firewall actually
+    shows — see LockdownState on why those are two different things."""
+    from app.services import lockdown
+
+    return LockdownState(**await lockdown.status())
+
+
+@router.post("/agents/lockdown", response_model=LockdownState)
+async def lockdown_toggle(body: LockdownSet):
+    """Engage or stand down the Lockdown Protocol (owner-driven, from the UI).
+
+    Engaging seals the host's exposed inbound ports and is passphrase-gated
+    (constant-time, against the same secret House Party uses). Standing down
+    needs no passphrase and always attempts the removal: the way out of
+    containment is never gated, or a lockdown could outlive the owner's ability
+    to lift it.
+
+    Containment runs synchronously here, so the response reports what actually
+    happened to the firewall rather than just a flipped flag."""
+    from app.services import lockdown
+
+    if body.engaged:
+        import hmac
+
+        from app.config import settings
+
+        supplied = (body.passphrase or "").strip()
+        expected = (settings.house_party_passphrase or "").strip()
+        if not supplied or not expected or not hmac.compare_digest(supplied, expected):
+            logger.warning(
+                "lockdown_engage_denied_ui",
+                extra={"reason": "missing" if not supplied else "bad"},
+            )
+            raise HTTPException(status_code=403, detail="Invalid authorization passphrase.")
+        ok, report = await lockdown.engage()
+    else:
+        ok, report = await lockdown.disengage()
+
+    state = await lockdown.status()
+    if not ok:
+        # Nothing was contained. A 409 rather than a 200-with-a-sad-message so a
+        # client cannot render "LOCKDOWN ACTIVE" over a refusal.
+        raise HTTPException(status_code=409, detail=report)
+    return LockdownState(**state, report=report)
 
 
 @router.get("/agents/asks", response_model=list[PendingAskEntry])

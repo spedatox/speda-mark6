@@ -65,6 +65,27 @@ class HousePartySet(BaseModel):
     passphrase: str | None = None
 
 
+class LockdownState(BaseModel):
+    """Lockdown Protocol state. `engaged` is the flag; `rules` is what the host
+    firewall actually shows, keyed by what each rule seals. They are reported
+    separately because a drift between them (flag on, rules gone) is exactly the
+    failure the owner needs to see rather than have averaged into one boolean."""
+
+    engaged: bool
+    enabled: bool = False
+    rules: dict[str, bool] = {}
+    report: str | None = None
+
+
+class LockdownSet(BaseModel):
+    """Engage/stand-down request. Engaging requires the owner's authorization
+    passphrase (the same one House Party uses); standing down needs none — the
+    way out of containment must never be gated."""
+
+    engaged: bool
+    passphrase: str | None = None
+
+
 class AgentModelInfo(BaseModel):
     """One agent's model allocation, as shown in the model routing UI."""
 

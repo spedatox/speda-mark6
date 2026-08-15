@@ -17,6 +17,7 @@ import PartyRosterStrip from './PartyRosterStrip'
 import RosterModelWindow from './RosterModelWindow'
 import AgentSwitcherOverlay from './AgentSwitcherOverlay'
 import HousePartyModal from './HousePartyModal'
+import LockdownModal from './LockdownModal'
 
 interface LayoutProps {
   profile: AppProfile
@@ -56,6 +57,19 @@ export default function Layout({
     }
     window.addEventListener('speda:hpp-authorize', onAuth)
     return () => window.removeEventListener('speda:hpp-authorize', onAuth)
+  }, [])
+
+  // Lockdown authorization modal. Two ways in, one modal: the Protocols tab
+  // opens it directly (setLockAuth below), and an agent asking for authorization
+  // mid-chat raises the same event House Party uses.
+  const [lockAuth, setLockAuth] = useState<{ reason?: string } | null>(null)
+  useEffect(() => {
+    const onAuth = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {}
+      setLockAuth({ reason: detail.reason || undefined })
+    }
+    window.addEventListener('speda:lockdown-authorize', onAuth)
+    return () => window.removeEventListener('speda:lockdown-authorize', onAuth)
   }, [])
 
   // Esc leaves voice mode. Registered before the agent-switcher handler below
@@ -207,13 +221,27 @@ export default function Layout({
       {boardOpen && <SystemsBoard config={config} onClose={() => setBoardOpen(false)} />}
       {commsOpen && <CommsTray config={config} onClose={() => setCommsOpen(false)} />}
       {coresOpen && inWarRoom && <RosterModelWindow config={config} onClose={() => setCoresOpen(false)} />}
-      {settingsOpen && <SettingsModal config={config} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsModal
+          config={config}
+          onClose={() => setSettingsOpen(false)}
+          onEngageLockdown={() => setLockAuth({})}
+        />
+      )}
       {hppAuth && (
         <HousePartyModal
           config={config}
           objective={hppAuth.objective}
           onClose={() => setHppAuth(null)}
           onEngaged={() => window.dispatchEvent(new CustomEvent('speda:hpp-engaged'))}
+        />
+      )}
+      {lockAuth && (
+        <LockdownModal
+          config={config}
+          reason={lockAuth.reason}
+          onClose={() => setLockAuth(null)}
+          onEngaged={() => window.dispatchEvent(new CustomEvent('speda:lockdown-engaged'))}
         />
       )}
       {switcherOpen && (
