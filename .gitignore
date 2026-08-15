@@ -23,6 +23,14 @@ build/
 *.egg-info/
 .eggs/
 
+# …but electron-builder uses `build/` as its buildResources SOURCE directory,
+# not as output. The blanket rule above was silently swallowing the app icon,
+# so it was never committed — electron-builder.yml pointed at a file that did
+# not exist in any clone, and both the installer and every `dev` run fell back
+# to Electron's default logo. Re-include just that tree.
+!packages/heartbreaker/build/
+!packages/heartbreaker/build/**
+
 # Virtual environment
 .venv/
 venv/

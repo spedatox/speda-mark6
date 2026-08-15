@@ -5,8 +5,6 @@ import type { AppConfig } from '../lib/types'
 import { PARTY_ROSTER } from '../lib/agents'
 import { AvatarStack } from './CommBubble'
 
-const MONO = "var(--font-mono)"
-const UI = "'Rajdhani', sans-serif"
 const POLL_MS = 2500
 
 /**
@@ -43,12 +41,6 @@ export default function PartyRosterStrip({ config, engaged, onExit, onOpenConfig
     const w = new Set<string>()
     for (const e of partyEntries) if (e.status === 'running') w.add(e.to_agent)
     return w
-  }, [partyEntries])
-
-  const doneCount = useMemo(() => {
-    const c: Record<string, number> = {}
-    for (const e of partyEntries) if (e.status === 'ok') c[e.to_agent] = (c[e.to_agent] ?? 0) + 1
-    return c
   }, [partyEntries])
 
   // Who is actually in the room: whoever the protocol has traffic with, plus

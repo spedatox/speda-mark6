@@ -64,9 +64,12 @@ function SessionItem({ session, active, onSelect, config, running }: {
         if (i >= next.length) clearInterval(id)
       }, 36)
       return () => clearInterval(id)
-    } else {
-      setDisplayTitle(next)
     }
+    setDisplayTitle(next)
+    // Only the typewriter branch has anything to tear down; saying so
+    // explicitly is what stops the effect from returning `undefined` on one
+    // path and a cleanup on another.
+    return undefined
   }, [session.title])
 
   const handleDelete = async (e: React.MouseEvent) => {

@@ -235,7 +235,9 @@ interface Props {
   onCloseVoice?: () => void
 }
 
-export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVoice, partyEngaged }: Props) {
+// `onSelectSession` stays in Props — Layout passes it — but nothing in here
+// reads it any more; session selection moved to the sidebar's own handler.
+export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged }: Props) {
   const { state, dispatch } = useChatContext()
   const { settings, update } = useSettings()
   const profile = useProfile()
@@ -546,6 +548,11 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
           // window off it, so the transcript never carries the ask (or a fence).
           const d = (event.data ?? {}) as { objective?: string }
           window.dispatchEvent(new CustomEvent('speda:hpp-authorize', { detail: { objective: d.objective } }))
+        } else if (event.type === 'lockdown_auth') {
+          // Same shape for containment: the agent asked, the app takes the
+          // passphrase — never the transcript.
+          const d = (event.data ?? {}) as { reason?: string }
+          window.dispatchEvent(new CustomEvent('speda:lockdown-authorize', { detail: { reason: d.reason } }))
         } else if (event.type === 'file') {
           dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
         } else if (event.type === 'done') {
@@ -748,6 +755,9 @@ export default function ChatMain({ config, onSelectSession, voiceOpen, onCloseVo
           } else if (event.type === 'house_party_auth') {
             const d = (event.data ?? {}) as { objective?: string }
             window.dispatchEvent(new CustomEvent('speda:hpp-authorize', { detail: { objective: d.objective } }))
+          } else if (event.type === 'lockdown_auth') {
+            const d = (event.data ?? {}) as { reason?: string }
+            window.dispatchEvent(new CustomEvent('speda:lockdown-authorize', { detail: { reason: d.reason } }))
           } else if (event.type === 'file') {
             dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
           } else if (event.type === 'done') {

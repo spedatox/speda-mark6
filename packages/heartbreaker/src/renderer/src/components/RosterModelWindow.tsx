@@ -53,7 +53,6 @@ export default function RosterModelWindow({ config, onClose }: {
   const onMove = (e: React.PointerEvent) => {
     if (!dragRef.current) return
     const w = winRef.current?.offsetWidth ?? 0
-    const h = winRef.current?.offsetHeight ?? 0
     const x = Math.min(Math.max(0, e.clientX - dragRef.current.ox), window.innerWidth - w)
     const y = Math.min(Math.max(24, e.clientY - dragRef.current.oy), window.innerHeight - 40)
     setPos({ x, y })

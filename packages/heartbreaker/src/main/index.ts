@@ -1,7 +1,21 @@
 import { app, BrowserWindow, ipcMain, shell, dialog, net, protocol } from 'electron'
+import { existsSync } from 'fs'
 import { join, normalize, sep } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+
+/**
+ * The window icon, for the runs where Windows has nothing else to go on.
+ *
+ * A PACKAGED build takes its icon from the .exe, which electron-builder stamps
+ * from the same `build/icon.ico` (see electron-builder.yml). `electron-vite dev`
+ * has no .exe, so with no `icon` on the BrowserWindow the window and the
+ * taskbar fall back to Electron's own logo — which is what every dev run has
+ * been showing. `__dirname` is `out/main` at runtime, so the build resources
+ * sit two levels up. Guarded because `build/` is not inside the packaged
+ * `files` glob; there the .exe icon is already correct.
+ */
+const WINDOW_ICON = join(__dirname, '../../build/icon.ico')
 
 /**
  * The packaged renderer is served over `app://bundle/` — NOT `file://`.
@@ -56,6 +70,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     autoHideMenuBar: true,
+    ...(existsSync(WINDOW_ICON) ? { icon: WINDOW_ICON } : {}),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -91,7 +106,11 @@ app.whenReady().then(() => {
   ipcMain.on('window-minimize', (e) => BrowserWindow.fromWebContents(e.sender)?.minimize())
   ipcMain.on('window-maximize', (e) => {
     const w = BrowserWindow.fromWebContents(e.sender)
-    w?.isMaximized() ? w.unmaximize() : w.maximize()
+    // The optional chain only guarded the TEST: with no window, `w?.isMaximized()`
+    // is undefined, the ternary took the false branch, and `w.maximize()` threw.
+    if (!w) return
+    if (w.isMaximized()) w.unmaximize()
+    else w.maximize()
   })
   ipcMain.on('window-close', (e) => BrowserWindow.fromWebContents(e.sender)?.close())
 
