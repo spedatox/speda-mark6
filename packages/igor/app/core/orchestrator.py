@@ -569,6 +569,16 @@ class AgentOrchestrator:
                         request_id=context.request_id,
                     )
 
+                # 2d. Same for the Lockdown Protocol's containment authorization.
+                lock_ask = context.extra.pop("lockdown_auth", None)
+                if lock_ask is not None:
+                    yield SSEEvent(
+                        type=SSEEventType.LOCKDOWN_AUTH,
+                        data=lock_ask,
+                        session_id=context.session_id,
+                        request_id=context.request_id,
+                    )
+
                 # 3. Zip the results back to their respective tool blocks
                 tool_results = [
                     {

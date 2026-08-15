@@ -566,6 +566,15 @@ class Settings(BaseSettings):
     system_ops_ssh_port: int = 22
     system_ops_ssh_key: str = str(_DATA_DIR / "host_ops_key")
 
+    # ── Lockdown Protocol ─────────────────────────────────────────────────────
+    # Owner-triggered inbound containment: sealing the host's exposed SSH and raw
+    # app ports behind firewall rules (app/services/lockdown.py). OFF by default
+    # — it edits the host firewall, so a deployment must opt in, and it needs the
+    # system_ops host bridge configured above to reach the host at all.
+    # Engaging reuses house_party_passphrase; standing down never needs one, so
+    # the way out is always available.
+    lockdown_protocol_enabled: bool = False
+
 
 settings = Settings()
 

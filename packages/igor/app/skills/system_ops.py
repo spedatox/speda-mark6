@@ -36,6 +36,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.core.context import AgentContext
 from app.models.memory_file import MemoryFile
+from app.services.host_bridge import remote_enabled, ssh_argv
 from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
@@ -78,33 +79,10 @@ def _denied(command: str) -> str | None:
 _SELF_SERVICES = {"app", "igor", "speda-app-1", "speda"}
 
 
-def _remote() -> bool:
-    """True when actions must run on the real host over SSH (prod-in-container)."""
-    return bool((settings.system_ops_host or "").strip())
-
-
-def _ssh_argv(remote_command: str) -> list[str]:
-    """argv for one SSH invocation of `remote_command` on the host.
-
-    BatchMode → never hangs on a prompt (a missing/rejected key fails loud and
-    fast, which the model sees as an error result). accept-new pins the host key
-    on first contact into a per-deployment known_hosts inside the data dir, so a
-    later host-key change — a MITM signal — is refused, not re-accepted.
-    """
-    key = settings.system_ops_ssh_key
-    known_hosts = str(Path(key).parent / "host_ops_known_hosts")
-    return [
-        "ssh",
-        "-i", key,
-        "-p", str(settings.system_ops_ssh_port),
-        "-o", "BatchMode=yes",
-        "-o", "StrictHostKeyChecking=accept-new",
-        "-o", f"UserKnownHostsFile={known_hosts}",
-        "-o", "ConnectTimeout=10",
-        settings.system_ops_host.strip(),
-        "--",
-        remote_command,
-    ]
+# The host bridge itself lives in services/host_bridge.py — the lockdown service
+# needs the same channel without inheriting this skill's orion/optimus gate.
+_remote = remote_enabled
+_ssh_argv = ssh_argv
 
 
 class SystemOpsSkill(Skill):
