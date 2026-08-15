@@ -18,8 +18,8 @@ object ThemeEngine {
     /** Derive the bright (active) and dim shades from a single accent hex. */
     fun deriveAccents(accent: String): Accents = Accents(
         accent = accent,
-        bright = ColorMath.mixWhite(accent, 0.28),
-        dim = ColorMath.mixVoid(accent, 0.62),
+        bright = ColorMath.mixWhite(accent, 0.32),
+        dim = ColorMath.mixVoid(accent, 0.32),
     )
 
     /**
