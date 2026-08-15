@@ -29,6 +29,7 @@ data class HbPalette(
     // ── Re-hued rgba (BASE_RGBA) ───────────────────────────────────────────
     val line: Color,
     val lineBright: Color,
+    /** Resting glass rim — fixed neutral white, NOT re-hued (BaseTokens.EDGE). */
     val edge: Color,
     val edgeBright: Color,
     val bgSidebar: Color,
@@ -38,6 +39,9 @@ data class HbPalette(
     val scrollbarThumb: Color,
     val scrollbarThumbHover: Color,
     val glassTint: Color,
+    /** Second stop of the glass sheen — the slab is lit ACROSS its face (160°)
+     *  rather than washed flat with one value. */
+    val glassTint2: Color,
     val glassTintHi: Color,
     val glassFill: Color,
     val glassMenu: Color,

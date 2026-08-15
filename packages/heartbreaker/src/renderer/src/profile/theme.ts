@@ -167,27 +167,39 @@ let _morphRaf = 0
    HOUSE PARTY PROTOCOL — the whole-app colour parade.
 
    While the protocol is engaged the ENTIRE palette (backgrounds, glass rims,
-   text, icons — everything applyTheme touches) drifts continuously through
-   the full roster's signature colours, one agent at a time, in ROSTER order.
-   The message: they are ALL here. The cadence matches the hbPartyCycle CSS
-   keyframe (~3s per agent); updates are throttled to ~12Hz — the drift is
-   slow enough that finer steps are invisible, and a full :root palette
-   rebuild every frame would be wasted style recalc.
+   text, icons — everything applyTheme touches) runs continuously through the
+   full roster's signature colours, one agent at a time, in ROSTER order.
+   The message: they are ALL here.
+
+   PACE. At 3s per agent a full lap took 21 seconds — long enough that the
+   thing read as a slow ambient wash and you could sit through a whole
+   exchange seeing two colours. The protocol is the loud mode; it should look
+   like the whole roster arriving at once. One stop is now MS_PER_STOP (900ms),
+   so a lap is 6.3s across the seven parading agents — and `.hb-party-cycle` /
+   `.hb-party-rim` in heartbreaker.css MUST carry the same 6.3s, or the CSS
+   chrome and the JS palette drift out of phase with each other.
+
+   The throttle came down with it: at this speed 12Hz visibly steps, so the
+   palette is rebuilt at ~25Hz. That is still far short of a rebuild per
+   frame, which would be wasted style recalc.
    ══════════════════════════════════════════════════════════════════════════ */
+
+/** One agent's turn in the parade. A lap is this × PARTY_COLORS.length (7). */
+const MS_PER_STOP = 900
 
 let _partyRaf = 0
 let _partyOn = false
 
 export function isPartyCycling(): boolean { return _partyOn }
 
-export function startPartyCycle(fromAccent: string, msPerStop = 3000): void {
+export function startPartyCycle(fromAccent: string, msPerStop = MS_PER_STOP): void {
   stopPartyCycle()
   cancelAnimationFrame(_morphRaf)
   _partyOn = true
   const colors = PARTY_COLORS
   const n = colors.length
-  const LEAD_MS = 700   // ease out of the current brand into the parade
-  const TICK_MS = 80
+  const LEAD_MS = 320   // ease out of the current brand into the parade
+  const TICK_MS = 40
   const start = performance.now()
   let last = 0
   const ease = (t: number): number => t * t * (3 - 2 * t)  // smoothstep

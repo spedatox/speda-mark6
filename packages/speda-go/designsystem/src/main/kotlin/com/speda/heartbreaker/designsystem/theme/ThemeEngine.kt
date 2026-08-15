@@ -81,7 +81,9 @@ object ThemeEngine {
             iconBright = hex("--hb-icon-bright"),
             line = rgba("--hb-line"),
             lineBright = rgba("--hb-line-bright"),
-            edge = rgba("--hb-edge"),
+            // The resting rim is a fixed neutral white, never re-hued — it is
+            // not in the token map at all (see BaseTokens.EDGE).
+            edge = parseRgba(BaseTokens.EDGE),
             edgeBright = rgba("--hb-edge-bright"),
             bgSidebar = rgba("--bg-sidebar"),
             bgHover = rgba("--bg-hover"),
@@ -90,6 +92,7 @@ object ThemeEngine {
             scrollbarThumb = rgba("--scrollbar-thumb"),
             scrollbarThumbHover = rgba("--scrollbar-thumb-hover"),
             glassTint = rgba("--glass-tint"),
+            glassTint2 = rgba("--glass-tint-2"),
             glassTintHi = rgba("--glass-tint-hi"),
             glassFill = rgba("--glass-fill"),
             glassMenu = rgba("--glass-menu"),

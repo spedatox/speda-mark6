@@ -50,7 +50,10 @@ function symbolOf(name: string): string {
   return name.slice(0, 2).toUpperCase()
 }
 
-function fmtDate(iso: string): string {
+/** A revision with no timestamp is a real row the API can return, so this
+ *  takes the null rather than making every caller guard it. */
+function fmtDate(iso: string | null): string {
+  if (!iso) return '—'
   const d = new Date(iso)
   const p = (n: number) => String(n).padStart(2, '0')
   return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`
@@ -96,7 +99,8 @@ function Panel({ title, light, right, pad = true, style, children }: {
 }
 
 /* ── Telemetry key/value row — the "IPv4 Adress: DENY" list style ─────────── */
-function KV({ k, v, color, alt }: { k: string; v: React.ReactNode; color?: string; alt?: boolean }) {
+// `alt` is still accepted (callers pass it) but no longer read — see below.
+function KV({ k, v, color }: { k: string; v: React.ReactNode; color?: string; alt?: boolean }) {
   return (
     // `alt` used to paint every other row with an accent wash — zebra striping
     // that fought the glass underneath it. The rows are legible on their own;
@@ -117,7 +121,7 @@ function KV({ k, v, color, alt }: { k: string; v: React.ReactNode; color?: strin
 }
 
 /* ── Model tile — periodic-table element; click routes the active model ────── */
-function ModelTile({ m, idx, active, onSelect }: {
+function ModelTile({ m, active, onSelect }: {
   m: ModelInfo; idx: number; active: boolean; onSelect: () => void
 }) {
   const [hover, setHover] = useState(false)
@@ -226,22 +230,9 @@ function ToolTile({ c, idx, onToggle }: { c: ConnectionInfo; idx: number; onTogg
   )
 }
 
-/* ── Segmented gauge — the block meter under the big percentage ────────────── */
-function SegBar({ pct, color }: { pct: number; color: string }) {
-  const SEGS = 22
-  const lit = Math.round(Math.min(pct, 100) / 100 * SEGS)
-  return (
-    <div style={{ display: 'flex', gap: 2 }}>
-      {Array.from({ length: SEGS }, (_, i) => (
-        <span key={i} style={{
-          flex: 1, height: 7,
-          background: i < lit ? color : 'rgba(var(--hb-accent-rgb),0.14)',
-          boxShadow: i < lit ? `0 0 5px ${color}55` : 'none',
-        }} />
-      ))}
-    </div>
-  )
-}
+/* The segmented block meter that used to sit under the big percentage was
+   removed with the FUI language — the deck's gauges are continuous rounded
+   bars now, and nothing had called it since. */
 
 /* ── RTT trace — minimalist line-art sparkline from real health probes ─────── */
 function Spark({ samples }: { samples: number[] }) {

@@ -177,7 +177,7 @@ private fun ConfigGroup(
     reveal: MutableMap<String, Boolean>,
 ) {
     val palette = LocalHbPalette.current
-    Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.R12)) {
+    Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.Ctl)) {
         Row(
             Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -331,7 +331,7 @@ private fun InlineSelect(value: String, options: List<String>, onChange: (String
     var expanded by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.R9, state = HbGlassState.Default)
+            Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.Tile, state = HbGlassState.Default)
                 .clickable { expanded = !expanded }.padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -340,7 +340,7 @@ private fun InlineSelect(value: String, options: List<String>, onChange: (String
             HbGlyphs.ChevronDown(palette.iconDim, modifier = Modifier.rotate(angle))
         }
         if (expanded) {
-            Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.R9, state = HbGlassState.Menu)) {
+            Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.Tile, state = HbGlassState.Menu)) {
                 options.forEach { opt ->
                     val active = opt == value
                     Row(
@@ -368,7 +368,7 @@ private fun SaveBar(
 ) {
     val palette = LocalHbPalette.current
     Row(
-        Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.TopOnly).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.CardTop).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -421,7 +421,7 @@ private fun SourceOfTruthPanel(config: AppConfig, graph: AppGraph) {
     if (d.agents.isEmpty()) return
     fun fileName(p: String) = p.removePrefix("/memories/")
 
-    Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.R12).padding(12.dp)) {
+    Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.Ctl).padding(12.dp)) {
         HbText("Agent Source of Truth", style = HbType.read.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold), color = palette.text)
         Hint("The one /memories file each agent reads its domain data from and writes every update back to. Pick any existing memory file.")
         Spacer(Modifier.height(8.dp))

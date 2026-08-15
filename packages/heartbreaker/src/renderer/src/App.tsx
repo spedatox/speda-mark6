@@ -14,11 +14,35 @@ import type { AppProfile } from './profile/types'
 import Layout from './components/Layout'
 import NeuralBackground from './components/NeuralBackground'
 import PartyActivation from './components/PartyActivation'
+import LockdownActivation from './components/LockdownActivation'
 import PendingAsksTray from './components/PendingAsksTray'
 import type { AppConfig } from './lib/types'
-import { fetchSessions, getHouseParty, setHouseParty } from './lib/api'
+import { fetchSessions, getHouseParty, setHouseParty, getLockdown } from './lib/api'
 import 'katex/dist/katex.min.css'
 import './theme/heartbreaker.css'
+
+/** The containment is still on. Deliberately unmissable and unclosable — the
+ *  failure this guards against is the owner forgetting the server is sealed and
+ *  spending an afternoon debugging "why can't I SSH in". */
+function LockdownStrip() {
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9500,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+      height: 26, pointerEvents: 'none',
+      background: 'linear-gradient(180deg, rgba(232,86,74,0.9), rgba(232,86,74,0.55))',
+      borderBottom: '1px solid rgba(232,86,74,0.9)',
+      fontFamily: 'var(--font-mono)', fontSize: '0.58rem',
+      letterSpacing: '0.28em', textTransform: 'uppercase', color: '#fff',
+      textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+    }}>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+        <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+      Lockdown Protocol active — inbound sealed
+    </div>
+  )
+}
 
 function buildProfile(agentId: string): AppProfile {
   // The war room is a real profile, not an overlay — switching to it is a
@@ -190,6 +214,45 @@ function AppInner() {
     return () => window.removeEventListener('speda:hpp-engaged', onEngaged)
   }, [engageParty, setWar])
 
+  // ── Lockdown Protocol ─────────────────────────────────────────────────────
+  // Independent of the war room: containment can be engaged while the roster is
+  // mobilized or while nothing else is happening, so it gets its own flag, its
+  // own cinematic, and a persistent indicator (the cinematic is one-shot; the
+  // strip is how the owner knows it is STILL on).
+  const [lockdown, setLockdown] = useState(false)
+  const lockdownRef = useRef(false)
+  const [lockCine, setLockCine] = useState<'seal' | 'release' | null>(null)
+  const lockCineRef = useRef<'seal' | 'release' | null>(null)
+  lockCineRef.current = lockCine
+
+  useEffect(() => {
+    if (!config) return
+    let live = true
+    const check = async () => {
+      const state = await getLockdown(config)
+      if (!live || lockCineRef.current) return   // never interrupt a running cinematic
+      if (state.engaged && !lockdownRef.current) setLockCine('seal')
+      else if (!state.engaged && lockdownRef.current) setLockCine('release')
+    }
+    check()
+    const t = setInterval(check, 4000)
+    return () => { live = false; clearInterval(t) }
+  }, [config])
+
+  // Instant trigger from the authorization modal, so the seal plays immediately
+  // rather than up to 4s later on the poll above.
+  useEffect(() => {
+    const onEngaged = () => { if (!lockCineRef.current && !lockdownRef.current) setLockCine('seal') }
+    window.addEventListener('speda:lockdown-engaged', onEngaged)
+    return () => window.removeEventListener('speda:lockdown-engaged', onEngaged)
+  }, [])
+
+  const lockIgnite = useCallback(() => {
+    const sealing = lockCineRef.current === 'seal'
+    lockdownRef.current = sealing
+    setLockdown(sealing)
+  }, [])
+
   const switchAgent = useCallback(async (agentId: string) => {
     // Leaving the war room by picking a real agent from the switcher: route it
     // through the stand-down cinematic, returning to the chosen agent.
@@ -266,8 +329,12 @@ function AppInner() {
           onExitWarRoom={() => exitWarRoom(true)}
         />
         <PendingAsksTray config={config} />
+        {lockdown && <LockdownStrip />}
         {activation && (
           <PartyActivation mode={activation} onIgnite={igniteActivation} onDone={activationDone} />
+        )}
+        {lockCine && (
+          <LockdownActivation mode={lockCine} onIgnite={lockIgnite} onDone={() => setLockCine(null)} />
         )}
       </ProfileContext.Provider>
     </ChatContext.Provider>

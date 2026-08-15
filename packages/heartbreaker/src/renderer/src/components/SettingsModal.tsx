@@ -6,17 +6,44 @@ import { importChats, fetchSessions, indexHistory, getConnections, setConnection
 import { memoryStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus, MemoryStatus } from '../lib/api'
 import RemindersTab from './RemindersTab'
+import ProtocolsTab from './ProtocolsTab'
 import type { AppConfig } from '../lib/types'
 import ConfigTab from './ConfigTab'
+import GlassSelect from './GlassSelect'
+import {
+  SettingsSection, SettingsField, SettingsRow, Switch, PillBtn, ServiceRow, LiveDot, fieldStyle,
+} from './settingsUI'
+
+/** Languages replies can be spoken in — mirrors VoiceMode's own switcher. */
+const VOICE_LOCALES = [
+  { value: 'en-US', label: 'English' },
+  { value: 'tr-TR', label: 'Türkçe' },
+]
 
 interface Props {
   config: AppConfig
   onClose: () => void
+  /** Opens the Lockdown authorization modal. Owned by Layout so the modal
+   *  renders above this window rather than inside its scroll pane. */
+  onEngageLockdown: () => void
 }
 
-type Tab = 'general' | 'config' | 'connections' | 'automations' | 'reminders' | 'interface' | 'data' | 'account'
+type Tab = 'general' | 'config' | 'connections' | 'automations' | 'reminders' | 'protocols' | 'interface' | 'data' | 'account'
 
-export default function SettingsModal({ config, onClose }: Props) {
+/* ── Rail glyphs ─────────────────────────────────────────────────────────── */
+const ico = { width: 17, height: 17, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 } as const
+const IcoGear = () => <svg {...ico}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+const IcoSliders = () => <svg {...ico} strokeLinecap="round"><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></svg>
+const IcoLink = () => <svg {...ico}><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1 1" /><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1-1" /></svg>
+const IcoBolt = () => <svg {...ico} strokeLinejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" /></svg>
+const IcoCalendar = () => <svg {...ico}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+const IcoMonitor = () => <svg {...ico}><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
+const IcoDatabase = () => <svg {...ico}><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5" /><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3" /></svg>
+const IcoUser = () => <svg {...ico}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+const IcoShield = () => <svg {...ico}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" /></svg>
+
+
+export default function SettingsModal({ config, onClose, onEngageLockdown }: Props) {
   const { settings, update } = useSettings()
   const { dispatch } = useChatContext()
   const profile = useProfile()
@@ -236,16 +263,22 @@ export default function SettingsModal({ config, onClose }: Props) {
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'general', label: 'General' },
-    { id: 'config', label: 'Configuration' },
-    { id: 'connections', label: 'Connections' },
-    { id: 'automations', label: 'Automations' },
-    { id: 'reminders', label: 'Reminders' },
-    { id: 'interface', label: 'Interface' },
-    { id: 'data', label: 'Data' },
-    { id: 'account', label: 'Account' },
+  // Each row carries its glyph. A settings rail of eight identical text labels
+  // is read linearly every time; with marks the owner goes straight to the one
+  // they want. `blurb` is the line under the pane title — what this tab is for,
+  // said once, instead of the owner inferring it from the fields.
+  const tabs: { id: Tab; label: string; blurb: string; icon: React.ReactNode }[] = [
+    { id: 'general', label: 'General', blurb: 'Identity, behaviour and voice-mode preferences', icon: <IcoGear /> },
+    { id: 'config', label: 'Configuration', blurb: 'Managed server settings, applied live', icon: <IcoSliders /> },
+    { id: 'connections', label: 'Connections', blurb: 'Accounts and services SPEDA can reach', icon: <IcoLink /> },
+    { id: 'automations', label: 'Automations', blurb: 'Scheduled work n8n runs on your behalf', icon: <IcoBolt /> },
+    { id: 'reminders', label: 'Reminders', blurb: 'What SPEDA is holding for you, and when', icon: <IcoCalendar /> },
+    { id: 'protocols', label: 'Protocols', blurb: 'Standing operational modes — containment and all-hands', icon: <IcoShield /> },
+    { id: 'interface', label: 'Interface', blurb: 'How the deck itself looks and behaves', icon: <IcoMonitor /> },
+    { id: 'data', label: 'Data', blurb: 'Stored history, memory files and exports', icon: <IcoDatabase /> },
+    { id: 'account', label: 'Account', blurb: 'The owner this client is signed in as', icon: <IcoUser /> },
   ]
+  const current = tabs.find(t => t.id === tab)
 
   return (
     <div
@@ -258,142 +291,153 @@ export default function SettingsModal({ config, onClose }: Props) {
         animation: 'fadeIn 0.15s ease',
       }}
     >
-      <div className="hb-glass" style={{
-        width: 'min(720px, 95vw)', height: 'min(600px, 88vh)',
-        background: 'var(--glass-tint)',
-        backdropFilter: 'var(--hb-holo-blur)',
-        WebkitBackdropFilter: 'var(--hb-holo-blur)',
-        border: '1px solid var(--hb-edge)',
+      {/* The settings surface is a proper WINDOW, not a dialog box — it is where
+          the owner configures the whole system, and the old 720×600 panel made
+          eight tabs of real content scroll in a letterbox. */}
+      <div className="hb-island" style={{
+        width: 'min(1240px, 94vw)', height: 'min(820px, 90vh)',
+        background: 'var(--glass-sheen), var(--glass-fill)',
+        backdropFilter: 'blur(44px) saturate(170%)',
+        WebkitBackdropFilter: 'blur(44px) saturate(170%)',
+        border: '1px solid rgba(255,255,255,0.12)',
         display: 'flex',
         overflow: 'hidden',
         animation: 'modalIn 0.15s ease',
-        boxShadow: 'var(--hb-holo-shadow)',
+        boxShadow: 'inset 0 1.5px 0 rgba(255,255,255,0.22), 0 40px 90px rgba(0,0,0,0.55)',
         position: 'relative',
       }}>
         {/* Left nav */}
         <div style={{
-          width: 190, flexShrink: 0,
-          borderRight: '1px solid var(--hb-line)',
-          padding: '1.1rem 0.6rem',
-          display: 'flex', flexDirection: 'column',
-          background: 'linear-gradient(180deg, rgba(10,24,32,0.5), transparent)',
+          width: 260, flexShrink: 0,
+          borderRight: '1px solid rgba(255,255,255,0.07)',
+          padding: '26px 16px',
+          display: 'flex', flexDirection: 'column', gap: 2,
         }}>
-          <p style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: '0.6rem', color: 'var(--hb-cyan)',
-            padding: '0 0.625rem 0.75rem', letterSpacing: '0.22em', textTransform: 'uppercase',
+          <div style={{
+            fontFamily: 'var(--font-ui)', fontSize: '1.375rem', fontWeight: 700,
+            letterSpacing: '0.04em', color: 'var(--hb-text)',
+            padding: '0 10px', marginBottom: 20,
           }}>
-            {'>>:'} CONFIG
-          </p>
-          {tabs.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              style={{
-                width: '100%', padding: '0.45rem 0.75rem',
-                border: 'none', textAlign: 'left',
-                borderLeft: tab === id ? '2px solid var(--hb-cyan)' : '2px solid transparent',
-                background: tab === id ? 'rgba(var(--hb-accent-rgb),0.12)' : 'transparent',
-                color: tab === id ? '#dff2f8' : 'var(--hb-text-dim)',
-                cursor: 'pointer',
-                fontFamily: "'Rajdhani', sans-serif",
-                fontSize: '0.78rem', fontWeight: 700,
-                letterSpacing: '0.12em', textTransform: 'uppercase',
-                transition: 'background 0.1s, color 0.1s, border-color 0.1s',
-                marginBottom: '0.125rem',
-              }}
-              onMouseEnter={e => { if (tab !== id) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)' }}
-              onMouseLeave={e => { if (tab !== id) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-            >
-              {label}
-            </button>
-          ))}
+            Settings
+          </div>
+          {tabs.map(({ id, label, icon }) => {
+            const on = tab === id
+            return (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                className="hb-tile"
+                style={{
+                  width: '100%', height: 44, padding: '0 14px',
+                  display: 'flex', alignItems: 'center', gap: 11, textAlign: 'left',
+                  border: on ? '1px solid rgba(var(--hb-accent-rgb),0.3)' : '1px solid transparent',
+                  background: on
+                    ? 'linear-gradient(160deg, rgba(var(--hb-accent-rgb),0.18), rgba(var(--hb-accent-rgb),0.05))'
+                    : 'transparent',
+                  color: on ? 'var(--hb-text)' : 'var(--hb-text-dim)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-read)',
+                  fontSize: '0.9375rem', fontWeight: on ? 500 : 400,
+                  transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+                }}
+                onMouseEnter={e => { if (!on) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)' }}
+                onMouseLeave={e => { if (!on) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+              >
+                <span style={{ display: 'flex', color: on ? 'var(--hb-cyan-bright)' : 'currentColor' }}>{icon}</span>
+                {label}
+              </button>
+            )
+          })}
         </div>
 
         {/* Right content */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Header row — white "SEARCH CONFIGURATION" plate */}
-          <div style={{
-            height: 46, flexShrink: 0, display: 'flex', alignItems: 'stretch',
-            gap: 0, borderBottom: '1px solid var(--hb-line)',
-          }}>
-            <h2 className="hb-head-light" style={{ flex: 1, fontSize: '0.82rem', minHeight: 0 }}>
-              {tabs.find(t => t.id === tab)?.label}
-              <span style={{ flex: 1 }} />
-              <span style={{
-                width: 7, height: 14, alignSelf: 'center',
-                background: 'rgba(217,156,68,0.5)',
-                border: '1px solid rgba(242,183,92,0.7)',
-                boxShadow: 'inset 0 1px 0 rgba(255,230,190,0.35)',
-              }} />
-            </h2>
-            <button
-              onClick={onClose}
-              style={{
-                width: 46, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                border: 'none', borderLeft: '1px solid var(--hb-edge)',
-                background: 'var(--glass-tint-hi)',
-                boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.25)',
-                color: 'var(--hb-icon-bright)',
-                cursor: 'pointer', transition: 'color 0.1s, background 0.12s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#eaf6fa' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--hb-icon-bright)' }}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+          {/* The pane names itself in its own content, the way the reference
+              deck does — no separate title bar plate above it. */}
+          <button
+            onClick={onClose}
+            title="Close (Esc)"
+            className="hb-tile"
+            style={{
+              position: 'absolute', top: 22, right: 26, zIndex: 2,
+              width: 38, height: 38,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'var(--glass-sheen)',
+              color: 'var(--hb-text-dim)',
+              cursor: 'pointer', transition: 'color 0.12s, border-color 0.12s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--hb-text)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--hb-text-dim)' }}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
 
           {/* Scrollable content */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem 1.25rem' }}>
+          <div className="hb-settings" style={{ flex: 1, overflowY: 'auto', padding: '30px 36px' }}>
+            <div style={{
+              fontFamily: 'var(--font-ui)', fontSize: '1.5rem', fontWeight: 700,
+              letterSpacing: '0.03em', color: 'var(--hb-text)', marginBottom: 4,
+              paddingRight: 56,
+            }}>
+              {current?.label}
+            </div>
+            <div style={{ fontSize: '0.905rem', color: 'var(--hb-text-faint)', marginBottom: 26 }}>
+              {current?.blurb}
+            </div>
 
             {/* General tab */}
             {tab === 'general' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-                    System Prompt
-                  </label>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.625rem', lineHeight: 1.5 }}>
-                    Defines the AI's behavior and personality for all conversations.
-                  </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
+                <SettingsField label="Display name">
+                  <input
+                    className="hb-tile"
+                    value={settings.userName}
+                    onChange={e => update({ userName: e.target.value })}
+                    placeholder={profile?.userName ?? 'Your name'}
+                    style={fieldStyle}
+                    onFocus={e => (e.currentTarget as HTMLInputElement).style.borderColor = 'rgba(var(--hb-accent-rgb),0.45)'}
+                    onBlur={e => (e.currentTarget as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.09)'}
+                  />
+                </SettingsField>
+
+                <SettingsField
+                  label="System instruction"
+                  hint="Defines the agent's behaviour and personality for every conversation."
+                >
                   <textarea
-                    className="hb-glass-xs"
+                    className="hb-tile"
                     value={localPrompt}
                     onChange={e => setLocalPrompt(e.target.value)}
                     placeholder="You are a helpful assistant…"
-                    rows={5}
+                    rows={4}
                     style={{
-                      // Dense translucent well — the modal's backdrop-filter is a
-                      // nested backdrop root, so the fill must occlude on its own.
-                      width: '100%', background: 'var(--glass-fill)',
-                      boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35), inset 0 -1px 0 0 rgba(255,255,255,0.05)',
-                      border: '1px solid var(--hb-edge)',
-                      padding: '0.75rem',
-                      color: 'var(--text-primary)', fontSize: '0.875rem',
-                      lineHeight: 1.6, fontFamily: 'inherit', resize: 'vertical',
-                      outline: 'none', transition: 'border-color 0.15s',
-                      userSelect: 'text',
+                      ...fieldStyle,
+                      height: 96, padding: '12px 16px',
+                      lineHeight: 1.55, resize: 'vertical',
                     }}
-                    onFocus={e => (e.currentTarget as HTMLTextAreaElement).style.borderColor = 'var(--border-focus)'}
-                    onBlur={e => (e.currentTarget as HTMLTextAreaElement).style.borderColor = 'var(--border)'}
+                    onFocus={e => (e.currentTarget as HTMLTextAreaElement).style.borderColor = 'rgba(var(--hb-accent-rgb),0.45)'}
+                    onBlur={e => (e.currentTarget as HTMLTextAreaElement).style.borderColor = 'rgba(255,255,255,0.09)'}
                   />
-                </div>
+                </SettingsField>
 
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
-                    <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-                      Temperature
-                    </label>
-                    <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                    marginBottom: 10,
+                  }}>
+                    <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)' }}>
+                      Creativity (temperature)
+                    </span>
+                    <span style={{
+                      fontSize: '0.845rem', color: 'var(--hb-cyan)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
                       {localTemp.toFixed(1)}
                     </span>
                   </div>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
-                    Lower = more precise and deterministic. Higher = more creative and varied.
-                  </p>
                   <input
                     type="range"
                     min={0} max={1} step={0.1}
@@ -401,11 +445,24 @@ export default function SettingsModal({ config, onClose }: Props) {
                     onChange={e => setLocalTemp(parseFloat(e.target.value))}
                     style={{ width: '100%' }}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.375rem' }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Precise (0.0)</span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Creative (1.0)</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                    <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>Precise</span>
+                    <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>Creative</span>
                   </div>
                 </div>
+
+                <SettingsRow
+                  title="Voice-mode language"
+                  desc="Used when replies are read aloud."
+                >
+                  <GlassSelect
+                    value={settings.voiceLocale}
+                    options={VOICE_LOCALES}
+                    onChange={v => update({ voiceLocale: v })}
+                    tint="var(--hb-cyan-bright)"
+                    title="Language replies are spoken in"
+                  />
+                </SettingsRow>
               </div>
             )}
 
@@ -414,270 +471,185 @@ export default function SettingsModal({ config, onClose }: Props) {
 
             {/* Connections tab — toggle MCP servers live */}
             {tab === 'connections' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>
-                  Toggle which services SPEDA can use. Disabling one hides its tools instantly
-                  (no restart) — which shrinks the prompt and keeps you under the rate limit.
-                </p>
-
-                {/* Google one-click sign-in */}
-                <div style={{
-                  padding: '0.85rem', border: '1px solid var(--border)',
-                  background: 'rgba(255,255,255,0.02)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '0.86rem', color: 'var(--text-primary)', fontWeight: 600 }}>
-                        Google Workspace
-                      </div>
-                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        {googleConnected
-                          ? 'Connected — Gmail, Calendar, Drive & Contacts are live.'
-                          : 'Connect your account for Gmail, Calendar, Drive.'}
-                      </div>
-                    </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
+                <SettingsSection title="Accounts" first />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
+                  <ServiceRow
+                    tint="#5cc98f"
+                    icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
+                    name="Google Workspace"
+                    desc={googleConnected
+                      ? 'Gmail, Calendar, Drive and Contacts are live.'
+                      : 'Sign in for Gmail, Calendar and Drive.'}
+                  >
                     {googleConnected ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <span style={{
-                          display: 'flex', alignItems: 'center', gap: '0.35rem',
-                          fontSize: '0.8rem', fontWeight: 600, color: 'var(--hb-green)',
-                        }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                          Connected
-                        </span>
-                        <button
-                          onClick={disconnectGoogle}
-                          className="hb-btn"
-                          style={{ padding: '0.45rem 0.8rem', fontSize: '0.78rem', fontWeight: 500 }}
-                        >
-                          Disconnect
-                        </button>
-                      </div>
+                      <>
+                        <LiveDot />
+                        <PillBtn onClick={disconnectGoogle} tone="danger">Disconnect</PillBtn>
+                      </>
                     ) : (
-                      <button
-                        onClick={signInGoogle}
-                        className="hb-btn"
-                        style={{
-                          gap: '0.5rem', padding: '0.5rem 0.9rem',
-                          fontSize: '0.82rem', fontWeight: 600, color: 'var(--hb-text)',
-                        }}
-                      >
-                        <svg width="15" height="15" viewBox="0 0 48 48">
+                      <PillBtn onClick={signInGoogle}>
+                        <svg width="14" height="14" viewBox="0 0 48 48">
                           <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h11.8c-.5 2.7-2 5-4.4 6.6v5.5h7.1c4.1-3.8 6.6-9.4 6.6-16.1z"/>
                           <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.4l-7.1-5.5c-2 1.3-4.5 2.1-7.4 2.1-5.7 0-10.5-3.8-12.2-9h-7.3v5.7C8.1 41.1 15.4 46 24 46z"/>
                           <path fill="#FBBC05" d="M11.8 28.2c-.4-1.3-.7-2.7-.7-4.2s.2-2.9.7-4.2v-5.7H4.5C3 17.2 2.1 20.5 2.1 24s.9 6.8 2.4 9.9l7.3-5.7z"/>
                           <path fill="#EA4335" d="M24 10.7c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 4.1 29.9 2 24 2 15.4 2 8.1 6.9 4.5 14.1l7.3 5.7c1.7-5.2 6.5-9.1 12.2-9.1z"/>
                         </svg>
-                        Sign in with Google
-                      </button>
+                        Connect
+                      </PillBtn>
                     )}
-                  </div>
+                  </ServiceRow>
                   {googleMsg && (
-                    <p style={{ marginTop: '0.6rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                    <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', margin: '0 0 0 4px' }}>
                       {googleMsg}
                     </p>
                   )}
-                </div>
 
-                {/* Notion one-click auth */}
-                <div style={{
-                  padding: '1.2rem',
-                  borderRadius: '0.6rem',
-                  border: '1px solid var(--border)',
-                  background: 'var(--glass-tint)',
-                  boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.08)',
-                  marginBottom: '1rem',
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <h4 style={{ margin: '0 0 0.3rem', fontSize: '0.85rem', color: 'var(--text-primary)' }}>Notion Workspace</h4>
-                      <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.4 }}>
-                        Connect your Notion workspace to enable powerful search, fetching, and page creation tools for your agents.
-                      </p>
-                    </div>
+                  <ServiceRow
+                    icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M4.45877 4.54133L19.5397 5.25732V6.33128L18.8252 6.47466C18.2526 6.54632 17.8938 6.76132 17.8938 7.33465V18.1532C17.8938 18.5832 18.2526 18.7982 18.8252 18.8698L19.5397 19.0132V20.0872L12.3924 19.3712V18.2972L13.107 18.1539C13.6796 18.0822 14.0384 17.8672 14.0384 17.2939V8.83863L7.75338 18.6545H6.53612V8.04996C6.53612 7.47664 6.17737 7.26164 5.6047 7.18997L4.89018 7.04664V5.97268L12.0374 6.68867V7.76262L11.3229 7.90595C10.7503 7.97762 10.3915 8.19262 10.3915 8.76595V16.3626L15.932 7.90595C16.1466 7.61929 16.4328 7.40429 16.7196 7.33262L17.2917 7.18929L17.1486 6.11532L4.45877 4.54133Z"/></svg>}
+                    name="Notion"
+                    desc="Search, fetch and create pages in your workspace."
+                  >
                     {notionConnected ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--hb-green)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--hb-green)' }}></span>
-                          Connected
-                        </span>
-                        <button
-                          onClick={disconnectNotion}
-                          className="hb-btn"
-                          style={{ padding: '0.45rem 0.8rem', fontSize: '0.78rem', fontWeight: 500 }}
-                        >
-                          Disconnect
-                        </button>
-                      </div>
+                      <>
+                        <LiveDot />
+                        <PillBtn onClick={disconnectNotion} tone="danger">Disconnect</PillBtn>
+                      </>
                     ) : (
-                      <button
-                        onClick={signInNotion}
-                        className="hb-btn"
-                        style={{
-                          gap: '0.5rem', padding: '0.5rem 0.9rem',
-                          fontSize: '0.82rem', fontWeight: 600, color: 'var(--hb-text)',
-                        }}
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                          <path d="M4.45877 4.54133L19.5397 5.25732V6.33128L18.8252 6.47466C18.2526 6.54632 17.8938 6.76132 17.8938 7.33465V18.1532C17.8938 18.5832 18.2526 18.7982 18.8252 18.8698L19.5397 19.0132V20.0872L12.3924 19.3712V18.2972L13.107 18.1539C13.6796 18.0822 14.0384 17.8672 14.0384 17.2939V8.83863L7.75338 18.6545H6.53612V8.04996C6.53612 7.47664 6.17737 7.26164 5.6047 7.18997L4.89018 7.04664V5.97268L12.0374 6.68867V7.76262L11.3229 7.90595C10.7503 7.97762 10.3915 8.19262 10.3915 8.76595V16.3626L15.932 7.90595C16.1466 7.61929 16.4328 7.40429 16.7196 7.33262L17.2917 7.18929L17.1486 6.11532L4.45877 4.54133Z" fill="currentColor"/>
-                        </svg>
-                        Sign in with Notion
-                      </button>
+                      <PillBtn onClick={signInNotion}>Connect</PillBtn>
                     )}
-                  </div>
+                  </ServiceRow>
                   {notionMsg && (
-                    <p style={{ marginTop: '0.6rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                    <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', margin: '0 0 0 4px' }}>
                       {notionMsg}
                     </p>
                   )}
                 </div>
 
-                {/* Prefix budget bar */}
-                {(() => {
-                  const pct = Math.min(100, Math.round((connBudget.used / connBudget.limit) * 100))
-                  const over = connBudget.used > connBudget.limit
-                  const col = over ? 'var(--hb-red)' : pct > 80 ? 'var(--hb-amber)' : 'var(--hb-green)'
-                  return (
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '0.3rem' }}>
-                        <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                          ACTIVE TOOL TOKENS
-                        </span>
-                        <span style={{ color: col, fontFamily: 'var(--font-mono)' }}>
-                          ~{connBudget.used.toLocaleString()} / {connBudget.limit.toLocaleString()}
-                        </span>
-                      </div>
-                      <div style={{ height: 6, background: 'rgba(var(--hb-accent-rgb),0.12)', overflow: 'hidden' }}>
-                        <div style={{ width: `${pct}%`, height: '100%', background: col, transition: 'width 0.2s' }} />
-                      </div>
-                      {over && (
-                        <p style={{ fontSize: '0.74rem', color: 'var(--hb-red)', marginTop: '0.4rem' }}>
-                          Over the 30k cold-write limit — disable a server (Notion is heaviest) or upgrade to Tier 2.
-                        </p>
-                      )}
-                    </div>
-                  )
-                })()}
+                <SettingsSection title="Tool servers" />
+                <div style={{ marginTop: -8 }}>
+                  <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', lineHeight: 1.55, margin: '0 0 14px' }}>
+                    Turning one off hides its tools instantly — no restart. That shrinks the
+                    prompt and keeps you under the rate limit.
+                  </p>
 
-                {/* Server list */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  {conns.length === 0 && (
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      No MCP servers loaded.
-                    </p>
-                  )}
-                  {conns.map(c => (
-                    <div key={c.server} style={{
-                      display: 'flex', alignItems: 'center', gap: '0.75rem',
-                      padding: '0.6rem 0.75rem',
-                      border: '1px solid var(--border)',
-                      background: 'rgba(255,255,255,0.02)',
-                    }}>
-                      {/* status dot */}
-                      <span style={{
-                        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                        background: c.connected ? 'var(--hb-green)' : 'var(--hb-red)',
-                      }} title={c.connected ? 'Connected' : 'Not connected'} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '0.86rem', color: 'var(--text-primary)', fontWeight: 500 }}>{c.label}</div>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '1px' }}>
-                          {c.connected
-                            ? `${c.tools} tools · ${c.always_on ? 'always on' : 'loaded on demand'}`
-                            : (c.needs ? `needs ${c.needs}` : 'offline')}
+                  {/* Prefix budget bar */}
+                  {(() => {
+                    const pct = Math.min(100, Math.round((connBudget.used / connBudget.limit) * 100))
+                    const over = connBudget.used > connBudget.limit
+                    const col = over ? '#e5897c' : pct > 80 ? 'var(--hb-amber-bright)' : 'var(--hb-cyan)'
+                    return (
+                      <div style={{ marginBottom: 16 }}>
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between',
+                          fontSize: '0.845rem', marginBottom: 8,
+                        }}>
+                          <span style={{ color: 'var(--hb-text-dim)' }}>Active tool tokens</span>
+                          <span style={{ color: col, fontVariantNumeric: 'tabular-nums' }}>
+                            ~{connBudget.used.toLocaleString()} / {connBudget.limit.toLocaleString()}
+                          </span>
                         </div>
+                        <div className="hb-round" style={{
+                          height: 6, background: 'rgba(255,255,255,0.07)', overflow: 'hidden',
+                        }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: col, transition: 'width 0.2s' }} />
+                        </div>
+                        {over && (
+                          <p style={{ fontSize: '0.8125rem', color: '#e5897c', marginTop: 8 }}>
+                            Over the 30k cold-write limit — turn a server off (Notion is heaviest) or upgrade to Tier 2.
+                          </p>
+                        )}
                       </div>
-                      {/* toggle */}
-                      <button
-                        onClick={() => toggleConn(c.server, !c.active)}
-                        disabled={!c.connected}
-                        title={c.active ? 'Active — click to disable' : 'Disabled — click to enable'}
-                        style={{
-                          width: 42, height: 24, flexShrink: 0, borderRadius: 999,
-                          border: 'none', position: 'relative', cursor: c.connected ? 'pointer' : 'not-allowed',
-                          background: c.active && c.connected ? 'rgba(var(--hb-accent-rgb),0.55)' : 'rgba(var(--hb-accent-rgb),0.2)',
-                          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.3), inset 0 -1px 0 rgba(255,255,255,0.08)',
-                          opacity: c.connected ? 1 : 0.4, transition: 'background 0.15s',
-                        }}
-                      >
-                        <span style={{
-                          position: 'absolute', top: 3, left: c.active && c.connected ? 21 : 3,
-                          width: 18, height: 18, borderRadius: '50%',
-                          background: 'rgba(255,255,255,0.85)',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.6)',
-                          transition: 'left 0.15s',
-                        }} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                    )
+                  })()}
 
-                <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
-                  A server greyed out as “needs …” requires its API key in the backend <code style={{ fontFamily: 'var(--font-mono)' }}>.env</code> and a restart.
-                </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {conns.length === 0 && (
+                      <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>
+                        No MCP servers loaded.
+                      </p>
+                    )}
+                    {conns.map(c => (
+                      <ServiceRow
+                        key={c.server}
+                        tint={c.connected ? '#5cc98f' : undefined}
+                        icon={<span style={{
+                          width: 8, height: 8, borderRadius: '50%',
+                          background: c.connected ? 'var(--hb-green)' : 'var(--hb-text-faint)',
+                          boxShadow: c.connected ? '0 0 6px var(--hb-green)' : 'none',
+                        }} />}
+                        name={c.label}
+                        desc={c.connected
+                          ? `${c.tools} tools · ${c.always_on ? 'always on' : 'loaded on demand'}`
+                          : (c.needs ? `needs ${c.needs}` : 'offline')}
+                      >
+                        <Switch
+                          on={c.active && c.connected}
+                          disabled={!c.connected}
+                          onChange={v => toggleConn(c.server, v)}
+                          title={c.connected
+                            ? (c.active ? 'Active — click to disable' : 'Disabled — click to enable')
+                            : 'Not connected'}
+                        />
+                      </ServiceRow>
+                    ))}
+                  </div>
+
+                  <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', lineHeight: 1.55, margin: '14px 0 0' }}>
+                    A server shown as “needs …” wants its API key in the backend{' '}
+                    <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--hb-cyan)' }}>.env</code>, then a restart.
+                  </p>
+                </div>
               </div>
             )}
 
             {/* Reminders tab — standing questions that nag until answered */}
             {tab === 'reminders' && <RemindersTab config={config} />}
+            {tab === 'protocols' && <ProtocolsTab config={config} onEngageLockdown={onEngageLockdown} />}
 
             {/* Automations tab — SPEDA's proactive n8n watchers */}
             {tab === 'automations' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-
-                {/* Pipeline status — n8n engine + Telegram delivery */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
+                <SettingsSection title="Pipeline" first />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
                   {[
                     {
-                      label: 'n8n ENGINE',
+                      label: 'n8n engine',
                       ok: !!autoStatus?.n8n_online,
                       detail: !autoStatus?.n8n_configured
                         ? 'needs N8N_API_KEY in the backend .env (n8n → Settings → n8n API)'
                         : autoStatus?.n8n_online ? autoStatus.n8n_url : 'unreachable — is the n8n container running?',
                     },
                     {
-                      label: 'TELEGRAM DELIVERY',
+                      label: 'Telegram delivery',
                       ok: !!autoStatus?.telegram_connected,
                       detail: !autoStatus?.telegram_configured
                         ? 'needs TELEGRAM_BOT_TOKEN in the backend .env (create a bot with @BotFather)'
                         : autoStatus?.telegram_connected ? 'connected — SPEDA can reach you' : 'bot ready — connect your chat below',
                     },
                   ].map(row => (
-                    <div key={row.label} style={{
-                      display: 'flex', alignItems: 'center', gap: '0.75rem',
-                      padding: '0.55rem 0.75rem',
-                      border: '1px solid var(--border)',
-                      background: 'rgba(255,255,255,0.02)',
-                    }}>
-                      <span style={{
-                        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                    <ServiceRow
+                      key={row.label}
+                      tint={row.ok ? '#5cc98f' : '#d99c44'}
+                      icon={<span style={{
+                        width: 8, height: 8, borderRadius: '50%',
                         background: row.ok ? 'var(--hb-green)' : 'var(--hb-amber)',
-                      }} />
-                      <span style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', letterSpacing: '0.08em', flexShrink: 0 }}>
-                        {row.label}
-                      </span>
-                      <span style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {row.detail}
-                      </span>
-                    </div>
+                        boxShadow: row.ok ? '0 0 6px var(--hb-green)' : 'none',
+                      }} />}
+                      name={row.label}
+                      desc={row.detail}
+                    >
+                      {row.ok ? <LiveDot label="Online" /> : (
+                        <span style={{ fontSize: '0.845rem', color: 'var(--hb-amber-bright)' }}>Not ready</span>
+                      )}
+                    </ServiceRow>
                   ))}
 
                   {autoStatus?.telegram_configured && !autoStatus?.telegram_connected && (
                     <div>
-                      <button
-                        onClick={handleTelegramConnect}
-                        style={{
-                          padding: '0.5rem 1rem',
-                          border: '1px solid rgba(var(--hb-cyan-bright-rgb),0.5)',
-                          background: 'rgba(var(--hb-accent-rgb),0.14)',
-                          color: '#cdeefa', cursor: 'pointer',
-                          fontFamily: "'Rajdhani',sans-serif", fontSize: '0.76rem', fontWeight: 700,
-                          letterSpacing: '0.12em', textTransform: 'uppercase',
-                        }}
-                      >
-                        Connect Telegram
-                      </button>
+                      <PillBtn onClick={handleTelegramConnect} tone="accent">Connect Telegram</PillBtn>
                       {tgMsg && (
-                        <p style={{ marginTop: '0.5rem', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                        <p style={{ marginTop: 8, fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>
                           {tgMsg}
                         </p>
                       )}
@@ -685,74 +657,66 @@ export default function SettingsModal({ config, onClose }: Props) {
                   )}
                 </div>
 
-                {/* Watcher list */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <SettingsSection title="Watchers" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
                   {autos.length === 0 && (
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>
                       Nothing is being watched yet.
                     </p>
                   )}
                   {autos.map(a => (
-                    <div key={a.id} style={{
-                      display: 'flex', alignItems: 'center', gap: '0.75rem',
-                      padding: '0.6rem 0.75rem',
-                      border: '1px solid var(--border)',
-                      background: 'rgba(255,255,255,0.02)',
+                    <div key={a.id} className="hb-tile" style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '12px 16px',
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.07)',
                       opacity: a.active ? 1 : 0.55,
                     }}>
-                      {/* kind chip */}
-                      <span style={{
-                        flexShrink: 0, padding: '1px 6px',
-                        fontSize: '0.58rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.1em',
-                        color: a.active ? 'var(--hb-cyan-bright)' : 'var(--text-muted)',
-                        border: '1px solid rgba(var(--hb-accent-rgb),0.3)',
+                      <span className="glass-round" style={{
+                        flexShrink: 0, height: 24, padding: '0 11px',
+                        display: 'inline-flex', alignItems: 'center',
+                        fontSize: '0.75rem',
+                        color: a.active ? 'var(--hb-cyan-bright)' : 'var(--hb-text-faint)',
+                        background: a.active ? 'rgba(var(--hb-accent-rgb),0.12)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${a.active ? 'rgba(var(--hb-accent-rgb),0.3)' : 'rgba(255,255,255,0.08)'}`,
                       }}>
-                        {{ web_watch: 'WEB', rss_watch: 'RSS', schedule: 'CRON', webhook: 'HOOK' }[a.kind] ?? a.kind.toUpperCase()}
+                        {{ web_watch: 'web', rss_watch: 'rss', schedule: 'cron', webhook: 'hook' }[a.kind] ?? a.kind}
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '0.86rem', color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{
+                          fontSize: '0.9375rem', color: 'var(--hb-text)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
                           {a.name}
                         </div>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{
+                          fontSize: '0.8125rem', color: 'var(--hb-text-faint)', marginTop: 2,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
                           {a.summary}
                           {a.last_fired_at && ` · last fired ${new Date(a.last_fired_at).toLocaleString()}`}
                           {a.expires_at && ` · until ${new Date(a.expires_at).toLocaleDateString()}`}
                         </div>
                       </div>
-                      {/* pause/resume toggle */}
-                      <button
-                        onClick={() => handleToggleAuto(a.id, !a.active)}
+                      <Switch
+                        on={a.active}
+                        onChange={v => handleToggleAuto(a.id, v)}
                         title={a.active ? 'Active — click to pause' : 'Paused — click to resume'}
-                        style={{
-                          width: 42, height: 24, flexShrink: 0, borderRadius: 999,
-                          border: 'none', position: 'relative', cursor: 'pointer',
-                          background: a.active ? 'rgba(var(--hb-accent-rgb),0.55)' : 'rgba(var(--hb-accent-rgb),0.2)',
-                          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.3), inset 0 -1px 0 rgba(255,255,255,0.08)',
-                          transition: 'background 0.15s',
-                        }}
-                      >
-                        <span style={{
-                          position: 'absolute', top: 3, left: a.active ? 21 : 3,
-                          width: 18, height: 18, borderRadius: '50%',
-                          background: 'rgba(255,255,255,0.85)',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.6)',
-                          transition: 'left 0.15s',
-                        }} />
-                      </button>
-                      {/* delete */}
+                      />
                       <button
                         onClick={() => handleDeleteAuto(a.id)}
                         title="Delete watcher (also removes the n8n workflow)"
+                        className="hb-tile"
                         style={{
-                          width: 26, height: 26, flexShrink: 0,
+                          width: 30, height: 30, flexShrink: 0,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           border: '1px solid transparent', background: 'transparent',
-                          color: 'var(--text-muted)', cursor: 'pointer', transition: 'color 0.12s',
+                          color: 'var(--hb-text-faint)', cursor: 'pointer', transition: 'color 0.12s',
                         }}
-                        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--hb-red)')}
-                        onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)')}
+                        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#e5897c')}
+                        onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--hb-text-faint)')}
                       >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                           <polyline points="3 6 5 6 21 6"/>
                           <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
                           <path d="M10 11v6M14 11v6"/>
@@ -762,59 +726,73 @@ export default function SettingsModal({ config, onClose }: Props) {
                   ))}
                 </div>
 
-                <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
-                  SPEDA creates these itself — just ask: <em style={{ color: 'var(--hb-amber)', fontStyle: 'normal' }}>“track this page for a month and tell me when my results are up”</em>. When a watcher fires, SPEDA composes the message and pings you on Telegram.
+                <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', lineHeight: 1.55, margin: 0 }}>
+                  SPEDA creates these itself — just ask:{' '}
+                  <em style={{ color: 'var(--hb-amber-bright)', fontStyle: 'normal' }}>
+                    “track this page for a month and tell me when my results are up”
+                  </em>. When a watcher fires, SPEDA composes the message and pings you on Telegram.
                 </p>
               </div>
             )}
 
             {/* Interface tab */}
             {tab === 'interface' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-                    Theme
-                  </label>
-                  <div style={{ display: 'flex', gap: '0.625rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
+                <SettingsField label="Theme">
+                  <div style={{ display: 'flex', gap: 10 }}>
                     {['Dark', 'Light'].map(t => (
                       <button
                         key={t}
-                        className={t === 'Dark' ? 'hb-btn hb-btn-tint' : 'hb-btn'}
+                        className="glass-round"
                         style={{
-                          padding: '0.5rem 1.25rem',
-                          fontSize: '0.875rem',
-                          ...(t === 'Dark' ? { color: 'var(--hb-cyan-bright)' } : {}),
+                          height: 38, padding: '0 20px',
+                          fontFamily: 'var(--font-read)', fontSize: '0.9375rem',
+                          border: t === 'Dark'
+                            ? '1px solid rgba(var(--hb-accent-rgb),0.32)'
+                            : '1px solid rgba(255,255,255,0.08)',
+                          background: t === 'Dark'
+                            ? 'linear-gradient(160deg, rgba(var(--hb-accent-rgb),0.18), rgba(var(--hb-accent-rgb),0.05))'
+                            : 'var(--glass-sheen)',
+                          color: t === 'Dark' ? 'var(--hb-text)' : 'var(--hb-text-faint)',
                           cursor: t === 'Dark' ? 'default' : 'not-allowed',
-                          opacity: t === 'Light' ? 0.5 : 1,
                         }}
                       >
-                        {t}{t === 'Light' ? ' (soon)' : ''}
+                        {t}{t === 'Light' ? ' — soon' : ''}
                       </button>
                     ))}
                   </div>
-                </div>
+                </SettingsField>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-                    Sidebar width
-                  </label>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    Drag the sidebar edge to resize.
-                  </p>
-                </div>
+                <SettingsRow
+                  title="Telemetry column"
+                  desc="The right-hand column: uplink, session budget, routing and toolsets."
+                >
+                  <Switch
+                    on={settings.telemetryOpen}
+                    onChange={v => update({ telemetryOpen: v })}
+                  />
+                </SettingsRow>
+
+                <SettingsRow
+                  title="Sidebar"
+                  desc="Drag the sidebar edge to resize it."
+                >
+                  <Switch
+                    on={settings.sidebarOpen}
+                    onChange={v => update({ sidebarOpen: v })}
+                  />
+                </SettingsRow>
               </div>
             )}
 
             {/* Data tab — import Claude chat export */}
             {tab === 'data' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-                    Import Claude conversations
-                  </label>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.875rem', lineHeight: 1.55 }}>
-                    Upload the <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>.zip</code> from
-                    your Claude data export. Each conversation becomes a session; messages are imported with their
+                  <SettingsSection title="Import Claude conversations" first />
+                  <p style={{ fontSize: '0.845rem', color: 'var(--hb-text-faint)', margin: '8px 0 14px', lineHeight: 1.55 }}>
+                    Upload the <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--hb-cyan)' }}>.zip</code> from
+                    your Claude data export. Each conversation becomes a session; messages keep their
                     original dates. Runs in the background — sessions appear as they process.
                   </p>
 
@@ -832,19 +810,13 @@ export default function SettingsModal({ config, onClose }: Props) {
                     }}
                   />
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
-                    <button
-                      className="hb-btn"
-                      onClick={() => fileRef.current?.click()}
-                      style={{ padding: '0.5rem 0.875rem', fontSize: '0.84rem' }}
-                    >
-                      Choose .zip…
-                    </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <PillBtn onClick={() => fileRef.current?.click()}>Choose .zip…</PillBtn>
 
                     <span style={{
-                      fontSize: '0.82rem', color: importFile ? 'var(--text-primary)' : 'var(--text-muted)',
-                      fontFamily: importFile ? 'var(--font-mono)' : 'inherit',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280,
+                      fontSize: '0.845rem',
+                      color: importFile ? 'var(--hb-text)' : 'var(--hb-text-faint)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300,
                     }}>
                       {importFile ? importFile.name : 'No file selected'}
                     </span>
@@ -852,12 +824,17 @@ export default function SettingsModal({ config, onClose }: Props) {
                     <div style={{ flex: 1 }} />
 
                     <button
-                      className="hb-btn hb-btn-tint"
                       onClick={handleImport}
                       disabled={!importFile || importStatus === 'uploading'}
+                      className="glass-round"
                       style={{
-                        padding: '0.5rem 1.1rem', color: 'var(--hb-cyan-bright)',
-                        fontSize: '0.84rem', fontWeight: 600, letterSpacing: '0.04em',
+                        height: 32, padding: '0 16px', flexShrink: 0,
+                        border: '1px solid rgba(var(--hb-accent-rgb),0.32)',
+                        background: 'rgba(var(--hb-accent-rgb),0.12)',
+                        color: 'var(--hb-cyan-bright)',
+                        fontFamily: 'var(--font-read)', fontSize: '0.845rem',
+                        cursor: !importFile || importStatus === 'uploading' ? 'default' : 'pointer',
+                        opacity: !importFile || importStatus === 'uploading' ? 0.45 : 1,
                       }}
                     >
                       {importStatus === 'uploading' ? 'Importing…' : 'Import'}
@@ -867,24 +844,20 @@ export default function SettingsModal({ config, onClose }: Props) {
                   {/* Status line */}
                   {importMsg && (
                     <p style={{
-                      marginTop: '0.875rem', fontSize: '0.8rem', fontFamily: 'var(--font-mono)',
-                      color: importStatus === 'error' ? 'var(--hb-red)'
-                           : importStatus === 'done' ? 'var(--hb-green)'
-                           : 'var(--text-secondary)',
+                      marginTop: 14, fontSize: '0.845rem',
+                      color: importStatus === 'error' ? '#e5897c'
+                           : importStatus === 'done' ? '#8fdcb3'
+                           : 'var(--hb-text-dim)',
                     }}>
                       {importStatus === 'done' ? '✓ ' : importStatus === 'error' ? '✕ ' : '› '}{importMsg}
                     </p>
                   )}
                 </div>
 
-                <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
-
                 {/* Index past conversations */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-                    Rebuild memory from history
-                  </label>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.875rem', lineHeight: 1.55 }}>
+                  <SettingsSection title="Rebuild memory from history" />
+                  <p style={{ fontSize: '0.845rem', color: 'var(--hb-text-faint)', margin: '8px 0 14px', lineHeight: 1.55 }}>
                     Mines durable facts about you from your entire conversation history and
                     rebuilds the memory record from them. Safe to run more than once: anything
                     you wrote yourself is preserved and only re-derived facts are replaced.
@@ -894,16 +867,17 @@ export default function SettingsModal({ config, onClose }: Props) {
                   {/* The record's state, shown without pressing anything — an empty
                       record is worth knowing about before it is needed. */}
                   {memory && (
-                    <div style={{
-                      marginBottom: '0.875rem', padding: '0.7rem 0.85rem',
-                      border: '1px solid var(--border)', borderRadius: '6px',
-                      fontSize: '0.78rem', lineHeight: 1.5,
-                      color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)',
+                    <div className="hb-tile" style={{
+                      marginBottom: 14, padding: '12px 16px',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      background: 'rgba(255,255,255,0.03)',
+                      fontSize: '0.845rem', lineHeight: 1.55,
+                      color: 'var(--hb-text-dim)',
                     }}>
-                      <div style={{ color: 'var(--text-primary)', marginBottom: '0.3rem' }}>
+                      <div style={{ color: 'var(--hb-text)', marginBottom: 4 }}>
                         {memory.observations} fact(s) recorded
                         {Object.keys(memory.by_origin).length > 0 && (
-                          <span style={{ color: 'var(--text-muted)' }}>
+                          <span style={{ color: 'var(--hb-text-faint)' }}>
                             {'  ·  '}
                             {Object.entries(memory.by_origin)
                               .map(([k, v]) => `${k}: ${v}`)
@@ -915,8 +889,8 @@ export default function SettingsModal({ config, onClose }: Props) {
                         color: memory.job?.status === 'running' || memory.job?.status === 'pending'
                           ? 'var(--hb-cyan-bright)'
                           : memory.thin_compositions.length > 0 || memory.observations === 0
-                            ? 'var(--hb-red)'
-                            : memory.at_risk_facts > 0 ? 'var(--hb-amber, #d9a441)' : 'var(--hb-green)',
+                            ? '#e5897c'
+                            : memory.at_risk_facts > 0 ? 'var(--hb-amber-bright)' : '#8fdcb3',
                       }}>
                         {memory.verdict}
                       </div>
@@ -925,10 +899,10 @@ export default function SettingsModal({ config, onClose }: Props) {
                           the first real run sat at a flat count for hours because
                           nothing was written until the very end. */}
                       {memory.job?.progress && (
-                        <div style={{ marginTop: '0.45rem' }}>
-                          <div style={{
-                            height: '3px', borderRadius: '2px',
-                            background: 'var(--border)', overflow: 'hidden',
+                        <div style={{ marginTop: 8 }}>
+                          <div className="hb-round" style={{
+                            height: 6,
+                            background: 'rgba(255,255,255,0.07)', overflow: 'hidden',
                           }}>
                             <div style={{
                               height: '100%',
@@ -945,22 +919,27 @@ export default function SettingsModal({ config, onClose }: Props) {
                   )}
 
                   <button
-                    className="hb-btn hb-btn-tint"
                     onClick={handleIndex}
                     disabled={indexStatus === 'running'}
+                    className="glass-round"
                     style={{
-                      padding: '0.5rem 1.1rem', color: 'var(--hb-cyan-bright)',
-                      fontSize: '0.84rem', fontWeight: 600, letterSpacing: '0.04em',
+                      height: 32, padding: '0 16px',
+                      border: '1px solid rgba(var(--hb-accent-rgb),0.32)',
+                      background: 'rgba(var(--hb-accent-rgb),0.12)',
+                      color: 'var(--hb-cyan-bright)',
+                      fontFamily: 'var(--font-read)', fontSize: '0.845rem',
+                      cursor: indexStatus === 'running' ? 'default' : 'pointer',
+                      opacity: indexStatus === 'running' ? 0.45 : 1,
                     }}
                   >
                     {indexStatus === 'running' ? 'Rebuilding…' : 'Rebuild memory'}
                   </button>
                   {indexMsg && (
                     <p style={{
-                      marginTop: '0.875rem', fontSize: '0.8rem', fontFamily: 'var(--font-mono)',
-                      color: indexStatus === 'error' ? 'var(--hb-red)'
-                           : indexStatus === 'done' ? 'var(--hb-green)'
-                           : 'var(--text-secondary)',
+                      marginTop: 14, fontSize: '0.845rem',
+                      color: indexStatus === 'error' ? '#e5897c'
+                           : indexStatus === 'done' ? '#8fdcb3'
+                           : 'var(--hb-text-dim)',
                     }}>
                       {indexStatus === 'done' ? '✓ ' : indexStatus === 'error' ? '✕ ' : '› '}{indexMsg}
                     </p>
@@ -971,75 +950,55 @@ export default function SettingsModal({ config, onClose }: Props) {
 
             {/* Account tab */}
             {tab === 'account' && profile && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
 
-                {/* Avatar row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                {/* Who this client is signed in as */}
+                <div className="hb-tile" style={{
+                  display: 'flex', alignItems: 'center', gap: 14,
+                  padding: '16px 18px',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                }}>
                   <div style={{
-                    width: 56, height: 56, borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #4285F4, #0D9488)',
+                    width: 48, height: 48, borderRadius: '50%', flexShrink: 0,
+                    background: 'linear-gradient(160deg, var(--hb-cyan-bright), var(--hb-cyan-dim))',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '1.4rem', fontWeight: 700, color: '#fff', flexShrink: 0,
+                    fontFamily: 'var(--font-ui)', fontSize: '1.25rem', fontWeight: 700,
+                    color: '#0a1420',
                   }}>
                     {(localUserName[0] || profile.avatarInitial).toUpperCase()}
                   </div>
-                  <div>
-                    <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: '1rem', color: 'var(--hb-text)' }}>
                       {localUserName || profile.userName || profile.name}
                     </p>
-                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{profile.tagline}</p>
+                    <p style={{ fontSize: '0.845rem', color: 'var(--hb-text-faint)', marginTop: 2 }}>
+                      {profile.tagline}
+                    </p>
                   </div>
                 </div>
 
-                <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
-
-                {/* Editable name */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-                    Your name
-                  </label>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.625rem', lineHeight: 1.5 }}>
-                    Used in the greeting on the home screen.
-                  </p>
+                <SettingsField label="Your name" hint="Used in the greeting on the home screen.">
                   <input
-                    className="hb-glass-xs"
+                    className="hb-tile"
                     type="text"
                     value={localUserName}
                     onChange={e => setLocalUserName(e.target.value)}
                     onBlur={() => update({ userName: localUserName.trim() })}
                     onKeyDown={e => { if (e.key === 'Enter') { update({ userName: localUserName.trim() }); (e.currentTarget as HTMLInputElement).blur() } }}
                     placeholder="Enter your name…"
-                    style={{
-                      // Dense translucent well — the modal's backdrop-filter is a
-                      // nested backdrop root, so the fill must occlude on its own.
-                      width: '100%', background: 'var(--glass-fill)',
-                      boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35), inset 0 -1px 0 0 rgba(255,255,255,0.05)',
-                      border: '1px solid var(--hb-edge)',
-                      padding: '0.625rem 0.75rem',
-                      color: 'var(--text-primary)', fontSize: '0.9375rem',
-                      fontFamily: 'inherit', outline: 'none',
-                      transition: 'border-color 0.15s', userSelect: 'text',
-                    }}
-                    onFocus={e => (e.currentTarget.style.borderColor = 'var(--border-focus)')}
-                    onBlurCapture={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                    style={fieldStyle}
+                    onFocus={e => (e.currentTarget.style.borderColor = 'rgba(var(--hb-accent-rgb),0.45)')}
+                    onBlurCapture={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)')}
                   />
-                </div>
+                </SettingsField>
 
-                {/* Suggested prompts (read-only) */}
-                {profile.suggestedPrompts.length > 0 && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                      Suggested prompts
-                    </label>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                      {profile.suggestedPrompts.map((p, i) => (
-                        <p key={i} style={{ fontSize: '0.84rem', color: 'var(--text-muted)', padding: '0.375rem 0.625rem', background: 'rgba(255,255,255,0.03)', borderRadius: '0.375rem', border: '1px solid var(--border)' }}>
-                          {p}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* There was a "Suggested prompts" list here reading
+                    `profile.suggestedPrompts`. That field does not exist —
+                    not on AppProfile, not in brands.ts, nowhere in the app —
+                    so the read was `undefined.length` and this tab threw on
+                    every open. Removed rather than guarded: guarding would
+                    have left a section that can never render anything. */}
               </div>
             )}
           </div>

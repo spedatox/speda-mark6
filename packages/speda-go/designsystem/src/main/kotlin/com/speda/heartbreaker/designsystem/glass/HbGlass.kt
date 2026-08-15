@@ -40,18 +40,38 @@ import dev.chrisbanes.haze.hazeEffect
  *  (HbHaze.kt), kept separate so the core material never depends on Haze.
  *
  *  CSS reference (`:root` --glass-* tokens):
- *    fill    rgba(8,16,24,0.62)              (palette.glassFill, re-hued)
- *    tint    rgba(190,215,235,0.06)          (palette.glassTint, re-hued)
- *    border  1px --hb-edge                   (palette.edge, re-hued)
+ *    fill    rgba(7,11,17,0.42)              (palette.glassFill, re-hued)
+ *    sheen   linear-gradient(160deg,
+ *              --glass-tint, --glass-tint-2) (glassTint → glassTint2, re-hued)
+ *    border  1px --hb-edge                   (palette.edge — FIXED neutral
+ *                                             white, never re-hued)
  *    shadow  inset 0 1px 0 white .28   (top specular streak)
  *            inset 1px 0 0 white .10   (left light edge)
  *            inset 0 -1px 0 white .06  (bottom rim / slab body)
  *            inset 0 0 2px 1px white .05 (inner glass glow)
  *            0 8px 32px black .35        (soft lift off the void)
+ *
+ *  The sheen is a GRADIENT, not a flat wash: the slab is lit across its face so
+ *  it reads as a pane catching light from above-left, rather than a uniformly
+ *  tinted rectangle.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-enum class HbGlassShape { R14, R12, R9, Pill, TopOnly }
+/**
+ * The radius scale, named by what a surface IS rather than by its number —
+ * mirroring `--r-island / --r-card / --r-ctl / --r-tile` in heartbreaker.css.
+ *
+ * The stops moved with the overhaul (the deck went from a sharp-cornered
+ * instrument panel to floating glass islands), and numeric names hid that: a
+ * component asking for `R12` was asking for "whatever 12 means today", while one
+ * asking for [Ctl] keeps meaning the right thing when the stop moves again.
+ *
+ *   Island 26  standing panels — sidebar, telemetry column, the settings window
+ *   Card   22  cards inside a panel — message bubbles, charts, the composer
+ *   Ctl    16  things you press or type into — buttons, fields, header plates
+ *   Tile   14  square glyph affordances — list rows, marks, rail tiles
+ */
+enum class HbGlassShape { Island, Card, Ctl, Tile, Pill, CardTop }
 
 /** Thin state layers on the single material (`.glass-*` modifiers). */
 sealed interface HbGlassState {
@@ -70,11 +90,12 @@ sealed interface HbGlassState {
 }
 
 fun HbGlassShape.toShape(): Shape = when (this) {
-    HbGlassShape.R14 -> RoundedCornerShape(14.dp)
-    HbGlassShape.R12 -> RoundedCornerShape(12.dp)
-    HbGlassShape.R9 -> RoundedCornerShape(9.dp)
+    HbGlassShape.Island -> RoundedCornerShape(26.dp)
+    HbGlassShape.Card -> RoundedCornerShape(22.dp)
+    HbGlassShape.Ctl -> RoundedCornerShape(16.dp)
+    HbGlassShape.Tile -> RoundedCornerShape(14.dp)
     HbGlassShape.Pill -> RoundedCornerShape(percent = 50)
-    HbGlassShape.TopOnly -> RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
+    HbGlassShape.CardTop -> RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
 }
 
 // Fixed white light-stack alphas — meaning-independent, not re-hued.
@@ -94,11 +115,11 @@ private object GlassLight {
 /**
  * Apply the unified glass material.
  *
- * @param shape corner-radius variant (default R14, the unified `--glass-r`).
+ * @param shape corner-radius variant (default [HbGlassShape.Card], `--r-card`).
  * @param state thin modifier layer on the single material.
  */
 fun Modifier.hbGlass(
-    shape: HbGlassShape = HbGlassShape.R14,
+    shape: HbGlassShape = HbGlassShape.Card,
     state: HbGlassState = HbGlassState.Default,
 ): Modifier = composed {
     val palette = LocalHbPalette.current
@@ -108,7 +129,7 @@ fun Modifier.hbGlass(
 /** Palette-explicit form for previews / static composition (no CompositionLocal). */
 fun Modifier.hbGlass(
     palette: HbPalette,
-    shape: HbGlassShape = HbGlassShape.R14,
+    shape: HbGlassShape = HbGlassShape.Card,
     state: HbGlassState = HbGlassState.Default,
 ): Modifier = hbGlassInternal(palette, shape, state, null)
 
@@ -130,6 +151,11 @@ private fun Modifier.hbGlassInternal(
         is HbGlassState.Tint -> state.color.copy(alpha = 0.16f)
         else -> palette.glassTint
     }
+    // The resting material's sheen runs tint → tint2 across the face. A state
+    // layer (amber, brand tint) is a deliberate flat wash and keeps one colour:
+    // it is saying "this surface is in a state", which a gradient would soften
+    // into decoration.
+    val tint2: Color = if (state is HbGlassState.Default) palette.glassTint2 else tint
     val border: Color = when (state) {
         is HbGlassState.Active -> palette.edgeBright
         is HbGlassState.Amber -> Color(red = 217, green = 156, blue = 68).copy(alpha = 0.45f)
@@ -156,13 +182,27 @@ private fun Modifier.hbGlassInternal(
                 Modifier.hazeEffect(state = haze) {
                     blurRadius = BLUR_RADIUS
                     backgroundColor = palette.void
+                    // Haze tints are flat colours — it has no gradient stop — so
+                    // the lit-across-the-face sheen is only in the fallback path
+                    // below. Over a real blurred backdrop the difference is not
+                    // visible anyway: the backdrop's own variation dominates.
                     tints = listOf(HazeTint(fill), HazeTint(tint))
                     noiseFactor = 0f
                 }
             } else {
                 Modifier.drawBehind {
                     drawRect(color = fill)
-                    drawRect(color = tint)
+                    // CSS `linear-gradient(160deg, tint, tint2)`. A CSS angle of
+                    // 0° points up and turns clockwise, so the gradient line for
+                    // θ is (sin θ, -cos θ) in y-up space — (0.342, 0.940) here,
+                    // i.e. mostly downward with a rightward lean.
+                    drawRect(
+                        brush = Brush.linearGradient(
+                            colors = listOf(tint, tint2),
+                            start = Offset.Zero,
+                            end = Offset(size.width * 0.342f, size.height * 0.940f),
+                        ),
+                    )
                 }
             },
         )
@@ -203,9 +243,10 @@ private fun Modifier.hbGlassInternal(
 /** First-corner radius in px for [shape]; Pill resolves to half the min side at draw time. */
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.firstCornerRadiusPx(shape: HbGlassShape): Float =
     when (shape) {
-        HbGlassShape.R14, HbGlassShape.TopOnly -> 14.dp.toPx()
-        HbGlassShape.R12 -> 12.dp.toPx()
-        HbGlassShape.R9 -> 9.dp.toPx()
+        HbGlassShape.Island -> 26.dp.toPx()
+        HbGlassShape.Card, HbGlassShape.CardTop -> 22.dp.toPx()
+        HbGlassShape.Ctl -> 16.dp.toPx()
+        HbGlassShape.Tile -> 14.dp.toPx()
         HbGlassShape.Pill -> minOf(size.width, size.height) / 2f
     }
 

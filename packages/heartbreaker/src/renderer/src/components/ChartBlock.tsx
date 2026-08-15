@@ -1,16 +1,18 @@
 /**
- * ChartBlock — Stark FUI chart renderer
+ * ChartBlock — the deck's chart renderer
  *
  * Triggered by ```chart code blocks in markdown.
- * SPEDA emits JSON matching ChartSpec. Rendered with Recharts, styled to the
- * Iron Man 2 / Jayse Hansen holographic UI palette.
+ * SPEDA emits JSON matching ChartSpec. Rendered with Recharts on the deck's
+ * glass plate: one card, a Condensed title with the unit as a right-hand
+ * caption, a single hairline baseline, and columns lit from the cap down.
  *
  * ── Spec format ────────────────────────────────────────────────────────────
  *
  * Line / Area / Bar:
  * {
  *   "type": "line" | "area" | "bar",
- *   "title": "PANEL_TITLE",           // optional, underscore splits style
+ *   "title": "Average delay",         // optional; "TITLE_SUB" still splits
+ *   "subtitle": "days · 3 carriers",  // optional right-hand caption
  *   "xKey": "month",                  // which data field is the X axis
  *   "series": [
  *     { "key": "revenue", "label": "REVENUE", "color": "var(--hb-cyan)" }
@@ -49,12 +51,16 @@ import {
 } from 'recharts'
 
 /* ── Palette ──────────────────────────────────────────────────────────────── */
-const PALETTE = ['var(--hb-cyan)', '#d39a3a', '#4fa377', 'var(--hb-cyan-bright)', '#c84a3a', '#9b72cf', 'var(--hb-text-dim)']
-const GRID    = 'rgba(var(--hb-accent-rgb),0.10)'
-const AXIS_C  = 'rgba(var(--hb-accent-rgb),0.30)'
+const PALETTE = ['var(--hb-cyan)', '#e8b96c', '#5cc98f', 'var(--hb-cyan-bright)', '#e5897c', '#b8a3e8', 'var(--hb-text-dim)']
+
+/* The deck's chart is a plate, not a plotter readout: one hairline baseline
+   under the data and nothing else. The old 10px monospace tick on a lit-accent
+   axis drew a grid the eye had to look past to read the numbers. */
+const GRID    = 'rgba(255,255,255,0.06)'
+const AXIS_C  = 'rgba(255,255,255,0.10)'
 const TICK    = {
-  fontFamily: "var(--font-mono)",
-  fontSize: 10,
+  fontFamily: 'var(--font-read)',
+  fontSize: 13,
   fill: 'var(--hb-text-faint)',
 }
 
@@ -62,26 +68,19 @@ const TICK    = {
 const xAxisProps = {
   stroke: AXIS_C,
   tick: TICK,
-  tickLine: { stroke: AXIS_C },
+  tickLine: false as const,
   axisLine: { stroke: AXIS_C },
+  tickMargin: 8,
 }
 const yAxisProps = {
   stroke: AXIS_C,
   tick: TICK,
   tickLine: false as const,
   axisLine: false as const,
-  width: 44,
+  width: 46,
 }
 
 /* ── Utility ──────────────────────────────────────────────────────────────── */
-function hexToRgb(hex: string): string {
-  const c = hex.replace('#', '')
-  const r = parseInt(c.slice(0, 2), 16)
-  const g = parseInt(c.slice(2, 4), 16)
-  const b = parseInt(c.slice(4, 6), 16)
-  return `${r},${g},${b}`
-}
-
 function resolveColor(s: Series, idx: number): string {
   return s.color ?? PALETTE[idx % PALETTE.length]
 }
@@ -91,27 +90,29 @@ function resolveColor(s: Series, idx: number): string {
 function StarkTooltip({ active, payload, label, unit }: any) {
   if (!active || !payload?.length) return null
   return (
-    <div className="hb-glass-xs" style={{
-      background: 'rgba(6,14,22,0.85)',
+    <div className="hb-tile" style={{
+      background: 'var(--glass-menu)',
       backdropFilter: 'var(--hb-holo-blur)',
       WebkitBackdropFilter: 'var(--hb-holo-blur)',
-      boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
-      border: '1px solid rgba(var(--hb-accent-rgb),0.5)',
-      padding: '0.35rem 0.6rem',
-      fontFamily: "var(--font-mono)",
-      fontSize: '0.69rem',
-      letterSpacing: '0.05em',
+      boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.16), 0 12px 30px rgba(0,0,0,0.4)',
+      border: '1px solid rgba(255,255,255,0.12)',
+      padding: '8px 12px',
+      fontFamily: 'var(--font-read)',
+      fontSize: '0.8125rem',
       pointerEvents: 'none',
     }}>
       {label != null && (
-        <div style={{ color: 'var(--hb-text-faint)', marginBottom: '0.2rem', textTransform: 'uppercase' }}>
+        <div style={{ color: 'var(--hb-text-faint)', marginBottom: 3 }}>
           {String(label)}
         </div>
       )}
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
       {payload.map((p: any, i: number) => (
-        <div key={i} style={{ color: p.color ?? 'var(--hb-cyan-bright)' }}>
-          {p.name ? `${String(p.name).toUpperCase()}  ` : ''}{p.value}{unit ?? ''}
+        <div key={i} style={{
+          color: p.color ?? 'var(--hb-cyan-bright)',
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {p.name ? `${String(p.name)}  ` : ''}{p.value}{unit ?? ''}
         </div>
       ))}
     </div>
@@ -124,62 +125,76 @@ function StarkLegend({ payload }: any) {
   if (!payload?.length || payload.length < 2) return null
   return (
     <div style={{
-      display: 'flex', gap: '1.1rem', justifyContent: 'center',
-      paddingTop: '0.35rem',
-      fontFamily: "var(--font-mono)",
-      fontSize: '0.62rem', letterSpacing: '0.1em', color: 'var(--hb-text-faint)',
+      display: 'flex', gap: 18, justifyContent: 'center', flexWrap: 'wrap',
+      paddingTop: 10,
+      fontFamily: 'var(--font-read)',
+      fontSize: '0.8125rem', color: 'var(--hb-text-dim)',
     }}>
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
       {payload.map((e: any, i: number) => (
-        <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-          <span style={{ display: 'inline-block', width: 16, height: 1.5, background: e.color }} />
-          {String(e.value).toUpperCase()}
+        <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span className="hb-round" style={{
+            display: 'inline-block', width: 8, height: 8, background: e.color,
+          }} />
+          {String(e.value)}
         </span>
       ))}
     </div>
   )
 }
 
-/* ── Panel shell ──────────────────────────────────────────────────────────── */
-function ChartPanel({ title, children }: { title?: string; children: React.ReactNode }) {
+/* ── Panel shell ──────────────────────────────────────────────────────────────
+   The reference chart is a PLATE: one glass card, the title sitting inside its
+   own padding with the unit as a quiet caption on the right, and the data
+   directly beneath. The old accent header bar with 0.2em tracking belonged to
+   the instrument-panel language and made every chart announce itself twice —
+   once as a labelled rack unit, once as a chart.
+
+   `TITLE_SUB` still splits, but the sub half now reads as that right-hand
+   caption rather than accent text glued onto the title. A `subtitle` on the
+   spec says the same thing without the underscore trick. */
+function ChartPanel({ title, subtitle, children }: {
+  title?: string
+  subtitle?: string
+  children: React.ReactNode
+}) {
   const idx  = title ? title.indexOf('_') : -1
   const main = idx > -1 ? title!.slice(0, idx) : title
-  const sub  = idx > -1 ? title!.slice(idx)    : ''
+  const cap  = subtitle ?? (idx > -1 ? title!.slice(idx + 1).replace(/_/g, ' ') : '')
 
   return (
-    <div className="hb-glass-sm hb-widget" style={{
+    <div className="hb-glass hb-widget" style={{
       position: 'relative',
-      background: 'rgba(6, 14, 22, 0.55)',
-      backdropFilter: 'var(--hb-holo-blur)',
-      WebkitBackdropFilter: 'var(--hb-holo-blur)',
-      border: '1px solid var(--hb-edge)',
-      boxShadow: 'var(--hb-holo-shadow)',
       margin: '0.75rem 0',
+      padding: '20px 22px 14px',
       overflow: 'hidden',
       animation: 'widgetEntrance 0.35s ease both',
     }}>
-      {/* panel header — frosted accent glass */}
       {title && (
         <div style={{
-          display: 'flex', alignItems: 'center',
-          height: 28, padding: '0 0.75rem',
-          background: 'rgba(var(--hb-accent-rgb),0.1)',
-          boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
-          borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.22)',
-          fontFamily: "'Rajdhani', sans-serif",
-          fontSize: '0.82rem', fontWeight: 700,
-          letterSpacing: '0.2em', textTransform: 'uppercase',
-          userSelect: 'none',
-          position: 'relative',
+          display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+          gap: 14, marginBottom: 16, userSelect: 'none',
         }}>
-          <span style={{ color: '#ffffff' }}>{main}</span>
-          {sub && <span style={{ color: 'var(--hb-cyan)' }}>{sub}</span>}
+          <span style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '1.125rem', fontWeight: 700,
+            letterSpacing: '0.08em', textTransform: 'uppercase',
+            color: 'var(--hb-text)',
+          }}>
+            {main}
+          </span>
+          {cap && (
+            <span style={{
+              fontFamily: 'var(--font-read)', fontSize: '0.8125rem',
+              color: 'var(--hb-text-faint)', textAlign: 'right',
+            }}>
+              {cap}
+            </span>
+          )}
         </div>
       )}
 
-      <div style={{ padding: '0.75rem 0.25rem 0.5rem 0' }}>
-        {children}
-      </div>
+      {children}
     </div>
   )
 }
@@ -195,6 +210,8 @@ interface Series {
 interface ChartSpec {
   type:     'line' | 'bar' | 'area' | 'pie'
   title?:   string
+  /** Right-hand caption under the title — units, basis, sample size. */
+  subtitle?: string
   xKey?:    string
   series?:  Series[]
   data:     Record<string, string | number>[]
@@ -279,21 +296,34 @@ function StarkBarChart({ spec }: { spec: ChartSpec }) {
   const tip = (p: any) => <StarkTooltip {...p} unit={unit} />
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 6, right: 16, bottom: 0, left: 0 }} barCategoryGap="32%">
+      <BarChart data={data} margin={{ top: 6, right: 16, bottom: 0, left: 0 }} barCategoryGap="30%">
+        {/* A column in the reference deck is a lit slab: bright at the cap,
+            fading toward the baseline. A flat 52% fill with a 1px stroke read
+            as a bar CHART; this reads as the data standing up. */}
+        <defs>
+          {series.map((s, i) => {
+            const c = resolveColor(s, i)
+            return (
+              <linearGradient key={s.key} id={`bg-${s.key}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor={c} stopOpacity={0.85} />
+                <stop offset="100%" stopColor={c} stopOpacity={0.18} />
+              </linearGradient>
+            )
+          })}
+        </defs>
         <CartesianGrid stroke={GRID} vertical={false} />
         <XAxis dataKey={xKey} {...xAxisProps} />
         <YAxis domain={yDomain ?? [0, 'auto']} {...yAxisProps} />
-        <Tooltip content={tip} cursor={{ fill: 'rgba(var(--hb-accent-rgb),0.05)' }} />
+        <Tooltip content={tip} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
         <Legend content={StarkLegend} />
-        {series.map((s, i) => {
-          const c = resolveColor(s, i)
-          return (
-            <Bar key={s.key} dataKey={s.key} name={s.label ?? s.key}
-              fill={`rgba(${hexToRgb(c)},0.52)`} stroke={c} strokeWidth={1}
-              isAnimationActive={false}
-            />
-          )
-        })}
+        {series.map(s => (
+          <Bar key={s.key} dataKey={s.key} name={s.label ?? s.key}
+            fill={`url(#bg-${s.key})`}
+            radius={[10, 10, 0, 0]}
+            maxBarSize={64}
+            isAnimationActive={false}
+          />
+        ))}
       </BarChart>
     </ResponsiveContainer>
   )
@@ -311,9 +341,9 @@ function PieLabel({ cx, cy, midAngle, outerRadius, name, percent }: any) {
       x={x} y={y}
       textAnchor={x > cx ? 'start' : 'end'}
       dominantBaseline="central"
-      style={{ fontFamily: "var(--font-mono)", fontSize: 10, fill: 'var(--hb-text-dim)', letterSpacing: '0.06em' }}
+      style={{ fontFamily: 'var(--font-read)', fontSize: 13, fill: 'var(--hb-text-dim)' }}
     >
-      {`${String(name).toUpperCase()} ${(percent * 100).toFixed(0)}%`}
+      {`${String(name)} ${(percent * 100).toFixed(0)}%`}
     </text>
   )
 }
@@ -349,16 +379,18 @@ function StarkPieChart({ spec }: { spec: ChartSpec }) {
 /* ── Parse error block ────────────────────────────────────────────────────── */
 function ParseError({ raw }: { raw: string }) {
   return (
-    <div style={{
-      padding: '0.5rem 0.75rem',
-      background: 'rgba(200,74,58,0.09)',
-      border: '1px solid rgba(200,74,58,0.35)',
-      fontFamily: "var(--font-mono)",
-      fontSize: '0.71rem', color: '#c84a3a',
-      margin: '0.5rem 0', letterSpacing: '0.05em',
+    <div className="hb-tile" style={{
+      padding: '10px 14px',
+      background: 'rgba(216,72,60,0.09)',
+      border: '1px solid rgba(216,72,60,0.32)',
+      fontFamily: 'var(--font-read)',
+      fontSize: '0.875rem', color: '#e5897c',
+      margin: '0.5rem 0',
     }}>
-      CHART // PARSE ERROR<br />
-      <span style={{ color: 'var(--hb-text-faint)', fontSize: '0.65rem' }}>{raw.slice(0, 120)}</span>
+      Chart — could not read the spec
+      <div style={{ color: 'var(--hb-text-faint)', fontSize: '0.8125rem', marginTop: 3 }}>
+        {raw.slice(0, 120)}
+      </div>
     </div>
   )
 }
@@ -367,16 +399,19 @@ function ParseError({ raw }: { raw: string }) {
 function Materializing() {
   return (
     <ChartPanel>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.3rem 0' }}>
-        <span style={{
-          width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-          background: 'var(--hb-cyan-bright)', animation: 'skeletonPulse 1.4s ease-in-out infinite',
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 0' }}>
+        {/* The same ring every other pending thing in the deck uses. */}
+        <span className="hb-round" style={{
+          width: 14, height: 14, flexShrink: 0,
+          border: '1.5px solid rgba(var(--hb-accent-rgb),0.3)',
+          borderTopColor: 'var(--hb-cyan)',
+          animation: 'spin 0.7s linear infinite',
         }} />
         <span style={{
-          fontFamily: "var(--font-mono)", fontSize: '0.68rem',
-          letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--hb-text-faint)',
+          fontFamily: 'var(--font-read)', fontSize: '0.875rem',
+          color: 'var(--hb-text-faint)',
         }}>
-          CHART // MATERIALIZING
+          Drawing the chart…
         </span>
       </div>
     </ChartPanel>
@@ -395,7 +430,7 @@ export default function ChartBlock({ children }: { children: string }) {
   if (!spec) return looksIncomplete(children) ? <Materializing /> : <ParseError raw={children} />
 
   return (
-    <ChartPanel title={spec.title}>
+    <ChartPanel title={spec.title} subtitle={spec.subtitle}>
       {spec.type === 'line' && <StarkLineChart spec={spec} />}
       {spec.type === 'area' && <StarkAreaChart spec={spec} />}
       {spec.type === 'bar'  && <StarkBarChart  spec={spec} />}

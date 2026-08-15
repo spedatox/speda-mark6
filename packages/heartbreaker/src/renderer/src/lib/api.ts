@@ -662,6 +662,75 @@ export async function setHouseParty(config: AppConfig, engaged: boolean): Promis
   }
 }
 
+/* ── Lockdown Protocol ────────────────────────────────────────────────────── */
+
+export interface LockdownState {
+  engaged: boolean
+  enabled: boolean
+  /** What the host firewall actually shows, keyed by what each rule seals.
+   *  Reported separately from `engaged` so a drift between the flag and the
+   *  real rules is visible instead of averaged away. */
+  rules: Record<string, boolean>
+  report?: string | null
+}
+
+export async function getLockdown(config: AppConfig): Promise<LockdownState> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/lockdown`, { headers: authHeaders(config) })
+    if (!res.ok) return { engaged: false, enabled: false, rules: {} }
+    return res.json()
+  } catch {
+    // Unreachable backend is NOT proof containment is off — say nothing rather
+    // than render an all-clear the server never sent.
+    return { engaged: false, enabled: false, rules: {} }
+  }
+}
+
+/** Stand containment down. Never takes a passphrase: the way out must always be
+ *  available, or a lockdown could outlive the owner's ability to lift it. */
+export async function standDownLockdown(
+  config: AppConfig,
+): Promise<{ ok: boolean; error?: string; report?: string }> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/lockdown`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ engaged: false }),
+    })
+    if (!res.ok) return { ok: false, error: `Stand down failed (HTTP ${res.status}).` }
+    const body = await res.json()
+    return { ok: true, report: body.report }
+  } catch {
+    return { ok: false, error: "Couldn't reach the backend to stand down." }
+  }
+}
+
+/** Engage containment with the owner's authorization passphrase (the same secret
+ *  House Party uses). A 409 means the server refused to seal — the protocol is
+ *  NOT active, so the caller must not render it as such. */
+export async function engageLockdown(
+  config: AppConfig,
+  passphrase: string,
+): Promise<{ ok: boolean; error?: string; report?: string }> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/lockdown`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ engaged: true, passphrase }),
+    })
+    if (res.status === 403) return { ok: false, error: 'Authorization denied — incorrect passphrase.' }
+    if (res.status === 409) {
+      const body = await res.json().catch(() => ({}))
+      return { ok: false, error: body.detail || 'Containment failed — the host was NOT sealed.' }
+    }
+    if (!res.ok) return { ok: false, error: `Engage failed (HTTP ${res.status}).` }
+    const body = await res.json()
+    return { ok: !!body.engaged, report: body.report }
+  } catch {
+    return { ok: false, error: "Couldn't reach the backend to engage." }
+  }
+}
+
 /** Engage the House Party Protocol with the owner's authorization passphrase.
  *  The passphrase is validated server-side (never stored in chat). Returns
  *  {ok:false, error} on a wrong passphrase (403) or a network failure. */

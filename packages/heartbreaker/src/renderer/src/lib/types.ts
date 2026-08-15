@@ -167,8 +167,12 @@ export interface PendingAsk {
 }
 
 export interface SSEEvent {
+  // `subagent` — a coding peer took part of the turn; ChatMain routes it to the
+  // subagent panel, and switched on it before the union admitted it existed.
+  // `lockdown_auth` — the backend is asking the owner to authorize the Lockdown
+  // Protocol; Layout opens the authorization modal on it.
   type: 'start' | 'chunk' | 'tool' | 'tool_result' | 'file' | 'done' | 'error'
-      | 'permission_request' | 'house_party_auth' | 'subagent'
+      | 'subagent' | 'permission_request' | 'house_party_auth' | 'lockdown_auth'
   data: unknown
   session_id: number
   request_id: string

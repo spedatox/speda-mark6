@@ -3,6 +3,7 @@ import { getConfig, saveConfig, getMemorySources, setMemorySource } from '../lib
 import type { AppConfig } from '../lib/types'
 import type { ConfigFieldInfo, ConfigGroupInfo, ConfigSaveResult, MemorySources } from '../lib/api'
 import GlassSelect from './GlassSelect'
+import { Switch } from './settingsUI'
 
 /**
  * ConfigTab — the full backend configuration surface: every API key, token,
@@ -123,9 +124,10 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
                 </span>
               </span>
               {groupDirty > 0 && (
-                <span style={{
-                  flexShrink: 0, fontSize: '0.6rem', fontFamily: MONO, color: 'var(--hb-amber)',
-                  border: '1px solid rgba(242,183,92,0.5)', padding: '1px 5px',
+                <span className="glass-round" style={{
+                  flexShrink: 0, fontSize: '0.78rem', color: 'var(--hb-amber-bright)',
+                  background: 'rgba(217,156,68,0.1)',
+                  border: '1px solid rgba(217,156,68,0.32)', padding: '2px 10px',
                 }}>
                   {groupDirty} edited
                 </span>
@@ -213,29 +215,39 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
 }) {
   const labelRow = (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.3rem' }}>
-      <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{f.label}</label>
+      <label style={{ fontSize: '0.9375rem', color: 'var(--hb-text)' }}>{f.label}</label>
       {f.requires_restart && (
-        <span title="Takes effect after a backend restart" style={{ fontSize: '0.58rem', fontFamily: MONO, color: 'var(--hb-amber)', letterSpacing: '0.06em' }}>
-          RESTART
+        <span
+          title="Takes effect after a backend restart"
+          className="glass-round"
+          style={{
+            fontSize: '0.72rem', color: 'var(--hb-amber-bright)',
+            background: 'rgba(217,156,68,0.1)', border: '1px solid rgba(217,156,68,0.28)',
+            padding: '1px 9px',
+          }}
+        >
+          restart
         </span>
       )}
-      {dirty && <span style={{ fontSize: '0.58rem', fontFamily: MONO, color: 'var(--hb-cyan-bright)' }}>● edited</span>}
+      {dirty && <span style={{ fontSize: '0.78rem', color: 'var(--hb-cyan-bright)' }}>● edited</span>}
       <span style={{ flex: 1 }} />
       {dirty && (
         <button onClick={onReset} title="Revert this field"
-          style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.68rem', fontFamily: MONO }}>
+          style={{ border: 'none', background: 'transparent', color: 'var(--hb-text-faint)', cursor: 'pointer', fontSize: '0.8125rem' }}>
           revert
         </button>
       )}
     </div>
   )
 
+  // Same 44px field the rest of the settings pane uses; the corner comes from
+  // the `.hb-settings` scope, which outranks the theme's blanket reset.
   const inputStyle: React.CSSProperties = {
-    width: '100%', background: 'var(--glass-fill)',
-    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35)',
-    border: `1px solid ${dirty ? 'rgba(var(--hb-cyan-bright-rgb),0.5)' : 'var(--hb-edge)'}`,
-    padding: '0.5rem 0.65rem', color: 'var(--text-primary)',
-    fontSize: '0.84rem', fontFamily: f.secret ? MONO : 'inherit',
+    width: '100%', height: 44,
+    background: 'rgba(255,255,255,0.03)',
+    border: `1px solid ${dirty ? 'rgba(var(--hb-accent-rgb),0.45)' : 'rgba(255,255,255,0.09)'}`,
+    padding: '0 16px', color: 'var(--hb-text)',
+    fontSize: '0.9375rem', fontFamily: f.secret ? MONO : 'var(--font-read)',
     outline: 'none', transition: 'border-color 0.15s',
   }
 
@@ -243,22 +255,8 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
 
   if (f.type === 'bool') {
     const current = dirty ? Boolean(edit) : Boolean(f.value)
-    control = (
-      <button
-        onClick={() => onChange(!current)}
-        title={current ? 'On — click to turn off' : 'Off — click to turn on'}
-        style={{
-          width: 42, height: 24, borderRadius: 999, border: 'none', position: 'relative', cursor: 'pointer',
-          background: current ? 'rgba(var(--hb-accent-rgb),0.55)' : 'rgba(var(--hb-accent-rgb),0.2)',
-          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.3)',
-        }}
-      >
-        <span style={{
-          position: 'absolute', top: 3, left: current ? 21 : 3, width: 18, height: 18, borderRadius: '50%',
-          background: 'rgba(255,255,255,0.85)', boxShadow: '0 1px 3px rgba(0,0,0,0.45)', transition: 'left 0.15s',
-        }} />
-      </button>
-    )
+    control = <Switch on={current} onChange={onChange}
+      title={current ? 'On — click to turn off' : 'Off — click to turn on'} />
   } else if (f.type === 'select') {
     const current = String(dirty ? edit : (f.value ?? f.options[0] ?? ''))
     control = (
@@ -285,8 +283,13 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
           autoComplete="off"
           spellCheck={false}
         />
-        <button onClick={onReveal} className="hb-btn" title={revealed ? 'Hide' : 'Show what you typed'}
-          style={{ padding: '0 0.6rem', fontSize: '0.72rem', flexShrink: 0 }}>
+        <button onClick={onReveal} className="hb-tile" title={revealed ? 'Hide' : 'Show what you typed'}
+          style={{
+            padding: '0 14px', height: 44, flexShrink: 0, cursor: 'pointer',
+            fontFamily: 'var(--font-read)', fontSize: '0.845rem',
+            border: '1px solid rgba(255,255,255,0.09)',
+            background: 'rgba(255,255,255,0.03)', color: 'var(--hb-text-dim)',
+          }}>
           {revealed ? 'Hide' : 'Show'}
         </button>
       </div>
@@ -310,11 +313,11 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
       {labelRow}
       {control}
       {f.help && (
-        <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.3rem 0 0', lineHeight: 1.45 }}>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', margin: '6px 0 0', lineHeight: 1.5 }}>
           {f.help}
           {f.secret && f.is_set && !dirty && (
             <button onClick={() => onChange('')} title="Clear this stored secret"
-              style={{ marginLeft: '0.5rem', border: 'none', background: 'transparent', color: 'var(--hb-red)', cursor: 'pointer', fontSize: '0.7rem', fontFamily: MONO }}>
+              style={{ marginLeft: 8, border: 'none', background: 'transparent', color: '#e5897c', cursor: 'pointer', fontSize: '0.8125rem' }}>
               clear stored
             </button>
           )}
@@ -370,8 +373,8 @@ function SourceOfTruthPanel({ config }: { config: AppConfig }) {
           return (
             <div key={a.agent_id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <div style={{ width: 130, flexShrink: 0 }}>
-                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{a.name}</div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontFamily: MONO }}>
+                <div style={{ fontSize: '0.9375rem', color: 'var(--hb-text)' }}>{a.name}</div>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>
                   {a.source ? fileName(a.source) : '—'}
                 </div>
               </div>

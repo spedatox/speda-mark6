@@ -62,7 +62,7 @@ fun FileCard(
         modifier
             .widthIn(max = 420.dp)
             .padding(top = 10.dp)
-            .hbGlass(shape = HbGlassShape.R12)
+            .hbGlass(shape = HbGlassShape.Ctl)
             .padding(horizontal = 11.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp),
