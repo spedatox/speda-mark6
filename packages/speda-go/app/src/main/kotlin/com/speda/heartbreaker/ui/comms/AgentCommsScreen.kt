@@ -1,7 +1,14 @@
 package com.speda.heartbreaker.ui.comms
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +28,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -31,7 +39,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -48,10 +58,12 @@ import com.speda.heartbreaker.designsystem.brand.Finish
 import com.speda.heartbreaker.designsystem.glass.HbGlassShape
 import com.speda.heartbreaker.designsystem.glass.HbGlassState
 import com.speda.heartbreaker.designsystem.glass.hbGlass
+import com.speda.heartbreaker.designsystem.glass.toShape
 import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.domain.CommTranscript
 import com.speda.heartbreaker.ui.HbText
 import com.speda.heartbreaker.ui.prose.ProseText
 import kotlinx.coroutines.delay
@@ -126,7 +138,7 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
                     .fillMaxWidth()
                     .heightIn(max = if (wide) maxH * 0.82f else 300.dp)
                     .animateContentSize()
-                    .hbGlass(shape = HbGlassShape.TopOnly, state = HbGlassState.Menu)
+                    .hbGlass(shape = HbGlassShape.CardTop, state = HbGlassState.Menu)
                     .navigationBarsPadding(),
             ) {
                 // ── Header ───────────────────────────────────────────────────
@@ -185,19 +197,25 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
                 // ── Feed ─────────────────────────────────────────────────────
                 if (entries.isEmpty()) {
                     HbText(
-                        if (loaded) "// NO TRAFFIC — DISPATCHES BETWEEN AGENTS WILL APPEAR HERE" else "// LINKING…",
-                        style = HbType.readout.copy(fontSize = 10.sp),
+                        if (loaded) "No traffic yet — dispatches between agents appear here." else "Linking…",
+                        style = HbType.read.copy(fontSize = 14.sp),
                         color = palette.textFaint,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     )
                 } else {
+                    // One timeline, every agent speaking for itself — the same
+                    // transcript the war room and the desktop tray render.
+                    val rows = remember(entries) { CommTranscript.rows(entries) }
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        items(entries, key = { it.id }) { e -> CommBubble(e, compact = !wide) }
+                        items(rows, key = { it.msg.key }) { row ->
+                            if (row.chip) TimeChip(row.msg.at)
+                            CommLine(row.msg, head = row.head, compact = !wide)
+                        }
                     }
                 }
             }
@@ -205,85 +223,167 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
     }
 }
 
+/** The clock that marks a pause in the room. */
 @Composable
-private fun CommBubble(e: AgentCommEntry, compact: Boolean) {
+private fun TimeChip(at: Long) {
+    val palette = LocalHbPalette.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.Center) {
+        Box(
+            Modifier
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.03f))
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+        ) {
+            HbText(
+                CLOCK_SHORT.format(Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault())),
+                style = HbType.readout.copy(fontSize = 11.sp),
+                color = palette.textFaint,
+            )
+        }
+    }
+}
+
+/**
+ * One participant's line: mark, name, bubble.
+ *
+ * `head = false` continues the same agent's run — the mark and the name drop
+ * away and the tail squares off, so a burst from one agent reads as one turn of
+ * speech rather than three separate announcements.
+ */
+@Composable
+private fun CommLine(m: CommTranscript.Msg, head: Boolean, compact: Boolean) {
     val palette = LocalHbPalette.current
     val clipboard = LocalClipboardManager.current
     var open by remember { mutableStateOf(false) }
 
-    val from = hexColor(Brands.agentColor(e.fromAgent))
-    val to = hexColor(Brands.agentColor(e.toAgent))
-    val failed = e.status in setOf("error", "timeout", "offline")
-    val clip = if (compact) 200 else 420
-    val result = e.result.orEmpty()
-    val clipped = e.task.length > clip || result.length > clip
-    val showTask = if (open || e.task.length <= clip) e.task else e.task.take(clip) + "…"
-    val showResult = if (open || result.length <= clip) result else result.take(clip) + "…"
+    val c = hexColor(Brands.agentColor(m.agent))
+    val tile = if (compact) 28.dp else 34.dp
+    val clip = if (compact) 260 else 520
+    val clipped = m.text.length > clip
+    val body = if (open || !clipped) m.text else m.text.take(clip) + "…"
 
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Avatar(id = e.fromAgent, color = from, size = if (compact) 22.dp else 26.dp)
-        Column(
-            Modifier
-                .weight(1f)
-                .hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Tint(from))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-        ) {
-            // meta line: SPEDA ▸ SENTINEL · 06:13:42 · HP · copy/expand controls
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                HbText(e.fromAgent.uppercase(Locale.ENGLISH), style = HbType.readout.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold), color = from)
-                HbText("▸", style = HbType.readout.copy(fontSize = 9.sp), color = palette.iconDim)
-                HbText(e.toAgent.uppercase(Locale.ENGLISH), style = HbType.readout.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold), color = to)
-                HbText(fmtCommTime(e.createdAt), style = HbType.readout.copy(fontSize = 9.sp), color = palette.textFaint)
-                if (e.protocol == "house_party") HbText("HP", style = HbType.readout.copy(fontSize = 9.sp), color = palette.amber)
-                if (e.kind == "broadcast") HbText("BROADCAST", style = HbType.readout.copy(fontSize = 9.sp), color = palette.amber)
-                Spacer(Modifier.weight(1f))
-                Box(
-                    Modifier.clickable {
-                        val full = if (result.isNotEmpty()) "${e.task}\n\n--- ${e.toAgent.uppercase(Locale.ENGLISH)} ---\n$result" else e.task
-                        clipboard.setText(AnnotatedString(full))
-                    },
-                ) { HbGlyphs.Copy(palette.iconDim, size = 11.dp) }
-                if (clipped) {
+    // The tail marks who started speaking; a continuation squares off.
+    val bubbleShape = if (head) {
+        RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 5.dp)
+    } else {
+        RoundedCornerShape(16.dp)
+    }
+    // An order going out carries the speaker's colour; work coming back is neutral.
+    val bg = if (m.outbound) c.copy(alpha = 0.09f) else Color.White.copy(alpha = 0.03f)
+    val rim = if (m.outbound) c.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.06f)
+
+    Row(
+        Modifier.fillMaxWidth().padding(top = if (head) 8.dp else 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        if (head) {
+            Box(
+                Modifier
+                    .size(tile)
+                    .clip(HbGlassShape.Tile.toShape())
+                    .background(c.copy(alpha = 0.16f))
+                    .border(1.dp, c.copy(alpha = 0.34f), HbGlassShape.Tile.toShape()),
+                contentAlignment = Alignment.Center,
+            ) {
+                Avatar(id = m.agent, color = c, size = tile * 0.61f)
+            }
+        } else {
+            Spacer(Modifier.size(tile))
+        }
+
+        Column(Modifier.weight(1f)) {
+            if (head) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     HbText(
-                        if (open) "LESS_" else "MORE_",
-                        style = HbType.readout.copy(fontSize = 8.5.sp),
-                        color = if (open) palette.amber else palette.icon,
-                        modifier = Modifier.clickable { open = !open },
+                        m.agent.replaceFirstChar { it.uppercase() },
+                        style = HbType.read.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+                        color = c,
                     )
+                    if (m.party) HbText("HP", style = HbType.readout.copy(fontSize = 10.sp), color = palette.amber)
+                    if (m.broadcast) HbText("ALL HANDS", style = HbType.readout.copy(fontSize = 10.sp), color = palette.amber)
                 }
+                Spacer(Modifier.height(4.dp))
             }
 
-            Spacer(Modifier.height(4.dp))
-            ProseText(showTask, modifier = Modifier.fillMaxWidth())
-
-            // the reply, nested — the target agent answering in the thread
-            if (e.status == "running") {
-                HbText(
-                    "${e.toAgent.uppercase(Locale.ENGLISH)} WORKING… " + elapsedLabel(e.createdAt),
-                    style = HbType.readout.copy(fontSize = 9.5.sp),
-                    color = palette.amber,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            } else if (result.isNotEmpty()) {
-                Column(
-                    Modifier
-                        .padding(top = 6.dp)
-                        .background(if (failed) palette.red.copy(alpha = 0.06f) else Color.Transparent)
-                        .padding(start = 8.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        HbText(e.toAgent.uppercase(Locale.ENGLISH), style = HbType.readout.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold), color = to)
-                        if (failed) HbText(e.status.uppercase(Locale.ENGLISH), style = HbType.readout.copy(fontSize = 9.sp), color = palette.red)
-                        e.durationMs?.let { HbText("${it / 1000.0}s", style = HbType.readout.copy(fontSize = 9.sp), color = palette.textFaint) }
+            Column(
+                Modifier
+                    .clip(bubbleShape)
+                    .background(bg)
+                    .border(1.dp, rim, bubbleShape)
+                    .padding(horizontal = 13.dp, vertical = 9.dp),
+            ) {
+                when {
+                    m.running -> Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    ) {
+                        WorkingRing(c)
+                        HbText(
+                            "working… " + elapsedLabel(m.since.orEmpty()),
+                            style = HbType.read.copy(fontSize = 14.sp),
+                            color = palette.textDim,
+                        )
                     }
-                    if (failed) {
-                        HbText(showResult, style = HbType.read.copy(fontSize = 13.sp), color = Color(0xFFD98A7A))
-                    } else {
-                        ProseText(showResult, modifier = Modifier.fillMaxWidth())
+                    m.failed -> HbText(
+                        if (m.text.isNotEmpty() && m.text != m.status) "${m.status}: $body" else m.status.orEmpty(),
+                        style = HbType.read.copy(fontSize = 14.sp),
+                        color = Color(0xFFE5897C),
+                    )
+                    else -> ProseText(body, modifier = Modifier.fillMaxWidth())
+                }
+
+                if (!m.running) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (clipped) {
+                            HbText(
+                                if (open) "Less" else "More",
+                                style = HbType.readout.copy(fontSize = 11.sp),
+                                color = if (open) palette.accentBright else palette.textFaint,
+                                modifier = Modifier.clickable { open = !open },
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        m.durationMs?.let {
+                            HbText("${it / 1000.0}s", style = HbType.readout.copy(fontSize = 11.sp), color = palette.textFaint)
+                        }
+                        HbText(
+                            CLOCK.format(Instant.ofEpochMilli(m.at).atZone(ZoneId.systemDefault())),
+                            style = HbType.readout.copy(fontSize = 11.sp),
+                            color = palette.textFaint,
+                        )
+                        Box(Modifier.clickable { clipboard.setText(AnnotatedString(m.copyText)) }) {
+                            HbGlyphs.Copy(palette.textFaint, size = 11.dp)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+/** The ring every pending thing in the deck uses. */
+@Composable
+private fun WorkingRing(color: Color) {
+    val spin = rememberInfiniteTransition(label = "working")
+    val angle by spin.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(700, easing = LinearEasing)),
+        label = "angle",
+    )
+    Canvas(Modifier.size(13.dp)) {
+        val stroke = 1.5.dp.toPx()
+        drawArc(
+            color = color.copy(alpha = 0.30f),
+            startAngle = 0f, sweepAngle = 360f, useCenter = false,
+            style = Stroke(width = stroke),
+        )
+        drawArc(
+            color = color,
+            startAngle = angle, sweepAngle = 90f, useCenter = false,
+            style = Stroke(width = stroke),
+        )
     }
 }
 
@@ -318,13 +418,14 @@ private fun elapsedLabel(since: String): String {
 
 private val CLOCK: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ENGLISH)
 
+/** The pause marker reads to the minute — a room's quiet stretch is not a
+ *  timestamp, it is "we picked this back up around then". */
+private val CLOCK_SHORT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH)
+
 private fun parseIsoUtc(iso: String): Instant {
     val withZone = if (iso.endsWith("Z") || iso.contains("+")) iso else "${iso}Z"
     return runCatching { Instant.parse(withZone) }.getOrElse { Instant.now() }
 }
-
-private fun fmtCommTime(iso: String): String =
-    CLOCK.format(parseIsoUtc(iso).atZone(ZoneId.systemDefault()))
 
 private fun hexColor(hex: String): Color =
     runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(Color(0xFF5D7F8A))

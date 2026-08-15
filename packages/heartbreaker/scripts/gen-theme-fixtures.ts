@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url'
 import { buildThemeVars, deriveAccents } from '../src/renderer/src/profile/theme.ts'
 
 const accents: Record<string, string> = {
-  speda: '#36abca',
+  speda: '#7fa4c4',
   ultron: '#8a93a6',
   centurion: '#d8483c',
   sentinel: '#d99c44',

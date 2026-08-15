@@ -144,7 +144,7 @@ fun HousePartyModal(
                 .widthIn(max = 420.dp)
                 .padding(24.dp)
                 .offset { IntOffset((sin(shake.value * 24f) * (1f - shake.value) * 9f).toInt(), 0) }
-                .hbGlass(shape = HbGlassShape.R14, state = HbGlassState.Amber)
+                .hbGlass(shape = HbGlassShape.Card, state = HbGlassState.Amber)
                 // Swallow taps: the scrim behind closes, the window must not.
                 .clickable(enabled = false) {}
                 .padding(18.dp),
@@ -207,7 +207,7 @@ fun HousePartyModal(
                             .fillMaxWidth()
                             .heightIn(min = 44.dp)
                             .hbGlass(
-                                shape = HbGlassShape.R9,
+                                shape = HbGlassShape.Tile,
                                 state = if (refused) HbGlassState.Tint(palette.red) else HbGlassState.Default,
                             )
                             .padding(horizontal = 12.dp, vertical = 11.dp),
@@ -253,7 +253,7 @@ fun HousePartyBanner(body: String, modifier: Modifier = Modifier) {
         modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
-            .hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Amber)
+            .hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Amber)
             .clickable { raise(HousePartyAsk(objective)) }
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

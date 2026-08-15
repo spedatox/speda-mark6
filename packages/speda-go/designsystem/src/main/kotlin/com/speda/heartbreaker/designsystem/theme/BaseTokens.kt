@@ -16,37 +16,61 @@ internal object BaseTokens {
 
     /** `--hb-*` hex tokens, re-hued (hue swapped, S/L preserved). */
     val BASE_HEX: Map<String, String> = linkedMapOf(
-        "--hb-void" to "#04080a",
-        "--hb-base" to "#060c0f",
-        "--hb-petrol" to "#0b1a22",
-        "--hb-steel" to "#13303b",
-        "--hb-text" to "#cadbe2",
-        "--hb-text-dim" to "#7a96a1",
-        "--hb-text-faint" to "#46626d",
-        "--bg-code" to "#08151b",
-        "--bg-code-header" to "#0a1d25",
-        "--hb-icon" to "#3a6472",
-        "--hb-icon-dim" to "#2e5260",
-        "--hb-icon-bright" to "#5d7f8a",
+        "--hb-void" to "#05070a",
+        "--hb-base" to "#080b10",
+        "--hb-petrol" to "#0e1319",
+        "--hb-steel" to "#161d26",
+        "--hb-text" to "#dbe6ec",
+        "--hb-text-dim" to "#93a6b1",
+        "--hb-text-faint" to "#5d6f7a",
+        "--bg-code" to "#0a0f15",
+        "--bg-code-header" to "#0e141b",
+        "--hb-icon" to "#7c8f9b",
+        "--hb-icon-dim" to "#5d6f7a",
+        "--hb-icon-bright" to "#93a6b1",
     )
 
-    /** rgba tokens — [base colour for hue/sat/light, alpha-as-emitted-string]. */
+    /**
+     * rgba tokens — [base colour for hue/sat/light, alpha-as-emitted-string].
+     *
+     * `--hb-edge` is deliberately NOT here. The resting panel rim is a fixed
+     * neutral white ([EDGE] below), not the brand: a pane of glass does not take
+     * the colour of what it frames, and re-hueing the rim was what turned every
+     * panel into a tinted box. The brand shows on `--hb-edge-bright`, the
+     * focused/active rim.
+     */
     val BASE_RGBA: Map<String, Pair<String, String>> = linkedMapOf(
-        "--hb-line" to ("#5fa5bc" to "0.26"),
-        "--hb-line-bright" to ("#6ec8e4" to "0.55"),
-        "--hb-edge" to ("#96cdf5" to "0.22"),
-        "--hb-edge-bright" to ("#aae1ff" to "0.55"),
-        "--bg-sidebar" to ("#081217" to "0.72"),
-        "--bg-hover" to ("#4696af" to "0.12"),
-        "--bg-input" to ("#08141a" to "0.66"),
-        "--bg-user-bubble" to ("#183844" to "0.46"),
-        "--scrollbar-thumb" to ("#468ca0" to "0.32"),
-        "--scrollbar-thumb-hover" to ("#5aafc8" to "0.55"),
-        "--glass-tint" to ("#bed7eb" to "0.06"),
-        "--glass-tint-hi" to ("#bed7eb" to "0.13"),
-        "--glass-fill" to ("#081018" to "0.62"),
-        "--glass-menu" to ("#0a141b" to "0.94"),
+        // Structural hairline stays neutral; the *bright* line is the accent one.
+        "--hb-line" to ("#dbe6ec" to "0.08"),
+        "--hb-line-bright" to ("#7fa4c4" to "0.3"),
+        "--hb-edge-bright" to ("#a9c6dc" to "0.4"),
+        "--bg-sidebar" to ("#0a0e14" to "0.55"),
+        "--bg-hover" to ("#bed7eb" to "0.06"),
+        "--bg-input" to ("#0a0e14" to "0.5"),
+        "--bg-user-bubble" to ("#7fa4c4" to "0.16"),
+        "--scrollbar-thumb" to ("#7fa4c4" to "0.28"),
+        "--scrollbar-thumb-hover" to ("#a9c6dc" to "0.55"),
+        // Unified glass material — a near-white frost with only a whisper of
+        // brand in it. Two stops so the slab can be lit across its face (160°)
+        // rather than washed flat; --glass-tint is also used alone for ghost
+        // hovers.
+        "--glass-tint" to ("#e6eef6" to "0.07"),
+        "--glass-tint-2" to ("#e6eef6" to "0.02"),
+        "--glass-tint-hi" to ("#e6eef6" to "0.12"),
+        // Dark occluding base. Kept because nested backdrop roots cancel a
+        // child's blur, but much lighter than before so the white frost above it
+        // is what the eye actually reads.
+        "--glass-fill" to ("#070b11" to "0.42"),
+        // Floating menus/dropdowns sit inside backdrop roots where their own
+        // blur is cancelled, so they need a near-opaque fill to occlude.
+        "--glass-menu" to ("#0b1016" to "0.95"),
     )
+
+    /**
+     * The resting glass rim — fixed neutral white, never re-hued.
+     * `heartbreaker.css`: `--hb-edge: rgba(255, 255, 255, 0.10)`.
+     */
+    const val EDGE = "rgba(255, 255, 255, 0.1)"
 
     /**
      * Semantic colours — meaning-bearing, NEVER re-hued (theme.ts leaves them

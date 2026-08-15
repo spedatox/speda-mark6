@@ -61,7 +61,7 @@ fun AppHeader(
         Box(
             Modifier
                 .size(width = 30.dp, height = 26.dp)
-                .hbGlass(shape = HbGlassShape.R12)
+                .hbGlass(shape = HbGlassShape.Ctl)
                 .clickable(onClick = onToggleSidebar),
             contentAlignment = Alignment.Center,
         ) { HbGlyphs.Menu(palette.iconBright) }

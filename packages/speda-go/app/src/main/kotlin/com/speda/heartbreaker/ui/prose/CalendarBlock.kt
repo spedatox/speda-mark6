@@ -87,7 +87,7 @@ fun CalendarBlock(raw: String, modifier: Modifier = Modifier) {
         )
 
         // Main holographic panel
-        Box(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.R14)) {
+        Box(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.Card)) {
             HudRing(Modifier.align(Alignment.CenterEnd))
 
             Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 13.dp, bottom = 14.dp)) {

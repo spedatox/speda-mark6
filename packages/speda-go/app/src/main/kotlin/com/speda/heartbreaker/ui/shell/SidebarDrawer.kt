@@ -329,7 +329,7 @@ fun SidebarDrawer(
             // Mobile-specific: the header can't carry WAR ROOM / COMMS / SYS and
             // a session title, so they live here — the slot the web gives Settings.
             if (footerMenuOpen) {
-                Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Menu)) {
+                Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Menu)) {
                     MenuItem("Settings", { footerMenuOpen = false; onOpenSettings() }) { HbGlyphs.Sliders(it, size = 13.dp) }
                     MenuItem("War room", { footerMenuOpen = false; onOpenWarRoom() }) { HbGlyphs.WarRoom(it, size = 13.dp) }
                     MenuItem("Comms", { footerMenuOpen = false; onToggleComms() }) { HbGlyphs.Comms(it, size = 13.dp) }
@@ -354,7 +354,7 @@ fun SidebarDrawer(
                     Box(
                         Modifier
                             .size(28.dp)
-                            .hbGlass(shape = HbGlassShape.R9),
+                            .hbGlass(shape = HbGlassShape.Tile),
                         contentAlignment = Alignment.Center,
                     ) {
                         HbText(
@@ -513,7 +513,7 @@ private fun SessionRow(
         }
 
         if (menuOpen) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp).hbGlass(shape = HbGlassShape.R9, state = HbGlassState.Menu)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp).hbGlass(shape = HbGlassShape.Tile, state = HbGlassState.Menu)) {
                 if (!confirmDelete) {
                     SessionMenuRow("Rename", palette.iconBright) {
                         menuOpen = false; draft = session.title ?: ""; editing = true
@@ -552,7 +552,7 @@ private fun AgentDropdown(current: String, onSelect: (String) -> Unit, onDismiss
         Modifier
             .padding(top = 40.dp)
             .fillMaxWidth()
-            .hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Menu),
+            .hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Menu),
     ) {
         for ((id, b) in Brands.BRANDS) {
             val active = id == current

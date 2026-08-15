@@ -27,7 +27,7 @@ object Brands {
 
     /** One entry per agent — verbatim from profile/brands.ts. */
     val BRANDS: Map<String, Brand> = linkedMapOf(
-        "speda" to Brand("speda", "SPEDA", "Mark VI", "Ahmet Erol", "Main Assistant", "S", "#36abca"),
+        "speda" to Brand("speda", "SPEDA", "Mark VI", "Ahmet Erol", "Main Assistant", "S", "#7fa4c4"),
         "ultron" to Brand("ultron", "Ultron", "Mark III", "Ahmet Erol", "Academy and Work Operations", "U", "#8a93a6"),
         "centurion" to Brand("centurion", "Centurion", "Mark I", "Ahmet Erol", "Cyber Security & Threat Intelligence", "C", "#d8483c"),
         "sentinel" to Brand("sentinel", "Sentinel", "Mark II", "Ahmet Erol", "Finance & Budget Intelligence", "S", "#d99c44"),
@@ -60,7 +60,7 @@ object Brands {
     /** Comms-UI accent per agent (lib/agents.ts AGENT_COLORS). Includes the
      *  broadcast/warroom amber which is not a switchable brand. */
     val AGENT_COLORS: Map<String, String> = mapOf(
-        "speda" to "#36abca", "sentinel" to "#d99c44", "nightcrawler" to "#9165e6",
+        "speda" to "#7fa4c4", "sentinel" to "#d99c44", "nightcrawler" to "#9165e6",
         "ultron" to "#8a93a6", "centurion" to "#d8483c", "atomix" to "#3fae74",
         "optimus" to "#2f4f8f", "orion" to "#e0703a", "all" to "#f2b75c", "warroom" to "#f2b75c",
     )

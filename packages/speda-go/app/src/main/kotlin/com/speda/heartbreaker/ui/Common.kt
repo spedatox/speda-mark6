@@ -45,7 +45,7 @@ fun HbGlassButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     state: HbGlassState = HbGlassState.Default,
-    shape: HbGlassShape = HbGlassShape.R12,
+    shape: HbGlassShape = HbGlassShape.Ctl,
     contentColor: Color = LocalHbPalette.current.iconBright,
     padding: PaddingValues = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
 ) {

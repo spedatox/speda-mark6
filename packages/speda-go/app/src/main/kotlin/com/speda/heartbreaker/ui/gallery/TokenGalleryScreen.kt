@@ -183,7 +183,7 @@ private fun GlassTile(label: String, haze: HazeState, state: HbGlassState) {
         modifier = Modifier
             .size(width = 120.dp, height = 72.dp)
             .hbHazeBlur(haze, palette)
-            .hbGlass(shape = HbGlassShape.R14, state = state),
+            .hbGlass(shape = HbGlassShape.Card, state = state),
         contentAlignment = Alignment.Center,
     ) {
         HbText(label, style = HbType.label, color = palette.text, caps = true)

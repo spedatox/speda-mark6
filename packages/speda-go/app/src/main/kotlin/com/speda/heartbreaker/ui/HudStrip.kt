@@ -116,7 +116,7 @@ fun HudStrip(
                 Row(
                     Modifier
                         .height(16.dp)
-                        .hbGlass(shape = HbGlassShape.R9, state = if (diagOpen) HbGlassState.Active else HbGlassState.Default)
+                        .hbGlass(shape = HbGlassShape.Tile, state = if (diagOpen) HbGlassState.Active else HbGlassState.Default)
                         .clickable { diagOpen = !diagOpen }
                         .padding(horizontal = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -138,7 +138,7 @@ fun HudStrip(
                     .align(Alignment.TopEnd)
                     .padding(top = 28.dp, end = 10.dp)
                     .widthIn(min = 180.dp)
-                    .hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Menu)
+                    .hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Menu)
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {

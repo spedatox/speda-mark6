@@ -86,7 +86,7 @@ fun SettingsScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Box(
-                Modifier.size(30.dp).hbGlass(shape = HbGlassShape.R9).clickable(onClick = onClose),
+                Modifier.size(30.dp).hbGlass(shape = HbGlassShape.Tile).clickable(onClick = onClose),
                 contentAlignment = Alignment.Center,
             ) { HbGlyphs.Close(palette.iconBright, size = 13.dp) }
             HbText("SETTINGS", style = HbType.headerBar.copy(fontSize = 13.sp), color = Color.White, caps = true)

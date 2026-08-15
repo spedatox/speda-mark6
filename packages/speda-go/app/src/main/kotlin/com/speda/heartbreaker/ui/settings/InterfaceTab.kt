@@ -94,7 +94,7 @@ private fun ThemeChip(label: String, active: Boolean) {
     val palette = LocalHbPalette.current
     Box(
         Modifier
-            .hbGlass(shape = HbGlassShape.R9, state = if (active) HbGlassState.Tint(palette.accent) else HbGlassState.Default)
+            .hbGlass(shape = HbGlassShape.Tile, state = if (active) HbGlassState.Tint(palette.accent) else HbGlassState.Default)
             .padding(horizontal = 16.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {

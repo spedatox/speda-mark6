@@ -104,7 +104,7 @@ private fun UplinkField(
                 androidx.compose.foundation.layout.Box(
                     Modifier
                         .fillMaxWidth()
-                        .hbGlass(shape = HbGlassShape.R9)
+                        .hbGlass(shape = HbGlassShape.Tile)
                         .padding(horizontal = 12.dp, vertical = 12.dp),
                 ) {
                     if (value.isEmpty()) {

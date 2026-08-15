@@ -161,7 +161,7 @@ fun Composer(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .hbGlass(shape = HbGlassShape.R14)
+                    .hbGlass(shape = HbGlassShape.Card)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
                 // Staged attachments — tap one to drop it before sending.
@@ -322,7 +322,7 @@ fun Composer(
                         .align(Alignment.BottomStart)
                         .padding(bottom = 52.dp)
                         .widthIn(min = 180.dp)
-                        .hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Menu),
+                        .hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Menu),
                 ) {
                     AttachItem("Photos") {
                         plusOpen = false
@@ -457,7 +457,7 @@ private fun ModelPicker(models: List<ModelInfo>, current: String, onPick: (Strin
         Modifier
             .padding(bottom = 52.dp)
             .fillMaxWidth()
-            .hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Menu),
+            .hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Menu),
     ) {
         if (models.isEmpty()) {
             HbText(

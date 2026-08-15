@@ -172,7 +172,7 @@ private fun UserRow(
                     // using it here made every bubble a flat cyan panel. The web
                     // bubble is `.hb-holo`, i.e. the unified neutral glass, and the
                     // accent shows only where it should: the 1px lit rim.
-                    .hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Default)
+                    .hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Default)
                     .noRippleClick { showActions = !showActions }
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
@@ -426,7 +426,7 @@ private fun PillButton(label: String, tint: Color?, onClick: () -> Unit) {
     val c = tint ?: palette.iconBright
     Box(
         Modifier
-            .hbGlass(shape = HbGlassShape.R9, state = if (tint != null) HbGlassState.Tint(tint) else HbGlassState.Default)
+            .hbGlass(shape = HbGlassShape.Tile, state = if (tint != null) HbGlassState.Tint(tint) else HbGlassState.Default)
             .noRippleClick(onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
@@ -450,7 +450,7 @@ private fun EditBox(value: String, onValueChange: (String) -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 72.dp)
-                    .hbGlass(shape = HbGlassShape.R12, state = HbGlassState.Active)
+                    .hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Active)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) { inner() }
         },
