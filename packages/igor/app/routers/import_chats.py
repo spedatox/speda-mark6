@@ -73,16 +73,27 @@ async def index_embeddings_endpoint(
     background_tasks: BackgroundTasks,
 ):
     """
-    Embed every past message that doesn't have a semantic-recall vector yet
-    (see app/skills/semantic_search.py). Idempotent and self-healing — safe to
-    call any time, including repeatedly; it only ever processes what's pending.
-    Runs in the background.
+    Build BOTH halves of recall over past messages: the semantic vector for any
+    message that lacks one, and the keyword index row for any message that lacks
+    THAT (see app/skills/semantic_search.py). Recall is hybrid, so a corpus with
+    only one of the two indexed is only half-searchable — and since the vector
+    half shipped years earlier, that is precisely the state an existing install
+    is in. Idempotent and self-healing: safe to call any time, repeatedly; each
+    pass only processes what is missing. Runs in the background.
     """
-    from app.services.embedding_indexer import backfill_embeddings
+    from app.services.embedding_indexer import backfill_embeddings, backfill_lexical
 
     request_id = str(uuid.uuid4())
-    background_tasks.add_task(backfill_embeddings, 1, request_id)
-    return JSONResponse({"accepted": True, "message": "Embedding backfill started in background"})
+
+    async def _both() -> None:
+        # Lexical first: it is local and finishes in seconds, so recall improves
+        # immediately instead of after the embedding backfill's rate-limited
+        # crawl through every unembedded message.
+        await backfill_lexical(1, request_id)
+        await backfill_embeddings(1, request_id)
+
+    background_tasks.add_task(_both)
+    return JSONResponse({"accepted": True, "message": "Recall backfill started in background"})
 
 
 @router.post("/import-chats")

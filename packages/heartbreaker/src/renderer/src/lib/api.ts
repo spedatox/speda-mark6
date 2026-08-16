@@ -396,6 +396,76 @@ export async function googleDisconnect(config: AppConfig): Promise<void> {
   })
 }
 
+export async function microsoftLoginUrl(config: AppConfig): Promise<{ auth_url?: string; error?: string }> {
+  const res = await fetch(`${config.apiBase}/connections/microsoft/login`, { headers: authHeaders(config)})
+  if (!res.ok) return { error: `HTTP ${res.status}` }
+  return res.json()
+}
+
+export async function microsoftStatus(config: AppConfig): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/connections/microsoft/status`, { headers: authHeaders(config)})
+    if (!res.ok) return false
+    return (await res.json()).connected === true
+  } catch { return false }
+}
+
+export async function microsoftDisconnect(config: AppConfig): Promise<void> {
+  await fetch(`${config.apiBase}/connections/microsoft/disconnect`, {
+    method: 'POST',
+    headers: authHeaders(config),
+  })
+}
+
+/* ── Hand-added MCP servers ───────────────────────────────────────────────
+   A server is a command or a URL plus credentials, so the owner can wire one
+   up without a code change — which is the whole point of MCP as a tier. */
+
+export interface CustomMcpServer {
+  name: string
+  transport: 'stdio' | 'http'
+  command: string | string[]
+  url: string
+  /** Credential values come back MASKED; sending one back unchanged keeps the
+      stored secret rather than overwriting it with the placeholder. */
+  env: Record<string, string>
+  headers: Record<string, string>
+  enabled: boolean
+  note: string
+  added_at?: string
+  connected?: boolean
+  tools?: number
+  tokens?: number
+}
+
+export async function getCustomMcpServers(
+  config: AppConfig,
+): Promise<{ servers: CustomMcpServer[]; reserved: string[] }> {
+  const res = await fetch(`${config.apiBase}/connections/mcp`, { headers: authHeaders(config) })
+  if (!res.ok) return { servers: [], reserved: [] }
+  return res.json()
+}
+
+export async function saveCustomMcpServer(
+  config: AppConfig,
+  server: Partial<CustomMcpServer>,
+): Promise<{ connected?: boolean; tools?: number; error?: string; message?: string }> {
+  const res = await fetch(`${config.apiBase}/connections/mcp`, {
+    method: 'POST',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(server),
+  })
+  if (!res.ok) return { error: `HTTP ${res.status}` }
+  return res.json()
+}
+
+export async function deleteCustomMcpServer(config: AppConfig, name: string): Promise<void> {
+  await fetch(`${config.apiBase}/connections/mcp/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+    headers: authHeaders(config),
+  })
+}
+
 export async function notionLoginUrl(config: AppConfig): Promise<{ auth_url?: string; error?: string }> {
   const res = await fetch(`${config.apiBase}/connections/notion/login`, { headers: authHeaders(config)})
   if (!res.ok) return { error: `HTTP ${res.status}` }

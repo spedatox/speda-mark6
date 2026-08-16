@@ -179,6 +179,28 @@ class CapabilityRegistry:
                 connected += 1
         return connected
 
+    async def drop_mcp_server(self, name: str) -> bool:
+        """Disconnect one MCP server and remove its tools from the live registry.
+
+        The inverse of register_mcp, needed because a hand-added server can be
+        deleted from the Connections panel: leaving its tools in the prompt after
+        the record is gone would advertise capabilities that now route nowhere.
+        Returns whether a server by that name was actually connected.
+        """
+        client = self._mcp_clients.pop(name, None)
+        if client is not None:
+            try:
+                await client.disconnect()
+            except BaseException as exc:
+                if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                    raise
+        self._mcp_tool_defs = [
+            t for t in self._mcp_tool_defs if self._mcp_tool_map.get(t["name"]) != name
+        ]
+        self._mcp_tool_map = {k: v for k, v in self._mcp_tool_map.items() if v != name}
+        logger.info("registry_drop", extra={"tier": 2, "capability": name})
+        return client is not None
+
     # ── Tier 3 ────────────────────────────────────────────────────────────────
 
     async def register_adapter(self, adapter: "OSSAdapter") -> None:

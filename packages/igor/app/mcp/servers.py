@@ -50,6 +50,19 @@ def build_google_clients(access_token: str | None = None):
     return _build_rest(access_token)
 
 
+def build_microsoft_clients():
+    """Build the Microsoft 365 (Outlook) client.
+
+    Talks to the standard Graph REST API and duck-types the MCPClient surface the
+    registry drives, exactly like the Google clients — so registration, lazy
+    loading, the Connections panel and the sign-in flow are unchanged. See
+    app/mcp/microsoft_rest.py.
+    """
+    from app.mcp.microsoft_rest import build_microsoft_clients as _build_ms
+
+    return _build_ms()
+
+
 async def _refresh_google_token(client_id: str, client_secret: str, refresh_token: str) -> str | None:
     """Exchange a Google OAuth refresh token for a fresh access token."""
     try:
@@ -91,6 +104,67 @@ def build_notion_client(access_token: str) -> MCPClient:
         command=["npx", "-y", "@notionhq/notion-mcp-server"],
         env={"NOTION_TOKEN": access_token},
     )
+
+
+# Names the owner may not claim for a hand-added server: every server this module
+# builds. Shadowing one would produce two clients with the same server_name, and
+# the registry's tool→server map keeps only the last — so the built-in's tools
+# would still be listed while every call routed somewhere else.
+RESERVED_SERVER_NAMES = frozenset({
+    "notion", "alpha_vantage", "playwright", "brave_search", "fetch", "tavily",
+    "exa", "github", "filesystem", "arxiv", "cve_intelligence",
+    "google_gmail", "google_calendar", "google_tasks", "google_drive",
+    "google_chat", "google_people", "microsoft_outlook",
+})
+
+
+def build_custom_client(record: dict) -> MCPClient:
+    """One MCPClient from a stored owner-defined server record.
+
+    This is the whole reason MCP is worth having as a tier: a server is a command
+    or a URL plus credentials, so anything speaking the protocol can be added
+    without a code change. See app/core/runtime_state.py for the record shape.
+    """
+    transport = (record.get("transport") or "stdio").strip().lower()
+    if transport == "http":
+        return MCPClient(
+            server_name=record["name"],
+            transport="http",
+            url=record.get("url") or "",
+            headers=dict(record.get("headers") or {}),
+        )
+    command = record.get("command") or []
+    if isinstance(command, str):
+        # Accept a pasted command line — that is how every MCP README writes it.
+        import shlex
+
+        command = shlex.split(command)
+    return MCPClient(
+        server_name=record["name"],
+        transport="stdio",
+        command=list(command),
+        env=dict(record.get("env") or {}),
+    )
+
+
+def build_custom_clients() -> list[MCPClient]:
+    """Every enabled owner-defined server. A record that cannot be turned into a
+    client is skipped and logged rather than taking startup down with it — the
+    same degraded-not-fatal posture as a missing API key."""
+    from app.core.runtime_state import get_custom_mcp_servers
+
+    clients: list[MCPClient] = []
+    for record in get_custom_mcp_servers():
+        if not record.get("enabled", True):
+            continue
+        try:
+            clients.append(build_custom_client(record))
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "custom_mcp_build_failed",
+                extra={"server": record.get("name", "?"), "error": str(e)},
+            )
+    return clients
 
 
 async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
@@ -246,16 +320,51 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
             "reason": "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN not all set",
         })
 
+    # ── Microsoft 365 — Graph REST (see app/mcp/microsoft_rest.py) ───────────
+    # The owner's university mailbox. Separate estate from Gmail, separate OAuth
+    # client, same registration shape: the client self-refreshes its access token
+    # on demand, so startup only needs the app registration + a stored refresh
+    # token, and connect() proves the token can actually be obtained.
+    from app.core.runtime_state import get_microsoft_refresh_token
+    microsoft_ready = all([
+        settings.microsoft_client_id,
+        settings.microsoft_client_secret,
+        get_microsoft_refresh_token(),
+    ])
+    if microsoft_ready:
+        servers.extend(build_microsoft_clients())
+    else:
+        logger.warning("mcp_skip", extra={
+            "server": "microsoft_outlook",
+            "reason": "MICROSOFT_CLIENT_ID / MICROSOFT_CLIENT_SECRET / refresh token not all set",
+        })
+
+    # ── Owner-defined MCP servers (Settings → Connections → Add server) ──────
+    # Anything the owner wired by hand: a command for stdio, or a URL plus
+    # headers for streamable HTTP. Registered last so a hand-added server can
+    # deliberately shadow nothing — a name collision with a built-in is rejected
+    # at save time, not silently here. See app/core/runtime_state.py.
+    custom = build_custom_clients()
+    servers.extend(custom)
+
     # ── Gate by the configured allowlist ─────────────────────────────────────
     # Every loaded tool inflates the cached prompt prefix on every request, so
     # only register the servers the operator enabled. "all" = no filtering.
     enabled_raw = (settings.mcp_enabled or "").strip().lower()
     if enabled_raw and enabled_raw != "all":
         enabled = {name.strip() for name in enabled_raw.split(",") if name.strip()}
+        custom_names = {c.server_name for c in custom}
 
         def _is_enabled(server_name: str) -> bool:
-            # google_gmail / google_calendar / … all match the "google" alias
-            if server_name.startswith("google_") and "google" in enabled:
+            # A server the owner added by hand is already an explicit opt-in;
+            # making them ALSO name it in MCP_ENABLED means "I added it and
+            # nothing happened", which is the worst outcome this list can produce.
+            if server_name in custom_names:
+                return True
+            # google_gmail / google_calendar / … all match the "google" alias,
+            # microsoft_outlook matches "microsoft".
+            prefix = server_name.split("_", 1)[0]
+            if "_" in server_name and prefix in enabled:
                 return True
             return server_name in enabled
 

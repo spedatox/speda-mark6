@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
-import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
+import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, microsoftLoginUrl, microsoftStatus, microsoftDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
 import { memoryStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus, MemoryStatus } from '../lib/api'
 import RemindersTab from './RemindersTab'
 import ProtocolsTab from './ProtocolsTab'
 import type { AppConfig } from '../lib/types'
 import ConfigTab from './ConfigTab'
+import McpServersPanel from './McpServersPanel'
 import GlassSelect from './GlassSelect'
 import {
   SettingsSection, SettingsField, SettingsRow, Switch, PillBtn, ServiceRow, LiveDot, fieldStyle,
@@ -143,6 +144,38 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
     await googleDisconnect(config)
     setGoogleConnected(false)
     setGoogleMsg('')
+    loadConns()
+  }
+
+  // Microsoft 365 — the university mailbox. Same three-step shape as Google:
+  // open consent in the browser, poll until the backend has the refresh token,
+  // then flip the row to connected.
+  const [microsoftMsg, setMicrosoftMsg] = useState('')
+  const [microsoftConnected, setMicrosoftConnected] = useState(false)
+  useEffect(() => { microsoftStatus(config).then(setMicrosoftConnected) }, [config])
+
+  const signInMicrosoft = async () => {
+    setMicrosoftMsg('Opening Microsoft sign-in…')
+    const r = await microsoftLoginUrl(config)
+    if (r.auth_url) {
+      window.api?.openExternal ? window.api.openExternal(r.auth_url) : window.open(r.auth_url, '_blank')
+      setMicrosoftMsg('Sign in with your university account, then come back — it connects automatically.')
+      let n = 0
+      const poll = setInterval(async () => {
+        n++
+        await loadConns()
+        if (await microsoftStatus(config)) { setMicrosoftConnected(true); setMicrosoftMsg(''); clearInterval(poll) }
+        else if (n > 20) clearInterval(poll)
+      }, 3000)
+    } else {
+      setMicrosoftMsg(r.error || 'Could not start Microsoft sign-in.')
+    }
+  }
+
+  const disconnectMicrosoft = async () => {
+    await microsoftDisconnect(config)
+    setMicrosoftConnected(false)
+    setMicrosoftMsg('')
     loadConns()
   }
 
@@ -506,6 +539,29 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                   )}
 
                   <ServiceRow
+                    tint="#4f8ff7"
+                    icon={<svg width="15" height="15" viewBox="0 0 24 24"><rect x="2" y="2" width="9.2" height="9.2" fill="#F25022"/><rect x="12.8" y="2" width="9.2" height="9.2" fill="#7FBA00"/><rect x="2" y="12.8" width="9.2" height="9.2" fill="#00A4EF"/><rect x="12.8" y="12.8" width="9.2" height="9.2" fill="#FFB900"/></svg>}
+                    name="Microsoft 365"
+                    desc={microsoftConnected
+                      ? 'Your university mailbox is live — Ultron reads it.'
+                      : 'Sign in with your school account (@ostimteknik.edu.tr) for Outlook mail.'}
+                  >
+                    {microsoftConnected ? (
+                      <>
+                        <LiveDot />
+                        <PillBtn onClick={disconnectMicrosoft} tone="danger">Disconnect</PillBtn>
+                      </>
+                    ) : (
+                      <PillBtn onClick={signInMicrosoft}>Connect</PillBtn>
+                    )}
+                  </ServiceRow>
+                  {microsoftMsg && (
+                    <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', margin: '0 0 0 4px' }}>
+                      {microsoftMsg}
+                    </p>
+                  )}
+
+                  <ServiceRow
                     icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M4.45877 4.54133L19.5397 5.25732V6.33128L18.8252 6.47466C18.2526 6.54632 17.8938 6.76132 17.8938 7.33465V18.1532C17.8938 18.5832 18.2526 18.7982 18.8252 18.8698L19.5397 19.0132V20.0872L12.3924 19.3712V18.2972L13.107 18.1539C13.6796 18.0822 14.0384 17.8672 14.0384 17.2939V8.83863L7.75338 18.6545H6.53612V8.04996C6.53612 7.47664 6.17737 7.26164 5.6047 7.18997L4.89018 7.04664V5.97268L12.0374 6.68867V7.76262L11.3229 7.90595C10.7503 7.97762 10.3915 8.19262 10.3915 8.76595V16.3626L15.932 7.90595C16.1466 7.61929 16.4328 7.40429 16.7196 7.33262L17.2917 7.18929L17.1486 6.11532L4.45877 4.54133Z"/></svg>}
                     name="Notion"
                     desc="Search, fetch and create pages in your workspace."
@@ -600,6 +656,9 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                     <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--hb-cyan)' }}>.env</code>, then a restart.
                   </p>
                 </div>
+
+                <SettingsSection title="Custom servers" />
+                <McpServersPanel config={config} />
               </div>
             )}
 

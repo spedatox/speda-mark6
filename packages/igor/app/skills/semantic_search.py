@@ -3,11 +3,16 @@ Semantic (meaning-based) search over the owner's entire conversation history.
 
 Complements the keyword-only `search_history` skill: that one finds exact
 phrases, this one finds relevant past exchanges even when the wording differs
-entirely from how the query is phrased. Backed by MessageEmbedding rows
-(app/models/message_embedding.py), populated incrementally every turn and
-backfilled via POST /admin/index-embeddings (app/services/embedding_indexer.py).
-Search is a brute-force cosine similarity over L2-normalized vectors — see
-app/services/embeddings.py for why that's the right call at single-user scale.
+entirely from how the query is phrased. Retrieval is HYBRID: a brute-force cosine pass over the L2-normalized
+MessageEmbedding vectors (app/models/message_embedding.py — see
+app/services/embeddings.py for why brute force is the right call at single-user
+scale) fused by Reciprocal Rank Fusion with a BM25 pass over an FTS5 index of
+the same messages. The vector half finds the conversation you can only describe;
+the keyword half finds the one you can name. Fusing them is what stops a rare
+literal token — a course code, a person, an amount — from being outranked by
+prose that merely sounds similar. See app/services/lexical.py. Both indexes are
+populated incrementally every turn and backfilled via POST /admin/index-embeddings
+(app/services/embedding_indexer.py).
 
 Three retrieval properties are ported from Honcho's message tools
 (plastic-labs/honcho, `search_messages` / `search_messages_temporal`), because
@@ -35,6 +40,7 @@ from app.core.context import AgentContext
 from app.models.message import Message
 from app.models.message_embedding import MessageEmbedding
 from app.models.session import Session
+from app.services import lexical
 from app.services.embeddings import embed_texts
 from app.skills.base import Skill
 
@@ -169,12 +175,6 @@ class SemanticSearchSkill(Skill):
         before = _parse_date(args.get("before"))
         agent_filter = (args.get("agent_id") or "").strip() or None
 
-        try:
-            query_vec = (await embed_texts([query]))[0]
-        except Exception as e:  # noqa: BLE001
-            logger.warning("recall_embed_query_failed", extra={"error": str(e)})
-            return "Semantic recall is unavailable right now (embedding call failed)."
-
         # Exclude the active session — its messages are already in the model's
         # context and would dominate the ranking (they echo the query's wording).
         stmt = (
@@ -206,16 +206,52 @@ class SemanticSearchSkill(Skill):
                 "once to backfill past conversations."
             )
 
-        matrix = np.stack([
-            np.frombuffer(row.embedding, dtype=np.float32) for row, _ in rows
-        ])
-        scores = matrix @ query_vec
+        # ── The two retrievers ────────────────────────────────────────────────
+        # Words first, and locally: this is the half that actually finds a course
+        # code, a person's name or a Turkish word the embedding has smoothed
+        # away, and it needs no network, so it still ranks when the query
+        # embedding fails. Note the candidate set is the EMBEDDED messages: a
+        # message the embedder never got to is not reachable from here at all
+        # until the backfill catches it, which is the embedding indexer's job,
+        # not this one's.
+        position = {row.message_id: i for i, (row, _) in enumerate(rows)}
+        lexical_ids = await lexical.search(
+            db=context.db,
+            query=query,
+            limit=limit * 4,
+            allowed_ids=set(position),
+            index=lexical.MESSAGES,
+        )
+        lexical_ranking = [position[m] for m in lexical_ids if m in position]
+
+        vector_ranking: list[int] = []
+        scores = np.zeros(len(rows), dtype=np.float32)
+        try:
+            query_vec = (await embed_texts([query]))[0]
+            matrix = np.stack([
+                np.frombuffer(row.embedding, dtype=np.float32) for row, _ in rows
+            ])
+            scores = matrix @ query_vec
+            vector_ranking = [int(i) for i in np.argsort(-scores)[: limit * 4]]
+        except Exception as e:  # noqa: BLE001
+            logger.warning("recall_embed_query_failed", extra={"error": str(e)})
+            if not lexical_ranking:
+                return "Recall is unavailable right now (the embedding call failed)."
+
+        fused = lexical.rrf_fuse(vector_ranking, lexical_ranking, limit=limit * 4)
+        if not fused:
+            return f"No relevant past exchanges found for '{query}'."
+        # The rendered score is the fused agreement between the two rankings,
+        # not a cosine — so it has to replace the raw dot products, or the
+        # snippet headers would report a number nothing was ordered by.
+        for idx, score in fused:
+            scores[idx] = score
 
         # Rank with a per-session diversity cap, so one long conversation can't
         # crowd out every other relevant exchange.
         picked: list[int] = []
         per_session: dict[int, int] = {}
-        for idx in np.argsort(-scores):
+        for idx, _ in fused:
             sid = rows[idx][0].session_id
             if per_session.get(sid, 0) >= MAX_PER_SESSION:
                 continue

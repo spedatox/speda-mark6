@@ -1,0 +1,180 @@
+{
+  "name": "School mail watch (Microsoft 365)",
+  "meta": {
+    "description": "Watches the owner's UNIVERSITY mailbox (Microsoft 365 / Outlook) and only wakes an agent when mail actually arrives. Ships pointed at ostimteknik.edu.tr → Ultron. The scan runs through Mark VI's own Microsoft connection — no second credential, no model, no tokens. Everything is configured in ONE node: 'Domain list'. This is the Outlook twin of 'Mail watch', which does the same job for Gmail; they are separate workflows because they are separate mailboxes, not two views of one."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/10 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-every-10m",
+      "name": "Every 10 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "notes": "University mail arrives at any hour — an exam room change at 23:00 is exactly the case this exists for — so this runs around the clock. 144 scans a day, each one HTTP request and zero tokens.\n\nEvery rule in the list is checked on this one schedule. Widening it to */30 only delays a push; the SPEDA-Seen category means a longer gap can never lose a message."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════\n//  THE ONLY NODE YOU EDIT. One { … } block per sender domain you care about.\n// ═══════════════════════════════════════════════════════════════════════\n//\n//  domain    REQUIRED. Sender domain, e.g. 'ostimteknik.edu.tr'. Subdomains\n//            count (ogrenci@mail.ostimteknik.edu.tr); lookalikes do not\n//            (info@ostimteknik.edu.tr.example.com). Igor checks the From\n//            header properly rather than trusting a substring match.\n//\n//  agent     Optional, default 'ultron'. Who reads the mail and writes the\n//            push. Ultron owns academic life, so university mail is his by\n//            default — 'speda' for anything that isn't really about study.\n//\n//  intent    Optional. What the agent should DO with it. The mail body is\n//            already in the payload either way, so the agent never re-fetches.\n//            Leave empty for the sensible default below.\n//\n//  unread    Optional, default false. Only consider unread mail. Leave false:\n//            reading a mail on your phone should not stop the push, the\n//            category is what tracks 'handled'.\n//\n//  folder    Optional. Well-known name ('inbox') or a folder id, when the\n//            university's mail is auto-filed. Empty = the whole mailbox,\n//            which is the safe default — a rule that only watches the inbox\n//            goes silent the day an Outlook rule starts filing that sender.\n//\n//  category  Optional, default 'SPEDA-Seen'. The Outlook category that marks\n//            a message handled. Give a rule its OWN category only if two\n//            rules could match the SAME message.\n//\n//  max       Optional, default 10, cap 25. Messages per scan.\n//\nconst DOMAINS = [\n\n  {\n    domain: 'ostimteknik.edu.tr',\n    agent: 'ultron',\n    intent: '',\n  },\n\n  // { domain: 'obs.ostimteknik.edu.tr', agent: 'ultron',\n  //   intent: 'Bu bir öğrenci bilgi sistemi bildirimi. Not, devamsızlık veya kayıt değişikliği varsa net söyle.' },\n\n];\n\n// ── Nothing below this line needs editing ───────────────────────────────\nconst DEFAULT_INTENT = \"New mail arrived in the owner's UNIVERSITY mailbox (Microsoft 365). The sender, subject and body of every message are ALREADY in `messages` in this payload — do NOT call Outlook or load a toolset, you have the mail. Read it and write the owner one short push in their language: who wrote, what they actually want, and any deadline, exam date, room change, fee or action required. One line per message if several arrived. If something needs a reply or a date on the calendar, say so plainly and offer to do it — do not do it unasked.\";\n\nconst out = [];\nDOMAINS.forEach((m, i) => {\n  if (!m || !m.domain) { return; }\n  out.push({\n    json: {\n      domain: String(m.domain).trim().replace(/^@/, ''),\n      agent: (m.agent || 'ultron').trim(),\n      intent: m.intent || DEFAULT_INTENT,\n      unread_only: !!m.unread,\n      folder: m.folder || '',\n      category: m.category || 'SPEDA-Seen',\n      max_results: m.max || 10,\n    },\n    pairedItem: { item: 0 },\n  });\n});\n// An empty list returns no items, which stops the branch harmlessly.\nreturn out;"
+      },
+      "id": "domain-list",
+      "name": "Domain list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300],
+      "notes": "⚙️ EDIT HERE — the whole configuration surface. One block per domain, in the DOMAINS array. The comment block documents every field.\n\nEach entry becomes one item and every node downstream runs once per item, so watching the university AND the student information system needs no other change.\n\nTO FORK: duplicate the workflow, keep only the rules you want in it, rename it, activate. Rules in different workflows are independent."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://app:8000/outlook/watch/scan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"domain\": $json.domain, \"unread_only\": $json.unread_only, \"folder\": $json.folder, \"category\": $json.category, \"max_results\": $json.max_results, \"newer_than_days\": 2, \"include_body\": true, \"body_chars\": 2000 }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "scan-outlook",
+      "name": "Igor: scan Outlook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 300],
+      "notes": "The cheap half. One Microsoft Graph request through Igor's own connection, a strict sender-domain check, and a category test — no model anywhere in it.\n\nneverError so a Graph outage becomes a status the Gate can report ONCE, instead of a failed execution nobody reads."
+    },
+    {
+      "parameters": {
+        "jsCode": "const store = $getWorkflowStaticData('global');\nconst broken = store.broken || {};\nconst cfg = $('Domain list').all();\nconst out = [];\n\n$input.all().forEach((item, i) => {\n  const res = item.json || {};\n  const conf = (cfg[i] && cfg[i].json) || {};\n  const id = conf.domain || ('#' + i);\n  const status = res.status || 'error';\n\n  // Watch health, EDGE-triggered per domain: a revoked Microsoft token makes\n  // every rule blind at once, and at a 10-minute cadence that would be 144\n  // identical pushes a day. One on the transition is enough.\n  if (status !== 'ok') {\n    if (!broken[id]) {\n      broken[id] = true;\n      out.push({ json: {\n        alert: true, domain: id, agent: conf.agent || 'ultron',\n        detail: res.detail || res.message || status,\n        count: 0, message_ids: [], messages: [], intent: '',\n      }, pairedItem: { item: i } });\n    }\n    return;\n  }\n  broken[id] = false;\n\n  // The normal path: nothing arrived. No items = branch stops = no turn.\n  if (!res.count) { return; }\n\n  out.push({ json: {\n    alert: false,\n    domain: id,\n    agent: conf.agent || 'ultron',\n    intent: conf.intent || '',\n    count: res.count,\n    message_ids: res.message_ids || [],\n    messages: res.messages || [],\n    category: conf.category || 'SPEDA-Seen',\n  }, pairedItem: { item: i } });\n});\n\nstore.broken = broken;\nreturn out;"
+      },
+      "id": "gate",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 300],
+      "notes": "The cost boundary — everything downstream spends money, everything upstream does not. On a normal run every rule reports zero and this returns no items, which stops the branch.\n\npairedItem is set explicitly so the mark-seen node can find its own rule's message ids."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://app:8000/trigger/{{ $json.agent }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"payload\": { \"type\": \"watchdog\", \"event\": \"new_school_mail\", \"job\": \"outlook_watch\", \"automation\": \"School mail watch — \" + $json.domain, \"source\": \"outlook\", \"domain\": $json.domain, \"count\": $json.count, \"messages\": $json.messages, \"intent\": $json.alert ? (\"Your school-mail watch for \" + $json.domain + \" cannot read the Microsoft mailbox right now (\" + $json.detail + \"). Tell the owner in one short line that the watch is blind and Microsoft 365 likely needs reconnecting in Settings → Connections. Do not call any tool.\") : $json.intent }, \"output_mode\": \"push\" }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "notify",
+      "name": "Igor: trigger agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "THE EXPENSIVE HALF — one agentic turn per rule that found mail. The agent comes from the rule (Ultron by default), so the URL is an expression; nothing to edit here.\n\nNo neverError, deliberately: a failure must kill the branch BEFORE mark-seen, leaving the mail uncategorised so the next poll retries it. Retries cover the 503 the trigger endpoint returns when the turn registry is at capacity."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://app:8000/outlook/watch/seen",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"message_ids\": $('Gate').item.json.message_ids, \"category\": $('Gate').item.json.category }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "mark-seen",
+      "name": "Igor: mark seen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1640, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "Categorises exactly the messages just handed to the agent, so the next scan skips them. This is what stops the same mail pushing every 10 minutes. Unread state is untouched — the mail still looks new in Outlook.\n\n$('Gate').item — not .first() — so when two rules both find mail, each ack categorises ITS OWN messages.\n\nDeliberately AFTER the trigger: categorising first would lose a message whenever the notify call failed. On the blind-watch alert path message_ids is empty and this is a no-op."
+    }
+  ],
+  "connections": {
+    "Every 10 minutes": {
+      "main": [[{ "node": "Domain list", "type": "main", "index": 0 }]]
+    },
+    "Domain list": {
+      "main": [[{ "node": "Igor: scan Outlook", "type": "main", "index": 0 }]]
+    },
+    "Igor: scan Outlook": {
+      "main": [[{ "node": "Gate", "type": "main", "index": 0 }]]
+    },
+    "Gate": {
+      "main": [[{ "node": "Igor: trigger agent", "type": "main", "index": 0 }]]
+    },
+    "Igor: trigger agent": {
+      "main": [[{ "node": "Igor: mark seen", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  }
+}

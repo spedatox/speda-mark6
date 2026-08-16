@@ -154,6 +154,32 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         ],
     ),
     ConfigGroup(
+        "microsoft", "Microsoft 365 (University Mail)",
+        "OAuth client for the owner's Outlook / school mailbox. Register an app in "
+        "Azure Portal → App registrations, add a Web redirect matching the URL below, "
+        "create a client secret, and grant the DELEGATED permissions offline_access, "
+        "Mail.ReadWrite, Mail.Send and User.Read. Then use the in-app "
+        "'Connect Microsoft 365' button for the refresh token.",
+        [
+            ConfigField("microsoft_client_id", "Application (client) ID", "text"),
+            ConfigField("microsoft_client_secret", "Client Secret Value", "password", secret=True,
+                        help="The secret VALUE, not the secret id — Azure shows the value once."),
+            ConfigField("microsoft_tenant", "Tenant", "text",
+                        help="'common' (work/school + personal, the default), 'organizations', "
+                             "or the university's tenant GUID if IT blocks multi-tenant apps.",
+                        placeholder="common"),
+            ConfigField("microsoft_refresh_token", "Microsoft Refresh Token", "password", secret=True,
+                        help="Usually captured by the Connections sign-in flow, and rotated "
+                             "automatically after that."),
+            ConfigField("microsoft_oauth_redirect", "OAuth Redirect", "url",
+                        help="Must match a Web platform redirect URI on the app registration."),
+            ConfigField("school_mail_domain", "School Mail Domain", "text", requires_restart=_LIVE,
+                        help="The sender domain the school-mail watch treats as 'the "
+                             "university'. Used by the shipped n8n workflow's default rule.",
+                        placeholder="ostimteknik.edu.tr"),
+        ],
+    ),
+    ConfigGroup(
         "notion", "Notion",
         "OAuth client for the hosted Notion MCP. Prefer the in-app 'Sign in with Notion'.",
         [

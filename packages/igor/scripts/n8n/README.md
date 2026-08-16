@@ -20,7 +20,8 @@ majority of runs.
 
 | File | Watches for | Costs a turn when |
 |---|---|---|
-| `mail_watch.json` | Mail from sender domains you list | mail actually arrives |
+| `mail_watch.json` | Mail from sender domains you list (**Gmail**) | mail actually arrives |
+| `outlook_watch.json` | The same, in the **Microsoft 365 / university** mailbox | school mail actually arrives |
 | `web_publish_watch.json` | New lines appearing on pages you list | something is published |
 | `service_health_check.json` | Services going down / coming back | a service changes state |
 | `persistent_reminders.json` | *(nothing — it asks)* | never; asking and answering are free |
@@ -49,7 +50,7 @@ so an unimported workflow does not go unnoticed forever.
 
 1. **Import** — n8n ▸ Workflows ▸ Import from File.
 2. **Edit the one config node.** Each workflow has exactly one, and its name
-   tells you (`Mail list`, `Watch list`, `Reminder list`, `Briefing list`,
+   tells you (`Mail list`, `Domain list`, `Watch list`, `Reminder list`, `Briefing list`,
    `Service list`). Everything is a plain JS array of objects at the top of the
    node; the comment block above it documents every field. (`memory_audit.json`
    is the exception — it has no config node. Import and activate.)

@@ -335,7 +335,9 @@ class Settings(BaseSettings):
     # Which MCP servers to CONNECT at startup. With lazy tool loading (below),
     # connecting a server is cheap — its tools only enter the prompt prefix when
     # SPEDA actually loads them via use_toolset. So this can be generous.
-    mcp_enabled: str = "tavily,google_gmail,google_calendar,notion"
+    mcp_enabled: str = (
+        "tavily,google_gmail,google_calendar,google_tasks,microsoft_outlook,notion"
+    )
 
     # Lazy tool loading (progressive disclosure). When True, only always_on
     # servers' tools sit in the prompt prefix; everything else is listed in a
@@ -473,6 +475,28 @@ class Settings(BaseSettings):
     # Redirect the in-app "Sign in with Google" flow comes back to. For a Desktop
     # OAuth client, loopback redirects are allowed automatically.
     google_oauth_redirect: str = "http://localhost:8000/oauth/google/callback"
+
+    # ── Microsoft 365 / Outlook (app/mcp/microsoft_rest.py) ────────────────────
+    # The owner's UNIVERSITY mailbox (@ostimteknik.edu.tr) is a Microsoft work/
+    # school account, so it is a second mail estate rather than a second door
+    # into Gmail. Register an app in Azure Portal → App registrations, add a Web
+    # platform redirect matching microsoft_oauth_redirect, create a client
+    # secret, and add the DELEGATED Graph permissions listed in MS_SCOPES.
+    #
+    # microsoft_tenant is the authority segment: "common" (work/school AND
+    # personal, the safe default), "organizations" (work/school only), or a
+    # specific tenant GUID/domain. Leave it "common" unless the university's
+    # tenant blocks multi-tenant apps — a single-tenant registration pinned to
+    # the school's own tenant id is the fallback if IT refuses user consent.
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_tenant: str = "common"
+    microsoft_refresh_token: str = ""
+    microsoft_oauth_redirect: str = "http://localhost:8000/oauth/microsoft/callback"
+    # Sender domain the school-mail watch treats as "the university". Read by the
+    # shipped n8n workflow's default rule; the probe itself takes the domain as a
+    # parameter and knows nothing about this.
+    school_mail_domain: str = "ostimteknik.edu.tr"
 
     # ── Maps & navigation (app/skills/navigation.py) ───────────────────────────
     # One Google Cloud key with Routes API v2, Places API (New) and Geocoding API

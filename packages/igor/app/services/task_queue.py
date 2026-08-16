@@ -77,7 +77,10 @@ def _handlers() -> dict:
         update_session_log,
         update_session_recap,
     )
-    from app.services.observations import embed_pending_observations
+    from app.services.observations import (
+        embed_pending_observations,
+        index_pending_observations,
+    )
 
     async def _title(session_id, request_id, user_id, model):
         await generate_title(session_id, request_id, model)
@@ -86,7 +89,12 @@ def _handlers() -> dict:
         await embed_session_tail(session_id, request_id, user_id)
 
     async def _embed_observations(session_id, request_id, user_id, model):
+        # Both halves of hybrid recall heal here: the vector index and the
+        # lexical one. They are one job because a fact that is searchable by
+        # meaning but not by name is only half-recallable, and splitting them
+        # into two queue kinds would let one silently fall behind the other.
         await embed_pending_observations(user_id, request_id)
+        await index_pending_observations(user_id, request_id)
 
     async def _compact(session_id, request_id, user_id, model):
         await maybe_compact_session(session_id, request_id, model)

@@ -266,6 +266,25 @@ def set_google_refresh_token(token: str) -> None:
     logger.info("google_refresh_token_saved")
 
 
+def get_microsoft_refresh_token() -> str:
+    """Refresh token captured via the in-app 'Connect Microsoft 365' flow.
+    Falls back to the .env value if the owner hasn't signed in through the UI."""
+    return _load().get("microsoft_refresh_token", settings.microsoft_refresh_token)
+
+
+def set_microsoft_refresh_token(token: str) -> None:
+    """Persist the Microsoft refresh token.
+
+    Written on sign-in AND on every rotation — Microsoft hands back a new refresh
+    token with most refreshes, and keeping the original would strand the
+    connection the day the issued chain moves past it.
+    """
+    state = _load()
+    state["microsoft_refresh_token"] = token
+    _save()
+    logger.info("microsoft_refresh_token_saved")
+
+
 def get_notion_access_token() -> str:
     """OAuth access token captured via the in-app Notion connection flow.
     Returns empty string if the user hasn't completed OAuth — does NOT fall
@@ -322,6 +341,101 @@ def drop_web_watch(watch_id: str) -> bool:
     _save()
     logger.info("web_watch_dropped", extra={"watch_id": watch_id, "existed": existed})
     return existed
+
+
+# ── Owner-defined MCP servers ───────────────────────────────────────────────
+# MCP's whole premise is that a server is a thing you point at and authenticate,
+# not a thing someone has to compile in — so the owner can add one by hand from
+# Settings → Connections and it becomes a Tier-2 capability like any other. Every
+# built-in server in app/mcp/servers.py could have been written as one of these;
+# they stay in code only because they ship configured.
+#
+# Shape of one record:
+#   {name, transport: "stdio"|"http", command: [...], url, env: {}, headers: {},
+#    enabled: bool, added_at: iso8601, note: str}
+#
+# env/headers hold CREDENTIALS. They live in the same runtime_state.json as the
+# Google and Microsoft refresh tokens — the file is already the trust boundary —
+# and the API masks them on read so the Settings panel never renders a key back.
+
+_SECRET_HINT = ("token", "key", "secret", "password", "auth", "pat", "credential")
+
+
+def get_custom_mcp_servers() -> list[dict]:
+    """Every hand-added server record, secrets included. Callers that render to
+    a client must go through mask_custom_mcp_server first."""
+    return [dict(s) for s in _load().get("custom_mcp_servers", [])]
+
+
+def get_custom_mcp_server(name: str) -> dict:
+    for server in get_custom_mcp_servers():
+        if server.get("name") == name:
+            return server
+    return {}
+
+
+def save_custom_mcp_server(record: dict) -> dict:
+    """Insert or replace one server record by name. Returns what was stored.
+
+    A re-save that omits `env`/`headers` KEEPS the stored values rather than
+    wiping them — the UI sends back masked secrets it never saw, and treating
+    those as "the owner cleared this field" would break the connection every
+    time they renamed a server.
+    """
+    state = _load()
+    servers = [dict(s) for s in state.get("custom_mcp_servers", [])]
+    name = record.get("name", "")
+    existing = next((s for s in servers if s.get("name") == name), None)
+    if existing:
+        for field in ("env", "headers"):
+            merged = dict(existing.get(field) or {})
+            for key, value in (record.get(field) or {}).items():
+                # A masked value came back unchanged from the UI — keep the real one.
+                if value == MASKED and key in merged:
+                    continue
+                merged[key] = value
+            record[field] = merged
+        record.setdefault("added_at", existing.get("added_at", ""))
+        servers = [record if s.get("name") == name else s for s in servers]
+    else:
+        servers.append(record)
+    state["custom_mcp_servers"] = servers
+    _save()
+    logger.info("custom_mcp_saved", extra={"server": name, "transport": record.get("transport")})
+    return record
+
+
+def delete_custom_mcp_server(name: str) -> bool:
+    state = _load()
+    servers = [dict(s) for s in state.get("custom_mcp_servers", [])]
+    remaining = [s for s in servers if s.get("name") != name]
+    existed = len(remaining) != len(servers)
+    state["custom_mcp_servers"] = remaining
+    # A deleted server must not stay in the disabled list forever — re-adding it
+    # later would come back silently switched off with nothing pointing at why.
+    disabled = set(state.get("disabled_servers", []))
+    disabled.discard(name)
+    state["disabled_servers"] = sorted(disabled)
+    _save()
+    logger.info("custom_mcp_deleted", extra={"server": name, "existed": existed})
+    return existed
+
+
+MASKED = "••••••••"
+
+
+def mask_custom_mcp_server(record: dict) -> dict:
+    """A copy safe to send to a client: every credential-looking value replaced
+    with a fixed placeholder. Names of the keys survive — the owner needs to see
+    THAT an API key is set, just not what it is."""
+    out = dict(record)
+    for field in ("env", "headers"):
+        values = record.get(field) or {}
+        out[field] = {
+            k: (MASKED if (v and any(h in k.lower() for h in _SECRET_HINT)) else v)
+            for k, v in values.items()
+        }
+    return out
 
 
 def set_server_active(server: str, active: bool) -> bool:

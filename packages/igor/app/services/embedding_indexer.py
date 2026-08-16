@@ -50,7 +50,26 @@ def _extract_text(content) -> str:
 
 
 async def _embed_and_store(db, user_id: int, batch: list[tuple[Message, str, str]]) -> int:
-    """batch: (message, agent_id, text) tuples. Embeds + stores in one call."""
+    """batch: (message, agent_id, text) tuples. Indexes lexically, then embeds.
+
+    The keyword index is written FIRST and committed on its own, deliberately.
+    Recall is hybrid now (see app/services/lexical.py), and the two halves fail
+    independently: an OpenAI outage should cost the meaning half of recall for
+    those messages, not both halves. Ordering it this way is what makes a
+    message searchable by the words in it even on a day the embeddings API is
+    unreachable — and the embedding backfill will still find it pending, because
+    pending-ness is defined by the MessageEmbedding row, not by this one.
+    """
+    from app.services import lexical
+
+    for message, _, text in batch:
+        await lexical.index_message(db, message.id, text)
+    try:
+        await db.commit()
+    except Exception as e:  # noqa: BLE001
+        await db.rollback()
+        logger.warning("lexical_batch_failed", extra={"error": str(e), "count": len(batch)})
+
     texts = [text for _, _, text in batch]
     try:
         vectors = await embed_texts(texts)
@@ -124,6 +143,51 @@ async def embed_session_tail(session_id: int, request_id: str, user_id: int) -> 
             "embed_session_tail_error",
             extra={"request_id": request_id, "session_id": session_id, "error": str(e)},
         )
+
+
+async def backfill_lexical(user_id: int, request_id: str) -> int:
+    """Give every already-embedded message a row in the keyword index.
+
+    backfill_embeddings cannot do this job: it defines "pending" as "has no
+    MessageEmbedding row", and the entire existing corpus HAS one — it was
+    embedded long before recall grew a lexical half. So this walks the other
+    way round, from message_embeddings (whose `text` column is already the exact
+    plain text the vector was built from) into whatever FTS5 is missing.
+
+    Idempotent and safe to re-run, like everything else in this module.
+    """
+    from app.services import lexical
+
+    written = 0
+    try:
+        async with AsyncSessionLocal() as db:
+            if not await lexical.ensure_index(db, lexical.MESSAGES):
+                return 0
+            known = await lexical.indexed_ids(db, lexical.MESSAGES)
+            rows = (
+                await db.execute(
+                    select(MessageEmbedding.message_id, MessageEmbedding.text)
+                    .where(MessageEmbedding.user_id == user_id)
+                    .order_by(MessageEmbedding.created_at.desc())
+                )
+            ).all()
+            missing = [(mid, body) for mid, body in rows if mid not in known and body]
+            for i, (message_id, body) in enumerate(missing, start=1):
+                await lexical.index_message(db, message_id, body)
+                written += 1
+                # Commit in chunks: one transaction over tens of thousands of
+                # inserts holds the write lock long enough for a live turn's
+                # background task to hit the busy timeout.
+                if i % 500 == 0:
+                    await db.commit()
+            await db.commit()
+        logger.info(
+            "backfill_lexical_complete",
+            extra={"request_id": request_id, "indexed": written, "total": len(rows)},
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.error("backfill_lexical_error", extra={"request_id": request_id, "error": str(e)})
+    return written
 
 
 async def backfill_embeddings(user_id: int, request_id: str) -> None:

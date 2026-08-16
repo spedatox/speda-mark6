@@ -69,6 +69,18 @@ current by acquiring a `valid_until`, never by being moved or deleted, and a
 changed value is linked with `superseded_by` rather than overwritten. Full
 contract: `docs/MEMORY_ARCHITECTURE_V3.md`.
 
+**11b. Recall is HYBRID, and both halves are maintained together.**
+`search_memory` and `recall_conversations` each run a vector pass (cosine over
+L2-normalized embeddings) AND a keyword pass (BM25 over FTS5), fused by
+Reciprocal Rank Fusion in `services/lexical.py`. Vector-only recall reliably
+loses the rare literal token — a course code, a name, an amount, a Turkish word —
+which is exactly what a recall query is usually built around. Anything that adds
+a searchable row writes BOTH indexes, and the backfills for both run off the same
+job; an index that only one path maintains is an index that silently goes stale.
+Turkish text is folded to ASCII on both sides before it reaches FTS5 (`ı`→`i` in
+particular: it is a distinct letter, not a diacritic, so no tokeniser setting
+will do it for you).
+
 **12. All endpoints require authentication.**
 `AuthMiddleware` validates the **`X-API-Key`** header on every request before any router logic runs, comparing it in constant time against `SPEDA_API_KEY` (from the environment). The n8n trigger endpoint additionally validates `X-N8N-Secret`. The only unauthenticated paths are `/health` and `/oauth/google/callback`. Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are disabled outside `DEBUG`. There is no public data endpoint.
 
@@ -209,6 +221,8 @@ speda-mark-vi/
     │   ├── files.py
     │   ├── import_chats.py
     │   ├── mail.py              # POST /mail/watch/{scan,seen} — n8n's LLM-free Gmail probe
+    │   ├── outlook.py           # POST /outlook/watch/{scan,seen} — the same probe for the
+    │   │                        #   owner's Microsoft 365 university mailbox (Ultron's)
     │   ├── web_watch.py         # POST /web/watch/{scan,ack} — n8n's LLM-free page-change probe
     │   │                        #   + GET /web/watch, DELETE /web/watch/{id} — owner-facing list/reset
     │   ├── memory.py
@@ -237,8 +251,13 @@ speda-mark-vi/
     │   └── fonts/, skill_docs/  # static assets, not modules
     ├── mcp/
     │   ├── client.py            # MCPClient base
-    │   ├── servers.py           # All MCP server registrations
-    │   └── google_rest.py       # Google Workspace REST bridge (OAuth 2.1, HTTP/SSE per Security section)
+    │   ├── servers.py           # All MCP server registrations, incl. owner-defined servers
+    │   │                        #   added by hand from Settings → Connections
+    │   ├── google_rest.py       # Google Workspace REST bridge — Gmail, Calendar (full
+    │   │                        #   recurrence/RSVP/multi-calendar), Tasks, Drive, Contacts
+    │   └── microsoft_rest.py    # Microsoft Graph REST bridge — the owner's UNIVERSITY
+    │                            #   mailbox (@ostimteknik.edu.tr). Separate estate, separate
+    │                            #   OAuth client; same duck-typed MCPClient surface.
     ├── adapters/
     │   ├── base.py              # OSSAdapter ABC
     │   ├── gpt_researcher.py
@@ -260,6 +279,11 @@ speda-mark-vi/
     │   ├── compaction.py, embeddings.py, embedding_indexer.py, history_indexer.py
     │   ├── health.py            # Atomix health-sample ingestion
     │   ├── mail_watch.py        # Gmail domain scan + SPEDA-Seen labelling (no LLM) — see "Cheap probes"
+    │   ├── outlook_watch.py     # The same for Microsoft 365: Graph scan + SPEDA-Seen
+    │   │                        #   CATEGORY (Outlook's label). Imports mail_watch's
+    │   │                        #   domain_matches — one answer to "is it really from them".
+    │   ├── lexical.py           # The KEYWORD half of recall: FTS5/BM25 + Turkish folding +
+    │   │                        #   Reciprocal Rank Fusion. Recall is hybrid, not vector-only.
     │   ├── web_watch.py         # Page fetch + line-level publish diff (no LLM) — see "Cheap probes"
     │   ├── routes.py, places.py # Map-card stores — geometry + congestion + turns, and
     │   │                        #   find_places result sets. Served by routers/navigation.py
@@ -372,7 +396,7 @@ A watcher that fires `POST /trigger/{agent_id}` on every tick spends a full agen
 
 | Half | What it is | Cost |
 |------|-----------|------|
-| **The probe** | A plain endpoint that answers one deterministic question — `/academic/ask-pending`, `/mail/watch/scan`, `/web/watch/scan` | One HTTP call. Zero tokens. |
+| **The probe** | A plain endpoint that answers one deterministic question — `/academic/ask-pending`, `/mail/watch/scan`, `/outlook/watch/scan`, `/web/watch/scan` | One HTTP call. Zero tokens. |
 | **The trigger** | `POST /trigger/{agent_id}`, reached only when the probe returned a hit | One agentic turn. |
 
 - A probe holds **no reasoning** — "did anyone from this domain write", "did a new line appear on this page", "did a lecture just end". If answering needs judgement, it belongs in the turn, not the probe.

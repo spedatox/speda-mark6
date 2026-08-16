@@ -266,7 +266,10 @@ class SearchMemorySkill(Skill):
         "observed once. Do NOT use it to search raw conversation transcripts — that is "
         "`recall_conversations` for meaning and `search_history` for exact wording; this "
         "searches distilled facts, not what was said. Modes: 'search' ranks by relevance to "
-        "your query, 'recent' returns the newest facts, 'established' returns those "
+        "your query, matching BOTH meaning and literal wording — so a course code, a "
+        "person's name, an amount or an exact Turkish word is worth putting in the query "
+        "verbatim rather than paraphrasing. 'recent' returns the newest facts, "
+        "'established' returns those "
         "reinforced most often across conversations, 'chain' traces one observation to its "
         "premises and to everything derived from it, and — for consolidation work — 'novel' "
         "surfaces the facts most isolated from everything else in memory while 'duplicates' "
@@ -418,7 +421,7 @@ class SearchMemorySkill(Skill):
                 "search_memory_failed",
                 extra={"request_id": context.request_id, "error": str(e)},
             )
-            return "Memory search is unavailable right now (the embedding call failed)."
+            return "Memory search failed. Try 'recent' to browse the record instead."
 
         logger.info(
             "search_memory",

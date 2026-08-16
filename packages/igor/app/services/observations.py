@@ -461,6 +461,15 @@ async def record_observations(
         await db.commit()
         for obs in stored:
             await db.refresh(obs)
+        # Lexical index AFTER the commit, because it is keyed by the row id the
+        # commit assigns. It is also a second commit rather than part of the
+        # first: an FTS5 failure must not roll back a recorded fact, and the
+        # index can always be rebuilt from the observations table.
+        from app.services import lexical
+
+        for obs in stored:
+            await lexical.index_observation(db, obs)
+        await db.commit()
 
     logger.info(
         "observations_recorded",
@@ -559,19 +568,32 @@ async def search_observations(
     before: datetime | None = None,
 ) -> list[tuple[Observation, float]]:
     """
-    Semantic search over observations, newest-biased and optionally filtered.
+    HYBRID search over observations, newest-biased and optionally filtered.
 
-    Scoring is a plain dot product over L2-normalized vectors — the same
-    brute-force approach app/services/embeddings.py justifies for messages.
-    Honcho reaches for pgvector HNSW here; at this store's scale (SQLite in
-    production, one owner, observations numbering in the thousands rather than
-    the millions) an index would cost more complexity than it buys latency, and
-    it would not survive the SQLite/Postgres split this project runs across.
+    Two retrievers run over the same filtered candidate set and their rankings
+    are fused with Reciprocal Rank Fusion (app/services/lexical.py):
 
-    Returns (observation, score) pairs, highest first. Rows whose embedding is
-    missing are skipped by the vector pass — call embed_pending_observations()
-    to heal them.
+      * **Meaning** — a plain dot product over L2-normalized vectors, the same
+        brute-force approach app/services/embeddings.py justifies for messages.
+        Honcho reaches for pgvector HNSW here; at this store's scale (SQLite in
+        production, one owner, thousands of observations rather than millions) an
+        index costs more complexity than it buys latency, and it would not
+        survive the SQLite/Postgres split this project runs across.
+      * **Words** — BM25 over an FTS5 index. This is the half that was missing,
+        and its absence is what made recall unreliable on exactly the things
+        worth recalling by name: a course code, a person, an amount, a Turkish
+        word the embedding model has quietly averaged into its neighbours.
+
+    Either half may come back empty — no embeddings yet, no FTS5 on this build,
+    a query of pure stopwords — and fusion of one list with nothing is that
+    list. So this degrades to whichever retriever is available rather than
+    failing.
+
+    Returns (observation, score) pairs, highest first, where the score is the
+    normalised RRF agreement between the two rankings (1.0 = ranked first by
+    both), NOT a cosine similarity.
     """
+    from app.services import lexical
     from app.services.embeddings import embed_texts
 
     from sqlalchemy import or_
@@ -606,16 +628,42 @@ async def search_observations(
     if not rows:
         return []
 
+    by_id = {o.id: o for o in rows}
+
+    # ── Words ────────────────────────────────────────────────────────────────
+    # Runs first and unconditionally: it needs no network, so a lexical hit
+    # survives an embedding provider that is down, rate-limited or unconfigured.
+    lexical_ids = await lexical.search(
+        db, query=query, limit=limit * 4, allowed_ids=set(by_id)
+    )
+
+    # ── Meaning ──────────────────────────────────────────────────────────────
+    vector_ids: list[int] = []
     embedded = [o for o in rows if o.embedding]
-    if not embedded:
+    if embedded:
+        try:
+            query_vec = (await embed_texts([query]))[0]
+            matrix = np.stack(
+                [np.frombuffer(o.embedding, dtype=np.float32) for o in embedded]
+            )
+            scores = matrix @ query_vec
+            vector_ids = [
+                embedded[int(i)].id for i in np.argsort(-scores)[: limit * 4]
+            ]
+        except Exception as e:  # noqa: BLE001
+            # A failed embedding call is no longer fatal to recall — there is a
+            # second retriever now, and answering from words alone beats
+            # answering "memory search is unavailable".
+            logger.warning("observation_vector_pass_failed", extra={"error": str(e)})
+
+    if not lexical_ids and not vector_ids:
+        # Neither retriever produced anything (no embeddings, no FTS5, and a
+        # query that tokenised to nothing). Newest-first is a poor answer but an
+        # honest one; an empty list would read as "nothing is recorded".
         return [(o, 0.0) for o in rows[:limit]]
 
-    query_vec = (await embed_texts([query]))[0]
-    matrix = np.stack([np.frombuffer(o.embedding, dtype=np.float32) for o in embedded])
-    scores = matrix @ query_vec
-
-    order = np.argsort(-scores)[:limit]
-    return [(embedded[int(i)], float(scores[int(i)])) for i in order]
+    fused = lexical.rrf_fuse(vector_ids, lexical_ids, limit=limit)
+    return [(by_id[i], score) for i, score in fused if i in by_id]
 
 
 async def recent_observations(
@@ -740,6 +788,53 @@ async def embed_pending_observations(user_id: int, request_id: str = "") -> int:
         extra={"request_id": request_id, "stored": stored},
     )
     return stored
+
+
+async def index_pending_observations(user_id: int, request_id: str = "") -> int:
+    """
+    Put every not-yet-indexed observation into the lexical index.
+
+    The keyword half of recall arrived after the record did, so most of what is
+    already stored has no FTS5 row — and unlike the embedding backfill, which
+    can find its gaps with `embedding IS NULL`, the gap here lives in a table the
+    ORM does not model. So the query is inverted: ask FTS5 which rowids it
+    already holds, and index the rest.
+
+    Same self-healing contract as embed_pending_observations: bounded per call,
+    idempotent, safe to re-run, opens its own session because it runs off the
+    request path.
+    """
+    from app.database import AsyncSessionLocal
+    from app.services import lexical
+
+    indexed = 0
+    try:
+        async with AsyncSessionLocal() as db:
+            if not await lexical.ensure_index(db):
+                return 0
+            known = await lexical.indexed_ids(db)
+            rows = list(
+                (await db.execute(
+                    _live(user_id).order_by(Observation.created_at.desc()).limit(5000)
+                )).scalars().all()
+            )
+            missing = [o for o in rows if o.id not in known][:512]
+            if not missing:
+                return 0
+            indexed = await lexical.rebuild(db, missing)
+            await db.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "observation_index_backfill_failed",
+            extra={"request_id": request_id, "error": str(e)},
+        )
+        return indexed
+
+    logger.info(
+        "observations_indexed",
+        extra={"request_id": request_id, "indexed": indexed},
+    )
+    return indexed
 
 
 # ── Formatting for tool results ───────────────────────────────────────────────
