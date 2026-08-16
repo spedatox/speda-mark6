@@ -117,6 +117,7 @@ container from `docker-compose.yml` (sourced from `packages/igor/.env` by
 | Probe (free) | Ack / commit | Notes |
 |---|---|---|
 | `POST /mail/watch/scan` | `POST /mail/watch/seen` | Gmail via the owner's existing Google connection |
+| `POST /outlook/watch/scan` | `POST /outlook/watch/seen` | The Microsoft 365 university mailbox, via the owner's Microsoft connection. Marks handled mail with an Outlook **category**, not a label — Graph has no labels |
 | `POST /web/watch/scan` | `POST /web/watch/ack` | also `GET /web/watch`, `DELETE /web/watch/{id}` to inspect and reset |
 | `POST /reminders/tick` | *(button tap or the `reminders` tool)* | also `GET /reminders/open`, `GET /reminders/history` |
 | `POST /academic/ask-pending` | *(the watch answers)* | Ultron Wear |
