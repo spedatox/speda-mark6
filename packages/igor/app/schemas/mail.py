@@ -1,15 +1,34 @@
 """Wire schemas for the n8n-facing mail watch. See services/mail_watch.py."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.services.mail_watch import SEEN_LABEL
 
 
 class MailScanRequest(BaseModel):
     """One poll. Every field has a default that is safe to leave alone — n8n
-    normally sends only `domain`."""
+    normally sends only `domain`, or only `recipient` for a forwarded mailbox."""
 
-    domain: str = Field(max_length=253, description="Sender domain, e.g. 'tdv.org'.")
+    domain: str = Field(
+        default="", max_length=253, description="Sender domain, e.g. 'tdv.org'."
+    )
+    # The forwarding case. Watching a mailbox that is forwarded into Gmail means
+    # identifying mail by the address it was DELIVERED to, because the sender may
+    # not survive the hop.
+    recipient: str = Field(
+        default="", max_length=320,
+        description="Delivered-to address, e.g. '240106452@ostimteknik.edu.tr'.",
+    )
+
+    @model_validator(mode="after")
+    def _needs_a_criterion(self):
+        """Refuse a watch with neither. `domain` used to be required, so nothing
+        could be empty by accident; now that both are optional, the pair has to
+        be checked — an empty scan would match the entire mailbox and hand every
+        message the owner owns to an agent."""
+        if not (self.domain or self.recipient):
+            raise ValueError("give a domain, a recipient, or both")
+        return self
     # Any extra Gmail query terms, ANDed on: 'is:unread', 'has:attachment', …
     extra_query: str = Field(default="", max_length=256)
     max_results: int = Field(default=10, ge=1, le=25)

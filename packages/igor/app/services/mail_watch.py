@@ -54,6 +54,38 @@ def _sender_address(from_header: str) -> str:
     return match.group(0).lower() if match else ""
 
 
+# Headers that can carry the address a message was DELIVERED to. Delivered-To is
+# the one that survives forwarding — Gmail stamps it with the mailbox that
+# actually received the message — but a plain To/Cc match is the common case and
+# X-Forwarded-To turns up on some relays.
+_RECIPIENT_HEADERS = ("Delivered-To", "To", "Cc", "X-Forwarded-To", "X-Original-To")
+
+
+def recipient_matches(headers: list[dict], recipient: str) -> bool:
+    """Whether `recipient` is one of the addresses this message was sent to.
+
+    This is the FORWARDING case, and it exists because the sender check cannot
+    cover it. When a mailbox is forwarded elsewhere, what reliably identifies the
+    mail is not who sent it — Exchange may rewrite From to the forwarding account
+    — but the fact that it was addressed to the original mailbox. That address
+    survives in Delivered-To/To even after the hop.
+
+    Exact address comparison, not substring: `ahmet@x.edu.tr` must not be matched
+    by `notahmet@x.edu.tr`, and Gmail's own `deliveredto:` operator is a
+    prefilter with the same fuzziness problem `domain_matches` exists to fix.
+    """
+    wanted = (recipient or "").strip().lower().lstrip("@")
+    if not wanted:
+        return False
+    for name in _RECIPIENT_HEADERS:
+        value = gmail_header(headers, name)
+        if not value:
+            continue
+        if any(addr.lower() == wanted for addr in _ADDR.findall(value)):
+            return True
+    return False
+
+
 def domain_matches(address: str, domain: str) -> bool:
     """Strict sender-domain test — the whole point of this module.
 
@@ -73,18 +105,27 @@ def domain_matches(address: str, domain: str) -> bool:
 def build_query(
     domain: str,
     *,
+    recipient: str = "",
     extra_query: str = "",
     newer_than_days: int = 2,
     label: str = SEEN_LABEL,
 ) -> str:
     """Assemble the Gmail search. Deliberately a superset of what we want —
-    precision comes from domain_matches() below, breadth from here.
+    precision comes from domain_matches()/recipient_matches(), breadth from here.
 
     `newer_than` is a floor, not the dedup mechanism: it bounds the scan if the
     label is ever missing or was cleared by hand, so a fresh watch does not fire
     on five years of archived mail on its first tick.
+
+    A `recipient` narrows by who the mail was addressed TO, which is how a
+    FORWARDED mailbox is watched: mail from the university arrives in Gmail, and
+    what identifies it is the school address it was sent to, not the sender.
     """
-    parts = [f"from:{domain.lstrip('@')}"]
+    parts = []
+    if domain:
+        parts.append(f"from:{domain.lstrip('@')}")
+    if recipient:
+        parts.append(f"deliveredto:{recipient.lstrip('@')}")
     if label:
         parts.append(f"-label:{label}")
     if newer_than_days > 0:
@@ -96,7 +137,8 @@ def build_query(
 
 async def scan(
     *,
-    domain: str,
+    domain: str = "",
+    recipient: str = "",
     extra_query: str = "",
     max_results: int = 10,
     newer_than_days: int = 2,
@@ -104,7 +146,16 @@ async def scan(
     body_chars: int = 2000,
     label: str = SEEN_LABEL,
 ) -> dict:
-    """Look for unseen mail from `domain`. Returns a status envelope, never raises.
+    """Look for unseen mail from `domain` and/or addressed to `recipient`.
+    Returns a status envelope, never raises.
+
+    At least one of `domain` / `recipient` is required — a scan with neither
+    would match the entire mailbox. Supplying BOTH ANDs them ("from the
+    registrar, to my school address").
+
+    `recipient` is the forwarding case: when the university mailbox is forwarded
+    into Gmail, the sender may or may not survive the hop, but the address it was
+    delivered to always does.
 
     status is one of:
       ok            — the scan ran; `count` may be 0 (the common case)
@@ -115,13 +166,22 @@ async def scan(
     `disconnected`/`error` on the EDGE rather than every poll — a broken watch
     that goes quiet forever is the failure mode worth alerting on.
     """
+    if not (domain or recipient):
+        return {
+            "status": "error",
+            "detail": "a watch needs a domain, a recipient, or both — with neither "
+                      "it would match the whole mailbox",
+            "count": 0, "message_ids": [], "messages": [],
+        }
+
     token = await google_access_token()
     if not token:
         logger.warning("mail_watch_disconnected", extra={"domain": domain})
         return {"status": "disconnected", "count": 0, "message_ids": [], "messages": []}
 
     query = build_query(
-        domain, extra_query=extra_query, newer_than_days=newer_than_days, label=label
+        domain, recipient=recipient, extra_query=extra_query,
+        newer_than_days=newer_than_days, label=label,
     )
     limit = max(1, min(int(max_results), _MAX_RESULTS))
 
@@ -156,7 +216,12 @@ async def scan(
                 if include_body
                 else {
                     "format": "metadata",
-                    "metadataHeaders": ["From", "To", "Subject", "Date"],
+                    # Delivered-To/Cc are needed for the recipient check; without
+                    # them a metadata-only scan silently rejects every forward.
+                    "metadataHeaders": [
+                        "From", "To", "Cc", "Subject", "Date",
+                        "Delivered-To", "X-Forwarded-To", "X-Original-To",
+                    ],
                 }
             ),
         )
@@ -166,9 +231,13 @@ async def scan(
         headers = message.get("payload", {}).get("headers", [])
         from_header = gmail_header(headers, "From")
         address = _sender_address(from_header)
-        if not domain_matches(address, domain):
-            # Gmail's fuzzy match let something through — drop it silently, this
-            # is exactly the case the strict check exists for.
+        # Both operators Gmail offers here (`from:`, `deliveredto:`) are fuzzy
+        # prefilters; these are the strict answers. Every supplied criterion must
+        # hold — an AND, so combining them narrows rather than widens.
+        if domain and not domain_matches(address, domain):
+            rejected += 1
+            continue
+        if recipient and not recipient_matches(headers, recipient):
             rejected += 1
             continue
 
