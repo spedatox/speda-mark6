@@ -57,6 +57,9 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
   // sealed and being sealed.
   const drift = !!lock && lock.enabled && ruleList.length > 0
     && ruleList.some(([, on]) => on !== engaged)
+  // Whether anything is ACTUALLY sealed, regardless of what the flag believes.
+  // This — not `engaged` — is what decides whether standing down is offered.
+  const sealed = ruleList.some(([, on]) => on)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -77,7 +80,15 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
               : 'The server is accepting inbound connections normally.'
         }
       >
-        {engaged ? (
+        {/* Offered whenever the flag says contained OR a rule is actually in
+            place. Gating this on the flag alone hid the escape hatch in the one
+            state that most needs it: engage() applies the firewall rules BEFORE
+            it persists the flag (deliberately — see lockdown.py), so a request
+            that dies in between leaves the ports sealed with the flag still
+            reading off. The panel would then correctly report "firewall does not
+            match the flag" while showing only an Engage button. disengage() is
+            ungated and removes rules unconditionally, so this is always safe. */}
+        {engaged || sealed ? (
           <PillBtn tone="danger" onClick={standDown} title="Remove the containment rules">
             {busy ? 'Standing down…' : 'Stand down'}
           </PillBtn>
