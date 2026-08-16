@@ -478,7 +478,7 @@ class HousePartySkill(Skill):
         )
         return (
             "House Party Protocol ENGAGED — authorization accepted. The full roster "
-            "is at your command at full model grade; the owner's UI is switching to "
+            "is up at full model grade; the owner's UI is switching to "
             "the war room. Now: state the objective, decompose it, and dispatch the "
             "agents in parallel this turn — then iterate on their results until the "
             "mission is done and debrief the owner."

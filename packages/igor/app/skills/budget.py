@@ -44,9 +44,9 @@ class BudgetModeSkill(Skill):
             return (
                 "Budget mode is now ON. From the next turn: concise answers, minimal "
                 "searches, the Legion stood down. Tell me to turn it off when you want "
-                "full power again, sir."
+                "full power again."
             )
         return (
             "Budget mode is now OFF. Full capabilities restored — deep research and "
-            "the Legion are available again. I'll spend where it counts, sir."
+            "the Legion are available again. I'll spend where it counts."
         )
