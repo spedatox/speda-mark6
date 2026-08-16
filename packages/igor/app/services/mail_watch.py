@@ -125,7 +125,18 @@ def build_query(
     if domain:
         parts.append(f"from:{domain.lstrip('@')}")
     if recipient:
-        parts.append(f"deliveredto:{recipient.lstrip('@')}")
+        # Gmail brace syntax = OR. BOTH operators are needed and neither is
+        # redundant, because the two delivery shapes put the address in
+        # different headers:
+        #   direct    Delivered-To: <the address>        → deliveredto: matches
+        #   forwarded Delivered-To: <the Gmail account>  → deliveredto: MISSES;
+        #             To:           <the address>          only to: matches
+        # Using deliveredto: alone is what silently breaks a forwarded mailbox
+        # watch — which is the exact case `recipient` exists for. The strict
+        # header check in recipient_matches() still decides; this only has to be
+        # a superset.
+        addr = recipient.lstrip("@")
+        parts.append(f"{{to:{addr} deliveredto:{addr}}}")
     if label:
         parts.append(f"-label:{label}")
     if newer_than_days > 0:
