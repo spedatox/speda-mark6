@@ -10,13 +10,27 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Paths that bypass authentication entirely.
-#   /health                 — liveness probe (no sensitive data)
-#   /oauth/google/callback  — Google's redirect can't carry our header
-#   /oauth/notion/callback  — Notion's redirect can't carry our header either
+#   /health                    — liveness probe (no sensitive data)
+#   /oauth/google/callback     — Google's redirect can't carry our header
+#   /oauth/notion/callback     — Notion's redirect can't carry our header either
+#   /oauth/microsoft/callback  — nor can Microsoft's
+# Every OAuth callback belongs here for the same structural reason: the provider
+# sends the OWNER'S BROWSER to this URL, and a browser navigation cannot attach
+# X-API-Key. Adding a provider without adding its callback here produces a
+# failure that looks like the provider's fault — consent succeeds, then the
+# redirect lands on a 401 — so the list must grow with app/routers/connections.py.
+# What protects these paths instead is that the authorization code is single-use,
+# short-lived, and only redeemable with the client secret held server-side.
+#
 # /docs, /redoc, /openapi.json are NOT here — they expose the full API schema.
 # They are disabled outside DEBUG (see main.create_app) and, when enabled in
 # DEBUG, are allowed through below for local convenience only.
-UNPROTECTED_PATHS = frozenset({"/health", "/oauth/google/callback", "/oauth/notion/callback"})
+UNPROTECTED_PATHS = frozenset({
+    "/health",
+    "/oauth/google/callback",
+    "/oauth/notion/callback",
+    "/oauth/microsoft/callback",
+})
 
 # Prefix-matched exemptions (path parameters can't be enumerated).
 #   /telegram/webhook/{agent_id} — Telegram's callback can't carry our X-API-Key;
