@@ -6,10 +6,22 @@ down removes exactly the rules it added. Both run as plain service calls, not as
 something an agent has to reason its way through with shell commands — the whole
 point is that containment happens the moment the flag flips.
 
+IT STOPS DEPLOYS. THAT IS THE POINT, BUT KNOW IT
+------------------------------------------------
+Sealing inbound SSH seals the channel CI deploys over
+(.github/workflows/deploy.yml SSHes in and runs deploy.sh). While engaged, every
+push to main fails at the SSH step after ~30s — the action's connect timeout —
+and the server is never touched, so nothing half-deploys. That is correct
+behaviour: containment that politely exempted a remote-code-execution path would
+not be containment. But it fails in a place that says nothing about lockdown, so:
+if deploys are timing out, check `GET /agents/lockdown` before anything else. It
+reports the real firewall rules alongside the flag, precisely because those two
+can disagree. Stand down to deploy; re-engage after.
+
 WHAT STAYS OPEN, AND WHY IT MUST
 --------------------------------
-Only INBOUND 22 (host sshd) and 8000 (the app's raw published port) are dropped.
-Left alone, deliberately:
+Only INBOUND host SSH (`system_ops_ssh_port`, plus 22 when that differs) and
+8000 (the app's raw published port) are dropped. Left alone, deliberately:
 
   * 443/80 — Caddy, and therefore the app itself. This is the channel the
     desktop client is built against and the one that carries the disengage call.
@@ -56,12 +68,27 @@ from app.services.host_bridge import run
 
 logger = logging.getLogger(__name__)
 
-# Inbound ports sealed while engaged: (chain, port, what it is).
-# 443/80 are absent by design — see the module docstring.
-_SEALED = (
-    ("INPUT", 22, "host SSH"),
-    ("DOCKER-USER", 8000, "app raw port"),
-)
+def _sealed() -> tuple[tuple[str, int, str], ...]:
+    """Inbound ports sealed while engaged: (chain, port, what it is).
+
+    443/80 are absent by design — see the module docstring.
+
+    The SSH entry is derived from `system_ops_ssh_port` rather than hardcoded to
+    22, because a hardcoded 22 gets containment exactly backwards on any host
+    that moved sshd: it seals a port nothing listens on while the real SSH stays
+    wide open, and you are told you are contained. The host bridge already reads
+    that setting to reach the host (services/host_bridge.py), so it is the same
+    number by construction.
+
+    22 is still sealed when the real port differs, because it is an inbound
+    surface either way and sealing it costs nothing when it is closed.
+    """
+    ssh_port = int(settings.system_ops_ssh_port or 22)
+    ports = [("INPUT", ssh_port, f"host SSH ({ssh_port})")]
+    if ssh_port != 22:
+        ports.append(("INPUT", 22, "host SSH (22)"))
+    ports.append(("DOCKER-USER", 8000, "app raw port"))
+    return tuple(ports)
 
 # Always exempt, on top of every Docker subnet found at engage time.
 _LOOPBACK = "127.0.0.0/8"
@@ -134,10 +161,32 @@ async def engage() -> tuple[bool, str]:
         )
 
     applied, already, failed = [], [], []
-    for chain, port, label in _SEALED:
+    flagged = False
+
+    def _mark_contained() -> None:
+        """Persist the flag the moment the FIRST seal is real.
+
+        The flag still follows the firewall — it is never set before a rule is
+        actually in place — but it no longer waits for the WHOLE loop. That wait
+        was minutes wide: every rule costs several SSH round trips to the host at
+        up to 25s each, and if the caller gave up in the middle (a browser fetch
+        timing out is enough to cancel the request), the ports stayed sealed with
+        the flag still reading off. That drift is the worst state this module can
+        produce, because `reconcile_on_startup` skips a clear flag and the UI
+        offers no way down from a lockdown it does not believe is on.
+        """
+        nonlocal flagged
+        if not flagged:
+            set_lockdown(True)
+            flagged = True
+
+    for chain, port, label in _sealed():
         where = f"{label} ({chain}:{port})"
         if await _present(_drop_rule(chain, port, "-C")):
             already.append(where)
+            # Already sealed with the flag clear IS the drift state — recording
+            # it here is what lets a re-engage repair a previous half-run.
+            _mark_contained()
             continue
 
         # Exemptions go in AFTER the drop so they land above it (-I inserts at
@@ -166,6 +215,7 @@ async def engage() -> tuple[bool, str]:
             continue
 
         applied.append(where)
+        _mark_contained()
 
     # The flag follows the firewall, never leads it: a half-applied lockdown that
     # reported success is how someone ends up believing they are contained.
@@ -210,7 +260,7 @@ async def disengage() -> tuple[bool, str]:
     exempt = await _exempt_sources() or [_LOOPBACK]
     removed, failed = [], []
 
-    for chain, port, label in _SEALED:
+    for chain, port, label in _sealed():
         where = f"{label} ({chain}:{port})"
         cleared = False
         # Loop: a repeated engage against an older build may have stacked
@@ -270,7 +320,7 @@ async def status() -> dict:
     engaged = get_lockdown()
     rules: dict[str, bool] = {}
     if settings.lockdown_protocol_enabled:
-        for chain, port, label in _SEALED:
+        for chain, port, label in _sealed():
             rules[label] = await _present(_drop_rule(chain, port, "-C"))
     return {
         "engaged": engaged,
