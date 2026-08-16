@@ -93,15 +93,33 @@ MESSAGES = Index("messages_fts", ["text"], [1.0])
 # AND / OR / NOT / NEAR are operators only in upper case.
 _TOKEN = re.compile(r"[^\W_]{2,}", re.UNICODE)
 
-# One-syllable Turkish/English function words carry no retrieval signal but do
-# match nearly everything once prefixed. Dropping them is what stops `ve*` and
-# `the*` from flattening the ranking.
+# Function words carry no retrieval signal but do match nearly everything once
+# prefixed. Dropping them is what stops `ve*` and `the*` from flattening the
+# ranking. The Turkish QUESTION words matter most: a recall query is usually
+# phrased as a question ("vize ne zaman", "kira ne kadar"), so they appear in
+# almost every query while identifying almost nothing. Written folded (ASCII),
+# because fold() runs before this set is consulted.
 _STOP = frozenset({
+    # English
     "the", "and", "for", "with", "that", "this", "was", "are", "has", "have",
     "not", "but", "you", "his", "her", "its", "from", "what", "when", "which",
-    "ile", "ver", "bir", "bu", "şu", "ama", "için", "gibi", "daha", "olan",
-    "olarak", "var", "yok", "ise", "veya", "ancak", "ki", "de", "da",
+    "how", "why", "who", "where", "does", "did", "about",
+    # Turkish function words
+    "ile", "bir", "bu", "su", "ama", "icin", "gibi", "daha", "olan",
+    "olarak", "var", "yok", "ise", "veya", "ancak", "ki", "de", "da", "mi",
+    "mu", "ya", "cok", "en", "her", "ve",
+    # Turkish question words — "ne zaman", "ne kadar", "kim", "hangi"…
+    "ne", "kim", "nasil", "neden", "nerede", "nereye", "kac", "hangi", "niye",
+    "zaman", "kadar", "kimin",
 })
+
+# Minimum length before a term is searched as a PREFIX. Prefixing exists for
+# Turkish agglutination — "sinav" reaching "sinavlarinda" — and real stems are
+# four characters or more. Below that a prefix stops being a stem and becomes a
+# wildcard: `ne*` matches "net", "neden", "nerede" and drowns the actual hit,
+# which is exactly how "vize ne zaman" returned a fact about morning replies.
+# Short tokens ("tl", "ai", "vpn") are still searched — just matched exactly.
+_PREFIX_MIN = 4
 
 
 # Turkish letters that unicode61 cannot fold on its own. ı/İ are the load-bearing
@@ -156,7 +174,9 @@ def build_match_query(query: str) -> str:
     terms = [t for t in _TOKEN.findall(fold(query)) if t not in _STOP][:24]
     if not terms:
         return ""
-    return " OR ".join(f"{t}*" for t in terms)
+    return " OR ".join(
+        f"{t}*" if len(t) >= _PREFIX_MIN else t for t in terms
+    )
 
 
 async def ensure_index(db: AsyncSession, index: Index = OBSERVATIONS) -> bool:
