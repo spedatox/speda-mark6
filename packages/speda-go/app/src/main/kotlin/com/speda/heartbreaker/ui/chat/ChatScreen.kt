@@ -272,7 +272,6 @@ fun ChatScreen(
             onResetUplink = onResetUplink,
             onOpenSettings = { drawerOpen = false; settingsOpen = true },
             // Moved off the header (note #3) — these live in the profile menu now.
-            onOpenWarRoom = { drawerOpen = false; onEnterWarRoom() },
             onToggleComms = { drawerOpen = false; commsOpen = true },
             onToggleBoard = { drawerOpen = false; boardOpen = true },
         )

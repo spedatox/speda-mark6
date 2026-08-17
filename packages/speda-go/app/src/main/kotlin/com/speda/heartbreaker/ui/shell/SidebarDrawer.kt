@@ -104,7 +104,6 @@ fun SidebarDrawer(
     onAgentChange: (String) -> Unit,
     onResetUplink: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenWarRoom: () -> Unit,
     onToggleComms: () -> Unit,
     onToggleBoard: () -> Unit,
     modifier: Modifier = Modifier,
@@ -326,12 +325,12 @@ fun SidebarDrawer(
             }
 
             // ── Footer profile row (tap → the profile menu) ──────────────────
-            // Mobile-specific: the header can't carry WAR ROOM / COMMS / SYS and
-            // a session title, so they live here — the slot the web gives Settings.
+            // Mobile-specific: the header can't carry COMMS / SYS and a session
+            // title, so they live here — the slot the web gives Settings.
+            // No War room entry: the House Party Protocol is a desktop surface.
             if (footerMenuOpen) {
                 Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Menu)) {
                     MenuItem("Settings", { footerMenuOpen = false; onOpenSettings() }) { HbGlyphs.Sliders(it, size = 13.dp) }
-                    MenuItem("War room", { footerMenuOpen = false; onOpenWarRoom() }) { HbGlyphs.WarRoom(it, size = 13.dp) }
                     MenuItem("Comms", { footerMenuOpen = false; onToggleComms() }) { HbGlyphs.Comms(it, size = 13.dp) }
                     MenuItem("Systems board", { footerMenuOpen = false; onToggleBoard() }) { HbGlyphs.Sys(it, size = 13.dp) }
                     MenuItem("Reset uplink", { footerMenuOpen = false; onResetUplink() }) { HbGlyphs.Close(it, size = 13.dp) }

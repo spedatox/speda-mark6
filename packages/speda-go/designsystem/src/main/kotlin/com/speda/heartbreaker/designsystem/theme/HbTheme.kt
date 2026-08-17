@@ -98,6 +98,13 @@ fun HbTheme(
     )
 }
 
-/** Convenience: resolve a brand's palette without composition (previews/tests). */
+/** Convenience: resolve a brand's palette without composition (previews/tests).
+ *
+ *  An unknown agent falls back to the DEFAULT brand, not to the war room's
+ *  amber — that fallback dated from when this app could enter the war room, and
+ *  it would now paint an unrecognised agent in the colour of a protocol the
+ *  mobile client does not run. */
 fun paletteForAgent(agentId: String): HbPalette =
-    ThemeEngine.buildPalette(Brands.BRANDS[agentId]?.accent ?: Brands.WARROOM.accent)
+    ThemeEngine.buildPalette(
+        Brands.BRANDS[agentId]?.accent ?: Brands.BRANDS.getValue(Brands.DEFAULT_AGENT).accent,
+    )
