@@ -320,12 +320,36 @@ def _format_directory(files: list[MemoryFile], path: str, *, with_sizes: bool = 
     groups: dict[str, list[MemoryFile]] = {}
     for f in sorted(files, key=lambda x: x.path):
         parent = f.path.rsplit("/", 1)[0]
+        # Dot-directories are the store's back office — `.archive/` holds the
+        # monoliths their members replaced, `.audit/` holds Orion's trail. Both
+        # are readable by path if anyone needs them, but listing them offers
+        # every agent a 27 KB superseded copy of a document it should be reading
+        # as a 4 KB member, and the listing is precisely where an agent decides
+        # what to open. A back office nobody advertises is not a hidden one.
+        if parent.rsplit("/", 1)[-1].startswith("."):
+            continue
         groups.setdefault(parent, []).append(f)
+
+    # A collection with no files yet still has to appear, or it does not exist as
+    # far as the agent is concerned. `life/` is empty until the first document
+    # that belongs to no domain arrives — and the prompt tells agents to file
+    # such a document there, while this listing is what they trust for what
+    # exists. The two disagreeing is how an instruction quietly stops being
+    # followed.
+    from app.services.memory_spec import COLLECTIONS
+
+    for coll in COLLECTIONS:
+        if coll.depth == 1 and not coll.closed:
+            groups.setdefault(coll.root, [])
 
     lines = [f"Here are the files and directories up to 2 levels deep in {path}:"]
     root = path.rstrip("/") or MEMORY_ROOT
     for parent in sorted(groups):
         members = groups[parent]
+        if not members:
+            lines.append(f"{parent}/")
+            lines.append("  (empty)")
+            continue
         if parent == root:
             # Top level keeps full paths: these are the documents agents are told
             # about by name in prompts, and a bare `owner.md` reads like a
