@@ -66,7 +66,7 @@ fun AutomationsTab(config: AppConfig, graph: AppGraph) {
         Panel {
             val s = status
             StatusLine(
-                "n8n ENGINE",
+                "n8n engine",
                 ok = s?.n8nOnline == true,
                 detail = when {
                     s == null -> "checking…"
@@ -77,7 +77,7 @@ fun AutomationsTab(config: AppConfig, graph: AppGraph) {
             )
             Spacer(Modifier.height(6.dp))
             StatusLine(
-                "TELEGRAM DELIVERY",
+                "Telegram delivery",
                 ok = s?.telegramConnected == true,
                 detail = when {
                     s == null -> "checking…"

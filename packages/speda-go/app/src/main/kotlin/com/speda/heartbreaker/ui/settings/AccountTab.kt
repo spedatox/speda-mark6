@@ -83,7 +83,7 @@ fun AccountTab(
 
         SectionHeader("Uplink")
         Panel {
-            FieldLabel("BACKEND")
+            FieldLabel("Backend")
             HbText(config.apiBase, style = HbType.readout.copy(fontSize = 12.sp), color = palette.textDim, maxLines = 1)
             Spacer(Modifier.height(12.dp))
             Hint("Disconnect from this Igor backend and re-enter the URL + key.")

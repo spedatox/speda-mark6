@@ -100,9 +100,8 @@ private fun ThemeChip(label: String, active: Boolean) {
     ) {
         HbText(
             label,
-            style = HbType.headerBar.copy(fontSize = 12.sp),
+            style = HbType.read.copy(fontSize = 13.5.sp),
             color = if (active) palette.accentBright else palette.textFaint,
-            caps = true,
         )
     }
 }

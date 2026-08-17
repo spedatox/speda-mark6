@@ -191,7 +191,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                         )
                     }
                     Column(Modifier.weight(1f)) {
-                        FieldLabel("GIVE UP AFTER")
+                        FieldLabel("Give up after")
                         GlassField(
                             value = editing.maxAsks.toString(),
                             onValueChange = { v ->
@@ -203,7 +203,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                 }
                 Spacer(Modifier.height(10.dp))
 
-                FieldLabel("DAYS")
+                FieldLabel("Days")
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     DAY_LABELS.forEachIndexed { i, dl ->
                         val n = i + 1
@@ -217,7 +217,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                 }
                 Spacer(Modifier.height(10.dp))
 
-                FieldLabel("ASKED BY")
+                FieldLabel("Asked by")
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     AGENTS.take(4).forEach { a ->
                         TabChip(a, active = editing.agent == a) { draft = editing.copy(agent = a) }
@@ -285,9 +285,9 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                             }
                         }
                     })
-                    SettingsButton("CANCEL", onClick = { draft = null; error = "" })
+                    SettingsButton("Cancel", onClick = { draft = null; error = "" })
                     if (!isNew) {
-                        SettingsButton("DELETE", tint = palette.amber, onClick = {
+                        SettingsButton("Delete", tint = palette.amber, onClick = {
                             scope.launch {
                                 api.deleteReminder(config, editing.id)
                                 draft = null

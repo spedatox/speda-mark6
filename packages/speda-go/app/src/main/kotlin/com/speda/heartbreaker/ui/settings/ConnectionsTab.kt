@@ -101,7 +101,7 @@ fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
             val over = used > limit
             val col = if (over) palette.red else if (pct > 0.8f) palette.amber else palette.green
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                HbText("ACTIVE TOOL TOKENS", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textDim)
+                HbText("Active tool tokens", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textDim)
                 HbText("~$used / $limit", style = HbType.readout.copy(fontSize = 10.sp), color = col)
             }
             Spacer(Modifier.height(6.dp))

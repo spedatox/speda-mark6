@@ -3,6 +3,7 @@ package com.speda.heartbreaker.ui.settings
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -241,9 +243,18 @@ private fun ConfigFieldRow(
         ) {
             HbText(f.label.ifEmpty { f.key }, style = HbType.read.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium), color = palette.text)
             if (f.requiresRestart) {
-                HbText("RESTART", style = HbType.readout.copy(fontSize = 9.sp, letterSpacing = 0.06.em), color = palette.amber)
+                // A pill, like every other status chip on the deck.
+                Box(
+                    Modifier
+                        .clip(CircleShape)
+                        .background(palette.amber.copy(alpha = 0.10f))
+                        .border(1.dp, palette.amber.copy(alpha = 0.28f), CircleShape)
+                        .padding(horizontal = 9.dp, vertical = 1.dp),
+                ) {
+                    HbText("restart", style = HbType.read.copy(fontSize = 12.sp), color = palette.amberBright)
+                }
             }
-            if (dirty) HbText("● edited", style = HbType.readout.copy(fontSize = 9.sp), color = palette.accentBright)
+            if (dirty) HbText("● edited", style = HbType.read.copy(fontSize = 12.5.sp), color = palette.accentBright)
             Spacer(Modifier.weight(1f))
             if (dirty) {
                 HbText(

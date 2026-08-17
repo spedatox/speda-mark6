@@ -199,13 +199,12 @@ fun HealthTab(config: AppConfig, graph: AppGraph) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     StatusDot(ok = s.lastSyncMillis > 0L)
                     HbText(
-                        if (s.lastSyncMillis > 0L) "LAST SYNC  ${formatStamp(s.lastSyncMillis)}" else "NEVER SYNCED",
-                        style = HbType.headerBar.copy(fontSize = 11.sp),
+                        if (s.lastSyncMillis > 0L) "Last sync ${formatStamp(s.lastSyncMillis)}" else "Never synced",
+                        style = HbType.read.copy(fontSize = 13.5.sp),
                         color = palette.textDim,
-                        caps = true,
                     )
                     serverSamples?.let {
-                        HbText("· $it ON SERVER", style = HbType.headerBar.copy(fontSize = 11.sp), color = palette.textFaint, caps = true)
+                        HbText("· $it on server", style = HbType.read.copy(fontSize = 13.5.sp), color = palette.textFaint)
                     }
                 }
                 Spacer(Modifier.height(10.dp))
@@ -298,7 +297,7 @@ private fun TypeRow(
         }
         HbText(label, style = HbType.read.copy(fontSize = 14.sp), color = palette.text, modifier = Modifier.weight(1f))
         if (checked && !granted) {
-            HbText("NOT GRANTED", style = HbType.headerBar.copy(fontSize = 10.sp), color = palette.amber, caps = true)
+            HbText("Not granted", style = HbType.read.copy(fontSize = 13.sp), color = palette.amberBright)
         }
     }
 }
