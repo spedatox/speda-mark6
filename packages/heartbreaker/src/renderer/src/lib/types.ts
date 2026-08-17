@@ -81,6 +81,21 @@ export interface TriggerMeta {
   automation?: string
   from_agent?: string   // agent_id of the dispatching agent (source === "agent")
   output_mode?: string  // "push" | "silent"
+  /** Set when this turn is a background job REPORTING BACK — a legionnaire, or
+   *  an agent that was dispatched to, finishing and waking the agent that sent
+   *  it. Carried on the ASSISTANT message: the reply is the thing to read, and
+   *  this is the receipt folded above it. */
+  report?: ReportMeta
+}
+
+/** What a finished background job brought back, for the folded card. */
+export interface ReportMeta {
+  kind: 'legion' | 'dispatch'
+  from: string          // the legionnaire's role, or the agent dispatched to
+  task: string
+  status: string        // "ok" | "error" | "timeout" | …
+  ticket?: number | null
+  result: string        // the raw findings the reply was written from
 }
 
 export interface ChatMessage {

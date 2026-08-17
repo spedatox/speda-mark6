@@ -76,3 +76,6 @@ packages/igor/scripts/tts_samples/
 # Forge scratch: session state, allowlist, and worktrees an agent created here
 .forge/
 .forge-worktrees/
+
+# Forge scratch — run_command output spills, never source
+.forge_spill/

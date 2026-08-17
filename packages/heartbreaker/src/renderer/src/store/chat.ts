@@ -41,6 +41,7 @@ export type ChatAction =
   | { type: 'APPEND_CHUNK'; payload: { id: string; chunk: string } }
   | { type: 'SET_STATUS'; payload: { id: string; status: string } }
   | { type: 'TAG_MESSAGE_SESSION'; payload: { id: string; sessionId: number } }
+  | { type: 'SET_MESSAGE_TRIGGER'; payload: { id: string; trigger: import('../lib/types').TriggerMeta } }
   | { type: 'ADD_TOOL'; payload: { id: string; tool: import('../lib/types').ToolBadge } }
   | { type: 'SUBAGENT'; payload: { id: string; event: Record<string, unknown> } }
   | { type: 'SET_TOOL_RESULT'; payload: { id: string; toolId: string; result: string } }
@@ -89,6 +90,18 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         messages: state.messages.map(m =>
           m.id === action.payload.id ? { ...m, sessionId: action.payload.sessionId } : m
+        ),
+      }
+
+    // Provenance for a turn this client did not send — a background job
+    // reporting back, learned from the stream's `start` event. On reload the
+    // same field arrives already attached to the row (rows_from_messages folds
+    // the seed into the reply), so both paths render one identical card.
+    case 'SET_MESSAGE_TRIGGER':
+      return {
+        ...state,
+        messages: state.messages.map(m =>
+          m.id === action.payload.id ? { ...m, trigger: action.payload.trigger } : m
         ),
       }
 

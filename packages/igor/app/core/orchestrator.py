@@ -389,9 +389,17 @@ class AgentOrchestrator:
         iterations = 0
         produced_text = False  # any text streamed yet this turn (for paragraph breaks)
 
+        # `trigger` rides the START event so a client attaching to a turn it did
+        # not send can label it the moment it appears — a background job
+        # reporting back renders the same folded card live as it does on reload,
+        # where it comes off the persisted seed instead. Absent for ordinary
+        # chat turns, which the client sent and already knows the origin of.
         yield SSEEvent(
             type=SSEEventType.START,
-            data={"tools_available": len(tools)},
+            data={
+                "tools_available": len(tools),
+                **({"trigger": tm} if (tm := context.extra.get("trigger_meta")) else {}),
+            },
             session_id=context.session_id,
             request_id=context.request_id,
         )

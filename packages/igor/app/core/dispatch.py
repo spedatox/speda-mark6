@@ -34,6 +34,12 @@ Every dispatch — and its result — is logged to the agent_messages table for 
 comms tray (GET /agents/comms). Telemetry writes are best-effort: a logging
 failure never fails the dispatch itself.
 
+A BACKGROUND dispatch (spawn) reports back when it lands: the report hook wired
+in the lifespan starts a push turn on the agent that sent it, so the answer is
+read and delivered unprompted. Without it a backgrounded job ended in silence
+and the owner had to ask "is it done?" — which is exactly the polling that
+sending the job away was supposed to remove.
+
 Construction: created BEFORE the CapabilityRegistry (the dispatch_agent skill
 needs it at registration time), wired AFTER the orchestrator exists via wire().
 All references live on app.state per Rule 6 — this module holds no globals.
@@ -196,6 +202,10 @@ class AgentDispatcher:
         # Live background (spawned) dispatch tasks — tracked so they aren't GC'd
         # mid-run and can be capped/cancelled on shutdown.
         self._background: set[asyncio.Task] = set()
+        # Set late in the lifespan (see set_report_hook): the callback closes
+        # over the orchestrator and turn registry, neither of which exists when
+        # the dispatcher is constructed (it precedes the registry).
+        self._report_hook = None
 
     def wire(self, *, orchestrator, profiles, session_manager, ws_manager) -> None:
         """Late-bind the engine refs (they are constructed after the registry)."""
@@ -203,6 +213,17 @@ class AgentDispatcher:
         self._profiles = profiles
         self._session_manager = session_manager
         self._ws_manager = ws_manager
+
+    def set_report_hook(self, hook) -> None:
+        """Install the callback a finished BACKGROUND dispatch fires to report in.
+
+        Kept as an injected awaitable rather than logic here, exactly as the
+        Legion's is (app/legion/runner.py): this module runs agents and must not
+        learn about sessions, delivery or the turn registry (Rule 1). None = the
+        old behaviour, where a background result waits in its ticket until
+        someone thinks to call dispatch_status.
+        """
+        self._report_hook = hook
 
     # ── Public API ───────────────────────────────────────────────────────────
 
@@ -368,9 +389,13 @@ class AgentDispatcher:
         task_obj.add_done_callback(self._background.discard)
         ticket = f"#{msg_id}" if msg_id is not None else "(untracked)"
         return (
-            f"Background dispatch {ticket} → {to_agent.upper()} started. It keeps "
-            "working after this turn ends; check progress with dispatch_status "
-            f"(id={msg_id}) or read_agent_channel. Tell the owner it's running."
+            f"Background dispatch {ticket} → {to_agent.upper()} started. The result "
+            "is NOT available yet, so never guess or fabricate it. When "
+            f"{to_agent.upper()} finishes you will be woken with its answer and you "
+            "will deliver it to the owner then — so tell him it is running and that "
+            "you will report back, and do NOT promise to check on it yourself or ask "
+            f"him to remind you. dispatch_status (id={msg_id}) is only for when he "
+            "asks before it lands."
         )
 
     async def _run_and_finish(
@@ -418,6 +443,31 @@ class AgentDispatcher:
             "agent_dispatch_bg_done",
             extra={"request_id": request_id, "from": from_agent, "to": to_agent, "status": status},
         )
+
+        # Report in. The ticket is written FIRST so the result is durable even if
+        # the reporting turn cannot start (registry at capacity, provider down) —
+        # it is still retrievable with dispatch_status. Cancellation is not
+        # reported: that path is a shutdown, not a finding, and it returns above
+        # before reaching here.
+        if self._report_hook is not None:
+            try:
+                await self._report_hook(
+                    agent_id=from_agent,
+                    to_agent=to_agent,
+                    task=task,
+                    result=result,
+                    status=status,
+                    ticket=msg_id,
+                    # Report back into the conversation this was ordered from,
+                    # not a blank session: that thread holds the owner's
+                    # constraints and the reason the job was sent away.
+                    room_session_id=origin_session_id,
+                )
+            except Exception as e:  # noqa: BLE001 — never break on delivery
+                logger.error(
+                    "dispatch_report_failed",
+                    extra={"request_id": request_id, "to": to_agent, "error": str(e)},
+                )
 
     async def broadcast(
         self,

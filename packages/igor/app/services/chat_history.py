@@ -106,12 +106,29 @@ def final_answer_text(content) -> str:
 
 def rows_from_messages(messages: list[Message]) -> list[dict]:
     """Shape stored user/assistant Message rows into the plain dicts the UI
-    renders for a session's message list."""
+    renders for a session's message list.
+
+    One row does not survive as a row: the seed of a background-completion
+    report (a legionnaire, or an agent that was dispatched to, finishing and
+    waking its caller — app/core/trigger_runner.py). It is stored as a user
+    turn because that is what the model was handed, but the owner did not write
+    it and it is nothing they asked to read: it is the scaffolding that produced
+    the reply below it. So it FOLDS INTO that reply, which carries it as a
+    folded card the owner can open — the same shape the live stream paints from
+    the START event, so watching the answer arrive and reopening it later look
+    alike. If no reply follows (the run died before persisting), the seed stays
+    a row of its own rather than vanishing with the work it recorded.
+    """
     out = []
+    held: dict | None = None   # a report seed waiting for the reply it produced
     for m in messages:
         if m.role not in ('user', 'assistant'):
             continue
         meta = _extract_meta(m.content)
+        is_seed = m.role == 'user' and (meta.get('trigger') or {}).get('report')
+        if m.role == 'assistant' and held is not None:
+            meta = {**meta, 'trigger': held['trigger']}
+            held = None
         # A user turn whose real text blocks are not what the bubble should show:
         # document uploads (the blocks hold the extracted file contents) and an
         # inter-agent dispatch (the blocks hold the routing preamble and the
@@ -141,5 +158,16 @@ def rows_from_messages(messages: list[Message]) -> list[dict]:
             row['uploads'] = meta['uploads']
         if meta.get('trigger'):
             row['trigger'] = meta['trigger']
+        # A seed waits for the reply that consumes it. Anything else arriving
+        # first means nothing ever will — release it in place, so it is still
+        # in the transcript and still in the right order.
+        if held is not None:
+            out.append(held)
+            held = None
+        if is_seed:
+            held = row
+            continue
         out.append(row)
+    if held is not None:
+        out.append(held)
     return out

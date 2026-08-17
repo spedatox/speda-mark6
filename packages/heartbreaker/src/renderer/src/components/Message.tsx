@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
-import type { ChatMessage, FileMeta, ToolBadge, SubagentRun } from '../lib/types'
+import type { ChatMessage, FileMeta, ToolBadge, SubagentRun, ReportMeta } from '../lib/types'
 import { SubagentPanel } from './SubagentPanel'
 import SubagentDetailView from './SubagentDetailView'
 import { useChatContext } from '../store/chat'
@@ -454,6 +454,94 @@ function ToolFeed({ tools, streaming }: { tools: ToolBadge[]; streaming: boolean
               <ToolRow tool={t} live={i === liveIdx} />
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * THE REPORT CARD — a background job that came back, folded above its answer.
+ *
+ * A legionnaire finishing, or an agent that was dispatched to reporting in,
+ * wakes its caller with a turn the owner never sent. The answer below is what
+ * they want; this is the receipt. It reads as one quiet line until opened,
+ * because the alternative — the seed prompt rendered as a chat bubble — put a
+ * wall of framing and raw findings on top of the reply and attributed it to the
+ * owner. Opened, it is the same thing a tool call shows: what was asked, and
+ * exactly what came back.
+ */
+function ReportCard({ report }: { report: ReportMeta }) {
+  const [open, setOpen] = useState(false)
+  const who = report.from.toUpperCase()
+  const failed = report.status !== 'ok'
+
+  return (
+    <div className="hb-glass-sm" style={{
+      margin: '0 0 6px', overflow: 'hidden',
+      border: `1px solid ${failed ? 'rgba(var(--hb-red-rgb,255,90,90),0.35)' : 'var(--hb-edge)'}`,
+      background: 'var(--glass-sheen), var(--glass-fill)',
+      backdropFilter: 'blur(24px) saturate(160%)',
+      WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+      animation: 'fadeSlideIn 0.15s ease',
+    }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+          padding: '10px 16px', cursor: 'pointer', textAlign: 'left',
+          background: 'transparent', border: 'none',
+          borderBottom: open ? '1px solid rgba(255,255,255,0.06)' : 'none',
+        }}
+      >
+        {/* Inbound, not outbound: this arrived on its own. */}
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+          stroke={failed ? 'var(--hb-red)' : 'var(--hb-cyan)'}
+          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <path d="M20 12H8M12 6l-6 6 6 6"/>
+        </svg>
+        <span style={{
+          fontFamily: "'Rajdhani', sans-serif", fontSize: '0.875rem', fontWeight: 600,
+          letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--hb-text-dim)',
+        }}>
+          {who} {report.kind === 'dispatch' ? 'reported back' : 'finished'}
+        </span>
+        {failed && (
+          <span style={{ fontSize: '0.8125rem', color: 'var(--hb-red)' }}>{report.status}</span>
+        )}
+        <span style={{ flex: 1 }} />
+        {report.ticket != null && (
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--hb-text-faint)',
+          }}>#{report.ticket}</span>
+        )}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--hb-text-faint)"
+          strokeWidth="1.5" style={{
+            flexShrink: 0,
+            transform: open ? 'none' : 'rotate(180deg)', transition: 'transform 0.18s',
+          }}>
+          <polyline points="6 15 12 9 18 15"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{ padding: '10px 16px 14px', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          {report.task && (
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: '0.63rem', lineHeight: 1.5,
+              color: 'var(--hb-icon)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}>
+              <span style={{ color: 'var(--hb-icon-dim)' }}>task:</span> {report.task}
+            </div>
+          )}
+          {report.result && (
+            <pre style={{
+              margin: 0, fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+              color: 'var(--hb-icon-bright)', lineHeight: 1.5,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              maxHeight: 260, overflow: 'auto',
+            }}>{report.result}</pre>
+          )}
         </div>
       )}
     </div>
@@ -1255,6 +1343,10 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
       style={{ display: 'flex', marginBottom: '1.5rem', alignItems: 'flex-start', animation: 'fadeSlideIn 0.2s ease' }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
+        {/* This turn was not sent by the owner — a background job finished and
+            woke the agent to deliver it. The receipt folds above the answer;
+            the answer itself renders exactly as any other. */}
+        {message.trigger?.report && <ReportCard report={message.trigger.report} />}
         {/* Text and tool activity INTERLEAVED in the order they actually
             happened (see buildSegments) — a tool fired mid-answer shows up
             between the sentences around it, not stacked above the whole

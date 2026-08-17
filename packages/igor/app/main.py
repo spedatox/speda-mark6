@@ -320,19 +320,22 @@ async def lifespan(app: FastAPI):
     # Legion is registered first. A completed worker now starts a real push turn
     # on the agent that deployed it instead of leaving the result sitting in a
     # ticket until someone thinks to ask.
-    from app.core.trigger_runner import make_legion_reporter
+    from app.core.trigger_runner import make_dispatch_reporter, make_legion_reporter
 
-    registry.set_legion_report_hook(
-        make_legion_reporter(
-            profiles=profiles,
-            orchestrator=orchestrator,
-            turns=app.state.turns,
-            session_manager=session_manager,
-            telegram_bots=telegram_bots,
-            agent_proxy=agent_proxy,
-            ws_manager=ws_manager,
-        )
-    )
+    reporter_deps = {
+        "profiles": profiles,
+        "orchestrator": orchestrator,
+        "turns": app.state.turns,
+        "session_manager": session_manager,
+        "telegram_bots": telegram_bots,
+        "agent_proxy": agent_proxy,
+        "ws_manager": ws_manager,
+    }
+    registry.set_legion_report_hook(make_legion_reporter(**reporter_deps))
+    # And the same for a BACKGROUND dispatch to another agent: when it lands, the
+    # agent that sent it is woken with the answer and delivers it, instead of the
+    # owner having to ask whether it finished.
+    dispatcher.set_report_hook(make_dispatch_reporter(**reporter_deps))
 
     # ── 9. Child processes — the local sandbox + the Forge peer ────────────────
     # Both are best-effort: a missing dependency logs a warning and SPEDA keeps

@@ -373,12 +373,16 @@ class LegionRunner:
         # Capture plain values only — the request-scoped db/context must not
         # outlive the request. The loop needs a context solely for tool
         # execution routing, so hand it a detached shallow stand-in.
+        # The conversation this deployment was ordered from — the ticket records
+        # it, and the completion report goes back INTO it so the agent reads its
+        # own finding with the thread that explains why it was sent.
+        room_session_id = context.extra.get("room_session_id") or context.session_id
         msg_id = await self._log_start(
             request_id=context.request_id,
             from_agent=context.agent_id,
             worker_id=worker.worker_id,
             task=f"{description} — {prompt}",
-            origin_session_id=context.extra.get("room_session_id") or context.session_id,
+            origin_session_id=room_session_id,
         )
         bg_context = _detached_context(context)
 
@@ -441,6 +445,7 @@ class LegionRunner:
                         result=result,
                         status=status,
                         ticket=msg_id,
+                        room_session_id=room_session_id,
                     )
                 except Exception as e:  # noqa: BLE001 — never break on delivery
                     logger.error(

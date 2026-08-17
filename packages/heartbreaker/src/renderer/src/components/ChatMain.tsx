@@ -19,6 +19,13 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10)
 }
 
+/** How often an open session asks the backend whether a turn has started in it
+ *  that this client did not send — a background job reporting its result back
+ *  into the conversation it was ordered from. `/chat/active` reads an in-memory
+ *  dict, so this is a cheap question to keep asking; the interval is the delay
+ *  between the answer landing and the owner watching it arrive. */
+const WATCH_MS = 4000
+
 /** Rebuild API image blocks from a user bubble's display `data:` URLs, so
  *  retrying a turn the backend never received resends its pictures instead of
  *  quietly dropping them. Attached DOCUMENTS cannot be recovered this way —
@@ -501,6 +508,10 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
         if (event.type === 'start') {
           gotStart = true
           runIdRef.current = event.request_id ?? null
+          // Claim it before the session watcher can see it on /chat/active: this
+          // turn is already streaming into a bubble, and an attach would paint a
+          // second one for the same answer.
+          if (event.request_id) attachedRef.current.add(event.request_id)
           // Every SSE event carries session_id — tag this turn (and its bubble)
           // with the session it belongs to, so switching views can tell whether
           // the in-flight stream is ours and SELECT_SESSION can preserve it.
@@ -694,27 +705,29 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   // (a job we switched away from, or one that survived an app reload). If so,
   // append a streaming bubble and tail its live stream — the run kept going
   // server-side the whole time, so this picks up mid-flight and finishes cleanly.
+  //
+  // And then KEEP asking, for as long as the session is open. A turn can begin
+  // in a conversation the owner is already looking at without them sending
+  // anything: a background legionnaire or a dispatched agent finishing reports
+  // back INTO the chat the work was ordered from (app/core/trigger_runner.py).
+  // Asking once on entry meant those answers appeared only on the next visit to
+  // the session — the owner sat in the very conversation the reply was landing
+  // in and saw nothing.
   useEffect(() => {
     const sid = state.activeSessionId
     if (sid == null) return
-    // Skip only when the local send streaming right now IS this session's turn;
-    // an orphaned fetch for another session no longer blocks reattach (it gets
-    // aborted by the effect above).
-    if (abortRef.current && turnSessionRef.current === sid) return
     let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
     const ctrl = new AbortController()
+    const sleep = (ms: number) => new Promise<void>(r => { timer = setTimeout(r, ms) })
 
-    ;(async () => {
-      const runs = await fetchActiveRuns(config, sid)
-      if (cancelled || runs.length === 0) return
-      const run = runs[0]
-      if (attachedRef.current.has(run.request_id)) return
+    const tail = async (run: { request_id: string }, status: string) => {
       attachedRef.current.add(run.request_id)
 
       const assistantId = makeId()
       dispatch({ type: 'ADD_ASSISTANT_MESSAGE', payload: {
         id: assistantId, role: 'assistant', content: '', tools: [],
-        isStreaming: true, isError: false, status: 'Reconnecting', sessionId: sid,
+        isStreaming: true, isError: false, status, sessionId: sid,
       } })
       runIdRef.current = run.request_id
 
@@ -734,7 +747,13 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
 
       try {
         for await (const event of attachStream(config, run.request_id, ctrl.signal)) {
-          if (event.type === 'chunk') {
+          if (event.type === 'start') {
+            // Who started this turn, since it wasn't us. A background job
+            // reporting back carries its receipt here; the card it renders is
+            // the one a reload rebuilds from the persisted seed.
+            const trig = (event.data as { trigger?: import('../lib/types').TriggerMeta } | null)?.trigger
+            if (trig) dispatch({ type: 'SET_MESSAGE_TRIGGER', payload: { id: assistantId, trigger: trig } })
+          } else if (event.type === 'chunk') {
             buf += event.data as string
             if (handle == null) handle = requestAnimationFrame(flush)
           } else if (event.type === 'tool') {
@@ -790,9 +809,42 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
         // back re-attaches (a sticky entry here made the SECOND return refuse).
         if (!settled) attachedRef.current.delete(run.request_id)
       }
+    }
+
+    ;(async () => {
+      // The first pass is the old behaviour — a run we already knew about,
+      // rejoined on entry. Anything found later is a turn that STARTED while
+      // the owner was sitting here, which is an arrival, not a reconnection.
+      let entering = true
+      while (!cancelled) {
+        // Never poll over our own send. The local stream is already painting
+        // this session's turn, and attaching to it would draw a second bubble
+        // for one answer. abortRef is the live signal (any local send, ours or
+        // another session's); runIdRef names the turn it belongs to, which the
+        // start handler also files in attachedRef the moment it is known.
+        if (!abortRef.current) {
+          const runs = await fetchActiveRuns(config, sid)
+          if (cancelled) return
+          const run = runs.find(
+            r => !attachedRef.current.has(r.request_id) && r.request_id !== runIdRef.current,
+          )
+          entering = entering && runs.length > 0
+          if (run) {
+            await tail(run, entering ? 'Reconnecting' : 'Reporting back')
+            entering = false
+            continue          // straight back to watching — jobs can land in a row
+          }
+        }
+        entering = false
+        await sleep(WATCH_MS)
+      }
     })()
 
-    return () => { cancelled = true; ctrl.abort() }
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      ctrl.abort()
+    }
   }, [state.activeSessionId, config, dispatch])
 
   const handleDelete = useCallback((id: string) => {
