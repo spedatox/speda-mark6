@@ -70,6 +70,11 @@ RETIRED_FILES: frozenset[str] = frozenset({
 # System-internal trails Orion writes but the owner does not edit. Dot-prefixed
 # so they never enter the injection set or the canonical-file rule.
 AUDIT_ROOT = "/memories/.audit"
+# Documents whose members replaced them. Kept verbatim and readable by path,
+# but never listed: offering the owner (or an agent) a 27 KB superseded copy
+# beside the 4 KB member that supersedes it is an invitation to read the
+# wrong one.
+ARCHIVE_ROOT = "/memories/.archive"
 
 
 class MemoryConflict(Exception):

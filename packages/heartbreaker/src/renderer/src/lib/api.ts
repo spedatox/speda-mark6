@@ -205,6 +205,25 @@ export interface ActiveRun {
   idle_s: number
 }
 
+export interface MemoryFolderInfo {
+  path: string
+  summary: string
+  owner_agent: string | null
+  open: boolean
+}
+
+/** Folders the store DECLARES — including ones holding no file yet.
+ *  A folder with no files does not exist in the table, so without this the
+ *  knowledge bank cannot show the owner where a thing will go before
+ *  something has gone there. */
+export async function fetchMemoryFolders(config: AppConfig): Promise<MemoryFolderInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/memory/folders`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return res.json()
+  } catch { return [] }
+}
+
 /** Detached turns the backend is currently running (optionally one session). */
 export async function fetchActiveRuns(config: AppConfig, sessionId?: number): Promise<ActiveRun[]> {
   try {

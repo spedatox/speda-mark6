@@ -6,8 +6,8 @@ import { useSettings } from '../store/settings'
 import { useHealth } from '../lib/useHealth'
 import { useOnlineAgents } from '../lib/useOnlineAgents'
 import { useIsMobile } from '../lib/useIsMobile'
-import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, fetchAgentModels, pinAgentModel, fetchLegionModels, pinLegionModel, commitMemoryFile, fetchMemoryRevisions, restoreMemoryRevision } from '../lib/api'
-import type { ConnectionInfo, MemoryFileInfo, AgentModelInfo, LegionModelInfo, MemoryRevisionInfo } from '../lib/api'
+import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, fetchMemoryFolders, fetchAgentModels, pinAgentModel, fetchLegionModels, pinLegionModel, commitMemoryFile, fetchMemoryRevisions, restoreMemoryRevision } from '../lib/api'
+import type { ConnectionInfo, MemoryFileInfo, MemoryFolderInfo, AgentModelInfo, LegionModelInfo, MemoryRevisionInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
 import { agentColor, monogram } from '../lib/agents'
 import AgentModelPicker from './AgentModelPicker'
@@ -281,6 +281,11 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const [budgetMode, setBudgetMode] = useState(true)
   const [rtt, setRtt] = useState<number[]>([])
   const [memFiles, setMemFiles] = useState<MemoryFileInfo[]>([])
+  // Folders the store DECLARES. `life/` holds nothing until the first
+  // document that belongs to no domain arrives, and a folder with no files
+  // is absent from a listing built out of file paths — so the owner could
+  // not see where such a thing would go before one had gone there.
+  const [memFolders, setMemFolders] = useState<MemoryFolderInfo[]>([])
   const [memPath, setMemPath] = useState<string | null>(null)
   const [banksWide, setBanksWide] = useState(false)
   const [agentInfos, setAgentInfos] = useState<AgentModelInfo[]>([])
@@ -302,6 +307,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
     fetchAgentModels(config).then(setAgentInfos)
     fetchLegionModels(config).then(setLegionInfos)
     getBudgetMode(config).then(setBudgetMode).catch(() => {})
+    fetchMemoryFolders(config).then(setMemFolders).catch(() => {})
     fetchMemoryFiles(config).then(files => {
       setMemFiles(files)
       // Open on the owner file — the extracted facts about the user.
@@ -349,6 +355,9 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                    'projects', 'life', 'wellness', 'academic', 'finance',
                    'cybersec', 'ops']
     const groups = new Map<string, MemoryFileInfo[]>()
+    for (const f of memFolders) {
+      groups.set(f.path.replace(/^\/memories\//, ''), [])
+    }
     for (const f of memFiles) {
       const parts = f.path.replace(/^\/memories\//, '').split('/')
       const dir = parts.slice(0, -1).join('/')
@@ -366,7 +375,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         dir,
         files.slice().sort((x, y) => x.path.localeCompare(y.path)),
       ] as [string, MemoryFileInfo[]])
-  }, [memFiles])
+  }, [memFiles, memFolders])
 
   // Folders start OPEN. A collapsed-by-default tree hides the thing the panel
   // exists to show, and the owner opened it to look at his memory.

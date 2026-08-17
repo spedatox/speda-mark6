@@ -58,6 +58,26 @@ async def list_memory_files(db: AsyncSession = Depends(get_db)):
         _serialize(f)
         for f in files
         if not f.path.startswith(memory_store.AUDIT_ROOT)
+        and not f.path.startswith(memory_store.ARCHIVE_ROOT)
+    ]
+
+
+@router.get("/memory/folders")
+async def list_memory_folders():
+    """Every folder the store DECLARES, whether or not it holds a file yet.
+
+    A folder with no files does not exist in the table — memory files are rows,
+    not a filesystem — so `life/` was invisible in the knowledge bank until the
+    first document landed in it. That is backwards: the owner should be able to
+    see where a thing WILL go before anything has gone there, and an agent is
+    already told the folder exists. Serves the declaration, not the data.
+    """
+    from app.services.memory_spec import COLLECTIONS
+
+    return [
+        {"path": c.root, "summary": c.summary, "owner_agent": c.owner_agent,
+         "open": not c.closed}
+        for c in COLLECTIONS
     ]
 
 
@@ -111,7 +131,15 @@ async def get_memory_sources(request: Request, db: AsyncSession = Depends(get_db
         .where(MemoryFile.user_id == _USER_ID)
         .order_by(MemoryFile.path)
     )
-    files = [
+    from app.services.memory_spec import COLLECTIONS
+
+    # A source of truth is a DIRECTORY now — an agent's domain is a folder of
+    # topics, and its standing members are what gets preloaded. The pool has to
+    # offer those roots or the picker can only assign paths the resolver no
+    # longer understands, which is exactly how four agents ended up pinned to
+    # documents that had been archived. Loose .md files stay offered: a domain
+    # that was never split is still one file, and the owner may pin one.
+    files = [c.root for c in COLLECTIONS] + [
         p for (p,) in result.all()
         if memory_store.is_owner_editable(p)
     ]
@@ -140,7 +168,14 @@ async def set_memory_source(body: SourceAssign, request: Request, db: AsyncSessi
     if request.app.state.profiles.get(body.agent_id) is None:
         raise HTTPException(status_code=404, detail=f"Unknown agent '{body.agent_id}'")
 
+    from app.services.memory_spec import collection_by_root
+
     path = (body.path or "").strip() or None
+    # A collection root is assignable and needs no file created — it IS the
+    # domain, and its members already exist.
+    if path is not None and collection_by_root(path) is not None:
+        set_agent_source(body.agent_id, path)
+        return {"agent_id": body.agent_id, "source": source_file_for(body.agent_id)}
     if path is not None:
         if not memory_store.is_owner_editable(path):
             raise HTTPException(
