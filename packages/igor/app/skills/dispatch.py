@@ -17,6 +17,7 @@ import logging
 from app.config import settings
 from app.core.context import AgentContext
 from app.core.runtime_state import get_house_party, set_house_party
+from app.core.surface import DESKTOP_ONLY_NOTICE, is_desktop_surface
 from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
@@ -417,6 +418,28 @@ class HousePartySkill(Skill):
             return (
                 "House Party Protocol stood down. Inter-agent dispatch is back on "
                 "the background tier, broadcast is disabled, and the war room closes."
+            )
+
+        # ── Engage: desktop only ────────────────────────────────────────────────
+        # Checked BEFORE the passphrase so a phone request never opens the
+        # authorization window at all. The war room — the roster staged, the
+        # live transcript, the colour parade — is built by the desktop client
+        # and nowhere else; engaging from the phone would run every agent at
+        # full interactive grade with nothing on screen to show for it.
+        if not is_desktop_surface(context.extra.get("client_platform")):
+            logger.info(
+                "house_party_engage_denied_surface",
+                extra={
+                    "request_id": context.request_id,
+                    "platform": context.extra.get("client_platform") or "unknown",
+                },
+            )
+            return (
+                f"REFUSED — the protocol is NOT engaged and nothing changed. "
+                f"{DESKTOP_ONLY_NOTICE} Tell the owner this in your own words, and "
+                f"do not call this tool again for this request: retrying from the "
+                f"same client will be refused the same way. If they want the "
+                f"protocol, they need to ask from the desktop app."
             )
 
         # ── Engage: passphrase-gated ────────────────────────────────────────────

@@ -41,12 +41,7 @@ import com.speda.heartbreaker.designsystem.glass.LocalHazeState
 import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.ui.HudStrip
-import com.speda.heartbreaker.ui.WarMode
 import com.speda.heartbreaker.ui.comms.AgentCommsScreen
-import com.speda.heartbreaker.ui.party.HousePartyAsk
-import com.speda.heartbreaker.ui.party.HousePartyModal
-import com.speda.heartbreaker.ui.party.LocalHousePartyRequest
-import com.speda.heartbreaker.ui.party.PartyRosterStrip
 import com.speda.heartbreaker.ui.settings.SettingsScreen
 import com.speda.heartbreaker.ui.systems.SystemsBoardScreen
 import com.speda.heartbreaker.ui.switcher.AgentSwitcherOverlay
@@ -72,19 +67,16 @@ private const val STICK_SLACK_PX = 96
  * mobile breakpoint).
  *
  * COMMS and SYS open the agent comms tray and systems board (M4 surfaces).
- * WAR ROOM currently drives the House Party palette parade, which is the
- * takeover's colour behaviour — the full cinematic is still M4 work.
+ *
+ * There is no war room here. The House Party Protocol is a desktop surface —
+ * see the note on HeartbreakerRoot.
  */
 @Composable
 fun ChatScreen(
     graph: AppGraph,
     uplink: Uplink,
     agentId: String,
-    warMode: WarMode,
     onAgentChange: (String) -> Unit,
-    onEnterWarRoom: () -> Unit,
-    onExitWarRoom: () -> Unit,
-    onPartyEngaged: () -> Unit,
     onResetUplink: () -> Unit,
     haze: dev.chrisbanes.haze.HazeState,
     modifier: Modifier = Modifier,
@@ -142,7 +134,7 @@ fun ChatScreen(
     var commsOpen by remember { mutableStateOf(false) }
     var boardOpen by remember { mutableStateOf(false) }
     var switcherOpen by remember { mutableStateOf(false) }
-    val brand = Brands.BRANDS[agentId] ?: Brands.WARROOM
+    val brand = Brands.BRANDS[agentId] ?: Brands.BRANDS.getValue(Brands.DEFAULT_AGENT)
     val activeTitle = state.sessions.firstOrNull { it.id == state.activeSessionId }?.title
 
     val listState = rememberLazyListState()
@@ -176,16 +168,6 @@ fun ChatScreen(
         }
     }
 
-    // Two sources, one window: the backend's SSE ask, and a tap on a salvaged
-    // hpp-warning banner (which can be raised from deep inside rendered prose,
-    // hence the CompositionLocal rather than a threaded callback).
-    val sseAsk by vm.housePartyAsk.collectAsStateWithLifecycle()
-    var bannerAsk by remember { mutableStateOf<String?>(null) }
-    val housePartyAsk = sseAsk ?: bannerAsk
-
-    CompositionLocalProvider(
-        LocalHousePartyRequest provides { ask -> bannerAsk = ask.objective.orEmpty() },
-    ) {
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().imePadding()) {
             HudStrip(
@@ -201,21 +183,6 @@ fun ChatScreen(
                 sessionTitle = activeTitle,
                 onToggleSidebar = { drawerOpen = true },
             )
-
-            // The war room's own strip, directly under the header exactly as on
-            // the desktop. CORES opens the systems board rather than a second
-            // window: the board already owns AGENT CORES, and duplicating the
-            // per-agent pins into a phone-sized modal would give the roster two
-            // places to be edited from.
-            if (warMode != WarMode.Off) {
-                PartyRosterStrip(
-                    api = graph.api,
-                    config = config,
-                    mode = warMode,
-                    onOpenCores = { boardOpen = true },
-                    onExit = onExitWarRoom,
-                )
-            }
 
             // The transcript is ALSO a backdrop: the header, composer and drawer
             // sit over it, so they must refract the text behind them — that's
@@ -351,20 +318,6 @@ fun ChatScreen(
             )
         }
 
-        // HOUSE PARTY PROTOCOL — the passphrase gate. Raised either by the
-        // backend's own `house_party_auth` event (the live flow) or by tapping a
-        // salvaged hpp-warning banner in the transcript.
-        housePartyAsk?.let { objective ->
-            BackHandler { vm.clearHousePartyAsk(); bannerAsk = null }
-            HousePartyModal(
-                api = graph.api,
-                config = config,
-                ask = HousePartyAsk(objective.ifBlank { null }),
-                onClose = { vm.clearHousePartyAsk(); bannerAsk = null },
-                onEngaged = onPartyEngaged,
-            )
-        }
-    }
     }
 }
 

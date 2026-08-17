@@ -485,38 +485,14 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
-    suspend fun getHouseParty(config: AppConfig): Boolean = withContext(Dispatchers.IO) {
-        runCatching {
-            getString(config, "/agents/house-party")?.let {
-                json.parseToJsonElement(it).jsonObject["engaged"]?.jsonPrimitive?.booleanOrNull
-            }
-        }.getOrNull() ?: false
-    }
-
-    /**
-     * Engage or stand down the House Party Protocol.
-     *
-     * Engaging REQUIRES the passphrase and the backend is the only thing that
-     * judges it (constant-time compare in `routers/agents.py`) — the client never
-     * holds, hashes or checks it, it only carries it. Standing down needs
-     * nothing. A refused passphrase comes back as a non-2xx, which surfaces here
-     * as `null` so the caller can tell "wrong" from "now engaged".
+    /*
+     * getHouseParty / setHouseParty used to live here. The House Party Protocol
+     * is a desktop surface now — the backend refuses to ENGAGE it from a
+     * non-desktop client (app/core/surface.py) — and nothing in this app calls
+     * the endpoint any more. The owner can still stand the protocol down from
+     * the phone by telling SPEDA, which goes through the `house_party` tool
+     * rather than this client.
      */
-    suspend fun setHouseParty(
-        config: AppConfig,
-        engaged: Boolean,
-        passphrase: String? = null,
-    ): Boolean? = withContext(Dispatchers.IO) {
-        runCatching {
-            val body = buildJsonObject {
-                put("engaged", engaged)
-                if (!passphrase.isNullOrBlank()) put("passphrase", passphrase)
-            }
-            postJson(config, "/agents/house-party", body)?.let {
-                json.parseToJsonElement(it).jsonObject["engaged"]?.jsonPrimitive?.booleanOrNull ?: engaged
-            }
-        }.getOrNull()
-    }
 
     // ── Online external peers (the Forge link) ───────────────────────────────────
 

@@ -50,11 +50,11 @@ import com.speda.heartbreaker.designsystem.theme.HbPalette
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbFonts
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.ui.HbText
 import com.speda.heartbreaker.domain.MarkdownPrep
 import com.speda.heartbreaker.domain.MathExtract
 import com.speda.heartbreaker.domain.TableColumns
 import com.speda.heartbreaker.domain.MathSpan
-import com.speda.heartbreaker.ui.party.HousePartyBanner
 import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
@@ -220,8 +220,41 @@ private fun Fence(language: String, code: String) {
         lang == "map" -> MapBlock(code)
         lang == "svg" -> SvgBlock(code)
         lang == "html" -> HtmlBlock(code)
-        isHppWarning(lang, code) -> HousePartyBanner(code)
+        // The protocol is desktop-only, but the model can still write one of
+        // these cards — it is answering, not checking which client asked. Say
+        // plainly why nothing is going to happen here rather than rendering an
+        // authorization card that cannot authorize anything, or swallowing the
+        // block and leaving the owner watching for a window that never opens.
+        isHppWarning(lang, code) -> DesktopOnlyNotice()
         else -> CodeBlockView(language = language, code = code)
+    }
+}
+
+/**
+ * What an authorization card becomes on the phone.
+ *
+ * The wording is the client's half of the same answer the backend gives when a
+ * phone tries to engage — see `DESKTOP_ONLY_NOTICE` in app/core/surface.py.
+ * Kept short here because SPEDA will already have said it in prose; this is the
+ * card that would have been the passphrase window, telling the owner why there
+ * is no window.
+ */
+@Composable
+private fun DesktopOnlyNotice() {
+    val palette = LocalHbPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(palette.amber.copy(alpha = 0.08f))
+            .border(1.dp, palette.amber.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        HbText(
+            "The House Party Protocol runs on the desktop app. Ask for it from there.",
+            style = HbType.read.copy(fontSize = 14.sp),
+            color = palette.amberBright,
+        )
     }
 }
 

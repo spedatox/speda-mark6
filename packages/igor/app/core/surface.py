@@ -82,6 +82,38 @@ def render_client_context(cc: ClientContext) -> str:
     return "[client context — " + " · ".join(bits) + "]"
 
 
+# ── Platform capability ──────────────────────────────────────────────────────
+# Some things the owner can ask for are not available on every surface. The
+# House Party Protocol is the first: it stages the whole roster in a war room
+# with a live transcript and a colour parade across the entire palette, which
+# only the desktop client builds. On the phone there is nothing to show, so the
+# protocol must not engage there rather than engage invisibly — a protocol the
+# owner cannot see running is worse than one that refuses.
+#
+# Desktop-class surfaces. Anything else — the Android app, Telegram, an
+# unstated platform — is not.
+_DESKTOP_SURFACES = frozenset({"desktop", "web"})
+
+
+def is_desktop_surface(platform: str | None) -> bool:
+    """Whether `platform` is a surface that renders the full deck.
+
+    Unknown or missing is deliberately NOT desktop: a client that does not say
+    what it is cannot be assumed to have a war room to show.
+    """
+    return (platform or "").strip().lower() in _DESKTOP_SURFACES
+
+
+#: What every refusal path tells the owner, in one place so the tool, the
+#: router and the client cannot drift into three different explanations.
+DESKTOP_ONLY_NOTICE = (
+    "The House Party Protocol is available on the desktop app only. It stages "
+    "the whole roster in the war room, and the phone has no war room to stage "
+    "it in — engaging from here would run the roster at full grade with nothing "
+    "to show for it."
+)
+
+
 def annotate_last_user(history: list[dict], cc: ClientContext | None) -> None:
     """Stamp the client-context line onto the newest user message, in place. No-op
     when there's no context or the tail isn't a user turn. Never persisted — it

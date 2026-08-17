@@ -59,10 +59,17 @@ class HousePartyState(BaseModel):
 
 class HousePartySet(BaseModel):
     """Engage/stand-down request. Engaging requires the owner's authorization
-    passphrase (validated server-side); standing down needs none."""
+    passphrase (validated server-side); standing down needs none.
+
+    `platform` is the surface asking. Engaging is desktop-only — the war room
+    exists nowhere else — so a client that does not say what it is cannot
+    engage. Standing down is unconditional from anywhere: a protocol you can
+    start but not stop is a trap, and the phone must always be able to stop it.
+    """
 
     engaged: bool
     passphrase: str | None = None
+    platform: str | None = None
 
 
 class LockdownState(BaseModel):

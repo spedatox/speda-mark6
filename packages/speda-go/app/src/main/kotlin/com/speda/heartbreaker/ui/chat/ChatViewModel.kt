@@ -51,20 +51,6 @@ class ChatViewModel(
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
     /**
-     * A pending House Party authorization, raised by the backend's `house_party`
-     * tool over SSE. `null` means nothing is being asked; a non-null value is the
-     * objective, which is often EMPTY — the tool is allowed to ask without one,
-     * and "asked, no objective given" is a different thing from "not asked".
-     *
-     * Deliberately a plain String? rather than the UI's own ask type: the stream
-     * loop has no business importing a composable's model.
-     */
-    private val _housePartyAsk = MutableStateFlow<String?>(null)
-    val housePartyAsk: StateFlow<String?> = _housePartyAsk.asStateFlow()
-
-    fun clearHousePartyAsk() { _housePartyAsk.value = null }
-
-    /**
      * Supplies the ambient client/platform/location context for a turn, resolved
      * fresh at send time (so location is current and the toggle is honoured). Set
      * by the shell; applied to every send, including regenerate/edit-and-resend.
@@ -425,12 +411,11 @@ class ChatViewModel(
                             }
                         }
                         "file" -> MessageJson.fileFrom(event.data)?.let { dispatch(ChatAction.AddFile(assistantId, it)) }
-                        // The backend is asking the owner to authorize House Party.
-                        // A real event, not a marker in the text — so the passphrase
-                        // ask never enters the transcript (and never gets re-read
-                        // out of history later).
-                        "house_party_auth" ->
-                            _housePartyAsk.value = strOf((event.data as? JsonObject)?.get("objective")).orEmpty()
+                        // `house_party_auth` is deliberately unhandled: the
+                        // protocol is a desktop surface, and the backend refuses
+                        // to engage it from here before any authorization window
+                        // would ever be raised. Falling through to the else is
+                        // the correct behaviour, not an omission.
                         "done" -> {
                             flush(); settled = true
                             dispatch(ChatAction.FinishMessage(assistantId, event.sessionId))

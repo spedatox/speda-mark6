@@ -181,11 +181,23 @@ async def house_party_toggle(body: HousePartySet):
     Engaging is passphrase-gated: the owner enters the authorization passphrase
     in the app's authorization window, and it is validated here in constant time
     against the configured secret. A missing or wrong passphrase is rejected with
-    403 and the protocol stays down. Standing down needs no passphrase."""
+    403 and the protocol stays down. Standing down needs no passphrase.
+
+    Engaging is also DESKTOP-ONLY, checked before the passphrase so a phone
+    never gets as far as being asked for it. Standing down stays open to every
+    surface — see HousePartySet."""
     if body.engaged:
         import hmac
 
         from app.config import settings
+        from app.core.surface import DESKTOP_ONLY_NOTICE, is_desktop_surface
+
+        if not is_desktop_surface(body.platform):
+            logger.warning(
+                "house_party_engage_denied_surface",
+                extra={"platform": body.platform or "unknown"},
+            )
+            raise HTTPException(status_code=409, detail=DESKTOP_ONLY_NOTICE)
 
         supplied = (body.passphrase or "").strip()
         expected = (settings.house_party_passphrase or "").strip()

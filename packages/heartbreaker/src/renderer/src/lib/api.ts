@@ -718,12 +718,17 @@ export async function getHouseParty(config: AppConfig): Promise<boolean> {
   }
 }
 
+/** Stand the protocol down (and, historically, the un-gated toggle).
+ *
+ *  Engaging goes through engageHouseParty, which carries the passphrase. This
+ *  still sends `platform` so an engage attempted through here is judged by the
+ *  same rule rather than slipping past it. */
 export async function setHouseParty(config: AppConfig, engaged: boolean): Promise<boolean> {
   try {
     const res = await fetch(`${config.apiBase}/agents/house-party`, {
       method: 'POST',
       headers: authHeaders(config, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ engaged }),
+      body: JSON.stringify({ engaged, platform: desktopClientContext().platform }),
     })
     if (!res.ok) return engaged
     return !!(await res.json()).engaged
@@ -812,9 +817,16 @@ export async function engageHouseParty(
     const res = await fetch(`${config.apiBase}/agents/house-party`, {
       method: 'POST',
       headers: authHeaders(config, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ engaged: true, passphrase }),
+      // `platform` gates the engage: the backend refuses any surface that is
+      // not the deck, and a client that does not name itself counts as not the
+      // deck. This is the path that must always carry it.
+      body: JSON.stringify({ engaged: true, passphrase, platform: desktopClientContext().platform }),
     })
     if (res.status === 403) return { ok: false, error: 'Authorization denied — incorrect passphrase.' }
+    if (res.status === 409) {
+      const detail = await res.json().catch(() => null)
+      return { ok: false, error: detail?.detail ?? 'The protocol is available on the desktop app only.' }
+    }
     if (!res.ok) return { ok: false, error: `Engage failed (HTTP ${res.status}).` }
     return { ok: !!(await res.json()).engaged }
   } catch {

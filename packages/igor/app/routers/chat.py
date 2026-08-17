@@ -286,6 +286,11 @@ async def _run_chat(
         context.extra["client_location"] = {
             "lat": _loc.lat, "lng": _loc.lng, "place": _loc.place,
         }
+    # Which surface this turn came from, for the skills that are not available
+    # on every client (house_party). Same discipline as the location above: a
+    # per-turn fact on the context, never persisted onto the session.
+    if body.client_context:
+        context.extra["client_platform"] = body.client_context.platform
     use_external = (
         profile.external_backend
         and request.app.state.ws_manager.is_connected(profile.agent_id)

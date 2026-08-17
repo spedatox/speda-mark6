@@ -35,7 +35,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +66,6 @@ import com.speda.heartbreaker.domain.CommTranscript
 import com.speda.heartbreaker.ui.HbText
 import com.speda.heartbreaker.ui.prose.ProseText
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -78,9 +76,12 @@ import java.util.Locale
  * CommBubble.tsx: a full-width bottom slab (the mobile spec calls for a
  * "full-width Comms Tray", not the desktop's 420px floating panel) showing
  * live dispatch traffic between SPEDA and the roster (GET /agents/comms,
- * written by app/core/dispatch.py) as a chat scrollback. EXTEND_ grows it
- * toward a near-full-height traffic console; also hosts the House Party
- * Protocol stand-down control (engaging is voice-only, never from this UI).
+ * written by app/core/dispatch.py) as a GROUP CHAT — every agent on one
+ * timeline, each speaking for itself. Expand grows it toward a near-full-height
+ * traffic console.
+ *
+ * No House Party control lives here any more: the protocol is a desktop
+ * surface. The owner can still stand it down from this app by telling SPEDA.
  */
 
 private const val POLL_MS = 3000L
@@ -88,15 +89,12 @@ private const val POLL_MS = 3000L
 @Composable
 fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
     val palette = LocalHbPalette.current
-    val scope = rememberCoroutineScope()
 
     var entries by remember { mutableStateOf<List<AgentCommEntry>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var wide by remember { mutableStateOf(false) }
-    var party by remember { mutableStateOf(false) }
 
     LaunchedEffect(config) {
-        party = api.getHouseParty(config)
         while (true) {
             // oldest first — a chat scrollback, newest at the bottom
             entries = api.fetchAgentComms(config, 120).asReversed()
@@ -147,34 +145,12 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    HbText("AGENT_COMMS // TRAFFIC", style = HbType.headerBar.copy(fontSize = 11.sp), color = palette.text, caps = true)
-                    if (live > 0) {
-                        HbText("$live LIVE", style = HbType.readout.copy(fontSize = 9.sp), color = palette.amber)
-                    }
-                    Spacer(Modifier.weight(1f))
-                    Row(
-                        Modifier
-                            .hbGlass(shape = HbGlassShape.Pill, state = if (party) HbGlassState.Tint(palette.amber) else HbGlassState.Default)
-                            .clickable(enabled = party) {
-                                // Optimistic, then corrected by what the backend
-                                // actually reports. A null (refused/unreachable)
-                                // leaves the flag exactly as the server has it.
-                                scope.launch { party = false; party = api.setHouseParty(config, false) ?: party }
-                            }
-                            .padding(horizontal = 8.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    ) {
-                        Box(
-                            Modifier.size(5.dp).background(
-                                if (party) palette.amber else palette.iconDim,
-                                CircleShape,
-                            ),
-                        )
+                    Column(Modifier.weight(1f)) {
+                        HbText("Agent traffic", style = HbType.headerBar.copy(fontSize = 15.sp), color = palette.text)
                         HbText(
-                            if (party) "HPP · STAND DOWN" else "HPP OFFLINE",
-                            style = HbType.headerBar.copy(fontSize = 9.sp),
-                            color = if (party) palette.amberBright else palette.textFaint,
+                            if (live > 0) "$live working" else "${entries.size} messages",
+                            style = HbType.read.copy(fontSize = 12.5.sp),
+                            color = if (live > 0) palette.green else palette.textFaint,
                         )
                     }
                     Row(
@@ -183,11 +159,11 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
                         HbText(
-                            if (wide) "RETRACT_" else "EXTEND_",
-                            style = HbType.readout.copy(fontSize = 9.sp),
-                            color = if (wide) palette.amber else palette.icon,
+                            if (wide) "Retract" else "Expand",
+                            style = HbType.read.copy(fontSize = 13.sp),
+                            color = if (wide) palette.accentBright else palette.accent,
                         )
-                        if (wide) HbGlyphs.ChevronDown(palette.amber, size = 9.dp) else HbGlyphs.ChevronUp(palette.icon, size = 9.dp)
+                        if (wide) HbGlyphs.ChevronDown(palette.accentBright, size = 10.dp) else HbGlyphs.ChevronUp(palette.accent, size = 10.dp)
                     }
                     Box(Modifier.clickable(onClick = onClose)) {
                         HbGlyphs.Close(palette.iconDim, size = 12.dp)
