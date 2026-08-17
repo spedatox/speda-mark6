@@ -101,6 +101,20 @@ object HbGlyphs {
         line(18f, 15f, 12f, 9f, color); line(12f, 9f, 6f, 15f, color)
     }
 
+    /** Chevron pointing right — "this row opens something". */
+    @Composable
+    fun ChevronRight(color: Color, size: Dp = 10.dp, modifier: Modifier = Modifier) = Glyph(size, modifier, stroke = 2.5f) {
+        line(9f, 6f, 15f, 12f, color); line(15f, 12f, 9f, 18f, color)
+    }
+
+    /** A document — the sheet with its corner turned. Same path the deck's
+     *  file-read tool step and the desktop's memory rail use. */
+    @Composable
+    fun File(color: Color, size: Dp = 13.dp, modifier: Modifier = Modifier) = Glyph(size, modifier, stroke = 1.6f) {
+        pathString("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z", color)
+        pathString("M14 3v5h5", color)
+    }
+
     // ── Message action bar (Message.tsx icons — path data copied verbatim) ────
 
     /** Copy — two overlapping sheets. */
