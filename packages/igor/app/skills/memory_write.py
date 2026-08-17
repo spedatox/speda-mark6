@@ -24,7 +24,7 @@ from sqlalchemy import select
 from app.core.context import AgentContext
 from app.models.memory_file import MemoryFile
 from app.services.memory_schema import MemorySchemaViolation, check_write
-from app.services.memory_spec import SPECS, spec_for
+from app.services.memory_spec import COLLECTIONS, SPECS, route_ledger, spec_for
 from app.services.memory_store import record_revision
 from app.services.memory_write import (
     WriteRejected,
@@ -80,7 +80,23 @@ async def _commit(
 
 
 def _ledger_paths() -> str:
-    return ", ".join(p.split("/")[-1] for p, s in SPECS.items() if s.kind == "ledger")
+    """The dated members an agent can actually append to, named in full.
+
+    Listing the domains (`finance.md`, `wellness.md`) stopped being useful when
+    they became directories: a domain no longer has one place a dated entry
+    goes. These are the files that DO index a key, so the description names
+    exactly what the tool will accept.
+    """
+    out = [
+        f"{c.root.split('/')[-1]}/{m.stem}.md ({m.index_pattern})"
+        for c in COLLECTIONS if c.closed
+        for m in c.members if m.index_pattern
+    ]
+    out += [
+        p.split("/")[-1] for p, s in SPECS.items()
+        if s.kind == "ledger" and not s.superseded_by
+    ]
+    return ", ".join(out)
 
 
 
@@ -103,7 +119,12 @@ class LedgerAppendSkill(Skill):
         "properties": {
             "path": {
                 "type": "string",
-                "description": "The ledger, e.g. /memories/finance.md or /memories/wellness.md.",
+                "description": (
+                    "The ledger file, e.g. /memories/wellness/sessions.md or "
+                    "/memories/finance/ledger.md. Naming the domain alone "
+                    "(`wellness`) also works for a dated entry — the key says "
+                    "which file it belongs in."
+                ),
             },
             "key": {
                 "type": "string",
@@ -140,7 +161,14 @@ class LedgerAppendSkill(Skill):
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
-        path = (args.get("path") or "").strip()
+        key = (args.get("key") or "").strip()
+        # A ledger is a directory now, and the KEY says which file: only
+        # `sessions` indexes YYYY-MM-DD, only `ledger` indexes YYYY-MM. So an
+        # agent naming the domain still lands in the right member instead of
+        # being refused for addressing a folder.
+        path, error = route_ledger(args.get("path") or "", key)
+        if error:
+            return error
         spec = spec_for(path)
         if spec is None:
             return f"`{path}` is not a known memory document."
@@ -149,7 +177,7 @@ class LedgerAppendSkill(Skill):
             return f"`{path}` does not exist."
         try:
             after = ledger_append(
-                file.content, path=path, key=(args.get("key") or "").strip(),
+                file.content, path=path, key=key,
                 section=(args.get("section") or None),
                 row=args.get("row"), lines_in=args.get("lines"),
             )

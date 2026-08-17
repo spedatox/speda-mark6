@@ -337,7 +337,7 @@ def check_member_title(path: str, text: str, spec: DocumentSpec) -> list[Finding
     person renamed in their own document without the file being renamed shows up
     immediately instead of quietly becoming a second person.
     """
-    from app.services.memory_spec import collection_for, slugify
+    from app.services.memory_spec import collection_for, member_for, slugify
 
     coll = collection_for(path)
     if coll is None:
@@ -347,6 +347,29 @@ def check_member_title(path: str, text: str, spec: DocumentSpec) -> list[Finding
     h1 = next((t for _, lvl, t in _headings(text) if lvl == 1), None)
     if h1 is None:
         return []          # check_document_frame already reports the missing H1
+
+    # A SECTION collection's member is not an entity: its filename is a chosen
+    # short handle (`sessions`) and its title is the declared human name
+    # ("Session Log"). Demanding they slugify to each other fired on 18 of the
+    # 71 migrated files at once — every one of them correct — and a verifier
+    # that cries wolf on its own migration is a verifier nobody reads again.
+    # The real invariant here is that the title matches what the SPEC declares.
+    declared = member_for(path)
+    if declared is not None:
+        _, member = declared
+        if h1.strip() != member.title:
+            return [Finding(
+                path, "member_title", "warning",
+                f"The title {h1!r} is not this topic's declared name "
+                f"{member.title!r}. A member's title is fixed by the spec, so a "
+                f"different one means the file was repurposed for something the "
+                f"folder has no place for.",
+                line=1,
+                fix=f"Restore the title to `# {member.title}`, or widen the "
+                    f"member's spec in memory_spec.COLLECTIONS if the topic "
+                    f"genuinely changed.",
+            )]
+        return []
 
     if slugify(h1) != stem:
         return [Finding(

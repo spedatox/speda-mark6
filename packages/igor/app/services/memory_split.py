@@ -1,6 +1,15 @@
 """
-Split a REGISTRY monolith into one file per entity
+Split a monolithic memory document into a directory
 (docs/MEMORY_ARCHITECTURE_V4.md §2.2, extended by memory_spec.COLLECTIONS).
+
+Two shapes, one operation:
+
+  - a REGISTRY splits by ENTITY — one person, one project, one file — and the
+    member set is open, because a new person is a new file;
+  - a domain document splits by TOPIC into the closed, named member set its
+    CollectionSpec declares — `wellness/sessions.md`, `finance/ledger.md` — so
+    the destination of every section is decided in the spec rather than derived
+    from its heading text.
 
 The operation is a CUT, never a regeneration. Every byte of an entity's prose
 moves into its own file unchanged; the only edit is heading level, because a
@@ -137,6 +146,113 @@ def _promote(lines: list[str], lift: int) -> list[str]:
 
 def plan_split(text: str, coll: CollectionSpec) -> SplitPlan:
     """Work out every file the split would write. Pure — touches no database."""
+    if coll.closed:
+        return _plan_sections(text, coll)
+    return _plan_entities(text, coll)
+
+
+def _plan_sections(text: str, coll: CollectionSpec) -> SplitPlan:
+    """Split a domain document into its declared TOPIC files.
+
+    Same operation as the entity split below and the same guarantee — every byte
+    of a section's body moves unchanged — with two differences that come from
+    the member set being closed and named:
+
+      1. **The destination is declared, not derived.** A section goes where its
+         `MemberSpec` says, so `## 5. LOG (Chronological)` becomes
+         `wellness/sessions.md` rather than `wellness/5-log-chronological.md`.
+         The H1 is the member's declared title; the numbering was an artifact of
+         ordering sections inside one file and means nothing in a folder.
+      2. **A section nobody declared is a problem, not a new file.** It is
+         reported and left in the monolith. Inventing a member here is how the
+         store grows a topic that only the agent who wrote it can find, and it
+         is the same class of guess that produced a person called "Professional".
+    """
+    plan = SplitPlan(source=coll.split_from, root=coll.root)
+
+    # section title → the member taking it, in declared order.
+    bodies: dict[str, list[str]] = {m.stem: [] for m in coll.members}
+    seen: dict[str, list[str]] = {m.stem: [] for m in coll.members}
+
+    current: str | None = None       # stem currently being filled
+    promote: bool = False            # this section is a member on its own
+    heading_line: str = ""
+    first_section = 0
+
+    def take(title: str) -> object | None:
+        import re as _re
+        for m in coll.members:
+            if title in m.takes:
+                return m
+            if m.takes_pattern and _re.match(m.takes_pattern, title):
+                return m
+        return None
+
+    for n, line, level, heading in _walk(text):
+        if level and level == coll.entity_level:
+            member = take(heading)
+            first_section = first_section or n
+            if member is None:
+                plan.problems.append(Problem(
+                    "unmapped", heading, n,
+                    f"No member of {coll.root} takes {heading!r}. It stays in "
+                    f"{coll.split_from}. Declare it in memory_spec.COLLECTIONS "
+                    f"(members are: {', '.join(m.stem for m in coll.members)}) "
+                    f"and re-run, or fold it into a section that exists.",
+                ))
+                current, promote = None, False
+                continue
+            current = member.stem
+            promote = not member.gathered
+            seen[current].append(heading)
+            plan.sections_seen[heading] = plan.sections_seen.get(heading, 0) + 1
+            # A gathered member keeps the source heading — the months ARE the
+            # index of finance/ledger.md. A member that is one section drops it,
+            # because that heading becomes the file's own title.
+            heading_line = "" if promote else line
+            if heading_line:
+                bodies[current].append(heading_line)
+            continue
+        if current is not None:
+            bodies[current].append(line)
+        elif not first_section:
+            plan.preamble_lines += 1
+
+    for m in coll.members:
+        raw = bodies[m.stem]
+        lines = _promote(raw, 1) if not m.gathered else raw
+        body = "\n".join(lines).strip()
+        if not body:
+            plan.problems.append(Problem(
+                "empty", m.stem, 0,
+                f"Nothing in {coll.split_from} maps to {m.stem} "
+                f"({'pattern ' + m.takes_pattern if m.takes_pattern else ', '.join(m.takes)}). "
+                f"The file is not written. Either the section is named "
+                f"differently in the document than in the spec, or this topic "
+                f"does not exist yet.",
+            ))
+            continue
+        member = Member(
+            path=f"{coll.root}/{m.stem}.md",
+            title=m.title,
+            group=None,
+            content=f"# {m.title}\n\n{body}\n",
+            source_line=0,
+        )
+        if member.bytes > (m.max_bytes or coll.max_bytes):
+            plan.problems.append(Problem(
+                "oversize", m.stem, 0,
+                f"{member.bytes / 1024:.1f}K exceeds the "
+                f"{(m.max_bytes or coll.max_bytes) / 1024:.0f}K cap. It is still "
+                f"written — the cap is a growth check, not a reason to drop the "
+                f"owner's data — but it wants compressing.",
+            ))
+        plan.members.append(member)
+
+    return plan
+
+
+def _plan_entities(text: str, coll: CollectionSpec) -> SplitPlan:
     plan = SplitPlan(source=coll.split_from, root=coll.root)
     lift = coll.entity_level - 1
 
@@ -145,6 +261,8 @@ def plan_split(text: str, coll: CollectionSpec) -> SplitPlan:
     start = 0
     body: list[str] = []
     first_entity_line = 0
+    stray: list[tuple[int, str]] = []              # lines under the CURRENT category
+    stray_all: list[tuple[str | None, list]] = []  # …and under the ones before it
 
     def flush() -> None:
         nonlocal title, body, start
@@ -163,15 +281,41 @@ def plan_split(text: str, coll: CollectionSpec) -> SplitPlan:
         # before it and sets where the next ones belong.
         if coll.depth == 2 and level and level == coll.entity_level - 1:
             flush()
-            group = heading
+            stray_all.append((group, stray))
+            group, stray = heading, []
             continue
         if title is not None:
             body.append(line)
         elif not first_entity_line:
             plan.preamble_lines += 1
+        elif line.strip():
+            # Body text under a CATEGORY heading that belongs to no person —
+            # `## Siberay Board` carries the board roster before its first
+            # `### Person`. It is nobody's file, so the split has nowhere to put
+            # it, and until now it was silently dropped: the loop only counted
+            # lines as preamble before the first entity, and everything after
+            # fell through both branches into nothing. Silent loss is the one
+            # outcome a migration must never produce, so it is reported.
+            stray.append((n, line))
 
     flush()
+    for group_name, lines in _by_group(stray_all + [(group, stray)]):
+        if not lines:
+            continue
+        preview = " ".join(l.strip() for _, l in lines)[:120]
+        plan.problems.append(Problem(
+            "stray", group_name or "(no category)", lines[0][0],
+            f"{len(lines)} line(s) sit under `{group_name}` but belong to no "
+            f"{coll.entity_noun}, so no file would carry them and they would be "
+            f"lost: “{preview}”. Move them onto an entity, or somewhere that is "
+            f"about the group rather than a person, before splitting.",
+        ))
     return plan
+
+
+def _by_group(pairs):
+    """(group, lines) pairs, dropping the empties — one problem per category."""
+    return [(g, ls) for g, ls in pairs if ls]
 
 
 def _emit(

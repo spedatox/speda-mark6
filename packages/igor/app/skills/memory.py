@@ -174,12 +174,24 @@ that is owner.md. Organised by theme:_
 # Files preloaded into the system prompt every turn — the "always relevant" set:
 # who the owner is, what's current, how to treat him, and the immutable past that
 # stops stale facts masquerading as current ones.
-PRELOAD_FILES = [
-    "/memories/owner.md",
-    "/memories/current.md",
-    "/memories/dossier.md",
-    "/memories/history.md",
-]
+#
+# Derived from the specs rather than listed here, because a split injected
+# document contributes its MEMBERS instead of itself: dossier.md became
+# dossier/likes.md … dossier/prohibitions.md, and the injected block has to
+# carry the same seven sections it always did, in the same order. Hardcoding
+# the old path here would have injected an empty husk (or, worse, a stale
+# monolith next to its live members) the day the split ran.
+#
+# `injected_paths(existing)` falls back to the monolith for as long as it is
+# unsplit, so this is correct on both sides of the migration — and during it.
+def preload_paths(existing: set[str] | None = None) -> list[str]:
+    from app.services.memory_spec import injected_paths
+
+    return list(injected_paths(existing))
+
+
+# The static view, for callers that only ask "is this path injected".
+PRELOAD_FILES = preload_paths()
 
 # Per-agent SOURCE-OF-TRUTH file: the one domain file an agent both reads (it is
 # preloaded into the system prompt every turn) and writes (all of its domain data
@@ -196,20 +208,48 @@ PRELOAD_FILES = [
 # continued — identical section structure, wellness.md newer and larger — and
 # sessions.md is retired (memory_store.RETIRED_FILES).
 AGENT_SOURCE_DEFAULTS: dict[str, str] = {
-    "atomix": "/memories/wellness.md",
-    "sentinel": "/memories/finance.md",
-    "ultron": "/memories/academic.md",
-    "centurion": "/memories/cybersec.md",
-    "orion": "/memories/ops.md",
+    "atomix": "/memories/wellness",
+    "sentinel": "/memories/finance",
+    "ultron": "/memories/academic",
+    "centurion": "/memories/cybersec",
+    "orion": "/memories/ops",
 }
 
 
 def source_file_for(agent_id: str) -> str | None:
-    """The agent's active source-of-truth file: the owner's runtime override if
-    set, else the built-in default, else None (no domain file for this agent)."""
+    """The agent's active source of truth — now a DIRECTORY, not a file.
+
+    The owner's runtime override wins (he can still pin a single file from the
+    Configuration tab), then the built-in default, then None.
+    """
     from app.core.runtime_state import get_agent_sources
 
     return get_agent_sources().get(agent_id) or AGENT_SOURCE_DEFAULTS.get(agent_id)
+
+
+def source_preload_for(agent_id: str) -> list[str]:
+    """Which of the agent's own files to put in the prompt every turn.
+
+    Its STANDING context — the profile, the program, the runbook — and never the
+    dated log, which is the one member that grows without bound. Preloading
+    `wellness.md` whole meant Atomix paid 27 KB every turn to be told his own
+    training split, and 14 KB of that was a session log he re-read from the top
+    on every request. The log is one `view` away and he is told its exact path.
+
+    A single-file override (the owner pinning one path) is returned as-is.
+    """
+    from app.services.memory_spec import collection_by_root
+
+    src = source_file_for(agent_id)
+    if not src:
+        return []
+    coll = collection_by_root(src)
+    if coll is None:
+        return [src]
+    return [
+        f"{coll.root}/{m.stem}.md" for m in coll.members
+        if not m.index_pattern      # the dated log stays on demand
+    ]
 
 
 # ── Path validation ───────────────────────────────────────────────────────────
@@ -396,9 +436,12 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
     # prompt cache holds (file sizes otherwise change every turn as log.md grows).
     listing = _format_directory(all_files, MEMORY_ROOT, with_sizes=False)
 
-    preload = list(PRELOAD_FILES)
-    if source_file and source_file not in preload:
-        preload.append(source_file)
+    # Resolved against what actually exists: a split injected document
+    # contributes its members, an unsplit one still contributes itself.
+    preload = preload_paths(set(by_path))
+    for p in source_preload_for(agent_id):
+        if p not in preload:
+            preload.append(p)
     sections = [f"### Directory\n\n{listing}"]
     for path in preload:
         f = by_path.get(path)
@@ -411,14 +454,40 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
     # writing its domain data. Placed last so it's the strongest instruction.
     source_directive = ""
     if source_file:
-        source_directive = (
-            f"\n\n**Your source of truth is `{source_file}`.** It is preloaded above. "
-            f"Treat it as the AUTHORITATIVE record for your domain: read every figure "
-            f"and fact you report from it, and write EVERY update, change, or new entry "
-            f"back to it with the `memory` tool (str_replace/insert/create) in the same "
-            f"turn you learn it — never leave it stale and never keep your domain data "
-            f"only in the conversation."
-        )
+        from app.services.memory_spec import collection_by_root
+
+        coll = collection_by_root(source_file)
+        if coll is not None:
+            members = ", ".join(f"`{m.stem}`" for m in coll.members)
+            dated = next((m for m in coll.members if m.index_pattern), None)
+            # Name the log explicitly. It is the one file NOT in the prompt, so
+            # an agent that is not told it exists will either answer without it
+            # or re-read the whole domain looking for it.
+            log_line = (
+                f" The dated log `{coll.root}/{dated.stem}.md` is deliberately NOT "
+                f"preloaded — it grows without bound. Open it with `view` when you "
+                f"need past entries, and add to it with `ledger_append` (give the "
+                f"date; it finds the file)."
+                if dated else ""
+            )
+            source_directive = (
+                f"\n\n**Your domain is `{coll.root}/` — {members}.** Everything above "
+                f"from that folder is already in your context; do not re-read it."
+                f"{log_line} These files are the AUTHORITATIVE record for your "
+                f"domain: report every figure from them, and write every update back "
+                f"in the same turn you learn it. Never leave them stale, never keep "
+                f"your domain data only in the conversation, and never create a file "
+                f"the folder does not already have."
+            )
+        else:
+            source_directive = (
+                f"\n\n**Your source of truth is `{source_file}`.** It is preloaded above. "
+                f"Treat it as the AUTHORITATIVE record for your domain: read every figure "
+                f"and fact you report from it, and write EVERY update, change, or new entry "
+                f"back to it with the `memory` tool (str_replace/insert/create) in the same "
+                f"turn you learn it — never leave it stale and never keep your domain data "
+                f"only in the conversation."
+            )
 
     block = (
         "## Memory\n\n"
