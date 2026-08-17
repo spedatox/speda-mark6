@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useChatContext } from '../store/chat'
@@ -335,6 +335,42 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   }, [memPath])
 
   const selFile = memFiles.find(f => f.path === memPath) || null
+
+  /** The store as a tree: loose files first, then one group per folder.
+   *
+   *  Ordering is deliberate and not alphabetical. The flat files at the root
+   *  are what the owner reads about himself, so they lead; the domains follow
+   *  in the order the roster owns them; dot-folders (`.audit`, `.archive`) sink
+   *  to the bottom because they are machine trails, not knowledge. Within a
+   *  folder, alphabetical — there is no meaningful order among topics and a
+   *  stable one is easier to scan than a clever one. */
+  const memTree = useMemo(() => {
+    const ORDER = ['', 'dossier', 'social/professional', 'social/personal',
+                   'projects', 'life', 'wellness', 'academic', 'finance',
+                   'cybersec', 'ops']
+    const groups = new Map<string, MemoryFileInfo[]>()
+    for (const f of memFiles) {
+      const parts = f.path.replace(/^\/memories\//, '').split('/')
+      const dir = parts.slice(0, -1).join('/')
+      const g = groups.get(dir)
+      if (g) g.push(f); else groups.set(dir, [f])
+    }
+    const rank = (d: string) => {
+      const i = ORDER.indexOf(d)
+      if (i >= 0) return i
+      return d.startsWith('.') ? 900 : 500      // dot-folders last
+    }
+    return [...groups.entries()]
+      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
+      .map(([dir, files]) => [
+        dir,
+        files.slice().sort((x, y) => x.path.localeCompare(y.path)),
+      ] as [string, MemoryFileInfo[]])
+  }, [memFiles])
+
+  // Folders start OPEN. A collapsed-by-default tree hides the thing the panel
+  // exists to show, and the owner opened it to look at his memory.
+  const [memFolded, setMemFolded] = useState<Record<string, boolean>>({})
 
   const applyFresh = (f: MemoryFileInfo) => {
     setMemFiles(prev => prev.map(x => (x.path === f.path ? { ...x, ...f } : x)))
@@ -852,44 +888,81 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
             height: isMobile ? (banksWide ? '68vh' : 280) : '100%',
             transition: 'height 0.5s cubic-bezier(0.22, 0.9, 0.3, 1)',
           }}>
-            {/* File rail — one entry per memory file */}
+            {/* File rail — the memory TREE, grouped by folder.
+                A flat list of filenames stopped working the moment memory
+                became a tree: `sessions.md`, `ledger.md`, `notes.md` and
+                `profile.md` all read alike, and eighty-odd of them in one
+                column told the owner nothing about which domain he was
+                looking at. Folders are the index now, exactly as they are for
+                the agents. */}
             <div style={{
-              width: 142, flexShrink: 0, overflowY: 'auto',
+              width: 186, flexShrink: 0, overflowY: 'auto',
               borderRight: '1px solid rgba(var(--hb-accent-rgb),0.14)',
             }}>
-              {memFiles.map(f => {
-                // The filename as it actually is — these are real .md files on
-                // the server, and SHOUTING them in mono made a list of eight
-                // documents read like a register of alarm codes.
-                const name = f.path.split('/').pop() || f.path
-                const sel = f.path === memPath
-                return (
-                  <button
-                    key={f.path}
-                    onClick={() => setMemPath(f.path)}
-                    className={sel ? 'hb-row hb-row-active' : 'hb-row'}
-                    style={{
-                      width: '100%', padding: '9px 12px', marginBottom: 2,
-                      display: 'flex', alignItems: 'center', gap: 9,
-                      cursor: 'pointer', textAlign: 'left',
-                      fontSize: '0.875rem',
-                      color: sel ? 'var(--hb-text)' : 'var(--hb-text-dim)',
-                      fontWeight: sel ? 500 : 400,
-                    }}
-                  >
-                    {/* document glyph — same family as the deck's rail icons */}
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                      style={{ flexShrink: 0, color: sel ? 'var(--hb-cyan)' : 'var(--hb-icon-dim)' }}>
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                    </svg>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {name}
-                    </span>
-                  </button>
-                )
-              })}
+              {memTree.map(([dir, files]) => (
+                <div key={dir} style={{ marginBottom: 6 }}>
+                  {dir && (
+                    <button
+                      onClick={() => setMemFolded(m => ({ ...m, [dir]: !m[dir] }))}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '7px 10px 5px', background: 'transparent', border: 'none',
+                        cursor: 'pointer', textAlign: 'left',
+                        fontFamily: "'Rajdhani', sans-serif", fontSize: '0.74rem',
+                        letterSpacing: '0.13em', textTransform: 'uppercase',
+                        color: 'var(--hb-text-faint)',
+                      }}
+                    >
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        strokeWidth="2.5" style={{
+                          flexShrink: 0, opacity: 0.6,
+                          transform: memFolded[dir] ? 'rotate(-90deg)' : 'none',
+                          transition: 'transform 0.15s',
+                        }}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {dir}
+                      </span>
+                      <span style={{ marginLeft: 'auto', opacity: 0.5, letterSpacing: 0 }}>
+                        {files.length}
+                      </span>
+                    </button>
+                  )}
+                  {!memFolded[dir] && files.map(f => {
+                    // Inside a folder the folder name is already overhead, so
+                    // the row carries only the leaf — `sessions`, not
+                    // `wellness/sessions.md`.
+                    const leaf = (f.path.split('/').pop() || f.path).replace(/\.md$/, '')
+                    const sel = f.path === memPath
+                    return (
+                      <button
+                        key={f.path}
+                        onClick={() => setMemPath(f.path)}
+                        className={sel ? 'hb-row hb-row-active' : 'hb-row'}
+                        style={{
+                          width: '100%', padding: '7px 12px 7px', marginBottom: 1,
+                          paddingLeft: dir ? 26 : 12,
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          cursor: 'pointer', textAlign: 'left', fontSize: '0.84rem',
+                          color: sel ? 'var(--hb-text)' : 'var(--hb-text-dim)',
+                          fontWeight: sel ? 500 : 400,
+                        }}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                          style={{ flexShrink: 0, color: sel ? 'var(--hb-cyan)' : 'var(--hb-icon-dim)' }}>
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {leaf}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
 
             {/* Fact readout — the selected file's extracted knowledge.
