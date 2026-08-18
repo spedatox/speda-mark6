@@ -212,20 +212,46 @@ jobs:
           SIZE: ${{ steps.installer.outputs.size }}
         run: |
           set -euo pipefail
-          # Notes via file: an inline --notes string would carry this step's
-          # YAML indentation into the release body and markdown would read it
-          # as a code block.
+
+          # Where the changelog starts: the previous release tag, or the root
+          # commit on the very first release. `tail -n1` because a repo with
+          # more than one root would otherwise put two SHAs in the range and
+          # git would reject it.
+          if ! since="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null)"; then
+            since="$(git rev-list --max-parents=0 HEAD | tail -n1)"
+          fi
+
+          # Notes via a file, and a HEREDOC rather than printf. Two separate
+          # reasons, both learned the hard way:
+          #
+          #   - an inline `--notes` string carries this step's YAML indentation
+          #     into the release body, and markdown reads that as a code block;
+          #   - `printf '- Agent: …'` does not print a bullet, it fails. The
+          #     format string begins with a dash, so bash's builtin parses it
+          #     as an option: "printf: - : invalid option", exit 2.
+          #
+          # Backticks are escaped because this heredoc is unquoted (it has to
+          # expand the variables); an unescaped one would run as a command.
           {
-            printf 'Windows installer for Heartbreaker, built from `%s`.\n\n' "${GITHUB_SHA:0:7}"
-            printf '- Agent: `%s`\n' "$AGENT"
-            printf '- Size: %s\n' "$SIZE"
-            printf '- Unsigned — SmartScreen will warn on first run. Expected for an in-house build.\n\n'
-            printf '**Before first launch** this build needs to be told where Igor is and given\n'
-            printf 'its API key. It ships without one on purpose: this repository is public, so\n'
-            printf 'a baked key would be published along with the installer. See `docs/RELEASING.md`.\n\n'
-            printf '### Changes\n\n'
-            git log --pretty='- %s' "$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD" \
-              -- packages/heartbreaker | head -n 30
+            cat <<EOF
+          Windows installer for Heartbreaker, built from \`${GITHUB_SHA:0:7}\`.
+
+          - Agent: \`${AGENT}\`
+          - Size: ${SIZE}
+          - Unsigned — SmartScreen will warn on first run. Expected for an in-house build.
+
+          **Before first launch** this build needs to be told where Igor is and given
+          its API key. It ships without one on purpose: this repository is public, so
+          a baked key would be published along with the installer. See \`docs/RELEASING.md\`.
+
+          ### Changes
+
+          EOF
+            # -n 30 rather than `| head -n 30`: under `set -o pipefail` a long
+            # enough log fills the pipe buffer, head walks away, and git dies of
+            # SIGPIPE taking the whole step with it. Capping in git has no pipe
+            # to break.
+            git log -n 30 --pretty='- %s' "${since}..HEAD" -- packages/heartbreaker
           } > "$RUNNER_TEMP/notes.md"
 
           # A re-run of the same commit computes a NEW version (the previous
