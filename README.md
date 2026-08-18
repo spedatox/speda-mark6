@@ -5,10 +5,10 @@
 
 ### Specialized Personal Executive Digital Assistant Mark VI
 
-<img width="1920" height="1014" alt="SPEDA Mark VI running in Heartbreaker, the holographic fluid-glass desktop command deck, showing a live agent conversation" src="https://github.com/user-attachments/assets/3691eed2-f8a2-4922-b188-2fe3c24b3402" />
+<img width="1920" height="1014" alt="Speda Mark VI running in Heartbreaker, the holographic fluid-glass desktop command deck, showing a live agent conversation" src="https://github.com/user-attachments/assets/3691eed2-f8a2-4922-b188-2fe3c24b3402" />
 
 
-**SPEDA Mark VI is a private, proactive, self-hosted multi-agent AI assistant** —
+**Speda Mark VI is a private, proactive, self-hosted multi-agent AI assistant** —
 a suite of eight domain specialists that watch the world for you, act while you
 sleep, remember who you are, and answer through a holographic command deck
 straight out of a Stark lab — on your desktop, in your pocket, or over Telegram.
@@ -29,7 +29,7 @@ straight out of a Stark lab — on your desktop, in your pocket, or over Telegra
 
 ## What makes it different
 
-Most "AI assistants" wake up, answer a question, and forget you exist. SPEDA is
+Most "AI assistants" wake up, answer a question, and forget you exist. Speda is
 built on the opposite premise — a **single owner** it knows deeply, a **standing
 staff** of specialists, and **senses of its own** that fire without being asked.
 
@@ -58,7 +58,7 @@ any of them directly; they quietly hand work to each other when a task belongs
 to someone else's domain.
 
 
-<img width="1918" height="1016" alt="The SPEDA Mark VI agent switcher showing all eight agents, each with its own signature accent colour and domain" src="https://github.com/user-attachments/assets/c7c889c1-fe57-497b-bfc8-f59246764b14" />
+<img width="1918" height="1016" alt="The Speda Mark VI agent switcher showing all eight agents, each with its own signature accent colour and domain" src="https://github.com/user-attachments/assets/c7c889c1-fe57-497b-bfc8-f59246764b14" />
 
 
 
@@ -71,7 +71,7 @@ to someone else's domain.
 |  **Centurion** | Mark I | Cyber Security | Vulnerability & CVE analysis, scanning, threat intelligence. |
 |  **Atomix** | Mark I | Health & Wellness | Personal health, fitness, nutrition, recovery. |
 |  **Optimus** | Mark II | Systems, Code & Infra | Real coding on real machines via **The Forge**. |
-|  **Orion** | Mark I | Maintenance & Memory | The system's own custodian — keeps SPEDA's memory and house in order. |
+|  **Orion** | Mark I | Maintenance & Memory | The system's own custodian — keeps Speda's memory and house in order. |
 
 > **Rebrandable to the core.** Identity lives entirely in prompt + profile files;
 > the engine holds zero identity strings. The same codebase ships as any agent —
@@ -79,7 +79,7 @@ to someone else's domain.
 
 ---
 
-<img width="1920" height="994" alt="The SPEDA Mark VI Systems Board showing the live model-routing matrix, active toolset shards, token budget and memory data banks" src="https://github.com/user-attachments/assets/fbfbfdd7-dba2-4af5-8f0a-db49e80751d1" />
+<img width="1920" height="994" alt="The Speda Mark VI Systems Board showing the live model-routing matrix, active toolset shards, token budget and memory data banks" src="https://github.com/user-attachments/assets/fbfbfdd7-dba2-4af5-8f0a-db49e80751d1" />
 
 
 ## The features
@@ -106,7 +106,7 @@ design, not two.
 
 ### 📱 Speda GO — the deck in your pocket
 
-<img width="738" height="1600" alt="SPEDA GO, the native Android client for SPEDA Mark VI, showing the AMOLED-black fluid-glass conversation view" src="https://github.com/user-attachments/assets/704053d8-74b8-4a44-8d75-138c55dde3f9" />
+<img width="738" height="1600" alt="Speda GO, the native Android client for Speda Mark VI, showing the AMOLED-black fluid-glass conversation view" src="https://github.com/user-attachments/assets/704053d8-74b8-4a44-8d75-138c55dde3f9" />
 
 
 A **native Android client** (Kotlin + Jetpack Compose), not a wrapped web view.
@@ -122,14 +122,14 @@ fullscreen, built for one thumb.
 
 ### 🗺️ Maps & navigation — Stark cartography, inline
 
-<img width="738" height="1600" alt="SPEDA GO rendering a live traffic-aware route map inline inside an Android conversation" src="https://github.com/user-attachments/assets/f0b092e3-eb41-4ef8-bbdd-2fe3da8e1cde" />
+<img width="738" height="1600" alt="Speda GO rendering a live traffic-aware route map inline inside an Android conversation" src="https://github.com/user-attachments/assets/f0b092e3-eb41-4ef8-bbdd-2fe3da8e1cde" />
 
 
 Ask for directions and you get a **live map in the conversation**, not a wall of
 coordinates. Traffic-aware routing over the Google Routes API with alternatives
 and real geometry, place search for "where can I go near here", pan/zoom
 gestures, a coordinate + address footer, and a one-tap handoff to Google Maps
-when you actually leave. Because SPEDA knows the surface you're on and — if you
+when you actually leave. Because Speda knows the surface you're on and — if you
 allow it — your live position, *"how do I get home?"* just works from the phone
 without it asking where "here" is. Your location is stamped onto the live turn
 only; it is never written into stored history.
@@ -158,11 +158,11 @@ its in-process self. No hard dependency, ever.
 
 ### 📡 Proactive automations — it works while you're away
 
-n8n is SPEDA's nervous system. Just *tell* it what to watch:
+n8n is Speda's nervous system. Just *tell* it what to watch:
 
 > *"Track this page for a month and tell me when the results are up."*
 
-SPEDA composes the watcher itself, arms it, and — when it fires — writes you a
+Speda composes the watcher itself, arms it, and — when it fires — writes you a
 proper message and delivers it to **Telegram**, unprompted. Watch web pages for
 changes or keywords, follow RSS feeds, schedule morning briefings, or open
 inbound webhooks. Time-boxed watchers self-expire. Manage them in chat or in the
@@ -181,7 +181,7 @@ the free one can't answer.
 
 ### 🧠 Memory that actually lasts
 
-SPEDA keeps a structured, Markdown-based memory of you — who you are, what's
+Speda keeps a structured, Markdown-based memory of you — who you are, what's
 current, a behavioural dossier, your projects, a rolling log — readable and
 editable by the agents themselves and refreshed by background tasks after every
 exchange. **Orion** is the dedicated custodian that keeps it clean.
@@ -192,7 +192,7 @@ open threads) in the background; when you open a *new* chat, the last few recaps
 for that agent are already in context — ask "what were we discussing?" and it
 answers without a search. Semantic recall over every past conversation covers
 the deep cuts, and it's all scoped per agent (Ultron remembers Ultron's threads;
-SPEDA, the orchestrator, sees across all of them). The result: an assistant that
+Speda, the orchestrator, sees across all of them). The result: an assistant that
 remembers your last conversation, your ongoing work, and your preferences
 without you repeating yourself.
 
@@ -206,7 +206,7 @@ answer is never a hostage to your network.
 
 ### 🚨 House Party Protocol — all hands on deck
 
-For genuinely high-stakes moments, SPEDA becomes mission commander and summons
+For genuinely high-stakes moments, Speda becomes mission commander and summons
 the **entire roster in parallel** at full model grade with domain boundaries
 relaxed. It's deliberately heavy and passphrase-gated: a secure authorization
 window (masked passphrase field, validated server-side) unlocks it, and the
@@ -247,7 +247,7 @@ mode** clamps everything down when you want it lean.
 
 ```bash
 # 1. Configure
-cp .env.example packages/igor/.env      # set ANTHROPIC_API_KEY + SPEDA_API_KEY
+cp .env.example packages/igor/.env      # set ANTHROPIC_API_KEY + Speda_API_KEY
 
 # 2. Igor, the backend (SQLite by default — no services needed)
 cd packages/igor && uv sync && uv run uvicorn app.main:app --port 8000 --reload
@@ -257,7 +257,7 @@ npm install && npm run heartbreaker:dev
 ```
 
 On Windows, **`speda.ps1`** boots the whole system — backend, sandbox, the Forge
-link, and the app — with a single command. **SPEDA GO** opens straight
+link, and the app — with a single command. **Speda GO** opens straight
 in Android Studio from `packages/speda-go` (Gradle 8.11 + JDK 21);
 point it at your backend on first launch and the key is kept in the Android
 Keystore.
@@ -285,18 +285,18 @@ per-package component docs ([IGOR.md](packages/igor/IGOR.md),
 
 | Doc | What |
 |---|---|
-| **[spedatox.github.io/speda-mark6](https://spedatox.github.io/speda-mark6/)** | **The project site** — the overview, [the roster](https://spedatox.github.io/speda-mark6/agents/), [Heartbreaker](https://spedatox.github.io/speda-mark6/heartbreaker/), [SPEDA GO](https://spedatox.github.io/speda-mark6/speda-go/), [Igor](https://spedatox.github.io/speda-mark6/igor/) and the [FAQ](https://spedatox.github.io/speda-mark6/faq/) |
+| **[spedatox.github.io/speda-mark6](https://spedatox.github.io/speda-mark6/)** | **The project site** — the overview, [the roster](https://spedatox.github.io/speda-mark6/agents/), [Heartbreaker](https://spedatox.github.io/speda-mark6/heartbreaker/), [Speda GO](https://spedatox.github.io/speda-mark6/speda-go/), [Igor](https://spedatox.github.io/speda-mark6/igor/) and the [FAQ](https://spedatox.github.io/speda-mark6/faq/) |
 | [docs/README.md](docs/README.md) | **The documentation index** — the map to every doc below and the component docs |
 | [REFERENCE.md](docs/REFERENCE.md) | Full capability catalog, HTTP API, and configuration reference |
 | [SETUP.md](docs/SETUP.md) · [DEPLOY.md](DEPLOY.md) | Install & production runbook |
 | [MEMORY_ARCHITECTURE.md](docs/MEMORY_ARCHITECTURE.md) · [MEMORY_REVISION_R1.md](docs/MEMORY_REVISION_R1.md) | How memory works |
 | [TELEGRAM_ARCHITECTURE.md](docs/TELEGRAM_ARCHITECTURE.md) | The bot fleet |
-| [ANDROID_PORT_PLAN.md](docs/ANDROID_PORT_PLAN.md) | SPEDA GO — the parity contract with the desktop client |
+| [ANDROID_PORT_PLAN.md](docs/ANDROID_PORT_PLAN.md) | Speda GO — the parity contract with the desktop client |
 | [FORGE_INTEGRATION_PLAN.md](docs/FORGE_INTEGRATION_PLAN.md) · [NEWS_BRIEFING_PLAN.md](docs/NEWS_BRIEFING_PLAN.md) · [BACKGROUND_OPS_PLAN.md](docs/BACKGROUND_OPS_PLAN.md) · [STARK_MAPS_PLAN.md](docs/STARK_MAPS_PLAN.md) · [ATOMIX_HEALTH_SYNC.md](docs/ATOMIX_HEALTH_SYNC.md) | Design notes for the newest systems |
 
 **Monorepo:** `packages/igor` (**Igor** — the backend) · `packages/heartbreaker`
-(the desktop/web app) · `packages/speda-go` (**SPEDA GO**)
-· `packages/striker` (**SPEDA Mark VI Core** — the single-agent "lite" build) ·
+(the desktop/web app) · `packages/speda-go` (**Speda GO**)
+· `packages/striker` (**Speda Mark VI Core** — the single-agent "lite" build) ·
 `packages/sandbox` (the isolated computer). The Forge is a separate deployment
 that connects back as a peer.
 
