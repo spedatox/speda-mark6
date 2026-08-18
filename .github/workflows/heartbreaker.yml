@@ -118,14 +118,29 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # Matches the developer machine (v24) and satisfies the root
+          # electron ^42.4.0 engine floor of >=22.12 that 20 tripped.
+          node-version: "24"
           cache: npm
 
-      # Root install: this is an npm workspace (packages/striker,
-      # packages/heartbreaker) with one lockfile at the root, so installing
-      # from anywhere else would resolve a different tree than a developer gets.
+      # Two things here, both load-bearing on Windows.
+      #
+      # ELECTRON_SKIP_BINARY_DOWNLOAD stops electron's postinstall from fetching
+      # its prebuilt binary. Three copies of electron are in this lockfile — the
+      # root's stray ^42.4.0 plus one per workspace, and BOTH workspaces resolve
+      # to the same 33.4.11 — so their postinstalls race to extract the same
+      # zip into the same shared %LOCALAPPDATA%\electron\Cache path and one of
+      # them loses with EPERM/EBUSY. Nothing here needs that binary: nothing
+      # RUNS Electron, and electron-builder downloads the dist it packages
+      # itself, reading only the version out of node_modules/electron.
+      #
+      # Scoping to the one workspace we build keeps striker's copy out of it
+      # entirely, which is both one less racer and a chunk of install time we
+      # were spending on a package this job never touches.
       - name: Install
-        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        run: npm ci --workspace packages/heartbreaker --include-workspace-root
 
       - name: Typecheck
         run: npm run heartbreaker:typecheck
