@@ -1,0 +1,227 @@
+name: heartbreaker
+
+# Heartbreaker (the desktop client) release pipeline. Every push to main that
+# touches packages/heartbreaker builds a Windows installer, tags it, and
+# publishes it as a Release on this repo.
+#
+# Versioning starts at 2.0.0 and the TAG IS THE SOURCE OF TRUTH. Each run reads
+# the highest vX.Y.Z tag and bumps the patch; with no tags at all it starts at
+# 2.0.0. package.json is rewritten in the runner but never committed back —
+# committing a bump from a push-triggered workflow either loops or needs a
+# token that can push to main, and neither is worth it when a tag already says
+# the same thing unambiguously. workflow_dispatch can ask for a minor or major
+# bump instead.
+#
+# Repo VARIABLES (Settings → Secrets and variables → Actions → Variables):
+#   SPEDA_API_BASE   https://your-server — baked into the installer so the app
+#                    knows where Igor lives. A hostname behind auth is not a
+#                    secret; a variable keeps it out of the build log's mystery.
+#
+# NO API KEY IS BAKED HERE, DELIBERATELY. This repository is PUBLIC, so every
+# Release asset is world-downloadable, and per CLAUDE.md Rule 12 the X-API-Key
+# is the entire authorization boundary in front of Igor — the owner's memory,
+# mail, calendar and portal sessions. Baking it into a published installer
+# hands all of that to anyone who clicks Download, and a string in an asar
+# bundle is not hidden by being compiled. The installer therefore ships without
+# one; see docs/RELEASING.md for how the key reaches an installed app.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/heartbreaker/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/heartbreaker.yml"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Which part of the version to raise"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      agent:
+        description: "Which agent the build talks to (/chat/<agent>) and brands as"
+        type: choice
+        options: [speda, ultron, centurion, sentinel, atomix, nightcrawler, optimus]
+        default: speda
+
+# Serialize. Two overlapping runs would read the same highest tag and both
+# claim the same version number. Never cancel in flight — a killed run can
+# leave a tag pushed with no asset on it.
+concurrency:
+  group: heartbreaker-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create the tag and the release
+
+jobs:
+  release:
+    name: Build and release the installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      # Full history + tags: the version is derived from them, and a shallow
+      # clone would see none and restart at 2.0.0 on every single run.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          bump="${{ inputs.bump || 'patch' }}"
+          latest="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
+
+          if [ -z "$latest" ]; then
+            next="2.0.0"
+            echo "No release tags yet — starting at $next."
+          else
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            case "$bump" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              *)     patch=$((patch + 1)) ;;
+            esac
+            next="${major}.${minor}.${patch}"
+            # Floor at 2.0.0. Only reachable if someone tags a v0/v1 by hand;
+            # going backwards past the announced starting point would produce a
+            # release that installs OVER a newer one and looks like a downgrade.
+            if [ "$(printf '%s\n2.0.0\n' "$next" | sort -V | head -n1)" != "2.0.0" ]; then
+              echo "::warning::computed $next is below the 2.0.0 floor — using 2.0.0"
+              next="2.0.0"
+            fi
+            echo "Latest tag $latest, $bump bump → $next."
+          fi
+
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "tag=v$next"    >> "$GITHUB_OUTPUT"
+
+      # SPEDA_API_BASE is config, not a credential, so a missing one is not
+      # fatal — but it is silent: the app falls back to http://localhost:8000
+      # and an installed client then fails to reach anything with no clue why.
+      # Say so loudly at build time instead of at the owner's first launch.
+      - name: Check the server address is configured
+        shell: bash
+        env:
+          API_BASE: ${{ vars.SPEDA_API_BASE }}
+        run: |
+          if [ -n "$API_BASE" ]; then
+            echo "installer will point at $API_BASE"
+          else
+            echo "::warning::repo variable SPEDA_API_BASE is not set; this build falls back to http://localhost:8000 and will not reach your server"
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      # Root install: this is an npm workspace (packages/striker,
+      # packages/heartbreaker) with one lockfile at the root, so installing
+      # from anywhere else would resolve a different tree than a developer gets.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run heartbreaker:typecheck
+
+      # electron-builder reads the version out of package.json, and
+      # artifactName interpolates it into the filename. Written here rather
+      # than committed — see the header.
+      - name: Stamp the version
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("fs");
+            const p = "packages/heartbreaker/package.json";
+            const j = JSON.parse(fs.readFileSync(p, "utf8"));
+            j.version = process.env.VERSION;
+            fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
+          '
+          node -e 'console.log("stamped", require("./packages/heartbreaker/package.json").version)'
+
+      - name: Build the renderer and main process
+        working-directory: packages/heartbreaker
+        env:
+          # electron-vite exposes MAIN_VITE_* to the main process, VITE_* to the
+          # renderer. The API base is baked; the key deliberately is not.
+          MAIN_VITE_SPEDA_API_BASE: ${{ vars.SPEDA_API_BASE }}
+          VITE_AGENT: ${{ inputs.agent || 'speda' }}
+        run: npx electron-vite build
+
+      # --publish never: electron-builder has its own GitHub publisher that
+      # would race this workflow's own release step and create a second, draft
+      # release for the same tag.
+      - name: Package the installer
+        working-directory: packages/heartbreaker
+        run: npx electron-builder --win --publish never
+
+      - name: Stage the installer
+        id: installer
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          src="packages/heartbreaker/dist/SPEDA Mark VI-${VERSION}-setup.exe"
+          [ -f "$src" ] || { echo "::error::installer not produced at $src"; ls -la packages/heartbreaker/dist; exit 1; }
+          # Rename off the product name: spaces in a release asset become dots
+          # in GitHub's own download URL, so a predictable ASCII name is one
+          # less thing between the owner and the file.
+          out="$RUNNER_TEMP/SPEDA-Mark-VI-${VERSION}-setup.exe"
+          cp "$src" "$out"
+          echo "path=$out" >> "$GITHUB_OUTPUT"
+          echo "size=$(( $(stat -c%s "$out") / 1048576 )) MB" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: heartbreaker-${{ steps.version.outputs.version }}
+          path: ${{ steps.installer.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          AGENT: ${{ inputs.agent || 'speda' }}
+          SIZE: ${{ steps.installer.outputs.size }}
+        run: |
+          set -euo pipefail
+          # Notes via file: an inline --notes string would carry this step's
+          # YAML indentation into the release body and markdown would read it
+          # as a code block.
+          {
+            printf 'Windows installer for Heartbreaker, built from `%s`.\n\n' "${GITHUB_SHA:0:7}"
+            printf '- Agent: `%s`\n' "$AGENT"
+            printf '- Size: %s\n' "$SIZE"
+            printf '- Unsigned — SmartScreen will warn on first run. Expected for an in-house build.\n\n'
+            printf '**Before first launch** this build needs to be told where Igor is and given\n'
+            printf 'its API key. It ships without one on purpose: this repository is public, so\n'
+            printf 'a baked key would be published along with the installer. See `docs/RELEASING.md`.\n\n'
+            printf '### Changes\n\n'
+            git log --pretty='- %s' "$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD" \
+              -- packages/heartbreaker | head -n 30
+          } > "$RUNNER_TEMP/notes.md"
+
+          # A re-run of the same commit computes a NEW version (the previous
+          # run's tag now exists), so a collision means something unusual —
+          # replace the asset rather than failing the run.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "::warning::$TAG already exists — replacing its asset"
+            gh release upload "$TAG" "${{ steps.installer.outputs.path }}" --clobber
+          else
+            gh release create "$TAG" "${{ steps.installer.outputs.path }}" \
+              --target "$GITHUB_SHA" \
+              --title "SPEDA Mark VI $VERSION" \
+              --notes-file "$RUNNER_TEMP/notes.md"
+          fi
