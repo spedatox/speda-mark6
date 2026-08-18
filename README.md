@@ -64,7 +64,7 @@ to someone else's domain.
 
 | Agent | Mark | Domain | What they do |
 |---|---|---|---|
-|  **SPEDA** | Mark VI | Chief of Staff | Your main assistant — plans, routes, runs automations, commands the others. |
+|  **Speda** | Mark VI | Chief of Staff | Your main assistant — plans, routes, runs automations, commands the others. |
 |  **Sentinel** | Mark II | Finance & Budget | Markets, portfolios, spending, cost discipline. |
 |  **NightCrawler** | Mark III | OSINT & Surveillance | Lawful web recon, threat intel, the **News Desk**, watchers. |
 |  **Ultron** | Mark III | Academy & Work | Research synthesis, literature, deep analytical work. |
