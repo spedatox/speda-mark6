@@ -438,6 +438,115 @@ def mask_custom_mcp_server(record: dict) -> dict:
     return out
 
 
+# ── Web portals (the browser sidecar's credential vault) ────────────────────
+# A portal is a site the owner has an account on and their agents are allowed to
+# reach: the student automation, the library, a supplier's order page. The record
+# holds the credentials; the COOKIES live in the sidecar (packages/browser), and
+# the two never swap jobs — this file is already the trust boundary for the
+# Google and Microsoft refresh tokens, and the sidecar must stay a container that
+# renders untrusted pages without holding a password.
+#
+# The password never reaches a model. `portal_login` names a portal; the skill
+# reads the record here and hands it to the sidecar over the internal network.
+# Nothing in the completion, the message table, the embedding index or the
+# memory pipeline ever contains it — which is the entire reason this is a vault
+# and not just a prompt the owner types their password into.
+#
+# Shape of one record:
+#   {name, label, login_url, home_url, username, password,
+#    selectors: {username, password, submit}, extra_fields: {},
+#    success_selector, success_url_contains, allowed_agents: [], note,
+#    enabled: bool, added_at, last_login, last_status}
+
+_PORTAL_SECRET_FIELDS = ("password",)
+
+
+def get_portals() -> list[dict]:
+    """Every portal record, credentials included. Anything rendering to a client
+    must go through mask_portal first."""
+    return [dict(p) for p in _load().get("portals", [])]
+
+
+def get_portal(name: str) -> dict:
+    for portal in get_portals():
+        if portal.get("name") == name:
+            return portal
+    return {}
+
+
+def save_portal(record: dict) -> dict:
+    """Insert or replace one portal by name. Returns what was stored.
+
+    A re-save that sends the masked password back KEEPS the stored one, for the
+    same reason the MCP server records do: the UI is echoing a value it never
+    saw, and reading that as "the owner cleared this" would break the login every
+    time they fixed a typo in the label.
+    """
+    state = _load()
+    portals = [dict(p) for p in state.get("portals", [])]
+    name = record.get("name", "")
+    existing = next((p for p in portals if p.get("name") == name), None)
+    if existing:
+        for field in _PORTAL_SECRET_FIELDS:
+            if record.get(field) in (MASKED, None, ""):
+                record[field] = existing.get(field, "")
+        record.setdefault("added_at", existing.get("added_at", ""))
+        # Login history belongs to the portal, not to whoever last edited it.
+        for field in ("last_login", "last_status"):
+            record.setdefault(field, existing.get(field, ""))
+        portals = [record if p.get("name") == name else p for p in portals]
+    else:
+        portals.append(record)
+    state["portals"] = portals
+    _save()
+    logger.info("portal_saved", extra={"portal": name})
+    return record
+
+
+def delete_portal(name: str) -> bool:
+    state = _load()
+    portals = [dict(p) for p in state.get("portals", [])]
+    remaining = [p for p in portals if p.get("name") != name]
+    existed = len(remaining) != len(portals)
+    state["portals"] = remaining
+    _save()
+    logger.info("portal_deleted", extra={"portal": name, "existed": existed})
+    return existed
+
+
+def record_portal_login(name: str, ok: bool, message: str) -> None:
+    """Stamp the outcome of the last sign-in attempt onto the record.
+
+    This is what makes a silently-expired portal visible: the Settings row can
+    say "last signed in 3 weeks ago, then stopped working" instead of the owner
+    finding out when an agent reports it cannot read their grades.
+    """
+    from datetime import datetime, timezone
+
+    state = _load()
+    portals = [dict(p) for p in state.get("portals", [])]
+    for portal in portals:
+        if portal.get("name") == name:
+            stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            portal["last_status"] = ("ok: " if ok else "failed: ") + message[:200]
+            if ok:
+                portal["last_login"] = stamp
+            portal["last_attempt"] = stamp
+            break
+    state["portals"] = portals
+    _save()
+
+
+def mask_portal(record: dict) -> dict:
+    """A copy safe to send to a client: the password replaced with a placeholder.
+    The username survives — the owner needs to confirm WHICH account this is."""
+    out = dict(record)
+    for field in _PORTAL_SECRET_FIELDS:
+        if record.get(field):
+            out[field] = MASKED
+    return out
+
+
 def set_server_active(server: str, active: bool) -> bool:
     state = _load()
     disabled = set(state.get("disabled_servers", []))

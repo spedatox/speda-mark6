@@ -245,6 +245,19 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                         placeholder="Europe/Istanbul"),
             ConfigField("sandbox_url", "Sandbox URL", "url",
                         help="Isolated container for run_command. Empty disables the tool."),
+            ConfigField("browser_url", "Browser URL", "url",
+                        help="Playwright container behind browse_page / browser_act / "
+                             "portal_login. Empty disables all three."),
+            ConfigField("browser_token", "Browser Token", "password", secret=True,
+                        help="Shared secret with the browser container — it holds live "
+                             "session cookies for your portals, so set it."),
+            ConfigField("browser_fallback_enabled", "Render When Fetch Comes Back Empty", "bool",
+                        requires_restart=_LIVE,
+                        help="Lets a page watch retry through the browser when a plain "
+                             "fetch finds no readable text (a JS-rendered results page). "
+                             "Costs a render instead of a GET on those polls."),
+            ConfigField("browser_max_chars", "Browser Page Text Cap", "int", requires_restart=_LIVE,
+                        help="How much rendered page text one browse_page call may return."),
             ConfigField("gpt_researcher_url", "GPT-Researcher URL", "url"),
             ConfigField("shannon_url", "Shannon URL", "url"),
             ConfigField("temp_outputs_dir", "Temp Outputs Dir", "text",

@@ -167,6 +167,18 @@ async def lifespan(app: FastAPI):
     from app.skills.health_data import HealthDataSkill
     await registry.register_skill(HealthDataSkill())
 
+    # The browser — Playwright in its own container (packages/browser). The plan B
+    # under every HTTP-only read path, and the only way into the owner's logged-in
+    # portals. Skipped entirely when BROWSER_URL is unset: three tools advertising
+    # a capability that cannot run costs a turn to discover, every turn.
+    from app.skills.browser import BROWSER_SKILLS, browser_available
+
+    if browser_available():
+        for _browser_skill in BROWSER_SKILLS:
+            await registry.register_skill(_browser_skill())
+    else:
+        logger.warning("browser_skills_skipped", extra={"reason": "BROWSER_URL not set"})
+
     # Academic desk — Ultron's course attendance ledger, written from the watch
     # (Ultron Wear) and read back here. check_attendance is read-only and
     # unrestricted so SPEDA can answer "kaç hakkım kaldı" without a dispatch;
@@ -494,7 +506,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, chat, health, trigger, import_chats, files, connections, mail, outlook, memory, navigation, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar
+    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, connections, mail, outlook, memory, navigation, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -504,6 +516,9 @@ def create_app() -> FastAPI:
     app.include_router(import_chats.router)
     app.include_router(files.router)
     app.include_router(connections.router)
+    # Web portals live under /connections/portals — same family as the OAuth
+    # connections above, different enough to keep in its own module.
+    app.include_router(browser_router.router)
     app.include_router(automations.router)
     app.include_router(memory.router)
     app.include_router(telegram.router)

@@ -531,6 +531,28 @@ class Settings(BaseSettings):
     sandbox_local_port: int = 9100
     sandbox_workspace: str = str(_DATA_DIR / "sandbox_workspace")
 
+    # ── The browser sidecar (packages/browser, app/services/browser.py) ────────
+    # Playwright in its own container: the plan-B fetch for pages that only exist
+    # after JavaScript, and the way into the owner's logged-in portals. In Docker
+    # this is the browser service (BROWSER_URL=http://browser:9200); empty
+    # disables browse_page / browser_act / portal_login with a clear message,
+    # same pattern as every other keyed capability.
+    #
+    # browser_token is shared with the sidecar, which holds live session cookies
+    # for the owner's student portal — on a shared Docker network, reachable is
+    # not the same as authorized. Leave it empty ONLY in local dev.
+    browser_url: str = "http://localhost:9200"
+    browser_token: str = ""
+    # Ceiling on how much rendered page text one call may return. The sidecar caps
+    # itself too; this is the cap the CONTEXT sees, and it is the one that costs
+    # money. Raise it for a research-heavy deployment, not for a phone.
+    browser_max_chars: int = 12_000
+    # Let a plain-HTTP fetch that came back empty retry through the browser
+    # (services/web_watch.py). A JS-rendered exam-results page is invisible to a
+    # plain GET, which is the failure this exists to end — but it turns one cheap
+    # probe into a browser render, so it stays a deliberate switch.
+    browser_fallback_enabled: bool = True
+
     # ── The Forge peer (app/services/forge_peer.py) ────────────────────────────
     # The Forge (Mark II) is the standalone execution engine. SPEDA owns its
     # lifecycle: the lifespan handler launches ONE child process per agent in

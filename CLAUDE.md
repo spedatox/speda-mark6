@@ -190,7 +190,9 @@ speda-mark-vi/
     │   ├── dispatch.py          # Agent-to-agent dispatch primitive — direct AND House Party broadcast
     │   ├── external_proxy.py    # ExternalAgentProxy — wired peer proxy for Optimus/Forge (app.state.agent_proxy)
     │   ├── external_chat.py     # Superseded by external_proxy.py — not constructed anywhere; confirm before touching
-    │   ├── runtime_state.py     # Persisted runtime flags (budget mode, House Party engaged) — not a scheduler
+    │   ├── runtime_state.py     # Persisted runtime flags (budget mode, House Party engaged) —
+    │   │                        #   not a scheduler. Also the credential vaults: owner-added
+    │   │                        #   MCP servers, and web PORTALS (the browser's logins)
     │   ├── surface.py           # Client-surface annotation for the live user turn
     │   └── files.py             # Generated-file bookkeeping under /tmp/speda_outputs/
     ├── legion/                  # The Legion (D-SA1–D-SA5) — Tier 0, registered before all other tiers
@@ -211,6 +213,8 @@ speda-mark-vi/
     │   ├── composer.py
     │   └── manager.py
     ├── routers/
+    │   ├── browser.py           # /connections/portals — the owner's saved web logins
+    │   │                        #   (CRUD + test sign-in + sign-out). Vault is runtime_state.
     │   ├── chat.py              # POST /chat[/{agent_id}] (SSE), WS /ws — Flutter user-facing
     │   ├── trigger.py           # POST /trigger/{agent_id} — n8n webhook
     │   ├── agents.py            # GET /agents, House Party toggle, agent WebSocket presence
@@ -237,6 +241,8 @@ speda-mark-vi/
     │   ├── observations.py      # record_observation / search_memory / forget_observation (the sourced-fact layer)
     │   ├── dispatch.py          # dispatch_agent / house_party tools
     │   ├── osint.py             # NightCrawler's threat-intel lookups (IP/URL/hash/breach/dark-web/crypto)
+    │   ├── browser.py           # browse_page / browser_act / portal_login — the Playwright
+    │   │                        #   sidecar's tool surface. Plan B for every HTTP-only read.
     │   ├── navigation.py
     │   ├── news.py
     │   ├── system_ops.py
@@ -284,6 +290,8 @@ speda-mark-vi/
     │   │                        #   domain_matches — one answer to "is it really from them".
     │   ├── lexical.py           # The KEYWORD half of recall: FTS5/BM25 + Turkish folding +
     │   │                        #   Reciprocal Rank Fusion. Recall is hybrid, not vector-only.
+    │   ├── browser.py           # The browser desk — client for packages/browser, portal
+    │   │                        #   lookup + login, and the page→text shaping the model reads
     │   ├── web_watch.py         # Page fetch + line-level publish diff (no LLM) — see "Cheap probes"
     │   ├── routes.py, places.py # Map-card stores — geometry + congestion + turns, and
     │   │                        #   find_places result sets. Served by routers/navigation.py
@@ -405,8 +413,44 @@ A watcher that fires `POST /trigger/{agent_id}` on every tick spends a full agen
 - **Exactly-once is the probe's job, and it commits last.** The scan never marks its own findings as handled; n8n acks (`/mail/watch/seen`, `/web/watch/ack`) only *after* the trigger was accepted. A failed notify therefore repeats next poll instead of vanishing. Never reorder these — a duplicate push is recoverable, a swallowed exam result is not.
 - **Give the agent the data it already cost you to fetch.** The probe's findings ride in the trigger payload and the `intent` says so explicitly, so the turn does not re-fetch (and re-pay for) what the probe just read.
 - Health failures are reported on the **edge**, not per poll — a revoked token must produce one push, not one every ten minutes.
+- **A probe that finds nothing readable may render once, and only once.** `/web/watch/scan` fetches over plain HTTP; when that comes back with no text — a JS-rendered exam-results page, a block page — it retries through the browser container (`browser_fallback_enabled`) rather than returning a permanent error on a watch the owner believes is working. A render is more expensive than a GET and still nothing next to a turn, which is the boundary this whole section defends. The scan reports `rendered: true` when it happened, so a watch that quietly started costing a render every poll is visible rather than deduced from a CPU graph.
 
 Shipped workflows live in `packages/igor/scripts/n8n/*.json` — import, edit the marked fields, activate. Their node `notes` are the documentation; keep them accurate when you change a node.
+
+---
+
+## The Browser
+
+Playwright in its own container (`packages/browser`), reached through
+`app/services/browser.py` and exposed as three Tier-1 skills. Full contract:
+`docs/BROWSER.md`.
+
+- **It is plan B, not last resort.** `fetch`, Tavily, Exa and the news reader all
+  speak HTTP and take what the server says, which is nothing on a page whose
+  content arrives by JavaScript. `browse_page` renders. It costs seconds where a
+  fetch costs milliseconds, so it goes second — but a page the owner can read in
+  Chrome must never be a page their assistant cannot read.
+- **A portal is an account, not a scraping target.** The owner's saved logins
+  (`Settings → Connections → Web portals`) are records in `runtime_state.json`;
+  the browser container keeps the COOKIES, this side keeps the credentials, and
+  the two never swap jobs. `portal_login` takes a portal NAME. No tool anywhere
+  in this system accepts a password as an argument, and no agent may ask for one
+  in chat — see Security.
+- **Sessions persist.** `storage_state` per profile, saved after every call, so
+  a student portal signed into in September is still signed in in November and
+  `browse_page(url, portal="obs")` simply works. `ensure_logged_in()` is what
+  every caller should use: it visits, notices a login wall, signs in, revisits.
+- **The three tools split by verb.** `browse_page` reads (read-only, parallel-
+  safe per Rule 9). `browser_act` clicks, fills and downloads, keyed by a
+  `session_id` the model passes back to stay on the same tab. `portal_login`
+  authenticates. Anything a page hands back as a download is pulled across and
+  registered through `app/core/files.py`, so it reaches the owner as a file card
+  rather than a path they cannot open.
+- **All three are `deferred`.** Rule 11 descriptions are long and these three
+  overlap with `fetch` and each other; they load on demand through `tool_search`
+  rather than sitting in every prompt prefix.
+- Registration is skipped entirely when `BROWSER_URL` is unset. Three tools
+  advertising a capability that cannot run costs a turn to discover, every turn.
 
 ---
 
@@ -464,7 +508,8 @@ Shipped (D-C4's "future" row above is live) — the all-hands mode that rallies 
 
 - **API key auth:** All endpoints require `X-API-Key` header. Validated in `app/middleware/auth.py` before routing.
 - **n8n trigger auth:** `POST /trigger/{agent_id}` additionally validates `X-N8N-Secret`. Both checks must pass.
-- **Playwright MCP (`@playwright/mcp`):** CVE-2025-9611 (CSRF vulnerability). Must run in an isolated Docker container. Never expose the Playwright MCP port to the public network. Internal Contabo network only. Applies to NightCrawler (in-process profile). Optimus manages its own Playwright isolation as a standalone deployment.
+- **The browser (`packages/browser`):** Playwright runs in its OWN container, never in the API container, and is never published — no host port, no Caddy site, internal network only. This is CVE-2025-9611's rule (CSRF in `@playwright/mcp`) applied to every Playwright surface, plus a second reason of its own: the container holds live session cookies for the owner's portals. `BROWSER_TOKEN` gates every call on top of the network boundary, because a shared Docker network makes a service reachable, not authorized. It mounts no host path, holds no `.env`, cannot reach the database, and runs as `pwuser` with all capabilities dropped. Optimus manages its own Playwright isolation as a standalone deployment.
+- **Portal credentials:** stored in `~/.speda/runtime_state.json` (the file already holding the Google/Microsoft refresh tokens), masked on every read the UI performs, and passed to the browser container only at login time. A password must never reach a model: `portal_login` takes a portal NAME, and the credential travels app → container → page. Nothing in a completion, the message table, the embedding index or the memory pipeline may ever contain one. Do not add a tool that accepts a password as an argument.
 - **MCP transport:** STDIO for all local MCP servers (subprocess on Contabo). HTTP/SSE only for officially managed remote servers (Google Workspace, Notion) with OAuth 2.1. No community servers exposed on public ports.
 
 ---
@@ -491,7 +536,8 @@ Shipped (D-C4's "future" row above is live) — the all-hands mode that rallies 
 - Do not add a House Party engage path outside `POST /agents/house-party` and the `house_party` tool — both are the only places the passphrase gate is enforced (see the House Party Protocol section).
 - Do not use `break` after the first tool call. The loop runs until `end_turn`.
 - Do not store generated files permanently. `/tmp/speda_outputs/` with 24-hour cleanup via n8n → `DELETE /admin/outputs`.
-- Do not run Playwright MCP without container isolation. CVE-2025-9611. Internal network only.
+- Do not run Playwright anywhere but its own container. CVE-2025-9611. Internal network only, never a published port.
+- Do not write a tool that takes a password as an argument, or ask the owner for one in chat. Portals are named; the credential is fetched by the backend (see Security).
 - Do not write one-line tool descriptions. Minimum 3–4 sentences per Rule 11.
 - Do not hardcode model IDs outside of `app/profiles/`. Each agent's model IDs live in its own profile file only.
 - Do not add a fourth value to `triggered_by`. n8n covers all automated triggers including scheduled jobs.

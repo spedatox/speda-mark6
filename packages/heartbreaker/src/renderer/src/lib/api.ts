@@ -485,6 +485,87 @@ export async function deleteCustomMcpServer(config: AppConfig, name: string): Pr
   })
 }
 
+// ── Web portals — the sites the owner has an account on ─────────────────────
+// The password comes back MASKED and is meant to be sent back that way: the
+// backend reads an unchanged mask as "keep the stored one", which is what lets
+// the owner fix a label without retyping a credential they can no longer see.
+
+export interface Portal {
+  name: string
+  label: string
+  login_url: string
+  home_url: string
+  username: string
+  /** Masked on read. Send it back untouched to keep the stored password. */
+  password: string
+  selectors: Record<string, string>
+  extra_fields: Record<string, string>
+  success_selector: string
+  success_url_contains: string
+  allowed_agents: string[]
+  note: string
+  enabled: boolean
+  added_at?: string
+  last_login?: string
+  last_status?: string
+  /** Whether the browser container currently holds cookies for this portal. */
+  session?: boolean
+}
+
+export interface BrowserStatus {
+  status: 'ok' | 'down' | 'off'
+  reason?: string
+  sessions?: number
+  profiles?: string[]
+}
+
+export async function getPortals(
+  config: AppConfig,
+): Promise<{ portals: Portal[]; browser: BrowserStatus; agents: string[] }> {
+  const res = await fetch(`${config.apiBase}/connections/portals`, { headers: authHeaders(config) })
+  if (!res.ok) return { portals: [], browser: { status: 'down', reason: `HTTP ${res.status}` }, agents: [] }
+  return res.json()
+}
+
+export async function savePortal(
+  config: AppConfig,
+  portal: Partial<Portal> & { test?: boolean },
+): Promise<{ ok?: boolean | null; error?: string; message?: string; landed_on?: string }> {
+  const res = await fetch(`${config.apiBase}/connections/portals`, {
+    method: 'POST',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(portal),
+  })
+  if (!res.ok) return { error: `HTTP ${res.status}` }
+  return res.json()
+}
+
+export async function portalLogin(
+  config: AppConfig,
+  name: string,
+): Promise<{ ok?: boolean; already?: boolean; message?: string; landed_on?: string; error?: string }> {
+  const res = await fetch(`${config.apiBase}/connections/portals/${encodeURIComponent(name)}/login`, {
+    method: 'POST',
+    headers: authHeaders(config),
+  })
+  if (!res.ok) return { error: `HTTP ${res.status}` }
+  return res.json()
+}
+
+export async function portalForget(config: AppConfig, name: string): Promise<void> {
+  await fetch(`${config.apiBase}/connections/portals/${encodeURIComponent(name)}/forget`, {
+    method: 'POST',
+    headers: authHeaders(config),
+  })
+}
+
+export async function deletePortal(config: AppConfig, name: string): Promise<void> {
+  await fetch(`${config.apiBase}/connections/portals/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+    headers: authHeaders(config),
+  })
+}
+
 export async function notionLoginUrl(config: AppConfig): Promise<{ auth_url?: string; error?: string }> {
   const res = await fetch(`${config.apiBase}/connections/notion/login`, { headers: authHeaders(config)})
   if (!res.ok) return { error: `HTTP ${res.status}` }

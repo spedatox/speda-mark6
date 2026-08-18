@@ -199,7 +199,16 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
     else:
         logger.warning("mcp_skip", extra={"server": "alpha_vantage", "reason": "ALPHA_VANTAGE_API_KEY not set"})
 
-    # Playwright — only available when running inside Docker stack
+    # Playwright — SUPERSEDED by the browser sidecar (packages/browser, reached
+    # through app/services/browser.py as browse_page / browser_act /
+    # portal_login). This registration stays as an escape hatch for an operator
+    # who wants upstream @playwright/mcp's full tool surface, and is off unless
+    # PLAYWRIGHT_MCP_URL is deliberately set — docker-compose no longer sets it.
+    #
+    # The sidecar is preferred for one reason above all: a login through the MCP
+    # server means the MODEL types the owner's password, which puts it in the
+    # transcript, the message table and the embedding index. See the module
+    # docstring of packages/browser/server.py.
     if os.environ.get("PLAYWRIGHT_MCP_URL"):
         servers.append(
             MCPClient(

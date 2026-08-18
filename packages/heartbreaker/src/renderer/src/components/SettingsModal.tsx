@@ -10,6 +10,7 @@ import ProtocolsTab from './ProtocolsTab'
 import type { AppConfig } from '../lib/types'
 import ConfigTab from './ConfigTab'
 import McpServersPanel from './McpServersPanel'
+import PortalsPanel from './PortalsPanel'
 import GlassSelect from './GlassSelect'
 import {
   SettingsSection, SettingsField, SettingsRow, Switch, PillBtn, ServiceRow, LiveDot, fieldStyle,
@@ -659,6 +660,9 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
 
                 <SettingsSection title="Custom servers" />
                 <McpServersPanel config={config} />
+
+                <SettingsSection title="Web portals" />
+                <PortalsPanel config={config} />
               </div>
             )}
 

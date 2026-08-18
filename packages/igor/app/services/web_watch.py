@@ -30,6 +30,17 @@ Exactly-once mirrors the mail watch: the scan does NOT commit what it saw, it
 parks it as `pending`; n8n calls /web/watch/ack after the trigger was accepted.
 A failed notify therefore leaves the old snapshot in place and the next poll
 reports the same publication again, instead of losing it silently.
+
+When the plain fetch finds nothing readable, the scan renders the page once in
+the browser container (services/browser.py) rather than returning a permanent
+error. This is the one place a probe is allowed to become expensive, and it is
+worth it: the pages a watch exists for — exam results, an academic calendar —
+are exactly the ones most likely to draw themselves client-side, so before this
+the watch the owner cared most about was the watch that silently never worked.
+lines_from_render() produces the same line shape as extract_lines() on purpose;
+one snapshot is fed by both, and a watch that renders once and fetches the next
+time must not report the whole page as new because its two extractors disagreed
+about whitespace.
 """
 
 import hashlib
@@ -40,6 +51,7 @@ from datetime import datetime, timezone
 
 import httpx
 
+from app.config import settings
 from app.core.runtime_state import (
     drop_web_watch,
     get_web_watch,
@@ -117,6 +129,56 @@ def extract_lines(html: str, *, ignore: str = "") -> list[str]:
     return lines
 
 
+def lines_from_render(page: dict, *, ignore: str = "") -> list[str]:
+    """The same list of lines, from a BROWSER render instead of raw HTML.
+
+    Deliberately produces the same shape as extract_lines — visible text, with
+    anchors as "text [href]" — because the two feed one snapshot. A watch that
+    fell back to the browser once and to plain HTTP the next poll must not
+    report the whole page as new because the two extractors disagreed about
+    formatting.
+    """
+    noise = re.compile(ignore, re.I) if ignore else None
+    lines: list[str] = []
+    seen: set[str] = set()
+
+    def keep(raw: str) -> None:
+        line = re.sub(r"[ 	 ]+", " ", raw).strip()
+        if len(line) < 3 or (noise and noise.search(line)) or line in seen:
+            return
+        seen.add(line)
+        lines.append(line[:500])
+
+    for raw in (page.get("text") or "").splitlines():
+        keep(raw)
+    for link in page.get("links") or []:
+        label = (link.get("text") or "").strip()
+        href = (link.get("href") or "").strip()
+        if label and href:
+            keep(f"{label} [{href}]")
+    return lines
+
+
+async def render_lines(url: str, *, ignore: str = "") -> tuple[list[str], str, str]:
+    """Plan B for a probe: render the page and extract the same lines.
+
+    Returns (lines, title, error). Never raises — this is reached from a code
+    path whose entire contract is that a dead site does not become a failed
+    workflow run.
+    """
+    from app.services import browser as browser_svc
+
+    if not browser_svc.configured():
+        return [], "", "browser not configured"
+    try:
+        page = await browser_svc.render(url, wait_ms=1200)
+    except Exception as exc:  # noqa: BLE001
+        return [], "", str(exc)[:200]
+    if page.get("error"):
+        return [], "", str(page["error"])[:200]
+    return lines_from_render(page, ignore=ignore), (page.get("title") or ""), ""
+
+
 def fingerprint(lines: list[str]) -> str:
     return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
 
@@ -155,29 +217,53 @@ async def scan(
     failed workflow run every few minutes.
     """
     terms = _parse_terms(look_for)
+    lines: list[str] = []
+    title = ""
+    rendered = False
+    http_error = ""
+
     try:
         async with httpx.AsyncClient(
             timeout=timeout, follow_redirects=True, headers={"User-Agent": _UA}
         ) as client:
             resp = await client.get(url)
         resp.raise_for_status()
+        lines = extract_lines(resp.text, ignore=ignore)
+        title = page_title(resp.text)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("web_watch_fetch_failed", extra={"watch_id": watch_id, "error": str(exc)})
-        return {"status": "error", "detail": str(exc)[:300], "changed": False,
-                "watch_id": watch_id, "url": url, "added": [], "added_count": 0}
+        http_error = str(exc)[:300]
+        logger.warning("web_watch_fetch_failed", extra={"watch_id": watch_id, "error": http_error})
 
-    lines = extract_lines(resp.text, ignore=ignore)
+    # ── Plan B ───────────────────────────────────────────────────────────────
+    # An empty extraction is almost always a JS-rendered page or a block page,
+    # not a page that genuinely went blank — and until the browser existed, that
+    # was where this ended: a permanent "error" on a watch the owner had every
+    # reason to think was working, for exactly the pages (exam results, an
+    # academic calendar behind a React shell) that a watch is for. So the probe
+    # renders it once. That is more expensive than a GET and still nothing next
+    # to a turn, which is the boundary this whole file is built around.
+    if not lines and settings.browser_fallback_enabled:
+        lines, browser_title, browser_error = await render_lines(url, ignore=ignore)
+        rendered = bool(lines)
+        title = title or browser_title
+        if not lines:
+            detail = http_error or "no readable text (JS-rendered or blocked?)"
+            if browser_error:
+                detail = f"{detail}; browser fallback also failed: {browser_error}"
+            return {"status": "error", "detail": detail, "changed": False,
+                    "watch_id": watch_id, "url": url, "added": [], "added_count": 0}
+        logger.info("web_watch_rendered", extra={"watch_id": watch_id, "lines": len(lines)})
+
     if not lines:
-        # An empty extraction is almost always a JS-rendered page or a block
-        # page, not a page that genuinely went blank. Committing it as the new
-        # snapshot would make every line of the real page "new" on recovery.
-        return {"status": "error", "detail": "no readable text (JS-rendered or blocked?)",
+        # Committing an empty scan as the new snapshot would make every line of
+        # the real page "new" on recovery, so it stays an error either way.
+        return {"status": "error",
+                "detail": http_error or "no readable text (JS-rendered or blocked?)",
                 "changed": False, "watch_id": watch_id, "url": url,
                 "added": [], "added_count": 0}
 
     print_ = fingerprint(lines)
     snapshot = "\n".join(lines)[:_SNAPSHOT_CHARS]
-    title = page_title(resp.text)
     state = get_web_watch(watch_id)
 
     if not state.get("snapshot"):
@@ -186,6 +272,7 @@ async def scan(
         logger.info("web_watch_baseline", extra={"watch_id": watch_id, "lines": len(lines)})
         return {"status": "baseline", "changed": False, "watch_id": watch_id, "url": url,
                 "title": title, "fingerprint": print_, "added": [], "added_count": 0,
+                "rendered": rendered,
                 "detail": "first scan — snapshot recorded, nothing reported"}
 
     previous = set(state["snapshot"].split("\n"))
@@ -218,6 +305,10 @@ async def scan(
         "truncated": len(kept) > max_added,
         "removed_count": removed,
         "matched_terms": terms,
+        # Which half answered. Worth reporting: a watch that quietly started
+        # costing a browser render every ten minutes is a thing the owner should
+        # be able to see, not deduce from the container's CPU graph.
+        "rendered": rendered,
     }
 
 

@@ -20,6 +20,7 @@ capability tier — the brain and hands of the whole system. Heartbreaker
 | Memory | `app/skills/memory.py`, `app/services/memory.py` | The `/memories` file law, episodic session recaps, semantic recall |
 | Sessions & turns | `app/core/session_manager.py`, `app/core/turn_runner.py` | Per-agent sessions, detached turns with replay/reattach |
 | Transport | `app/routers/chat.py`, `app/websocket/` | HTTP+SSE chat, Flutter WS, and the Optimus peer socket |
+| The browser | `packages/browser`, `app/services/browser.py` | Playwright in its own container: the plan-B read for JS-rendered pages, and the owner's saved portal logins |
 | Automations | n8n (external) → `POST /trigger/{agent_id}` | Igor never schedules anything internally |
 
 ## Running Igor

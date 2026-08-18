@@ -31,6 +31,11 @@ class WebScanResponse(BaseModel):
     truncated: bool = False
     removed_count: int = 0
     matched_terms: list[str] = Field(default_factory=list)
+    # True when the plain HTTP fetch found nothing readable and the scan fell
+    # back to a browser render (app/services/web_watch.py). Reported rather than
+    # left implicit: a watch that quietly started costing a render every poll is
+    # something the owner should be able to see, not deduce.
+    rendered: bool = False
 
 
 class WebAckRequest(BaseModel):
