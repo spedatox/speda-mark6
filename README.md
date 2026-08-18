@@ -64,14 +64,14 @@ to someone else's domain.
 
 | Agent | Mark | Domain | What they do |
 |---|---|---|---|
-| 🟦 **SPEDA** | Mark VI | Chief of Staff | Your main assistant — plans, routes, runs automations, commands the others. |
-| 🟨 **Sentinel** | Mark II | Finance & Budget | Markets, portfolios, spending, cost discipline. |
-| 🟪 **NightCrawler** | Mark III | OSINT & Surveillance | Lawful web recon, threat intel, the **News Desk**, watchers. |
-| ⬜ **Ultron** | Mark III | Academy & Work | Research synthesis, literature, deep analytical work. |
-| 🟥 **Centurion** | Mark I | Cyber Security | Vulnerability & CVE analysis, scanning, threat intelligence. |
-| 🟩 **Atomix** | Mark I | Health & Wellness | Personal health, fitness, nutrition, recovery. |
-| 🔵 **Optimus** | Mark II | Systems, Code & Infra | Real coding on real machines via **The Forge**. |
-| 🟧 **Orion** | Mark I | Maintenance & Memory | The system's own custodian — keeps SPEDA's memory and house in order. |
+|  **SPEDA** | Mark VI | Chief of Staff | Your main assistant — plans, routes, runs automations, commands the others. |
+|  **Sentinel** | Mark II | Finance & Budget | Markets, portfolios, spending, cost discipline. |
+|  **NightCrawler** | Mark III | OSINT & Surveillance | Lawful web recon, threat intel, the **News Desk**, watchers. |
+|  **Ultron** | Mark III | Academy & Work | Research synthesis, literature, deep analytical work. |
+|  **Centurion** | Mark I | Cyber Security | Vulnerability & CVE analysis, scanning, threat intelligence. |
+|  **Atomix** | Mark I | Health & Wellness | Personal health, fitness, nutrition, recovery. |
+|  **Optimus** | Mark II | Systems, Code & Infra | Real coding on real machines via **The Forge**. |
+|  **Orion** | Mark I | Maintenance & Memory | The system's own custodian — keeps SPEDA's memory and house in order. |
 
 > **Rebrandable to the core.** Identity lives entirely in prompt + profile files;
 > the engine holds zero identity strings. The same codebase ships as any agent —
