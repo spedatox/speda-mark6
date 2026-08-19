@@ -4,6 +4,7 @@ import { useSettings } from '../store/settings'
 import { useIsPeerOnline } from '../lib/useOnlineAgents'
 import HisarBrowser from './HisarBrowser'
 import type { AppConfig } from '../lib/types'
+import { useT } from '../lib/i18n'
 
 /**
  * THE DECK BAR — the chat column's title row, plus the floating icon rail.
@@ -30,6 +31,7 @@ import type { AppConfig } from '../lib/types'
  * workspace namespace without path translation.
  */
 function ForgeLink({ config, agentId }: { config: AppConfig; agentId: string }) {
+  const t = useT()
   const online = useIsPeerOnline(config, 'optimus')
   const { settings, update } = useSettings()
   const [browserOpen, setBrowserOpen] = useState(false)
@@ -56,9 +58,7 @@ function ForgeLink({ config, agentId }: { config: AppConfig; agentId: string }) 
       )}
       <span className="hb-hide-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
         <span
-          title={online
-            ? 'Optimus is running on the Forge (Mark II) — full agentic execution in an isolated Cell.'
-            : 'The Forge peer is offline — Optimus is answering from its in-process fallback engine.'}
+          title={online ? t.header.forgeOnlineTitle : t.header.forgeOfflineTitle}
           style={{
             display: 'flex', alignItems: 'center', gap: 5,
             fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
@@ -70,7 +70,7 @@ function ForgeLink({ config, agentId }: { config: AppConfig; agentId: string }) 
             boxShadow: online ? '0 0 6px var(--hb-green)' : 'none',
             animation: online ? 'hbBlink 1.6s ease-in-out infinite' : 'none',
           }} />
-          {online ? 'FORGE LINK' : 'IN-PROCESS'}
+          {online ? t.header.forgeLink : t.header.inProcess}
         </span>
         <span className="hb-query-box" style={{
           display: 'flex', alignItems: 'center', gap: 6, height: 24,
@@ -78,9 +78,7 @@ function ForgeLink({ config, agentId }: { config: AppConfig; agentId: string }) 
         }}>
           <button
             onClick={() => setBrowserOpen(true)}
-            title={cwd
-              ? `Forge workspace: ${cwd}\nClick to browse Hisar and choose a different folder.`
-              : 'Browse Hisar to choose the folder the Forge runs Optimus jobs in. Both Mark VI and the Forge share the same vault, so the path needs no translation.'}
+            title={cwd ? t.header.workspaceSet(cwd) : t.header.workspaceUnset}
             style={{
               display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
               border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
@@ -94,13 +92,13 @@ function ForgeLink({ config, agentId }: { config: AppConfig; agentId: string }) 
               <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
             </svg>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {folderName || 'SET WORKSPACE'}
+              {folderName || t.header.setWorkspace}
             </span>
           </button>
           {cwd && (
             <button
               onClick={() => update({ forgeCwd: '' })}
-              title="Clear the workspace — use the peer’s default"
+              title={t.header.clearWorkspace}
               style={{
                 display: 'flex', alignItems: 'center', flexShrink: 0,
                 border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
@@ -176,6 +174,7 @@ export function DeckRail({
   voiceOpen, onToggleVoice, telemetryOpen, onToggleTelemetry,
   inWarRoom, onOpenWarRoom,
 }: RailProps) {
+  const t = useT()
   return (
     <div style={{
       position: 'absolute', top: 20, right: 20, zIndex: 30,
@@ -184,7 +183,7 @@ export function DeckRail({
       {!inWarRoom && onOpenWarRoom && (
         <RailTile
           onClick={onOpenWarRoom}
-          title="Enter the war room — brief SPEDA and stage the roster (protocol stays offline until engaged)"
+          title={t.header.enterWarRoom}
         >
           {/* Command table — the roster converging on a centre point */}
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
@@ -201,7 +200,7 @@ export function DeckRail({
         <RailTile
           active={commsOpen}
           onClick={onToggleComms}
-          title={commsOpen ? 'Close agent comms' : 'Open inter-agent comms traffic'}
+          title={commsOpen ? t.header.closeComms : t.header.openComms}
         >
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
             <circle cx="5" cy="12" r="2.4"/><circle cx="19" cy="5" r="2.4"/><circle cx="19" cy="19" r="2.4"/>
@@ -214,7 +213,7 @@ export function DeckRail({
         <RailTile
           active={telemetryOpen}
           onClick={onToggleTelemetry}
-          title={telemetryOpen ? 'Hide the telemetry column' : 'Show the telemetry column'}
+          title={telemetryOpen ? t.header.hideTelemetry : t.header.showTelemetry}
         >
           {/* Pulse trace, not the bar meter. The four-bar glyph is an audio
               equaliser to anyone who has used a media player, so it belongs to
@@ -229,7 +228,7 @@ export function DeckRail({
         <RailTile
           active={boardOpen}
           onClick={onToggleBoard}
-          title={boardOpen ? 'Close systems board' : 'Open systems board'}
+          title={boardOpen ? t.header.closeBoard : t.header.openBoard}
         >
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
@@ -242,7 +241,7 @@ export function DeckRail({
         <RailTile
           active={voiceOpen}
           onClick={onToggleVoice}
-          title={voiceOpen ? 'Leave voice mode' : 'Voice mode — replies are spoken aloud'}
+          title={voiceOpen ? t.header.leaveVoice : t.header.openVoice}
         >
           {/* The equaliser bars — this is the one people read as "audio". */}
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
@@ -267,6 +266,7 @@ interface Props {
 export default function Header({
   config, agentId, sidebarOpen, onToggleSidebar, railClearance = 0,
 }: Props) {
+  const t = useT()
   const { state } = useChatContext()
   const activeSession = state.sessions.find(s => s.id === state.activeSessionId)
 
@@ -281,7 +281,7 @@ export default function Header({
         <button
           className="hb-btn hb-tile"
           onClick={onToggleSidebar}
-          title="Open panel"
+          title={t.header.openPanel}
           style={{ width: 36, height: 36, flexShrink: 0 }}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
@@ -300,7 +300,7 @@ export default function Header({
           maxWidth: '46%', flexShrink: 1, minWidth: 0,
         }}
       >
-        {activeSession?.title || 'New conversation'}
+        {activeSession?.title || t.header.newConversation}
       </span>
 
       {/* Live state — the pill appears only while the agent is actually working,
@@ -319,7 +319,7 @@ export default function Header({
             background: 'var(--hb-cyan)', boxShadow: '0 0 8px var(--hb-cyan)',
             animation: 'hbPulse 1.4s ease-in-out infinite',
           }} />
-          Responding
+          {t.header.responding}
         </span>
       )}
 

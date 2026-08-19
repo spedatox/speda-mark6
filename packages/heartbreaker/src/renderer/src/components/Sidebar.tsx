@@ -8,30 +8,34 @@ import { deleteSession, renameSession, fetchActiveRuns } from '../lib/api'
 import { hasMark } from '../lib/agentMarks'
 import AgentMark from './AgentMark'
 import { SkeletonList } from './Skeleton'
+import { useT } from '../lib/i18n'
 
 const ProfileContext = createContext<AppProfile | null>(null)
 export const useProfile = () => useContext(ProfileContext)!
 export { ProfileContext }
 
 /* ── Time grouping ────────────────────────────────────────────────────────── */
-function groupSessions(sessions: Session[]): { label: string; items: Session[] }[] {
+type GroupKey = 'today' | 'yesterday' | 'week' | 'month' | 'older'
+const GROUP_ORDER: GroupKey[] = ['today', 'yesterday', 'week', 'month', 'older']
+
+function groupSessions(sessions: Session[]): { key: GroupKey; items: Session[] }[] {
   const now = new Date()
   const tod = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const yest = new Date(tod.getTime() - 86400_000)
   const week = new Date(tod.getTime() - 7 * 86400_000)
   const month = new Date(tod.getTime() - 30 * 86400_000)
-  const groups: Record<string, Session[]> = {
-    'Today': [], 'Yesterday': [], 'This week': [], 'This month': [], 'Older': [],
+  const groups: Record<GroupKey, Session[]> = {
+    today: [], yesterday: [], week: [], month: [], older: [],
   }
   for (const s of sessions) {
     const d = new Date(s.started_at)
-    if (d >= tod)   groups['Today'].push(s)
-    else if (d >= yest)  groups['Yesterday'].push(s)
-    else if (d >= week)  groups['This week'].push(s)
-    else if (d >= month) groups['This month'].push(s)
-    else groups['Older'].push(s)
+    if (d >= tod)   groups.today.push(s)
+    else if (d >= yest)  groups.yesterday.push(s)
+    else if (d >= week)  groups.week.push(s)
+    else if (d >= month) groups.month.push(s)
+    else groups.older.push(s)
   }
-  return Object.entries(groups).filter(([, v]) => v.length).map(([label, items]) => ({ label, items }))
+  return GROUP_ORDER.filter(k => groups[k].length).map(key => ({ key, items: groups[key] }))
 }
 
 /* ── Shared micro-styles ──────────────────────────────────────────────────── */
@@ -43,6 +47,7 @@ const mono: React.CSSProperties = {
 function SessionItem({ session, active, onSelect, config, running }: {
   session: Session; active: boolean; onSelect: () => void; config: AppConfig; running?: boolean
 }) {
+  const t = useT()
   const { dispatch } = useChatContext()
   const [hover, setHover]       = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -145,7 +150,7 @@ function SessionItem({ session, active, onSelect, config, running }: {
             paddingRight: lit ? '3.75rem' : '14px',
           }}
         >
-          {displayTitle || 'New conversation'}
+          {displayTitle || t.sidebar.newConversation}
         </button>
       )}
 
@@ -154,7 +159,7 @@ function SessionItem({ session, active, onSelect, config, running }: {
           collides with the hover action icons. */}
       {running && !lit && !renaming && (
         <span
-          title="A turn is still running in this conversation"
+          title={t.sidebar.turnRunning}
           style={{
             position: 'absolute', right: '0.7rem', top: '50%', transform: 'translateY(-50%)',
             width: 7, height: 7, borderRadius: '50%',
@@ -172,13 +177,13 @@ function SessionItem({ session, active, onSelect, config, running }: {
           position: 'absolute', right: '0.3rem', top: '50%', transform: 'translateY(-50%)',
           display: 'flex', alignItems: 'center', gap: '2px',
         }}>
-          <ActionIcon title="Rename" onClick={handleRenameStart} hoverColor="var(--hb-cyan-bright)">
+          <ActionIcon title={t.sidebar.rename} onClick={handleRenameStart} hoverColor="var(--hb-cyan-bright)">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
           </ActionIcon>
-          <ActionIcon title="Delete" onClick={handleDelete} hoverColor="#c84a3a">
+          <ActionIcon title={t.sidebar.delete} onClick={handleDelete} hoverColor="#c84a3a">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="3 6 5 6 21 6"/>
               <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
@@ -239,13 +244,14 @@ function GroupLabel({ label }: { label: string }) {
 
 /* ── New chat button ──────────────────────────────────────────────────────── */
 function NewChatBtn({ onClick }: { onClick: () => void }) {
+  const t = useT()
   const [hover, setHover] = useState(false)
   return (
     <button
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title="New conversation"
+      title={t.sidebar.newConversation}
       // The sidebar's one accented surface. It is the only ACTION in a column
       // that is otherwise a list, so it is the only thing here allowed to carry
       // the brand — the selected row stays neutral on purpose. The class is
@@ -270,7 +276,7 @@ function NewChatBtn({ onClick }: { onClick: () => void }) {
         <path d="M12 5v14M5 12h14"/>
       </svg>
       <span style={{ fontSize: '0.905rem', fontWeight: 500 }}>
-        New conversation
+        {t.sidebar.newConversation}
       </span>
     </button>
   )
@@ -280,6 +286,7 @@ function NewChatBtn({ onClick }: { onClick: () => void }) {
 function SearchBar({ value, onChange, onClose }: {
   value: string; onChange: (v: string) => void; onClose: () => void
 }) {
+  const t = useT()
   return (
     <div className="hb-seam-b" style={{
       display: 'flex', alignItems: 'center', gap: '0.4rem',
@@ -292,7 +299,7 @@ function SearchBar({ value, onChange, onClose }: {
       <input
         autoFocus
         type="text"
-        placeholder="SEARCH SESSIONS"
+        placeholder={t.sidebar.searchPlaceholder}
         value={value}
         onChange={e => onChange(e.target.value)}
         style={{
@@ -322,6 +329,7 @@ function SearchBar({ value, onChange, onClose }: {
 
 /* ── Settings menu popup ──────────────────────────────────────────────────── */
 function SettingsPopup({ onSettings, onClose }: { onSettings: () => void; onClose: () => void }) {
+  const t = useT()
   return (
     <div className="hb-glass" style={{
       position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, right: 0,
@@ -339,7 +347,7 @@ function SettingsPopup({ onSettings, onClose }: { onSettings: () => void; onClos
     }}>
       <PopupItem
         icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>}
-        label="Settings"
+        label={t.sidebar.settings}
         onClick={() => { onSettings(); onClose() }}
       />
     </div>
@@ -476,6 +484,7 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive, switchAgent 
   profile: AppProfile; onToggle: () => void; onSearch: () => void; searchActive: boolean
   switchAgent: (agentId: string) => void
 }) {
+  const t = useT()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const toggleDropdown = useCallback(() => setDropdownOpen(v => !v), [])
 
@@ -499,7 +508,7 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive, switchAgent 
       {/* Brand — clickable to open the agent switcher */}
       <button
         onClick={toggleDropdown}
-        title="Switch agent"
+        title={t.sidebar.switchAgent}
         style={{
           display: 'flex', alignItems: 'center', gap: '0.4rem',
           minWidth: 0, overflow: 'hidden',
@@ -559,12 +568,12 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive, switchAgent 
 
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-        <HeaderBtn title="Search" active={searchActive} onClick={onSearch}>
+        <HeaderBtn title={t.sidebar.search} active={searchActive} onClick={onSearch}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
           </svg>
         </HeaderBtn>
-        <HeaderBtn title="Close sidebar" onClick={onToggle}>
+        <HeaderBtn title={t.sidebar.closeSidebar} onClick={onToggle}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="3" y1="6" x2="21" y2="6"/>
             <line x1="3" y1="12" x2="21" y2="12"/>
@@ -718,6 +727,7 @@ interface Props {
 }
 
 export default function Sidebar({ profile, config, isOpen, mobile, onSelectSession, onToggle, onNewChat, onOpenSettings, switchAgent }: Props) {
+  const t = useT()
   const { state } = useChatContext()
   const [search, setSearch]         = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -811,13 +821,13 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
                 color: 'var(--hb-icon-dim)',
                 textTransform: 'uppercase',
               }}>
-                {search ? 'No results' : 'No sessions yet'}
+                {search ? t.sidebar.noResults : t.sidebar.noSessionsYet}
               </p>
             </div>
           ) : (
-            groups.map(({ label, items }) => (
-              <div key={label}>
-                <GroupLabel label={label} />
+            groups.map(({ key, items }) => (
+              <div key={key}>
+                <GroupLabel label={t.sidebar.groups[key]} />
                 {items.map(session => (
                   <SessionItem
                     key={session.id}

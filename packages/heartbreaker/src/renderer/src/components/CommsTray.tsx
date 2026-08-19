@@ -5,6 +5,7 @@ import type { AppConfig } from '../lib/types'
 import { useIsMobile } from '../lib/useIsMobile'
 import { CommFeed, AvatarStack } from './CommBubble'
 import { SkeletonList } from './Skeleton'
+import { useT } from '../lib/i18n'
 
 /**
  * AGENT_COMMS — the inter-agent traffic tray.
@@ -21,6 +22,7 @@ const UI = "'Rajdhani', sans-serif"
 const POLL_MS = 3000
 
 export default function CommsTray({ config, onClose }: { config: AppConfig; onClose: () => void }) {
+  const t = useT()
   const isMobile = useIsMobile()
   const [entries, setEntries] = useState<AgentCommEntry[]>([])
   const [wide, setWide] = useState(false)
@@ -98,29 +100,29 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
             fontFamily: UI, fontSize: '0.94rem', fontWeight: 600,
             letterSpacing: '0.04em', color: 'var(--hb-text)',
           }}>
-            Agent traffic
+            {t.commsTray.agentTraffic}
           </div>
           <div style={{
             fontSize: '0.78rem',
             color: live > 0 ? 'var(--hb-green)' : 'var(--hb-text-faint)',
           }}>
-            {live > 0 ? `${live} working` : `${entries.length} exchange${entries.length === 1 ? '' : 's'}`}
+            {live > 0 ? t.commsTray.working(live) : t.commsTray.exchanges(entries.length)}
           </div>
         </div>
         <button
           onClick={() => setWide(w => !w)}
-          title={wide ? 'Retract (Esc)' : 'Extend the traffic console'}
+          title={wide ? t.commsTray.retractEsc : t.commsTray.extendConsole}
           style={{
             border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 2px',
             fontSize: '0.8125rem', letterSpacing: '0.06em', flexShrink: 0,
             color: wide ? 'var(--hb-cyan-bright)' : 'var(--hb-cyan)', transition: 'color 0.15s',
           }}
         >
-          {wide ? 'Retract' : 'Expand'}
+          {wide ? t.commsTray.retract : t.commsTray.expand}
         </button>
         <button
           onClick={onClose}
-          title="Close (Esc)"
+          title={t.message.closeEsc}
           style={{
             border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0,
             color: 'var(--hb-text-faint)', display: 'flex', alignItems: 'center', padding: 0,
@@ -152,7 +154,7 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
             padding: '10px 2px', margin: 0,
             fontSize: '0.875rem', color: 'var(--hb-text-faint)',
           }}>
-            No traffic yet — dispatches between agents appear here.
+            {t.commsTray.noTraffic}
           </p>
         ) : (
           <CommFeed entries={entries} compact={!wide} />
@@ -171,8 +173,8 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
           onClick={standDown}
           disabled={!party}
           title={party
-            ? 'Stand down — end the House Party Protocol'
-            : "Engaged only by telling SPEDA: 'House Party Protocol'"}
+            ? t.commsTray.standDownTitle
+            : t.commsTray.engagedOnlyTitle}
           style={{
             display: 'flex', alignItems: 'center', gap: 8, height: 28, padding: '0 12px',
             background: 'rgba(217,156,68,0.08)',
@@ -186,11 +188,11 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
             background: party ? 'var(--hb-amber-bright)' : 'var(--hb-icon-dim)',
             boxShadow: party ? '0 0 6px rgba(242,183,92,0.8)' : 'none',
           }} />
-          {party ? 'House Party live — stand down' : 'House Party offline'}
+          {party ? t.commsTray.housePartyLive : t.commsTray.housePartyOffline}
         </button>
         {!party && (
           <span style={{ fontSize: '0.78rem', color: 'var(--hb-text-faint)', whiteSpace: 'nowrap' }}>
-            say “House Party Protocol”
+            {t.commsTray.sayHouseParty}
           </span>
         )}
       </div>

@@ -6,6 +6,7 @@ import { PARTY_ROSTER } from '../lib/agents'
 import { Avatar } from './CommBubble'
 import AgentModelPicker from './AgentModelPicker'
 import { Skeleton } from './Skeleton'
+import { useT } from '../lib/i18n'
 
 const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
@@ -22,6 +23,7 @@ export default function RosterModelWindow({ config, onClose }: {
   config: AppConfig
   onClose: () => void
 }) {
+  const t = useT()
   const [infos, setInfos] = useState<AgentModelInfo[]>([])
   const [models, setModels] = useState<ModelInfo[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -100,11 +102,11 @@ export default function RosterModelWindow({ config, onClose }: {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
           </svg>
-          ROSTER CORES
+          {t.rosterModelWindow.title}
         </span>
         <button
           onClick={onClose}
-          title="Close (Esc)"
+          title={t.message.closeEsc}
           style={{
             border: 'none', background: 'transparent', cursor: 'pointer', padding: 2,
             color: 'var(--hb-icon-dim)', display: 'flex',
@@ -121,7 +123,7 @@ export default function RosterModelWindow({ config, onClose }: {
         fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.1em',
         color: 'var(--hb-icon)', borderBottom: '1px solid var(--hb-edge)',
       }}>
-        {'// PROFILE = AGENT\'S OWN POLICY · DESKTOP PIN OVERRIDES INTERACTIVE + DISPATCH · TELEGRAM PIN OVERRIDES BOT CHANNEL'}
+        {t.rosterModelWindow.caption}
       </p>
 
       {/* Roster list */}
@@ -146,12 +148,12 @@ export default function RosterModelWindow({ config, onClose }: {
                   fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.08em',
                   color: 'var(--hb-icon-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
-                  {info ? info.domain : loaded ? 'OFFLINE' : <Skeleton width={70} height={8} />}
+                  {info ? info.domain : loaded ? t.rosterModelWindow.offline : <Skeleton width={70} height={8} />}
                 </span>
               </span>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                 <div style={{ width: 156 }}>
-                  <span style={{ fontFamily: MONO, fontSize: '0.42rem', letterSpacing: '0.08em', color: 'var(--hb-icon-dim)', display: 'block', marginBottom: 2 }}>DESKTOP</span>
+                  <span style={{ fontFamily: MONO, fontSize: '0.42rem', letterSpacing: '0.08em', color: 'var(--hb-icon-dim)', display: 'block', marginBottom: 2 }}>{t.rosterModelWindow.desktop}</span>
                   {info
                     ? <AgentModelPicker info={info} models={models} onPin={m => pin(id, m)} large />
                     : loaded
@@ -159,7 +161,7 @@ export default function RosterModelWindow({ config, onClose }: {
                       : <Skeleton height={26} />}
                 </div>
                 <div style={{ width: 156 }}>
-                  <span style={{ fontFamily: MONO, fontSize: '0.42rem', letterSpacing: '0.08em', color: 'var(--hb-icon-dim)', display: 'block', marginBottom: 2 }}>TELEGRAM</span>
+                  <span style={{ fontFamily: MONO, fontSize: '0.42rem', letterSpacing: '0.08em', color: 'var(--hb-icon-dim)', display: 'block', marginBottom: 2 }}>{t.rosterModelWindow.telegram}</span>
                   {info
                     ? <AgentModelPicker info={{ ...info, override: info.telegram_override }} models={models} onPin={m => pinTg(id, m)} large />
                     : loaded

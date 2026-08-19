@@ -5,6 +5,7 @@ import type { ConfigFieldInfo, ConfigGroupInfo, ConfigSaveResult, MemorySources 
 import GlassSelect from './GlassSelect'
 import { Switch } from './settingsUI'
 import { Skeleton, SkeletonText, SkeletonList } from './Skeleton'
+import { useT } from '../lib/i18n'
 
 /**
  * ConfigTab — the full backend configuration surface: every API key, token,
@@ -18,6 +19,7 @@ const MONO = 'var(--font-mono)'
 type EditVal = string | number | boolean
 
 export default function ConfigTab({ config }: { config: AppConfig }) {
+  const t = useT()
   const [groups, setGroups] = useState<ConfigGroupInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -97,9 +99,8 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '4.5rem' }}>
       <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>
-        Everything the backend can be configured with — API keys, bot tokens, endpoints and flags.
-        Values are stored in a managed override file that wins over the checked-in <code style={{ fontFamily: MONO }}>.env</code>.
-        A <span style={{ color: 'var(--hb-amber)' }}>restart-required</span> field is saved now and takes effect on the next backend restart.
+        {t.configTab.introPre} <code style={{ fontFamily: MONO }}>.env</code>{t.configTab.introMid}{' '}
+        <span style={{ color: 'var(--hb-amber)' }}>{t.configTab.restartRequiredLabel}</span> {t.configTab.introPost}
       </p>
 
       <SourceOfTruthPanel config={config} />
@@ -108,7 +109,7 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
       <input
         value={query}
         onChange={e => setQuery(e.target.value)}
-        placeholder="Search settings (e.g. telegram, openai, n8n)…"
+        placeholder={t.configTab.searchPlaceholder}
         style={{
           width: '100%', background: 'var(--glass-fill)',
           boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35)',
@@ -149,7 +150,7 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
                   background: 'rgba(217,156,68,0.1)',
                   border: '1px solid rgba(217,156,68,0.32)', padding: '2px 10px',
                 }}>
-                  {groupDirty} edited
+                  {t.configTab.groupEdited(groupDirty)}
                 </span>
               )}
             </button>
@@ -187,13 +188,13 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           {result ? (
             <span style={{ fontSize: '0.72rem', fontFamily: MONO, color: 'var(--text-secondary)' }}>
-              {result.applied_live.length > 0 && <span style={{ color: 'var(--hb-green)' }}>✓ {result.applied_live.length} applied live. </span>}
-              {result.restart_required.length > 0 && <span style={{ color: 'var(--hb-amber)' }}>↻ {result.restart_required.length} need a restart. </span>}
-              {result.rejected.length > 0 && <span style={{ color: 'var(--hb-red)' }}>✕ {result.rejected.length} rejected.</span>}
+              {result.applied_live.length > 0 && <span style={{ color: 'var(--hb-green)' }}>{t.configTab.appliedLive(result.applied_live.length)}</span>}
+              {result.restart_required.length > 0 && <span style={{ color: 'var(--hb-amber)' }}>{t.configTab.needsRestart(result.restart_required.length)}</span>}
+              {result.rejected.length > 0 && <span style={{ color: 'var(--hb-red)' }}>{t.configTab.rejected(result.rejected.length)}</span>}
             </span>
           ) : (
             <span style={{ fontSize: '0.72rem', fontFamily: MONO, color: 'var(--text-muted)' }}>
-              {dirtyKeys.length ? `${dirtyKeys.length} unsaved change${dirtyKeys.length > 1 ? 's' : ''}` : 'No changes'}
+              {dirtyKeys.length ? t.configTab.unsavedChanges(dirtyKeys.length) : t.configTab.noChanges}
             </span>
           )}
         </div>
@@ -203,7 +204,7 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
             className="hb-btn"
             style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem' }}
           >
-            Discard
+            {t.configTab.discard}
           </button>
         )}
         <button
@@ -217,7 +218,7 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
             cursor: dirtyKeys.length && !saving ? 'pointer' : 'not-allowed',
           }}
         >
-          {saving ? 'Saving…' : 'Save changes'}
+          {saving ? t.configTab.saving : t.configTab.saveChanges}
         </button>
       </div>
     </div>
@@ -233,12 +234,13 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
   onChange: (v: EditVal) => void
   onReset: () => void
 }) {
+  const t = useT()
   const labelRow = (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.3rem' }}>
       <label style={{ fontSize: '0.9375rem', color: 'var(--hb-text)' }}>{f.label}</label>
       {f.requires_restart && (
         <span
-          title="Takes effect after a backend restart"
+          title={t.configTab.restartEffectTitle}
           className="glass-round"
           style={{
             fontSize: '0.72rem', color: 'var(--hb-amber-bright)',
@@ -246,15 +248,15 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
             padding: '1px 9px',
           }}
         >
-          restart
+          {t.configTab.restartChip}
         </span>
       )}
-      {dirty && <span style={{ fontSize: '0.78rem', color: 'var(--hb-cyan-bright)' }}>● edited</span>}
+      {dirty && <span style={{ fontSize: '0.78rem', color: 'var(--hb-cyan-bright)' }}>{t.configTab.editedDot}</span>}
       <span style={{ flex: 1 }} />
       {dirty && (
-        <button onClick={onReset} title="Revert this field"
+        <button onClick={onReset} title={t.configTab.revertFieldTitle}
           style={{ border: 'none', background: 'transparent', color: 'var(--hb-text-faint)', cursor: 'pointer', fontSize: '0.8125rem' }}>
-          revert
+          {t.configTab.revert}
         </button>
       )}
     </div>
@@ -276,7 +278,7 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
   if (f.type === 'bool') {
     const current = dirty ? Boolean(edit) : Boolean(f.value)
     control = <Switch on={current} onChange={onChange}
-      title={current ? 'On — click to turn off' : 'Off — click to turn on'} />
+      title={current ? t.configTab.onClickToTurnOff : t.configTab.offClickToTurnOn} />
   } else if (f.type === 'select') {
     const current = String(dirty ? edit : (f.value ?? f.options[0] ?? ''))
     control = (
@@ -298,19 +300,19 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
           type={revealed ? 'text' : 'password'}
           value={dirty ? String(edit) : ''}
           onChange={e => onChange(e.target.value)}
-          placeholder={f.is_set ? `stored ${f.hint || '••••'} — type to replace` : (f.placeholder || 'not set')}
+          placeholder={f.is_set ? t.configTab.storedTypeToReplace(f.hint || '••••') : (f.placeholder || t.configTab.notSet)}
           style={{ ...inputStyle, flex: 1 }}
           autoComplete="off"
           spellCheck={false}
         />
-        <button onClick={onReveal} className="hb-tile" title={revealed ? 'Hide' : 'Show what you typed'}
+        <button onClick={onReveal} className="hb-tile" title={revealed ? t.configTab.hide : t.configTab.showWhatYouTyped}
           style={{
             padding: '0 14px', height: 44, flexShrink: 0, cursor: 'pointer',
             fontFamily: 'var(--font-read)', fontSize: '0.845rem',
             border: '1px solid rgba(255,255,255,0.09)',
             background: 'rgba(255,255,255,0.03)', color: 'var(--hb-text-dim)',
           }}>
-          {revealed ? 'Hide' : 'Show'}
+          {revealed ? t.configTab.hide : t.common.show}
         </button>
       </div>
     )
@@ -336,9 +338,9 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
         <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', margin: '6px 0 0', lineHeight: 1.5 }}>
           {f.help}
           {f.secret && f.is_set && !dirty && (
-            <button onClick={() => onChange('')} title="Clear this stored secret"
+            <button onClick={() => onChange('')} title={t.configTab.clearSecretTitle}
               style={{ marginLeft: 8, border: 'none', background: 'transparent', color: '#e5897c', cursor: 'pointer', fontSize: '0.8125rem' }}>
-              clear stored
+              {t.configTab.clearStored}
             </button>
           )}
         </p>

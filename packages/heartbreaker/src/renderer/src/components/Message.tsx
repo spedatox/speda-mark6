@@ -15,6 +15,8 @@ import CalendarBlock from './CalendarBlock'
 import MapBlock from './MapBlock'
 import ErrorBoundary from './ErrorBoundary'
 import HousePartyWarning from './HousePartyWarning'
+import { useT } from '../lib/i18n'
+import type { Dict } from '../lib/i18n/en'
 
 const RENDERABLE_LANGS = new Set(['html', 'svg'])
 
@@ -53,30 +55,6 @@ function IconTrash()     { return <svg width="13" height="13" viewBox="0 0 24 24
 function IconBolt()      { return <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> }
 
 /* ── Working status ──────────────────────────────────────────────────────── */
-
-// Map raw tool names → present-progressive natural-language status.
-const TOOL_STATUS: Record<string, string> = {
-  read_skill:             'Reviewing capabilities',
-  generate_document:      'Preparing the document',
-  system_info:            'Checking system status',
-  text_to_speech:         'Generating audio',
-  speech_to_text:         'Transcribing audio',
-  send_push_notification: 'Sending a notification',
-  web_search:             'Searching the web',
-  WebSearch:              'Searching the web',
-  web_fetch:              'Reading the page',
-  WebFetch:               'Reading the page',
-  Task:                   'Deploying the Legion',
-  legion_status:          'Checking on the Legion',
-  // Forge (Optimus) execution + codebase-graph tools.
-  run_command:            'Running a command',
-  read_file:              'Reading a file',
-  write_file:             'Writing a file',
-  edit_file:              'Editing a file',
-  graph_query:            'Searching the codebase graph',
-  graph_path:             'Tracing the codebase graph',
-  graph_overview:         'Mapping the codebase graph',
-}
 
 // Tool names that count as "web search" for the disclosure label
 const SEARCH_TOOL_PATTERNS = [
@@ -151,27 +129,27 @@ function shortPath(p: string): string {
 }
 
 // One-line "what it did", Claude-Code style: a verb + a target.
-function toolSummary(tool: ToolBadge): { verb: string; target?: string } {
+function toolSummary(tool: ToolBadge, t: Dict): { verb: string; target?: string } {
   const inp = (tool.input && typeof tool.input === 'object')
     ? tool.input as Record<string, unknown> : {}
   const str = (k: string) => (typeof inp[k] === 'string' ? inp[k] as string : undefined)
   const path = str('path')
   switch (tool.name) {
-    case 'edit_file':   return { verb: 'Edited', target: path && shortPath(path) }
-    case 'write_file':  return { verb: 'Wrote', target: path && shortPath(path) }
-    case 'read_file':   return { verb: 'Read', target: path && shortPath(path) }
-    case 'run_command': return { verb: 'Ran', target: str('command') }
+    case 'edit_file':   return { verb: t.message.verbEdited, target: path && shortPath(path) }
+    case 'write_file':  return { verb: t.message.verbWrote, target: path && shortPath(path) }
+    case 'read_file':   return { verb: t.message.verbRead, target: path && shortPath(path) }
+    case 'run_command': return { verb: t.message.verbRan, target: str('command') }
     case 'system_ops': {
       const action = str('action')
-      if (action === 'read_file')  return { verb: 'Read', target: path && shortPath(path) }
-      if (action === 'write_file') return { verb: 'Wrote', target: path && shortPath(path) }
-      return { verb: 'Ran', target: str('command') }   // exec (default)
+      if (action === 'read_file')  return { verb: t.message.verbRead, target: path && shortPath(path) }
+      if (action === 'write_file') return { verb: t.message.verbWrote, target: path && shortPath(path) }
+      return { verb: t.message.verbRan, target: str('command') }   // exec (default)
     }
-    case 'graph_query':    return { verb: 'Searched graph', target: str('question') }
-    case 'graph_path':     return { verb: 'Traced the codebase graph' }
-    case 'graph_overview': return { verb: 'Mapped the codebase graph' }
+    case 'graph_query':    return { verb: t.message.verbSearchedGraph, target: str('question') }
+    case 'graph_path':     return { verb: t.message.verbTracedGraph }
+    case 'graph_overview': return { verb: t.message.verbMappedGraph }
     default:
-      if (isSearchTool(tool.name)) return { verb: 'Searched', target: str('query') || str('question') }
+      if (isSearchTool(tool.name)) return { verb: t.message.verbSearched, target: str('query') || str('question') }
       return { verb: tool.name.replace(/_/g, ' ').replace(/-/g, ' ') }
   }
 }
@@ -279,8 +257,9 @@ function CommandBlock({ command, result }: { command?: string; result?: string }
 
 // One row in the feed: always-visible summary; click to expand diff/output/detail.
 function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
-  const { verb, target } = toolSummary(tool)
+  const { verb, target } = toolSummary(tool, t)
   const inp = (tool.input && typeof tool.input === 'object')
     ? tool.input as Record<string, unknown> : {}
   const action = typeof inp.action === 'string' ? inp.action : undefined
@@ -472,6 +451,7 @@ function ToolFeed({ tools, streaming }: { tools: ToolBadge[]; streaming: boolean
  * exactly what came back.
  */
 function ReportCard({ report }: { report: ReportMeta }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const who = report.from.toUpperCase()
   const failed = report.status !== 'ok'
@@ -504,7 +484,7 @@ function ReportCard({ report }: { report: ReportMeta }) {
           fontFamily: "'Rajdhani', sans-serif", fontSize: '0.875rem', fontWeight: 600,
           letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--hb-text-dim)',
         }}>
-          {who} {report.kind === 'dispatch' ? 'reported back' : 'finished'}
+          {who} {report.kind === 'dispatch' ? t.message.reportedBack : t.message.finished}
         </span>
         {failed && (
           <span style={{ fontSize: '0.8125rem', color: 'var(--hb-red)' }}>{report.status}</span>
@@ -531,7 +511,7 @@ function ReportCard({ report }: { report: ReportMeta }) {
               fontFamily: 'var(--font-mono)', fontSize: '0.63rem', lineHeight: 1.5,
               color: 'var(--hb-icon)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
             }}>
-              <span style={{ color: 'var(--hb-icon-dim)' }}>task:</span> {report.task}
+              <span style={{ color: 'var(--hb-icon-dim)' }}>{t.message.taskLabel}</span> {report.task}
             </div>
           )}
           {report.result && (
@@ -588,8 +568,8 @@ function buildSegments(fullText: string, tools: ToolBadge[], revealedLen: number
   return segments
 }
 
-function statusLabel(toolName: string): string {
-  return TOOL_STATUS[toolName] ?? `Using ${toolName.replace(/_/g, ' ')}`
+function statusLabel(toolName: string, t: Dict): string {
+  return (t.message.toolStatus as Record<string, string>)[toolName] ?? t.message.usingTool(toolName)
 }
 
 // Rotating dashed-ring spinner
@@ -602,13 +582,14 @@ function Spinner() {
 }
 
 function WorkingStatus({ tools, status }: { tools: { id: string; name: string }[]; status?: string }) {
+  const t = useT()
   const lastTool = tools.length ? tools[tools.length - 1].name : null
 
   // Real status only — an active tool drives the label; otherwise the live
   // phase the stream reports (Connecting → Thinking → slow/timeout). No looped
   // filler: if nothing's happening it says so, and the watchdog eventually
   // turns this into an error rather than spinning forever.
-  const label = lastTool ? statusLabel(lastTool) : (status ?? 'Thinking')
+  const label = lastTool ? statusLabel(lastTool, t) : (status ?? t.message.thinking)
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.15rem 0' }}>
@@ -651,6 +632,7 @@ function StreamingCursor() {
  *  always visible — an error banner is the one place the owner should not have
  *  to go hunting on hover for the way out. */
 function RetryBtn({ onClick }: { onClick: () => void }) {
+  const t = useT()
   const [hover, setHover] = useState(false)
   return (
     <button
@@ -667,7 +649,7 @@ function RetryBtn({ onClick }: { onClick: () => void }) {
       }}
     >
       <IconRefresh />
-      Try again
+      {t.message.tryAgain}
     </button>
   )
 }
@@ -875,6 +857,7 @@ export function TextSegment({ text }: { text: string }) {
 
 /* ── Lightbox — full-screen image viewer (click an attachment to open) ───── */
 function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  const t = useT()
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -894,7 +877,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
       <img src={src} alt="attachment"
         style={{ maxWidth: '92vw', maxHeight: '92vh', objectFit: 'contain',
                  border: '1px solid rgba(var(--hb-cyan-bright-rgb),0.3)', boxShadow: '0 12px 60px rgba(0,0,0,0.6)' }} />
-      <button onClick={onClose} title="Close (Esc)" style={{
+      <button onClick={onClose} title={t.message.closeEsc} style={{
         position: 'fixed', top: 18, right: 18, width: 34, height: 34,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'rgba(8,20,28,0.7)', border: '1px solid rgba(var(--hb-cyan-bright-rgb),0.3)',
@@ -931,6 +914,7 @@ function fmtBytes(b: number): string {
 }
 
 function FileCard({ file }: { file: FileMeta }) {
+  const t = useT()
   const { state } = useChatContext()
   const [hover, setHover] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -997,7 +981,7 @@ function FileCard({ file }: { file: FileMeta }) {
 
       <button
         onClick={onDownload}
-        title="Download"
+        title={t.message.download}
         className="glass-round"
         style={{
           flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8,
@@ -1015,7 +999,7 @@ function FileCard({ file }: { file: FileMeta }) {
           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>
         </svg>
-        {busy ? '…' : 'Download'}
+        {busy ? '…' : t.message.download}
       </button>
     </div>
   )
@@ -1063,6 +1047,7 @@ interface Props {
 
 /* ── Component ───────────────────────────────────────────────────────────── */
 export default function Message({ message, onDelete, onRegenerate, onEditAndResend }: Props) {
+  const t = useT()
   const [hovered, setHovered] = useState(false)
   const [copied, setCopied] = useState(false)
   const [thumbUp, setThumbUp] = useState(false)
@@ -1244,7 +1229,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                   onClick={() => { setEditing(false); setEditValue(message.content) }}
                   style={{ padding: '0.35rem 0.875rem', fontSize: '0.8rem' }}
                 >
-                  Cancel
+                  {t.common.cancel}
                 </button>
                 <button
                   className="hb-btn hb-btn-tint"
@@ -1254,7 +1239,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                     fontSize: '0.8rem', fontWeight: 600,
                   }}
                 >
-                  Save & Send
+                  {t.message.saveAndSend}
                 </button>
               </div>
             </div>
@@ -1274,7 +1259,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                         nothing a reader didn't just read. Only the House Party
                         variant adds anything. */}
                     {message.trigger.source === 'agent'
-                      ? (message.trigger.job === 'house party dispatch' ? '· house party' : '')
+                      ? (message.trigger.job === 'house party dispatch' ? t.message.housePartyTag : '')
                       : `· ${message.trigger.source}${message.trigger.output_mode ? ` · ${message.trigger.output_mode}` : ''}`}
                   </span>
                 </div>
@@ -1314,15 +1299,15 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                 {onEditAndResend && !message.trigger && (
                   // An automation's seed turn isn't editable: resending it would
                   // re-file it as the owner's own message and lose the origin.
-                  <ActionBtn title="Edit message" onClick={() => { setEditValue(message.content); setEditing(true) }}>
+                  <ActionBtn title={t.message.editMessage} onClick={() => { setEditValue(message.content); setEditing(true) }}>
                     <IconEdit />
                   </ActionBtn>
                 )}
-                <ActionBtn title={copied ? 'Copied!' : 'Copy'} onClick={copy} color={copied ? 'var(--accent)' : undefined}>
+                <ActionBtn title={copied ? t.message.copied : t.message.copy} onClick={copy} color={copied ? 'var(--accent)' : undefined}>
                   {copied ? <IconCheck /> : <IconCopy />}
                 </ActionBtn>
                 {onDelete && (
-                  <ActionBtn title="Delete" onClick={onDelete}>
+                  <ActionBtn title={t.message.delete} onClick={onDelete}>
                     <span style={{ color: 'inherit' }}><IconTrash /></span>
                   </ActionBtn>
                 )}
@@ -1401,7 +1386,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
             borderRadius: '0.625rem', padding: '0.625rem 0.875rem', fontSize: '0.9rem',
             marginTop: message.content || message.tools.length ? '0.5rem' : 0,
           }}>
-            {message.errorNote || message.content || 'Something went wrong.'}
+            {message.errorNote || message.content || t.message.somethingWentWrong}
             {/* Retry lives INSIDE the banner and is never hover-gated: a failed
                 turn is exactly where the owner needs this button, and the hover
                 action bar below is gated on `content` — which a turn that died
@@ -1429,25 +1414,25 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
             marginTop: '0.5rem',
             display: 'flex', alignItems: 'center', gap: '0.125rem',
           }}>
-            <ActionBtn title={copied ? 'Copied!' : 'Copy'} onClick={copy} color={copied ? 'var(--accent)' : undefined}>
+            <ActionBtn title={copied ? t.message.copied : t.message.copy} onClick={copy} color={copied ? 'var(--accent)' : undefined}>
               {copied ? <IconCheck /> : <IconCopy />}
             </ActionBtn>
-            <ActionBtn title="Good response" onClick={() => { setThumbUp(v => !v); setThumbDown(false) }} color={thumbUp ? 'var(--accent)' : undefined}>
+            <ActionBtn title={t.message.goodResponse} onClick={() => { setThumbUp(v => !v); setThumbDown(false) }} color={thumbUp ? 'var(--accent)' : undefined}>
               <IconThumbUp />
             </ActionBtn>
-            <ActionBtn title="Bad response" onClick={() => { setThumbDown(v => !v); setThumbUp(false) }} color={thumbDown ? '#f87171' : undefined}>
+            <ActionBtn title={t.message.badResponse} onClick={() => { setThumbDown(v => !v); setThumbUp(false) }} color={thumbDown ? '#f87171' : undefined}>
               <IconThumbDown />
             </ActionBtn>
-            <ActionBtn title={speaking ? 'Stop reading' : 'Read aloud'} onClick={readAloud} color={speaking ? 'var(--accent)' : undefined}>
+            <ActionBtn title={speaking ? t.message.stopReading : t.message.readAloud} onClick={readAloud} color={speaking ? 'var(--accent)' : undefined}>
               <IconSpeaker />
             </ActionBtn>
             {onRegenerate && (
-              <ActionBtn title="Regenerate response" onClick={onRegenerate}>
+              <ActionBtn title={t.message.regenerateResponse} onClick={onRegenerate}>
                 <IconRefresh />
               </ActionBtn>
             )}
             {onDelete && (
-              <ActionBtn title="Delete" onClick={onDelete}>
+              <ActionBtn title={t.message.delete} onClick={onDelete}>
                 <IconTrash />
               </ActionBtn>
             )}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { persistConnection, pingHealth } from '../lib/connection'
+import { useT } from '../lib/i18n'
 
 const MONO = 'var(--font-mono)'
 const UI = "'Rajdhani', sans-serif"
@@ -41,6 +42,7 @@ interface Props {
 export default function ConnectionSetupModal({
   initialApiBase, initialApiKey, firstRun, onClose, onSaved,
 }: Props) {
+  const t = useT()
   const [apiBase, setApiBase] = useState(initialApiBase === 'http://localhost:8000' ? '' : initialApiBase)
   const [apiKey, setApiKey] = useState(initialApiKey === 'dev-key' ? '' : initialApiKey)
   const [reveal, setReveal] = useState(false)
@@ -62,7 +64,7 @@ export default function ConnectionSetupModal({
       if (!reachable) {
         setBusy(false)
         setUnreachable(true)
-        setError("Couldn't reach that address — check the URL, or save anyway if the server is just waking up.")
+        setError(t.connectionSetup.unreachableError)
         return
       }
     }
@@ -125,13 +127,13 @@ export default function ConnectionSetupModal({
               fontFamily: UI, fontSize: '1.15rem', fontWeight: 800, letterSpacing: '0.14em',
               textTransform: 'uppercase', color: '#fff', lineHeight: 1.05,
             }}>
-              Connect to Igor
+              {t.connectionSetup.title}
             </div>
             <div style={{
               fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.24em',
               textTransform: 'uppercase', color: CYAN, marginTop: 3,
             }}>
-              {firstRun ? 'First-time setup' : 'Server connection'}
+              {firstRun ? t.connectionSetup.firstTimeSetup : t.connectionSetup.serverConnection}
             </div>
           </div>
         </div>
@@ -140,8 +142,7 @@ export default function ConnectionSetupModal({
           margin: 0, fontFamily: 'var(--font-read)', fontSize: '0.84rem', lineHeight: 1.55,
           color: 'var(--hb-text-dim)',
         }}>
-          This client needs to know where your Igor backend lives and its API key
-          before it can reach SPEDA or anyone on the roster.
+          {t.connectionSetup.body}
         </p>
 
         {/* Server URL */}
@@ -150,7 +151,7 @@ export default function ConnectionSetupModal({
             display: 'block', fontFamily: MONO, fontSize: '0.6rem', letterSpacing: '0.18em',
             textTransform: 'uppercase', color: 'var(--hb-text-faint)', marginBottom: 6,
           }}>
-            Server URL
+            {t.connectionSetup.serverUrl}
           </label>
           <div style={{
             display: 'flex', alignItems: 'center', gap: '0.6rem',
@@ -189,7 +190,7 @@ export default function ConnectionSetupModal({
             display: 'block', fontFamily: MONO, fontSize: '0.6rem', letterSpacing: '0.18em',
             textTransform: 'uppercase', color: 'var(--hb-text-faint)', marginBottom: 6,
           }}>
-            API Key
+            {t.connectionSetup.apiKey}
           </label>
           <div style={{
             display: 'flex', alignItems: 'center', gap: '0.5rem',
@@ -216,13 +217,13 @@ export default function ConnectionSetupModal({
                 letterSpacing: reveal ? 'normal' : '0.2em',
               }}
             />
-            <button onClick={() => setReveal(r => !r)} type="button" title={reveal ? 'Hide' : 'Show'}
+            <button onClick={() => setReveal(r => !r)} type="button" title={reveal ? t.configTab.hide : t.common.show}
               style={{
                 flexShrink: 0, height: 32, padding: '0 10px', cursor: 'pointer',
                 background: 'transparent', border: 'none', color: 'var(--hb-text-faint)',
                 fontFamily: 'var(--font-read)', fontSize: '0.72rem',
               }}>
-              {reveal ? 'Hide' : 'Show'}
+              {reveal ? t.configTab.hide : t.common.show}
             </button>
           </div>
         </div>
@@ -247,7 +248,7 @@ export default function ConnectionSetupModal({
               fontFamily: UI, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase',
             }}
           >
-            {firstRun ? 'Use local default' : 'Cancel'}
+            {firstRun ? t.connectionSetup.useLocalDefault : t.connectionSetup.cancel}
           </button>
           {unreachable ? (
             <button
@@ -260,7 +261,7 @@ export default function ConnectionSetupModal({
                 fontFamily: UI, fontSize: '0.78rem', fontWeight: 800, letterSpacing: '0.2em', textTransform: 'uppercase',
               }}
             >
-              Save anyway
+              {t.connectionSetup.saveAnyway}
             </button>
           ) : (
             <button
@@ -284,7 +285,7 @@ export default function ConnectionSetupModal({
                   <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
                 </svg>
               )}
-              {busy ? 'Connecting…' : 'Connect'}
+              {busy ? t.connectionSetup.connecting : t.connectionSetup.connect}
             </button>
           )}
         </div>

@@ -6,6 +6,7 @@ import type { LockdownState } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import { SettingsSection, SettingsRow, PillBtn } from './settingsUI'
 import { SkeletonText } from './Skeleton'
+import { useT } from '../lib/i18n'
 
 /**
  * PROTOCOLS — the standing operational modes, in one place.
@@ -25,6 +26,7 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
    *  above the settings window. */
   onEngageLockdown: () => void
 }) {
+  const t = useT()
   const [party, setParty] = useState(false)
   const [lock, setLock] = useState<LockdownState | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -53,7 +55,7 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
   const standDown = async () => {
     setBusy(true); setNote(null)
     const res = await standDownLockdown(config)
-    setNote(res.ok ? (res.report || 'Containment stood down.') : (res.error || 'Stand down failed.'))
+    setNote(res.ok ? (res.report || t.protocolsTab.containmentStoodDown) : (res.error || t.protocolsTab.standDownFailed))
     await refresh()
     setBusy(false)
   }
@@ -71,11 +73,9 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <SettingsSection title="Lockdown Protocol" first />
+      <SettingsSection title={t.protocolsTab.lockdownTitle} first />
       <div style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', lineHeight: 1.6, marginTop: -8 }}>
-        Emergency inbound containment. Engaging seals the server's exposed SSH and raw app
-        ports behind firewall rules immediately. This app's HTTPS channel and all outbound
-        traffic stay up, so SPEDA keeps working and containment can always be lifted from here.
+        {t.protocolsTab.lockdownDesc}
       </div>
 
       {!loaded ? (
@@ -84,13 +84,13 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
         </div>
       ) : (
         <SettingsRow
-          title={engaged ? 'Containment ACTIVE' : 'Containment inactive'}
+          title={engaged ? t.protocolsTab.containmentActive : t.protocolsTab.containmentInactive}
           desc={
             !lock?.enabled
-              ? 'Disabled on this deployment — set LOCKDOWN_PROTOCOL_ENABLED to use it.'
+              ? t.protocolsTab.lockdownDisabled
               : engaged
-                ? 'Host SSH (22) and the app raw port (8000) are sealed.'
-                : 'The server is accepting inbound connections normally.'
+                ? t.protocolsTab.portsSealed
+                : t.protocolsTab.acceptingNormally
           }
         >
           {/* Offered whenever the flag says contained OR a rule is actually in
@@ -102,16 +102,16 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
               match the flag" while showing only an Engage button. disengage() is
               ungated and removes rules unconditionally, so this is always safe. */}
           {engaged || sealed ? (
-            <PillBtn tone="danger" onClick={standDown} title="Remove the containment rules">
-              {busy ? 'Standing down…' : 'Stand down'}
+            <PillBtn tone="danger" onClick={standDown} title={t.protocolsTab.removeRulesTitle}>
+              {busy ? t.protocolsTab.standingDown : t.protocolsTab.standDown}
             </PillBtn>
           ) : (
             <PillBtn
               tone="danger"
               onClick={lock?.enabled ? onEngageLockdown : undefined}
-              title={lock?.enabled ? 'Requires the authorization passphrase' : 'Not enabled on this deployment'}
+              title={lock?.enabled ? t.protocolsTab.requiresPassphrase : t.protocolsTab.notEnabled}
             >
-              Engage lockdown
+              {t.protocolsTab.engageLockdown}
             </PillBtn>
           )}
         </SettingsRow>
@@ -129,7 +129,7 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
             fontFamily: 'var(--font-mono)', fontSize: '0.6rem', letterSpacing: '0.18em',
             textTransform: 'uppercase', color: drift ? '#e5897c' : 'var(--hb-text-faint)',
           }}>
-            {drift ? 'Firewall does not match the flag' : 'Firewall rules'}
+            {drift ? t.protocolsTab.firewallMismatch : t.protocolsTab.firewallRules}
           </div>
           {ruleList.map(([label, on]) => (
             <div key={label} style={{
@@ -138,7 +138,7 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
             }}>
               <span>{label}</span>
               <span style={{ color: on ? '#e5897c' : 'var(--hb-text-faint)' }}>
-                {on ? 'SEALED' : 'open'}
+                {on ? t.protocolsTab.sealed : t.protocolsTab.open}
               </span>
             </div>
           ))}
@@ -156,11 +156,9 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
         </div>
       )}
 
-      <SettingsSection title="House Party Protocol" />
+      <SettingsSection title={t.protocolsTab.housePartyTitle} />
       <div style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', lineHeight: 1.6, marginTop: -8 }}>
-        All-hands mode: SPEDA becomes mission commander and dispatches the entire roster in
-        parallel at full model grade. Heavy, expensive, still a prototype — engaged by telling
-        SPEDA directly ("House Party Protocol"), which opens its authorization window.
+        {t.protocolsTab.housePartyDesc}
       </div>
 
       {!loaded ? (
@@ -169,21 +167,19 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
         </div>
       ) : (
         <SettingsRow
-          title={party ? 'Protocol ENGAGED' : 'Protocol offline'}
-          desc={party
-            ? 'The full roster is mobilized; the deck is in war-room mode.'
-            : 'Say "House Party Protocol" to SPEDA to request authorization.'}
+          title={party ? t.protocolsTab.protocolEngaged : t.protocolsTab.protocolOffline}
+          desc={party ? t.protocolsTab.rosterMobilized : t.protocolsTab.sayToRequest}
         >
           {party ? (
             <PillBtn
               tone="danger"
               onClick={async () => { setParty(await setHouseParty(config, false)) }}
-              title="End the House Party Protocol"
+              title={t.protocolsTab.endHouseParty}
             >
-              Stand down
+              {t.protocolsTab.standDown}
             </PillBtn>
           ) : (
-            <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-faint)' }}>Owner voice only</span>
+            <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-faint)' }}>{t.protocolsTab.ownerVoiceOnly}</span>
           )}
         </SettingsRow>
       )}

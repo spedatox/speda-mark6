@@ -19,13 +19,14 @@ import {
 import type { ReminderDefinition, ReminderCycleInfo } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import { SkeletonList } from './Skeleton'
+import { useT } from '../lib/i18n'
+import type { Dict } from '../lib/i18n/en'
 
 const AGENTS = ['speda', 'atomix', 'ultron', 'sentinel', 'nightcrawler', 'centurion', 'orion']
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-const blank = (): ReminderDefinition => ({
+const blank = (t: Dict): ReminderDefinition => ({
   id: '', agent: 'atomix', text: '', at: '09:00', days: '*',
-  options: [{ label: '✅ Done', value: 'done' }],
+  options: [{ label: t.remindersTab.defaultDoneLabel, value: 'done' }],
   every_minutes: 5, max_asks: 10, enabled: true,
 })
 
@@ -61,6 +62,8 @@ function setToDays(set: Set<number>): string {
 }
 
 export default function RemindersTab({ config }: { config: AppConfig }): React.ReactElement {
+  const t = useT()
+  const DAY_LABELS = t.remindersTab.dayLabels
   const [defs, setDefs] = useState<ReminderDefinition[]>([])
   const [history, setHistory] = useState<ReminderCycleInfo[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -82,7 +85,7 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
   const save = async (): Promise<void> => {
     if (!draft) return
     const id = draft.id.trim()
-    if (!id || !draft.text.trim()) { setError('An id and the message text are both required.'); return }
+    if (!id || !draft.text.trim()) { setError(t.remindersTab.idRequired); return }
     setBusy(true); setError(null)
     const res = await saveReminder(config, { ...draft, id })
     setBusy(false)
@@ -92,7 +95,7 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
   }
 
   const remove = async (id: string): Promise<void> => {
-    if (!confirm(`Delete reminder "${id}"?\n\nIts history is kept.`)) return
+    if (!confirm(t.remindersTab.confirmDelete(id))) return
     await deleteReminder(config, id)
     await load()
   }
@@ -105,9 +108,7 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       <p style={{ fontSize: '0.8rem', color: 'var(--hb-text-dim)', margin: 0, lineHeight: 1.5 }}>
-        Reminders are sent over the owning agent’s Telegram bot with answer buttons, and
-        re-asked every few minutes until you tap one. The text is sent exactly as written —
-        no model rewrites it, and asking costs nothing.
+        {t.remindersTab.intro}
       </p>
 
       {/* ── The list ──────────────────────────────────────────────────────── */}
@@ -115,8 +116,7 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
         <SkeletonList rows={3} mark={false} />
       ) : defs.length === 0 && !draft && (
         <div style={{ fontSize: '0.8rem', color: 'var(--hb-text-faint)' }}>
-          No reminders configured. Agent-composed ones (like Atomix’s evening checklist)
-          still run — they just aren’t defined here.
+          {t.remindersTab.noneConfigured}
         </div>
       )}
 
@@ -140,15 +140,15 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
                 {d.text}
               </div>
               <div style={{ fontSize: '0.7rem', color: 'var(--hb-text-faint)', letterSpacing: '0.05em' }}>
-                {d.id} · {d.agent} · {d.days === '*' ? 'every day' : d.days.split(',').map(n => DAY_LABELS[Number(n) - 1]).join(' ')}
-                {' · '}every {d.every_minutes}m, max {d.max_asks}
+                {d.id} · {d.agent} · {d.days === '*' ? t.remindersTab.everyDay : d.days.split(',').map(n => DAY_LABELS[Number(n) - 1]).join(' ')}
+                {' · '}{t.remindersTab.everyMinMax(d.every_minutes, d.max_asks)}
               </div>
             </div>
             <button onClick={() => toggle(d)} style={chip(d.enabled)}>
-              {d.enabled ? 'ON' : 'OFF'}
+              {d.enabled ? t.remindersTab.on : t.remindersTab.off}
             </button>
-            <button onClick={() => { setDraft({ ...d }); setError(null) }} style={chip(false)}>EDIT</button>
-            <button onClick={() => remove(d.id)} style={{ ...chip(false), color: 'var(--hb-danger, #c84a3a)' }}>DELETE</button>
+            <button onClick={() => { setDraft({ ...d }); setError(null) }} style={chip(false)}>{t.remindersTab.edit}</button>
+            <button onClick={() => remove(d.id)} style={{ ...chip(false), color: 'var(--hb-danger, #c84a3a)' }}>{t.remindersTab.delete}</button>
           </div>
         ))}
       </div>
@@ -158,7 +158,7 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.9rem', border: '1px solid var(--hb-accent)', borderRadius: 8 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <div>
-              <span style={label}>id (permanent)</span>
+              <span style={label}>{t.remindersTab.idPermanent}</span>
               <input
                 style={input} value={draft.id} placeholder="lustral_evening"
                 onChange={e => setDraft({ ...draft, id: e.target.value.replace(/[^a-z0-9_]/gi, '_').toLowerCase() })}
@@ -166,7 +166,7 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
               />
             </div>
             <div>
-              <span style={label}>asked by</span>
+              <span style={label}>{t.remindersTab.askedBy}</span>
               <select style={input} value={draft.agent} onChange={e => setDraft({ ...draft, agent: e.target.value })}>
                 {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
@@ -174,7 +174,7 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
           </div>
 
           <div>
-            <span style={label}>message (sent verbatim)</span>
+            <span style={label}>{t.remindersTab.messageVerbatim}</span>
             <textarea
               style={{ ...input, minHeight: 70, resize: 'vertical' }}
               value={draft.text} placeholder="💊 150 mg Lustral aldın mı?"
@@ -184,23 +184,23 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
             <div>
-              <span style={label}>time</span>
+              <span style={label}>{t.remindersTab.time}</span>
               <input style={input} type="time" value={draft.at} onChange={e => setDraft({ ...draft, at: e.target.value })} />
             </div>
             <div>
-              <span style={label}>re-ask every (min)</span>
+              <span style={label}>{t.remindersTab.reaskEvery}</span>
               <input style={input} type="number" min={1} max={1440} value={draft.every_minutes}
                 onChange={e => setDraft({ ...draft, every_minutes: Number(e.target.value) })} />
             </div>
             <div>
-              <span style={label}>give up after</span>
+              <span style={label}>{t.remindersTab.giveUpAfter}</span>
               <input style={input} type="number" min={1} max={200} value={draft.max_asks}
                 onChange={e => setDraft({ ...draft, max_asks: Number(e.target.value) })} />
             </div>
           </div>
 
           <div>
-            <span style={label}>days</span>
+            <span style={label}>{t.remindersTab.days}</span>
             <div style={{ display: 'flex', gap: '0.35rem' }}>
               {DAY_LABELS.map((dl, i) => {
                 const n = i + 1
@@ -220,7 +220,7 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
           </div>
 
           <div>
-            <span style={label}>answer buttons (first should be the expected answer)</span>
+            <span style={label}>{t.remindersTab.answerButtons}</span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               {draft.options.map((o, i) => (
                 <div key={i} style={{ display: 'flex', gap: '0.4rem' }}>
@@ -243,7 +243,7 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
               {draft.options.length < 6 && (
                 <button style={{ ...chip(false), alignSelf: 'flex-start' }}
                   onClick={() => setDraft({ ...draft, options: [...draft.options, { label: '', value: '' }] })}>
-                  + button
+                  {t.remindersTab.addButton}
                 </button>
               )}
             </div>
@@ -253,31 +253,31 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
 
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button style={{ ...chip(true), padding: '0.5rem 1rem' }} onClick={save} disabled={busy}>
-              {busy ? 'SAVING…' : 'SAVE'}
+              {busy ? t.remindersTab.saving : t.remindersTab.save}
             </button>
             <button style={{ ...chip(false), padding: '0.5rem 1rem' }} onClick={() => { setDraft(null); setError(null) }}>
-              CANCEL
+              {t.remindersTab.cancel}
             </button>
           </div>
         </div>
       ) : (
         <button style={{ ...chip(true), alignSelf: 'flex-start', padding: '0.5rem 1rem' }}
-          onClick={() => { setDraft(blank()); setError(null) }}>
-          + NEW REMINDER
+          onClick={() => { setDraft(blank(t)); setError(null) }}>
+          {t.remindersTab.newReminder}
         </button>
       )}
 
       {/* ── History ───────────────────────────────────────────────────────── */}
       {history.length > 0 && (
         <div>
-          <span style={label}>recent — what was answered or missed</span>
+          <span style={label}>{t.remindersTab.recentHistory}</span>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             {history.map((h, i) => (
               <div key={i} style={{ display: 'flex', gap: '0.6rem', fontSize: '0.75rem', color: 'var(--hb-text-dim)' }}>
                 <span style={{ minWidth: 82, color: 'var(--hb-text-faint)' }}>{h.day}</span>
                 <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.reminder_id}</span>
                 <span style={{ color: h.status === 'answered' ? 'var(--hb-accent-bright)' : 'var(--hb-amber, #c8a13a)' }}>
-                  {h.status === 'answered' ? h.answer : 'no answer'}
+                  {h.status === 'answered' ? h.answer : t.remindersTab.noAnswer}
                 </span>
                 <span style={{ minWidth: 52, textAlign: 'right', color: 'var(--hb-text-faint)' }}>{h.asks}×</span>
               </div>

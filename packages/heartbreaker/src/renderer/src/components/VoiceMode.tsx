@@ -4,6 +4,7 @@ import VoiceCanvas from './VoiceCanvas'
 import { splitPanels, hasArtifacts } from '../lib/voicePanels'
 import { TextSegment } from './Message'
 import type { MicState } from '../lib/mic'
+import { useT } from '../lib/i18n'
 
 /**
  * Voice mode's surface: the orb, and the reply as it is being spoken.
@@ -99,6 +100,7 @@ export default function VoiceMode({
   state, amplitude, spectrum, inputLevel, reply, streaming, prompt, locale, onLocale,
   onClose, onStopSpeaking, micState, configured, agentName, dock, onDock,
 }: Props) {
+  const t = useT()
   const visible = useMemo(() => renderable(reply, streaming), [reply, streaming])
   const hasText = visible.trim().length > 0
   const panels = useMemo(() => splitPanels(visible), [visible])
@@ -250,13 +252,13 @@ export default function VoiceMode({
   // barge-in both are true at once, and what the owner needs confirmed at that
   // instant is that they are being heard, not that the agent is still talking.
   const label =
-    !configured ? 'VOICE OUTPUT NOT CONFIGURED'
-    : micState === 'hearing' ? 'LISTENING'
-    : micState === 'recognizing' ? 'TRANSCRIBING'
-    : state === 'speaking' ? 'SPEAKING'
-    : state === 'thinking' ? 'THINKING'
-    : micState === 'listening' ? 'MIC OPEN'
-    : 'STANDING BY'
+    !configured ? t.voiceMode.notConfigured
+    : micState === 'hearing' ? t.voiceMode.listening
+    : micState === 'recognizing' ? t.voiceMode.transcribing
+    : state === 'speaking' ? t.voiceMode.speaking
+    : state === 'thinking' ? t.voiceMode.thinking
+    : micState === 'listening' ? t.voiceMode.micOpen
+    : t.voiceMode.standingBy
 
   const chip = {
     height: 24, padding: '0 0.6rem',
@@ -288,7 +290,7 @@ export default function VoiceMode({
               key={l.id}
               className={locale === l.id ? 'hb-btn hb-btn-tint' : 'hb-btn'}
               onClick={() => onLocale(l.id)}
-              title={`Speak replies in ${l.id}`}
+              title={t.voiceMode.speakRepliesIn(l.id)}
               style={{ ...chip, ...(locale === l.id ? { color: 'var(--hb-cyan-bright)' } : {}) }}
             >
               {l.label}
@@ -304,23 +306,23 @@ export default function VoiceMode({
           <button
             className="hb-btn"
             onClick={() => { setReflow(n => n + 1); onDock({ dx: 0, dy: 0, scale: 1 }) }}
-            title="Re-pack the windows and put the orb back on its corner"
+            title={t.voiceMode.reflowTitle}
             style={{ ...chip }}
           >
-            REFLOW
+            {t.voiceMode.reflow}
           </button>
         )}
 
         <button
           className="hb-btn"
           onClick={onClose}
-          title="Leave voice mode (Esc)"
+          title={t.voiceMode.leaveVoiceModeEsc}
           style={{ ...chip, gap: '0.35rem' }}
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>
-          EXIT
+          {t.voiceMode.exit}
         </button>
         </div>
       </div>
@@ -369,7 +371,7 @@ export default function VoiceMode({
       <div
         onPointerDown={grabOrb}
         onWheel={sizeOrb}
-        title={hasCanvas ? 'Drag to place · scroll to size · REFLOW resets' : undefined}
+        title={hasCanvas ? t.voiceMode.dragToPlace : undefined}
         style={{
           position: 'absolute', zIndex: 3,
           // Grabbable only when docked. Centred, it owns the screen and must not
@@ -449,13 +451,13 @@ export default function VoiceMode({
           <button
             className="hb-btn"
             onClick={onStopSpeaking}
-            title="Stop speaking"
+            title={t.voiceMode.stopSpeaking}
             style={{ ...chip, height: 26, padding: '0 0.75rem', gap: '0.4rem', pointerEvents: 'auto' }}
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
               <rect x="5" y="5" width="14" height="14" rx="2" />
             </svg>
-            STOP
+            {t.voiceMode.stop}
           </button>
         )}
 
@@ -465,8 +467,8 @@ export default function VoiceMode({
             letterSpacing: '0.06em', color: 'var(--hb-icon-dim)', textAlign: 'center',
           }}>
             {configured
-              ? `Type below, or hit the mic and just talk — ${agentName} answers out loud.`
-              : 'Set AZURE_SPEECH_KEY on the backend to enable voice.'}
+              ? t.voiceMode.typeOrTalk(agentName)
+              : t.voiceMode.voiceNotEnabled}
           </div>
         )}
       </div>

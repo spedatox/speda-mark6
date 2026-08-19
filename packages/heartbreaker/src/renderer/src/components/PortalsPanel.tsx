@@ -29,6 +29,8 @@ import {
 import type { AppConfig } from '../lib/types'
 import { PillBtn, ServiceRow, Switch, fieldStyle } from './settingsUI'
 import { Skeleton, SkeletonList } from './Skeleton'
+import { useT } from '../lib/i18n'
+import type { Dict } from '../lib/i18n/en'
 
 const EMPTY = {
   name: '', label: '', login_url: '', home_url: '', username: '', password: '',
@@ -45,16 +47,17 @@ const PortalIcon = () => (
 )
 
 /** "logged in · last checked 2 hours ago", or whatever the truth is. */
-function statusLine(p: Portal): string {
-  if (!p.enabled) return 'switched off'
+function statusLine(p: Portal, t: Dict): string {
+  if (!p.enabled) return t.portalsPanel.switchedOff
   const bits: string[] = []
-  bits.push(p.session ? 'signed in' : 'no live session')
+  bits.push(p.session ? t.portalsPanel.signedIn : t.portalsPanel.noLiveSession)
   if (p.username) bits.push(p.username)
-  if (p.last_status) bits.push(p.last_status.startsWith('ok:') ? 'last sign-in worked' : p.last_status)
+  if (p.last_status) bits.push(p.last_status.startsWith('ok:') ? t.portalsPanel.lastSignInWorked : p.last_status)
   return bits.join(' · ')
 }
 
 export default function PortalsPanel({ config }: { config: AppConfig }) {
+  const t = useT()
   const [portals, setPortals] = useState<Portal[]>([])
   const [browser, setBrowser] = useState<BrowserStatus>({ status: 'off' })
   const [agents, setAgents] = useState<string[]>([])
@@ -128,8 +131,8 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
     if (r.error) { setMsg({ text: r.error, ok: false }); return }
     setMsg({
       text: r.ok
-        ? `Signed in${r.landed_on ? ` — landed on “${r.landed_on}”` : ''}.`
-        : (r.message || 'Saved.'),
+        ? `${t.portalsPanel.signedInDot}${r.landed_on ? t.portalsPanel.signedInLandedOn(r.landed_on) : ''}.`
+        : (r.message || t.portalsPanel.saved),
       ok: Boolean(r.ok),
     })
     if (r.ok) setTimeout(reset, 1800)
@@ -142,8 +145,8 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
     await load()
     setMsg({
       text: r.already
-        ? `${name}: already signed in — the stored session is still live.`
-        : `${name}: ${r.ok ? 'signed in.' : (r.message || r.error || 'sign-in failed.')}`,
+        ? t.portalsPanel.alreadySignedIn(name)
+        : t.portalsPanel.testResult(name, !!r.ok, r.message || r.error || ''),
       ok: Boolean(r.ok || r.already),
     })
   }
@@ -175,10 +178,7 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
   return (
     <div style={{ marginTop: -8 }}>
       <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', lineHeight: 1.55, margin: '0 0 6px' }}>
-        Sites you have an account on — your student automation, a library, anything without
-        an API. Your agents open them in a real browser, already signed in. The password is
-        stored on the backend and handed straight to the browser; it never passes through a
-        conversation, and no agent can read it back.
+        {t.portalsPanel.intro}
       </p>
       {!loaded ? (
         <div style={{ margin: '0 0 14px' }}>
@@ -190,10 +190,10 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
           color: browser.status === 'ok' ? 'var(--hb-text-faint)' : '#e5b07c',
         }}>
           {browser.status === 'ok'
-            ? `Browser online — ${browser.sessions ?? 0} live session${browser.sessions === 1 ? '' : 's'}.`
+            ? t.portalsPanel.browserOnline(browser.sessions ?? 0)
             : browser.status === 'off'
-              ? 'The browser container is not configured (BROWSER_URL unset), so portals cannot be opened.'
-              : `Browser unreachable: ${browser.reason ?? 'no answer'}. Is the browser container running?`}
+              ? t.portalsPanel.browserNotConfigured
+              : t.portalsPanel.browserUnreachable(browser.reason ?? t.portalsPanel.noAnswer)}
         </p>
       )}
 
@@ -205,37 +205,37 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
             tint={p.session ? '#5cc98f' : undefined}
             icon={<PortalIcon />}
             name={p.label || p.name}
-            desc={statusLine(p)}
+            desc={statusLine(p, t)}
           >
             <Switch
               on={p.enabled}
               onChange={v => toggle(p, v)}
-              title={p.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}
+              title={p.enabled ? t.mcpServersPanel.enabledClickDisable : t.mcpServersPanel.disabledClickEnable}
             />
-            <PillBtn onClick={() => test(p.name)} title="Sign in now and report what happened">
-              {busy === p.name ? '…' : 'Test'}
+            <PillBtn onClick={() => test(p.name)} title={t.portalsPanel.testTitle}>
+              {busy === p.name ? '…' : t.portalsPanel.test}
             </PillBtn>
             {p.session && (
-              <PillBtn onClick={() => signOut(p.name)} title="Drop the stored session, keep the credentials">
-                Sign out
+              <PillBtn onClick={() => signOut(p.name)} title={t.portalsPanel.signOutTitle}>
+                {t.portalsPanel.signOut}
               </PillBtn>
             )}
-            <PillBtn onClick={() => startEdit(p)}>Edit</PillBtn>
-            <PillBtn onClick={() => remove(p.name)} tone="danger" title="Delete the credentials and the session">
-              Remove
+            <PillBtn onClick={() => startEdit(p)}>{t.mcpServersPanel.edit}</PillBtn>
+            <PillBtn onClick={() => remove(p.name)} tone="danger" title={t.portalsPanel.deleteTitle}>
+              {t.portalsPanel.remove}
             </PillBtn>
           </ServiceRow>
         ))}
         {loaded && portals.length === 0 && !open && (
           <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)', margin: 0 }}>
-            No portals yet.
+            {t.portalsPanel.noneYet}
           </p>
         )}
       </div>
 
       {!open && (
         <div style={{ marginTop: 14 }}>
-          <PillBtn onClick={() => setOpen(true)} tone="accent">+ Add portal</PillBtn>
+          <PillBtn onClick={() => setOpen(true)} tone="accent">{t.portalsPanel.addPortal}</PillBtn>
         </div>
       )}
 
@@ -251,12 +251,12 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
           background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.09)',
         }}>
           <div style={{ fontSize: '0.9375rem', color: 'var(--hb-text)' }}>
-            {editing ? `Edit “${editing}”` : 'New portal'}
+            {editing ? t.portalsPanel.editPortal(editing) : t.portalsPanel.newPortal}
           </div>
 
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ width: 180 }}>
-              <Label>Short name</Label>
+              <Label>{t.portalsPanel.shortName}</Label>
               <input
                 style={{ ...fieldStyle, fontFamily: 'var(--font-mono)' }}
                 value={draft.name}
@@ -266,7 +266,7 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
               />
             </div>
             <div style={{ flex: 1 }}>
-              <Label>Label</Label>
+              <Label>{t.portalsPanel.label}</Label>
               <input
                 style={fieldStyle}
                 value={draft.label}
@@ -276,12 +276,11 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
             </div>
           </div>
           <Hint>
-            The short name is what an agent says — “check my grades on <code>obs</code>”. Keep it
-            lowercase and memorable.
+            {t.portalsPanel.shortNameHintPre} <code>obs</code> {t.portalsPanel.shortNameHintPost}
           </Hint>
 
           <div>
-            <Label>Sign-in page</Label>
+            <Label>{t.portalsPanel.signInPage}</Label>
             <input
               style={{ ...fieldStyle, fontFamily: 'var(--font-mono)' }}
               value={draft.login_url}
@@ -290,19 +289,19 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
             />
           </div>
           <div>
-            <Label>Page to land on after signing in (optional)</Label>
+            <Label>{t.portalsPanel.landingPage}</Label>
             <input
               style={{ ...fieldStyle, fontFamily: 'var(--font-mono)' }}
               value={draft.home_url}
               placeholder="https://obs.example.edu.tr/dashboard"
               onChange={e => setDraft(d => ({ ...d, home_url: e.target.value }))}
             />
-            <Hint>Where the agents start when they open this portal without a specific page.</Hint>
+            <Hint>{t.portalsPanel.landingPageHint}</Hint>
           </div>
 
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <Label>Username</Label>
+              <Label>{t.portalsPanel.username}</Label>
               <input
                 style={fieldStyle}
                 value={draft.username}
@@ -311,13 +310,13 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
               />
             </div>
             <div style={{ flex: 1 }}>
-              <Label>Password</Label>
+              <Label>{t.portalsPanel.password}</Label>
               <input
                 style={fieldStyle}
                 type="password"
                 value={draft.password}
                 autoComplete="new-password"
-                placeholder={editing ? 'unchanged' : ''}
+                placeholder={editing ? t.portalsPanel.unchanged : ''}
                 onChange={e => setDraft(d => ({ ...d, password: e.target.value }))}
               />
             </div>
@@ -325,8 +324,8 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
 
           {agents.length > 0 && (
             <div>
-              <Label>Which agents may use it</Label>
-              <Hint>None selected means all of them — right for a student portal, wrong for a bank.</Hint>
+              <Label>{t.portalsPanel.whichAgents}</Label>
+              <Hint>{t.portalsPanel.whichAgentsHint}</Hint>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
                 {agents.map(a => {
                   const on = allowed.includes(a)
@@ -345,35 +344,33 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
           )}
 
           <div>
-            <Label>Note (optional)</Label>
+            <Label>{t.portalsPanel.note}</Label>
             <input
               style={fieldStyle}
               value={draft.note}
-              placeholder="grades, attendance, exam schedule"
+              placeholder={t.portalsPanel.notePlaceholder}
               onChange={e => setDraft(d => ({ ...d, note: e.target.value }))}
             />
-            <Hint>Shown to the agents, so write what the portal is for.</Hint>
+            <Hint>{t.portalsPanel.noteHint}</Hint>
           </div>
 
           <div>
             <PillBtn onClick={() => setAdvanced(v => !v)}>
-              {advanced ? 'Hide advanced' : 'Advanced — the form did not work'}
+              {advanced ? t.portalsPanel.hideAdvanced : t.portalsPanel.showAdvanced}
             </PillBtn>
           </div>
 
           {advanced && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <Hint>
-                Normally none of this is needed: the browser finds the login form by looking for
-                the password box. Fill these in only if a test sign-in reported it could not find
-                the fields — right-click the field in Chrome → Inspect → Copy → Copy selector.
+                {t.portalsPanel.advancedHint}
               </Hint>
               {([
-                ['username_selector', 'Username field selector', '#txtParamT01'],
-                ['password_selector', 'Password field selector', '#txtParamT02'],
-                ['submit_selector', 'Sign-in button selector', '#btnLogin'],
-                ['success_selector', 'Something only visible once signed in', '.main-menu'],
-                ['success_url_contains', 'Text the signed-in URL contains', '/dashboard'],
+                ['username_selector', t.portalsPanel.usernameSelector, '#txtParamT01'],
+                ['password_selector', t.portalsPanel.passwordSelector, '#txtParamT02'],
+                ['submit_selector', t.portalsPanel.submitSelector, '#btnLogin'],
+                ['success_selector', t.portalsPanel.successSelector, '.main-menu'],
+                ['success_url_contains', t.portalsPanel.successUrlContains, '/dashboard'],
               ] as const).map(([key, label, ph]) => (
                 <div key={key}>
                   <Label>{label}</Label>
@@ -398,11 +395,11 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
             <PillBtn
               onClick={canSave ? save : undefined}
               tone="accent"
-              title={canSave ? undefined : 'Needs a name, a sign-in URL, a username and a password'}
+              title={canSave ? undefined : t.portalsPanel.needsFields}
             >
-              {busy === 'save' ? 'Signing in…' : 'Save & sign in'}
+              {busy === 'save' ? t.portalsPanel.signingIn : t.portalsPanel.saveAndSignIn}
             </PillBtn>
-            <PillBtn onClick={reset}>Cancel</PillBtn>
+            <PillBtn onClick={reset}>{t.mcpServersPanel.cancel}</PillBtn>
           </div>
         </div>
       )}

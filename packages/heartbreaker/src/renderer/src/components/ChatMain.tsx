@@ -10,6 +10,7 @@ import VoiceMode from './VoiceMode'
 import { PermissionPrompt } from './InteractionPrompt'
 import AgentMark from './AgentMark'
 import { Skeleton } from './Skeleton'
+import { useT } from '../lib/i18n'
 import { hasMark } from '../lib/agentMarks'
 import { VoiceSession, voiceStatus } from '../lib/voice'
 import type { MicState } from '../lib/mic'
@@ -43,19 +44,23 @@ function imageBlocksFrom(urls?: string[]): ImageBlock[] | undefined {
 }
 
 function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppConfig }) {
+  const t = useT()
   const profile = useProfile()
   const { settings } = useSettings()
   const hour = new Date().getHours()
-  const salutation = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const salutation = hour < 12 ? t.welcome.goodMorning : hour < 18 ? t.welcome.goodAfternoon : t.welcome.goodEvening
   const displayName = settings.userName.trim() || profile?.userName || ''
   // House Party takeover — the hero speaks protocol, not pleasantries. It
   // states the roster's readiness rather than greeting the owner, because by
   // the time this screen exists the room is already assembled.
   const isWarroom = profile?.agentId === 'warroom'
+  // Turkish's dotless ı/İ pair means a locale-blind toUpperCase() mangles
+  // "İyi günler" → "IYI GüNLER" — toLocaleUpperCase needs the actual tag.
+  const localeTag = settings.locale === 'tr' ? 'tr' : 'en'
   const fullGreeting = (isWarroom
-    ? 'Superior Six is Assembled and ready.'
+    ? t.welcome.warroomGreeting
     : (displayName ? `${salutation}, ${displayName}` : salutation)
-  ).toUpperCase()
+  ).toLocaleUpperCase(localeTag)
 
   const [typed, setTyped] = useState('')
   const [done, setDone] = useState(false)
@@ -116,10 +121,11 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
     const id = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
-  const clock = now.toLocaleTimeString('en-GB', { hour12: false })
-  const dateLine = now.toLocaleDateString('en-GB', {
+  const dateLocale = settings.locale === 'tr' ? 'tr-TR' : 'en-GB'
+  const clock = now.toLocaleTimeString(dateLocale, { hour12: false })
+  const dateLine = now.toLocaleDateString(dateLocale, {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
-  }).toUpperCase()
+  }).toLocaleUpperCase(localeTag)
 
   return (
     <div style={{
@@ -287,6 +293,7 @@ interface Props {
 // `onSelectSession` stays in Props — Layout passes it — but nothing in here
 // reads it any more; session selection moved to the sidebar's own handler.
 export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged, historyLoading }: Props) {
+  const t = useT()
   const { state, dispatch } = useChatContext()
   const { settings, update } = useSettings()
   const profile = useProfile()
@@ -431,7 +438,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     const assistantId = makeId()
     dispatch({
       type: 'ADD_ASSISTANT_MESSAGE',
-      payload: { id: assistantId, role: 'assistant', content: '', tools: [], isStreaming: true, isError: false, status: 'Connecting' },
+      payload: { id: assistantId, role: 'assistant', content: '', tools: [], isStreaming: true, isError: false, status: t.chatMain.statusConnecting },
     })
 
     const ctrl = new AbortController()
@@ -502,7 +509,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
 
     // Which model the turn is running on — surfaced in the stall/timeout copy so
     // the message names the actual thing that went quiet (e.g. GLM-5.2).
-    const modelName = settings.model ? (settings.model.split(':').pop() || settings.model).toUpperCase() : 'the model'
+    const modelName = settings.model ? (settings.model.split(':').pop() || settings.model).toUpperCase() : t.chatMain.modelFallback
 
     const watchdog = setInterval(() => {
       const idle = Date.now() - lastActivity
@@ -512,16 +519,16 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
         const waited = Math.round((Date.now() - startedAt) / 1000)
         // Name the phase it died in — a diagnostic, not "isn't responding".
         if (!gotStart) {
-          timeoutReason = `No response from the backend in ${waited}s — it never acknowledged the request. The API server may be down, unreachable, or stuck before the model started.`
+          timeoutReason = t.chatMain.timeoutNoAck(waited)
         } else if (gotTool) {
-          timeoutReason = `A tool call ran ${waited}s with no further output, so the turn was cancelled — the tool or a service it calls is likely stuck.`
+          timeoutReason = t.chatMain.timeoutToolStuck(waited)
         } else {
-          timeoutReason = `${modelName} accepted the request but streamed nothing for ${waited}s — almost always rate-limited, overloaded, or queued upstream. Cancelled; try again in a moment.`
+          timeoutReason = t.chatMain.timeoutNoStream(modelName, waited)
         }
         ctrl.abort()
       } else if (idle >= STALL_MS && !gotTool) {
         const waited = Math.round((Date.now() - startedAt) / 1000)
-        dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: `Waiting on ${modelName} — ${waited}s, no tokens yet (may be rate-limited)` } })
+        dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: t.chatMain.waitingOnModel(modelName, waited) } })
       }
     }, 1000)
 
@@ -561,7 +568,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
             turnSessionRef.current = event.session_id
             dispatch({ type: 'TAG_MESSAGE_SESSION', payload: { id: assistantId, sessionId: event.session_id } })
           }
-          dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Thinking' } })
+          dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: t.chatMain.statusThinking } })
         } else if (event.type === 'chunk') {
           gotContent = true
           const delta = event.data as string
@@ -663,7 +670,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       settled = true
       if (timedOut) {
         // Precise, phase-specific reason built by the watchdog — never filler.
-        dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: timeoutReason || 'The backend went silent and the request timed out.', unsent: !gotStart } })
+        dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: timeoutReason || t.chatMain.timedOutFallback, unsent: !gotStart } })
       } else if (err instanceof Error && err.name === 'AbortError') {
         // User-initiated stop — keep whatever streamed so far.
         dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: state.activeSessionId ?? 0 } })
@@ -673,7 +680,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
         const net = /failed to fetch|networkerror|load failed|err_connection/i.test(err.message)
         dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId,
           error: net
-            ? "Couldn't reach the backend — network error. Is the API server running and reachable from this host?"
+            ? t.chatMain.networkError
             : err.message,
           // No START event means the turn never landed: whatever the reason, the
           // prompt was not stored and Try again has to send it again.
@@ -692,7 +699,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       }
       forceUpdate(n => n + 1)
     }
-  }, [state.activeSessionId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd, dispatch])
+  }, [state.activeSessionId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd, dispatch, t])
 
   // Mirror the latest `send` into a ref so the stable row handlers below can call
   // it without listing it as a dependency (which would make them change identity
@@ -872,7 +879,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           )
           entering = entering && runs.length > 0
           if (run) {
-            await tail(run, entering ? 'Reconnecting' : 'Reporting back')
+            await tail(run, entering ? t.chatMain.statusReconnecting : t.chatMain.statusReportingBack)
             entering = false
             continue          // straight back to watching — jobs can land in a row
           }
@@ -887,7 +894,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       if (timer) clearTimeout(timer)
       ctrl.abort()
     }
-  }, [state.activeSessionId, config, dispatch])
+  }, [state.activeSessionId, config, dispatch, t])
 
   const handleDelete = useCallback((id: string) => {
     dispatch({ type: 'DELETE_MESSAGE', payload: { id } })

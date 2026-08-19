@@ -6,6 +6,9 @@ export interface AppSettings {
   model: string
   systemPrompt: string
   temperature: number
+  /** The interface language — Turkish by default. Separate from `voiceLocale`:
+   *  the UI you read and the voice you hear are independent choices. */
+  locale: 'tr' | 'en'
   sidebarOpen: boolean
   /** The deck's right telemetry column. Defaults on — it is the glanceable
    *  half of the Systems Board — but two 280px columns is a lot of horizontal
@@ -44,6 +47,7 @@ const DEFAULT: AppSettings = {
   model: 'claude-sonnet-4-6',
   systemPrompt: '',
   temperature: 0.7,
+  locale: 'tr',
   sidebarOpen: true,
   telemetryOpen: true,
   userName: '',

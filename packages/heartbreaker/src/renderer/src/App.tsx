@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { ChatContext, chatReducer, initialState } from './store/chat'
 import { saveMessages } from './store/messageCache'
-import { SettingsContext, useSettingsProvider } from './store/settings'
+import { SettingsContext, useSettingsProvider, useSettings } from './store/settings'
 import { ProfileContext } from './components/Sidebar'
 import DEFAULT_PROFILE from './profile'
 import { BRANDS } from './profile/brands'
@@ -21,6 +21,7 @@ import { Skeleton } from './components/Skeleton'
 import type { AppConfig } from './lib/types'
 import { fetchSessions, getHouseParty, setHouseParty, getLockdown } from './lib/api'
 import { resolveConnection } from './lib/connection'
+import { useT } from './lib/i18n'
 import 'katex/dist/katex.min.css'
 import './theme/heartbreaker.css'
 
@@ -28,6 +29,7 @@ import './theme/heartbreaker.css'
  *  failure this guards against is the owner forgetting the server is sealed and
  *  spending an afternoon debugging "why can't I SSH in". */
 function LockdownStrip() {
+  const t = useT()
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9500,
@@ -42,7 +44,7 @@ function LockdownStrip() {
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
         <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
       </svg>
-      Lockdown Protocol active — inbound sealed
+      {t.app.lockdownStripActive}
     </div>
   )
 }
@@ -64,6 +66,15 @@ function AppInner() {
   // a real server — see lib/connection.ts. `firstRun` only changes the copy;
   // Settings → Account reopens the same modal with it false.
   const [connectionPrompt, setConnectionPrompt] = useState<{ firstRun: boolean } | null>(null)
+
+  // Turkish's special-casing rules (dotless ı/İ) only apply to CSS
+  // `text-transform: uppercase` — used all over the deck's FUI labels — when
+  // the document's language is actually declared. Without this, every such
+  // label in Turkish renders with an ASCII-only uppercase pass.
+  const { settings: rootSettings } = useSettings()
+  useEffect(() => {
+    document.documentElement.lang = rootSettings.locale
+  }, [rootSettings.locale])
 
   // ── House Party Protocol / War Room ───────────────────────────────────────
   // Three states. off: a normal agent. standby: the owner opened the war room

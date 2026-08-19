@@ -6,6 +6,7 @@ import { getConnections, fetchAgentModels, fetchLegionModels } from '../lib/api'
 import type { ConnectionInfo, AgentModelInfo, LegionModelInfo } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import { Skeleton } from './Skeleton'
+import { useT } from '../lib/i18n'
 
 /**
  * THE TELEMETRY COLUMN — the deck's right-hand standing panel.
@@ -111,6 +112,7 @@ interface Props {
 }
 
 export default function TelemetryColumn({ config, agentId, open }: Props) {
+  const t = useT()
   const { state } = useChatContext()
   const health = useHealth(config.apiBase, config.apiKey, 4000)
   const onlineAgents = useOnlineAgents(config, 8000)
@@ -171,11 +173,11 @@ export default function TelemetryColumn({ config, agentId, open }: Props) {
     >
       {/* ── Link ─────────────────────────────────────────────────────────── */}
       <div>
-        <div style={LABEL}>Telemetry</div>
-        <Row k="Host" v={hostOf(config.apiBase)} />
+        <div style={LABEL}>{t.telemetryColumn.telemetry}</div>
+        <Row k={t.telemetryColumn.host} v={hostOf(config.apiBase)} />
         <Row
-          k="Latency"
-          v={health.online && health.latencyMs != null ? `${health.latencyMs} ms` : 'offline'}
+          k={t.telemetryColumn.latency}
+          v={health.online && health.latencyMs != null ? `${health.latencyMs} ms` : t.telemetryColumn.offline}
           color={health.online ? 'var(--hb-green)' : 'var(--hb-red)'}
         />
         <Trace samples={rtt} />
@@ -183,13 +185,13 @@ export default function TelemetryColumn({ config, agentId, open }: Props) {
 
       {/* ── Spend ────────────────────────────────────────────────────────── */}
       <div>
-        <div style={LABEL}>This session</div>
+        <div style={LABEL}>{t.telemetryColumn.thisSession}</div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 }}>
           <span style={{
             fontFamily: 'var(--font-ui)', fontSize: 30, fontWeight: 600,
             color: 'var(--hb-text)', fontVariantNumeric: 'tabular-nums',
           }}>{compact(total)}</span>
-          <span style={{ fontSize: 13.5, color: 'var(--hb-text-faint)' }}>tokens</span>
+          <span style={{ fontSize: 13.5, color: 'var(--hb-text-faint)' }}>{t.telemetryColumn.tokens}</span>
         </div>
         <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', display: 'flex' }}>
           <span style={{ width: `${inPct}%`, background: 'var(--hb-cyan)' }} />
@@ -197,20 +199,20 @@ export default function TelemetryColumn({ config, agentId, open }: Props) {
         </div>
         <div style={{ display: 'flex', gap: 18, marginTop: 10 }}>
           <span
-            title="Input counts the whole prompt each turn: system, memory, tools and history."
+            title={t.telemetryColumn.inputTitle}
             style={{ fontSize: 13.5, color: 'var(--hb-text-dim)' }}
           >
-            <span style={{ color: 'var(--hb-cyan)' }}>▲</span> {compact(input)} in
+            <span style={{ color: 'var(--hb-cyan)' }}>▲</span> {t.telemetryColumn.inSuffix(compact(input))}
           </span>
           <span style={{ fontSize: 13.5, color: 'var(--hb-text-dim)' }}>
-            <span style={{ color: 'var(--hb-cyan-dim)' }}>▼</span> {compact(output)} out
+            <span style={{ color: 'var(--hb-cyan-dim)' }}>▼</span> {t.telemetryColumn.outSuffix(compact(output))}
           </span>
         </div>
       </div>
 
       {/* ── Routing ──────────────────────────────────────────────────────── */}
       <div>
-        <div style={LABEL}>Routing</div>
+        <div style={LABEL}>{t.telemetryColumn.routing}</div>
         {!telemetryLoaded ? (
           <div className="hb-skeleton-group" style={{ display: 'flex', flexDirection: 'column', gap: 11, padding: '7px 0 5px' }}>
             <Skeleton height={12} width="88%" style={{ ['--hb-skeleton-delay' as string]: '0s' }} />
@@ -220,32 +222,32 @@ export default function TelemetryColumn({ config, agentId, open }: Props) {
         ) : (
           <>
             <div style={{ borderBottom: '1px solid var(--hb-line)' }}>
-              <Row k="Chat" v={shortModel(chatModel)} color="var(--hb-cyan-bright)" />
+              <Row k={t.telemetryColumn.chat} v={shortModel(chatModel)} color="var(--hb-cyan-bright)" />
             </div>
             <div style={{ borderBottom: '1px solid var(--hb-line)' }}>
-              <Row k="Background" v={shortModel(bgModel)} />
+              <Row k={t.telemetryColumn.background} v={shortModel(bgModel)} />
             </div>
-            <Row k="Legion" v={legionModel ? shortModel(legionModel) : 'inherits'} />
+            <Row k={t.telemetryColumn.legion} v={legionModel ? shortModel(legionModel) : t.telemetryColumn.inherits} />
           </>
         )}
       </div>
 
       {/* ── Toolsets ─────────────────────────────────────────────────────── */}
       <div>
-        <div style={LABEL}>Toolsets</div>
+        <div style={LABEL}>{t.telemetryColumn.toolsets}</div>
         <div className="hb-skeleton-group" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {!telemetryLoaded ? (
             [86, 62, 100].map((w, i) => (
               <Skeleton key={i} width={w} height={28} radius={14} style={{ ['--hb-skeleton-delay' as string]: `${i * 0.05}s` }} />
             ))
           ) : armed.length === 0 ? (
-            <span style={{ fontSize: 13, color: 'var(--hb-text-faint)' }}>none armed</span>
+            <span style={{ fontSize: 13, color: 'var(--hb-text-faint)' }}>{t.telemetryColumn.noneArmed}</span>
           ) : null}
           {telemetryLoaded && armed.map(s => (
             <span
               key={s.server}
               className="glass-round"
-              title={`${s.label} — ${s.tools} tools, ${s.tokens} tokens of definitions`}
+              title={t.telemetryColumn.toolsetTitle(s.label, s.tools, s.tokens)}
               style={{
                 height: 28, padding: '0 12px', display: 'flex', alignItems: 'center',
                 border: '1px solid var(--hb-edge)', background: 'var(--glass-tint)',
@@ -258,7 +260,7 @@ export default function TelemetryColumn({ config, agentId, open }: Props) {
           {forgeOnline && (
             <span
               className="glass-round"
-              title="The Forge peer is connected — Optimus runs agentically in its Cell."
+              title={t.telemetryColumn.forgeConnectedTitle}
               style={{
                 height: 28, padding: '0 12px', display: 'flex', alignItems: 'center',
                 border: '1px solid rgba(var(--hb-accent-rgb),0.32)',
@@ -266,7 +268,7 @@ export default function TelemetryColumn({ config, agentId, open }: Props) {
                 fontSize: 13, color: 'var(--hb-cyan-bright)',
               }}
             >
-              Forge linked
+              {t.telemetryColumn.forgeLinked}
             </span>
           )}
         </div>
@@ -278,11 +280,11 @@ export default function TelemetryColumn({ config, agentId, open }: Props) {
           width: 6, height: 6, borderRadius: '50%',
           background: health.online ? 'var(--hb-green)' : 'var(--hb-red)',
         }} />
-        {health.tools != null ? `${health.tools} tools` : 'tools —'}
+        {health.tools != null ? t.telemetryColumn.toolsCount(health.tools) : t.telemetryColumn.toolsDash}
         {' · '}
-        {state.sessions.length} session{state.sessions.length === 1 ? '' : 's'}
+        {t.telemetryColumn.sessionsCount(state.sessions.length)}
         {' · '}
-        {state.messages.length} msg
+        {t.telemetryColumn.msgCount(state.messages.length)}
       </div>
     </aside>
   )

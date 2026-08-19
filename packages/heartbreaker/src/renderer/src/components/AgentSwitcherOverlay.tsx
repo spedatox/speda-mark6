@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { ROSTER, agentColor } from '../lib/agents'
 import { BRANDS } from '../profile/brands'
 import { Avatar } from './CommBubble'
+import { useT } from '../lib/i18n'
 
 /**
  * AGENT SWITCHER — the "armoury" selector (Alt+A).
@@ -100,6 +101,7 @@ export default function AgentSwitcherOverlay({
   onClose: () => void
   currentAgentId: string
 }) {
+  const t = useT()
   const [selectedIndex, setSelectedIndex] = useState(() => Math.max(0, ROSTER.indexOf(currentAgentId)))
   const [confirming, setConfirming] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -171,7 +173,7 @@ export default function AgentSwitcherOverlay({
           color: selColor, marginBottom: '0.7rem', textTransform: 'uppercase',
           animation: `swSub 0.8s ${SMOOTH} 0.15s both`, transition: 'color 0.6s ease',
         }}>
-          Armoury // SPEDA Mark VI
+          {t.agentSwitcher.eyebrow}
         </div>
         <h1 style={{
           fontFamily: "'Rajdhani', sans-serif", fontWeight: 700,
@@ -180,7 +182,7 @@ export default function AgentSwitcherOverlay({
           textShadow: `0 0 28px ${selColor}88`, transition: 'text-shadow 0.6s ease',
           animation: `swTitle 0.9s ${SMOOTH} both`,
         }}>
-          Select Your Agent
+          {t.agentSwitcher.title}
         </h1>
         <div style={{
           height: 2, marginTop: '0.9rem',
@@ -312,9 +314,9 @@ export default function AgentSwitcherOverlay({
         marginTop: '1.4rem', padding: '0.55rem 1.2rem',
         animation: `hintIn 0.7s ${SMOOTH} 0.8s both`,
       }}>
-        <span style={{ color: 'var(--hb-amber-bright)', padding: '0 0.3rem' }}>&larr; &rarr;</span> NAVIGATE
-        &middot; <span style={{ color: 'var(--hb-amber-bright)', padding: '0 0.3rem' }}>ENTER</span> ENGAGE
-        &middot; <span style={{ color: 'var(--hb-amber-bright)', padding: '0 0.3rem' }}>ESC</span> CANCEL
+        <span style={{ color: 'var(--hb-amber-bright)', padding: '0 0.3rem' }}>&larr; &rarr;</span> {t.agentSwitcher.navigate}
+        &middot; <span style={{ color: 'var(--hb-amber-bright)', padding: '0 0.3rem' }}>ENTER</span> {t.agentSwitcher.engage}
+        &middot; <span style={{ color: 'var(--hb-amber-bright)', padding: '0 0.3rem' }}>ESC</span> {t.agentSwitcher.cancel}
       </div>
     </div>
   )

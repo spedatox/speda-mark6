@@ -25,6 +25,7 @@ import {
 import type { AppConfig } from '../lib/types'
 import { PillBtn, ServiceRow, Switch, fieldStyle } from './settingsUI'
 import { SkeletonList } from './Skeleton'
+import { useT } from '../lib/i18n'
 
 /** One key/value pair as the editor holds it — an array, not an object, so a
  *  half-typed key doesn't collapse two rows into one while you type. */
@@ -55,6 +56,7 @@ const ServerIcon = () => (
 )
 
 export default function McpServersPanel({ config }: { config: AppConfig }) {
+  const t = useT()
   const [servers, setServers] = useState<CustomMcpServer[]>([])
   const [reserved, setReserved] = useState<string[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -120,8 +122,8 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
     if (r.error) { setMsg({ text: r.error, ok: false }); return }
     setMsg({
       text: r.connected
-        ? `Connected — ${r.tools ?? 0} tool${r.tools === 1 ? '' : 's'} are live now.`
-        : (r.message ?? 'Saved.'),
+        ? t.mcpServersPanel.connected(r.tools ?? 0)
+        : (r.message ?? t.mcpServersPanel.saved),
       ok: true,
     })
     if (r.connected) setTimeout(reset, 1600)
@@ -148,9 +150,7 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
   return (
     <div style={{ marginTop: -8 }}>
       <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', lineHeight: 1.55, margin: '0 0 14px' }}>
-        Any server that speaks MCP can be added here — a local command for stdio, or an
-        endpoint and a header for HTTP. It connects immediately and comes back on every
-        restart. Credentials are stored on the backend and never shown again.
+        {t.mcpServersPanel.intro}
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -164,28 +164,28 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
             desc={
               s.connected
                 ? `${s.tools ?? 0} tools · ${s.transport === 'http' ? s.url : (Array.isArray(s.command) ? s.command.join(' ') : s.command)}`
-                : (s.enabled ? 'not connected — check the command, URL or credentials' : 'switched off')
+                : (s.enabled ? t.mcpServersPanel.notConnected : t.mcpServersPanel.switchedOff)
             }
           >
             <Switch
               on={s.enabled}
               onChange={v => toggle(s, v)}
-              title={s.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}
+              title={s.enabled ? t.mcpServersPanel.enabledClickDisable : t.mcpServersPanel.disabledClickEnable}
             />
-            <PillBtn onClick={() => startEdit(s)}>Edit</PillBtn>
-            <PillBtn onClick={() => remove(s.name)} tone="danger" title="Forget this server">Remove</PillBtn>
+            <PillBtn onClick={() => startEdit(s)}>{t.mcpServersPanel.edit}</PillBtn>
+            <PillBtn onClick={() => remove(s.name)} tone="danger" title={t.mcpServersPanel.forgetServerTitle}>{t.mcpServersPanel.remove}</PillBtn>
           </ServiceRow>
         ))}
         {loaded && servers.length === 0 && !open && (
           <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)', margin: 0 }}>
-            No hand-added servers yet.
+            {t.mcpServersPanel.noneYet}
           </p>
         )}
       </div>
 
       {!open && (
         <div style={{ marginTop: 14 }}>
-          <PillBtn onClick={() => setOpen(true)} tone="accent">+ Add MCP server</PillBtn>
+          <PillBtn onClick={() => setOpen(true)} tone="accent">{t.mcpServersPanel.addServer}</PillBtn>
         </div>
       )}
 
@@ -195,12 +195,12 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
           background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.09)',
         }}>
           <div style={{ fontSize: '0.9375rem', color: 'var(--hb-text)' }}>
-            {editing ? `Edit “${editing}”` : 'New MCP server'}
+            {editing ? t.mcpServersPanel.editServer(editing) : t.mcpServersPanel.newServer}
           </div>
 
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginBottom: 8 }}>Name</div>
+              <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginBottom: 8 }}>{t.mcpServersPanel.name}</div>
               <input
                 style={fieldStyle}
                 value={draft.name}
@@ -210,27 +210,26 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
               />
             </div>
             <div style={{ width: 170 }}>
-              <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginBottom: 8 }}>Transport</div>
+              <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginBottom: 8 }}>{t.mcpServersPanel.transport}</div>
               <select
                 style={{ ...fieldStyle, cursor: 'pointer' }}
                 value={draft.transport}
                 onChange={e => setDraft(d => ({ ...d, transport: e.target.value as 'stdio' | 'http' }))}
               >
-                <option value="stdio">stdio (command)</option>
-                <option value="http">http (URL)</option>
+                <option value="stdio">{t.mcpServersPanel.stdioCommand}</option>
+                <option value="http">{t.mcpServersPanel.httpUrl}</option>
               </select>
             </div>
           </div>
           {nameTaken && (
             <p style={{ fontSize: '0.8125rem', color: '#e5897c', margin: 0 }}>
-              “{draft.name}” is a built-in server. Two servers sharing a name would hijack
-              each other's tools — pick another.
+              {t.mcpServersPanel.nameTaken(draft.name)}
             </p>
           )}
 
           {draft.transport === 'stdio' ? (
             <div>
-              <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginBottom: 8 }}>Command</div>
+              <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginBottom: 8 }}>{t.mcpServersPanel.command}</div>
               <input
                 style={{ ...fieldStyle, fontFamily: 'var(--font-mono)' }}
                 value={draft.command}
@@ -238,13 +237,12 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
                 onChange={e => setDraft(d => ({ ...d, command: e.target.value }))}
               />
               <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', margin: '8px 0 0', lineHeight: 1.5 }}>
-                Paste the command line from the server's README. It runs on the backend host,
-                so anything it needs (node, uvx, python) has to be installed there.
+                {t.mcpServersPanel.commandHint}
               </p>
             </div>
           ) : (
             <div>
-              <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginBottom: 8 }}>Endpoint URL</div>
+              <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginBottom: 8 }}>{t.mcpServersPanel.endpointUrl}</div>
               <input
                 style={{ ...fieldStyle, fontFamily: 'var(--font-mono)' }}
                 value={draft.url}
@@ -255,10 +253,8 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
           )}
 
           <PairEditor
-            label={draft.transport === 'stdio' ? 'Environment variables' : 'HTTP headers'}
-            hint={draft.transport === 'stdio'
-              ? 'Where an stdio server takes its API key, e.g. LINEAR_API_KEY.'
-              : 'Where an HTTP server takes its credential, e.g. Authorization: Bearer …'}
+            label={draft.transport === 'stdio' ? t.mcpServersPanel.envVars : t.mcpServersPanel.httpHeaders}
+            hint={draft.transport === 'stdio' ? t.mcpServersPanel.envVarsHint : t.mcpServersPanel.httpHeadersHint}
             keyPlaceholder={draft.transport === 'stdio' ? 'SOME_API_KEY' : 'Authorization'}
             valuePlaceholder={draft.transport === 'stdio' ? 'sk-…' : 'Bearer sk-…'}
             pairs={draft.transport === 'stdio' ? envPairs : headerPairs}
@@ -266,11 +262,11 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
           />
 
           <div>
-            <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginBottom: 8 }}>Note (optional)</div>
+            <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginBottom: 8 }}>{t.mcpServersPanel.note}</div>
             <input
               style={fieldStyle}
               value={draft.note}
-              placeholder="What this is for"
+              placeholder={t.mcpServersPanel.notePlaceholder}
               onChange={e => setDraft(d => ({ ...d, note: e.target.value }))}
             />
           </div>
@@ -283,10 +279,10 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
 
           <div style={{ display: 'flex', gap: 10 }}>
             <PillBtn onClick={canSave ? save : undefined} tone="accent"
-              title={canSave ? undefined : 'Fill in a name and a command or URL first'}>
-              {busy ? 'Connecting…' : editing ? 'Save & reconnect' : 'Save & connect'}
+              title={canSave ? undefined : t.mcpServersPanel.fillNameFirst}>
+              {busy ? t.mcpServersPanel.connecting : editing ? t.mcpServersPanel.saveAndReconnect : t.mcpServersPanel.saveAndConnect}
             </PillBtn>
-            <PillBtn onClick={reset}>Cancel</PillBtn>
+            <PillBtn onClick={reset}>{t.mcpServersPanel.cancel}</PillBtn>
           </div>
         </div>
       )}

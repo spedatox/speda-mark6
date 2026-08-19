@@ -7,6 +7,8 @@ import { fetchModels, fileToImageBlock, fileToDocBlock, getBudgetMode, setBudget
 import { MicSession, micAvailable, type MicState } from '../lib/mic'
 import { fetchVoices } from '../lib/voice'
 import type { AppConfig, ModelInfo, ImageBlock, DocBlock, UploadedFile } from '../lib/types'
+import { useT } from '../lib/i18n'
+import type { Dict } from '../lib/i18n/en'
 
 interface AttachedFile {
   id: string
@@ -41,14 +43,18 @@ function shortModelName(name: string): string {
   return name.replace(/^(anthropic|openai|gemini|zai|deepseek|nvidia|ollama):/, '').replace(/^Claude\s+/i, '').toUpperCase()
 }
 
-const PROVIDER_LABELS: Record<string, string> = {
-  anthropic: 'ANTHROPIC',
-  openai: 'OPENAI',
-  gemini: 'GOOGLE GEMINI',
-  zai: 'Z.AI · GLM',
-  deepseek: 'DEEPSEEK',
-  nvidia: 'NVIDIA NIM',
-  ollama: 'DEAD ZONE PROTOCOL',
+// Company/product names stay untranslated (ANTHROPIC, OPENAI, …) — only the
+// one playful in-house codename (ollama's "dead zone") is localized.
+function providerLabels(t: Dict): Record<string, string> {
+  return {
+    anthropic: 'ANTHROPIC',
+    openai: 'OPENAI',
+    gemini: 'GOOGLE GEMINI',
+    zai: 'Z.AI · GLM',
+    deepseek: 'DEEPSEEK',
+    nvidia: 'NVIDIA NIM',
+    ollama: t.inputBar.providerOllama,
+  }
 }
 
 function formatSize(bytes: number): string {
@@ -105,12 +111,13 @@ function ToolBtn({
 function SendBtn({ canSend, isStreaming, onSend, onStop }: {
   canSend: boolean; isStreaming: boolean; onSend: () => void; onStop?: () => void
 }) {
+  const t = useT()
   const [press, setPress] = useState(false)
   if (isStreaming) {
     return (
       <button
         className="hb-glass-xs"
-        title="Stop generating"
+        title={t.inputBar.stopGenerating}
         onClick={onStop}
         onMouseDown={() => setPress(true)}
         onMouseUp={() => setPress(false)}
@@ -134,7 +141,7 @@ function SendBtn({ canSend, isStreaming, onSend, onStop }: {
   return (
     <button
       className="hb-glass-xs"
-      title="Send message"
+      title={t.inputBar.sendMessage}
       onClick={onSend}
       disabled={!canSend}
       onMouseDown={() => { if (canSend) setPress(true) }}
@@ -293,6 +300,7 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
   models: ModelInfo[]; activeId: string; onSelect: (id: string) => void
   voices: ModelInfo[]; activeVoiceId: string; onSelectVoice: (id: string) => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'text' | 'voice'>('text')
   const ref = useRef<HTMLDivElement>(null)
@@ -347,7 +355,7 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
     <div style={{ position: 'relative' }} ref={ref}>
       <button
         className="hb-glass-xs"
-        title="Select model"
+        title={t.inputBar.selectModel}
         onClick={() => setOpen(v => !v)}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
@@ -402,22 +410,22 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
             boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
             borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.2)',
           }}>
-            {(['text', 'voice'] as const).map(t => (
+            {(['text', 'voice'] as const).map(tabId => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
+                key={tabId}
+                onClick={() => setTab(tabId)}
                 style={{
                   flex: 1, border: 'none', cursor: 'pointer',
-                  background: tab === t ? 'rgba(var(--hb-accent-rgb),0.22)' : 'transparent',
-                  color: tab === t ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
-                  borderBottom: tab === t ? '2px solid var(--hb-cyan)' : '2px solid transparent',
+                  background: tab === tabId ? 'rgba(var(--hb-accent-rgb),0.22)' : 'transparent',
+                  color: tab === tabId ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
+                  borderBottom: tab === tabId ? '2px solid var(--hb-cyan)' : '2px solid transparent',
                   fontFamily: "'Rajdhani', sans-serif",
                   fontSize: '0.62rem', fontWeight: 700,
                   letterSpacing: '0.2em', textTransform: 'uppercase',
                   transition: 'background 0.1s, color 0.1s, border-color 0.1s',
                 }}
               >
-                {t === 'text' ? 'TEXT' : 'VOICE'}
+                {tabId === 'text' ? t.inputBar.tabText : t.inputBar.tabVoice}
               </button>
             ))}
           </div>
@@ -428,15 +436,13 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
                 fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
                 lineHeight: 1.6, color: 'var(--hb-icon-dim)',
               }}>
-                {tab === 'voice'
-                  ? 'No voices available. Set AZURE_SPEECH_KEY or OPENAI_API_KEY on the backend.'
-                  : 'No models available.'}
+                {tab === 'voice' ? t.inputBar.noVoices : t.inputBar.noModels}
               </div>
             )}
             {groups.map(([provider, items]) => (
               <div key={provider}>
                 <ProviderRow
-                  label={PROVIDER_LABELS[provider] ?? provider.toUpperCase()}
+                  label={providerLabels(t)[provider] ?? provider.toUpperCase()}
                   count={items.length}
                   open={expanded === provider}
                   holdsActive={provider === activeProvider}
@@ -505,6 +511,7 @@ function MobileToolsMenu({ budget, listening, onAttach, onToggleBudget, onVoice 
   budget: boolean; listening: boolean
   onAttach: () => void; onToggleBudget: () => void; onVoice: () => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -521,7 +528,7 @@ function MobileToolsMenu({ budget, listening, onAttach, onToggleBudget, onVoice 
     <div ref={ref} style={{ position: 'relative' }}>
       <button
         className="hb-glass-xs"
-        title="More tools"
+        title={t.inputBar.moreTools}
         onClick={() => setOpen(v => !v)}
         style={{
           width: 30, height: 30,
@@ -572,24 +579,24 @@ function MobileToolsMenu({ budget, listening, onAttach, onToggleBudget, onVoice 
             letterSpacing: '0.2em', textTransform: 'uppercase',
             color: 'var(--hb-text-dim)',
           }}>
-            TOOLS
+            {t.inputBar.tools}
           </div>
           <MenuRow
             icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>}
-            label="Attach files"
+            label={t.inputBar.attachFiles}
             onClick={() => { onAttach(); setOpen(false) }}
           />
           <MenuRow
             icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.2a2.4 2.4 0 0 1 2.5-1.7c1.3 0 2.3.8 2.3 1.9 0 2.4-4.6 1.4-4.6 3.7 0 1.1 1 1.9 2.3 1.9a2.4 2.4 0 0 0 2.5-1.7"/></svg>}
-            label="Budget mode"
-            value={budget ? 'ON' : 'OFF'}
+            label={t.inputBar.budgetMode}
+            value={budget ? t.inputBar.on : t.inputBar.off}
             valueColor={budget ? '#5fc78f' : '#d3a04a'}
             onClick={onToggleBudget}
           />
           {/* Available while streaming too — that is when barge-in happens. */}
           <MenuRow
             icon={<svg width="13" height="13" viewBox="0 0 24 24" fill={listening ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
-            label={listening ? 'Stop listening' : 'Voice input'}
+            label={listening ? t.inputBar.stopListening : t.inputBar.voiceInput}
             onClick={() => { onVoice(); setOpen(false) }}
           />
         </div>
@@ -634,6 +641,7 @@ function Thumb({ file, alt }: { file: File; alt: string }) {
 export default function InputBar({
   onSend, onStop, config, voiceMode, agentSpeaking, onSpeechStart, onMicState, micLevelRef,
 }: Props) {
+  const t = useT()
   const { state } = useChatContext()
   const { settings, update } = useSettings()
   const profile = useProfile()
@@ -896,7 +904,7 @@ export default function InputBar({
                       color: 'var(--hb-text-dim)', background: 'rgba(4,8,12,0.75)', textAlign: 'right',
                     }}>{formatSize(a.size)}</span>
                   )}
-                  <button onClick={() => removeAttachment(a.id)} title="Remove"
+                  <button onClick={() => removeAttachment(a.id)} title={t.inputBar.remove}
                     className="hb-glass-xs"
                     style={{
                       position: 'absolute', top: -6, right: -6,
@@ -927,7 +935,7 @@ export default function InputBar({
               onPaste={onPaste}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
-              placeholder="How can I help you today?"
+              placeholder={t.inputBar.placeholder}
               style={{
                 width: '100%', background: 'transparent', border: 'none', outline: 'none',
                 resize: 'none', color: 'var(--hb-text)',
@@ -959,7 +967,7 @@ export default function InputBar({
                 />
               ) : (<>
               {/* Attach */}
-              <ToolBtn title="Attach files or images" onClick={() => fileInputRef.current?.click()}>
+              <ToolBtn title={t.inputBar.attachFilesOrImages} onClick={() => fileInputRef.current?.click()}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
                 </svg>
@@ -968,9 +976,7 @@ export default function InputBar({
               {/* Budget mode toggle — green when frugal, amber when unleashed */}
               <button
                 className="hb-glass-xs"
-                title={budget
-                  ? 'Budget mode ON — concise answers, the Legion stood down. Click to unleash.'
-                  : 'Full power — deep research enabled. Click to go frugal.'}
+                title={budget ? t.inputBar.budgetOnTitle : t.inputBar.budgetOffTitle}
                 onClick={toggleBudget}
                 style={{
                   height: 30, padding: '0 0.55rem',
@@ -993,7 +999,7 @@ export default function InputBar({
                   <circle cx="12" cy="12" r="9"/>
                   <path d="M12 7v10M9.5 9.2a2.4 2.4 0 0 1 2.5-1.7c1.3 0 2.3.8 2.3 1.9 0 2.4-4.6 1.4-4.6 3.7 0 1.1 1 1.9 2.3 1.9a2.4 2.4 0 0 0 2.5-1.7"/>
                 </svg>
-                {budget ? 'Budget' : 'Full'}
+                {budget ? t.inputBar.budgetShort : t.inputBar.fullShort}
               </button>
               </>)}
             </div>
@@ -1015,10 +1021,10 @@ export default function InputBar({
               {!isMobile && micAvailable() && (
                 <ToolBtn
                   title={
-                    !listening ? (voiceMode ? 'Speak instead of typing' : 'Voice input — dictate into the composer')
-                    : micState === 'hearing' ? 'Listening — speaking now'
-                    : micState === 'recognizing' ? 'Transcribing…'
-                    : 'Mic on — click to stop'
+                    !listening ? (voiceMode ? t.inputBar.speakInsteadOfTyping : t.inputBar.voiceInputDictate)
+                    : micState === 'hearing' ? t.inputBar.listeningNow
+                    : micState === 'recognizing' ? t.inputBar.transcribing
+                    : t.inputBar.micOnClickToStop
                   }
                   onClick={handleVoiceInput}
                   active={listening}
@@ -1071,7 +1077,7 @@ export default function InputBar({
                 <polyline points="17 8 12 3 7 8"/>
                 <line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
-              Drop to attach
+              {t.inputBar.dropToAttach}
             </div>
           )}
         </div>
@@ -1087,10 +1093,10 @@ export default function InputBar({
           userSelect: 'none',
         }}>
           {[
-            `${profile?.name ?? 'AI'} can make mistakes`,
-            'Enter to send',
-            'Shift+Enter for newline',
-            'paste or drop images',
+            t.inputBar.canMakeMistakes(profile?.name ?? 'AI'),
+            t.inputBar.enterToSend,
+            t.inputBar.shiftEnterNewline,
+            t.inputBar.pasteOrDropImages,
           ].map((seg, i) => (
             <span key={i} data-brand-text={i === 0 ? '' : undefined} style={{ display: 'flex', alignItems: 'center' }}>
               {i > 0 && (

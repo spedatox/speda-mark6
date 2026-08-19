@@ -13,6 +13,7 @@ import McpServersPanel from './McpServersPanel'
 import PortalsPanel from './PortalsPanel'
 import GlassSelect from './GlassSelect'
 import { SkeletonList, SkeletonText } from './Skeleton'
+import { useT, LOCALES } from '../lib/i18n'
 import {
   SettingsSection, SettingsField, SettingsRow, Switch, PillBtn, ServiceRow, LiveDot, fieldStyle,
 } from './settingsUI'
@@ -53,6 +54,7 @@ function maskApiKey(key: string): string {
 
 
 export default function SettingsModal({ config, onClose, onEngageLockdown }: Props) {
+  const t = useT()
   const { settings, update } = useSettings()
   const { dispatch } = useChatContext()
   const profile = useProfile()
@@ -326,15 +328,15 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
   // they want. `blurb` is the line under the pane title — what this tab is for,
   // said once, instead of the owner inferring it from the fields.
   const tabs: { id: Tab; label: string; blurb: string; icon: React.ReactNode }[] = [
-    { id: 'general', label: 'General', blurb: 'Identity, behaviour and voice-mode preferences', icon: <IcoGear /> },
-    { id: 'config', label: 'Configuration', blurb: 'Managed server settings, applied live', icon: <IcoSliders /> },
-    { id: 'connections', label: 'Connections', blurb: 'Accounts and services SPEDA can reach', icon: <IcoLink /> },
-    { id: 'automations', label: 'Automations', blurb: 'Scheduled work n8n runs on your behalf', icon: <IcoBolt /> },
-    { id: 'reminders', label: 'Reminders', blurb: 'What SPEDA is holding for you, and when', icon: <IcoCalendar /> },
-    { id: 'protocols', label: 'Protocols', blurb: 'Standing operational modes — containment and all-hands', icon: <IcoShield /> },
-    { id: 'interface', label: 'Interface', blurb: 'How the deck itself looks and behaves', icon: <IcoMonitor /> },
-    { id: 'data', label: 'Data', blurb: 'Stored history, memory files and exports', icon: <IcoDatabase /> },
-    { id: 'account', label: 'Account', blurb: 'The owner this client is signed in as', icon: <IcoUser /> },
+    { id: 'general', ...t.settings.tabs.general, icon: <IcoGear /> },
+    { id: 'config', ...t.settings.tabs.config, icon: <IcoSliders /> },
+    { id: 'connections', ...t.settings.tabs.connections, icon: <IcoLink /> },
+    { id: 'automations', ...t.settings.tabs.automations, icon: <IcoBolt /> },
+    { id: 'reminders', ...t.settings.tabs.reminders, icon: <IcoCalendar /> },
+    { id: 'protocols', ...t.settings.tabs.protocols, icon: <IcoShield /> },
+    { id: 'interface', ...t.settings.tabs.interface, icon: <IcoMonitor /> },
+    { id: 'data', ...t.settings.tabs.data, icon: <IcoDatabase /> },
+    { id: 'account', ...t.settings.tabs.account, icon: <IcoUser /> },
   ]
   const current = tabs.find(t => t.id === tab)
 
@@ -376,7 +378,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
             letterSpacing: '0.04em', color: 'var(--hb-text)',
             padding: '0 10px', marginBottom: 20,
           }}>
-            Settings
+            {t.settings.title}
           </div>
           {tabs.map(({ id, label, icon }) => {
             const on = tab === id
@@ -449,12 +451,12 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
             {/* General tab */}
             {tab === 'general' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
-                <SettingsField label="Display name">
+                <SettingsField label={t.settingsGeneral.displayName}>
                   <input
                     className="hb-tile"
                     value={settings.userName}
                     onChange={e => update({ userName: e.target.value })}
-                    placeholder={profile?.userName ?? 'Your name'}
+                    placeholder={profile?.userName ?? t.settingsGeneral.namePlaceholder}
                     style={fieldStyle}
                     onFocus={e => (e.currentTarget as HTMLInputElement).style.borderColor = 'rgba(var(--hb-accent-rgb),0.45)'}
                     onBlur={e => (e.currentTarget as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.09)'}
@@ -462,14 +464,14 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                 </SettingsField>
 
                 <SettingsField
-                  label="System instruction"
-                  hint="Defines the agent's behaviour and personality for every conversation."
+                  label={t.settingsGeneral.systemInstruction}
+                  hint={t.settingsGeneral.systemInstructionHint}
                 >
                   <textarea
                     className="hb-tile"
                     value={localPrompt}
                     onChange={e => setLocalPrompt(e.target.value)}
-                    placeholder="You are a helpful assistant…"
+                    placeholder={t.settingsGeneral.systemInstructionPlaceholder}
                     rows={4}
                     style={{
                       ...fieldStyle,
@@ -487,7 +489,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                     marginBottom: 10,
                   }}>
                     <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)' }}>
-                      Creativity (temperature)
+                      {t.settingsGeneral.creativity}
                     </span>
                     <span style={{
                       fontSize: '0.845rem', color: 'var(--hb-cyan)',
@@ -504,21 +506,21 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                     style={{ width: '100%' }}
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-                    <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>Precise</span>
-                    <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>Creative</span>
+                    <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>{t.settingsGeneral.precise}</span>
+                    <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>{t.settingsGeneral.creative}</span>
                   </div>
                 </div>
 
                 <SettingsRow
-                  title="Voice-mode language"
-                  desc="Used when replies are read aloud."
+                  title={t.settingsGeneral.voiceModeLanguage}
+                  desc={t.settingsGeneral.voiceModeLanguageDesc}
                 >
                   <GlassSelect
                     value={settings.voiceLocale}
                     options={VOICE_LOCALES}
                     onChange={v => update({ voiceLocale: v })}
                     tint="var(--hb-cyan-bright)"
-                    title="Language replies are spoken in"
+                    title={t.settingsGeneral.voiceModeLanguageTitle}
                   />
                 </SettingsRow>
               </div>
@@ -530,20 +532,20 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
             {/* Connections tab — toggle MCP servers live */}
             {tab === 'connections' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
-                <SettingsSection title="Accounts" first />
+                <SettingsSection title={t.settingsConnections.accounts} first />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
                   <ServiceRow
                     tint="#5cc98f"
                     icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
                     name="Google Workspace"
                     desc={googleConnected
-                      ? 'Gmail, Calendar, Drive and Contacts are live.'
-                      : 'Sign in for Gmail, Calendar and Drive.'}
+                      ? t.settingsConnections.googleConnectedDesc
+                      : t.settingsConnections.googleDisconnectedDesc}
                   >
                     {googleConnected ? (
                       <>
                         <LiveDot />
-                        <PillBtn onClick={disconnectGoogle} tone="danger">Disconnect</PillBtn>
+                        <PillBtn onClick={disconnectGoogle} tone="danger">{t.settingsConnections.disconnect}</PillBtn>
                       </>
                     ) : (
                       <PillBtn onClick={signInGoogle}>
@@ -553,7 +555,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                           <path fill="#FBBC05" d="M11.8 28.2c-.4-1.3-.7-2.7-.7-4.2s.2-2.9.7-4.2v-5.7H4.5C3 17.2 2.1 20.5 2.1 24s.9 6.8 2.4 9.9l7.3-5.7z"/>
                           <path fill="#EA4335" d="M24 10.7c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 4.1 29.9 2 24 2 15.4 2 8.1 6.9 4.5 14.1l7.3 5.7c1.7-5.2 6.5-9.1 12.2-9.1z"/>
                         </svg>
-                        Connect
+                        {t.settingsConnections.connect}
                       </PillBtn>
                     )}
                   </ServiceRow>
@@ -568,16 +570,16 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                     icon={<svg width="15" height="15" viewBox="0 0 24 24"><rect x="2" y="2" width="9.2" height="9.2" fill="#F25022"/><rect x="12.8" y="2" width="9.2" height="9.2" fill="#7FBA00"/><rect x="2" y="12.8" width="9.2" height="9.2" fill="#00A4EF"/><rect x="12.8" y="12.8" width="9.2" height="9.2" fill="#FFB900"/></svg>}
                     name="Microsoft 365"
                     desc={microsoftConnected
-                      ? 'Your university mailbox is live — Ultron reads it.'
-                      : 'Sign in with your school account (@ostimteknik.edu.tr) for Outlook mail.'}
+                      ? t.settingsConnections.microsoftConnectedDesc
+                      : t.settingsConnections.microsoftDisconnectedDesc}
                   >
                     {microsoftConnected ? (
                       <>
                         <LiveDot />
-                        <PillBtn onClick={disconnectMicrosoft} tone="danger">Disconnect</PillBtn>
+                        <PillBtn onClick={disconnectMicrosoft} tone="danger">{t.settingsConnections.disconnect}</PillBtn>
                       </>
                     ) : (
-                      <PillBtn onClick={signInMicrosoft}>Connect</PillBtn>
+                      <PillBtn onClick={signInMicrosoft}>{t.settingsConnections.connect}</PillBtn>
                     )}
                   </ServiceRow>
                   {microsoftMsg && (
@@ -589,15 +591,15 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                   <ServiceRow
                     icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M4.45877 4.54133L19.5397 5.25732V6.33128L18.8252 6.47466C18.2526 6.54632 17.8938 6.76132 17.8938 7.33465V18.1532C17.8938 18.5832 18.2526 18.7982 18.8252 18.8698L19.5397 19.0132V20.0872L12.3924 19.3712V18.2972L13.107 18.1539C13.6796 18.0822 14.0384 17.8672 14.0384 17.2939V8.83863L7.75338 18.6545H6.53612V8.04996C6.53612 7.47664 6.17737 7.26164 5.6047 7.18997L4.89018 7.04664V5.97268L12.0374 6.68867V7.76262L11.3229 7.90595C10.7503 7.97762 10.3915 8.19262 10.3915 8.76595V16.3626L15.932 7.90595C16.1466 7.61929 16.4328 7.40429 16.7196 7.33262L17.2917 7.18929L17.1486 6.11532L4.45877 4.54133Z"/></svg>}
                     name="Notion"
-                    desc="Search, fetch and create pages in your workspace."
+                    desc={t.settingsConnections.notionDesc}
                   >
                     {notionConnected ? (
                       <>
                         <LiveDot />
-                        <PillBtn onClick={disconnectNotion} tone="danger">Disconnect</PillBtn>
+                        <PillBtn onClick={disconnectNotion} tone="danger">{t.settingsConnections.disconnect}</PillBtn>
                       </>
                     ) : (
-                      <PillBtn onClick={signInNotion}>Connect</PillBtn>
+                      <PillBtn onClick={signInNotion}>{t.settingsConnections.connect}</PillBtn>
                     )}
                   </ServiceRow>
                   {notionMsg && (
@@ -607,11 +609,10 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                   )}
                 </div>
 
-                <SettingsSection title="Tool servers" />
+                <SettingsSection title={t.settingsConnections.toolServers} />
                 <div style={{ marginTop: -8 }}>
                   <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', lineHeight: 1.55, margin: '0 0 14px' }}>
-                    Turning one off hides its tools instantly — no restart. That shrinks the
-                    prompt and keeps you under the rate limit.
+                    {t.settingsConnections.toolServersDesc}
                   </p>
 
                   {/* Prefix budget bar */}
@@ -625,7 +626,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                           display: 'flex', justifyContent: 'space-between',
                           fontSize: '0.845rem', marginBottom: 8,
                         }}>
-                          <span style={{ color: 'var(--hb-text-dim)' }}>Active tool tokens</span>
+                          <span style={{ color: 'var(--hb-text-dim)' }}>{t.settingsConnections.activeToolTokens}</span>
                           <span style={{ color: col, fontVariantNumeric: 'tabular-nums' }}>
                             ~{connBudget.used.toLocaleString()} / {connBudget.limit.toLocaleString()}
                           </span>
@@ -637,7 +638,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                         </div>
                         {over && (
                           <p style={{ fontSize: '0.8125rem', color: '#e5897c', marginTop: 8 }}>
-                            Over the 30k cold-write limit — turn a server off (Notion is heaviest) or upgrade to Tier 2.
+                            {t.settingsConnections.overLimit}
                           </p>
                         )}
                       </div>
@@ -649,7 +650,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                       <SkeletonList rows={3} />
                     ) : conns.length === 0 && (
                       <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>
-                        No MCP servers loaded.
+                        {t.settingsConnections.noMcpServers}
                       </p>
                     )}
                     {conns.map(c => (
@@ -663,31 +664,31 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                         }} />}
                         name={c.label}
                         desc={c.connected
-                          ? `${c.tools} tools · ${c.always_on ? 'always on' : 'loaded on demand'}`
-                          : (c.needs ? `needs ${c.needs}` : 'offline')}
+                          ? (c.always_on ? t.settingsConnections.toolsAlwaysOn(c.tools) : t.settingsConnections.toolsOnDemand(c.tools))
+                          : (c.needs ? t.settingsConnections.needs(c.needs) : t.settingsConnections.offline)}
                       >
                         <Switch
                           on={c.active && c.connected}
                           disabled={!c.connected}
                           onChange={v => toggleConn(c.server, v)}
                           title={c.connected
-                            ? (c.active ? 'Active — click to disable' : 'Disabled — click to enable')
-                            : 'Not connected'}
+                            ? (c.active ? t.settingsConnections.activeClickDisable : t.settingsConnections.disabledClickEnable)
+                            : t.settingsConnections.notConnected}
                         />
                       </ServiceRow>
                     ))}
                   </div>
 
                   <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', lineHeight: 1.55, margin: '14px 0 0' }}>
-                    A server shown as “needs …” wants its API key in the backend{' '}
-                    <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--hb-cyan)' }}>.env</code>, then a restart.
+                    {t.settingsConnections.needsKeyFooter}{' '}
+                    <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--hb-cyan)' }}>.env</code>{t.settingsConnections.needsKeyFooterPost}
                   </p>
                 </div>
 
-                <SettingsSection title="Custom servers" />
+                <SettingsSection title={t.settingsConnections.customServers} />
                 <McpServersPanel config={config} />
 
-                <SettingsSection title="Web portals" />
+                <SettingsSection title={t.settingsConnections.webPortals} />
                 <PortalsPanel config={config} />
               </div>
             )}
@@ -699,24 +700,24 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
             {/* Automations tab — SPEDA's proactive n8n watchers */}
             {tab === 'automations' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
-                <SettingsSection title="Pipeline" first />
+                <SettingsSection title={t.settingsAutomations.pipeline} first />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
                   {!autosLoaded ? (
                     <SkeletonList rows={2} />
                   ) : [
                     {
-                      label: 'n8n engine',
+                      label: t.settingsAutomations.n8nEngine,
                       ok: !!autoStatus?.n8n_online,
                       detail: !autoStatus?.n8n_configured
-                        ? 'needs N8N_API_KEY in the backend .env (n8n → Settings → n8n API)'
-                        : autoStatus?.n8n_online ? autoStatus.n8n_url : 'unreachable — is the n8n container running?',
+                        ? t.settingsAutomations.n8nNeedsKey
+                        : autoStatus?.n8n_online ? autoStatus.n8n_url : t.settingsAutomations.n8nUnreachable,
                     },
                     {
-                      label: 'Telegram delivery',
+                      label: t.settingsAutomations.telegramDelivery,
                       ok: !!autoStatus?.telegram_connected,
                       detail: !autoStatus?.telegram_configured
-                        ? 'needs TELEGRAM_BOT_TOKEN in the backend .env (create a bot with @BotFather)'
-                        : autoStatus?.telegram_connected ? 'connected — SPEDA can reach you' : 'bot ready — connect your chat below',
+                        ? t.settingsAutomations.telegramNeedsToken
+                        : autoStatus?.telegram_connected ? t.settingsAutomations.telegramConnected : t.settingsAutomations.telegramReady,
                     },
                   ].map(row => (
                     <ServiceRow
@@ -730,15 +731,15 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                       name={row.label}
                       desc={row.detail}
                     >
-                      {row.ok ? <LiveDot label="Online" /> : (
-                        <span style={{ fontSize: '0.845rem', color: 'var(--hb-amber-bright)' }}>Not ready</span>
+                      {row.ok ? <LiveDot label={t.settingsAutomations.online} /> : (
+                        <span style={{ fontSize: '0.845rem', color: 'var(--hb-amber-bright)' }}>{t.settingsAutomations.notReady}</span>
                       )}
                     </ServiceRow>
                   ))}
 
                   {autoStatus?.telegram_configured && !autoStatus?.telegram_connected && (
                     <div>
-                      <PillBtn onClick={handleTelegramConnect} tone="accent">Connect Telegram</PillBtn>
+                      <PillBtn onClick={handleTelegramConnect} tone="accent">{t.settingsAutomations.connectTelegram}</PillBtn>
                       {tgMsg && (
                         <p style={{ marginTop: 8, fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>
                           {tgMsg}
@@ -748,13 +749,13 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                   )}
                 </div>
 
-                <SettingsSection title="Watchers" />
+                <SettingsSection title={t.settingsAutomations.watchers} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
                   {!autosLoaded ? (
                     <SkeletonList rows={3} mark={false} />
                   ) : autos.length === 0 && (
                     <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>
-                      Nothing is being watched yet.
+                      {t.settingsAutomations.nothingWatched}
                     </p>
                   )}
                   {autos.map(a => (
@@ -787,18 +788,18 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
                           {a.summary}
-                          {a.last_fired_at && ` · last fired ${new Date(a.last_fired_at).toLocaleString()}`}
-                          {a.expires_at && ` · until ${new Date(a.expires_at).toLocaleDateString()}`}
+                          {a.last_fired_at && t.settingsAutomations.lastFired(new Date(a.last_fired_at).toLocaleString())}
+                          {a.expires_at && t.settingsAutomations.until(new Date(a.expires_at).toLocaleDateString())}
                         </div>
                       </div>
                       <Switch
                         on={a.active}
                         onChange={v => handleToggleAuto(a.id, v)}
-                        title={a.active ? 'Active — click to pause' : 'Paused — click to resume'}
+                        title={a.active ? t.settingsAutomations.activeClickPause : t.settingsAutomations.pausedClickResume}
                       />
                       <button
                         onClick={() => handleDeleteAuto(a.id)}
-                        title="Delete watcher (also removes the n8n workflow)"
+                        title={t.settingsAutomations.deleteWatcherTitle}
                         className="hb-tile"
                         style={{
                           width: 30, height: 30, flexShrink: 0,
@@ -820,10 +821,10 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                 </div>
 
                 <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', lineHeight: 1.55, margin: 0 }}>
-                  SPEDA creates these itself — just ask:{' '}
+                  {t.settingsAutomations.footerPre}{' '}
                   <em style={{ color: 'var(--hb-amber-bright)', fontStyle: 'normal' }}>
-                    “track this page for a month and tell me when my results are up”
-                  </em>. When a watcher fires, SPEDA composes the message and pings you on Telegram.
+                    “{t.settingsAutomations.footerExample}”
+                  </em>. {t.settingsAutomations.footerPost}
                 </p>
               </div>
             )}
@@ -831,34 +832,50 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
             {/* Interface tab */}
             {tab === 'interface' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
-                <SettingsField label="Theme">
+                <SettingsRow
+                  title={t.settingsInterface.language}
+                  desc={t.settingsInterface.languageDesc}
+                >
+                  <div style={{ maxWidth: 200 }}>
+                    <GlassSelect
+                      value={settings.locale}
+                      options={LOCALES}
+                      onChange={v => update({ locale: v as 'tr' | 'en' })}
+                      tint="var(--hb-cyan-bright)"
+                      large
+                    />
+                  </div>
+                </SettingsRow>
+
+                <SettingsField label={t.settingsInterface.theme}>
                   <div style={{ display: 'flex', gap: 10 }}>
-                    {['Dark', 'Light'].map(t => (
+                    {(['dark', 'light'] as const).map(themeId => (
                       <button
-                        key={t}
+                        key={themeId}
                         className="glass-round"
                         style={{
                           height: 38, padding: '0 20px',
                           fontFamily: 'var(--font-read)', fontSize: '0.9375rem',
-                          border: t === 'Dark'
+                          border: themeId === 'dark'
                             ? '1px solid rgba(var(--hb-accent-rgb),0.32)'
                             : '1px solid rgba(255,255,255,0.08)',
-                          background: t === 'Dark'
+                          background: themeId === 'dark'
                             ? 'linear-gradient(160deg, rgba(var(--hb-accent-rgb),0.18), rgba(var(--hb-accent-rgb),0.05))'
                             : 'var(--glass-sheen)',
-                          color: t === 'Dark' ? 'var(--hb-text)' : 'var(--hb-text-faint)',
-                          cursor: t === 'Dark' ? 'default' : 'not-allowed',
+                          color: themeId === 'dark' ? 'var(--hb-text)' : 'var(--hb-text-faint)',
+                          cursor: themeId === 'dark' ? 'default' : 'not-allowed',
                         }}
                       >
-                        {t}{t === 'Light' ? ' — soon' : ''}
+                        {themeId === 'dark' ? t.settingsInterface.dark : t.settingsInterface.light}
+                        {themeId === 'light' ? t.settingsInterface.comingSoon : ''}
                       </button>
                     ))}
                   </div>
                 </SettingsField>
 
                 <SettingsRow
-                  title="Telemetry column"
-                  desc="The right-hand column: uplink, session budget, routing and toolsets."
+                  title={t.settingsInterface.telemetryColumn}
+                  desc={t.settingsInterface.telemetryColumnDesc}
                 >
                   <Switch
                     on={settings.telemetryOpen}
@@ -867,8 +884,8 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                 </SettingsRow>
 
                 <SettingsRow
-                  title="Sidebar"
-                  desc="Drag the sidebar edge to resize it."
+                  title={t.settingsInterface.sidebar}
+                  desc={t.settingsInterface.sidebarDesc}
                 >
                   <Switch
                     on={settings.sidebarOpen}
@@ -882,11 +899,9 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
             {tab === 'data' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
                 <div>
-                  <SettingsSection title="Import Claude conversations" first />
+                  <SettingsSection title={t.settingsData.importTitle} first />
                   <p style={{ fontSize: '0.845rem', color: 'var(--hb-text-faint)', margin: '8px 0 14px', lineHeight: 1.55 }}>
-                    Upload the <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--hb-cyan)' }}>.zip</code> from
-                    your Claude data export. Each conversation becomes a session; messages keep their
-                    original dates. Runs in the background — sessions appear as they process.
+                    {t.settingsData.importDescPre} <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--hb-cyan)' }}>.zip</code> {t.settingsData.importDescPost}
                   </p>
 
                   {/* Hidden native input + custom trigger */}
@@ -904,14 +919,14 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                   />
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <PillBtn onClick={() => fileRef.current?.click()}>Choose .zip…</PillBtn>
+                    <PillBtn onClick={() => fileRef.current?.click()}>{t.settingsData.chooseZip}</PillBtn>
 
                     <span style={{
                       fontSize: '0.845rem',
                       color: importFile ? 'var(--hb-text)' : 'var(--hb-text-faint)',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300,
                     }}>
-                      {importFile ? importFile.name : 'No file selected'}
+                      {importFile ? importFile.name : t.settingsData.noFileSelected}
                     </span>
 
                     <div style={{ flex: 1 }} />
@@ -930,7 +945,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                         opacity: !importFile || importStatus === 'uploading' ? 0.45 : 1,
                       }}
                     >
-                      {importStatus === 'uploading' ? 'Importing…' : 'Import'}
+                      {importStatus === 'uploading' ? t.settingsData.importing : t.settingsData.import}
                     </button>
                   </div>
 
@@ -949,12 +964,9 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
 
                 {/* Index past conversations */}
                 <div>
-                  <SettingsSection title="Rebuild memory from history" />
+                  <SettingsSection title={t.settingsData.rebuildTitle} />
                   <p style={{ fontSize: '0.845rem', color: 'var(--hb-text-faint)', margin: '8px 0 14px', lineHeight: 1.55 }}>
-                    Mines durable facts about you from your entire conversation history and
-                    rebuilds the memory record from them. Safe to run more than once: anything
-                    you wrote yourself is preserved and only re-derived facts are replaced.
-                    Runs in the background; a few minutes.
+                    {t.settingsData.rebuildDesc}
                   </p>
 
                   {/* The record's state, shown without pressing anything — an empty
@@ -1033,7 +1045,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                       opacity: indexStatus === 'running' ? 0.45 : 1,
                     }}
                   >
-                    {indexStatus === 'running' ? 'Rebuilding…' : 'Rebuild memory'}
+                    {indexStatus === 'running' ? t.settingsData.rebuilding : t.settingsData.rebuildMemory}
                   </button>
                   {indexMsg && (
                     <p style={{
@@ -1084,15 +1096,15 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                     tab, which edits settings ON the backend and needs this
                     connection to already work to load anything. */}
                 <SettingsRow
-                  title="Server connection"
+                  title={t.settingsAccount.serverConnection}
                   desc={`${config.apiBase} · key ${maskApiKey(config.apiKey)}`}
                 >
                   <PillBtn onClick={() => window.dispatchEvent(new CustomEvent('speda:connection-setup'))}>
-                    Edit
+                    {t.settingsAccount.edit}
                   </PillBtn>
                 </SettingsRow>
 
-                <SettingsField label="Your name" hint="Used in the greeting on the home screen.">
+                <SettingsField label={t.settingsAccount.yourName} hint={t.settingsAccount.yourNameHint}>
                   <input
                     className="hb-tile"
                     type="text"
