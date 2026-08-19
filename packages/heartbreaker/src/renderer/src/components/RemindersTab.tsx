@@ -18,6 +18,7 @@ import {
 } from '../lib/api'
 import type { ReminderDefinition, ReminderCycleInfo } from '../lib/api'
 import type { AppConfig } from '../lib/types'
+import { SkeletonList } from './Skeleton'
 
 const AGENTS = ['speda', 'atomix', 'ultron', 'sentinel', 'nightcrawler', 'centurion', 'orion']
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -62,13 +63,19 @@ function setToDays(set: Set<number>): string {
 export default function RemindersTab({ config }: { config: AppConfig }): React.ReactElement {
   const [defs, setDefs] = useState<ReminderDefinition[]>([])
   const [history, setHistory] = useState<ReminderCycleInfo[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [draft, setDraft] = useState<ReminderDefinition | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = async (): Promise<void> => {
-    setDefs(await getReminders(config))
-    setHistory(await getReminderHistory(config, 20))
+    try {
+      setDefs(await getReminders(config))
+      setHistory(await getReminderHistory(config, 20))
+    } finally {
+      // Always clear — an unreachable backend must not skeleton this forever.
+      setLoaded(true)
+    }
   }
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -104,7 +111,9 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
       </p>
 
       {/* ── The list ──────────────────────────────────────────────────────── */}
-      {defs.length === 0 && !draft && (
+      {!loaded ? (
+        <SkeletonList rows={3} mark={false} />
+      ) : defs.length === 0 && !draft && (
         <div style={{ fontSize: '0.8rem', color: 'var(--hb-text-faint)' }}>
           No reminders configured. Agent-composed ones (like Atomix’s evening checklist)
           still run — they just aren’t defined here.

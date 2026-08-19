@@ -5,6 +5,7 @@ import {
 import type { LockdownState } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import { SettingsSection, SettingsRow, PillBtn } from './settingsUI'
+import { SkeletonText } from './Skeleton'
 
 /**
  * PROTOCOLS — the standing operational modes, in one place.
@@ -26,12 +27,19 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
 }) {
   const [party, setParty] = useState(false)
   const [lock, setLock] = useState<LockdownState | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    setParty(await getHouseParty(config))
-    setLock(await getLockdown(config))
+    try {
+      const [p, l] = await Promise.all([getHouseParty(config), getLockdown(config)])
+      setParty(p)
+      setLock(l)
+    } finally {
+      // Always clear — an unreachable backend must not skeleton this forever.
+      setLoaded(true)
+    }
   }, [config])
 
   useEffect(() => {
@@ -70,38 +78,44 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
         traffic stay up, so SPEDA keeps working and containment can always be lifted from here.
       </div>
 
-      <SettingsRow
-        title={engaged ? 'Containment ACTIVE' : 'Containment inactive'}
-        desc={
-          !lock?.enabled
-            ? 'Disabled on this deployment — set LOCKDOWN_PROTOCOL_ENABLED to use it.'
-            : engaged
-              ? 'Host SSH (22) and the app raw port (8000) are sealed.'
-              : 'The server is accepting inbound connections normally.'
-        }
-      >
-        {/* Offered whenever the flag says contained OR a rule is actually in
-            place. Gating this on the flag alone hid the escape hatch in the one
-            state that most needs it: engage() applies the firewall rules BEFORE
-            it persists the flag (deliberately — see lockdown.py), so a request
-            that dies in between leaves the ports sealed with the flag still
-            reading off. The panel would then correctly report "firewall does not
-            match the flag" while showing only an Engage button. disengage() is
-            ungated and removes rules unconditionally, so this is always safe. */}
-        {engaged || sealed ? (
-          <PillBtn tone="danger" onClick={standDown} title="Remove the containment rules">
-            {busy ? 'Standing down…' : 'Stand down'}
-          </PillBtn>
-        ) : (
-          <PillBtn
-            tone="danger"
-            onClick={lock?.enabled ? onEngageLockdown : undefined}
-            title={lock?.enabled ? 'Requires the authorization passphrase' : 'Not enabled on this deployment'}
-          >
-            Engage lockdown
-          </PillBtn>
-        )}
-      </SettingsRow>
+      {!loaded ? (
+        <div className="hb-tile" style={{ padding: '16px 18px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <SkeletonText lines={2} lastWidth="60%" />
+        </div>
+      ) : (
+        <SettingsRow
+          title={engaged ? 'Containment ACTIVE' : 'Containment inactive'}
+          desc={
+            !lock?.enabled
+              ? 'Disabled on this deployment — set LOCKDOWN_PROTOCOL_ENABLED to use it.'
+              : engaged
+                ? 'Host SSH (22) and the app raw port (8000) are sealed.'
+                : 'The server is accepting inbound connections normally.'
+          }
+        >
+          {/* Offered whenever the flag says contained OR a rule is actually in
+              place. Gating this on the flag alone hid the escape hatch in the one
+              state that most needs it: engage() applies the firewall rules BEFORE
+              it persists the flag (deliberately — see lockdown.py), so a request
+              that dies in between leaves the ports sealed with the flag still
+              reading off. The panel would then correctly report "firewall does not
+              match the flag" while showing only an Engage button. disengage() is
+              ungated and removes rules unconditionally, so this is always safe. */}
+          {engaged || sealed ? (
+            <PillBtn tone="danger" onClick={standDown} title="Remove the containment rules">
+              {busy ? 'Standing down…' : 'Stand down'}
+            </PillBtn>
+          ) : (
+            <PillBtn
+              tone="danger"
+              onClick={lock?.enabled ? onEngageLockdown : undefined}
+              title={lock?.enabled ? 'Requires the authorization passphrase' : 'Not enabled on this deployment'}
+            >
+              Engage lockdown
+            </PillBtn>
+          )}
+        </SettingsRow>
+      )}
 
       {/* What the firewall actually shows, not just what the flag claims. */}
       {ruleList.length > 0 && (
@@ -149,24 +163,30 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
         SPEDA directly ("House Party Protocol"), which opens its authorization window.
       </div>
 
-      <SettingsRow
-        title={party ? 'Protocol ENGAGED' : 'Protocol offline'}
-        desc={party
-          ? 'The full roster is mobilized; the deck is in war-room mode.'
-          : 'Say "House Party Protocol" to SPEDA to request authorization.'}
-      >
-        {party ? (
-          <PillBtn
-            tone="danger"
-            onClick={async () => { setParty(await setHouseParty(config, false)) }}
-            title="End the House Party Protocol"
-          >
-            Stand down
-          </PillBtn>
-        ) : (
-          <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-faint)' }}>Owner voice only</span>
-        )}
-      </SettingsRow>
+      {!loaded ? (
+        <div className="hb-tile" style={{ padding: '16px 18px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <SkeletonText lines={2} lastWidth="55%" />
+        </div>
+      ) : (
+        <SettingsRow
+          title={party ? 'Protocol ENGAGED' : 'Protocol offline'}
+          desc={party
+            ? 'The full roster is mobilized; the deck is in war-room mode.'
+            : 'Say "House Party Protocol" to SPEDA to request authorization.'}
+        >
+          {party ? (
+            <PillBtn
+              tone="danger"
+              onClick={async () => { setParty(await setHouseParty(config, false)) }}
+              title="End the House Party Protocol"
+            >
+              Stand down
+            </PillBtn>
+          ) : (
+            <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-faint)' }}>Owner voice only</span>
+          )}
+        </SettingsRow>
+      )}
     </div>
   )
 }

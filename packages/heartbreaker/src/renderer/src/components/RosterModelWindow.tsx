@@ -5,6 +5,7 @@ import type { AppConfig, ModelInfo } from '../lib/types'
 import { PARTY_ROSTER } from '../lib/agents'
 import { Avatar } from './CommBubble'
 import AgentModelPicker from './AgentModelPicker'
+import { Skeleton } from './Skeleton'
 
 const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
@@ -23,10 +24,14 @@ export default function RosterModelWindow({ config, onClose }: {
 }) {
   const [infos, setInfos] = useState<AgentModelInfo[]>([])
   const [models, setModels] = useState<ModelInfo[]>([])
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    fetchAgentModels(config).then(setInfos).catch(() => {})
-    fetchModels(config).then(setModels).catch(() => {})
+    setLoaded(false)
+    Promise.all([
+      fetchAgentModels(config).then(setInfos).catch(() => {}),
+      fetchModels(config).then(setModels).catch(() => {}),
+    ]).finally(() => setLoaded(true))
   }, [config])
 
   const pin = async (agentId: string, model: string | null) => {
@@ -141,7 +146,7 @@ export default function RosterModelWindow({ config, onClose }: {
                   fontFamily: MONO, fontSize: '0.5rem', letterSpacing: '0.08em',
                   color: 'var(--hb-icon-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
-                  {info ? info.domain : 'OFFLINE'}
+                  {info ? info.domain : loaded ? 'OFFLINE' : <Skeleton width={70} height={8} />}
                 </span>
               </span>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
@@ -149,13 +154,17 @@ export default function RosterModelWindow({ config, onClose }: {
                   <span style={{ fontFamily: MONO, fontSize: '0.42rem', letterSpacing: '0.08em', color: 'var(--hb-icon-dim)', display: 'block', marginBottom: 2 }}>DESKTOP</span>
                   {info
                     ? <AgentModelPicker info={info} models={models} onPin={m => pin(id, m)} large />
-                    : <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)' }}>—</span>}
+                    : loaded
+                      ? <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)' }}>—</span>
+                      : <Skeleton height={26} />}
                 </div>
                 <div style={{ width: 156 }}>
                   <span style={{ fontFamily: MONO, fontSize: '0.42rem', letterSpacing: '0.08em', color: 'var(--hb-icon-dim)', display: 'block', marginBottom: 2 }}>TELEGRAM</span>
                   {info
                     ? <AgentModelPicker info={{ ...info, override: info.telegram_override }} models={models} onPin={m => pinTg(id, m)} large />
-                    : <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)' }}>—</span>}
+                    : loaded
+                      ? <span style={{ fontFamily: MONO, fontSize: '0.55rem', color: 'var(--hb-icon-dim)' }}>—</span>
+                      : <Skeleton height={26} />}
                 </div>
               </div>
             </div>

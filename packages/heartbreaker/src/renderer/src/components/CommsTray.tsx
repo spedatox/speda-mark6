@@ -4,6 +4,7 @@ import type { AgentCommEntry } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import { useIsMobile } from '../lib/useIsMobile'
 import { CommFeed, AvatarStack } from './CommBubble'
+import { SkeletonList } from './Skeleton'
 
 /**
  * AGENT_COMMS — the inter-agent traffic tray.
@@ -32,7 +33,10 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
   useEffect(() => {
     const load = () => {
       // oldest first — a chat scrollback, newest at the bottom
-      fetchAgentComms(config, 120).then(rows => { setEntries(rows.slice().reverse()); setLoaded(true) })
+      fetchAgentComms(config, 120)
+        .then(rows => setEntries(rows.slice().reverse()))
+        // Always clear — an unreachable backend must not skeleton this forever.
+        .finally(() => setLoaded(true))
     }
     load()
     getHouseParty(config).then(setParty)
@@ -141,14 +145,14 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
           transition: 'height 0.45s cubic-bezier(0.22, 0.9, 0.3, 1)',
         }}
       >
-        {entries.length === 0 ? (
+        {!loaded ? (
+          <SkeletonList rows={3} markSize={26} />
+        ) : entries.length === 0 ? (
           <p style={{
             padding: '10px 2px', margin: 0,
             fontSize: '0.875rem', color: 'var(--hb-text-faint)',
           }}>
-            {loaded
-              ? 'No traffic yet — dispatches between agents appear here.'
-              : 'Linking…'}
+            No traffic yet — dispatches between agents appear here.
           </p>
         ) : (
           <CommFeed entries={entries} compact={!wide} />

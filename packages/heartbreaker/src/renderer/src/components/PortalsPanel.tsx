@@ -28,6 +28,7 @@ import {
 } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import { PillBtn, ServiceRow, Switch, fieldStyle } from './settingsUI'
+import { Skeleton, SkeletonList } from './Skeleton'
 
 const EMPTY = {
   name: '', label: '', login_url: '', home_url: '', username: '', password: '',
@@ -57,6 +58,7 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
   const [portals, setPortals] = useState<Portal[]>([])
   const [browser, setBrowser] = useState<BrowserStatus>({ status: 'off' })
   const [agents, setAgents] = useState<string[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [draft, setDraft] = useState({ ...EMPTY })
   const [allowed, setAllowed] = useState<string[]>([])
   const [open, setOpen] = useState(false)
@@ -66,10 +68,15 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
   const load = async () => {
-    const r = await getPortals(config)
-    setPortals(r.portals)
-    setBrowser(r.browser)
-    setAgents(r.agents)
+    try {
+      const r = await getPortals(config)
+      setPortals(r.portals)
+      setBrowser(r.browser)
+      setAgents(r.agents)
+    } finally {
+      // Always clear — an unreachable backend must not skeleton this forever.
+      setLoaded(true)
+    }
   }
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -173,19 +180,26 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
         stored on the backend and handed straight to the browser; it never passes through a
         conversation, and no agent can read it back.
       </p>
-      <p style={{
-        fontSize: '0.8125rem', lineHeight: 1.55, margin: '0 0 14px',
-        color: browser.status === 'ok' ? 'var(--hb-text-faint)' : '#e5b07c',
-      }}>
-        {browser.status === 'ok'
-          ? `Browser online — ${browser.sessions ?? 0} live session${browser.sessions === 1 ? '' : 's'}.`
-          : browser.status === 'off'
-            ? 'The browser container is not configured (BROWSER_URL unset), so portals cannot be opened.'
-            : `Browser unreachable: ${browser.reason ?? 'no answer'}. Is the browser container running?`}
-      </p>
+      {!loaded ? (
+        <div style={{ margin: '0 0 14px' }}>
+          <Skeleton height={13} width="65%" />
+        </div>
+      ) : (
+        <p style={{
+          fontSize: '0.8125rem', lineHeight: 1.55, margin: '0 0 14px',
+          color: browser.status === 'ok' ? 'var(--hb-text-faint)' : '#e5b07c',
+        }}>
+          {browser.status === 'ok'
+            ? `Browser online — ${browser.sessions ?? 0} live session${browser.sessions === 1 ? '' : 's'}.`
+            : browser.status === 'off'
+              ? 'The browser container is not configured (BROWSER_URL unset), so portals cannot be opened.'
+              : `Browser unreachable: ${browser.reason ?? 'no answer'}. Is the browser container running?`}
+        </p>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {portals.map(p => (
+        {!loaded && <SkeletonList rows={2} />}
+        {loaded && portals.map(p => (
           <ServiceRow
             key={p.name}
             tint={p.session ? '#5cc98f' : undefined}
@@ -212,7 +226,7 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
             </PillBtn>
           </ServiceRow>
         ))}
-        {portals.length === 0 && !open && (
+        {loaded && portals.length === 0 && !open && (
           <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)', margin: 0 }}>
             No portals yet.
           </p>

@@ -5,6 +5,7 @@ import { useOnlineAgents } from '../lib/useOnlineAgents'
 import { getConnections, fetchAgentModels, fetchLegionModels } from '../lib/api'
 import type { ConnectionInfo, AgentModelInfo, LegionModelInfo } from '../lib/api'
 import type { AppConfig } from '../lib/types'
+import { Skeleton } from './Skeleton'
 
 /**
  * THE TELEMETRY COLUMN — the deck's right-hand standing panel.
@@ -67,7 +68,19 @@ function Row({ k, v, color }: { k: string; v: React.ReactNode; color?: string })
 /** RTT trace. Bars are the last 15 samples; the newest is lit. */
 function Trace({ samples }: { samples: number[] }) {
   if (!samples.length) {
-    return <div style={{ height: 34, marginTop: 10, fontSize: 12.5, color: 'var(--hb-text-faint)' }}>no samples yet</div>
+    return (
+      <div className="hb-skeleton-group" style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 34, marginTop: 10 }}>
+        {Array.from({ length: 15 }).map((_, i) => (
+          <Skeleton
+            key={i}
+            width="100%"
+            height={`${18 + ((i * 7) % 5) * 14}%`}
+            radius={2}
+            style={{ flex: 1, ['--hb-skeleton-delay' as string]: `${i * 0.04}s` }}
+          />
+        ))}
+      </div>
+    )
   }
   const shown = samples.slice(-15)
   const peak = Math.max(...shown, 1)
@@ -107,12 +120,18 @@ export default function TelemetryColumn({ config, agentId, open }: Props) {
   const [servers, setServers] = useState<ConnectionInfo[]>([])
   const [agentInfos, setAgentInfos] = useState<AgentModelInfo[]>([])
   const [legionInfos, setLegionInfos] = useState<LegionModelInfo[]>([])
+  // False while Routing/Toolsets are still in flight — without it, an agent
+  // switch briefly reads as "nothing armed" / "inherits" instead of loading.
+  const [telemetryLoaded, setTelemetryLoaded] = useState(false)
 
   useEffect(() => {
     if (!open) return
-    getConnections(config).then(r => setServers(r.servers)).catch(() => {})
-    fetchAgentModels(config).then(setAgentInfos).catch(() => {})
-    fetchLegionModels(config).then(setLegionInfos).catch(() => {})
+    setTelemetryLoaded(false)
+    Promise.all([
+      getConnections(config).then(r => setServers(r.servers)).catch(() => {}),
+      fetchAgentModels(config).then(setAgentInfos).catch(() => {}),
+      fetchLegionModels(config).then(setLegionInfos).catch(() => {}),
+    ]).finally(() => setTelemetryLoaded(true))
   }, [config, open])
 
   useEffect(() => {
@@ -192,23 +211,37 @@ export default function TelemetryColumn({ config, agentId, open }: Props) {
       {/* ── Routing ──────────────────────────────────────────────────────── */}
       <div>
         <div style={LABEL}>Routing</div>
-        <div style={{ borderBottom: '1px solid var(--hb-line)' }}>
-          <Row k="Chat" v={shortModel(chatModel)} color="var(--hb-cyan-bright)" />
-        </div>
-        <div style={{ borderBottom: '1px solid var(--hb-line)' }}>
-          <Row k="Background" v={shortModel(bgModel)} />
-        </div>
-        <Row k="Legion" v={legionModel ? shortModel(legionModel) : 'inherits'} />
+        {!telemetryLoaded ? (
+          <div className="hb-skeleton-group" style={{ display: 'flex', flexDirection: 'column', gap: 11, padding: '7px 0 5px' }}>
+            <Skeleton height={12} width="88%" style={{ ['--hb-skeleton-delay' as string]: '0s' }} />
+            <Skeleton height={12} width="72%" style={{ ['--hb-skeleton-delay' as string]: '0.05s' }} />
+            <Skeleton height={12} width="60%" style={{ ['--hb-skeleton-delay' as string]: '0.1s' }} />
+          </div>
+        ) : (
+          <>
+            <div style={{ borderBottom: '1px solid var(--hb-line)' }}>
+              <Row k="Chat" v={shortModel(chatModel)} color="var(--hb-cyan-bright)" />
+            </div>
+            <div style={{ borderBottom: '1px solid var(--hb-line)' }}>
+              <Row k="Background" v={shortModel(bgModel)} />
+            </div>
+            <Row k="Legion" v={legionModel ? shortModel(legionModel) : 'inherits'} />
+          </>
+        )}
       </div>
 
       {/* ── Toolsets ─────────────────────────────────────────────────────── */}
       <div>
         <div style={LABEL}>Toolsets</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {armed.length === 0 && (
+        <div className="hb-skeleton-group" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {!telemetryLoaded ? (
+            [86, 62, 100].map((w, i) => (
+              <Skeleton key={i} width={w} height={28} radius={14} style={{ ['--hb-skeleton-delay' as string]: `${i * 0.05}s` }} />
+            ))
+          ) : armed.length === 0 ? (
             <span style={{ fontSize: 13, color: 'var(--hb-text-faint)' }}>none armed</span>
-          )}
-          {armed.map(s => (
+          ) : null}
+          {telemetryLoaded && armed.map(s => (
             <span
               key={s.server}
               className="glass-round"

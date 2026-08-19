@@ -7,6 +7,7 @@ import { useSettings } from '../store/settings'
 import { deleteSession, renameSession, fetchActiveRuns } from '../lib/api'
 import { hasMark } from '../lib/agentMarks'
 import AgentMark from './AgentMark'
+import { SkeletonList } from './Skeleton'
 
 const ProfileContext = createContext<AppProfile | null>(null)
 export const useProfile = () => useContext(ProfileContext)!
@@ -796,7 +797,9 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
 
         {/* Session list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem 16px 0.5rem' }}>
-          {groups.length === 0 ? (
+          {!state.sessionsLoaded ? (
+            <SkeletonList rows={5} mark={false} markSize={28} />
+          ) : groups.length === 0 ? (
             <div style={{
               padding: '2rem 0.85rem 1rem',
               textAlign: 'center',

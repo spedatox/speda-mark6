@@ -9,6 +9,10 @@ export interface TokenUsage {
 export interface ChatState {
   config: AppConfig | null
   sessions: Session[]
+  /** False until the first SET_SESSIONS lands (or again mid agent-switch, via
+   *  SESSIONS_LOADING) — distinguishes "still loading" from "genuinely zero
+   *  sessions" so the sidebar can skeleton instead of claiming "No sessions yet". */
+  sessionsLoaded: boolean
   activeSessionId: number | null
   messages: ChatMessage[]
   isStreaming: boolean
@@ -24,6 +28,7 @@ export interface ChatState {
 export const initialState: ChatState = {
   config: null,
   sessions: [],
+  sessionsLoaded: false,
   activeSessionId: null,
   messages: [],
   isStreaming: false,
@@ -33,6 +38,9 @@ export const initialState: ChatState = {
 export type ChatAction =
   | { type: 'SET_CONFIG'; payload: AppConfig }
   | { type: 'SET_SESSIONS'; payload: Session[] }
+  /** Fired right as a re-fetch starts (agent switch) so the sidebar drops the
+   *  PREVIOUS agent's stale list and skeletons instead of showing it mislabeled. */
+  | { type: 'SESSIONS_LOADING' }
   | { type: 'SELECT_SESSION'; payload: { sessionId: number; messages: ChatMessage[] } }
   | { type: 'NEW_CHAT' }
   | { type: 'ADD_TOKEN_USAGE'; payload: TokenUsage }
@@ -59,7 +67,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, config: action.payload }
 
     case 'SET_SESSIONS':
-      return { ...state, sessions: action.payload }
+      return { ...state, sessions: action.payload, sessionsLoaded: true }
+
+    case 'SESSIONS_LOADING':
+      return { ...state, sessions: [], sessionsLoaded: false }
 
     case 'SELECT_SESSION': {
       // Preserve any still-streaming bubble that belongs to the selected

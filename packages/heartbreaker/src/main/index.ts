@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, dialog, net, protocol } from 'electron'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join, normalize, sep } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -93,8 +93,36 @@ function createWindow(): void {
   }
 }
 
+/**
+ * Where the owner's server URL + key land when they fill in the connection
+ * popup (see `set-config` below). One JSON file in userData, not electron-store —
+ * this is the only piece of persisted app state that needs to exist, so a
+ * dependency would outweigh the twelve lines it replaces.
+ */
+let connectionFile = ''
+
+function readPersistedConnection(): { apiBase?: string; apiKey?: string } {
+  try {
+    const data = JSON.parse(readFileSync(connectionFile, 'utf-8'))
+    return {
+      apiBase: typeof data.apiBase === 'string' ? data.apiBase : undefined,
+      apiKey: typeof data.apiKey === 'string' ? data.apiKey : undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
+/** First non-blank string, left to right — env beats a build-time bake beats
+ *  whatever the owner last typed into the connection popup. */
+function firstNonEmpty(...vals: (string | undefined)[]): string | undefined {
+  for (const v of vals) if (v && v.trim()) return v.trim()
+  return undefined
+}
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.speda.heartbreaker')
+  connectionFile = join(app.getPath('userData'), 'connection.json')
 
   registerRendererProtocol()
 
@@ -137,19 +165,43 @@ app.whenReady().then(() => {
   // Defaults must match the backend (speda_api_key="dev-key") and the web
   // fallback in App.tsx, otherwise the auth middleware rejects every request 401.
   // Resolution order: runtime env > value baked at build time (MAIN_VITE_*) >
-  // localhost default. build-app.ps1 bakes the server URL + key into the installer.
-  ipcMain.handle('get-config', () => ({
-    apiBase:
-      process.env.SPEDA_API_BASE ??
-      // @ts-ignore - electron-vite injects MAIN_VITE_* into import.meta.env
-      (import.meta.env.MAIN_VITE_SPEDA_API_BASE as string | undefined) ??
-      'http://localhost:8000',
-    apiKey:
-      process.env.SPEDA_API_KEY ??
-      // @ts-ignore
-      (import.meta.env.MAIN_VITE_SPEDA_API_KEY as string | undefined) ??
-      'dev-key'
-  }))
+  // the connection popup's saved file > localhost default. build-app.ps1 bakes
+  // the server URL + key into the installer for a shipped build; a build that
+  // skipped that step (or `npm run heartbreaker:dev` outside dev, in principle)
+  // falls through to the popup instead of silently pointing at a localhost the
+  // end user's machine will never have.
+  ipcMain.handle('get-config', () => {
+    const persisted = readPersistedConnection()
+    const envBase = process.env.SPEDA_API_BASE
+    // @ts-ignore - electron-vite injects MAIN_VITE_* into import.meta.env
+    const bakedBase = import.meta.env.MAIN_VITE_SPEDA_API_BASE as string | undefined
+    const envKey = process.env.SPEDA_API_KEY
+    // @ts-ignore
+    const bakedKey = import.meta.env.MAIN_VITE_SPEDA_API_KEY as string | undefined
+
+    const resolvedBase = firstNonEmpty(envBase, bakedBase, persisted.apiBase)
+    const resolvedKey = firstNonEmpty(envKey, bakedKey, persisted.apiKey)
+
+    return {
+      apiBase: resolvedBase ?? 'http://localhost:8000',
+      apiKey: resolvedKey ?? 'dev-key',
+      // False only when nothing beyond the bare local-dev default was found —
+      // the signal the renderer uses to raise the connection popup.
+      configured: Boolean(resolvedBase),
+      isDev: is.dev,
+    }
+  })
+
+  // Written by the connection popup (first run, or "Edit" in Settings → Account).
+  // Takes effect immediately — the renderer updates its own config state after
+  // this resolves, no restart needed — and survives every future launch.
+  ipcMain.handle('set-config', (_e, next: { apiBase?: string; apiKey?: string }) => {
+    const apiBase = (next?.apiBase ?? '').trim()
+    const apiKey = (next?.apiKey ?? '').trim()
+    if (!apiBase || !apiKey) throw new Error('A server URL and an API key are both required.')
+    writeFileSync(connectionFile, JSON.stringify({ apiBase, apiKey }, null, 2), 'utf-8')
+    return { apiBase, apiKey, configured: true }
+  })
 
   createWindow()
 

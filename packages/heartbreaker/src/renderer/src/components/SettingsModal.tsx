@@ -12,6 +12,7 @@ import ConfigTab from './ConfigTab'
 import McpServersPanel from './McpServersPanel'
 import PortalsPanel from './PortalsPanel'
 import GlassSelect from './GlassSelect'
+import { SkeletonList, SkeletonText } from './Skeleton'
 import {
   SettingsSection, SettingsField, SettingsRow, Switch, PillBtn, ServiceRow, LiveDot, fieldStyle,
 } from './settingsUI'
@@ -44,6 +45,12 @@ const IcoDatabase = () => <svg {...ico}><ellipse cx="12" cy="5" rx="9" ry="3" />
 const IcoUser = () => <svg {...ico}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
 const IcoShield = () => <svg {...ico}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" /></svg>
 
+/** Never show the whole key in a settings pane — just enough to recognize it. */
+function maskApiKey(key: string): string {
+  if (!key) return '—'
+  return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`
+}
+
 
 export default function SettingsModal({ config, onClose, onEngageLockdown }: Props) {
   const { settings, update } = useSettings()
@@ -63,14 +70,21 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
   const [indexStatus, setIndexStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [indexMsg, setIndexMsg] = useState('')
   const [memory, setMemory] = useState<MemoryStatus | null>(null)
+  const [memoryChecked, setMemoryChecked] = useState(false)
 
   // ── Connections ───────────────────────────────────────────────────────────
   const [conns, setConns] = useState<ConnectionInfo[]>([])
+  const [connsLoaded, setConnsLoaded] = useState(false)
   const [connBudget, setConnBudget] = useState({ used: 0, limit: 30000 })
   const loadConns = async () => {
-    const r = await getConnections(config)
-    setConns(r.servers)
-    setConnBudget({ used: r.active_tool_tokens, limit: r.itpm_limit })
+    try {
+      const r = await getConnections(config)
+      setConns(r.servers)
+      setConnBudget({ used: r.active_tool_tokens, limit: r.itpm_limit })
+    } finally {
+      // Always clear — an unreachable backend must not skeleton this forever.
+      setConnsLoaded(true)
+    }
   }
   useEffect(() => { if (tab === 'connections') loadConns() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
   const toggleConn = async (server: string, active: boolean) => {
@@ -81,10 +95,16 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
   // ── Automations ───────────────────────────────────────────────────────────
   const [autos, setAutos] = useState<AutomationInfo[]>([])
   const [autoStatus, setAutoStatus] = useState<AutomationsStatus | null>(null)
+  const [autosLoaded, setAutosLoaded] = useState(false)
   const [tgMsg, setTgMsg] = useState('')
   const loadAutos = async () => {
-    setAutos(await getAutomations(config))
-    setAutoStatus(await getAutomationsStatus(config))
+    try {
+      setAutos(await getAutomations(config))
+      setAutoStatus(await getAutomationsStatus(config))
+    } finally {
+      // Always clear — an unreachable backend must not skeleton this forever.
+      setAutosLoaded(true)
+    }
   }
   useEffect(() => { if (tab === 'automations') loadAutos() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
   const handleToggleAuto = async (id: number, active: boolean) => {
@@ -227,6 +247,10 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
       return running
     } catch {
       return false
+    } finally {
+      // Always clear — an unreachable backend must not skeleton this forever;
+      // `memory` stays null on failure and the tile just stays hidden.
+      setMemoryChecked(true)
     }
   }, [config])
 
@@ -621,7 +645,9 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                   })()}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {conns.length === 0 && (
+                    {!connsLoaded ? (
+                      <SkeletonList rows={3} />
+                    ) : conns.length === 0 && (
                       <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>
                         No MCP servers loaded.
                       </p>
@@ -675,7 +701,9 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
                 <SettingsSection title="Pipeline" first />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
-                  {[
+                  {!autosLoaded ? (
+                    <SkeletonList rows={2} />
+                  ) : [
                     {
                       label: 'n8n engine',
                       ok: !!autoStatus?.n8n_online,
@@ -722,7 +750,9 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
 
                 <SettingsSection title="Watchers" />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
-                  {autos.length === 0 && (
+                  {!autosLoaded ? (
+                    <SkeletonList rows={3} mark={false} />
+                  ) : autos.length === 0 && (
                     <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>
                       Nothing is being watched yet.
                     </p>
@@ -929,7 +959,15 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
 
                   {/* The record's state, shown without pressing anything — an empty
                       record is worth knowing about before it is needed. */}
-                  {memory && (
+                  {!memoryChecked ? (
+                    <div className="hb-tile" style={{
+                      marginBottom: 14, padding: '12px 16px',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      background: 'rgba(255,255,255,0.03)',
+                    }}>
+                      <SkeletonText lines={2} lastWidth="35%" />
+                    </div>
+                  ) : memory && (
                     <div className="hb-tile" style={{
                       marginBottom: 14, padding: '12px 16px',
                       border: '1px solid rgba(255,255,255,0.07)',
@@ -1040,6 +1078,19 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                     </p>
                   </div>
                 </div>
+
+                {/* This client's own connection to Igor — the address + key it
+                    talks to the backend with. Distinct from the Configuration
+                    tab, which edits settings ON the backend and needs this
+                    connection to already work to load anything. */}
+                <SettingsRow
+                  title="Server connection"
+                  desc={`${config.apiBase} · key ${maskApiKey(config.apiKey)}`}
+                >
+                  <PillBtn onClick={() => window.dispatchEvent(new CustomEvent('speda:connection-setup'))}>
+                    Edit
+                  </PillBtn>
+                </SettingsRow>
 
                 <SettingsField label="Your name" hint="Used in the greeting on the home screen.">
                   <input

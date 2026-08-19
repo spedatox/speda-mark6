@@ -5,7 +5,8 @@ declare global {
     electron: ElectronAPI
     api: {
       platform: string
-      getConfig: () => Promise<{ apiBase: string; apiKey: string }>
+      getConfig: () => Promise<{ apiBase: string; apiKey: string; configured: boolean; isDev: boolean }>
+      setConfig: (cfg: { apiBase: string; apiKey: string }) => Promise<{ apiBase: string; apiKey: string; configured: boolean }>
       windowMinimize: () => void
       windowMaximize: () => void
       windowClose: () => void

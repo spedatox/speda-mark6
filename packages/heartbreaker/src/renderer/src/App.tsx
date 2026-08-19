@@ -16,8 +16,11 @@ import NeuralBackground from './components/NeuralBackground'
 import PartyActivation from './components/PartyActivation'
 import LockdownActivation from './components/LockdownActivation'
 import PendingAsksTray from './components/PendingAsksTray'
+import ConnectionSetupModal from './components/ConnectionSetupModal'
+import { Skeleton } from './components/Skeleton'
 import type { AppConfig } from './lib/types'
 import { fetchSessions, getHouseParty, setHouseParty, getLockdown } from './lib/api'
+import { resolveConnection } from './lib/connection'
 import 'katex/dist/katex.min.css'
 import './theme/heartbreaker.css'
 
@@ -57,6 +60,10 @@ function AppInner() {
   const [state, dispatch] = useReducer(chatReducer, initialState)
   const [profile, setProfile] = useState<AppProfile>(DEFAULT_PROFILE)
   const [config, setConfig] = useState<AppConfig | null>(null)
+  // Raised on boot when nothing (env, a build-time bake, or a prior save) chose
+  // a real server — see lib/connection.ts. `firstRun` only changes the copy;
+  // Settings → Account reopens the same modal with it false.
+  const [connectionPrompt, setConnectionPrompt] = useState<{ firstRun: boolean } | null>(null)
 
   // ── House Party Protocol / War Room ───────────────────────────────────────
   // Three states. off: a normal agent. standby: the owner opened the war room
@@ -101,27 +108,41 @@ function AppInner() {
 
   useEffect(() => {
     const load = async () => {
-      let cfg: AppConfig
-      if (window.api?.getConfig) {
-        const raw = await window.api.getConfig()
-        cfg = { apiBase: raw.apiBase, apiKey: raw.apiKey, agentId: profile.agentId }
-      } else {
-        cfg = {
-          apiBase: (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8000',
-          apiKey: (import.meta.env.VITE_API_KEY as string) || 'dev-key',
-          agentId: profile.agentId,
-        }
-      }
+      const resolved = await resolveConnection()
+      const cfg: AppConfig = { apiBase: resolved.apiBase, apiKey: resolved.apiKey, agentId: profile.agentId }
       dispatch({ type: 'SET_CONFIG', payload: cfg })
       setConfig(cfg)
+      // Never for a local dev run — it already has a working default. Otherwise,
+      // nobody chose this address, so ask instead of silently sitting on it.
+      if (!resolved.configured && !resolved.isDev) setConnectionPrompt({ firstRun: true })
       try {
         const sessions = await fetchSessions(cfg)
         dispatch({ type: 'SET_SESSIONS', payload: sessions })
-      } catch { /* backend not available */ }
+      } catch {
+        // Backend unreachable — still mark sessions "loaded" (empty) so the
+        // sidebar shows "No sessions yet" instead of skeletoning forever.
+        dispatch({ type: 'SET_SESSIONS', payload: [] })
+      }
     }
     load()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Settings → Account's "Edit" reopens the same modal, outside first-run.
+  useEffect(() => {
+    const onOpen = () => setConnectionPrompt({ firstRun: false })
+    window.addEventListener('speda:connection-setup', onOpen)
+    return () => window.removeEventListener('speda:connection-setup', onOpen)
+  }, [])
+
+  const handleConnectionSaved = useCallback((apiBase: string, apiKey: string) => {
+    const nextConfig: AppConfig = { apiBase, apiKey, agentId: configRef.current?.agentId ?? profile.agentId }
+    setConfig(nextConfig)
+    dispatch({ type: 'SET_CONFIG', payload: nextConfig })
+    fetchSessions(nextConfig)
+      .then(s => dispatch({ type: 'SET_SESSIONS', payload: s }))
+      .catch(() => dispatch({ type: 'SET_SESSIONS', payload: [] }))
+  }, [profile.agentId])
 
   /** Point the chat store + config at `agentId` and reload its sessions. */
   const retarget = useCallback((agentId: string) => {
@@ -133,7 +154,10 @@ function AppInner() {
     setConfig(cfg)
     dispatch({ type: 'SET_CONFIG', payload: cfg })
     dispatch({ type: 'NEW_CHAT' })
-    fetchSessions(cfg).then(s => dispatch({ type: 'SET_SESSIONS', payload: s })).catch(() => {})
+    dispatch({ type: 'SESSIONS_LOADING' })
+    fetchSessions(cfg)
+      .then(s => dispatch({ type: 'SET_SESSIONS', payload: s }))
+      .catch(() => dispatch({ type: 'SET_SESSIONS', payload: [] }))
   }, [])
 
   /** Open the war room from the UI — branded STANDBY (protocol offline). */
@@ -286,25 +310,28 @@ function AppInner() {
     setConfig(nextConfig)
     dispatch({ type: 'SET_CONFIG', payload: nextConfig })
     dispatch({ type: 'NEW_CHAT' })
+    dispatch({ type: 'SESSIONS_LOADING' })
     await new Promise(r => setTimeout(r, 30))
     root?.classList.remove('agent-morphing')
 
     try {
       const sessions = await fetchSessions(nextConfig)
       dispatch({ type: 'SET_SESSIONS', payload: sessions })
-    } catch { /* backend not available */ }
+    } catch {
+      dispatch({ type: 'SET_SESSIONS', payload: [] })
+    }
   }, [config, profile.accent, exitWarRoom])
 
   if (!config) {
     return (
       <div style={{
-        height: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem',
-        alignItems: 'center', justifyContent: 'center',
+        height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'var(--bg-primary)',
-        fontFamily: "var(--font-mono)", letterSpacing: '0.12em',
-        fontSize: '0.72rem',
       }}>
-        <span style={{ color: 'var(--hb-cyan)' }}>Loading configuration…</span>
+        <div style={{ width: 220, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Skeleton height={16} width="70%" />
+          <Skeleton height={10} width="45%" />
+        </div>
       </div>
     )
   }
@@ -329,6 +356,15 @@ function AppInner() {
           onExitWarRoom={() => exitWarRoom(true)}
         />
         <PendingAsksTray config={config} />
+        {connectionPrompt && (
+          <ConnectionSetupModal
+            initialApiBase={config.apiBase}
+            initialApiKey={config.apiKey}
+            firstRun={connectionPrompt.firstRun}
+            onClose={() => setConnectionPrompt(null)}
+            onSaved={handleConnectionSaved}
+          />
+        )}
         {lockdown && <LockdownStrip />}
         {activation && (
           <PartyActivation mode={activation} onIgnite={igniteActivation} onDone={activationDone} />

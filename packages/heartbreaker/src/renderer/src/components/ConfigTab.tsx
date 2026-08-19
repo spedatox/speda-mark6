@@ -4,6 +4,7 @@ import type { AppConfig } from '../lib/types'
 import type { ConfigFieldInfo, ConfigGroupInfo, ConfigSaveResult, MemorySources } from '../lib/api'
 import GlassSelect from './GlassSelect'
 import { Switch } from './settingsUI'
+import { Skeleton, SkeletonText, SkeletonList } from './Skeleton'
 
 /**
  * ConfigTab — the full backend configuration surface: every API key, token,
@@ -28,11 +29,15 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
 
   const load = async () => {
     setLoading(true)
-    const g = await getConfig(config)
-    setGroups(g)
-    // Open the first group by default so the panel isn't a wall of collapsed rows.
-    setOpen(o => (Object.keys(o).length ? o : g.length ? { [g[0].id]: true } : {}))
-    setLoading(false)
+    try {
+      const g = await getConfig(config)
+      setGroups(g)
+      // Open the first group by default so the panel isn't a wall of collapsed rows.
+      setOpen(o => (Object.keys(o).length ? o : g.length ? { [g[0].id]: true } : {}))
+    } finally {
+      // Always clear — an unreachable backend must not skeleton this pane forever.
+      setLoading(false)
+    }
   }
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -71,7 +76,22 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
   }
 
   if (loading) {
-    return <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: MONO }}>Loading configuration…</p>
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '4.5rem' }}>
+        <SkeletonText lines={2} lastWidth="55%" />
+        <Skeleton height={44} />
+        <div className="hb-skeleton-group" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {[220, 160, 190].map((w, i) => (
+            <div key={i} style={{ border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)', padding: '0.85rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', ['--hb-skeleton-delay' as string]: `${i * 0.07}s` }}>
+                <Skeleton width={11} height={11} radius={3} />
+                <Skeleton width={w} height={13} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -334,9 +354,17 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
  */
 function SourceOfTruthPanel({ config }: { config: AppConfig }) {
   const [data, setData] = useState<MemorySources | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
 
-  const load = async () => setData(await getMemorySources(config))
+  const load = async () => {
+    try {
+      setData(await getMemorySources(config))
+    } finally {
+      // Always clear — an unreachable backend must not skeleton this forever.
+      setLoaded(true)
+    }
+  }
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const assign = async (agentId: string, path: string) => {
@@ -348,6 +376,13 @@ function SourceOfTruthPanel({ config }: { config: AppConfig }) {
     finally { setBusy(null) }
   }
 
+  if (!loaded) {
+    return (
+      <div style={{ border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)', padding: '0.85rem' }}>
+        <SkeletonList rows={2} mark={false} />
+      </div>
+    )
+  }
   if (!data || data.agents.length === 0) return null
   const fileName = (p: string) => p.replace('/memories/', '')
 

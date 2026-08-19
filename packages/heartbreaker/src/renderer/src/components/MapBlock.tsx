@@ -34,6 +34,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { looksIncomplete } from '../lib/partialJson'
 import { useChatContext } from '../store/chat'
+import { Skeleton, SkeletonText } from './Skeleton'
 
 /* ── Spec types ─────────────────────────────────────────────────────────────── */
 
@@ -1152,9 +1153,13 @@ function ParseError({ raw }: { raw: string }): React.ReactElement {
 function Materializing(): React.ReactElement {
   return (
     <div className="hb-glass-sm" style={{
-      margin: '0.75rem 0', padding: '0.6rem 0.75rem', border: '1px solid var(--hb-edge)',
-      background: 'rgba(6,14,22,0.55)', fontFamily: "'Rajdhani', sans-serif",
-      fontSize: '0.845rem', letterSpacing: '0.14em', color: 'var(--hb-text-faint)',
-    }}>Building the map…</div>
+      margin: '0.75rem 0', padding: '0.75rem', border: '1px solid var(--hb-edge)',
+      background: 'rgba(6,14,22,0.55)',
+    }}>
+      <Skeleton height={220} radius={8} />
+      <div style={{ marginTop: 10 }}>
+        <SkeletonText lines={1} lastWidth="42%" lineHeight={11} />
+      </div>
+    </div>
   )
 }
