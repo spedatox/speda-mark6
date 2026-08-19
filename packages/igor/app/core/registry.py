@@ -379,8 +379,7 @@ class CapabilityRegistry:
         return out
 
     def tool_index(
-        self, allowlist: set[str] | None = None, active_servers: set[str] | None = None,
-        agent_id: str | None = None, loaded_tools: set[str] | None = None,
+        self, allowlist: set[str] | None = None, agent_id: str | None = None,
     ) -> str:
         """The system-prompt block listing deferred tools BY NAME ONLY.
 
@@ -388,12 +387,24 @@ class CapabilityRegistry:
         hundreds, so the model can still see its whole capability surface for a
         fraction of the prefix. It learns what each one does by searching for it.
         Mirrors how Anthropic surfaces deferred tools: name now, schema on demand.
+
+        Deliberately NOT scoped by `active_servers`/`loaded_tools`: this text
+        lives inside the `_cache`-flagged block of the system prompt (see
+        AgentOrchestrator.build_system_prompt). Anthropic never notices either
+        way — it resolves deferred tools server-side and never touches this
+        list — but every OpenAI-compat provider (Gemini, OpenAI, z.ai,
+        DeepSeek) has `defer_loading=False` and resolves them by calling the
+        local `tool_search` skill, which is exactly what used to shrink this
+        list mid-session. That rewrote the supposedly-cached prefix the moment
+        the model loaded its first deferred tool, and every implicit-cache hit
+        for the rest of the session (and Gemini's implicit caching in
+        particular, since it has no explicit routing key to fall back on) died
+        with it. A tool staying listed here after it's loaded is harmless —
+        the prompt below already tells the model tools in its tools array need
+        no search — so the fix is to make this list depend on nothing but
+        agent identity and hold it constant for the whole session.
         """
-        loaded = set(loaded_tools or set())
-        names = sorted(
-            t["name"] for t in self.deferred_tools(allowlist, active_servers, agent_id)
-            if t["name"] not in loaded
-        )
+        names = sorted(t["name"] for t in self.deferred_tools(allowlist, agent_id=agent_id))
         if not names:
             return ""
         return (

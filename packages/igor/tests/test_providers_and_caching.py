@@ -867,6 +867,21 @@ async def test_resolved_tools_append_and_never_reorder_the_prefix(deferring_regi
     assert after[len(before):] == ["obscure_thing"]
 
 
+async def test_tool_index_text_is_stable_regardless_of_what_loaded(deferring_registry):
+    """tool_index() feeds the `_cache`-flagged system-prompt block, so it must
+    not change shape as tools get resolved mid-session — a provider without
+    Anthropic's server-side deferred resolution (Gemini and every other
+    OpenAI-compat path) calls the local tool_search skill to load a deferred
+    tool, and if that shrank this text it would rewrite the supposedly-cached
+    prefix and kill every implicit cache hit for the rest of the session."""
+    assert deferring_registry.tool_index() == deferring_registry.tool_index()
+    # tool_index() takes no active_servers/loaded_tools — a caller passing the
+    # session's growing sets (the old, broken call shape) must be a TypeError,
+    # not a silently-accepted footgun.
+    with pytest.raises(TypeError):
+        deferring_registry.tool_index(loaded_tools={"obscure_thing"})
+
+
 async def test_anthropic_path_flags_instead_of_withholding(deferring_registry):
     """On Anthropic the tool ships flagged so the API's own tool-search can
     resolve it; the flag is what keeps it out of the model's context."""

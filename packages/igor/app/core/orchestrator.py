@@ -335,11 +335,12 @@ class AgentOrchestrator:
         # description costs, so the model keeps sight of its whole capability
         # surface without the prefix carrying every schema on every iteration.
         # Pointless in a dead zone — the deferred set is remote either way.
+        # NOT scoped by active_servers/loaded_tools on purpose — this text sits
+        # in the `_cache`-flagged block below, so it must be identical every
+        # turn of the session. See tool_index()'s docstring.
         index = "" if dead_zone else self._registry.tool_index(
             allowlist=allowlist,
-            active_servers=context.extra.get("active_servers"),
             agent_id=context.agent_id,
-            loaded_tools=context.extra.get("loaded_tools"),
         )
         if index:
             stable_core = f"{stable_core}\n\n{index}"
