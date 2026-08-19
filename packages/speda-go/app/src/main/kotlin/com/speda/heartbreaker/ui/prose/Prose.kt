@@ -218,6 +218,7 @@ private fun Fence(language: String, code: String) {
         lang == "chart" -> ChartBlock(code)
         lang == "calendar" -> CalendarBlock(code)
         lang == "map" -> MapBlock(code)
+        lang == "aircraft" -> AircraftBlock(code)
         lang == "svg" -> SvgBlock(code)
         lang == "html" -> HtmlBlock(code)
         // The protocol is desktop-only, but the model can still write one of

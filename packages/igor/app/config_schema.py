@@ -233,6 +233,12 @@ CONFIG_GROUPS: list[ConfigGroup] = [
             ConfigField("etherscan_api_key", "Etherscan Key", "password", secret=True),
             ConfigField("intelx_api_key", "Intelligence X Key", "password", secret=True),
             ConfigField("blockchair_api_key", "Blockchair Key", "password", secret=True),
+            ConfigField("aircraft_tracking_base_url", "Aircraft Tracking API Base URL", "url",
+                        requires_restart=_LIVE,
+                        help="Powers track_aircraft. Defaults to airplanes.live's free, keyless "
+                             "feed. Override only to point at a compatible mirror (api.adsb.one, "
+                             "api.adsb.lol) if rate-limited.",
+                        placeholder="https://api.airplanes.live"),
         ],
     ),
     ConfigGroup(

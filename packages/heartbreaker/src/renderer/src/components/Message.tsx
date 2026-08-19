@@ -13,6 +13,7 @@ import WidgetFrame from './WidgetFrame'
 import ChartBlock from './ChartBlock'
 import CalendarBlock from './CalendarBlock'
 import MapBlock from './MapBlock'
+import AircraftBlock from './AircraftBlock'
 import ErrorBoundary from './ErrorBoundary'
 import HousePartyWarning from './HousePartyWarning'
 import { useT } from '../lib/i18n'
@@ -759,6 +760,9 @@ const mdComponents: any = {
       }
       if (lang === 'map') {
         return <ErrorBoundary label="MAP"><MapBlock>{code}</MapBlock></ErrorBoundary>
+      }
+      if (lang === 'aircraft') {
+        return <ErrorBoundary label="AIRCRAFT"><AircraftBlock>{code}</AircraftBlock></ErrorBoundary>
       }
       if (HPP_ALIASES.has(lang) || (HPP_AMBIGUOUS.has(lang) && looksLikeHppWarning(code))) {
         return <HousePartyWarning>{code}</HousePartyWarning>

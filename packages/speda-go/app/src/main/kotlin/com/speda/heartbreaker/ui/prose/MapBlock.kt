@@ -612,7 +612,7 @@ private fun fitCamera(map: MapLibreMap, spec: MapSpec, places: List<MapPlace>) {
 }
 
 @Composable
-private fun rememberMapViewWithLifecycle(): MapView {
+internal fun rememberMapViewWithLifecycle(): MapView {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val mapView = remember {

@@ -15,8 +15,10 @@ import com.speda.heartbreaker.designsystem.glass.LocalHazeState
 import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.designsystem.glass.rememberHbHazeState
 import com.speda.heartbreaker.ui.chat.ChatScreen
+import com.speda.heartbreaker.ui.prose.LocalAircraftResolver
 import com.speda.heartbreaker.ui.prose.LocalPlaceResolver
 import com.speda.heartbreaker.ui.prose.LocalRouteResolver
+import com.speda.heartbreaker.domain.AircraftSpec
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.MapPlace
 import com.speda.heartbreaker.domain.RouteGeometry
@@ -73,12 +75,22 @@ fun MainScreen(
             }
             fn
         }
+        // Live ADS-B position by tail number — polled repeatedly by the card
+        // itself, not resolved once like routes/places (see
+        // app/services/aircraft.py for why this one has no id-store).
+        val resolveAircraft = remember(routeConfig) {
+            val fn: suspend (String) -> AircraftSpec? = { tail ->
+                graph.api.fetchAircraftTrack(routeConfig, tail)
+            }
+            fn
+        }
 
         CompositionLocalProvider(
             LocalHazeState provides haze,
             LocalAmbientHazeState provides ambientHaze,
             LocalRouteResolver provides resolveRoute,
             LocalPlaceResolver provides resolvePlaces,
+            LocalAircraftResolver provides resolveAircraft,
         ) {
             ChatScreen(
                 graph = graph,

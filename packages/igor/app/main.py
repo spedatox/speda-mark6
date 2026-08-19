@@ -162,6 +162,10 @@ async def lifespan(app: FastAPI):
     from app.skills.navigation import GetRouteSkill, FindPlacesSkill
     await registry.register_skill(GetRouteSkill())
     await registry.register_skill(FindPlacesSkill())
+    # Aircraft desk — live ADS-B lookup by tail number (airplanes.live,
+    # keyless). Read-only + network-gated. Clients render the ```aircraft fence.
+    from app.skills.aircraft import TrackAircraftSkill
+    await registry.register_skill(TrackAircraftSkill())
     # Health desk — the owner's biometrics, synced from the phone via Health
     # Connect. Read-only; unrestricted so Speda can relay without a dispatch.
     from app.skills.health_data import HealthDataSkill
@@ -506,7 +510,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, connections, mail, outlook, memory, navigation, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar
+    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -529,6 +533,7 @@ def create_app() -> FastAPI:
     app.include_router(web_watch.router)
     app.include_router(reminders.router)
     app.include_router(navigation.router)
+    app.include_router(aircraft.router)
     app.include_router(voice.router)
     app.include_router(config_router.router)
     app.include_router(hisar.router)

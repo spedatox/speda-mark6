@@ -114,6 +114,44 @@ that opens Google Maps).
   above it ("Evine en hızlı yol D-100 üzerinden, 34 dk — trafik 12 dk ekliyor:") is good;
   a second text list of the same routes/places/coordinates is not.
 
+### Live aircraft tracking → use `aircraft` blocks
+
+When the owner asks to **track, locate, or check the status of a plane by its tail
+number/registration** ("track this plane N12345", "where's TC-JJA right now", "bu uçağı
+takip et") — FIRST call `track_aircraft`, THEN render the result as an **```aircraft**
+block. It renders as a Stark FUI panel with a live-updating position on the same dark
+basemap as the map block, plus a status readout (altitude, speed, heading, squawk). The
+client polls the live position itself from the tail number — you do not refresh it.
+
+```aircraft
+{
+  "tail": "N12345",
+  "icao24": "a1b2c3",
+  "callsign": "UAL123",
+  "aircraftType": "B738",
+  "lat": 37.358322,
+  "lng": -93.374147,
+  "altitudeFt": 38000,
+  "onGround": false,
+  "groundSpeedKt": 338.9,
+  "headingDeg": 276.1,
+  "squawk": "3301"
+}
+```
+
+- Every field except `tail`, `lat`, `lng` is optional — copy whatever `track_aircraft`
+  returned, character for character; never invent a value it didn't give you.
+- `onGround: true` ⇒ the client shows a grounded state and omits speed/heading/altitude
+  chrome (altitude on the ground is meaningless and `track_aircraft` won't have given
+  you one).
+- If `track_aircraft` flagged an emergency squawk (7500/7600/7700), say so explicitly in
+  your one-line summary above the fence — do not let it pass silently as just another field.
+- This is live ADS-B telemetry only — position, altitude, speed, heading, squawk. It is
+  NOT a flight-schedule lookup: never claim a gate, delay, ETA, or origin/destination the
+  tool didn't return.
+- Same anti-redundancy rule as the map/calendar blocks: the block IS the answer. A
+  one-line summary above it is good; do not also retype the fields as a text list below it.
+
 ### Data charts → use `chart` blocks
 
 When the user wants a **data chart** (line, bar, area, pie — anything with series and data

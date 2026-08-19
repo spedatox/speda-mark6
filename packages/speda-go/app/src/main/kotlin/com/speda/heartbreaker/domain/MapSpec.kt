@@ -262,6 +262,53 @@ fun parsePlaceSet(raw: String): List<MapPlace>? = runCatching {
     }
 }.getOrNull()
 
+/* ── Aircraft tracking ─────────────────────────────────────────────────────── */
+
+/**
+ * The ```aircraft fence contract from prompts/core/06_visual_output.md, and
+ * also the shape of GET /aircraft/track/{tail} — unlike routes/places, a live
+ * position is polled directly by tail number rather than resolved once from a
+ * generated id (see app/services/aircraft.py for why). One type covers both:
+ * the fence gives the initial snapshot, the poll refreshes the same fields.
+ */
+data class AircraftSpec(
+    val tail: String,
+    val icao24: String? = null,
+    val callsign: String? = null,
+    val aircraftType: String? = null,
+    val lat: Double,
+    val lng: Double,
+    val altitudeFt: Int? = null,
+    val onGround: Boolean = false,
+    val groundSpeedKt: Double? = null,
+    val headingDeg: Double? = null,
+    val squawk: String? = null,
+    val emergency: String? = null,
+)
+
+/** Returns null when the fence/response isn't valid JSON yet, or is missing the
+ *  minimum a card needs to place a marker (tail + position). */
+fun parseAircraftSpec(raw: String): AircraftSpec? = runCatching {
+    val o = LenientJson.parseToJsonElement(raw) as? JsonObject ?: return null
+    val tail = o.str("tail")?.takeIf { it.isNotBlank() } ?: return null
+    val lat = o.dbl("lat") ?: return null
+    val lng = o.dbl("lng") ?: return null
+    AircraftSpec(
+        tail = tail,
+        icao24 = o.str("icao24"),
+        callsign = o.str("callsign"),
+        aircraftType = o.str("aircraftType"),
+        lat = lat,
+        lng = lng,
+        altitudeFt = o.intv("altitudeFt"),
+        onGround = o.boolv("onGround") ?: false,
+        groundSpeedKt = o.dbl("groundSpeedKt"),
+        headingDeg = o.dbl("headingDeg"),
+        squawk = o.str("squawk"),
+        emergency = o.str("emergency"),
+    )
+}.getOrNull()
+
 /* ── JsonObject scalar helpers (null-soft) ───────────────────────────────────── */
 
 private fun JsonObject.prim(key: String): JsonPrimitive? =

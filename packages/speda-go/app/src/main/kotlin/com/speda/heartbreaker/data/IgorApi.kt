@@ -1,10 +1,12 @@
 package com.speda.heartbreaker.data
 
+import com.speda.heartbreaker.domain.AircraftSpec
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.ChatMessage
 import com.speda.heartbreaker.domain.MapPlace
 import com.speda.heartbreaker.domain.RouteGeometry
 import com.speda.heartbreaker.domain.Session
+import com.speda.heartbreaker.domain.parseAircraftSpec
 import com.speda.heartbreaker.domain.parsePlaceSet
 import com.speda.heartbreaker.domain.parseRouteGeometry
 import com.speda.heartbreaker.health.HealthIngestRequest
@@ -219,6 +221,21 @@ class IgorApi(
         withContext(Dispatchers.IO) {
             runCatching {
                 getString(config, "/navigation/places/$placesId")?.let(::parsePlaceSet)
+            }.getOrNull()
+        }
+
+    /**
+     * Live position + ADS-B status for a tail number, polled directly — unlike
+     * routes/places there is no id-store behind this (see
+     * app/services/aircraft.py): a live position changes every few seconds and
+     * a tail number is short enough to carry safely without one. Null on any
+     * failure, including "no current signal" (404) — the card keeps its last
+     * known position rather than blanking.
+     */
+    suspend fun fetchAircraftTrack(config: AppConfig, tail: String): AircraftSpec? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                getString(config, "/aircraft/track/$tail")?.let(::parseAircraftSpec)
             }.getOrNull()
         }
 

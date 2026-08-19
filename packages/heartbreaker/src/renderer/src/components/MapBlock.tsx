@@ -177,7 +177,7 @@ function trafficFeatures(coords: [number, number][], bands: TrafficBand[]): GeoJ
 
 /* ── Stark style (verified OpenFreeMap endpoints; mirrors the Android asset) ──── */
 
-const STARK_STYLE: maplibregl.StyleSpecification = {
+export const STARK_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
   sources: { openmaptiles: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' } },
@@ -215,7 +215,7 @@ const STARK_STYLE: maplibregl.StyleSpecification = {
 /* ── Helpers ─────────────────────────────────────────────────────────────────── */
 
 /** Can this renderer still hand out a WebGL2 context right now? */
-function webglAvailable(): boolean {
+export function webglAvailable(): boolean {
   try {
     const probe = document.createElement('canvas')
     const gl = probe.getContext('webgl2')
@@ -228,7 +228,7 @@ function webglAvailable(): boolean {
   }
 }
 
-function cssVar(name: string, fallback: string): string {
+export function cssVar(name: string, fallback: string): string {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
   return v || fallback
 }
@@ -287,7 +287,7 @@ async function reverseGeocode(lat: number, lng: number): Promise<string | null> 
 
 /** Igor call with the session's key. Null on any failure — every caller here
  * degrades to "that part of the card is missing", never to a wrong drawing. */
-function useIgor(): (path: string) => Promise<any | null> {
+export function useIgor(): (path: string) => Promise<any | null> {
   const { state } = useChatContext()
   const apiBase = state.config?.apiBase
   const apiKey = state.config?.apiKey

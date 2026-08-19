@@ -509,6 +509,13 @@ class Settings(BaseSettings):
     owner_home_lat: float | None = None
     owner_home_lng: float | None = None
 
+    # ── Aircraft tracking (app/skills/aircraft.py) ──────────────────────────────
+    # Live ADS-B lookup by tail number/registration. Keyless — airplanes.live's
+    # community feed needs no signup. The base URL is overridable only so a
+    # compatible mirror (api.adsb.one, api.adsb.lol — same ADSBExchange v2
+    # response schema) can stand in if airplanes.live is rate-limited or down.
+    aircraft_tracking_base_url: str = "https://api.airplanes.live"
+
     # OSS Adapter URLs
     gpt_researcher_url: str = "http://localhost:8001"
     shannon_url: str = "http://localhost:9000"
