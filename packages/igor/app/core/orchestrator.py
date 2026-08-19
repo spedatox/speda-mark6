@@ -1,9 +1,11 @@
 import asyncio
 import logging
+import time
 from typing import AsyncGenerator
 
 from app.core.context import AgentContext
 from app.core.registry import CapabilityRegistry
+from app.models.tool_call import ToolCall
 from app.profiles.registry import ProfileRegistry
 from app.schemas.sse import SSEEvent, SSEEventType
 from app.services.llm_client import LLMClient, blocks_to_dicts
@@ -12,6 +14,21 @@ from app.skills.memory import MemoryRecallCache, recall_for_context, recall_sess
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ITERATIONS = 30  # Safety guard — Rule 4a
+
+# Cap on what a tool_calls row stores of a result — generous enough for real
+# debugging (unlike the 1500-char SSE preview, which only has to look right in
+# the UI), bounded so one tool that returns a page of HTML doesn't make this
+# table the thing that fills the disk.
+_TOOL_RESULT_STORE_CHARS = 4000
+
+
+async def _timed(tool_name: str, args: dict, context: AgentContext, registry: CapabilityRegistry):
+    """Run one tool call and report how long it took, for the tool_calls audit
+    row — `asyncio.gather` alone loses this once several calls run concurrently
+    and finish at different times."""
+    start = time.monotonic()
+    result = await registry.execute(tool_name, args, context)
+    return result, int((time.monotonic() - start) * 1000)
 
 
 class AgentOrchestrator:
@@ -547,12 +564,14 @@ class AgentOrchestrator:
                         },
                     )
 
-                # 2. Execute all tools in parallel
+                # 2. Execute all tools in parallel, each timed individually for
+                #    the tool_calls audit row persisted below.
                 exec_tasks = [
-                    self._registry.execute(block.name, block.input, context)
+                    _timed(block.name, block.input, context, self._registry)
                     for block in tool_use_blocks
                 ]
-                results = await asyncio.gather(*exec_tasks)
+                timed_results = await asyncio.gather(*exec_tasks)
+                results = [r for r, _ in timed_results]
 
                 # 2b. Emit each tool's RESULT (truncated) so the UI can show what
                 #     came back when the user expands the tool disclosure.
@@ -564,6 +583,33 @@ class AgentOrchestrator:
                         session_id=context.session_id,
                         request_id=context.request_id,
                     )
+
+                # 2c. Persist the audit row per call — tool_calls has carried the
+                #     schema for this since day one but nothing ever wrote to it,
+                #     so a cost or behaviour investigation had only the tool NAME
+                #     from the log line above, never its input, result, timing or
+                #     failure. Best-effort: a DB hiccup here must never break the
+                #     turn the way a lost tool result would.
+                if context.db is not None:
+                    try:
+                        for block, (res, duration_ms) in zip(tool_use_blocks, timed_results):
+                            stored = (res if isinstance(res, str) else str(res))[:_TOOL_RESULT_STORE_CHARS]
+                            context.db.add(ToolCall(
+                                session_id=context.session_id,
+                                request_id=context.request_id,
+                                tool_name=block.name,
+                                tool_input=block.input,
+                                tool_result=stored,
+                                duration_ms=duration_ms,
+                                error=stored if stored.startswith("Error") else None,
+                            ))
+                        await context.db.commit()
+                    except Exception as exc:
+                        logger.warning(
+                            "tool_call_persist_failed",
+                            extra={"request_id": context.request_id, "error": str(exc)},
+                        )
+                        await context.db.rollback()
 
                 # 2c. The house_party tool asks the owner to authorize by opening
                 #     the app's own passphrase window. Emit it the moment the tool

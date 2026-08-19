@@ -567,7 +567,7 @@ class CapabilityRegistry:
         # on a field that isn't part of the contract.
         extra = getattr(context, "extra", None)
         memo_key: tuple[str, str] | None = None
-        if extra is not None and self._memoizable(tool_name):
+        if extra is not None and self._memoizable(tool_name, args):
             try:
                 import json as _json
 
@@ -593,14 +593,28 @@ class CapabilityRegistry:
             extra.setdefault("tool_memo", {})[memo_key] = result
         return result
 
-    def _memoizable(self, tool_name: str) -> bool:
+    def _memoizable(self, tool_name: str, args: dict) -> bool:
         """Whether an identical repeat call may be served from the per-turn memo.
-        Read-only Tier-1 skills only — those carry the Rule 9 annotation that
-        promises no side effects. MCP tools and adapters are excluded: nothing
-        in their definitions tells us whether a repeat is safe, and guessing
-        wrong on a write is far worse than paying for a duplicate read."""
+
+        Read-only Tier-1 skills qualify outright — those carry the Rule 9
+        annotation that promises no side effects. A skill that mixes reads and
+        writes under one tool name (MemorySkill is the only one today: `view`
+        never mutates, but `create`/`str_replace`/`insert`/`delete` do) can
+        still offer its safe commands via `memoizable_commands`, checked
+        against this specific call's `command` arg — the coarse `read_only`
+        flag alone would either block memoizing `view` entirely or risk
+        memoizing a write, which would silently skip a second, legitimately
+        intended write. MCP tools and adapters declare neither and are never
+        memoized: nothing in their definitions says a repeat is safe, and
+        guessing wrong on a write is far worse than paying for a duplicate
+        read."""
         skill = self._skills.get(tool_name)
-        return bool(skill is not None and getattr(skill, "read_only", False))
+        if skill is None:
+            return False
+        if getattr(skill, "read_only", False):
+            return True
+        commands = getattr(skill, "memoizable_commands", None)
+        return bool(commands) and args.get("command") in commands
 
     async def _dispatch(self, tool_name: str, args: dict, context: "AgentContext") -> str:
         """Tier routing proper. execute() wraps this with the per-turn memo."""

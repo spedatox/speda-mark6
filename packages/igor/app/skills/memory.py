@@ -656,6 +656,10 @@ class MemorySkill(Skill):
         "Every write is versioned. Most turns need no memory operations at all."
     )
     read_only = False
+    # `view` never mutates and is safe to serve from the per-turn tool memo
+    # like a fully read-only skill (registry.CapabilityRegistry._memoizable) —
+    # every other command writes and must always run for real.
+    memoizable_commands = frozenset({"view"})
     input_schema = {
         "type": "object",
         "properties": {

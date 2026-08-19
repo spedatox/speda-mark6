@@ -945,6 +945,104 @@ async def test_identical_read_only_calls_run_once_per_turn():
     assert len(calls) == 4
 
 
+async def test_a_mixed_skill_memoizes_only_its_declared_read_only_command():
+    """MemorySkill's actual shape: read_only=False (it can write), but `view`
+    never mutates. The coarse skill-level flag alone would either block `view`
+    from ever memoizing or risk memoizing a write and silently skipping a
+    second, legitimately intended one — `memoizable_commands` is checked
+    against THIS call's `command` arg instead."""
+    calls = []
+
+    class _Mixed(Skill):
+        name = "mixed_thing"
+        read_only = False
+        memoizable_commands = frozenset({"view"})
+        description = "Mixed read/write. Test only. Returns text."
+        input_schema = {"type": "object", "properties": {
+            "command": {"type": "string"}, "q": {"type": "string"},
+        }}
+
+        async def execute(self, args, context):
+            calls.append(dict(args))
+            return f"result-{len(calls)}"
+
+    class _Counting(Skill):
+        name = "counting_thing2"
+        read_only = True
+        description = "Read-only. Test only. Returns text."
+        input_schema = {"type": "object", "properties": {"q": {"type": "string"}}}
+
+        async def execute(self, args, context):
+            calls.append(dict(args))
+            return f"other-{len(calls)}"
+
+    r = CapabilityRegistry()
+    await r.register_skill(_Mixed())
+    await r.register_skill(_Counting())
+    ctx = SimpleNamespace(extra={}, request_id="t", agent_id="speda")
+
+    # Two identical `view` calls: the second is served from the memo.
+    assert await r.execute("mixed_thing", {"command": "view", "q": "a"}, ctx) == "result-1"
+    assert await r.execute("mixed_thing", {"command": "view", "q": "a"}, ctx) == "result-1"
+    assert len(calls) == 1
+
+    # A `view` in between does not evict an unrelated skill's cached read —
+    # the shared memo is only wiped by a call this registry could not prove
+    # was safe, and `view` just was.
+    await r.execute("counting_thing2", {"q": "z"}, ctx)
+    before = len(calls)
+    await r.execute("mixed_thing", {"command": "view", "q": "a"}, ctx)  # memo hit
+    await r.execute("counting_thing2", {"q": "z"}, ctx)  # still memoized
+    assert len(calls) == before
+
+    # Two identical `create` calls: NOT memoized — a repeat write must always
+    # actually run (e.g. to get its real "already exists" error back). And it
+    # DOES invalidate the memo, unlike `view` above.
+    calls_before_create = len(calls)
+    await r.execute("mixed_thing", {"command": "create", "q": "b"}, ctx)
+    await r.execute("mixed_thing", {"command": "create", "q": "b"}, ctx)
+    assert len(calls) == calls_before_create + 2
+    await r.execute("counting_thing2", {"q": "z"}, ctx)  # memo was wiped → runs again
+    assert len(calls) == calls_before_create + 3
+
+
+# ── tool_calls audit persistence ─────────────────────────────────────────────
+
+
+async def test_tool_call_round_trips_through_a_real_db():
+    """The core risk in wiring tool_calls up at all: does a dict `tool_input`
+    actually survive SQLAlchemy's JSON column round-trip, and does a result
+    that reads as an error land in both `tool_result` and `error`."""
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from app.database import Base
+    from app.models.tool_call import ToolCall
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+    async with maker() as db:
+        db.add(ToolCall(
+            session_id=1, request_id="req-1", tool_name="memory",
+            tool_input={"command": "view", "path": "/memories/wellness/profile.md"},
+            tool_result="Error: the path does not exist.",
+            duration_ms=42,
+            error="Error: the path does not exist.",
+        ))
+        await db.commit()
+
+    async with maker() as db:
+        row = (await db.execute(select(ToolCall))).scalar_one()
+        assert row.tool_input == {"command": "view", "path": "/memories/wellness/profile.md"}
+        assert row.duration_ms == 42
+        assert row.error == row.tool_result
+
+    await engine.dispose()
+
+
 # ── Reasoning must not become dialogue ──────────────────────────────────────
 # GLM, Ollama and generic OpenAI-compat gateways inline the model's thinking
 # into `content` wrapped in <think>…</think>. Persisted, it becomes history —
