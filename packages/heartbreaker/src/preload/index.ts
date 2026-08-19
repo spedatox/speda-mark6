@@ -3,8 +3,10 @@ import { electronAPI } from '@electron-toolkit/preload'
 
 const api = {
   platform: process.platform as string,
-  getConfig: (): Promise<{ apiBase: string; apiKey: string }> =>
+  getConfig: (): Promise<{ apiBase: string; apiKey: string; configured: boolean; isDev: boolean }> =>
     ipcRenderer.invoke('get-config'),
+  setConfig: (cfg: { apiBase: string; apiKey: string }): Promise<{ apiBase: string; apiKey: string; configured: boolean }> =>
+    ipcRenderer.invoke('set-config', cfg),
   windowMinimize: () => ipcRenderer.send('window-minimize'),
   windowMaximize: () => ipcRenderer.send('window-maximize'),
   windowClose: () => ipcRenderer.send('window-close'),

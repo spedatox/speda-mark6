@@ -108,12 +108,18 @@ export default function Layout({
 
   const sidebarOpen = settings.sidebarOpen
 
+  // True only while a just-selected session has NO local cache to show
+  // meanwhile — lets ChatMain skeleton the transcript instead of flashing the
+  // "new chat" welcome screen for a conversation that already has history.
+  const [historyLoading, setHistoryLoading] = useState(false)
+
   const handleSelectSession = useCallback(async (sessionId: number) => {
     setDrawerOpen(false)
     // Show the cached transcript instantly (also the offline fallback), then let
     // the server refresh it. If the fetch fails (no network), the cache stays.
     const cached = loadMessages(config.agentId, sessionId)
     dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages: cached ?? [] } })
+    if (!cached) setHistoryLoading(true)
     try {
       const messages = await fetchMessages(config, sessionId)
       // Server is authoritative when it actually returned the turn; if it came
@@ -124,6 +130,7 @@ export default function Layout({
         if (messages.length) saveMessages(config.agentId, sessionId, messages)
       }
     } catch { /* offline — keep the cached transcript already shown */ }
+    finally { setHistoryLoading(false) }
   }, [config, dispatch])
 
   const handleNewChat = useCallback(() => {
@@ -191,6 +198,7 @@ export default function Layout({
           voiceOpen={voiceOpen && !isMobile}
           onCloseVoice={() => setVoiceOpen(false)}
           partyEngaged={partyEngaged}
+          historyLoading={historyLoading}
         />
       </div>
 

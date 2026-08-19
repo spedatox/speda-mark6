@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AppConfig } from '../lib/types'
 import { authHeaders } from '../lib/api'
+import { SkeletonList } from './Skeleton'
 
 interface Props {
   config: AppConfig
@@ -145,12 +146,8 @@ export default function HisarBrowser({ config, current, onSelect, onClose }: Pro
           minHeight: 180, maxHeight: 360,
         }}>
           {loading && (
-            <div style={{
-              padding: '2rem', textAlign: 'center',
-              fontFamily: 'var(--font-mono)', fontSize: '0.66rem',
-              color: 'var(--hb-text-faint)',
-            }}>
-              Reading {path}…
+            <div style={{ padding: '0.4rem 0.7rem' }}>
+              <SkeletonList rows={4} mark={false} />
             </div>
           )}
           {error && (

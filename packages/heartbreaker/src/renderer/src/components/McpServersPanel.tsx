@@ -24,6 +24,7 @@ import {
 } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import { PillBtn, ServiceRow, Switch, fieldStyle } from './settingsUI'
+import { SkeletonList } from './Skeleton'
 
 /** One key/value pair as the editor holds it — an array, not an object, so a
  *  half-typed key doesn't collapse two rows into one while you type. */
@@ -56,6 +57,7 @@ const ServerIcon = () => (
 export default function McpServersPanel({ config }: { config: AppConfig }) {
   const [servers, setServers] = useState<CustomMcpServer[]>([])
   const [reserved, setReserved] = useState<string[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [draft, setDraft] = useState({ ...EMPTY_DRAFT })
   const [envPairs, setEnvPairs] = useState<Pair[]>([])
   const [headerPairs, setHeaderPairs] = useState<Pair[]>([])
@@ -65,9 +67,14 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
   const load = async () => {
-    const r = await getCustomMcpServers(config)
-    setServers(r.servers)
-    setReserved(r.reserved)
+    try {
+      const r = await getCustomMcpServers(config)
+      setServers(r.servers)
+      setReserved(r.reserved)
+    } finally {
+      // Always clear — an unreachable backend must not skeleton this forever.
+      setLoaded(true)
+    }
   }
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -147,7 +154,8 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {servers.map(s => (
+        {!loaded && <SkeletonList rows={2} />}
+        {loaded && servers.map(s => (
           <ServiceRow
             key={s.name}
             tint={s.connected ? '#5cc98f' : undefined}
@@ -168,7 +176,7 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
             <PillBtn onClick={() => remove(s.name)} tone="danger" title="Forget this server">Remove</PillBtn>
           </ServiceRow>
         ))}
-        {servers.length === 0 && !open && (
+        {loaded && servers.length === 0 && !open && (
           <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)', margin: 0 }}>
             No hand-added servers yet.
           </p>

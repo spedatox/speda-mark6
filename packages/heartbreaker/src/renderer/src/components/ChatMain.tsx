@@ -9,6 +9,7 @@ import InputBar from './InputBar'
 import VoiceMode from './VoiceMode'
 import { PermissionPrompt } from './InteractionPrompt'
 import AgentMark from './AgentMark'
+import { Skeleton } from './Skeleton'
 import { hasMark } from '../lib/agentMarks'
 import { VoiceSession, voiceStatus } from '../lib/voice'
 import type { MicState } from '../lib/mic'
@@ -77,8 +78,10 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
   // pleasantries, so it stays out of there.
   const [remark, setRemark] = useState('')
   const [remarkTyped, setRemarkTyped] = useState('')
+  const [remarkLoading, setRemarkLoading] = useState(true)
   useEffect(() => {
     if (!profile?.agentId) return
+    setRemarkLoading(true)
     // The war room's line is FIXED. Everywhere else the remark is a
     // memory-aware one-liner from the cheapest model, but here it states how
     // the protocol works, and that must read the same every single time — it
@@ -86,10 +89,15 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
     // the rules of the room look negotiable.
     if (isWarroom) {
       setRemark('All agents will work on one single task under the leadership of SPEDA.')
+      setRemarkLoading(false)
       return
     }
     let alive = true
-    fetchWelcome(config, profile.agentId).then(t => { if (alive) setRemark(t) })
+    fetchWelcome(config, profile.agentId).then(t => {
+      if (!alive) return
+      setRemark(t)
+      setRemarkLoading(false)
+    })
     return () => { alive = false }
   }, [config, profile?.agentId, isWarroom])
   useEffect(() => {
@@ -214,8 +222,13 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
       </h1>
 
       {/* JARVIS remark — the contextual, memory-aware line under the greeting.
-          Reserves no space until it exists, so the layout never jumps. */}
-      {remarkTyped && (
+          A skeleton line holds its place while it's fetched (agent switches
+          re-trigger this) and collapses away if it resolves empty. */}
+      {remarkLoading ? (
+        <div style={{ marginTop: '0.9rem', width: 'min(360px, 70vw)' }}>
+          <Skeleton height={15} width="100%" />
+        </div>
+      ) : remarkTyped && (
         <p style={{
           // Reads as a sentence, not a readout: the remark is the one piece of
           // prose on this screen, so it drops the HUD letter-spacing.
@@ -232,6 +245,32 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
   )
 }
 
+/** Chat history arriving for a session with no local cache — a few bubble-shaped
+ *  placeholders in the same column MessageList uses, so switching sessions never
+ *  flashes the "new chat" welcome screen for a conversation that already has one. */
+function HistorySkeleton() {
+  const rows = [
+    { side: 'user' as const, width: '38%' },
+    { side: 'assistant' as const, width: '72%' },
+    { side: 'assistant' as const, width: '54%' },
+    { side: 'user' as const, width: '30%' },
+  ]
+  return (
+    <div style={{ flex: 1, overflow: 'hidden', padding: '1.5rem 1rem 0.5rem' }}>
+      <div className="hb-skeleton-group" style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 22 }}>
+        {rows.map((r, i) => (
+          <div key={i} style={{
+            display: 'flex', justifyContent: r.side === 'user' ? 'flex-end' : 'flex-start',
+            ['--hb-skeleton-delay' as string]: `${i * 0.09}s`,
+          }}>
+            <Skeleton width={r.width} height={r.side === 'user' ? 34 : 58} radius={14} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 interface Props {
   config: AppConfig
   /** House Party is ENGAGED — the transcript becomes the group room. */
@@ -240,11 +279,14 @@ interface Props {
   /** Voice mode replaces the transcript with the orb; the composer stays. */
   voiceOpen?: boolean
   onCloseVoice?: () => void
+  /** Layout set this while a just-selected session's history is in flight and
+   *  no local cache existed to show meanwhile — see handleSelectSession. */
+  historyLoading?: boolean
 }
 
 // `onSelectSession` stays in Props — Layout passes it — but nothing in here
 // reads it any more; session selection moved to the sidebar's own handler.
-export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged }: Props) {
+export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged, historyLoading }: Props) {
   const { state, dispatch } = useChatContext()
   const { settings, update } = useSettings()
   const profile = useProfile()
@@ -953,7 +995,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
         // composer, sending, streaming, re-attach — is unchanged underneath.
         ? <PartyStream config={config} />
         : isEmpty
-        ? <WelcomeView onSend={send} config={config} />
+        ? (historyLoading ? <HistorySkeleton /> : <WelcomeView onSend={send} config={config} />)
         : (
           <MessageList
             onDelete={handleDelete}

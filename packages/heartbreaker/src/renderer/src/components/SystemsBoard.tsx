@@ -12,6 +12,7 @@ import type { AppConfig, ModelInfo } from '../lib/types'
 import { agentColor, monogram } from '../lib/agents'
 import AgentModelPicker from './AgentModelPicker'
 import GlassSelect from './GlassSelect'
+import { Skeleton, SkeletonList } from './Skeleton'
 
 /**
  * SYSTEMS BOARD — the deep view of the deck's instrumentation.
@@ -239,11 +240,16 @@ function Spark({ samples }: { samples: number[] }) {
   const W = 196, H = 56
   if (samples.length < 2) {
     return (
-      <div style={{
-        height: H, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: '0.8125rem', color: 'var(--hb-text-faint)',
-      }}>
-        AWAITING TELEMETRY_
+      <div className="hb-skeleton-group" style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: H, padding: '0 2px' }}>
+        {Array.from({ length: 18 }).map((_, i) => (
+          <Skeleton
+            key={i}
+            width="100%"
+            height={`${22 + ((i * 11) % 6) * 11}%`}
+            radius={1}
+            style={{ flex: 1, ['--hb-skeleton-delay' as string]: `${i * 0.03}s` }}
+          />
+        ))}
       </div>
     )
   }
@@ -296,6 +302,10 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState<string | null>(null)
   const [revs, setRevs] = useState<MemoryRevisionInfo[] | null>(null)
+  // False until the boot batch below settles — without it, an agent switch
+  // (this re-fetches on every `config` change) briefly reads as "no servers
+  // connected" / "no model catalogue" instead of loading.
+  const [boardLoaded, setBoardLoaded] = useState(false)
 
   const loadConns = () => getConnections(config).then(r => {
     setServers(r.servers)
@@ -303,18 +313,21 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   }).catch(() => {})
 
   useEffect(() => {
-    fetchModels(config).then(setModels).catch(() => {})
-    fetchAgentModels(config).then(setAgentInfos)
-    fetchLegionModels(config).then(setLegionInfos)
-    getBudgetMode(config).then(setBudgetMode).catch(() => {})
-    fetchMemoryFolders(config).then(setMemFolders).catch(() => {})
-    fetchMemoryFiles(config).then(files => {
-      setMemFiles(files)
-      // Open on the owner file — the extracted facts about the user.
-      const preferred = files.find(f => f.path.endsWith('/owner.md')) ?? files[0]
-      if (preferred) setMemPath(preferred.path)
-    }).catch(() => {})
-    loadConns()
+    setBoardLoaded(false)
+    Promise.all([
+      fetchModels(config).then(setModels).catch(() => {}),
+      fetchAgentModels(config).then(setAgentInfos),
+      fetchLegionModels(config).then(setLegionInfos),
+      getBudgetMode(config).then(setBudgetMode).catch(() => {}),
+      fetchMemoryFolders(config).then(setMemFolders).catch(() => {}),
+      fetchMemoryFiles(config).then(files => {
+        setMemFiles(files)
+        // Open on the owner file — the extracted facts about the user.
+        const preferred = files.find(f => f.path.endsWith('/owner.md')) ?? files[0]
+        if (preferred) setMemPath(preferred.path)
+      }).catch(() => {}),
+      loadConns(),
+    ]).finally(() => setBoardLoaded(true))
   }, [config]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -561,7 +574,9 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         </Panel>
 
         <Panel title="Connected servers" style={{ flex: 1, animation: 'hbRise 0.4s 0.12s ease both' }}>
-          {servers.length === 0 ? (
+          {!boardLoaded ? (
+            <SkeletonList rows={3} mark={false} />
+          ) : servers.length === 0 ? (
             <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)', padding: '4px 0' }}>
               No servers connected
             </p>
@@ -600,7 +615,9 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
             oversized invented designation is the exact set dressing this board
             is not allowed to carry. */}
         <div style={{ position: 'relative', padding: '4px 2px', minHeight: '100%' }}>
-          {models.length === 0 && (
+          {!boardLoaded ? (
+            <SkeletonList rows={3} />
+          ) : models.length === 0 && (
             <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)', padding: '4px 0' }}>
               No model catalogue — no provider keys are configured on this server.
             </p>
@@ -887,7 +904,11 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         }
         style={{ gridColumn: '1 / -1', animation: 'hbRise 0.45s 0.26s ease both' }}
       >
-        {memFiles.length === 0 ? (
+        {!boardLoaded ? (
+          <div style={{ margin: '4px 18px' }}>
+            <SkeletonList rows={2} mark={false} />
+          </div>
+        ) : memFiles.length === 0 ? (
           <p style={{ margin: '4px 18px', fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>
             No memory files yet — nothing has been written to the record.
           </p>
