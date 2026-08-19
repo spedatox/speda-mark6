@@ -30,8 +30,8 @@ Only INBOUND host SSH (`system_ops_ssh_port`, plus 22 when that differs) and
     them, which is what keeps the host bridge (services/host_bridge.py) alive
     while engaged. Orion can still operate the host; lockdown can still be
     lifted from inside.
-  * All outbound traffic — the model APIs, Google, Telegram. A contained SPEDA
-    is still a working SPEDA.
+  * All outbound traffic — the model APIs, Google, Telegram. A contained Speda
+    is still a working Speda.
 
 WHY TWO CHAINS
 --------------

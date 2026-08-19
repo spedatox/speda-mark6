@@ -149,7 +149,7 @@ fun AgentSwitcherOverlay(
             verticalArrangement = Arrangement.Center,
         ) {
             // ── Title ─────────────────────────────────────────────────────────
-            HbText("ARMOURY // SPEDA MARK VI", style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.28.em), color = selColor, caps = true)
+            HbText("ARMOURY // Speda MARK VI", style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.28.em), color = selColor, caps = true)
             Spacer(Modifier.height(10.dp))
             HbText("SELECT YOUR AGENT", style = HbType.headerBar.copy(fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.24.em), color = Color(0xFFEEF7FA), caps = true)
             Spacer(Modifier.height(10.dp))

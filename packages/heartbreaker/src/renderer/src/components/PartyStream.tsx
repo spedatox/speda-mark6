@@ -34,7 +34,7 @@ const MD_PLUGINS = [remarkGfm]
 
 export default function PartyStream({ config, commanderId = 'speda' }: {
   config: AppConfig
-  /** Which agent is chairing — SPEDA under the war-room alias. */
+  /** Which agent is chairing — Speda under the war-room alias. */
   commanderId?: string
 }) {
   const { state } = useChatContext()

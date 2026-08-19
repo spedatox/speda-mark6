@@ -311,7 +311,7 @@ class HousePartySkill(Skill):
     search_keywords = "house party protocol all hands roster emergency all agents mobilize"
     description = (
         "Engages or stands down the House Party Protocol — the all-hands mode for "
-        "extremely high-stakes situations, where SPEDA becomes mission commander, "
+        "extremely high-stakes situations, where Speda becomes mission commander, "
         "plans the objective, and dispatches the ENTIRE roster in parallel with "
         "every agent at full model grade and domain boundaries relaxed. This is a "
         "HEAVY, EXPENSIVE, still-PROTOTYPE capability: it burns full-grade model "
@@ -444,7 +444,7 @@ class HousePartySkill(Skill):
 
         # ── Engage: passphrase-gated ────────────────────────────────────────────
         # The protocol is heavy/expensive/prototype, so it only arms on the
-        # owner's exact authorization passphrase. Constant-time compare; SPEDA
+        # owner's exact authorization passphrase. Constant-time compare; Speda
         # never learns the secret.
         import hmac
 

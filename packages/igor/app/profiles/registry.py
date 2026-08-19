@@ -59,7 +59,7 @@ class ProfileRegistry:
 
     @property
     def default(self) -> AgentProfile:
-        """The SPEDA profile — backs unscoped paths. Raises if never registered."""
+        """The Speda profile — backs unscoped paths. Raises if never registered."""
         return self.require(DEFAULT_AGENT_ID)
 
     def roster(self) -> list[AgentProfile]:

@@ -5,7 +5,7 @@ Google's remote MCP servers (gmailmcp.googleapis.com, …) require enrolment in 
 Google Workspace Developer Preview Program and blanket-deny otherwise ("caller
 does not have permission"), even with a valid token and every API enabled. The
 standard REST APIs (gmail.googleapis.com, calendar, drive, people) work with the
-exact same OAuth token, so SPEDA talks to those directly.
+exact same OAuth token, so Speda talks to those directly.
 
 GoogleRestClient duck-types the MCPClient surface the registry already drives
 (server_name / connect / list_tools / call_tool / disconnect), so registration,

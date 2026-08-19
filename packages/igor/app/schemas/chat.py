@@ -29,7 +29,7 @@ class ClientLocation(BaseModel):
 
 class ClientContext(BaseModel):
     """Ambient facts about the client the owner is speaking from — which device,
-    OS and app, and (opt-in) where. Lets SPEDA answer platform/location-aware
+    OS and app, and (opt-in) where. Lets Speda answer platform/location-aware
     questions ("what's near me", "is this the phone or the desktop") without a
     tool round-trip. Assembled fresh by the client each turn; optional throughout."""
     platform: str | None = None       # "android" | "desktop" | "web" | …
@@ -54,7 +54,7 @@ class ChatRequest(BaseModel):
     documents: list[DocumentAttachment] = []
 
     # Ambient client/platform/location context for THIS turn. Stamped onto the
-    # live user message only (not stored), so SPEDA is platform- and location-aware
+    # live user message only (not stored), so Speda is platform- and location-aware
     # without the churn a clock/location in the cached system prefix would cause.
     client_context: ClientContext | None = None
 

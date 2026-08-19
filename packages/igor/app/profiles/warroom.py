@@ -6,10 +6,10 @@ class WarRoomProfile(SPEDAProfile):
     """
     WAR ROOM — the House Party Protocol command channel.
 
-    This is SPEDA's brain behind a separate conversation scope: same prompts,
+    This is Speda's brain behind a separate conversation scope: same prompts,
     same full tool access, same model policy. The distinct agent_id exists so
     war-room operations get their own session history (sessions are scoped by
-    (user_id, agent_id)) instead of mixing into the owner's day-to-day SPEDA
+    (user_id, agent_id)) instead of mixing into the owner's day-to-day Speda
     chats. The Heartbreaker war room addresses POST /chat/warroom while the
     protocol is engaged.
 

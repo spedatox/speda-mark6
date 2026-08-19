@@ -1,7 +1,7 @@
 {
   "name": "Persistent reminders — Atomix",
   "meta": {
-    "description": "A reminder that keeps asking over Telegram until you tap an answer. Everything is configured in TWO places in one node: which agent asks, and the reminder list. Fork this workflow once per agent (Atomix for health, SPEDA for chores…), rename it, edit the list, activate. Asking and answering cost zero tokens — no LLM is involved unless you reply in words instead of tapping."
+    "description": "A reminder that keeps asking over Telegram until you tap an answer. Everything is configured in TWO places in one node: which agent asks, and the reminder list. Fork this workflow once per agent (Atomix for health, Speda for chores…), rename it, edit the list, activate. Asking and answering cost zero tokens — no LLM is involved unless you reply in words instead of tapping."
   },
   "nodes": [
     {

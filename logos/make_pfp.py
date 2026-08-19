@@ -33,7 +33,7 @@ def lift(rgb, trigger=0.62, target=0.82):
     wash the hue out instead.
 
     Trigger and target are deliberately separate. A blanket floor of `target`
-    would also lift Ultron, Atomix and SPEDA, which already read correctly;
+    would also lift Ultron, Atomix and Speda, which already read correctly;
     only accents below `trigger` are actually in trouble, and those need a jump
     well past the trigger to fix. As tuned, Optimus is the only one that moves.
     """

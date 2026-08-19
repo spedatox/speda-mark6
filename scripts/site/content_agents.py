@@ -17,11 +17,11 @@ from build import BASE, REPO, ROSTER, Page, emblem, url
 
 AGENTS = {
     "speda": dict(
-        title="SPEDA — The Chief of Staff Agent of SPEDA Mark VI",
-        meta="SPEDA is the orchestrator of SPEDA Mark VI: it plans, routes, arms automations and commands the roster — the one agent whose recall spans all the others.",
-        keywords="SPEDA agent, chief of staff AI agent, AI orchestrator agent, multi-agent orchestration",
+        title="Speda — The Chief of Staff Agent of Speda Mark VI",
+        meta="Speda is the orchestrator of Speda Mark VI: it plans, routes, arms automations and commands the roster — the one agent whose recall spans all the others.",
+        keywords="Speda agent, chief of staff AI agent, AI orchestrator agent, multi-agent orchestration",
         tagline="The orchestrator, and the agent you talk to by default.",
-        lede="SPEDA is the executive. It takes the request, decides whether it can be answered in one loop or "
+        lede="Speda is the executive. It takes the request, decides whether it can be answered in one loop or "
              "needs a specialist, arms the automations, deploys workers when a job genuinely warrants them, and "
              "carries the thread across everything the other seven are doing.",
         doctrine="Do the work, or find who should. Never hand the owner a routing decision he did not ask to make.",
@@ -29,7 +29,7 @@ AGENTS = {
         operates=[
             "<strong>Routes rather than performs</strong> when a task belongs in someone else's domain — the "
             "specialists are dispatched to, not suggested to the owner.",
-            "<strong>Composes automations in-conversation.</strong> Ask for something to be watched and SPEDA "
+            "<strong>Composes automations in-conversation.</strong> Ask for something to be watched and Speda "
             "writes the watcher, arms it, and reports when it fires.",
             "<strong>Deploys the Legion sparingly.</strong> The tool description is written to talk the model "
             "out of it: expensive and rare, never for lookups or news.",
@@ -37,24 +37,24 @@ AGENTS = {
             "other profile operates.",
         ],
         arch=[
-            "<code>episodic_recall_scope = \"all\"</code> — a new SPEDA session is seeded with recent session "
+            "<code>episodic_recall_scope = \"all\"</code> — a new Speda session is seeded with recent session "
             "recaps from <em>every</em> agent, tagged by <code>agent_id</code>. Specialists see only their own. "
             "This is the orchestrator privilege, and no other profile has it.",
             "<code>house_party_commander = True</code> — the only profile that commands rather than operates "
-            "under the protocol. The War Room channel subclasses SPEDA to inherit it.",
+            "under the protocol. The War Room channel subclasses Speda to inherit it.",
             "Its display name is <em>derived from the prompt file's H1</em>, not hardcoded: editing "
             "<code>prompts/core/01_identity.md</code> rebrands the backend without touching Python.",
             "Ten core prompt sections are assembled per turn, then a skills manifest is appended that reads "
             "<code>SKILL.md</code> frontmatter at request time — so adding a skill needs no prompt edit.",
         ],
-        closing="SPEDA is also the fork point. Because identity lives entirely in prompt and profile files and "
+        closing="Speda is also the fork point. Because identity lives entirely in prompt and profile files and "
                 "the engine holds zero identity strings, the same codebase ships as any single agent — a fully "
                 "branded standalone app — by flipping one build flag.",
     ),
 
     "sentinel": dict(
-        title="Sentinel — The Finance Agent of SPEDA Mark VI",
-        meta="Sentinel is the finance agent of SPEDA Mark VI: markets, holdings, budgets and the numbers behind a decision, with a hard not-a-licensed-advisor boundary.",
+        title="Sentinel — The Finance Agent of Speda Mark VI",
+        meta="Sentinel is the finance agent of Speda Mark VI: markets, holdings, budgets and the numbers behind a decision, with a hard not-a-licensed-advisor boundary.",
         keywords="Sentinel agent, AI finance agent, budget intelligence AI, market monitoring agent",
         tagline="The owner's money — and the number behind every claim.",
         lede="Sentinel owns markets, holdings, budgets, spending, macro context and the arithmetic under a "
@@ -88,8 +88,8 @@ AGENTS = {
     ),
 
     "nightcrawler": dict(
-        title="NightCrawler — The OSINT Agent of SPEDA Mark VI",
-        meta="NightCrawler is the OSINT and web-surveillance agent of SPEDA Mark VI: lawful open-source intelligence, corroboration, the watchers and the News Desk.",
+        title="NightCrawler — The OSINT Agent of Speda Mark VI",
+        meta="NightCrawler is the OSINT and web-surveillance agent of Speda Mark VI: lawful open-source intelligence, corroboration, the watchers and the News Desk.",
         keywords="NightCrawler agent, OSINT AI agent, web surveillance AI, open source intelligence automation, threat intelligence agent",
         tagline="Finds what is out there, verifies it, and keeps watching it.",
         lede="NightCrawler is the system's eyes on the open web: finding, monitoring and corroborating public "
@@ -121,8 +121,8 @@ AGENTS = {
     ),
 
     "ultron": dict(
-        title="Ultron — The Academic-Life Agent of SPEDA Mark VI",
-        meta="Ultron is the academic-life agent of SPEDA Mark VI: coursework, exams, study planning and the collision between university and a full-time job.",
+        title="Ultron — The Academic-Life Agent of Speda Mark VI",
+        meta="Ultron is the academic-life agent of Speda Mark VI: coursework, exams, study planning and the collision between university and a full-time job.",
         keywords="Ultron agent, AI study planner, academic assistant AI, university work balance, coursework planning agent",
         tagline="University and a job at the same time — planned honestly.",
         lede="Ultron owns the owner's academic life and the hard constraint that shapes it: he studies at "
@@ -156,8 +156,8 @@ AGENTS = {
     ),
 
     "centurion": dict(
-        title="Centurion — The Cyber Security Agent of SPEDA Mark VI",
-        meta="Centurion is the cyber security agent of SPEDA Mark VI: CVE and threat intelligence, exposure assessment, hardening and authorized testing from an isolated cell.",
+        title="Centurion — The Cyber Security Agent of Speda Mark VI",
+        meta="Centurion is the cyber security agent of Speda Mark VI: CVE and threat intelligence, exposure assessment, hardening and authorized testing from an isolated cell.",
         keywords="Centurion agent, AI cyber security agent, CVE intelligence automation, authorized penetration testing AI, threat intelligence agent",
         tagline="Defence and offence in balance, on authorized targets only.",
         lede="Centurion covers vulnerabilities, threats, advisories, exposure, hardening, exploitation and "
@@ -192,8 +192,8 @@ AGENTS = {
     ),
 
     "atomix": dict(
-        title="Atomix — The Health Agent of SPEDA Mark VI",
-        meta="Atomix is the personal health agent of SPEDA Mark VI: fitness, nutrition, sleep and training, tracked against a real record with a hard not-a-doctor boundary.",
+        title="Atomix — The Health Agent of Speda Mark VI",
+        meta="Atomix is the personal health agent of Speda Mark VI: fitness, nutrition, sleep and training, tracked against a real record with a hard not-a-doctor boundary.",
         keywords="Atomix agent, AI health assistant, personal fitness AI agent, training log AI, wellness tracking agent",
         tagline="The owner's body — on evidence, not fads.",
         lede="Atomix owns fitness, nutrition, sleep, training, habits, recovery and day-to-day wellbeing. It "
@@ -227,8 +227,8 @@ AGENTS = {
     ),
 
     "optimus": dict(
-        title="Optimus — The Systems & Code Agent of SPEDA Mark VI",
-        meta="Optimus is the systems, code and infrastructure agent of SPEDA Mark VI — the one agent whose real engine is a standalone external framework, The Forge.",
+        title="Optimus — The Systems & Code Agent of Speda Mark VI",
+        meta="Optimus is the systems, code and infrastructure agent of Speda Mark VI — the one agent whose real engine is a standalone external framework, The Forge.",
         keywords="Optimus agent, AI coding agent, agentic coding framework, infrastructure AI agent, The Forge execution engine",
         tagline="Architecturally unique: its real engine lives somewhere else.",
         lede="Optimus owns architecture, code, debugging, DevOps, scripting, automation and the systems that "
@@ -265,8 +265,8 @@ AGENTS = {
     ),
 
     "orion": dict(
-        title="Orion — The Memory Custodian of SPEDA Mark VI",
-        meta="Orion is the custodian agent of SPEDA Mark VI: memory hygiene, the nightly audit and host operations. Its subject is the system itself, not the outside world.",
+        title="Orion — The Memory Custodian of Speda Mark VI",
+        meta="Orion is the custodian agent of Speda Mark VI: memory hygiene, the nightly audit and host operations. Its subject is the system itself, not the outside world.",
         keywords="Orion agent, AI memory custodian, agent memory hygiene, AI system maintenance agent",
         tagline="Its subject is the system itself.",
         lede="Orion is not a specialist in finance, health or research. It keeps the owner's memory clean, "
@@ -352,7 +352,7 @@ def _agent_page(agent_id: str, name: str, mark: str, short_domain: str) -> Page:
     body = f"""
 <section class="hero" style="min-height:auto;padding:6rem 0 3rem">
   <div class="wrap">
-    <p class="crumb"><a href="../../">SPEDA Mark VI</a><span>/</span><a href="../">The roster</a><span>/</span></p>
+    <p class="crumb"><a href="../../">Speda Mark VI</a><span>/</span><a href="../">The roster</a><span>/</span></p>
     <div class="crest rise">{emblem(agent_id)}</div>
     <p class="eyebrow rise">{mark} · {short_domain}</p>
     <h1 class="rise">{name}</h1>
@@ -418,7 +418,7 @@ def _agent_page(agent_id: str, name: str, mark: str, short_domain: str) -> Page:
         slug=f"agents/{agent_id}",
         title=a["title"],
         description=a["meta"],
-        keywords=a["keywords"] + ", SPEDA Mark VI",
+        keywords=a["keywords"] + ", Speda Mark VI",
         body=body,
         nav="agents",
         accent=agent_id,
@@ -426,11 +426,11 @@ def _agent_page(agent_id: str, name: str, mark: str, short_domain: str) -> Page:
         priority="0.8",
         jsonld=[{
             "@type": "TechArticle",
-            "headline": f"{name} — {short_domain} agent of SPEDA Mark VI",
+            "headline": f"{name} — {short_domain} agent of Speda Mark VI",
             "description": a["meta"],
             "url": url(f"agents/{agent_id}"),
             "author": {"@id": f"{BASE}/#author"},
-            "about": {"@type": "SoftwareApplication", "name": "SPEDA Mark VI", "url": url("")},
+            "about": {"@type": "SoftwareApplication", "name": "Speda Mark VI", "url": url("")},
             "proficiencyLevel": "Expert",
         }],
     )
@@ -461,7 +461,7 @@ def roster_page() -> Page:
     body = f"""
 <section class="hero" style="min-height:auto;padding:6rem 0 2rem">
   <div class="wrap">
-    <p class="crumb"><a href="../">SPEDA Mark VI</a><span>/</span></p>
+    <p class="crumb"><a href="../">Speda Mark VI</a><span>/</span></p>
     <p class="eyebrow rise">The roster</p>
     <h1 class="rise">Eight agents,<br>one memory of you</h1>
     <p class="lede rise">They are not eight installs. Six run as <strong>in-process agent profiles</strong>
@@ -498,13 +498,13 @@ def roster_page() -> Page:
       </article>
       <article class="holo pad">
         <h3 class="card-title">Memory scope</h3>
-        <p class="card-body">Specialists recall only their own threads. SPEDA alone is seeded with recent
+        <p class="card-body">Specialists recall only their own threads. Speda alone is seeded with recent
           recaps from every agent — the orchestrator privilege. Atomix alone gets the training log injected
           every turn.</p>
       </article>
       <article class="holo pad">
         <h3 class="card-title">Architectural rank</h3>
-        <p class="card-body">SPEDA commands under House Party Protocol; the others operate. Optimus and
+        <p class="card-body">Speda commands under House Party Protocol; the others operate. Optimus and
           Centurion may be proxied to an external peer. Orion and Optimus alone can see the host-operations
           capability, guarded at the skill level.</p>
       </article>
@@ -522,7 +522,7 @@ def roster_page() -> Page:
     <figure>
       <img src="https://github.com/user-attachments/assets/c7c889c1-fe57-497b-bfc8-f59246764b14"
            width="1918" height="1016" loading="lazy"
-           alt="The SPEDA Mark VI agent switcher showing all eight agents with their marks, domains and accent colours">
+           alt="The Speda Mark VI agent switcher showing all eight agents with their marks, domains and accent colours">
       <figcaption>The switcher — the whole interface recolours to whoever you are addressing</figcaption>
     </figure>
   </div>
@@ -538,9 +538,9 @@ def roster_page() -> Page:
       <a class="holo pad agent-card" style="--a: var(--warroom)" href="../systems/house-party/">
         <span class="name">War Room</span>
         <span class="domain">A session scope, not an agent</span>
-        <p class="card-body">The House Party Protocol command channel. It is SPEDA's brain behind a separate
+        <p class="card-body">The House Party Protocol command channel. It is Speda's brain behind a separate
           conversation scope — same prompts, same tools, same model policy — so full-roster operations never
-          bleed into the owner's day-to-day chats. Agents dispatch to SPEDA, never to it.</p>
+          bleed into the owner's day-to-day chats. Agents dispatch to Speda, never to it.</p>
       </a>
       <a class="holo pad agent-card" style="--a: var(--ultron)" href="../systems/legion/">
         <span class="name">The Legion</span>
@@ -555,13 +555,13 @@ def roster_page() -> Page:
 """
     return Page(
         slug="agents",
-        title="The Roster — The 8 AI Agents of SPEDA Mark VI",
+        title="The Roster — The 8 AI Agents of Speda Mark VI",
         description=(
-            "SPEDA, Sentinel, NightCrawler, Ultron, Centurion, Atomix, Optimus and Orion — the eight agents of "
-            "SPEDA Mark VI, their domains and operating doctrines."
+            "Speda, Sentinel, NightCrawler, Ultron, Centurion, Atomix, Optimus and Orion — the eight agents of "
+            "Speda Mark VI, their domains and operating doctrines."
         ),
         keywords=(
-            "SPEDA Mark VI agents, multi-agent AI roster, Sentinel agent, NightCrawler OSINT agent, Ultron "
+            "Speda Mark VI agents, multi-agent AI roster, Sentinel agent, NightCrawler OSINT agent, Ultron "
             "agent, Centurion security agent, Atomix health agent, Optimus coding agent, Orion memory custodian"
         ),
         body=body,
@@ -570,8 +570,8 @@ def roster_page() -> Page:
         priority="0.9",
         jsonld=[{
             "@type": "ItemList",
-            "name": "The eight agents of SPEDA Mark VI",
-            "description": "The full agent roster of SPEDA Mark VI, each an agent profile with its own identity, doctrine and model policy.",
+            "name": "The eight agents of Speda Mark VI",
+            "description": "The full agent roster of Speda Mark VI, each an agent profile with its own identity, doctrine and model policy.",
             "numberOfItems": 8,
             "itemListElement": [
                 {"@type": "ListItem", "position": i, "name": f"{name} — {dom}", "url": url(f"agents/{aid}")}

@@ -216,7 +216,7 @@ async def test_another_agents_tick_does_not_touch_it(db):
     bot = FakeBot(); bots = FakeBots(bot)
     await R.open_ask(db, agent_id="atomix", reminder_id="atomix_evening", text=EVENING, bots=bots)
     await R.tick(db, "speda", [], bots, now=R.owner_now() + timedelta(minutes=30))
-    assert len(bot.sent) == 1, "SPEDA's tick must not re-ask Atomix's reminder"
+    assert len(bot.sent) == 1, "Speda's tick must not re-ask Atomix's reminder"
 
 
 # ── The ledger Atomix reads back ─────────────────────────────────────────────

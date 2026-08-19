@@ -1,7 +1,7 @@
 """
 Conversation history search.
 
-Lets SPEDA search the owner's entire conversation history — not just the current
+Lets Speda search the owner's entire conversation history — not just the current
 session's rolling window — filtered by keyword and/or date range. This is recall
 over raw past exchanges, complementing the curated memory files.
 """

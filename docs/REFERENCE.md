@@ -1,4 +1,4 @@
-# SPEDA Mark VI — Technical Reference
+# Speda Mark VI — Technical Reference
 
 The engineering companion to the [README](../README.md): the full capability
 catalog, HTTP API, configuration, and the architectural rules. The binding
@@ -37,8 +37,8 @@ agentic loop handles every stop reason explicitly (`end_turn`, `tool_use`,
 |---|---|
 | `packages/igor` | FastAPI backend — orchestrator, capability registry, skills, memory, automations, news desk, turn runner |
 | `packages/heartbreaker` | **Primary UI** (Electron + React) — the fluid-glass HUD |
-| `packages/striker` | *SPEDA Mark VI Core* — the single-agent (SPEDA-only) public "lite" build; same features on a calmer theme (re-themed from the old `packages/desktop` neutral base) |
-| `packages/speda-go` | **SPEDA GO** — native Kotlin + Compose mobile client |
+| `packages/striker` | *Speda Mark VI Core* — the single-agent (Speda-only) public "lite" build; same features on a calmer theme (re-themed from the old `packages/desktop` neutral base) |
+| `packages/speda-go` | **Speda GO** — native Kotlin + Compose mobile client |
 | `packages/sandbox` | Isolated command-execution container ("capable computer") |
 | *(separate repo)* The Forge | Optimus's Mark II execution engine — connects back as a WebSocket peer |
 

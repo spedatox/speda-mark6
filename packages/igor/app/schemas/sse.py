@@ -7,7 +7,7 @@ class SSEEventType(str, Enum):
     CHUNK = "chunk"
     TOOL = "tool"
     TOOL_RESULT = "tool_result"   # what a tool returned (for the disclosure panel)
-    FILE = "file"     # a downloadable file SPEDA produced this turn
+    FILE = "file"     # a downloadable file Speda produced this turn
     PERMISSION_REQUEST = "permission_request"  # a peer's gate is asking the owner
     HOUSE_PARTY_AUTH = "house_party_auth"      # open the HPP authorization window
     LOCKDOWN_AUTH = "lockdown_auth"            # open the containment authorization window

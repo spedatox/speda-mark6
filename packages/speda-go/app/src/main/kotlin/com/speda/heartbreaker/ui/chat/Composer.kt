@@ -340,7 +340,7 @@ fun Composer(
                         runCatching { dictate.launch(speechIntent()) }
                     }
                     // Budget mode. Optimistic in the UI and re-synced after each
-                    // turn by the caller, because SPEDA can flip it itself.
+                    // turn by the caller, because Speda can flip it itself.
                     AttachItem(
                         label = when (budgetMode) {
                             true -> "Budget mode · FRUGAL"

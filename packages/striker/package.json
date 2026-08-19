@@ -1,7 +1,7 @@
 {
   "name": "speda-mark6-core",
   "version": "0.1.0",
-  "description": "SPEDA Mark VI Core — simplistic single-agent SPEDA client (codename Striker)",
+  "description": "Speda Mark VI Core — simplistic single-agent Speda client (codename Striker)",
   "main": "./out/main/index.js",
   "author": "Ahmet Erol Bayrak",
   "scripts": {

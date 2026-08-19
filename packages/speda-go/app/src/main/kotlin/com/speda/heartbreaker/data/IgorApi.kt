@@ -490,7 +490,7 @@ class IgorApi(
      * is a desktop surface now — the backend refuses to ENGAGE it from a
      * non-desktop client (app/core/surface.py) — and nothing in this app calls
      * the endpoint any more. The owner can still stand the protocol down from
-     * the phone by telling SPEDA, which goes through the `house_party` tool
+     * the phone by telling Speda, which goes through the `house_party` tool
      * rather than this client.
      */
 

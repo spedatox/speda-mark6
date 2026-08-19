@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render site/assets/og.png — the 1200x630 social card for SPEDA Mark VI.
+"""Render site/assets/og.png — the 1200x630 social card for Speda Mark VI.
 
 Every crawler that builds a link preview (Google, X, Slack, Discord, Telegram,
 LinkedIn, iMessage) reads og:image, and none of them accept SVG. So the card is
@@ -26,7 +26,7 @@ INK = (4, 7, 10)
 
 # Agent accents, roster order — mirrors brands.ts.
 ACCENTS = [
-    (0x36, 0xAB, 0xCA),  # SPEDA
+    (0x36, 0xAB, 0xCA),  # Speda
     (0xD9, 0x9C, 0x44),  # Sentinel
     (0x91, 0x65, 0xE6),  # NightCrawler
     (0x8A, 0x93, 0xA6),  # Ultron

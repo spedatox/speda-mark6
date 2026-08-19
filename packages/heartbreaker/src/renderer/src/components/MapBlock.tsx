@@ -2,7 +2,7 @@
  * MapBlock — Stark inline map + navigation renderer (desktop parity with the
  * Android ui/prose/MapBlock.kt).
  *
- * Triggered by ```map code blocks in markdown. SPEDA emits JSON matching the
+ * Triggered by ```map code blocks in markdown. Speda emits JSON matching the
  * fence contract in prompts/core/06_visual_output.md. Rendered with MapLibre GL
  * (our own Stark dark style over OpenFreeMap vector tiles — no Google Play
  * Services, no Maps key on the client).

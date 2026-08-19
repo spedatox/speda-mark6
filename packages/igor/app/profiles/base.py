@@ -19,7 +19,7 @@ class DocTheme:
 
 class AgentProfile(ABC):
     """
-    ABC for all in-process agent identity profiles (SPEDA + the five Superior
+    ABC for all in-process agent identity profiles (Speda + the five Superior
     Six that run here). One subclass per agent_id; the engine is untouched by
     identity (Rule 10). The ProfileRegistry loads every enabled subclass at
     startup and the orchestrator resolves one per request from context.agent_id.
@@ -59,7 +59,7 @@ class AgentProfile(ABC):
     # Episodic session recall scope (Rule 10: identity decision lives here, not
     # in the skill). "own" — a new session sees only THIS agent's recent session
     # recaps (specialists stay in their lane). "all" — sees every agent's recaps,
-    # tagged by agent_id; the orchestrator profile (SPEDA) overrides to this so
+    # tagged by agent_id; the orchestrator profile (Speda) overrides to this so
     # it has cross-agent situational awareness.
     episodic_recall_scope: Literal["own", "all"] = "own"
 
@@ -68,7 +68,7 @@ class AgentProfile(ABC):
     # roster, debriefs the owner), False = OPERATIVE (takes dispatched work,
     # including work outside its usual domain). The orchestrator picks the
     # protocol block off this flag — identity decision, so it lives here and not
-    # as an agent_id comparison in core (Rule 10). SPEDA sets it True, and its
+    # as an agent_id comparison in core (Rule 10). Speda sets it True, and its
     # war-room session alias inherits it.
     house_party_commander: bool = False
 

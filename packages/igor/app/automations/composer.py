@@ -1,13 +1,13 @@
 """
-Workflow composer — turns SPEDA's structured intent into valid n8n workflow JSON.
+Workflow composer — turns Speda's structured intent into valid n8n workflow JSON.
 
-SPEDA decides the *semantics* (poll this URL every 6h, watch for a change, stop
+Speda decides the *semantics* (poll this URL every 6h, watch for a change, stop
 after 30 days, ping me) and emits a `spec`; this module deterministically
 assembles correct n8n node graphs from a validated block library. That keeps
-"SPEDA, track this site for a month" reliable — no gambling on hand-written n8n
+"Speda, track this site for a month" reliable — no gambling on hand-written n8n
 JSON — while still letting it compose any combination of triggers/conditions.
 
-Every composed workflow terminates in an HTTP Request node that calls SPEDA's
+Every composed workflow terminates in an HTTP Request node that calls Speda's
 `POST /trigger/speda` with `output_mode: "push"` and the owner's natural-language
 intent, so when the watcher fires the orchestrator composes the actual message
 and Telegram delivers it.
@@ -64,7 +64,7 @@ def _interval_rule(minutes: int) -> dict:
 
 def _callback_body(kind: str, name: str, intent: str) -> str:
     """n8n expression building the /trigger/speda body. Static strings are
-    JSON-escaped (valid JS literals); `$json` carries the upstream item so SPEDA
+    JSON-escaped (valid JS literals); `$json` carries the upstream item so Speda
     sees what actually fired (the new email, the changed page, the feed item)."""
     return (
         "={{ ({ \"payload\": { "
@@ -80,7 +80,7 @@ def _callback_node(kind: str, name: str, intent: str, x: int, agent_id: str = "s
     """The terminal HTTP Request → the owning agent. Carries both required
     secrets and fires /trigger/{agent_id} so the push is composed in that
     agent's voice."""
-    return _node("Notify SPEDA", _T_HTTP, x, {
+    return _node("Notify Speda", _T_HTTP, x, {
         "method": "POST",
         "url": f"{settings.speda_callback_url.rstrip('/')}/trigger/{agent_id}",
         "sendHeaders": True,
@@ -152,7 +152,7 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
     agent_id is the agent that owns the watcher; the terminal callback fires
     /trigger/{agent_id} so the push is composed in that agent's voice."""
     kind = spec.get("kind")
-    name = spec.get("name") or "SPEDA automation"
+    name = spec.get("name") or "Speda automation"
     intent = spec.get("intent") or name
     expires_at = spec.get("expires_at")
 
@@ -166,10 +166,10 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
         if expires_at:
             gate = _node("Gate", _T_CODE, 220, {"jsCode": _expiry_gate_code(expires_at)})
             cb = _callback_node(kind, name, intent, 440, agent_id)
-            nodes, chain = [trigger, gate, cb], ("Schedule", "Gate", "Notify SPEDA")
+            nodes, chain = [trigger, gate, cb], ("Schedule", "Gate", "Notify Speda")
         else:
             cb = _callback_node(kind, name, intent, 220, agent_id)
-            nodes, chain = [trigger, cb], ("Schedule", "Notify SPEDA")
+            nodes, chain = [trigger, cb], ("Schedule", "Notify Speda")
 
     elif kind == "web_watch":
         url = spec.get("url")
@@ -191,7 +191,7 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
         })
         cb = _callback_node(kind, name, intent, 660, agent_id)
         nodes = [trigger, fetch, gate, cb]
-        chain = ("Schedule", "Fetch page", "Detect change", "Notify SPEDA")
+        chain = ("Schedule", "Fetch page", "Detect change", "Notify Speda")
 
     elif kind == "rss_watch":
         feed = spec.get("feed_url")
@@ -203,7 +203,7 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
             "pollTimes": {"item": [{"mode": "everyX", "value": every, "unit": "minutes"}]},
         })
         cb = _callback_node(kind, name, intent, 220, agent_id)
-        nodes, chain = [trigger, cb], ("RSS", "Notify SPEDA")
+        nodes, chain = [trigger, cb], ("RSS", "Notify Speda")
 
     elif kind == "webhook":
         path = spec.get("webhook_path") or uuid.uuid4().hex[:16]
@@ -212,7 +212,7 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
             "path": path, "httpMethod": "POST", "responseMode": "onReceived",
         })
         cb = _callback_node(kind, name, intent, 220, agent_id)
-        nodes, chain = [trigger, cb], ("Webhook", "Notify SPEDA")
+        nodes, chain = [trigger, cb], ("Webhook", "Notify Speda")
 
     else:
         raise ValueError(f"unknown automation kind: {kind!r}")

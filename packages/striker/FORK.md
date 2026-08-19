@@ -84,6 +84,6 @@ cd packages/ultron && npm install && npm run dev
 | Atomix | Science | Physics / engineering | Green `#4fa377` |
 | Centurion | Security | Cyber / threat intel | Orange `#c8743a` |
 | Nightcrawler | Operations | Recon / logistics | Purple `#9b72cf` |
-| Optimus | Code | Dev / architecture | Cyan `#36abca` (same as SPEDA core) |
+| Optimus | Code | Dev / architecture | Cyan `#36abca` (same as Speda core) |
 
-SPEDA Mark VI (this repo's `packages/heartbreaker/`) is the flagship — the others fork from here.
+Speda Mark VI (this repo's `packages/heartbreaker/`) is the flagship — the others fork from here.

@@ -17,7 +17,7 @@ from app.mcp.servers import RESERVED_SERVER_NAMES
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["connections"])
 
-# Scopes for the Google services SPEDA uses. One scope set per registered MCP
+# Scopes for the Google services Speda uses. One scope set per registered MCP
 # service — a missing scope makes that service's tools return PERMISSION_DENIED
 # ("caller is not authorized") at call time even though the MCP handshake and
 # tool listing succeed. Chat had NO scope at all before, and People (Contacts)
@@ -76,7 +76,7 @@ def _oauth_result_page(msg: str, ok: bool) -> str:
     font-family:system-ui;display:flex;align-items:center;justify-content:center;
     height:100vh;margin:0"><div style="text-align:center">
     <div style="font-size:2rem;color:{color}">{'✓' if ok else '✕'}</div>
-    <h2>{msg}</h2><p style="color:#7a96a1">You can close this tab and return to SPEDA.</p>
+    <h2>{msg}</h2><p style="color:#7a96a1">You can close this tab and return to Speda.</p>
     </div></body></html>"""
 
 

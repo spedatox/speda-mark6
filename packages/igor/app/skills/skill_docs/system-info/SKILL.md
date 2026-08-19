@@ -1,6 +1,6 @@
 ---
 name: system-info
-description: Reports server health metrics (disk usage, memory, uptime) for the Contabo instance SPEDA runs on. Use when the user asks about server health, available storage, memory, or uptime.
+description: Reports server health metrics (disk usage, memory, uptime) for the Contabo instance Speda runs on. Use when the user asks about server health, available storage, memory, or uptime.
 ---
 
 # system_info

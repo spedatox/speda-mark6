@@ -1,4 +1,4 @@
-"""Automations — view/manage SPEDA's proactive n8n watchers from Settings,
+"""Automations — view/manage Speda's proactive n8n watchers from Settings,
 plus the one-time Telegram connect flow. Zero business logic beyond delegation
 to automations.manager (Rule 1)."""
 
@@ -18,8 +18,8 @@ router = APIRouter(tags=["automations"])
 
 
 def _speda_bot(request: Request):
-    """The bot that fronts the legacy single-bot connect flow — SPEDA's. May be
-    None if no SPEDA token is configured (the registry only builds bots for
+    """The bot that fronts the legacy single-bot connect flow — Speda's. May be
+    None if no Speda token is configured (the registry only builds bots for
     configured tokens)."""
     bots = getattr(request.app.state, "telegram_bots", None)
     return bots.get("speda") if bots else None
@@ -84,7 +84,7 @@ async def automations_status(request: Request):
 
 @router.post("/automations/telegram/connect")
 async def telegram_connect(request: Request):
-    """Return the t.me deep link for SPEDA's bot and (in 'off' mode) start
+    """Return the t.me deep link for Speda's bot and (in 'off' mode) start
     listening for the owner's /start tap. When ingress is running (polling/
     webhook) the /start update is captured by the gateway automatically, so no
     separate capture task is spawned. The UI opens the link, then polls

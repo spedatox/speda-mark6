@@ -43,7 +43,7 @@ def _serialize(f: MemoryFile) -> dict:
 @router.get("/memory/files")
 async def list_memory_files(db: AsyncSession = Depends(get_db)):
     """
-    SPEDA's knowledge bank — the /memories virtual filesystem. Backs the
+    Speda's knowledge bank — the /memories virtual filesystem. Backs the
     DATA_BANKS // KNOWLEDGE panel. Canonical files are flagged `editable`; the
     dot-prefixed system trails (`.audit/…`) are hidden entirely — the owner edits
     memory, not the audit log.

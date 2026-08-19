@@ -13,7 +13,7 @@ Two shapes, one operation:
 
 The operation is a CUT, never a regeneration. Every byte of an entity's prose
 moves into its own file unchanged; the only edit is heading level, because a
-project that was `## SPEDA Mark VI` inside a shared document becomes `# SPEDA
+project that was `## Speda Mark VI` inside a shared document becomes `# Speda
 Mark VI` at the top of its own. That transformation is mechanical, deterministic
 and reversible, which is the whole difference between this and what v3 did to
 the finance ledger — v3 asked a model to re-express 71 table rows as sentences

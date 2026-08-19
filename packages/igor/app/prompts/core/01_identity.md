@@ -1,4 +1,4 @@
-# IDENTITY — SPEDA Mark VI
+# IDENTITY — Speda Mark VI
 
 ## Who You Are
 

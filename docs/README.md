@@ -1,6 +1,6 @@
-# SPEDA Mark VI — Documentation
+# Speda Mark VI — Documentation
 
-The complete documentation index for **SPEDA Mark VI** — the private,
+The complete documentation index for **Speda Mark VI** — the private,
 proactive, multi-agent executive assistant (backend codename **Igor**, desktop
 client **Heartbreaker**, sub-agent workers **The Legion**).
 
@@ -38,8 +38,8 @@ ships today.
 |---|---|---|
 | **Igor** (backend) | [../packages/igor/IGOR.md](../packages/igor/IGOR.md) | FastAPI agentic core — orchestrator, registry, skills, memory, automations, news, turns |
 | **Heartbreaker** (desktop client) | [../packages/heartbreaker/HEARTBREAKER.md](../packages/heartbreaker/HEARTBREAKER.md) | The primary UI — Stark fluid-glass command deck (Electron + React) |
-| **Striker** / *SPEDA Mark VI Core* | [../packages/striker/STRIKER.md](../packages/striker/STRIKER.md) | The single-agent, public "lite" build — same features, calmer theme, SPEDA only |
-| **SPEDA GO** (Android) | [../packages/speda-go/README.md](../packages/speda-go/README.md) · [fonts](../packages/speda-go/docs/FONTS.md) | Native Kotlin + Compose client — the deck in your pocket |
+| **Striker** / *Speda Mark VI Core* | [../packages/striker/STRIKER.md](../packages/striker/STRIKER.md) | The single-agent, public "lite" build — same features, calmer theme, Speda only |
+| **Speda GO** (Android) | [../packages/speda-go/README.md](../packages/speda-go/README.md) · [fonts](../packages/speda-go/docs/FONTS.md) | Native Kotlin + Compose client — the deck in your pocket |
 | **Sandbox** | *(no standalone doc — see [`packages/sandbox/server.py`](../packages/sandbox/server.py) and the `run_command` skill)* | The isolated Linux "capable computer" |
 
 > **Package layout.** `packages/igor` (backend) · `packages/heartbreaker`
@@ -76,7 +76,7 @@ Deep dives on how each major system was designed and built.
 ### Clients & surfaces
 | Doc | What |
 |---|---|
-| [ANDROID_PORT_PLAN.md](ANDROID_PORT_PLAN.md) | SPEDA GO — the parity contract with the desktop client |
+| [ANDROID_PORT_PLAN.md](ANDROID_PORT_PLAN.md) | Speda GO — the parity contract with the desktop client |
 | [STARK_MAPS_PLAN.md](STARK_MAPS_PLAN.md) | Inline maps & traffic-aware navigation |
 
 ### Health & platform
@@ -95,7 +95,7 @@ except Optimus, which is a standalone deployment connecting back over WebSocket.
 
 | Agent | Domain | Profile |
 |---|---|---|
-| **SPEDA** | Chief of Staff — plans, routes, commands the roster | `profiles/speda.py` |
+| **Speda** | Chief of Staff — plans, routes, commands the roster | `profiles/speda.py` |
 | **Sentinel** | Finance & budget | `profiles/sentinel.py` |
 | **NightCrawler** | OSINT, surveillance, the News Desk | `profiles/nightcrawler.py` |
 | **Ultron** | Academic research & synthesis | `profiles/ultron.py` |

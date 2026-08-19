@@ -1,4 +1,4 @@
-# SPEDA Mark VI — Deployment Runbook
+# Speda Mark VI — Deployment Runbook
 
 Move the backend to a server (Docker) and ship the desktop app. Written for a
 fresh Hetzner CX33 (or any Ubuntu box) but works anywhere Docker runs.
@@ -10,7 +10,7 @@ fresh Hetzner CX33 (or any Ubuntu box) but works anywhere Docker runs.
 ```
 server (Docker)                         your PC
 ┌────────────────────────────┐          ┌─────────────────────┐
-│ postgres   (data + memory) │          │ SPEDA Mark VI .exe  │
+│ postgres   (data + memory) │          │ Speda Mark VI .exe  │
 │ app        (FastAPI :8000) │◀── API ──│ (Electron desktop)  │
 │ sandbox    (capable comp.) │          └─────────────────────┘
 └────────────────────────────┘
@@ -81,7 +81,7 @@ $env:SPEDA_API_BASE = "http://<server-ip>:8000"
 $env:SPEDA_API_KEY  = "<same secret as the server .env>"
 cd packages/heartbreaker
 npm install          # first time — pulls electron-builder
-npm run dist         # -> dist/SPEDA Mark VI-0.1.0-setup.exe
+npm run dist         # -> dist/Speda Mark VI-0.1.0-setup.exe
 ```
 
 Install the `.exe`. The app reads `SPEDA_API_BASE` / `SPEDA_API_KEY` at launch,
@@ -96,7 +96,7 @@ system environment variables so they persist).
 ## The "capable computer" (sandbox)
 
 `docker compose` runs a `sandbox` service — an isolated container (no secrets, no
-host mounts, 1 GB / 1 CPU / 256 pids, no-new-privileges). SPEDA's `run_command`
+host mounts, 1 GB / 1 CPU / 256 pids, no-new-privileges). Speda's `run_command`
 tool executes shell/Python in it; files and installed packages persist in the
 `sandbox_workspace` volume. It's only reachable from the `app` over the internal
 Docker network.
@@ -105,7 +105,7 @@ Docker network.
 
 Add an `n8n` service to the same compose network, point its HTTP nodes at
 `http://app:8000`, and use the existing `X-API-Key` auth. Wire triggers
-(schedules, webhooks) to drive SPEDA proactively.
+(schedules, webhooks) to drive Speda proactively.
 
 ---
 
@@ -118,4 +118,4 @@ Add an `n8n` service to the same compose network, point its HTTP nodes at
 | Rebuild after code change | `docker compose up -d --build app` |
 | Migrate data (dry run) | `python scripts/migrate_sqlite_to_postgres.py --dry-run` |
 | Build desktop installer | `npm run dist` (in packages/heartbreaker) |
-| Toggle budget mode | UI button, ask SPEDA, or `BUDGET_MODE` in .env |
+| Toggle budget mode | UI button, ask Speda, or `BUDGET_MODE` in .env |

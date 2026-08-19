@@ -57,8 +57,8 @@ fun InterfaceTab(config: AppConfig, graph: AppGraph) {
         SectionHeader("Location awareness")
         Panel {
             ToggleRow(
-                label = "Share location with SPEDA",
-                subtitle = "Sends your device's precise position each turn, so SPEDA can answer location-aware questions.",
+                label = "Share location with Speda",
+                subtitle = "Sends your device's precise position each turn, so Speda can answer location-aware questions.",
                 checked = settings.locationEnabled,
                 enabled = true,
                 onToggle = { on ->
@@ -75,7 +75,7 @@ fun InterfaceTab(config: AppConfig, graph: AppGraph) {
             )
             Spacer(Modifier.height(8.dp))
             Hint(
-                "Your device model, OS and app version always travel with a turn so SPEDA knows it's on the phone. " +
+                "Your device model, OS and app version always travel with a turn so Speda knows it's on the phone. " +
                     "Location is opt-in and never stored — it rides only the message you send.",
             )
         }

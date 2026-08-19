@@ -9,7 +9,7 @@ import type { AppProfile } from './types'
  *   $env:VITE_AGENT='ultron'; npm run heartbreaker:dev          # dev
  *   powershell -File build-app.ps1 -Agent ultron -ApiBase ...   # installer
  *
- * Unset → SPEDA. Unknown value → SPEDA (safe fallback).
+ * Unset → Speda. Unknown value → Speda (safe fallback).
  */
 const selected = (import.meta.env.VITE_AGENT as string | undefined)?.trim().toLowerCase()
 const brand = (selected && BRANDS[selected]) || BRANDS[DEFAULT_AGENT]

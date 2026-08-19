@@ -52,7 +52,7 @@ export interface ChatMessage {
                       // error (network drop, host restart) never erases what
                       // already streamed
   images?: string[]   // data: URLs for display in the user bubble
-  files?: FileMeta[]  // downloadable files SPEDA produced
+  files?: FileMeta[]  // downloadable files Speda produced
   uploads?: UploadedFile[]  // non-image files the user attached (display chips)
   status?: string     // live status line while streaming (real phase, not looped filler)
   sessionId?: number  // which session a STREAMING bubble belongs to — lets

@@ -138,7 +138,7 @@ export function Bubble({ e, mine = false, compact = false }: {
           boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
         }}
       >
-        {/* meta line: SPEDA ▸ SENTINEL · 06:13:42 · HP · copy/expand controls */}
+        {/* meta line: Speda ▸ SENTINEL · 06:13:42 · HP · copy/expand controls */}
         <div style={{
           display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 3,
           fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.08em',

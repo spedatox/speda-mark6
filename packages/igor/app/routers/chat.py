@@ -125,7 +125,7 @@ async def list_sessions(
     limit: int = 500,
     db: AsyncSession = Depends(get_db),
 ):
-    # Agent-scoped: defaults to SPEDA so the existing UI is unchanged; pass
+    # Agent-scoped: defaults to Speda so the existing UI is unchanged; pass
     # ?agent_id=… to list another agent's sessions once the UI addresses them.
     session_manager = request.app.state.session_manager
     sessions = await session_manager.list_sessions(
@@ -185,7 +185,7 @@ async def _run_chat(
     background_tasks: BackgroundTasks,
     db: AsyncSession,
 ):
-    """Shared chat handler. Both the bare /chat (SPEDA) and /chat/{agent_id}
+    """Shared chat handler. Both the bare /chat (Speda) and /chat/{agent_id}
     routes call through here — the only difference is which agent is addressed."""
     orchestrator = request.app.state.orchestrator
     session_manager = request.app.state.session_manager
@@ -353,7 +353,7 @@ async def chat(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """Bare /chat targets the default agent (SPEDA) — backward compatible with
+    """Bare /chat targets the default agent (Speda) — backward compatible with
     the desktop client."""
     return await _run_chat(request, "speda", body, background_tasks, db)
 
@@ -405,7 +405,7 @@ async def websocket_chat(websocket: WebSocket):
 
     orchestrator = websocket.app.state.orchestrator
     session_manager = websocket.app.state.session_manager
-    # Real-time chat targets the default agent (SPEDA) for now.
+    # Real-time chat targets the default agent (Speda) for now.
     profile = websocket.app.state.profiles.default
 
     logger.info("ws_flutter_connect")

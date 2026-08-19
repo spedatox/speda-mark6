@@ -78,7 +78,7 @@ export default function PartyRosterStrip({ config, engaged, onExit, onOpenConfig
         {engaged ? 'House Party — Full Grade' : 'War Room — Standby'}
       </span>
 
-      {/* max 7 — SPEDA and the Superior Six, the whole party. Clipping at 6
+      {/* max 7 — Speda and the Superior Six, the whole party. Clipping at 6
           left a "+1" hanging off the end of a roster that always fits. */}
       <AvatarStack ids={present} size={38} max={7} />
 
@@ -112,7 +112,7 @@ export default function PartyRosterStrip({ config, engaged, onExit, onOpenConfig
         onClick={onExit}
         title={engaged
           ? 'Stand down — end the protocol, dispatches return to the background tier'
-          : 'Exit the war room — return to SPEDA'}
+          : 'Exit the war room — return to Speda'}
         style={{
           height: 36, padding: '0 18px', flexShrink: 0, cursor: 'pointer',
           background: 'rgba(216,72,60,0.12)',

@@ -61,7 +61,7 @@ async def test_a_listing_names_what_is_there(monkeypatch):
 @pytest.mark.asyncio
 async def test_an_empty_folder_says_so(monkeypatch):
     skill = _skill(monkeypatch, lambda *a: _resp(json={"entries": []}))
-    out = await skill.execute({"action": "list", "path": "/SPEDA"}, _Ctx())
+    out = await skill.execute({"action": "list", "path": "/Speda"}, _Ctx())
     assert "empty" in out.lower()
 
 
@@ -87,18 +87,18 @@ async def test_a_deposit_reports_where_it_actually_landed(monkeypatch):
     """Hisar never overwrites, so the name it used may differ from the one
     asked for. Reporting the requested name would send the owner to a file
     that is not there."""
-    skill = _skill(monkeypatch, lambda *a: _resp(json={"path": "/SPEDA/brief-1.md"}))
+    skill = _skill(monkeypatch, lambda *a: _resp(json={"path": "/Speda/brief-1.md"}))
     out = await skill.execute({
-        "action": "deposit", "path": "/SPEDA",
+        "action": "deposit", "path": "/Speda",
         "filename": "brief.md", "content": "hello",
     }, _Ctx())
 
-    assert "/SPEDA/brief-1.md" in out
+    assert "/Speda/brief-1.md" in out
 
 
 @pytest.mark.asyncio
 async def test_a_refused_deposit_does_not_read_as_filed(monkeypatch):
-    """Machines may write only under /SPEDA and /Forge. A 403 reported as
+    """Machines may write only under /Speda and /Forge. A 403 reported as
     success is how an agent tells the owner his report is filed when it is
     not."""
     def _403(*a, **k):
@@ -114,7 +114,7 @@ async def test_a_refused_deposit_does_not_read_as_filed(monkeypatch):
     }, _Ctx())
 
     assert "Refused" in out
-    assert "/SPEDA" in out          # says where it COULD go
+    assert "/Speda" in out          # says where it COULD go
     assert "Filed at" not in out
 
 
@@ -184,7 +184,7 @@ def test_the_description_says_when_not_to_use_it():
     actually gets wrong."""
     d = HisarSkill().description
     assert "save_file" in d
-    assert "/SPEDA" in d and "/Forge" in d
+    assert "/Speda" in d and "/Forge" in d
     assert "delete" in d.lower()
 
 
@@ -203,7 +203,7 @@ async def test_a_root_listing_has_no_nameless_directory(monkeypatch):
 
     skill = _skill(monkeypatch, lambda *a: _resp(json={"entries": [
         {"name": "Desktop", "kind": "dir"},
-        {"name": "SPEDA", "kind": "dir"},
+        {"name": "Speda", "kind": "dir"},
         {"name": "Timeline 1.mov", "kind": "file", "size": 22681894},
     ]}))
     monkeypatch.setattr(HISAR, "_client_marker", None, raising=False)
@@ -211,7 +211,7 @@ async def test_a_root_listing_has_no_nameless_directory(monkeypatch):
     entries = await skill.entries("/")
     dirs = [e["name"] for e in entries if skill.is_dir(e) and e.get("name")]
 
-    assert dirs == ["Desktop", "SPEDA"]
+    assert dirs == ["Desktop", "Speda"]
     assert "" not in dirs
 
 

@@ -204,7 +204,7 @@ async def _seed_default_user() -> None:
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(User).where(User.id == 1))
         if result.scalar_one_or_none() is None:
-            session.add(User(id=1, name="SPEDA", timezone="UTC"))
+            session.add(User(id=1, name="Speda", timezone="UTC"))
             await session.commit()
 
 

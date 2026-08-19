@@ -697,7 +697,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
             {tab === 'reminders' && <RemindersTab config={config} />}
             {tab === 'protocols' && <ProtocolsTab config={config} onEngageLockdown={onEngageLockdown} />}
 
-            {/* Automations tab — SPEDA's proactive n8n watchers */}
+            {/* Automations tab — Speda's proactive n8n watchers */}
             {tab === 'automations' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
                 <SettingsSection title={t.settingsAutomations.pipeline} first />

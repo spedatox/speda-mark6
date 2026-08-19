@@ -2,10 +2,10 @@
 
 **Goal (the owner's two asks):**
 
-1. **Background agent dispatch.** When SPEDA dispatches a task to another agent,
-   the dispatch can run in the background — SPEDA finishes its own turn
+1. **Background agent dispatch.** When Speda dispatches a task to another agent,
+   the dispatch can run in the background — Speda finishes its own turn
    immediately and stays fully usable while the specialist works.
-2. **Turns survive navigation.** A running turn (any agent — SPEDA chat, Optimus
+2. **Turns survive navigation.** A running turn (any agent — Speda chat, Optimus
    coding via the Forge, a dispatched chain) is never killed by switching
    sessions, switching agents, the stop-watchdog, or a renderer reload. The
    result is always persisted, and returning to the session re-attaches to the
@@ -166,7 +166,7 @@ wait for — and that the result lands in the agent channel / comms tray).
 **Completion visibility — deliberately minimal in v1:**
 - The comms tray already shows the row flipping `running → ok` (fact 2) — the
   owner sees completion without any new backend surface.
-- SPEDA learns results by calling `dispatch_status` / `read_agent_channel` on
+- Speda learns results by calling `dispatch_status` / `read_agent_channel` on
   a later turn. **Do NOT auto-inject "since your last turn" blocks into the
   conversation history** — SessionManager's byte-identical prompt-prefix
   reconstruction is what keeps the prompt cache valid; injected ephemera would
@@ -174,8 +174,8 @@ wait for — and that the result lands in the agent channel / comms tray).
   notification (`NotificationsSkill`) fired from `_run_and_finish`, never a
   history mutation.
 
-**Acceptance (Phase 2):** SPEDA dispatches NightCrawler with `background:true`
-→ SPEDA's answer streams to completion within seconds while the comms tray
+**Acceptance (Phase 2):** Speda dispatches NightCrawler with `background:true`
+→ Speda's answer streams to completion within seconds while the comms tray
 shows NIGHTCRAWLER running; a follow-up "ne durumda?" turn gets the real result
 via `dispatch_status`; five concurrent background dispatches work, a sixth is
 refused politely.
@@ -218,7 +218,7 @@ All in `packages/heartbreaker` (never `packages/desktop`).
   cooking there. Same jewel on the agent cards in `AgentSwitcherOverlay` for
   agents with active runs.
 
-**Acceptance (Phase 3):** start a long Optimus/Forge job → switch to SPEDA,
+**Acceptance (Phase 3):** start a long Optimus/Forge job → switch to Speda,
 chat normally (both streams alive) → switch back: the Optimus session shows the
 live stream continuing (replayed seamlessly); reload the entire app mid-run →
 re-enter the session → stream re-attaches; stop button cancels only the visible

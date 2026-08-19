@@ -27,7 +27,7 @@ object Brands {
 
     /** One entry per agent — verbatim from profile/brands.ts. */
     val BRANDS: Map<String, Brand> = linkedMapOf(
-        "speda" to Brand("speda", "SPEDA", "Mark VI", "Ahmet Erol", "Main Assistant", "S", "#7fa4c4"),
+        "speda" to Brand("speda", "Speda", "Mark VI", "Ahmet Erol", "Main Assistant", "S", "#7fa4c4"),
         "ultron" to Brand("ultron", "Ultron", "Mark III", "Ahmet Erol", "Academy and Work Operations", "U", "#8a93a6"),
         "centurion" to Brand("centurion", "Centurion", "Mark I", "Ahmet Erol", "Cyber Security & Threat Intelligence", "C", "#d8483c"),
         "sentinel" to Brand("sentinel", "Sentinel", "Mark II", "Ahmet Erol", "Finance & Budget Intelligence", "S", "#d99c44"),

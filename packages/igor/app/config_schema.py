@@ -105,7 +105,7 @@ CONFIG_GROUPS: list[ConfigGroup] = [
     ),
     ConfigGroup(
         "telegram", "Telegram Channel",
-        "One bot per agent — chat + notifications. Set a token per agent; SPEDA's "
+        "One bot per agent — chat + notifications. Set a token per agent; Speda's "
         "is the fallback voice. Switch ingress to polling (dev) or webhook (prod).",
         [
             ConfigField("telegram_mode", "Ingress Mode", "select",
@@ -115,9 +115,9 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                         help="Public HTTPS base, e.g. https://speda.example.com (webhook mode)."),
             ConfigField("telegram_webhook_secret", "Webhook Secret", "password", secret=True,
                         help="Shared secret_token validated on every inbound webhook."),
-            ConfigField("telegram_bot_token", "SPEDA Bot Token (legacy alias)", "password", secret=True,
-                        help="From @BotFather. Used for SPEDA if the per-agent token is unset."),
-            ConfigField("telegram_bot_token_speda", "SPEDA Bot Token", "password", secret=True),
+            ConfigField("telegram_bot_token", "Speda Bot Token (legacy alias)", "password", secret=True,
+                        help="From @BotFather. Used for Speda if the per-agent token is unset."),
+            ConfigField("telegram_bot_token_speda", "Speda Bot Token", "password", secret=True),
             ConfigField("telegram_bot_token_sentinel", "Sentinel Bot Token", "password", secret=True),
             ConfigField("telegram_bot_token_nightcrawler", "NightCrawler Bot Token", "password", secret=True),
             ConfigField("telegram_bot_token_ultron", "Ultron Bot Token", "password", secret=True),
@@ -129,7 +129,7 @@ CONFIG_GROUPS: list[ConfigGroup] = [
     ),
     ConfigGroup(
         "automation", "Automation (n8n)",
-        "n8n is the sole scheduling organ. SPEDA is a control plane over its REST API.",
+        "n8n is the sole scheduling organ. Speda is a control plane over its REST API.",
         [
             ConfigField("n8n_api_url", "n8n API URL", "url",
                         help="e.g. http://n8n:5678 (compose) or your public n8n host."),
@@ -137,8 +137,8 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                         help="n8n → Settings → n8n API → create key."),
             ConfigField("n8n_secret", "n8n Trigger Secret", "password", secret=True,
                         help="Shared X-N8N-Secret validated on POST /trigger."),
-            ConfigField("speda_callback_url", "SPEDA Callback URL", "url",
-                        help="URL n8n uses to call back into SPEDA's /trigger endpoint."),
+            ConfigField("speda_callback_url", "Speda Callback URL", "url",
+                        help="URL n8n uses to call back into Speda's /trigger endpoint."),
         ],
     ),
     ConfigGroup(

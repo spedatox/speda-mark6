@@ -1,4 +1,4 @@
-# SPEDA Mark VI — Complete Setup Guide
+# Speda Mark VI — Complete Setup Guide
 
 Everything you need to deploy, configure, and operate the full system: Igor (the backend), the agent roster, Docker services, MCP integrations, Heartbreaker (the desktop client), and CI/CD.
 
@@ -184,7 +184,7 @@ Then open `http://localhost:5678` in your browser:
    docker compose restart app
    ```
 
-SPEDA can now create, list, and manage n8n workflows (watchers, schedules) through the `manage_automations` tool.
+Speda can now create, list, and manage n8n workflows (watchers, schedules) through the `manage_automations` tool.
 
 ---
 
@@ -264,7 +264,7 @@ docker compose exec app python scripts/google_oauth.py
 
 ## 8. Telegram (Proactive Delivery)
 
-When an n8n watcher fires, SPEDA composes a message and delivers it to your Telegram.
+When an n8n watcher fires, Speda composes a message and delivers it to your Telegram.
 
 ### Setup
 
@@ -285,7 +285,7 @@ No public webhook needed — the backend polls `getUpdates` during a 90-second c
 
 The desktop client (Heartbreaker) is an Electron + React app. Build an installer pointed at your server:
 
-### Default build (SPEDA)
+### Default build (Speda)
 
 ```powershell
 powershell -File build-app.ps1 -ApiBase https://yourdomain.com -ApiKey your-api-key
@@ -310,7 +310,7 @@ The installer is output to `packages/heartbreaker/dist/`. The API base and key a
 ### Dev mode
 
 ```bash
-# Run the SPEDA build in dev mode
+# Run the Speda build in dev mode
 npm run heartbreaker:dev
 
 # Run as a specific agent
@@ -357,7 +357,7 @@ ssh-copy-id -i ~/.ssh/speda_deploy.pub user@your-server-ip
 
 The workflow only triggers on pushes that touch: `packages/igor/**`, `packages/sandbox/**`, `docker-compose.yml`, `deploy.sh`, `Caddyfile`, or the workflow itself. Concurrency control ensures only one deploy runs at a time.
 
-### SPEDA GO — mirror + APK release (`.github/workflows/speda-go.yml`)
+### Speda GO — mirror + APK release (`.github/workflows/speda-go.yml`)
 
 A second workflow covers the mobile client. Every push to `main` touching
 `packages/speda-go/**` builds a **signed release APK**, mirrors the package into
@@ -377,7 +377,7 @@ keytool -genkeypair -keystore speda-go-release.jks -storetype PKCS12 -alias sped
 ```
 
 Keep the `.jks` **off the repo and backed up**. Losing it means no future build
-can upgrade an installed SPEDA GO — only a full uninstall/reinstall. The
+can upgrade an installed Speda GO — only a full uninstall/reinstall. The
 standalone repo is a mirror: never hand-edit it, and note that its `README.md`
 is the one file the sync deliberately leaves alone.
 
@@ -443,7 +443,7 @@ ssh -L 5678:127.0.0.1:5678 user@your-server-ip
 
 | Agent | ID | Domain | Color | Tools |
 |---|---|---|---|---|
-| **SPEDA** | `speda` | Orchestrator | Cyan `#36abca` | All (unrestricted) |
+| **Speda** | `speda` | Orchestrator | Cyan `#36abca` | All (unrestricted) |
 | **Ultron** | `ultron` | Academic research | Gray `#8a93a6` | tavily, exa, arxiv, fetch, generate_document, search_history, Task |
 | **Sentinel** | `sentinel` | Finance & budget | Amber `#d99c44` | alpha_vantage, tavily, exa, fetch, generate_document, search_history, manage_automations, Task |
 | **NightCrawler** | `nightcrawler` | OSINT & surveillance | Purple `#9165e6` | tavily, exa, brave_search, fetch, playwright, arxiv, generate_document, search_history, manage_automations, Task |

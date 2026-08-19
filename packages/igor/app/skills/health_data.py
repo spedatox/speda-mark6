@@ -390,7 +390,7 @@ class HealthDataSkill(Skill):
             + f"\n\n{asked}This is a broken sync, not a health finding. Report "
             "it as such: tell the owner which metrics stopped arriving and when "
             "the last reading was, and suggest checking that the watch is worn "
-            "and paired and that SPEDA GO's Health tab still shows the link "
+            "and paired and that Speda GO's Health tab still shows the link "
             "live. Do NOT report the last stored values as if they were "
             "current, do NOT describe them as 'the most recent data' inside a "
             "briefing about today, and do NOT fill the gap with estimates. If "

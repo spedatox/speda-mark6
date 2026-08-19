@@ -2,7 +2,7 @@ from app.profiles.base import AgentProfile, DocTheme
 from app.prompts.loader import assemble, build_skills_manifest
 
 # Ultron-specific identity + shared policy sections. Only the identity differs
-# from SPEDA; the decision / output / visual / formatting / memory policies are
+# from Speda; the decision / output / visual / formatting / memory policies are
 # common to every agent and reused from prompts/core/.
 PROMPT_SECTIONS = [
     "agents/ultron/01_identity.md",
@@ -32,7 +32,7 @@ class UltronProfile(AgentProfile):
     domain = "academic life & university/work balance — study, planning, coursework"
     doc_theme = DocTheme(accent="#8a93a6")   # signature slate — matches the UI brand
 
-    # Unrestricted — all tools available (same as SPEDA). Previously a narrow
+    # Unrestricted — all tools available (same as Speda). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.
     tool_allowlist = None
 

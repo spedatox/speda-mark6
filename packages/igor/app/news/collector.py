@@ -31,7 +31,7 @@ from app.news.feeds import enabled_feeds
 
 logger = logging.getLogger(__name__)
 
-_UA = "SPEDA-Mark-VI/1.0 (news collector)"
+_UA = "Speda-Mark-VI/1.0 (news collector)"
 _TIMEOUT = httpx.Timeout(10.0, connect=6.0)
 _MAX_ITEMS_PER_FEED = 40   # newest N entries per feed — older ones are stale anyway
 

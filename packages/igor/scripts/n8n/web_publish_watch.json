@@ -1,7 +1,7 @@
 {
   "name": "Web publish watch",
   "meta": {
-    "description": "Watches any number of pages for newly published content — academic calendar, exam results, schedules, announcements. Everything is configured in ONE node: 'Watch list'. The scan is a fetch plus a line-level diff, so a poll that finds nothing costs zero tokens; SPEDA is triggered only for the pages that actually changed. Safe to activate with an empty list: it simply does nothing until you add a page."
+    "description": "Watches any number of pages for newly published content — academic calendar, exam results, schedules, announcements. Everything is configured in ONE node: 'Watch list'. The scan is a fetch plus a line-level diff, so a poll that finds nothing costs zero tokens; Speda is triggered only for the pages that actually changed. Safe to activate with an empty list: it simply does nothing until you add a page."
   },
   "nodes": [
     {
@@ -76,7 +76,7 @@
         800,
         300
       ],
-      "notes": "THE CHEAP HALF — runs once per page in the watch list, and takes all its settings from there. Nothing to edit here.\n\nIgor fetches each page, strips it to visible text (links kept as 'text [href]', so a newly posted PDF arrives with its URL) and diffs it against the last snapshot SPEDA was actually told about. The FIRST scan of a new watch_id returns 'baseline' and reports nothing — otherwise the entire page would count as new.\n\nneverError: one dead site must not fail the run and take the other pages down with it. The gate inspects each response instead.",
+      "notes": "THE CHEAP HALF — runs once per page in the watch list, and takes all its settings from there. Nothing to edit here.\n\nIgor fetches each page, strips it to visible text (links kept as 'text [href]', so a newly posted PDF arrives with its URL) and diffs it against the last snapshot Speda was actually told about. The FIRST scan of a new watch_id returns 'baseline' and reports nothing — otherwise the entire page would count as new.\n\nneverError: one dead site must not fail the run and take the other pages down with it. The gate inspects each response instead.",
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000

@@ -12,9 +12,9 @@ import 'katex/dist/katex.min.css'
 import './theme/striker.css'
 
 /**
- * SPEDA Mark VI Core — the single-agent shell. Unlike Heartbreaker there is no
+ * Speda Mark VI Core — the single-agent shell. Unlike Heartbreaker there is no
  * roster, no agent switcher, no war room / House Party takeover and no runtime
- * theme morph: the agent is always SPEDA and the palette is static (striker.css).
+ * theme morph: the agent is always Speda and the palette is static (striker.css).
  * The ambient NeuralBackground stays; the HUD frame does not.
  */
 function AppInner() {

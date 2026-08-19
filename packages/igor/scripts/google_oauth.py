@@ -1,5 +1,5 @@
 """
-One-time Google OAuth flow to obtain a refresh token for SPEDA's Google Workspace MCP.
+One-time Google OAuth flow to obtain a refresh token for Speda's Google Workspace MCP.
 
 Run once:
     python scripts/google_oauth.py
@@ -11,7 +11,7 @@ Requirements:
 - OAuth 2.0 credentials (Desktop app type) created in Cloud Console
 - Your Google account added as a test user on the OAuth consent screen
 
-No extra packages needed — uses only httpx (already in SPEDA's deps).
+No extra packages needed — uses only httpx (already in Speda's deps).
 """
 
 import asyncio
@@ -61,7 +61,7 @@ async def exchange_code(client_id: str, client_secret: str, code: str) -> dict:
 
 async def main() -> None:
     print("=" * 60)
-    print("  SPEDA — Google Workspace OAuth setup")
+    print("  Speda — Google Workspace OAuth setup")
     print("=" * 60)
     print()
     print("Paste your credentials from Google Cloud Console:")

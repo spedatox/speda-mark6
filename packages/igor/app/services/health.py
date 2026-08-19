@@ -1,7 +1,7 @@
 """
 Health sample ingestion, daily rollups and query helpers.
 
-The owner's biometrics arrive from SPEDA GO (Health Connect → phone →
+The owner's biometrics arrive from Speda GO (Health Connect → phone →
 POST /health/ingest); this module owns everything that happens after the router
 validates the payload — Rule 1 keeps the router logic-free. The health_data
 skill reads through here too, so the aggregation rules live in exactly one place.
@@ -135,7 +135,7 @@ async def demand_sync(db: AsyncSession, reason: str = "") -> dict:
     """Ask the phone for a sync NOW, and wake it so it hears the asking.
 
     Two halves, and both are needed. The runtime-state flag is the durable
-    request — SPEDA GO's 15-minute worker reads it, so a demand raised while the
+    request — Speda GO's 15-minute worker reads it, so a demand raised while the
     phone was unreachable is still served later. The FCM data message is what
     makes it timely: a briefing waiting twenty-five seconds cannot use an answer
     that arrives at the next quarter hour.

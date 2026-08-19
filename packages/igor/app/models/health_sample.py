@@ -10,7 +10,7 @@ from app.database import Base
 class HealthSample(Base):
     """
     One biometric reading synced from the owner's phone — Samsung Health (or any
-    other collector) → Health Connect → SPEDA GO → POST /health/ingest.
+    other collector) → Health Connect → Speda GO → POST /health/ingest.
     See docs/ATOMIX_HEALTH_SYNC.md.
 
     Deliberately metric-generic: `metric` is a free string ("steps",

@@ -20,7 +20,7 @@ One-time history indexer.
 Mines durable facts about the owner from the entire imported conversation
 history using Haiku (cheap), consolidates them into a clean profile, and writes
 it to /memories/history.md — which is a preloaded memory file. This bootstraps
-SPEDA's knowledge of the owner from hundreds of past conversations without
+Speda's knowledge of the owner from hundreds of past conversations without
 re-reading them on every turn.
 
 Run once (or with force=True to re-index). Per-conversation extraction is capped

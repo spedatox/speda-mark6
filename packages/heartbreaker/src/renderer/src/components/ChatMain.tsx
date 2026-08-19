@@ -93,7 +93,7 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
     // is a briefing, not a greeting, and a model-written variant would make
     // the rules of the room look negotiable.
     if (isWarroom) {
-      setRemark('All agents will work on one single task under the leadership of SPEDA.')
+      setRemark('All agents will work on one single task under the leadership of Speda.')
       setRemarkLoading(false)
       return
     }
@@ -991,7 +991,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           onStopSpeaking={stopSpeaking}
           micState={micState}
           configured={voiceReady}
-          agentName={profile?.name ?? 'SPEDA'}
+          agentName={profile?.name ?? 'Speda'}
           dock={settings.voiceOrbDock}
           onDock={d => update({ voiceOrbDock: d })}
         />

@@ -10,7 +10,7 @@ the answer must be WRITTEN, so that one carries a directive as well as a fact.
 It belongs here rather than in the system prompt because it is a property of the
 turn, not of the session — see _VOICE_DIRECTIVE.
 
-Every ingestion path (HTTP chat, Telegram gateway) funnels through here so SPEDA
+Every ingestion path (HTTP chat, Telegram gateway) funnels through here so Speda
 learns the surface uniformly, no matter how the turn arrived.
 """
 from __future__ import annotations

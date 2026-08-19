@@ -90,7 +90,7 @@ fun DataTab(config: AppConfig, graph: AppGraph) {
 
         SectionHeader("Index past conversations")
         Panel {
-            Hint("One-time: mine durable facts about you from your whole history, consolidate them, and write a profile to memory so SPEDA actually knows you. Background; a couple of minutes.")
+            Hint("One-time: mine durable facts about you from your whole history, consolidate them, and write a profile to memory so Speda actually knows you. Background; a couple of minutes.")
             Spacer(Modifier.height(10.dp))
             SettingsButton(
                 if (indexing) "Indexing…" else "Index history",

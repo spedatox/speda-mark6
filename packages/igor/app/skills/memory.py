@@ -1,12 +1,12 @@
 """
-SPEDA Memory Skill — implements Anthropic's agent memory tool pattern.
+Speda Memory Skill — implements Anthropic's agent memory tool pattern.
 
 Architecture (per Anthropic Memory Tool docs):
   - Memory is a virtual filesystem: structured markdown files under /memories/
-  - SPEDA reads its memory directory at the start of every turn (JIT retrieval)
-  - SPEDA writes and updates memory files when it learns something worth keeping
+  - Speda reads its memory directory at the start of every turn (JIT retrieval)
+  - Speda writes and updates memory files when it learns something worth keeping
   - The agent controls its own memory — passive background extraction supplements this
-    but the primary write path is SPEDA itself during conversations
+    but the primary write path is Speda itself during conversations
 
 Commands (matching Anthropic's spec exactly):
   view       → list directory or read file with line numbers
@@ -633,9 +633,9 @@ async def recall_sessions_for_context(
 
 class MemorySkill(Skill):
     """
-    SPEDA's persistent memory tool.
+    Speda's persistent memory tool.
     Implements Anthropic's agent memory pattern: view/create/str_replace/insert/delete.
-    SPEDA uses this to maintain continuity across sessions without reloading
+    Speda uses this to maintain continuity across sessions without reloading
     everything into the context window upfront.
     """
 

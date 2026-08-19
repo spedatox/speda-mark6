@@ -90,7 +90,7 @@ class CommTranscriptTest {
 
     @Test
     fun `consecutive lines from one agent group under a single head`() {
-        // Two orders from SPEDA back to back (neither answered yet).
+        // Two orders from Speda back to back (neither answered yet).
         val rows = CommTranscript.rows(
             listOf(
                 entry(1, "speda", "centurion", task = "first", result = "", durationMs = 0),

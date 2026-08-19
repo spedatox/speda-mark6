@@ -55,7 +55,7 @@ class CapabilityRegistry:
 
     async def dead_zone_active(self) -> bool:
         """
-        True when SPEDA is operating without an uplink. DEAD_ZONE_MODE=on forces
+        True when Speda is operating without an uplink. DEAD_ZONE_MODE=on forces
         it (dev testing), =off disables it, =auto (default) probes connectivity
         and caches the verdict for 60s. In the dead zone, list_tools() filters
         to offline-capable Tier-1 skills only — a local model calling web search
@@ -237,7 +237,7 @@ class CapabilityRegistry:
         allowlist (per-agent scoping): when set, only tools whose owning
         capability (skill name / MCP server / adapter / "Task") is listed are
         returned — runtime-infrastructure skills (_ALWAYS_AVAILABLE) always pass.
-        None = the full registry (e.g. SPEDA the orchestrator). The profile
+        None = the full registry (e.g. Speda the orchestrator). The profile
         declares the allowlist; the registry enforces it (Rules 5 + 10).
 
         loaded_tools: deferred tools resolved by `tool_search` this turn. They

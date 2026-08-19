@@ -42,6 +42,9 @@ logger = logging.getLogger(__name__)
 # Outlook categories are free-text, but only categories defined in the mailbox's
 # master list get a colour. An undefined one still applies and still filters —
 # it just shows uncoloured, which is a cosmetic issue and not a correctness one.
+# NOT renamed with the rest of the SPEDA -> Speda sweep: this is a live Outlook
+# category already applied to real messages. Changing the string here would
+# make the app stop recognizing mail it already marked seen and re-trigger on it.
 SEEN_CATEGORY = "SPEDA-Seen"
 
 # Graph caps $top at 1000; this is a notifier, not an importer. If more than 50

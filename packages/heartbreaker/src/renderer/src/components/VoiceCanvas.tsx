@@ -9,14 +9,14 @@ import { FRAMED, GAP, pack, type Placed, type VoicePanel } from '../lib/voicePan
  *  Voice mode does not show a document. It shows a WORKSPACE: the answer is
  *  taken apart and each piece is given its own window, floating over the void
  *  with the orb docked in the corner. Ask for the solution to an equation and
- *  three windows materialise — what SPEDA is saying, the worked solution, the
+ *  three windows materialise — what Speda is saying, the worked solution, the
  *  plot — instead of one column you have to read top to bottom.
  *
  *  That is the whole point of the mode being a different mode. A transcript
  *  rendered a bit larger is still a transcript; this is an instrument panel.
  *
  *  Two things own a window's position:
- *    - the LAYOUT, which packs windows as they materialise (SPEDA managing the
+ *    - the LAYOUT, which packs windows as they materialise (Speda managing the
  *      board), and re-packs whenever a new one arrives; and
  *    - the OWNER, who can drag any window anywhere. A dragged window is pinned
  *      — the layout stops moving it — until REFLOW hands the board back.

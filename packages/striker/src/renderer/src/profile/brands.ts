@@ -21,7 +21,7 @@ export const DEFAULT_AGENT = 'speda'
 
 export const BRANDS: Record<string, Brand> = {
   speda: {
-    agentId: 'speda', name: 'SPEDA', modelNumber: 'Mark VI', userName: 'Ahmet Erol',
+    agentId: 'speda', name: 'Speda', modelNumber: 'Mark VI', userName: 'Ahmet Erol',
     tagline: 'Main Assistant',
     avatarInitial: 'S', accent: '#36abca',
   },

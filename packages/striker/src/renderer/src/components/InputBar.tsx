@@ -507,7 +507,7 @@ export default function InputBar({ onSend, onStop, config }: Props) {
   const dragDepth = useRef(0)
 
   useEffect(() => { fetchModels(config).then(setModels).catch(() => {}) }, [config])
-  // Load budget state on mount, and re-sync whenever a turn finishes (SPEDA can
+  // Load budget state on mount, and re-sync whenever a turn finishes (Speda can
   // toggle it itself via the set_budget_mode tool).
   useEffect(() => { getBudgetMode(config).then(setBudget).catch(() => {}) }, [config])
   useEffect(() => {

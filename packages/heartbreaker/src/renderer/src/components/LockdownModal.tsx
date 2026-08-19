@@ -20,7 +20,7 @@ const KEYFRAMES = `
  *  during an incident, when the last thing they should have to do is remember
  *  which ports survive — so the modal tells them before they authorize. */
 const SEALED = ['Host SSH (22)', 'App raw port (8000)']
-const OPEN = ['HTTPS 443/80 — this app', 'Outbound — SPEDA keeps working']
+const OPEN = ['HTTPS 443/80 — this app', 'Outbound — Speda keeps working']
 
 /**
  * LockdownModal — the authorization pop-up for engaging the Lockdown Protocol.

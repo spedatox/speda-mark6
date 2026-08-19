@@ -663,7 +663,7 @@ export default function InputBar({
   // lookup that can fail on its own, and a slow or dead voice endpoint must not
   // hold up the text models the composer actually needs to function.
   useEffect(() => { fetchVoices(config).then(setVoices).catch(() => {}) }, [config])
-  // Load budget state on mount, and re-sync whenever a turn finishes (SPEDA can
+  // Load budget state on mount, and re-sync whenever a turn finishes (Speda can
   // toggle it itself via the set_budget_mode tool).
   useEffect(() => { getBudgetMode(config).then(setBudget).catch(() => {}) }, [config])
   useEffect(() => {

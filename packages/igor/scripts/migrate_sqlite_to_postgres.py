@@ -1,5 +1,5 @@
 """
-One-shot migration: copy SPEDA's existing SQLite database into Postgres,
+One-shot migration: copy Speda's existing SQLite database into Postgres,
 preserving everything — sessions, messages, memory files (including the indexed
 history facts), users, tool calls. Run this ONCE when moving to the server so you
 never re-run (or re-pay for) history indexing.
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 # Ensure THIS project's `app` package wins, regardless of cwd or any other
-# SPEDA checkout on the machine (scripts/ on sys.path[0] would otherwise let a
+# Speda checkout on the machine (scripts/ on sys.path[0] would otherwise let a
 # stale sibling project's `app` shadow it).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 

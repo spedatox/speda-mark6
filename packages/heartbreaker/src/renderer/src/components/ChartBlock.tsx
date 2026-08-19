@@ -2,7 +2,7 @@
  * ChartBlock — the deck's chart renderer
  *
  * Triggered by ```chart code blocks in markdown.
- * SPEDA emits JSON matching ChartSpec. Rendered with Recharts on the deck's
+ * Speda emits JSON matching ChartSpec. Rendered with Recharts on the deck's
  * glass plate: one card, a Condensed title with the unit as a right-hand
  * caption, a single hairline baseline, and columns lit from the cap down.
  *

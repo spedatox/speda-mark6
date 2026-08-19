@@ -39,7 +39,7 @@ def _extract_images(content) -> list[str]:
 
 
 def _extract_meta(content) -> dict:
-    """Pull the SPEDA display-only meta block so the tool disclosure,
+    """Pull the Speda display-only meta block so the tool disclosure,
     download cards (assistant) and upload chips (user) survive a reload."""
     if not isinstance(content, list):
         return {}

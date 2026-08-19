@@ -118,7 +118,7 @@ export interface ChatMessage {
    *  received it — see handleRegenerate in ChatMain. */
   unsent?: boolean
   images?: string[]   // data: URLs for display in the user bubble
-  files?: FileMeta[]  // downloadable files SPEDA produced
+  files?: FileMeta[]  // downloadable files Speda produced
   uploads?: UploadedFile[]  // non-image files the user attached (display chips)
   trigger?: TriggerMeta     // set when an automation, not the owner, sent this turn
   status?: string     // live status line while streaming (real phase, not looped filler)

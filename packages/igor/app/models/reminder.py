@@ -37,7 +37,7 @@ class ReminderCycle(Base):
     # reminder rather than continuing this one — same rule as watch_id.
     reminder_id: Mapped[str] = mapped_column(String(64))
     # Which agent asks. Its Telegram bot sends, and its voice is the one the
-    # owner hears — a medicine question from Atomix, not from SPEDA.
+    # owner hears — a medicine question from Atomix, not from Speda.
     agent_id: Mapped[str] = mapped_column(String(32), default="speda")
 
     # The question as sent, kept verbatim so the transcript is honest even if

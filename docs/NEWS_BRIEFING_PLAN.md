@@ -1,6 +1,6 @@
 # News Briefing — Two-Tier RSS + NewsData.io Intelligence Desk
 
-**Goal:** Give SPEDA a professional news desk. Tier 1 is an always-on, zero-cost
+**Goal:** Give Speda a professional news desk. Tier 1 is an always-on, zero-cost
 RSS watcher over curated Turkish + English outlets: breaking-news keyword
 triggers, deduped headline store, daily briefing feed. Tier 2 is NewsData.io as
 the analyst — corroboration, related-article timelines, historical/category
@@ -48,7 +48,7 @@ Rule 11 (3–4 sentence tool descriptions).
    for non-request DB work (see `app/core/dispatch.py`).
 
 6. **Agent ownership (memory: agent domains):** NightCrawler = OSINT / web
-   surveillance / research — the watcher persona. SPEDA = the owner's briefing
+   surveillance / research — the watcher persona. Speda = the owner's briefing
    voice. Tool allowlists are currently unrestricted (`tool_allowlist = None`),
    so registration alone exposes the tools to everyone; ownership is expressed
    in prompts and in which agent n8n triggers.
@@ -72,7 +72,7 @@ POST /news/poll       POST /trigger/speda              │
         │               "output_mode":"push"}          │
         │                    │                         │
         ▼                    ▼                         │
-┌───────────────┐     SPEDA orchestrator run           │
+┌───────────────┐     Speda orchestrator run           │
 │ RSS fetch      │     └─ news_headlines tool ──┐      │
 │ parse (feedparser)                            │      │
 │ dedup (URL+title hash)                        ▼      │
@@ -133,11 +133,11 @@ Tier 2 — NewsData.io (news_deep_dive tool, any agent)◄─┘
 ### Skills (`app/skills/news.py`) — all Rule-11 descriptions
 
 - **`news_headlines`** *(read-only)* — reads `news_items` (since-hours,
-  category, flagged-only, limit). This is what SPEDA calls for the daily
+  category, flagged-only, limit). This is what Speda calls for the daily
   briefing and "bugün ne oldu?" turns. Returns deduped headlines with outlet
   cross-counts ("also in 3 outlets") — corroboration signal for free.
 - **`news_watch`** *(not read-only)* — add/remove/list watchlist keywords, so
-  "SPEDA, 'OSTİM' geçen haberleri anında bildir" is one turn.
+  "Speda, 'OSTİM' geçen haberleri anında bildir" is one turn.
 - **`news_deep_dive`** *(read-only, requires_network)* — Tier 2. NewsData.io
   `/api/1/latest` + `/api/1/archive` wrappers: query, category, country=tr,
   language, from/to dates. Takes a `purpose` enum (`deep_dive`|`auto_flag`|
@@ -176,7 +176,7 @@ developing story doesn't fire 20 pushes.
    (Deliberately NOT the n8n RSS trigger node: dedup across 30+ feeds and the
    watchlist live in the backend; n8n only ticks.)
 2. **`news_briefing`** — daily 07:30 → `POST /trigger/speda`
-   `{"type":"cron","job":"news_briefing","output_mode":"push"}`. SPEDA's run
+   `{"type":"cron","job":"news_briefing","output_mode":"push"}`. Speda's run
    calls `news_headlines(since_hours=24)`, composes the briefing (headlines +
    1-liners, flagged items first, grouped by category), optionally ONE
    `news_deep_dive(purpose="digest")` per tracked topic, and pushes it.
@@ -184,7 +184,7 @@ developing story doesn't fire 20 pushes.
 ### Prompts (small)
 
 - Add a short "news desk" paragraph to NightCrawler's identity prompt (it owns
-  the watch + flash judgement) and one line to SPEDA's briefing-relevant shared
+  the watch + flash judgement) and one line to Speda's briefing-relevant shared
   section describing the two tiers and the quota discipline ("prefer
   news_headlines and read_article; news_deep_dive is budgeted").
 

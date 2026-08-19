@@ -26,8 +26,8 @@ def shell(*, crumbs_html: str, eyebrow: str, h1: str, lede: str,
 """
 
 
-SYS_CRUMB = '<p class="crumb"><a href="../../">SPEDA Mark VI</a><span>/</span><a href="../">Systems</a><span>/</span></p>'
-TOP_CRUMB = '<p class="crumb"><a href="../">SPEDA Mark VI</a><span>/</span></p>'
+SYS_CRUMB = '<p class="crumb"><a href="../../">Speda Mark VI</a><span>/</span><a href="../">Systems</a><span>/</span></p>'
+TOP_CRUMB = '<p class="crumb"><a href="../">Speda Mark VI</a><span>/</span></p>'
 
 
 def _sys(slug, *, accent, title, meta, keywords, eyebrow, h1, crumb, lede, doctrine, cite, body,
@@ -36,7 +36,7 @@ def _sys(slug, *, accent, title, meta, keywords, eyebrow, h1, crumb, lede, doctr
         slug=f"systems/{slug}",
         title=title,
         description=meta,
-        keywords=keywords + ", SPEDA Mark VI",
+        keywords=keywords + ", Speda Mark VI",
         body=shell(crumbs_html=SYS_CRUMB, eyebrow=eyebrow, h1=h1, lede=lede,
                    doctrine=doctrine, cite=cite, body=body),
         nav="systems",
@@ -49,7 +49,7 @@ def _sys(slug, *, accent, title, meta, keywords, eyebrow, h1, crumb, lede, doctr
             "description": meta,
             "url": url(f"systems/{slug}"),
             "author": {"@id": f"{BASE}/#author"},
-            "about": {"@type": "SoftwareApplication", "name": "SPEDA Mark VI", "url": url("")},
+            "about": {"@type": "SoftwareApplication", "name": "Speda Mark VI", "url": url("")},
             "proficiencyLevel": "Expert",
         }],
     )
@@ -461,7 +461,7 @@ MAPS_BODY = """
     <figure class="portrait">
       <img src="https://github.com/user-attachments/assets/f0b092e3-eb41-4ef8-bbdd-2fe3da8e1cde"
            width="738" height="1600" loading="lazy"
-           alt="SPEDA GO rendering a traffic-aware route with alternatives on an inline map inside a conversation">
+           alt="Speda GO rendering a traffic-aware route with alternatives on an inline map inside a conversation">
       <figcaption>Routing rendered in the conversation, not handed off to another app</figcaption>
     </figure>
 
@@ -474,7 +474,7 @@ MAPS_BODY = """
     </div>
 
     <div class="actions">
-      <a class="btn btn-primary" href="../../speda-go/">SPEDA GO</a>
+      <a class="btn btn-primary" href="../../speda-go/">Speda GO</a>
       <a class="btn" href="../capabilities/">The capability arsenal</a>
     </div>
   </div>
@@ -522,7 +522,7 @@ HOUSE_BODY = """
     </div>
 
     <div class="actions">
-      <a class="btn btn-primary" href="../../agents/speda/">SPEDA, the mission commander</a>
+      <a class="btn btn-primary" href="../../agents/speda/">Speda, the mission commander</a>
       <a class="btn" href="../../agents/">The roster it rallies</a>
     </div>
   </div>
@@ -619,8 +619,8 @@ CAP_BODY = """
 def system_pages() -> list[Page]:
     return [
         _sys("legion", accent="nightcrawler",
-             title="The Legion — Sub-Agent Workers in SPEDA Mark VI",
-             meta="The Legion is the sub-agent worker system of SPEDA Mark VI: scout, researcher, analyst, judge and general, run on the parent model's own cheap tier.",
+             title="The Legion — Sub-Agent Workers in Speda Mark VI",
+             meta="The Legion is the sub-agent worker system of Speda Mark VI: scout, researcher, analyst, judge and general, run on the parent model's own cheap tier.",
              keywords="The Legion, AI sub-agents, parallel research agents, multi-agent fan-out, sub-agent worker system",
              eyebrow="System 01 — The Legion",
              h1="The Legion",
@@ -633,8 +633,8 @@ def system_pages() -> list[Page]:
              body=LEGION_BODY, priority="0.85"),
 
         _sys("memory", accent="orion",
-             title="Memory & Recall — How SPEDA Mark VI Remembers",
-             meta="SPEDA Mark VI's memory is a closed set of eight Markdown files, one question each, enforced by a custodian agent, plus episodic recaps and semantic recall.",
+             title="Memory & Recall — How Speda Mark VI Remembers",
+             meta="Speda Mark VI's memory is a closed set of eight Markdown files, one question each, enforced by a custodian agent, plus episodic recaps and semantic recall.",
              keywords="AI assistant memory architecture, persistent AI memory, agent memory hygiene, episodic recall, semantic conversation recall",
              eyebrow="System 02 — Memory",
              h1="Memory that<br>does not rot",
@@ -647,8 +647,8 @@ def system_pages() -> list[Page]:
              body=MEMORY_BODY, priority="0.85"),
 
         _sys("automations", accent="sentinel",
-             title="Proactive Automations — SPEDA Mark VI Watchers",
-             meta="How SPEDA Mark VI watches the world without burning turns: deterministic zero-token probes gate every trigger, and an automated turn is a real chat turn.",
+             title="Proactive Automations — Speda Mark VI Watchers",
+             meta="How Speda Mark VI watches the world without burning turns: deterministic zero-token probes gate every trigger, and an automated turn is a real chat turn.",
              keywords="proactive AI assistant, AI watchers, n8n AI automation, scheduled AI agent, cheap probe pattern",
              eyebrow="System 03 — Automations",
              h1="A poll must<br>not cost a turn",
@@ -660,8 +660,8 @@ def system_pages() -> list[Page]:
              body=AUTOMATIONS_BODY, priority="0.85"),
 
         _sys("news", accent="nightcrawler",
-             title="The News Desk — Two-Tier Intelligence in SPEDA Mark VI",
-             meta="The SPEDA Mark VI News Desk pairs an always-on zero-cost RSS layer with deduplication and keyword alerts against a quota-budgeted analyst tier.",
+             title="The News Desk — Two-Tier Intelligence in Speda Mark VI",
+             meta="The Speda Mark VI News Desk pairs an always-on zero-cost RSS layer with deduplication and keyword alerts against a quota-budgeted analyst tier.",
              keywords="AI news briefing, RSS monitoring AI, automated news digest, breaking news alerts AI agent",
              eyebrow="System 04 — The News Desk",
              h1="The News Desk",
@@ -674,9 +674,9 @@ def system_pages() -> list[Page]:
              body=NEWS_BODY),
 
         _sys("forge", accent="optimus",
-             title="The Forge — The External Execution Engine of SPEDA Mark VI",
-             meta="The Forge is the standalone execution engine behind Optimus in SPEDA Mark VI: a privileged shell in an isolated cell, connected back as a WebSocket peer.",
-             keywords="agentic coding engine, AI code execution sandbox, external agent peer, The Forge SPEDA",
+             title="The Forge — The External Execution Engine of Speda Mark VI",
+             meta="The Forge is the standalone execution engine behind Optimus in Speda Mark VI: a privileged shell in an isolated cell, connected back as a WebSocket peer.",
+             keywords="agentic coding engine, AI code execution sandbox, external agent peer, The Forge Speda",
              eyebrow="System 05 — The Forge",
              h1="The Forge",
              crumb="The Forge",
@@ -688,8 +688,8 @@ def system_pages() -> list[Page]:
              body=FORGE_BODY),
 
         _sys("maps", accent="speda",
-             title="Maps & Navigation — Inline Routing in SPEDA Mark VI",
-             meta="SPEDA Mark VI renders traffic-aware routes inside the conversation, defaulting the origin to your live position — never writing it into stored history.",
+             title="Maps & Navigation — Inline Routing in Speda Mark VI",
+             meta="Speda Mark VI renders traffic-aware routes inside the conversation, defaulting the origin to your live position — never writing it into stored history.",
              keywords="AI assistant maps, traffic aware routing AI, inline map rendering, location aware AI assistant",
              eyebrow="System 06 — Cartography",
              h1="Maps, inside<br>the conversation",
@@ -701,8 +701,8 @@ def system_pages() -> list[Page]:
              body=MAPS_BODY),
 
         _sys("house-party", accent="warroom",
-             title="House Party Protocol — All-Hands Mode in SPEDA Mark VI",
-             meta="House Party Protocol runs the entire SPEDA Mark VI roster in parallel at full model grade with boundaries relaxed — passphrase-gated, and deliberately expensive.",
+             title="House Party Protocol — All-Hands Mode in Speda Mark VI",
+             meta="House Party Protocol runs the entire Speda Mark VI roster in parallel at full model grade with boundaries relaxed — passphrase-gated, and deliberately expensive.",
              keywords="House Party Protocol, multi-agent broadcast, all-hands AI mode, War Room AI dashboard",
              eyebrow="System 07 — House Party Protocol",
              h1="All hands",
@@ -716,8 +716,8 @@ def system_pages() -> list[Page]:
              body=HOUSE_BODY),
 
         _sys("capabilities", accent="centurion",
-             title="The Capability Arsenal of SPEDA Mark VI",
-             meta="The four capability tiers of SPEDA Mark VI, presented to the model as one array: Python skills, MCP servers, wrapped open-source engines and the Legion.",
+             title="The Capability Arsenal of Speda Mark VI",
+             meta="The four capability tiers of Speda Mark VI, presented to the model as one array: Python skills, MCP servers, wrapped open-source engines and the Legion.",
              keywords="AI agent tools, MCP servers, model context protocol integration, AI capability registry, agent toolset",
              eyebrow="System 08 — The arsenal",
              h1="Four tiers,<br>one array",
@@ -808,13 +808,13 @@ def systems_hub() -> Page:
 """
     return Page(
         slug="systems",
-        title="The Systems of SPEDA Mark VI — How It Actually Works",
+        title="The Systems of Speda Mark VI — How It Actually Works",
         description=(
-            "The eight subsystems of SPEDA Mark VI: the Legion, memory, proactive automations, the News Desk, "
+            "The eight subsystems of Speda Mark VI: the Legion, memory, proactive automations, the News Desk, "
             "the Forge, maps, House Party Protocol and the capability arsenal."
         ),
         keywords=(
-            "SPEDA Mark VI architecture, AI assistant subsystems, multi-agent system design, agentic "
+            "Speda Mark VI architecture, AI assistant subsystems, multi-agent system design, agentic "
             "architecture, AI assistant internals"
         ),
         body=body,
@@ -823,7 +823,7 @@ def systems_hub() -> Page:
         priority="0.9",
         jsonld=[{
             "@type": "ItemList",
-            "name": "The subsystems of SPEDA Mark VI",
+            "name": "The subsystems of Speda Mark VI",
             "numberOfItems": 8,
             "itemListElement": [
                 {"@type": "ListItem", "position": i, "name": name.replace("&amp;", "&"),
@@ -842,7 +842,7 @@ HB_BODY = """
     <figure style="margin-top:0">
       <img src="https://github.com/user-attachments/assets/3691eed2-f8a2-4922-b188-2fe3c24b3402"
            width="1920" height="1014"
-           alt="The Heartbreaker desktop client for SPEDA Mark VI showing the fluid-glass conversation view">
+           alt="The Heartbreaker desktop client for Speda Mark VI showing the fluid-glass conversation view">
       <figcaption>The conversation deck, themed to the active agent</figcaption>
     </figure>
   </div>
@@ -893,7 +893,7 @@ HB_BODY = """
           which backend agent the app addresses. The same build therefore ships as any single agent, each a
           fully branded standalone application pointed at its own endpoint.</p>
         <p>The sub-768px layout doubles as the specification for the Android client, so
-          <a href="../speda-go/">SPEDA GO</a> and Heartbreaker are one design rather than two. A fixture test
+          <a href="../speda-go/">Speda GO</a> and Heartbreaker are one design rather than two. A fixture test
           suite verifies the two theme engines against each other, agent by agent.</p>
       </div>
     </div>
@@ -925,7 +925,7 @@ GO_BODY = """
     <div class="split">
       <div class="prose" style="max-width:none">
         <h3>Native, and held to a written parity contract</h3>
-        <p>SPEDA GO is Kotlin and Jetpack Compose rather than a wrapped web view, which means the Stark glass,
+        <p>Speda GO is Kotlin and Jetpack Compose rather than a wrapped web view, which means the Stark glass,
           the palette morph on agent switch, the ambient background and the House Party colour parade are all
           re-implemented natively. The theme engine is <strong>verified against the desktop one by fixture
           tests, agent by agent</strong> — parity is a test suite, not an intention.</p>
@@ -939,7 +939,7 @@ GO_BODY = """
           than in plain preferences.</p>
 
         <h3>On the name</h3>
-        <p>The mobile client is <strong>SPEDA GO</strong> — never "Heartbreaker mobile" or "Heartbreaker
+        <p>The mobile client is <strong>Speda GO</strong> — never "Heartbreaker mobile" or "Heartbreaker
           Droid". <a href="../heartbreaker/">Heartbreaker</a> is the desktop client only. The Kotlin package
           identifier deliberately still reads as the old name: renaming it would orphan every installed app's
           keystore data, so it stays exactly where it is.</p>
@@ -947,7 +947,7 @@ GO_BODY = """
       <figure class="portrait" style="margin-top:0">
         <img src="https://github.com/user-attachments/assets/704053d8-74b8-4a44-8d75-138c55dde3f9"
              width="738" height="1600"
-             alt="SPEDA GO running on Android showing the AMOLED-black fluid-glass conversation view">
+             alt="Speda GO running on Android showing the AMOLED-black fluid-glass conversation view">
         <figcaption>One thumb, full deck</figcaption>
       </figure>
     </div>
@@ -966,7 +966,7 @@ GO_BODY = """
     </div>
 
     <div class="actions">
-      <a class="btn btn-primary" href="https://github.com/spedatox/speda-go">SPEDA GO on GitHub</a>
+      <a class="btn btn-primary" href="https://github.com/spedatox/speda-go">Speda GO on GitHub</a>
       <a class="btn" href="{repo}/blob/main/docs/ANDROID_PORT_PLAN.md">The parity contract</a>
     </div>
   </div>
@@ -1070,20 +1070,20 @@ def client_pages() -> list[Page]:
     return [
         Page(
             slug="heartbreaker",
-            title="Heartbreaker — The SPEDA Mark VI Desktop Command Deck",
+            title="Heartbreaker — The Speda Mark VI Desktop Command Deck",
             description=(
-                "Heartbreaker is the SPEDA Mark VI desktop client: a fluid-glass holographic command deck on "
+                "Heartbreaker is the Speda Mark VI desktop client: a fluid-glass holographic command deck on "
                 "Electron and React, with a live Systems Board and a comms tray."
             ),
             keywords=(
-                "Heartbreaker, SPEDA Mark VI desktop client, Electron AI assistant UI, holographic HUD "
+                "Heartbreaker, Speda Mark VI desktop client, Electron AI assistant UI, holographic HUD "
                 "interface, fluid glass UI, AI command deck"
             ),
             body=shell(
                 crumbs_html=TOP_CRUMB,
                 eyebrow="The desktop client",
                 h1="Heartbreaker",
-                lede="The primary face of SPEDA Mark VI, and the thing that makes it feel unlike other "
+                lede="The primary face of Speda Mark VI, and the thing that makes it feel unlike other "
                      "assistants: a Stark-tech fluid-glass command deck rather than a message list.",
                 doctrine="Heartbreaker renders the network. Igor runs it. The client holds zero business logic.",
                 cite="packages/heartbreaker/HEARTBREAKER.md",
@@ -1095,30 +1095,30 @@ def client_pages() -> list[Page]:
             jsonld=[{
                 "@type": "SoftwareApplication",
                 "name": "Heartbreaker",
-                "alternateName": "SPEDA Mark VI desktop client",
+                "alternateName": "Speda Mark VI desktop client",
                 "applicationCategory": "BusinessApplication",
                 "operatingSystem": "Windows, macOS, Linux",
                 "url": url("heartbreaker"),
-                "description": "The desktop client for SPEDA Mark VI — a fluid-glass holographic command deck built with Electron and React, with an agent switcher, a live Systems Board and an inter-agent comms tray.",
+                "description": "The desktop client for Speda Mark VI — a fluid-glass holographic command deck built with Electron and React, with an agent switcher, a live Systems Board and an inter-agent comms tray.",
                 "author": {"@id": f"{BASE}/#author"},
-                "isPartOf": {"@type": "SoftwareApplication", "name": "SPEDA Mark VI", "url": url("")},
+                "isPartOf": {"@type": "SoftwareApplication", "name": "Speda Mark VI", "url": url("")},
             }],
         ),
         Page(
             slug="speda-go",
-            title="SPEDA GO — Native Android Client for SPEDA Mark VI",
+            title="Speda GO — Native Android Client for Speda Mark VI",
             description=(
-                "SPEDA GO is the native Kotlin and Jetpack Compose Android client for SPEDA Mark VI — full "
+                "Speda GO is the native Kotlin and Jetpack Compose Android client for Speda Mark VI — full "
                 "chat core, inline maps and charts, and an offline transcript cache."
             ),
             keywords=(
-                "SPEDA GO, SPEDA Mark VI Android, Kotlin AI assistant app, Jetpack Compose AI client, native "
+                "Speda GO, Speda Mark VI Android, Kotlin AI assistant app, Jetpack Compose AI client, native "
                 "Android AI assistant"
             ),
             body=shell(
                 crumbs_html=TOP_CRUMB,
                 eyebrow="The Android client",
-                h1="SPEDA GO",
+                h1="Speda GO",
                 lede="The command deck in your pocket — native Kotlin and Jetpack Compose, carrying the whole "
                      "chat core rather than a companion subset.",
                 doctrine="Parity with the desktop client is a fixture test suite, agent by agent — not an "
@@ -1128,30 +1128,30 @@ def client_pages() -> list[Page]:
             ),
             nav="speda-go",
             accent="atomix",
-            crumbs=[("speda-go", "SPEDA GO")],
+            crumbs=[("speda-go", "Speda GO")],
             priority="0.85",
             jsonld=[{
                 "@type": "MobileApplication",
-                "name": "SPEDA GO",
-                "alternateName": "SPEDA Mark VI for Android",
+                "name": "Speda GO",
+                "alternateName": "Speda Mark VI for Android",
                 "applicationCategory": "BusinessApplication",
                 "operatingSystem": "Android",
                 "url": url("speda-go"),
                 "downloadUrl": "https://github.com/spedatox/speda-go",
-                "description": "The native Android client for SPEDA Mark VI, written in Kotlin with Jetpack Compose. Carries the full chat core including streaming, the tool feed, inline map, chart and calendar rendering, attachments, an offline transcript cache and the agent switcher.",
+                "description": "The native Android client for Speda Mark VI, written in Kotlin with Jetpack Compose. Carries the full chat core including streaming, the tool feed, inline map, chart and calendar rendering, attachments, an offline transcript cache and the agent switcher.",
                 "author": {"@id": f"{BASE}/#author"},
-                "isPartOf": {"@type": "SoftwareApplication", "name": "SPEDA Mark VI", "url": url("")},
+                "isPartOf": {"@type": "SoftwareApplication", "name": "Speda Mark VI", "url": url("")},
             }],
         ),
         Page(
             slug="igor",
-            title="Igor — The SPEDA Mark VI Agentic Backend (FastAPI)",
+            title="Igor — The Speda Mark VI Agentic Backend (FastAPI)",
             description=(
-                "Igor is the FastAPI agentic core of SPEDA Mark VI: one orchestrator owning the loop and the "
+                "Igor is the FastAPI agentic core of Speda Mark VI: one orchestrator owning the loop and the "
                 "system prompt, detached turns, and provider-agnostic model routing."
             ),
             keywords=(
-                "Igor backend, SPEDA Mark VI architecture, FastAPI agentic loop, multi-agent orchestrator, "
+                "Igor backend, Speda Mark VI architecture, FastAPI agentic loop, multi-agent orchestrator, "
                 "capability registry, provider-agnostic LLM routing, detached turns"
             ),
             body=shell(
@@ -1171,11 +1171,11 @@ def client_pages() -> list[Page]:
             priority="0.85",
             jsonld=[{
                 "@type": "TechArticle",
-                "headline": "Igor — the agentic backend of SPEDA Mark VI",
-                "description": "How the SPEDA Mark VI backend is built: a single orchestrator owning the system prompt and agentic loop, detached turns, a four-tier capability registry, in-process agent profiles and provider-agnostic model routing.",
+                "headline": "Igor — the agentic backend of Speda Mark VI",
+                "description": "How the Speda Mark VI backend is built: a single orchestrator owning the system prompt and agentic loop, detached turns, a four-tier capability registry, in-process agent profiles and provider-agnostic model routing.",
                 "url": url("igor"),
                 "author": {"@id": f"{BASE}/#author"},
-                "about": {"@type": "SoftwareApplication", "name": "SPEDA Mark VI", "url": url("")},
+                "about": {"@type": "SoftwareApplication", "name": "Speda Mark VI", "url": url("")},
                 "proficiencyLevel": "Expert",
             }],
         ),

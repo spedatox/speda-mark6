@@ -1,9 +1,9 @@
 # H.İ.S.A.R. × Forge × Mark VI — Placement Plan
 
 **Goal:** Place Hisar Mark I (the web-desktop file system) and Forge Mark I (the
-privileged execution peer) beside SPEDA on the Contabo server so that:
+privileged execution peer) beside Speda on the Contabo server so that:
 
-1. **Agents can commit work to Hisar on command** — "SPEDA, put that report in
+1. **Agents can commit work to Hisar on command** — "Speda, put that report in
    Hisar" lands the file in the vault, visible on the web desktop.
 2. **Forge saves the projects it scaffolds to Hisar** — a coding job dispatched
    to Optimus leaves its workspace browsable (and downloadable) from Hisar.
@@ -78,7 +78,7 @@ privileged execution peer) beside SPEDA on the Contabo server so that:
 ├── Desktop/          # what the web desktop shows as the desktop surface
 ├── Documents/
 ├── Transfers/        # daily-driver drop zone (uploads from any device)
-├── SPEDA/            # ← agent deposits land here, per-agent subfolders
+├── Speda/            # ← agent deposits land here, per-agent subfolders
 │   ├── speda/  sentinel/  nightcrawler/  ...
 └── Forge/            # ← Forge's own subtree
     ├── workspaces/   # live Cell workspaces (FORGE_WORKSPACE_ROOT)
@@ -124,7 +124,7 @@ hisar-mk1/
 - Two credentials, two scopes: the **owner JWT** (full CRUD, short-lived,
   issued by login) and the **machine token** (`X-Hisar-Token`, env-set,
   constant-time compare — same pattern as Igor's `X-API-Key`) which can only
-  `upload`/`mkdir`/`deposit` under `/SPEDA` and `/Forge`. An agent credential
+  `upload`/`mkdir`/`deposit` under `/Speda` and `/Forge`. An agent credential
   can add files; it can never read, list, or delete the owner's vault.
 - Upload size cap (env, default 2 GiB), request rate limit on `/auth/login`.
 - Runs as a non-root user; the vault bind mount is the only writable path.
@@ -202,7 +202,7 @@ other skill (Rule 5 — drop a file in `skills/`, the orchestrator never changes
   the vault path where the file landed and its public desktop location."*
   (≥3–4 sentences per Rule 11 — final text lives in the skill.)
 - Args: `source` (a `/tmp/speda_outputs` filename or a `file_id` from
-  `register_file`), optional `folder` (default `SPEDA/{agent_id}/`), optional
+  `register_file`), optional `folder` (default `Speda/{agent_id}/`), optional
   `filename`.
 - Implementation: streams the file to Hisar's `POST /deposit` with
   `X-Hisar-Token`. New settings in `app/config.py`: `hisar_url`,
@@ -215,7 +215,7 @@ other skill (Rule 5 — drop a file in `skills/`, the orchestrator never changes
 
 **Flow:** owner: *"Sentinel, monthly budget PDF'ini Hisar'a koy"* → Sentinel
 generates via `documents` skill → `hisar_deposit(source=...)` → file at
-`vault/SPEDA/sentinel/2026-07-budget.pdf` → visible in the web desktop
+`vault/Speda/sentinel/2026-07-budget.pdf` → visible in the web desktop
 immediately (listing is live), downloadable from any logged-in device.
 
 ---
@@ -251,7 +251,7 @@ whatever machine they're on.
 3. **Restore from Trash + Empty Trash** (the client seam already anticipates it).
 4. **Persist desktop layout** server-side (`/state` blob) so the desktop is the
    same from every device.
-5. **SPEDA awareness of the vault** — a read-only `hisar_list` skill so the
+5. **Speda awareness of the vault** — a read-only `hisar_list` skill so the
    owner can ask "what's in my Transfers folder?" (separate decision: it widens
    the machine scope from write-only to read; do it only if genuinely wanted).
 
@@ -263,7 +263,7 @@ whatever machine they're on.
 |---|---|
 | Vault path traversal | Single `resolve()` chokepoint, realpath containment, symlink rejection — unit-tested first |
 | Owner auth | Argon2 password hash, short-lived JWT in httpOnly cookie, login rate-limit |
-| Agent/Forge auth | `X-Hisar-Token` constant-time compare; scope limited to upload/mkdir under `SPEDA/` + `Forge/` |
+| Agent/Forge auth | `X-Hisar-Token` constant-time compare; scope limited to upload/mkdir under `Speda/` + `Forge/` |
 | Transport | Caddy TLS on both domains; HTTP never exposed |
 | Blast radius | Hisar container: non-root, vault is its only writable mount, no access to Igor's DB/secrets/network beyond compose |
 | Forge | Unchanged threat model — Cell isolation as today; the vault subtree it can touch contains no Igor state |
@@ -277,7 +277,7 @@ whatever machine they're on.
 |---|---|---|
 | **H1** Hisar backend | `hisar-mk1` | Path-sandbox unit tests green; client runs CRUD against it locally end-to-end (login, upload w/ progress, download, rename, trash) |
 | **H2** Deploy | `speda-mark6` (compose/Caddy) + DNS | `https://hisar.spedatox.systems` serves the desktop with TLS; upload from a phone works; vault survives container recreation |
-| **H3** `hisar_deposit` | `speda-mark6` `packages/igor` | Owner asks SPEDA to save a generated file → appears in the web desktop; skill absent when `hisar_url` unset |
+| **H3** `hisar_deposit` | `speda-mark6` `packages/igor` | Owner asks Speda to save a generated file → appears in the web desktop; skill absent when `hisar_url` unset |
 | **H4** Forge archive | `forge-mark1` | A dispatched scaffold job ends with the project under `Forge/projects/`, visible in Hisar |
 | **H5** Polish | `hisar-mk1` | Share link opened from a device that has never logged in |
 

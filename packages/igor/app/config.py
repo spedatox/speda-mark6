@@ -72,7 +72,7 @@ def write_managed_env(updates: dict[str, str | None]) -> None:
             current[key] = value
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
     lines = [
-        "# SPEDA managed overrides — written by the desktop Configuration tab.",
+        "# Speda managed overrides — written by the desktop Configuration tab.",
         "# Edit in the app (Settings → Configuration). Values here win over .env.",
         "",
     ]
@@ -227,7 +227,7 @@ class Settings(BaseSettings):
     # House Party Protocol authorization passphrase. The all-hands protocol is
     # heavy, expensive and still a prototype, so engaging it requires the owner
     # to speak this exact passphrase — the house_party tool validates the agent's
-    # supplied value against this in constant time and refuses otherwise. SPEDA
+    # supplied value against this in constant time and refuses otherwise. Speda
     # never knows it; it must be given by the owner each time. Change it in .env.
     house_party_passphrase: str = "wheels-up-24-karat"
 
@@ -241,20 +241,20 @@ class Settings(BaseSettings):
     cors_allowed_origins: str = ""
 
     # ── n8n automation engine ────────────────────────────────────────────────
-    # n8n is the sole scheduling/automation organ (CLAUDE.md). SPEDA is a CONTROL
+    # n8n is the sole scheduling/automation organ (CLAUDE.md). Speda is a CONTROL
     # PLANE over its REST API — it composes/lists/toggles workflows but never
     # schedules anything internally. Default host is the docker-compose service.
     # ── Hisar: the owner's own cloud filesystem ──────────────────────────────
     # Reached over the container network, not the public hostname — this is an
     # internal call and should not leave the box. The machine token is the same
     # HISAR_MACHINE_TOKEN the Hisar container holds; it grants read across the
-    # vault and write only under /SPEDA and /Forge (server/auth.py there).
+    # vault and write only under /Speda and /Forge (server/auth.py there).
     hisar_base_url: str = "http://hisar:8600"
     hisar_machine_token: str = ""
 
     n8n_api_url: str = "http://n8n:5678"
     n8n_api_key: str = ""   # n8n → Settings → n8n API → create key
-    # URL n8n uses to call BACK into SPEDA's /trigger endpoint. Internal compose
+    # URL n8n uses to call BACK into Speda's /trigger endpoint. Internal compose
     # network by default; override with the public domain if n8n runs elsewhere.
     speda_callback_url: str = "http://app:8000"
 
@@ -264,12 +264,12 @@ class Settings(BaseSettings):
     # from @NightCrawlerBot — attribution lives at the notification surface.
     # Tokens are SECRETS (config, keyed by agent_id); the agent's *identity* is
     # its profile (Rule 10). A leaked token burns one bot, never the fleet. A
-    # missing token degrades that one agent to SPEDA's bot (tagged), never the
+    # missing token degrades that one agent to Speda's bot (tagged), never the
     # channel. See docs/TELEGRAM_ARCHITECTURE.md.
     #
-    # telegram_bot_token is the legacy single-bot alias — treated as SPEDA's bot
+    # telegram_bot_token is the legacy single-bot alias — treated as Speda's bot
     # when telegram_bot_token_speda is unset, so existing setups keep working.
-    telegram_bot_token: str = ""            # from @BotFather — legacy alias for SPEDA
+    telegram_bot_token: str = ""            # from @BotFather — legacy alias for Speda
     telegram_bot_token_speda: str = ""
     telegram_bot_token_sentinel: str = ""
     telegram_bot_token_nightcrawler: str = ""
@@ -334,7 +334,7 @@ class Settings(BaseSettings):
 
     # Which MCP servers to CONNECT at startup. With lazy tool loading (below),
     # connecting a server is cheap — its tools only enter the prompt prefix when
-    # SPEDA actually loads them via use_toolset. So this can be generous.
+    # Speda actually loads them via use_toolset. So this can be generous.
     mcp_enabled: str = (
         "tavily,google_gmail,google_calendar,google_tasks,microsoft_outlook,notion"
     )
@@ -362,7 +362,7 @@ class Settings(BaseSettings):
     # voice is IDENTITY and lives in app/profiles/*.py (Rule 10); this is only the
     # engine default for profiles that stay silent about it.
     tts_default_voice: str = "en-US-BrianMultilingualNeural"
-    # The language SPEDA SPEAKS — deliberately separate from the voice's own
+    # The language Speda SPEAKS — deliberately separate from the voice's own
     # locale, because for a multilingual voice the two differ on purpose. Azure
     # has only two native Turkish voices and both are the stock CapCut ones, so
     # the roster uses multilingual voices instead; those carry an en-US/de-DE
@@ -513,7 +513,7 @@ class Settings(BaseSettings):
     gpt_researcher_url: str = "http://localhost:8001"
     shannon_url: str = "http://localhost:9000"
 
-    # Sandbox — the isolated computer SPEDA runs commands in ("capable computer").
+    # Sandbox — the isolated computer Speda runs commands in ("capable computer").
     # In Docker this is the sandbox service (SANDBOX_URL=http://sandbox:9000);
     # empty disables the run_command tool. The default port is 9100 to avoid a
     # collision with Shannon (9000). In local dev the sandbox launcher spawns
@@ -554,7 +554,7 @@ class Settings(BaseSettings):
     browser_fallback_enabled: bool = True
 
     # ── The Forge peer (app/services/forge_peer.py) ────────────────────────────
-    # The Forge (Mark II) is the standalone execution engine. SPEDA owns its
+    # The Forge (Mark II) is the standalone execution engine. Speda owns its
     # lifecycle: the lifespan handler launches ONE child process per agent in
     # `forge_agents`, and each connects back to WS /agents/ws/<agent_id> as an
     # external peer. While an agent's peer is online, /chat/<agent_id> is proxied

@@ -451,7 +451,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const providers = Array.from(new Set(models.map(m => m.provider ?? 'anthropic')))
   const activeProvider = models.find(m => m.id === settings.model)?.provider ?? 'anthropic'
 
-  // Provider groups collapse, as they do on SPEDA GO. The catalogue runs to a
+  // Provider groups collapse, as they do on Speda GO. The catalogue runs to a
   // hundred-odd models across seven providers, and a live Ollama or NVIDIA
   // listing alone can be dozens of rows — enough to bury the one model the
   // owner opened the board to change. Only the group holding the active model
@@ -875,7 +875,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         </Panel>
       </div>
 
-      {/* ── Bottom band — knowledge bank: what SPEDA knows about the owner ─ */}
+      {/* ── Bottom band — knowledge bank: what Speda knows about the owner ─ */}
       <Panel title="Memory files" light pad={false}
         right={
           <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.first
  * Atomix refuses to write a health briefing from stale data — a resting heart
  * rate from four days ago reported under today's date is a false statement
  * about the owner's body, not merely old news. When it needs biometrics that
- * describe the present it raises a demand server-side. SPEDA GO carries no
+ * describe the present it raises a demand server-side. Speda GO carries no
  * Firebase, so nothing can wake this app from outside; the demand is a note
  * left where the app will find it, and this is the app looking.
  *

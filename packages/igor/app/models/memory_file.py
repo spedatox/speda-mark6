@@ -8,7 +8,7 @@ from app.database import Base
 
 class MemoryFile(Base):
     """
-    Virtual filesystem for SPEDA's long-term memory.
+    Virtual filesystem for Speda's long-term memory.
 
     Each row is a file in the /memories/{user_id}/ directory.
     The model reads and writes these via the memory tool during conversations —

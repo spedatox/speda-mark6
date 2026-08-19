@@ -1,6 +1,6 @@
-# Igor — the SPEDA Mark VI backend
+# Igor — the Speda Mark VI backend
 
-**Igor is the backend core of SPEDA Mark VI.** One FastAPI process holding the
+**Igor is the backend core of Speda Mark VI.** One FastAPI process holding the
 event loop, the database, the owner's shared memory, the orchestrator, and every
 capability tier — the brain and hands of the whole system. Heartbreaker
 (`packages/heartbreaker`) is the face; Igor does the work.
@@ -14,7 +14,7 @@ capability tier — the brain and hands of the whole system. Heartbreaker
 | Organ | Where | What |
 |---|---|---|
 | The orchestrator | `app/core/orchestrator.py` | Owns the system prompt and the agentic loop — the only place either exists |
-| The roster | `app/profiles/` | SPEDA + the Superior Six as in-process `AgentProfile`s; all identity lives here, zero in core |
+| The roster | `app/profiles/` | Speda + the Superior Six as in-process `AgentProfile`s; all identity lives here, zero in core |
 | **The Legion** | `app/legion/` | Disposable worker agents (wire name `Task`): scout / researcher / analyst / judge / general, provider-agnostic model resolution, background tickets |
 | Capabilities | `app/core/registry.py` | Four tiers behind one interface: the Legion (0), Python skills (1), MCP servers (2), OSS adapters (3) |
 | Memory | `app/skills/memory.py`, `app/services/memory.py` | The `/memories` file law, episodic session recaps, semantic recall |

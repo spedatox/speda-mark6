@@ -204,11 +204,11 @@ fun WelcomeView(
 }
 
 /**
- * The agent hero — "SPEDA MARK VI".
+ * The agent hero — "Speda MARK VI".
  *
  * Mobile-specific: the brand is the loudest thing on the home screen, so it is
  * sized to fill the width (shrink-to-fit, since a long name like NIGHTCRAWLER
- * MARK III needs far less than SPEDA MARK VI).
+ * MARK III needs far less than Speda MARK VI).
  *
  * Name and mark are ONE line of styled text rather than two composables in a Row:
  * that gives them a shared baseline for free — Row's Alignment.Bottom lines up the

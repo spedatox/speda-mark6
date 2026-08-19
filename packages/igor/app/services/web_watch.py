@@ -74,7 +74,7 @@ _MAX_ADDED = 40
 
 _UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0 Safari/537.36 SPEDA-WebWatch/1.0"
+    "Chrome/124.0 Safari/537.36 Speda-WebWatch/1.0"
 )
 
 # <head> goes too: its <title> is captured separately by page_title(), and left
@@ -314,7 +314,7 @@ async def scan(
 
 def ack(watch_id: str, fingerprint_: str) -> dict:
     """Promote the parked snapshot to the committed one, so the next scan diffs
-    against what SPEDA has actually been told about.
+    against what Speda has actually been told about.
 
     The fingerprint must match the pending one: if the page moved on between the
     scan and this call, acknowledging blind would silently skip whatever landed

@@ -14,7 +14,7 @@ class RunCommandSkill(Skill):
     deferred = True
     search_keywords = "shell bash terminal command execute script sandbox run code"
     description = (
-        "Runs a shell command in SPEDA's own sandboxed Linux computer (an isolated "
+        "Runs a shell command in Speda's own sandboxed Linux computer (an isolated "
         "container with Python 3.12, pip, git, curl, jq, pandas/numpy preinstalled, "
         "and a persistent /workspace). Use this to actually DO computing work: run "
         "scripts, do calculations, process data, fetch files, install packages "

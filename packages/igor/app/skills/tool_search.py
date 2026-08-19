@@ -2,7 +2,7 @@
 
 Anthropic's API does this natively: mark a tool `defer_loading: true`, add the
 `tool_search_tool_regex` server tool, and the model searches its own tool
-library without the schemas ever sitting in the prefix. SPEDA runs on whatever
+library without the schemas ever sitting in the prefix. Speda runs on whatever
 provider the owner routed the agent to, and z.ai/Gemini/OpenAI/DeepSeek have no
 such server tool — so this skill is that mechanism, reimplemented over the
 CapabilityRegistry so the behaviour is identical on every provider.

@@ -12,7 +12,7 @@ import {
   type SceneProps,
 } from './scenes'
 
-const SPEDA = BRANDS.speda.accent
+const Speda = BRANDS.speda.accent
 const UI = "'Rajdhani', sans-serif"
 const MONO = "'Share Tech Mono', monospace"
 const DURS_KEY = 'teaser_durs_v1'
@@ -23,7 +23,7 @@ function accentAt(now: number, beats: Beat[]): { key: string; accent: string } {
   if (six && now >= six.t0 && now < six.t1) {
     const { intro, slot } = sixTiming(six.dur)
     const lt = now - six.t0
-    if (lt < intro) return { key: 'speda', accent: SPEDA }
+    if (lt < intro) return { key: 'speda', accent: Speda }
     const idx = Math.min(5, Math.floor((lt - intro) / slot))
     return { key: 'six-' + idx, accent: BRANDS[SIX_ORDER[idx]].accent }
   }
@@ -32,7 +32,7 @@ function accentAt(now: number, beats: Beat[]): { key: string; accent: string } {
     const step = Math.floor((now - col.t0) / 1.1) % 6
     return { key: 'col-' + step, accent: BRANDS[SIX_ORDER[step]].accent }
   }
-  return { key: 'speda', accent: SPEDA }
+  return { key: 'speda', accent: Speda }
 }
 
 const SCENES: Record<BeatId, (p: SceneProps) => JSX.Element> = {
@@ -61,9 +61,9 @@ export default function Teaser() {
   const [now, setNow] = useState(frozenAt ?? 0)
   const [playing, setPlaying] = useState(params0.has('autoplay'))
   const startRef = useRef(0)
-  const lastAccent = useRef(SPEDA)
+  const lastAccent = useRef(Speda)
 
-  useLayoutEffect(() => { applyTheme(SPEDA); lastAccent.current = SPEDA }, [])
+  useLayoutEffect(() => { applyTheme(Speda); lastAccent.current = Speda }, [])
 
   // persist
   useEffect(() => { localStorage.setItem(DURS_KEY, JSON.stringify(durs)) }, [durs])
@@ -215,7 +215,7 @@ function SettingsPanel(props: {
 
       <div style={{ ...lbl, color: 'var(--hb-cyan)', margin: '14px 0 8px' }}>TIMING</div>
       <div style={{ ...lbl, marginBottom: 4 }}>
-        SPEDA wordmark appears · {tparams.wordmarkAt.toFixed(1)}s into Ignition
+        Speda wordmark appears · {tparams.wordmarkAt.toFixed(1)}s into Ignition
       </div>
       <input type="range" min={0} max={Math.max(1, ignDur)} step={0.1} value={tparams.wordmarkAt}
         onChange={e => setTparams({ ...tparams, wordmarkAt: Number(e.target.value) })}

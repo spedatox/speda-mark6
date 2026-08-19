@@ -12,7 +12,7 @@ class BudgetModeSkill(Skill):
     deferred = True
     search_keywords = "budget cost cheap frugal spend saving mode expensive"
     description = (
-        "Turns SPEDA's budget mode ON or OFF when the owner asks (e.g. 'go budget "
+        "Turns Speda's budget mode ON or OFF when the owner asks (e.g. 'go budget "
         "mode', 'activate budget mode', 'stop saving money', 'unleash yourself', "
         "'turn off budget mode'). Budget mode forces short answers, minimises web "
         "searches, and disables the expensive Legion workers. Use this ONLY when the owner "

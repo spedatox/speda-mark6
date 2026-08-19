@@ -1,5 +1,5 @@
 """
-SPEDA Browser — the eyes. A Playwright service in its own container.
+Speda Browser — the eyes. A Playwright service in its own container.
 
 Same shape as packages/sandbox: a small HTTP service the API talks to over the
 internal Docker network, isolated from Igor's secrets and never published to the
@@ -575,7 +575,7 @@ async def lifespan(_app: FastAPI):
         await engine.stop()
 
 
-app = FastAPI(title="SPEDA Browser", docs_url=None, redoc_url=None, lifespan=lifespan)
+app = FastAPI(title="Speda Browser", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 
 def check(token: str | None) -> None:

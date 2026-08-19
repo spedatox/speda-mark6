@@ -32,10 +32,10 @@ import kotlinx.coroutines.launch
  * interactive grade while showing the owner nothing is worse than one that
  * simply is not offered. The backend agrees — `POST /agents/house-party` and
  * the `house_party` tool both refuse to ENGAGE from a non-desktop surface, and
- * SPEDA says so in its own words when asked from the phone.
+ * Speda says so in its own words when asked from the phone.
  *
  * Standing down deliberately stays possible from anywhere: the owner can tell
- * SPEDA to stand the protocol down from this app, and the tool will. A protocol
+ * Speda to stand the protocol down from this app, and the tool will. A protocol
  * you can start but not stop is a trap.
  */
 @Composable

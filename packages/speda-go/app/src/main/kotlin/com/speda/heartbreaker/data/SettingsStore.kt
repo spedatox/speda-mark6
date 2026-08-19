@@ -18,7 +18,7 @@ data class HbSettings(
     val userName: String = "",
     val systemPrompt: String = "",
     val temperature: Float = 0.7f,
-    /** Android-exclusive: share device location with SPEDA each turn (opt-in). */
+    /** Android-exclusive: share device location with Speda each turn (opt-in). */
     val locationEnabled: Boolean = false,
     /** Whether the first-launch location permission prompt has already fired. */
     val locationPrompted: Boolean = false,

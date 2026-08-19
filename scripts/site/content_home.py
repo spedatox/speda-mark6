@@ -1,4 +1,4 @@
-"""Home page and FAQ for the SPEDA Mark VI site.
+"""Home page and FAQ for the Speda Mark VI site.
 
 Copy is written against the code, not the README: the roster domains come from
 app/profiles/*.py, the doctrine lines from app/prompts/agents/*/01_identity.md,
@@ -22,7 +22,7 @@ from build import BASE, REPO, ROSTER, Page, emblem, url
 
 
 def _mark_mask() -> str:
-    """The SPEDA path as a CSS mask, so glass can be clipped to the mark itself.
+    """The Speda path as a CSS mask, so glass can be clipped to the mark itself.
 
     `backdrop-filter` frosts a rectangle by default. Masking the element to the
     logo's own silhouette is what makes the *mark* the glass object rather than
@@ -45,7 +45,7 @@ def _mark_mask() -> str:
 
 
 def _monolith() -> str:
-    """The hero object: the SPEDA mark itself, cut from glass and extruded.
+    """The hero object: the Speda mark itself, cut from glass and extruded.
 
     Three parts stacked in Z — the extrusion behind (the same mark repeated,
     each copy deeper and darker, which is what gives the object a real side
@@ -58,7 +58,7 @@ def _monolith() -> str:
         '<div class="monolith">\n'
         '        <span class="mono-field"></span>\n'
         '        <canvas class="mono-canvas" data-glass3d '
-        'aria-label="The SPEDA Mark VI emblem rendered in glass" role="img"></canvas>\n'
+        'aria-label="The Speda Mark VI emblem rendered in glass" role="img"></canvas>\n'
         '        <div class="mono-fallback" data-glass-path aria-hidden="true">'
         f"{mark}</div>\n"
         "      </div>"
@@ -92,7 +92,7 @@ HOME_BODY = """
 <section class="hero hero-home">
   <div class="hero-copy">
     <p class="eyebrow rise">Specialized Personal Executive Digital Assistant</p>
-    <h1 class="rise">SPEDA<br>Mark VI
+    <h1 class="rise">Speda<br>Mark VI
       <span class="hero-sub">Eight agents. One memory. Zero prompts required.</span>
     </h1>
     <p class="lede rise">A private, self-hosted AI assistant built as a <strong>standing staff</strong>
@@ -114,7 +114,7 @@ HOME_BODY = """
       <p class="eyebrow">The premise</p>
       <h2>An assistant that forgets you is not an assistant.</h2>
       <p class="lede">Every general chatbot begins each conversation as a stranger with no stake in your
-        week. SPEDA Mark VI inverts all three assumptions: it serves <strong>one owner</strong>, it keeps a
+        week. Speda Mark VI inverts all three assumptions: it serves <strong>one owner</strong>, it keeps a
         <strong>structured memory</strong> of him that outlives any session, and it has
         <strong>senses that fire on their own schedule</strong> instead of waiting to be asked.</p>
     </div>
@@ -324,7 +324,7 @@ HOME_BODY = """
     <figure style="margin-top:0">
       <img src="https://github.com/user-attachments/assets/3691eed2-f8a2-4922-b188-2fe3c24b3402"
            width="1920" height="1014"
-           alt="Heartbreaker, the SPEDA Mark VI desktop command deck, showing a live agent conversation in fluid-glass panels">
+           alt="Heartbreaker, the Speda Mark VI desktop command deck, showing a live agent conversation in fluid-glass panels">
       <figcaption>Heartbreaker — the primary interface, themed to the active agent</figcaption>
     </figure>
     <div class="grid g3" style="margin-top:2.6rem">
@@ -334,7 +334,7 @@ HOME_BODY = """
           budget telemetry, and a comms tray where you watch agents talk to each other.</p>
       </a>
       <a class="holo pad agent-card rise" style="--a: var(--atomix)" href="speda-go/">
-        <span class="name">SPEDA GO</span><span class="domain">Android · Kotlin + Compose</span>
+        <span class="name">Speda GO</span><span class="domain">Android · Kotlin + Compose</span>
         <p class="card-body">Native, not a wrapped web view. Full chat core, inline maps and charts, offline
           transcript cache — verified against the desktop theme engine by fixture tests.</p>
       </a>
@@ -381,14 +381,14 @@ def home_page() -> Page:
             .replace("{repo}", REPO))
     return Page(
         slug="",
-        title="SPEDA Mark VI — Self-Hosted Multi-Agent AI Assistant",
+        title="Speda Mark VI — Self-Hosted Multi-Agent AI Assistant",
         description=(
-            "SPEDA Mark VI is a private, self-hosted multi-agent AI assistant: eight specialist agents, "
+            "Speda Mark VI is a private, self-hosted multi-agent AI assistant: eight specialist agents, "
             "persistent memory, proactive watchers, desktop and Android clients."
         ),
         keywords=(
-            "SPEDA Mark VI, SPEDA, Specialized Personal Executive Digital Assistant, multi-agent AI "
-            "assistant, self-hosted AI assistant, proactive AI assistant, Heartbreaker, SPEDA GO, Igor, "
+            "Speda Mark VI, Speda, Specialized Personal Executive Digital Assistant, multi-agent AI "
+            "assistant, self-hosted AI assistant, proactive AI assistant, Heartbreaker, Speda GO, Igor, "
             "The Legion, House Party Protocol, personal AI agent"
         ),
         body=body,
@@ -402,15 +402,15 @@ def home_page() -> Page:
                 "@type": "WebSite",
                 "@id": f"{BASE}/#website",
                 "url": url(""),
-                "name": "SPEDA Mark VI",
-                "alternateName": ["S.P.E.D.A. Mark VI", "SPEDA", "Specialized Personal Executive Digital Assistant"],
+                "name": "Speda Mark VI",
+                "alternateName": ["S.P.E.D.A. Mark VI", "Speda", "Specialized Personal Executive Digital Assistant"],
                 "inLanguage": "en",
                 "publisher": {"@id": f"{BASE}/#author"},
             },
             {
                 "@type": "SoftwareApplication",
                 "@id": f"{BASE}/#app",
-                "name": "SPEDA Mark VI",
+                "name": "Speda Mark VI",
                 "alternateName": "Specialized Personal Executive Digital Assistant Mark VI",
                 "applicationCategory": "BusinessApplication",
                 "applicationSubCategory": "AI personal assistant",
@@ -443,8 +443,8 @@ def home_page() -> Page:
                 "@id": f"{BASE}/#code",
                 "name": "speda-mark6",
                 "description": (
-                    "Monorepo for SPEDA Mark VI: the Igor FastAPI backend, the Heartbreaker desktop client, "
-                    "the SPEDA GO Android client, the Striker single-agent build and the isolated sandbox."
+                    "Monorepo for Speda Mark VI: the Igor FastAPI backend, the Heartbreaker desktop client, "
+                    "the Speda GO Android client, the Striker single-agent build and the isolated sandbox."
                 ),
                 "codeRepository": REPO,
                 "programmingLanguage": ["Python", "TypeScript", "Kotlin"],
@@ -459,35 +459,35 @@ def home_page() -> Page:
 # ── FAQ ──────────────────────────────────────────────────────────────────────
 
 FAQ = [
-    ("What is SPEDA Mark VI?",
-     "SPEDA Mark VI is a private, self-hosted, proactive multi-agent AI assistant built for a single owner. "
+    ("What is Speda Mark VI?",
+     "Speda Mark VI is a private, self-hosted, proactive multi-agent AI assistant built for a single owner. "
      "Eight domain-specialist agents share one persistent memory, one event loop and one capability registry, "
      "run their own watchers over the web and the owner's accounts, and answer through a holographic desktop "
-     "client called Heartbreaker, a native Android client called SPEDA GO, and Telegram.",
-     'SPEDA Mark VI is a private, self-hosted, proactive multi-agent AI assistant built for a single owner. '
+     "client called Heartbreaker, a native Android client called Speda GO, and Telegram.",
+     'Speda Mark VI is a private, self-hosted, proactive multi-agent AI assistant built for a single owner. '
      'Eight domain-specialist agents share one persistent memory, one event loop and one capability registry, '
      'run their own watchers, and answer through <a href="../heartbreaker/">Heartbreaker</a> on desktop, '
-     '<a href="../speda-go/">SPEDA GO</a> on Android, and Telegram.'),
+     '<a href="../speda-go/">Speda GO</a> on Android, and Telegram.'),
 
-    ("What does SPEDA stand for?",
-     "SPEDA stands for Specialized Personal Executive Digital Assistant. Mark VI is the sixth generation; "
+    ("What does Speda stand for?",
+     "Speda stands for Specialized Personal Executive Digital Assistant. Mark VI is the sixth generation; "
      "earlier generations were published as speda-mark1 through speda-mark5.",
      "<strong>Specialized Personal Executive Digital Assistant.</strong> Mark VI is the sixth generation; "
      "earlier generations were published as <code>speda-mark1</code> through <code>speda-mark5</code>."),
 
-    ("Which agents are in SPEDA Mark VI?",
-     "Eight: SPEDA (Chief of Staff), Sentinel (finance and budget), NightCrawler (OSINT and web surveillance), "
+    ("Which agents are in Speda Mark VI?",
+     "Eight: Speda (Chief of Staff), Sentinel (finance and budget), NightCrawler (OSINT and web surveillance), "
      "Ultron (academic life and university-work balance), Centurion (cyber security), Atomix (the owner's "
      "personal health), Optimus (systems, code and infrastructure) and Orion (maintenance and memory custodian). "
      "Six run purely in-process; Optimus and Centurion can additionally be backed by an external execution peer.",
-     'Eight — <a href="../agents/speda/">SPEDA</a>, <a href="../agents/sentinel/">Sentinel</a>, '
+     'Eight — <a href="../agents/speda/">Speda</a>, <a href="../agents/sentinel/">Sentinel</a>, '
      '<a href="../agents/nightcrawler/">NightCrawler</a>, <a href="../agents/ultron/">Ultron</a>, '
      '<a href="../agents/centurion/">Centurion</a>, <a href="../agents/atomix/">Atomix</a>, '
      '<a href="../agents/optimus/">Optimus</a> and <a href="../agents/orion/">Orion</a>. Six run purely '
      'in-process as agent profiles; Optimus and Centurion can additionally be backed by an external '
      'execution peer. <a href="../agents/">Full roster →</a>'),
 
-    ("Is SPEDA Mark VI self-hosted, and where does my data go?",
+    ("Is Speda Mark VI self-hosted, and where does my data go?",
      "Yes. It runs entirely on hardware you control. There are no accounts and no tenancy; authentication is a "
      "single API key validated in constant time on every request. Conversations, memory and generated files stay "
      "in your own database and filesystem. The only data leaving your machine is what you send to whichever model "
@@ -497,7 +497,7 @@ FAQ = [
      "in your own database and filesystem. The only data leaving your machine is what you send to whichever model "
      "provider you configure — and routing to a local Ollama model avoids even that."),
 
-    ("Which AI models does SPEDA Mark VI support?",
+    ("Which AI models does Speda Mark VI support?",
      "Seven providers through one router: Anthropic, OpenAI, Google Gemini, z.ai (GLM), DeepSeek, NVIDIA NIM and "
      "local Ollama. Model references are provider:model strings, you can pin a different model per agent from the "
      "UI, and a fallback chain retries the next provider on failure. Translation happens only at the wire "
@@ -507,7 +507,7 @@ FAQ = [
      "different model per agent from the UI, and a fallback chain retries the next provider on failure. "
      "Translation happens only at the wire boundary — internally everything speaks one content-block format."),
 
-    ("Is SPEDA Mark VI open source?",
+    ("Is Speda Mark VI open source?",
      "The source is publicly readable on GitHub, but it is a private project and is not licensed for "
      "redistribution. You can read the code, the architecture and the documentation.",
      "The source is publicly readable on GitHub, but it is a private project and is "
@@ -563,8 +563,8 @@ FAQ = [
      "self-hosted, single-owner, with a structured memory no vendor holds. It is not a replacement for a "
      "frontier model; it <em>routes</em> to one."),
 
-    ("Who built SPEDA Mark VI?",
-     "SPEDA Mark VI was built by Ahmet Erol Bayrak, who publishes on GitHub as spedatox. It is the sixth "
+    ("Who built Speda Mark VI?",
+     "Speda Mark VI was built by Ahmet Erol Bayrak, who publishes on GitHub as spedatox. It is the sixth "
      "generation of a project that began with speda-mark1.",
      'Built by <strong>Ahmet Erol Bayrak</strong>, who publishes on GitHub as '
      '<a href="https://github.com/spedatox">@spedatox</a>. It is the sixth generation of a project that began '
@@ -580,9 +580,9 @@ def faq_page() -> Page:
     body = f"""
 <section class="hero" style="min-height:auto;padding:6rem 0 2rem">
   <div class="wrap">
-    <p class="crumb"><a href="../">SPEDA Mark VI</a><span>/</span></p>
+    <p class="crumb"><a href="../">Speda Mark VI</a><span>/</span></p>
     <p class="eyebrow rise">Frequently asked questions</p>
-    <h1 class="rise">SPEDA Mark VI,<br>answered</h1>
+    <h1 class="rise">Speda Mark VI,<br>answered</h1>
     <p class="lede rise">Direct answers to what people actually ask — what it is, who runs on it, where the
       data lives, and what it takes to stand one up.</p>
   </div>
@@ -603,14 +603,14 @@ def faq_page() -> Page:
 """
     return Page(
         slug="faq",
-        title="SPEDA Mark VI FAQ — What It Is and How It Works",
+        title="Speda Mark VI FAQ — What It Is and How It Works",
         description=(
-            "Answers about SPEDA Mark VI: what SPEDA stands for, the eight agents, self-hosting and privacy, "
+            "Answers about Speda Mark VI: what Speda stands for, the eight agents, self-hosting and privacy, "
             "supported AI models, licensing, and what you need to run it."
         ),
         keywords=(
-            "what is SPEDA Mark VI, what does SPEDA stand for, SPEDA Mark VI FAQ, self-hosted AI assistant "
-            "privacy, SPEDA Mark VI license, SPEDA Mark VI requirements"
+            "what is Speda Mark VI, what does Speda stand for, Speda Mark VI FAQ, self-hosted AI assistant "
+            "privacy, Speda Mark VI license, Speda Mark VI requirements"
         ),
         body=body,
         nav="faq",

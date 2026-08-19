@@ -195,7 +195,7 @@ class SessionManager:
         Prefix a user message with its timestamp, derived from the message's DB
         created_at — minute precision, rendered in the owner's timezone.
 
-        This is how SPEDA knows the current time: the newest user message's
+        This is how Speda knows the current time: the newest user message's
         stamp IS "now". The clock used to live in the system prompt, where its
         minute-level churn changed the request prefix every turn and invalidated
         the conversation prompt-cache entry on EVERY provider (Anthropic
@@ -252,7 +252,7 @@ class SessionManager:
         ).scalars().all()
 
         def _clean(content):
-            # Strip SPEDA display-only blocks (tools/files metadata) before the
+            # Strip Speda display-only blocks (tools/files metadata) before the
             # history goes back to Claude — they aren't valid Anthropic blocks.
             if not isinstance(content, list):
                 return content

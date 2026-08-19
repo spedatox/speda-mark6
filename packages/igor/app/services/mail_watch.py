@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 
 # Flat, not nested ("SPEDA/Seen"): a slash makes a nested label whose Gmail
 # search term needs quoting, and the query is assembled as a plain string here.
+# NOT renamed with the rest of the SPEDA -> Speda sweep: this is a live Gmail
+# label already applied to real messages. Changing the string here would make
+# the app stop recognizing mail it already marked seen and re-trigger on it.
 SEEN_LABEL = "SPEDA-Seen"
 
 # Gmail's own cap for a single messages.list page in this use; the watch is a
@@ -173,7 +176,7 @@ async def scan(
       disconnected  — no usable Google token; the owner must re-authorise
       error         — Gmail answered with a failure; `detail` carries it
 
-    The caller (n8n) fires SPEDA only when count > 0, and should surface
+    The caller (n8n) fires Speda only when count > 0, and should surface
     `disconnected`/`error` on the EDGE rather than every poll — a broken watch
     that goes quiet forever is the failure mode worth alerting on.
     """

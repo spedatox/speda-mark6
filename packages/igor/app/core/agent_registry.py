@@ -17,8 +17,8 @@ class AgentRegistry:
     In-memory dict updated by WebSocket lifecycle events.
     Persists all state changes to Postgres for audit.
 
-    SPEDA checks this before delegating any task to an agent.
-    If an agent is offline, SPEDA either handles the task itself or informs the user.
+    Speda checks this before delegating any task to an agent.
+    If an agent is offline, Speda either handles the task itself or informs the user.
     """
 
     def __init__(self, ws_manager: WebSocketManager) -> None:

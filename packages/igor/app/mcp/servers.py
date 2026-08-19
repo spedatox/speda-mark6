@@ -1,5 +1,5 @@
 """
-MCP server registrations for SPEDA Mark VI.
+MCP server registrations for Speda Mark VI.
 
 All 12 confirmed servers from Entry 005. Each is registered here and added to the
 CapabilityRegistry at startup. If a required API key is missing, the server is skipped
@@ -277,7 +277,7 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
     else:
         logger.warning("mcp_skip", extra={"server": "github", "reason": "GITHUB_TOKEN not set"})
 
-    # Filesystem — sandboxed to the user's SPEDA outputs directory
+    # Filesystem — sandboxed to the user's Speda outputs directory
     outputs_dir = str(_DATA_DIR / "outputs")
     servers.append(
         MCPClient(

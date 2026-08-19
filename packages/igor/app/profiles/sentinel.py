@@ -23,7 +23,7 @@ class SentinelProfile(AgentProfile):
     domain = "finance & budget intelligence"
     doc_theme = DocTheme(accent="#d99c44")   # signature gold — matches the UI brand
 
-    # Unrestricted — all tools available (same as SPEDA). Previously a narrow
+    # Unrestricted — all tools available (same as Speda). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.
     tool_allowlist = None
 

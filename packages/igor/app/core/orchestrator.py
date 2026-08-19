@@ -21,7 +21,7 @@ class AgentOrchestrator:
 
     Stateless with respect to identity: it holds the ProfileRegistry, not one
     profile, and resolves the agent per request from context.agent_id. The same
-    loop serves every in-process agent (SPEDA + the five Superior Six).
+    loop serves every in-process agent (Speda + the five Superior Six).
 
     Router contract: call run(context) and stream the SSEEvents.
     Zero logic in the router beyond that.
@@ -90,7 +90,7 @@ class AgentOrchestrator:
         stable_core = self.build_system_prompt(context)
 
         # Per-agent tool scoping: the profile's declared allowlist (None = the
-        # full registry, e.g. SPEDA the orchestrator) governs what this agent can
+        # full registry, e.g. Speda the orchestrator) governs what this agent can
         # see and load. Resolved once here and stored on the context so the
         # toolset catalog, the tool list, and Legion workers all share one scope.
         profile = self._profiles.require(context.agent_id)
@@ -105,7 +105,7 @@ class AgentOrchestrator:
         context.extra["doc_accent"] = profile.doc_theme.accent
 
         # House Party Protocol — high-stakes all-hands mode (owner-engaged only).
-        # SPEDA becomes mission commander; every other agent becomes an operative
+        # Speda becomes mission commander; every other agent becomes an operative
         # that accepts tasks outside its domain. Engaged/stood down via the
         # house_party tool on the owner's explicit invocation.
         from app.core.runtime_state import get_house_party
@@ -267,7 +267,7 @@ class AgentOrchestrator:
 
         # ── Automated-run discipline ────────────────────────────────────────
         # A trigger fires with no human in the loop. Weaker non-Anthropic models
-        # (SPEDA runs on open models in prod) will happily write a plausible
+        # (Speda runs on open models in prod) will happily write a plausible
         # briefing WITHOUT calling any tool if left to their own devices — the
         # daily-brief "pure hallucination" bug. This standing directive is
         # model-agnostic (the ollama block below is greeting-discipline, not

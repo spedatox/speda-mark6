@@ -11,7 +11,7 @@ Sends a push notification to the user's Android device via the Flutter app.
 
 - `output_mode` is `push`
 - A background task finishes with a result worth surfacing immediately
-- SPEDA determines the user should be informed without them opening the app
+- Speda determines the user should be informed without them opening the app
 
 ## When not to use
 

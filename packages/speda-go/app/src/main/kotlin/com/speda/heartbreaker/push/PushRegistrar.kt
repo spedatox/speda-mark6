@@ -79,7 +79,7 @@ class PushRegistrar(
     /**
      * Stable per install, and distinct from the watch's. Igor keys devices on
      * this, so it must not change between launches — model alone would collide
-     * if the owner ever ran SPEDA GO on two identical handsets.
+     * if the owner ever ran Speda GO on two identical handsets.
      */
     private fun deviceId(): String =
         "speda-go-${Build.MANUFACTURER}-${Build.MODEL}"

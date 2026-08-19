@@ -1,8 +1,8 @@
 """
-SPEDA Sandbox — isolated command-execution service.
+Speda Sandbox — isolated command-execution service.
 
 A minimal HTTP exec server that runs inside its OWN container, separate from the
-API. SPEDA's run_command skill posts commands here; this runs them in a
+API. Speda's run_command skill posts commands here; this runs them in a
 persistent /workspace directory and returns the output.
 
 Security model:
@@ -11,7 +11,7 @@ Security model:
   - It holds NO secrets — the API's .env, database, and keys are not present here.
   - Every command runs with a hard timeout so nothing hangs forever.
   - State (files, installed packages in /workspace) persists across commands so
-    SPEDA can work like it's using a real computer.
+    Speda can work like it's using a real computer.
 
 This is deliberately tiny and dependency-light (stdlib only) so the sandbox image
 stays small and fast to build.
@@ -119,5 +119,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(os.environ.get("SANDBOX_PORT", "9000"))
     os.makedirs(WORKSPACE, exist_ok=True)
-    print(f"SPEDA sandbox exec server on :{port}, workspace={WORKSPACE}", flush=True)
+    print(f"Speda sandbox exec server on :{port}, workspace={WORKSPACE}", flush=True)
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()

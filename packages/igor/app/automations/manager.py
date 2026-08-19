@@ -1,6 +1,6 @@
 """
 Automation manager — the one place automations are created, listed, toggled and
-deleted. Both SPEDA's tool (skills/automations.py) and the Settings UI router
+deleted. Both Speda's tool (skills/automations.py) and the Settings UI router
 (routers/automations.py) call through here, so the two views can never drift.
 
 Flow for create: validate + compose the spec into n8n workflow JSON → POST it
@@ -63,7 +63,7 @@ def _as_dict(a: Automation) -> dict:
 async def create_automation(spec: dict, db: AsyncSession, agent_id: str = "speda") -> dict:
     """Compose → push to n8n → activate → persist. Returns the automation dict,
     or raises ValueError with a actionable message (bad spec / n8n unreachable)
-    that SPEDA can read and repair. agent_id is the creating agent — the watcher
+    that Speda can read and repair. agent_id is the creating agent — the watcher
     fires back through that agent's /trigger and is voiced by it."""
     # Idempotency guard — the daily-brief bug spawned FIVE identical "morning
     # briefing" workflows because nothing stopped a re-create. Refuse to stack a

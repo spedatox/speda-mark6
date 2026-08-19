@@ -49,7 +49,7 @@ export function ColdOpen({ local, dur }: SceneProps) {
     <div style={center({ opacity: o })}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: MONO,
         fontSize: 13, letterSpacing: '0.35em', color: 'var(--hb-text-faint)' }}>
-        <span>SPEDA</span>
+        <span>Speda</span>
         <span style={{ opacity: blink ? 1 : 0, color: 'var(--hb-cyan)' }}>▮</span>
       </div>
       <div style={{ height: 1, width: lineW, marginTop: 14,
@@ -62,11 +62,11 @@ export function ColdOpen({ local, dur }: SceneProps) {
   )
 }
 
-/* ── 2 · Ignition — wordmark assembles at params.wordmarkAt ("I am SPEDA…") ──── */
+/* ── 2 · Ignition — wordmark assembles at params.wordmarkAt ("I am Speda…") ──── */
 export function Ignition({ local, dur, params }: SceneProps) {
   const o = envelope(local, dur, 0.6, 0.8)
   const w = local - params.wordmarkAt          // local time since wordmark cue
-  const letters = 'SPEDA'.split('')
+  const letters = 'Speda'.split('')
   return (
     <div style={center({ opacity: o })}>
       <CornerBrackets o={clamp01((local - 0.3) / 1.2)} />
@@ -233,7 +233,7 @@ function FocusFiles({ t }: { t: number }) {
   )
 }
 
-/* MCP — real logos lighting up around a SPEDA hub. */
+/* MCP — real logos lighting up around a Speda hub. */
 function FocusMcp({ t }: { t: number }) {
   return (
     <div className="hb-holo" style={{ width: 'min(620px,86vw)', padding: '1.6rem 1.4rem' }}>
@@ -263,7 +263,7 @@ function FocusMcp({ t }: { t: number }) {
   )
 }
 
-/* Sub-agents — a delegation graph: SPEDA hub → parallel workers, pulses outward. */
+/* Sub-agents — a delegation graph: Speda hub → parallel workers, pulses outward. */
 function FocusSubAgents({ t }: { t: number }) {
   const workers = [
     { a: -0.78, label: 'RESEARCH', effort: 'medium' },
@@ -298,7 +298,7 @@ function FocusSubAgents({ t }: { t: number }) {
       <circle cx={0} cy={-40} r={36} fill="rgba(var(--hb-accent-rgb),0.16)"
         stroke="var(--hb-edge-bright)" strokeWidth={1} />
       <text x={0} y={-36} textAnchor="middle" fontFamily={UI} fontSize={15} fontWeight="700"
-        fill="var(--hb-cyan-bright)">SPEDA</text>
+        fill="var(--hb-cyan-bright)">Speda</text>
     </svg>
   )
 }
@@ -489,7 +489,7 @@ export function Proactivity({ local, dur }: SceneProps) {
         opacity: fired ? easeOut(clamp01((local - dur * 0.55) / 0.6)) : 0,
         transform: `translateY(${fired ? 0 : 20}px)`, transition: 'opacity .3s' }}>
         <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.2em',
-          color: 'var(--hb-cyan)', marginBottom: 5 }}>◆ SPEDA · PUSH</div>
+          color: 'var(--hb-cyan)', marginBottom: 5 }}>◆ Speda · PUSH</div>
         <div style={{ fontFamily: UI, fontWeight: 600, fontSize: 15, color: 'var(--hb-text)' }}>
           AAPL +4.2% — threshold hit.
         </div>
@@ -549,7 +549,7 @@ export function Resolve({ local, dur }: SceneProps) {
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4em', ...rise(clamp01(local / 1.2)) }}>
         <span style={{ fontFamily: UI, fontWeight: 700, fontSize: 'clamp(46px,8vw,104px)',
           letterSpacing: '0.08em', color: 'var(--hb-text)',
-          textShadow: '0 0 40px rgba(var(--hb-accent-rgb),0.35)' }}>SPEDA</span>
+          textShadow: '0 0 40px rgba(var(--hb-accent-rgb),0.35)' }}>Speda</span>
         <span style={{ fontFamily: UI, fontWeight: 600, fontSize: 'clamp(16px,2.6vw,34px)',
           letterSpacing: '0.5em', color: 'var(--hb-cyan)' }}>MARK VI</span>
       </div>

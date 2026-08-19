@@ -24,7 +24,7 @@ const KEYFRAMES = `
  * composer" flow: a proper modal with a MASKED passphrase field that is
  * validated server-side (the passphrase never enters the chat transcript).
  *
- * Opened by Layout when SPEDA emits the ```hpp-warning marker (or the owner
+ * Opened by Layout when Speda emits the ```hpp-warning marker (or the owner
  * clicks the inline AUTHORIZE trigger). On success the protocol engages and the
  * app transitions to the war room.
  */

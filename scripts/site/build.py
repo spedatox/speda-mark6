@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the SPEDA Mark VI public site into site/.
+"""Build the Speda Mark VI public site into site/.
 
 Why a generator instead of 23 hand-written files: every page needs a correct
 canonical, OpenGraph block, Twitter card, breadcrumb, JSON-LD graph and nav
@@ -38,7 +38,7 @@ TODAY = date.today().isoformat()
 # (brands.ts / Brands.kt / agents.ts), which agree with each other; the backend
 # DocTheme for optimus and orion has drifted and is NOT the source used here.
 ROSTER = [
-    ("speda",        "SPEDA",        "Mark VI",  "Chief of Staff"),
+    ("speda",        "Speda",        "Mark VI",  "Chief of Staff"),
     ("sentinel",     "Sentinel",     "Mark II",  "Finance & Budget"),
     ("nightcrawler", "NightCrawler", "Mark III", "OSINT & Surveillance"),
     ("ultron",       "Ultron",       "Mark III", "Academic Life"),
@@ -52,7 +52,7 @@ NAV = [
     ("agents",       "Agents"),
     ("systems",      "Systems"),
     ("heartbreaker", "Heartbreaker"),
-    ("speda-go",     "SPEDA GO"),
+    ("speda-go",     "Speda GO"),
     ("igor",         "Igor"),
     ("faq",          "FAQ"),
 ]
@@ -60,7 +60,7 @@ NAV = [
 FOOTER = [
     ("The roster", [
         ("agents", "All eight agents"),
-        ("agents/speda", "SPEDA — Chief of Staff"),
+        ("agents/speda", "Speda — Chief of Staff"),
         ("agents/sentinel", "Sentinel — finance"),
         ("agents/nightcrawler", "NightCrawler — OSINT"),
         ("agents/ultron", "Ultron — academic life"),
@@ -82,13 +82,13 @@ FOOTER = [
     ]),
     ("The software", [
         ("heartbreaker", "Heartbreaker — desktop"),
-        ("speda-go", "SPEDA GO — Android"),
+        ("speda-go", "Speda GO — Android"),
         ("igor", "Igor — the backend"),
         ("faq", "Frequently asked"),
     ]),
     ("Source", [
         (REPO, "speda-mark6 on GitHub"),
-        ("https://github.com/spedatox/speda-go", "SPEDA GO repository"),
+        ("https://github.com/spedatox/speda-go", "Speda GO repository"),
         ("https://github.com/spedatox/forge-mark1", "The Forge repository"),
         (AUTHOR_URL, "All projects by spedatox"),
     ]),
@@ -171,7 +171,7 @@ def render_nav(page: Page) -> str:
 def render_crumbs(page: Page) -> str:
     if not page.crumbs:
         return ""
-    parts = [f'<a href="{href(page.slug, "")}">SPEDA Mark VI</a>']
+    parts = [f'<a href="{href(page.slug, "")}">Speda Mark VI</a>']
     for slug, label in page.crumbs:
         parts.append(f'<a href="{href(page.slug, slug)}">{label}</a>')
     joined = "<span>/</span>".join(parts)
@@ -181,7 +181,7 @@ def render_crumbs(page: Page) -> str:
 def crumb_jsonld(page: Page) -> dict | None:
     if not page.crumbs:
         return None
-    items = [{"@type": "ListItem", "position": 1, "name": "SPEDA Mark VI", "item": url("")}]
+    items = [{"@type": "ListItem", "position": 1, "name": "Speda Mark VI", "item": url("")}]
     for i, (slug, label) in enumerate(page.crumbs, start=2):
         items.append({"@type": "ListItem", "position": i, "name": label, "item": url(slug)})
     return {"@type": "BreadcrumbList", "itemListElement": items}
@@ -231,14 +231,14 @@ TEMPLATE = """<!DOCTYPE html>
 <meta name="keywords" content="{keywords}">
 
 <meta property="og:type" content="{og_type}">
-<meta property="og:site_name" content="SPEDA Mark VI">
+<meta property="og:site_name" content="Speda Mark VI">
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{description}">
 <meta property="og:url" content="{canonical}">
 <meta property="og:image" content="{base}/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="SPEDA Mark VI — Specialized Personal Executive Digital Assistant">
+<meta property="og:image:alt" content="Speda Mark VI — Specialized Personal Executive Digital Assistant">
 <meta property="og:locale" content="en_US">
 
 <meta name="twitter:card" content="summary_large_image">
@@ -300,7 +300,7 @@ def build_page(page: Page) -> str:
         graph.insert(0, crumbs)
 
     # The author node is attached to every page: it is how an answer engine
-    # resolves "who built SPEDA Mark VI" without guessing.
+    # resolves "who built Speda Mark VI" without guessing.
     graph.append({
         "@type": "Person",
         "@id": f"{BASE}/#author",

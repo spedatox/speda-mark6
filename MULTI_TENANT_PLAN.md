@@ -1,6 +1,6 @@
-# Multi-Tenant Architecture Migration Plan — SPEDA Mark VI
+# Multi-Tenant Architecture Migration Plan — Speda Mark VI
 
-**Status:** APPROVED — implementation underway. Phases 0–3 **done**. **Phase 4: roster complete** — all five in-process specialists (Ultron, Atomix, Sentinel, NightCrawler, Centurion) authored and registered alongside SPEDA, each reachable at `/chat/{agent_id}` with a distinct allowlist + voice. Remaining in Phase 4: the **UI agent switcher** + per-agent session lists (frontend). Phase 5 (inter-agent dispatch / House Party) pending.
+**Status:** APPROVED — implementation underway. Phases 0–3 **done**. **Phase 4: roster complete** — all five in-process specialists (Ultron, Atomix, Sentinel, NightCrawler, Centurion) authored and registered alongside Speda, each reachable at `/chat/{agent_id}` with a distinct allowlist + voice. Remaining in Phase 4: the **UI agent switcher** + per-agent session lists (frontend). Phase 5 (inter-agent dispatch / House Party) pending.
 
 **Scope:** Collapse the "fork-per-agent" Superior Six model into a single multi-tenant backend where all agents run as profiles inside one FastAPI process, sharing one event loop, one database, and one `CapabilityRegistry`, addressed by `agent_id`.
 
@@ -12,7 +12,7 @@
 | **OQ2 / OQ3** | **Fully shared memory.** All in-process agents read/write the same memory files and facts. **No `agent_id` on `memory_files` or `memories`** — those tables are unchanged. The unique-constraint wrinkle disappears entirely. |
 | **OQ4** | **WebSocket transport stays.** Optimus is a standalone external framework that connects back as a WebSocket peer. `websocket/manager.py`, `agent_registry.py`, `/agents/ws/{id}` are retained for Optimus only. |
 | **OQ5** | **Six separate profile files** — the agents differ enough (model policy, allowlist, voice) to each warrant their own module. No data-driven factory. |
-| **OQ8** | **Canonical roster:** in-process profiles = Sentinel, NightCrawler, Ultron, Centurion, Atomix (+ SPEDA orchestrator). Optimus = external WebSocket peer. (Replaces the README's Unicron/Ratchet/Optimus-in-list naming.) |
+| **OQ8** | **Canonical roster:** in-process profiles = Sentinel, NightCrawler, Ultron, Centurion, Atomix (+ Speda orchestrator). Optimus = external WebSocket peer. (Replaces the README's Unicron/Ratchet/Optimus-in-list naming.) |
 | **OQ6 / OQ7 / OQ9** | Deferred to Phase 5 (MCP concurrency, Skyfall licensing, rate-limit policy) — only relevant once multi-agent dispatch goes live. |
 
 ### Net effect on the schema delta
@@ -83,7 +83,7 @@ Mechanism: add a **nullable `agent_id`** to `memory_files`. `NULL` = shared/owne
 
 **Declarative allowlist on the profile, applied by the registry.** Not runtime-computed.
 
-- Each `AgentProfile` declares an allowlist — which skills, MCP servers, and toolsets it may use. Examples: Optimus → `sandbox`, `github`, `filesystem`; Sentinel → `alpha_vantage`, `tavily`, finance skills; NightCrawler → `tavily`, `exa`, `arxiv`, `playwright`. SPEDA (orchestrator) → broad/all.
+- Each `AgentProfile` declares an allowlist — which skills, MCP servers, and toolsets it may use. Examples: Optimus → `sandbox`, `github`, `filesystem`; Sentinel → `alpha_vantage`, `tavily`, finance skills; NightCrawler → `tavily`, `exa`, `arxiv`, `playwright`. Speda (orchestrator) → broad/all.
 - `CapabilityRegistry.list_tools()` gains a third filter parameter (an agent allowlist) beside the existing `active_servers` and `offline_only`. The registry remains the only component that enumerates tools (**Rule 5 preserved**); the profile only declares policy (**Rule 10 preserved** — capability policy is identity, lives in profiles).
 
 **Interaction with the "3–4 sentence tool description" rule and context window:** No conflict — and it *helps*. Per-agent filtering *reduces* the tool count each agent sees, shrinking its prompt prefix. Combined with the existing lazy-loading (only always-on servers in-prefix, rest pulled via `use_toolset`), a scoped agent's cached prefix is smaller than today's. The authoring rule (each description ≥ 3–4 sentences) is unaffected; it governs how tools are written, not how many are exposed.
@@ -124,7 +124,7 @@ No destructive migrations: every change is additive (new nullable columns / new 
 
 - **`app/profiles/base.py`** — `AgentProfile` ABC gains: `agent_id`, `domain`, a declarative `tool_allowlist`, and a per-agent prompt-section list (so each agent assembles from its own prompt directory). `allocate_model()` stays per-profile.
 - **`app/profiles/speda.py`** — Becomes one profile among several: set `agent_id="speda"`, declare its (broad) allowlist. Model IDs stay here (**Rule 10**).
-- **`app/prompts/core/`** — Today this is SPEDA's single identity set. Restructure so each agent has its own prompt directory (e.g. `prompts/agents/{agent_id}/01_identity.md …`) while shared policy sections (formatting, visual output, memory protocol) can remain common. The prompt loader resolves agent-specific first, shared as fallback.
+- **`app/prompts/core/`** — Today this is Speda's single identity set. Restructure so each agent has its own prompt directory (e.g. `prompts/agents/{agent_id}/01_identity.md …`) while shared policy sections (formatting, visual output, memory protocol) can remain common. The prompt loader resolves agent-specific first, shared as fallback.
 
 ### Routers (thin surface)
 
@@ -198,17 +198,17 @@ The dispatched sub-conversation gets its **own** 30-iteration guard, **not** sha
 
 ```
 User → POST /chat/speda
-  └─ Orchestrator builds SPEDA context (chain=["speda"]), runs loop
-      └─ SPEDA decides it needs finance → emits tool_use: dispatch_to_agent("sentinel", "...")
+  └─ Orchestrator builds Speda context (chain=["speda"]), runs loop
+      └─ Speda decides it needs finance → emits tool_use: dispatch_to_agent("sentinel", "...")
           └─ dispatch.py: validate sentinel ∈ ProfileRegistry ✓
                            "sentinel" ∉ chain ✓ ; depth 1 < 2 ✓
              new context: agent_id="sentinel", triggered_by="agent",
                           model=Sentinel.allocate_model(), chain=["speda","sentinel"],
                           tools = registry.list_tools(allowlist=Sentinel.allowlist)
              run Sentinel's orchestrator loop (own 30-iter budget) → end_turn
-          └─ Sentinel's final text returned as tool_result to SPEDA's loop
-      └─ SPEDA continues with Sentinel's answer in context → composes reply → end_turn
-  └─ SSE stream of SPEDA's reply → User
+          └─ Sentinel's final text returned as tool_result to Speda's loop
+      └─ Speda continues with Sentinel's answer in context → composes reply → end_turn
+  └─ SSE stream of Speda's reply → User
 ```
 
 A "full House Party" is this same primitive invoked across several agents within one top-level request — concurrency for that case is addressed next.
@@ -256,13 +256,13 @@ Verdict: async concurrency is sufficient; the gating factors are provider rate l
 
 **Do the multi-tenant skeleton *now*, before deep MCP/Agent-SDK wiring. Defer House Party to last.**
 
-Rationale: the `agent_id` threading touches the core (`AgentContext`, orchestrator, session manager, routers). Doing it now — while SPEDA is the only live agent and the others are config-only — means near-zero migration cost (no six deployments, no cross-fork data to reconcile). If MCP/Agent-SDK are fully wired first, that tool-routing and sub-agent code gets reworked under multi-tenancy anyway. Build the scoping mechanism into the registry *now* so later MCP wiring lands in a multi-tenant-aware registry. House Party genuinely must be last (`CLAUDE.md` parks it until all six are operational).
+Rationale: the `agent_id` threading touches the core (`AgentContext`, orchestrator, session manager, routers). Doing it now — while Speda is the only live agent and the others are config-only — means near-zero migration cost (no six deployments, no cross-fork data to reconcile). If MCP/Agent-SDK are fully wired first, that tool-routing and sub-agent code gets reworked under multi-tenancy anyway. Build the scoping mechanism into the registry *now* so later MCP wiring lands in a multi-tenant-aware registry. House Party genuinely must be last (`CLAUDE.md` parks it until all six are operational).
 
 - **Phase 0 — Governance.** ✅ **Done.** OQ1 (`CLAUDE.md` amended), OQ2/OQ3 (fully-shared memory), OQ4 (WebSocket kept for Optimus), OQ5 (six files), OQ8 (roster) all resolved.
-- **Phase 1 — Identity threading (no behavior change for SPEDA).** ✅ **Done.** `agent_id` on `AgentContext`; `ProfileRegistry` built; orchestrator un-bound from a single profile and resolving per request; routers stamp `agent_id`. SPEDA-only works end-to-end.
+- **Phase 1 — Identity threading (no behavior change for Speda).** ✅ **Done.** `agent_id` on `AgentContext`; `ProfileRegistry` built; orchestrator un-bound from a single profile and resolving per request; routers stamp `agent_id`. Speda-only works end-to-end.
 - **Phase 2 — Session & automation scoping.** ✅ **Done.** Sessions scoped by `(user_id, agent_id)` with a composite index; `automations.agent_id` added via an idempotent additive migration; watchers fire back through `/trigger/{agent_id}`. **Memory is fully shared (OQ3)** — no per-agent memory partitioning; identity-safety handled by framing the shared memory block as owner-knowledge (separate commit).
-- **Phase 3 — Registry scoping + second profile.** ✅ **Done.** `list_tools()`/`toolset_catalog()` gained an `allowlist` filter (runtime skills memory/read_skill/use_toolset always pass; sub-agents inherit the scope via context). **Ultron** authored (`app/profiles/ultron.py` + `app/prompts/agents/ultron/01_identity.md`) with a narrow research/synthesis allowlist (`tavily`, `exa`, `arxiv`, `fetch`, `generate_document`, `search_history`, `Task`) and a distinct scholarly voice. `/chat/{agent_id}` route added (bare `/chat` still = SPEDA; 404 on unknown agent). Verified: Ultron sees 8 tools, SPEDA broad, Ultron ⊂ SPEDA.
-- **Phase 4 — Roster completion + frontend.** *Backend done.* All five in-process specialists authored — Ultron (academic), Atomix (personal health), Sentinel (finance), NightCrawler (OSINT), Centurion (cyber security) — each a profile + `prompts/agents/{id}/01_identity.md` + a narrow allowlist, registered in the lifespan, reachable at `/chat/{agent_id}`. Verified: each scoped to its domain, no cross-domain leakage, no specialist holds sandbox/code execution, each a strict subset of SPEDA. **Remaining: frontend** — UI agent switcher + per-agent session lists. The WebSocket agent transport is **kept** for Optimus (external peer — OQ4), not retired.
+- **Phase 3 — Registry scoping + second profile.** ✅ **Done.** `list_tools()`/`toolset_catalog()` gained an `allowlist` filter (runtime skills memory/read_skill/use_toolset always pass; sub-agents inherit the scope via context). **Ultron** authored (`app/profiles/ultron.py` + `app/prompts/agents/ultron/01_identity.md`) with a narrow research/synthesis allowlist (`tavily`, `exa`, `arxiv`, `fetch`, `generate_document`, `search_history`, `Task`) and a distinct scholarly voice. `/chat/{agent_id}` route added (bare `/chat` still = Speda; 404 on unknown agent). Verified: Ultron sees 8 tools, Speda broad, Ultron ⊂ Speda.
+- **Phase 4 — Roster completion + frontend.** *Backend done.* All five in-process specialists authored — Ultron (academic), Atomix (personal health), Sentinel (finance), NightCrawler (OSINT), Centurion (cyber security) — each a profile + `prompts/agents/{id}/01_identity.md` + a narrow allowlist, registered in the lifespan, reachable at `/chat/{agent_id}`. Verified: each scoped to its domain, no cross-domain leakage, no specialist holds sandbox/code execution, each a strict subset of Speda. **Remaining: frontend** — UI agent switcher + per-agent session lists. The WebSocket agent transport is **kept** for Optimus (external peer — OQ4), not retired.
 - **Phase 5 — Inter-agent dispatch + House Party.** Build `dispatch.py` (cycle/depth/budget guards), the `dispatch_to_agent` tool, and only then enable concurrent multi-agent operation — after MCP concurrency (OQ6) and rate-limit policy (OQ9) are settled. Skyfall middleware (OQ7) lands before any of this is exposed beyond the owner.
 
 ---

@@ -50,9 +50,9 @@ import com.speda.heartbreaker.ui.HbText
 private enum class SettingsTab(val label: String, val blurb: String) {
     General("General", "Identity, behaviour and voice-mode preferences"),
     Config("Configuration", "Managed server settings, applied live"),
-    Connections("Connections", "Accounts and services SPEDA can reach"),
+    Connections("Connections", "Accounts and services Speda can reach"),
     Automations("Automations", "Scheduled work n8n runs on your behalf"),
-    Reminders("Reminders", "What SPEDA is holding for you, and when"),
+    Reminders("Reminders", "What Speda is holding for you, and when"),
     Health("Health", "What Health Connect shares with Atomix"),
     Interface("Interface", "How the deck itself looks and behaves"),
     Data("Data", "Stored history, memory files and exports"),

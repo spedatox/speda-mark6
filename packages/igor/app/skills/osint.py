@@ -37,7 +37,7 @@ from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
 
-_UA = "SPEDA-Mark-VI/1.0 (OSINT skill)"
+_UA = "Speda-Mark-VI/1.0 (OSINT skill)"
 _TIMEOUT = httpx.Timeout(12.0, connect=6.0)
 # Ahmia's clearnet index is slow and a popular query returns a large (100s of KB)
 # result page — give the read plenty of room so big responses don't time out.
@@ -503,7 +503,7 @@ _ATTR_VALUE_RE = re.compile(r'value="([^"]*)"', re.IGNORECASE)
 # Ahmia's search form ships a per-page-load hidden anti-bot token (random field
 # NAME and value). A request without it is tarpitted (read timeout) or handed
 # the empty search page — which is exactly why token-less lookups "didn't work".
-# We also present a browser UA; the SPEDA UA gets the same cold shoulder.
+# We also present a browser UA; the Speda UA gets the same cold shoulder.
 _AHMIA_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 

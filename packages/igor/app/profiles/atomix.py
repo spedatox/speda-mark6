@@ -32,7 +32,7 @@ class AtomixProfile(AgentProfile):
     domain = "personal health & wellness (the owner's health)"
     doc_theme = DocTheme(accent="#3fae74")   # signature green — matches the UI brand
 
-    # Unrestricted — all tools available (same as SPEDA). Previously a narrow
+    # Unrestricted — all tools available (same as Speda). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.
     tool_allowlist = None
 

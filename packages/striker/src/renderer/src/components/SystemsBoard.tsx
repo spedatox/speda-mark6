@@ -598,7 +598,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         </Panel>
       </div>
 
-      {/* ── Bottom band — knowledge bank: what SPEDA knows about the owner ─ */}
+      {/* ── Bottom band — knowledge bank: what Speda knows about the owner ─ */}
       <Panel title="DATA_BANKS // KNOWLEDGE" light pad={false}
         right={
           <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -745,7 +745,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                   <>
                     {toolbar}
                     <p style={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.14em', color: 'var(--hb-icon-dim)', padding: '0.3rem 0' }}>
-                      // EMPTY — SPEDA HAS NOT WRITTEN HERE YET
+                      // EMPTY — Speda HAS NOT WRITTEN HERE YET
                     </p>
                   </>
                 )

@@ -11,7 +11,7 @@ export const AGENT_COLORS: Record<string, string> = {
 export const ROSTER = ['speda', 'sentinel', 'nightcrawler', 'ultron', 'centurion', 'atomix', 'optimus', 'orion']
 
 /**
- * Who assembles for the House Party Protocol: SPEDA and the Superior Six.
+ * Who assembles for the House Party Protocol: Speda and the Superior Six.
  *
  * Orion is deliberately absent. It is Mark VI's own maintenance and memory
  * custodian — it keeps the record straight and the host healthy — not a field

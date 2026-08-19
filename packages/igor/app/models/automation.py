@@ -8,9 +8,9 @@ from app.database import Base
 
 class Automation(Base):
     """
-    A proactive watcher SPEDA set up for the owner. The actual scheduling and
+    A proactive watcher Speda set up for the owner. The actual scheduling and
     polling lives in n8n (the sole automation organ, per CLAUDE.md); this row is
-    SPEDA's local metadata mapping a friendly automation to its n8n workflow id.
+    Speda's local metadata mapping a friendly automation to its n8n workflow id.
 
     `spec` stores the composed block spec (JSON) so the workflow can be rebuilt
     or inspected without re-querying n8n. `kind` is the composition type

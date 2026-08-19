@@ -1,4 +1,4 @@
-"""Forge peer launcher — SPEDA owns the Forge's lifecycle.
+"""Forge peer launcher — Speda owns the Forge's lifecycle.
 
 The Forge (Mark II, repo `forge-mk1`) is the standalone execution engine behind
 the external-backend agents (Optimus, Centurion). When `forge_dir` is configured,
@@ -9,10 +9,10 @@ after the backend's WebSocket routes are live:
 
 Each child then connects back to this backend's agents WebSocket
 (`WS /agents/ws/<agent_id>`) like any external peer — no separate terminal, no
-manual plumbing. The env each child needs (SPEDA key, its own WS URL, Cell
+manual plumbing. The env each child needs (Speda key, its own WS URL, Cell
 backend, an isolated workspace root, and a passed-through ANTHROPIC_API_KEY so
 the Forge makes its OWN inference calls) is injected here from settings, so the
-SPEDA-side config is the single place to wire the whole network.
+Speda-side config is the single place to wire the whole network.
 
 Peers register under their `agent_id`, and Mark VI keys connections by that id
 (`WebSocketManager`), so each peer MUST connect on the WS path matching its own
@@ -21,7 +21,7 @@ id — otherwise disconnect teardown (which uses the path id) and chat routing
 URL from `forge_ws_url` as a base plus `/<agent_id>` to keep the two aligned.
 
 Startup is best-effort by design: a missing directory, a broken interpreter, or
-an instant crash logs a warning and SPEDA keeps running — each agent's in-process
+an instant crash logs a warning and Speda keeps running — each agent's in-process
 profile is the fallback, exactly as when its peer is offline. The launcher also
 supervises: if a child exits while the app is up, it is relaunched with capped
 exponential backoff so a transient Forge crash self-heals without a backend
@@ -168,7 +168,7 @@ class ForgePeerLauncher:
         backoff = _BACKOFF_START_S
         while not self._stopping:
             try:
-                # stdout/stderr inherit the SPEDA console — the Forge's log lines
+                # stdout/stderr inherit the Speda console — the Forge's log lines
                 # appear alongside the backend's, one terminal for the network.
                 proc = await asyncio.create_subprocess_exec(
                     *cmd, cwd=str(self._root), env=env,

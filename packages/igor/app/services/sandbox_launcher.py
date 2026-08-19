@@ -1,6 +1,6 @@
 """Mark VI sandbox launcher — local mode.
 
-The sandbox is the isolated computer SPEDA runs commands in (the `run_command`
+The sandbox is the isolated computer Speda runs commands in (the `run_command`
 skill posts to `settings.sandbox_url`). In production it is a Docker service on
 Contabo (`docker-compose.yml`, internal network only). On a dev machine without
 Docker there is nothing to answer those requests, so this launcher spawns the
@@ -82,7 +82,7 @@ class SandboxLauncher:
             "SANDBOX_WORKSPACE": workspace,
         }
         try:
-            # stdout/stderr inherit the SPEDA console (one terminal for the boot).
+            # stdout/stderr inherit the Speda console (one terminal for the boot).
             self._proc = await asyncio.create_subprocess_exec(
                 sys.executable, str(_SANDBOX_SERVER),
                 env=env,

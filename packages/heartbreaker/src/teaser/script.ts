@@ -36,7 +36,7 @@ export const TIMELINE: BeatDef[] = [
   ] },
   { id: 'ignition', label: 'Ignition', dur: 10, captions: [
     { t: 0.4, dur: 4.6, text: 'Allow me to introduce myself.' },
-    { t: 5.2, dur: 4.6, text: 'I am SPEDA, Mark VI — a proactive artificial intelligence.' },
+    { t: 5.2, dur: 4.6, text: 'I am Speda, Mark VI — a proactive artificial intelligence.' },
   ] },
   { id: 'capabilities', label: 'Capabilities', dur: 21, captions: [
     { t: 0.5, dur: 6.0, text: "And I'm here to assist you with a variety of tasks as best I can," },
@@ -60,15 +60,15 @@ export const TIMELINE: BeatDef[] = [
     { t: 5.6, dur: 4.9, text: 'and when a task is large enough, the six move as one.' },
   ] },
   { id: 'resolve', label: 'Resolve', dur: 9, captions: [
-    { t: 0.6, dur: 3.8, text: 'I am SPEDA, Mark VI.' },
+    { t: 0.6, dur: 3.8, text: 'I am Speda, Mark VI.' },
     { t: 4.7, dur: 3.9, text: 'Ready when you are.' },
   ] },
 ]
 
 /** Extra editable timing knobs (relative seconds within their beat). */
 export interface TeaserParams {
-  /** when the SPEDA wordmark assembles within the Ignition beat — align to the
-   *  "I am SPEDA, Mark VI" line, not "allow me to introduce myself". */
+  /** when the Speda wordmark assembles within the Ignition beat — align to the
+   *  "I am Speda, Mark VI" line, not "allow me to introduce myself". */
   wordmarkAt: number
 }
 export const DEFAULT_PARAMS: TeaserParams = { wordmarkAt: 5.2 }

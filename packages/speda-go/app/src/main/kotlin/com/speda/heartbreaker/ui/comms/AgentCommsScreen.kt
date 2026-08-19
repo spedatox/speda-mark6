@@ -75,13 +75,13 @@ import java.util.Locale
  * AGENT_COMMS — the inter-agent traffic tray. Mobile port of CommsTray.tsx +
  * CommBubble.tsx: a full-width bottom slab (the mobile spec calls for a
  * "full-width Comms Tray", not the desktop's 420px floating panel) showing
- * live dispatch traffic between SPEDA and the roster (GET /agents/comms,
+ * live dispatch traffic between Speda and the roster (GET /agents/comms,
  * written by app/core/dispatch.py) as a GROUP CHAT — every agent on one
  * timeline, each speaking for itself. Expand grows it toward a near-full-height
  * traffic console.
  *
  * No House Party control lives here any more: the protocol is a desktop
- * surface. The owner can still stand it down from this app by telling SPEDA.
+ * surface. The owner can still stand it down from this app by telling Speda.
  */
 
 private const val POLL_MS = 3000L

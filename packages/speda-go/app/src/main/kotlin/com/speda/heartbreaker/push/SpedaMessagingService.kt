@@ -6,7 +6,7 @@ import com.google.firebase.messaging.RemoteMessage
 import com.speda.heartbreaker.HeartbreakerApp
 
 /**
- * Igor's wake channel into SPEDA GO.
+ * Igor's wake channel into Speda GO.
  *
  * Atomix will not write a health briefing from stale biometrics — a resting
  * heart rate from four days ago reported under today's date is a false

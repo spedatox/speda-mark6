@@ -36,7 +36,7 @@ SOCIAL = collection_by_root("/memories/social")
 @pytest.mark.parametrize(
     "title,expected",
     [
-        ("SPEDA Mark VI", "speda-mark-vi"),
+        ("Speda Mark VI", "speda-mark-vi"),
         # Turkish. `ı` and `ğ` have no compatibility decomposition, so an
         # NFKD-based slug leaves them intact and the path stops round-tripping.
         # "Pınar Uzun" and "Doğan" are real entries.
@@ -75,7 +75,7 @@ PROJECTS_DOC = """# Active Projects
 
 _One section per project._
 
-## SPEDA Mark VI
+## Speda Mark VI
 Status: Active
 Stack: FastAPI
 
@@ -102,7 +102,7 @@ def test_split_promotes_headings_and_respects_code_fences():
     ]
     speda = plan.members[0].content
     # The entity heading becomes the document title; its children rise one level.
-    assert speda.startswith("# SPEDA Mark VI\n")
+    assert speda.startswith("# Speda Mark VI\n")
     assert "\n## Architecture\n" in speda and "\n## Team\n" in speda
     # A directory tree inside a fence must not cut the document or get promoted.
     assert "# a hash inside a fence is not a heading" in speda

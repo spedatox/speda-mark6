@@ -10,7 +10,7 @@ _IDENTITY_PATH = Path(__file__).parent.parent / "prompts" / "core" / "01_identit
 def _derive_agent_name() -> str:
     """
     Single source of the agent's display name: the identity file's H1 heading.
-    `# IDENTITY — SPEDA Mark VI` → "SPEDA Mark VI". Falls back to "SPEDA".
+    `# IDENTITY — Speda Mark VI` → "Speda Mark VI". Falls back to "Speda".
     This means editing prompts/core/01_identity.md rebrands the back-end too —
     no need to touch this file when forking an agent.
     """
@@ -21,7 +21,7 @@ def _derive_agent_name() -> str:
             return match.group(1).strip()
     except Exception:
         pass
-    return "SPEDA"
+    return "Speda"
 
 
 # Derived once at import — the agent's display name (used for the FastAPI title).
@@ -46,7 +46,7 @@ PROMPT_SECTIONS = [
 
 class SPEDAProfile(AgentProfile):
     """
-    SPEDA — the orchestrator profile and primary owner-facing agent.
+    Speda — the orchestrator profile and primary owner-facing agent.
     One profile among several in the multi-tenant backend; addressed by
     agent_id="speda". Never put prompt content in core modules.
     """
@@ -54,15 +54,15 @@ class SPEDAProfile(AgentProfile):
     agent_id = "speda"
     domain = "orchestration & general executive assistance"
     doc_theme = DocTheme(accent="#36abca")   # signature cyan — matches the UI brand
-    # None = full registry access. SPEDA is the orchestrator; it sees every
+    # None = full registry access. Speda is the orchestrator; it sees every
     # tool. The domain-specialised agents declare narrower allowlists.
     tool_allowlist = None
-    # Orchestrator privilege: a new SPEDA session is seeded with recent session
+    # Orchestrator privilege: a new Speda session is seeded with recent session
     # recaps from EVERY agent (tagged by agent_id), not just its own — the
     # executive needs cross-agent situational awareness. Specialists keep the
     # base "own" scope.
     episodic_recall_scope = "all"
-    # Mission commander under the House Party Protocol — SPEDA plans and
+    # Mission commander under the House Party Protocol — Speda plans and
     # dispatches; every other profile is an operative. The war-room alias
     # (profiles/warroom.py) subclasses this and inherits the command role.
     house_party_commander = True

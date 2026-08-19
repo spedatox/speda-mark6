@@ -1,13 +1,13 @@
 """
 Background memory services.
 
-Memory architecture follows Anthropic's agent memory pattern: SPEDA owns its
+Memory architecture follows Anthropic's agent memory pattern: Speda owns its
 memory and writes structured files via the `memory` tool during conversations
 (see app/skills/memory.py). These background tasks are the SUPPLEMENT to that —
 specifically the "end-of-session update" Anthropic recommends:
 
   - update_session_log(): after each turn, append a one-line dated summary to
-    /memories/log.md so SPEDA always has a recent-session trail to read back.
+    /memories/log.md so Speda always has a recent-session trail to read back.
   - generate_title(): name the conversation for the sidebar.
 
 The old flat-fact "memories" table (app/models/memory.py) is superseded by the

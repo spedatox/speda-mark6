@@ -2,7 +2,7 @@
 
 Hisar is a system the owner designed and runs: a web desktop at
 hisar.spedatox.systems over a vault of real folders (Documents, Media,
-Projects, Desktop, plus SPEDA/ and Forge/). It is not SPEDA's storage — it is
+Projects, Desktop, plus Speda/ and Forge/). It is not Speda's storage — it is
 the owner's, and the agents work in it alongside them.
 
 Two boundaries, enforced by Hisar itself rather than here (server/auth.py):
@@ -11,7 +11,7 @@ Two boundaries, enforced by Hisar itself rather than here (server/auth.py):
   has to be: an agent that can only write cannot find the report it filed last
   week, check whether a folder exists, or read a document the owner asked it to
   work from.
-- **Write is narrow.** `/SPEDA` and `/Forge` only, via the deposit door, which
+- **Write is narrow.** `/Speda` and `/Forge` only, via the deposit door, which
   creates parents and never overwrites. Delete and rename are owner-only and
   have no path from here at all — an agent cannot destroy the owner's files
   even by mistake.
@@ -71,7 +71,7 @@ class HisarSkill(Skill):
         "will want again — a report, a briefing, a generated document — whereas "
         "save_file is for handing a file over in the conversation right now and "
         "leaves nothing they can browse to afterwards. You may read anywhere in "
-        "the vault but write ONLY under /SPEDA and /Forge, and you cannot delete "
+        "the vault but write ONLY under /Speda and /Forge, and you cannot delete "
         "or rename anything, so treat the owner's own folders as reference "
         "material. Returns a directory listing, the document's text, or the "
         "path a deposit landed at."
@@ -85,7 +85,7 @@ class HisarSkill(Skill):
                 "enum": ["list", "read", "deposit"],
                 "description": (
                     "list: what is in a folder. read: the text of one document. "
-                    "deposit: file new content under /SPEDA or /Forge."
+                    "deposit: file new content under /Speda or /Forge."
                 ),
             },
             "path": {
@@ -94,7 +94,7 @@ class HisarSkill(Skill):
                     "Vault path, always absolute from the vault root and using "
                     "forward slashes: '/', '/Documents', '/Projects/site'. For "
                     "`read` this is the file. For `deposit` it is the FOLDER to "
-                    "file into (default '/SPEDA'). Never a path from the "
+                    "file into (default '/Speda'). Never a path from the "
                     "server's disk — the vault root is not '/opt/...'."
                 ),
             },
@@ -128,7 +128,7 @@ class HisarSkill(Skill):
                 return await self._read(path)
             if action == "deposit":
                 return await self._deposit(
-                    folder=path or "/SPEDA",
+                    folder=path or "/Speda",
                     filename=(args.get("filename") or "").strip(),
                     content=args.get("content") or "",
                 )
@@ -232,9 +232,9 @@ class HisarSkill(Skill):
     def _explain(self, e: httpx.HTTPStatusError) -> str:
         code = e.response.status_code
         if code == 403:
-            return ("Refused by Hisar: agents may write only under /SPEDA and "
+            return ("Refused by Hisar: agents may write only under /Speda and "
                     "/Forge, and may not delete or rename anything. Deposit "
-                    "under /SPEDA instead, or ask the owner to move it.")
+                    "under /Speda instead, or ask the owner to move it.")
         if code == 401:
             return ("Hisar rejected the machine token. This is a deployment "
                     "problem, not something to retry — tell the owner.")

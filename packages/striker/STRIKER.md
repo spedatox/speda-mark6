@@ -1,12 +1,12 @@
-# Striker — SPEDA Mark VI Core
+# Striker — Speda Mark VI Core
 
-**Codename: Striker. Product name: "SPEDA Mark VI Core".** This is the
-single-agent, public/"lite" build of SPEDA — the client you hand to people who
-want to try SPEDA without exposing the owner's private roster (the Superior Six).
+**Codename: Striker. Product name: "Speda Mark VI Core".** This is the
+single-agent, public/"lite" build of Speda — the client you hand to people who
+want to try Speda without exposing the owner's private roster (the Superior Six).
 
 It is the sibling of [`packages/heartbreaker`](../heartbreaker/HEARTBREAKER.md):
 **same app, same backend (Igor), same features on the chat surface** — but a
-**single agent (SPEDA)** and a **calmer, simplistic theme** instead of the full
+**single agent (Speda)** and a **calmer, simplistic theme** instead of the full
 Stark fluid-glass command deck.
 
 > **Lineage.** Striker began as `packages/desktop` (the old neutral template).
@@ -30,7 +30,7 @@ Fonts and the **frosted-glass material** are kept. So is the ambient
 
 ## What's different (single-agent + simplistic)
 
-- **One agent: SPEDA.** No agent switcher, no roster, no war room / House Party
+- **One agent: Speda.** No agent switcher, no roster, no war room / House Party
   Protocol, no inter-agent comms tray, no Forge link. `config.agentId` is fixed
   to `"speda"`, so every call targets `/chat/speda`.
 - **Simplistic theme** (`src/renderer/src/theme/striker.css`): the Stark
@@ -65,7 +65,7 @@ src/
 ├── main/        Electron main — window, IPC (get-config, window controls, open-external)
 ├── preload/     the contextBridge api surface
 └── renderer/    the React app — components, lib (api client, hooks), store
-                 (chat + settings reducers), profile (single SPEDA profile), theme (striker.css)
+                 (chat + settings reducers), profile (single Speda profile), theme (striker.css)
 ```
 
 The renderer never reaches Igor from components — everything goes through

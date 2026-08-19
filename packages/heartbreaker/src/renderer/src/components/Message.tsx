@@ -1399,7 +1399,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
           </div>
         )}
 
-        {/* Downloadable files SPEDA produced this turn */}
+        {/* Downloadable files Speda produced this turn */}
         {message.files && message.files.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
             {message.files.map((f, i) => <FileCard key={i} file={f} />)}

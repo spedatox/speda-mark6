@@ -108,7 +108,7 @@ New `app/services/sandbox_launcher.py`, same lifecycle pattern as Phase 1:
   Docker remains the production isolation on Contabo. Do not weaken the skill
   description's claims beyond adding nothing.
 
-**Acceptance:** with the backend up, asking SPEDA to `run_command` executes locally
+**Acceptance:** with the backend up, asking Speda to `run_command` executes locally
 and returns stdout; files persist across calls in `.speda\sandbox_workspace`.
 
 ## Phase 3 — Forge Cell verification (no code expected)
@@ -170,7 +170,7 @@ lifespan children, not ps1 jobs). `speda.ps1` changes are cosmetic + cleanup onl
 2. In Heartbreaker, the Optimus status shows **FORGE LINK** online.
 3. A chat to Optimus streams from the Forge with visible `run_command` /
    `graph_query` tool events, and the Cell workspace shows the side effects.
-4. A chat to SPEDA using `run_command` executes in the local Mark VI sandbox and
+4. A chat to Speda using `run_command` executes in the local Mark VI sandbox and
    returns real output.
 5. Kill the forge peer process manually → the next Optimus turn answers via the
    in-process profile (no error surfaced to the user); the peer's reconnect/backoff

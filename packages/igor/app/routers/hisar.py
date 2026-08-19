@@ -61,7 +61,7 @@ async def hisar_dirs(request: Request, path: str = "/"):
     # on the first screen it shows.
     dirs = [e["name"] for e in entries if HISAR.is_dir(e) and e.get("name")]
 
-    # Sort: leading underscore/prefix (SPEDA/, Forge/) first, then alpha.
-    dirs.sort(key=lambda d: (not d.startswith(("SPEDA", "Forge", "Projects", "Documents")), d.lower()))
+    # Sort: leading underscore/prefix (Speda/, Forge/) first, then alpha.
+    dirs.sort(key=lambda d: (not d.startswith(("Speda", "Forge", "Projects", "Documents")), d.lower()))
 
     return {"path": path.strip() or "/", "dirs": dirs}

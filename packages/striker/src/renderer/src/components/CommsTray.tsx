@@ -9,7 +9,7 @@ import { Bubble } from './CommBubble'
  * AGENT_COMMS — the inter-agent traffic tray.
  *
  * A floating liquid-glass slab anchored bottom-right showing live dispatch
- * traffic between SPEDA and the Superior Six (GET /agents/comms, written by
+ * traffic between Speda and the Superior Six (GET /agents/comms, written by
  * app/core/dispatch.py) as a chat scrollback — the same fluid-glass bubbles
  * as the House Party war room, compact cut. EXTEND_ grows it into the full
  * traffic console with the DATA_BANKS motion language; also hosts the House
@@ -52,7 +52,7 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
     return () => window.removeEventListener('keydown', onKey)
   }, [wide, onClose])
 
-  // Engagement is owner-voice-only (say it to SPEDA); the UI can only STAND DOWN.
+  // Engagement is owner-voice-only (say it to Speda); the UI can only STAND DOWN.
   const standDown = async () => {
     if (!party) return
     setParty(false)                         // optimistic
@@ -98,7 +98,7 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
             onClick={standDown}
             title={party
               ? 'STAND DOWN — end the House Party Protocol'
-              : "Engaged only by telling SPEDA: 'House Party Protocol'"}
+              : "Engaged only by telling Speda: 'House Party Protocol'"}
             style={{
               gap: 5, height: 18, padding: '0 6px',
               ...(party ? { color: 'var(--hb-amber-bright)' } : {}),

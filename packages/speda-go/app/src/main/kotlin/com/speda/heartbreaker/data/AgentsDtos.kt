@@ -49,7 +49,7 @@ data class LegionModelInfo(
     @SerialName("deployment_pin") val deploymentPin: String? = null,
 )
 
-/** SPEDA's knowledge bank file (GET/PUT /memory/files) — Systems board DATA_BANKS. */
+/** Speda's knowledge bank file (GET/PUT /memory/files) — Systems board DATA_BANKS. */
 @Serializable
 data class MemoryFileInfo(
     val path: String,

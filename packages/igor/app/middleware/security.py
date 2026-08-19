@@ -23,7 +23,7 @@ _HEADERS = {
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    "Server": "SPEDA",
+    "Server": "Speda",
 }
 
 

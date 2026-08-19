@@ -37,7 +37,7 @@ async def health(request: Request) -> JSONResponse:
 
 @router.post("/health/ingest")
 async def health_ingest(body: HealthIngestRequest, db: AsyncSession = Depends(get_db)):
-    """Accept a batch of biometrics from SPEDA GO. Idempotent on
+    """Accept a batch of biometrics from Speda GO. Idempotent on
     (metric, start_ts, origin), so the phone can safely re-send a batch whose
     POST failed — duplicates are counted, not stored twice."""
     return await health_service.ingest_samples(
@@ -68,9 +68,9 @@ async def health_freshness(db: AsyncSession = Depends(get_db)):
 
 @router.get("/health/sync-demand")
 async def health_sync_demand():
-    """Polled by SPEDA GO: is Igor waiting on a sync right now?
+    """Polled by Speda GO: is Igor waiting on a sync right now?
 
-    SPEDA GO carries no Firebase, so nothing can wake it from the server side —
+    Speda GO carries no Firebase, so nothing can wake it from the server side —
     this is a note left where the app will look (on foreground, and after each
     scheduled sync). `outstanding` is true only while a demand is unserved; the
     app should sync immediately when it sees it, which clears it via ingest.

@@ -19,7 +19,7 @@
 
 
 **Goal:** Heartbreaker (Android first) renders inline, Stark-styled maps in chat instead of
-SPEDA reciting coordinates. SPEDA can compute routes A→B with live traffic, compare travel
+Speda reciting coordinates. Speda can compute routes A→B with live traffic, compare travel
 options, show them on the map, and hand off to Google Maps turn-by-turn navigation with one
 tap.
 
@@ -28,7 +28,7 @@ rides on already exist:
 
 1. **Location in:** `PlatformContextProvider.snapshot()` already ships `ClientContext.location`
    (lat/lng/accuracy/place) with every turn, and `core/surface.py:40-45` already injects it
-   into the system prompt. SPEDA knows where the owner is.
+   into the system prompt. Speda knows where the owner is.
 2. **Widgets out:** the client already has a fence-widget pipeline — ```` ```chart ```` →
    `ChartBlock`, ```` ```calendar ```` → `CalendarBlock` — dispatched in `Prose.kt` (`Fence()`).
    A map is the third fence type: ```` ```map ````.
@@ -85,7 +85,7 @@ The map card carries a **`▸ NAVIGATE`** action that fires
 `google.navigation:q=<lat>,<lng>&mode=<d|w|b|two-wheeler>` (falling back to the
 `https://www.google.com/maps/dir/?api=1&…` universal URL if no handler). "Redirect me
 automatically once set" is implemented as: when the user's message is an explicit navigation
-command ("take me there", "start navigation"), SPEDA sets `"autoNavigate": true` in the spec
+command ("take me there", "start navigation"), Speda sets `"autoNavigate": true` in the spec
 and the client fires the intent **once** on first render of that message — but only for live
 (streaming) messages, never on history replay, and only when the app is foregrounded. A
 model-triggered app switch is an outward-facing action; the explicit-command gating keeps the
@@ -95,7 +95,7 @@ user in control.
 
 One new Tier-1 skill file `app/skills/navigation.py` (Rule 5: drop a file in `skills/`,
 register at startup, orchestrator untouched). Tools are `read_only = True` and
-`requires_network = True`. Available to SPEDA (and any profile whose allowlist permits);
+`requires_network = True`. Available to Speda (and any profile whose allowlist permits);
 no `restricted_to` — nothing privileged about directions.
 
 ---
@@ -268,7 +268,7 @@ accent-tinted hairlines):
   text halos off, glyphs from the tile provider's font stack, POI noise stripped. The
   accent colour (per-agent palette) is injected at runtime: route lines, markers, and the
   location dot are **runtime layers**, not baked into the style, so Sentinel's amber map
-  differs from SPEDA's teal automatically via `LocalHbPalette`.
+  differs from Speda's teal automatically via `LocalHbPalette`.
 - **Routes**: primary route = accent line (5 dp, glow underlay at 30% alpha, animated
   dash-phase "energy flow" if cheap); alternatives = 2 dp dimmed. Traffic readout chip per
   route: `34 MIN · +12 TRAFFIC` (delta of `durationMin − noTrafficMin`, amber when delta

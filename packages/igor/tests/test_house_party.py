@@ -3,7 +3,7 @@ The House Party Protocol's argument handling and its authorization gate.
 
 The regression these cover, observed in prod on 2026-08-04: every agent was
 pinned to a non-Anthropic provider, and non-Anthropic providers do not enforce a
-tool schema's `required`. SPEDA emitted `house_party({})` on Gemini and
+tool schema's `required`. Speda emitted `house_party({})` on Gemini and
 `house_party({"action": "engage"})` on DeepSeek for turns where the owner had
 plainly said "engage house party protocol". The skill read the absent `engaged`
 as False, STOOD THE PROTOCOL DOWN, and handed the model a stand-down

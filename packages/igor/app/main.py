@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
 
     profiles = ProfileRegistry()
     profiles.register(SPEDAProfile())       # orchestrator
-    profiles.register(WarRoomProfile())     # House Party command channel (SPEDA alias)
+    profiles.register(WarRoomProfile())     # House Party command channel (Speda alias)
     profiles.register(UltronProfile())      # academic research
     profiles.register(AtomixProfile())      # personal health
     profiles.register(SentinelProfile())    # finance
@@ -163,7 +163,7 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(GetRouteSkill())
     await registry.register_skill(FindPlacesSkill())
     # Health desk — the owner's biometrics, synced from the phone via Health
-    # Connect. Read-only; unrestricted so SPEDA can relay without a dispatch.
+    # Connect. Read-only; unrestricted so Speda can relay without a dispatch.
     from app.skills.health_data import HealthDataSkill
     await registry.register_skill(HealthDataSkill())
 
@@ -181,7 +181,7 @@ async def lifespan(app: FastAPI):
 
     # Academic desk — Ultron's course attendance ledger, written from the watch
     # (Ultron Wear) and read back here. check_attendance is read-only and
-    # unrestricted so SPEDA can answer "kaç hakkım kaldı" without a dispatch;
+    # unrestricted so Speda can answer "kaç hakkım kaldı" without a dispatch;
     # ask_attendance is the push side, normally driven by the n8n per-lecture
     # trigger. See docs/ULTRON_WEAR.md.
     from app.skills.attendance import AskAttendanceSkill, AttendanceStatusSkill
@@ -350,7 +350,7 @@ async def lifespan(app: FastAPI):
     dispatcher.set_report_hook(make_dispatch_reporter(**reporter_deps))
 
     # ── 9. Child processes — the local sandbox + the Forge peer ────────────────
-    # Both are best-effort: a missing dependency logs a warning and SPEDA keeps
+    # Both are best-effort: a missing dependency logs a warning and Speda keeps
     # running. The sandbox gives the run_command skill a computer without Docker;
     # the Forge peer is the standalone Optimus engine that connects back over the
     # agents WebSocket (in-process OptimusProfile is the fallback when offline).

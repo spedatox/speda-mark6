@@ -1,4 +1,4 @@
-# SPEDA Browser
+# Speda Browser
 
 A Playwright service in its own container. Igor's agents reach it through
 `app/services/browser.py`; nothing else on the network should.

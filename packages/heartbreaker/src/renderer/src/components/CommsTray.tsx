@@ -11,7 +11,7 @@ import { useT } from '../lib/i18n'
  * AGENT_COMMS — the inter-agent traffic tray.
  *
  * A floating liquid-glass slab anchored bottom-right showing live dispatch
- * traffic between SPEDA and the Superior Six (GET /agents/comms, written by
+ * traffic between Speda and the Superior Six (GET /agents/comms, written by
  * app/core/dispatch.py) as a chat scrollback — the same fluid-glass bubbles
  * as the House Party war room, compact cut. EXTEND_ grows it into the full
  * traffic console with the DATA_BANKS motion language; also hosts the House
@@ -57,7 +57,7 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
     return () => window.removeEventListener('keydown', onKey)
   }, [wide, onClose])
 
-  // Engagement is owner-voice-only (say it to SPEDA); the UI can only STAND DOWN.
+  // Engagement is owner-voice-only (say it to Speda); the UI can only STAND DOWN.
   const standDown = async () => {
     if (!party) return
     setParty(false)                         // optimistic
@@ -163,7 +163,7 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
 
       {/* Footer — protocol state, and how to raise it. Standing down is a
           control; engaging is deliberately NOT, because the passphrase gate
-          lives with SPEDA (see the House Party section of CLAUDE.md). */}
+          lives with Speda (see the House Party section of CLAUDE.md). */}
       <div style={{
         flexShrink: 0, padding: '12px 16px 16px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,

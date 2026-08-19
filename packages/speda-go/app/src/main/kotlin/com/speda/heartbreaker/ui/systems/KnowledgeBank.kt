@@ -56,7 +56,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * DATA_BANKS // KNOWLEDGE — what SPEDA knows about the owner, browsable and
+ * DATA_BANKS // KNOWLEDGE — what Speda knows about the owner, browsable and
  * (for canonical files) owner-editable.
  *
  * A FILE EXPLORER, not a document. Two things forced this. Memory became a
@@ -348,7 +348,7 @@ private fun MemoryFileWindow(
                     )
                     revs != null -> RevisionList(revs.orEmpty(), onRestore = ::restore)
                     file.content.isBlank() -> HbText(
-                        "Empty — SPEDA has not written here yet.",
+                        "Empty — Speda has not written here yet.",
                         style = HbType.read.copy(fontSize = 14.sp),
                         color = palette.textFaint,
                     )

@@ -11,7 +11,7 @@ keeps resolving. New code must use the registry, never construct a client here.
 from app.telegram.client import TelegramBot
 
 # Legacy name. The old TelegramClient took no args and read the single
-# TELEGRAM_BOT_TOKEN; the shim binds that to the SPEDA agent id.
+# TELEGRAM_BOT_TOKEN; the shim binds that to the Speda agent id.
 class TelegramClient(TelegramBot):  # noqa: D401 - compat shim
     def __init__(self) -> None:
         from app.config import settings

@@ -8,7 +8,7 @@ one-time setup.
 
 **Status:** **steps 1–2 implemented** (backend: model, service, endpoints,
 `health_data` skill — see §4). Steps 3–6 (the Android courier, the n8n digest)
-are still design-only. Builds on the SPEDA GO client
+are still design-only. Builds on the Speda GO client
 (`packages/speda-go`) and the existing skill/registry architecture.
 Nothing here changes the orchestrator (CLAUDE.md Rule 5).
 
@@ -25,7 +25,7 @@ There are two ways to read Samsung Health data:
 
 So the pipeline never talks to Samsung at all. Samsung Health remains the
 *collector* (phone sensors + Galaxy Watch); Health Connect is the *system
-mailbox* we read; SPEDA GO is the *courier*; Igor is the *warehouse*;
+mailbox* we read; Speda GO is the *courier*; Igor is the *warehouse*;
 Atomix is the *analyst*.
 
 This also future-proofs the pipe: if the owner ever switches to Google Fit,
@@ -82,7 +82,7 @@ revokes nothing at the OS level but stops reading + syncing it (and `DISCONNECT
 + WIPE` calls the backend delete endpoint, then drops the local sync token).
 
 **First-run nudge (gentle):** when the owner first opens *Atomix* in the app
-(not SPEDA — the moment intent is obvious), a one-time dismissible banner:
+(not Speda — the moment intent is obvious), a one-time dismissible banner:
 "Atomix can read your Samsung Health data — set up in Settings ▸ Health." No
 launch-time popups; health consent must never be an interruption.
 
@@ -96,7 +96,7 @@ Health Connect (on-device system store)
         │  WorkManager periodic sync, ~every 4h + on app open
         │  Changes API differential token → only NEW/CHANGED records
         ▼
-SPEDA GO  ── POST /health/ingest (X-API-Key, batched JSON) ──►  Igor
+Speda GO  ── POST /health/ingest (X-API-Key, batched JSON) ──►  Igor
                                                                            │
                               ┌────────────────────────────────────────────┤
                               ▼                                            ▼
@@ -143,7 +143,7 @@ Three pieces enforce it:
    (`{"type": "health_sync_now"}`, TTL 300s) to every `platform="phone"` device.
    The skill then waits ~25s for the phone to deliver; ingest is what clears the
    demand, so a batch arriving — even an all-duplicate one — releases the wait.
-3. **SPEDA GO answers, two ways.** `SpedaMessagingService` turns the push into an
+3. **Speda GO answers, two ways.** `SpedaMessagingService` turns the push into an
    expedited one-shot `HealthSyncWorker` (`HealthSyncManager.syncNow()`). If the
    push never lands — Doze, a build with no `google-services.json`, a revoked
    installation — `HealthDemandWorker` polls `GET /health/sync-demand` every 15
@@ -171,7 +171,7 @@ newest reading per metric. `GET /health/freshness` exposes the same view.
 Without the file the app still compiles, installs and runs — `BuildConfig.
 PUSH_ENABLED` is false, registration is skipped, and the 15-minute poll carries
 the whole load. That degradation is deliberate: nobody should need the owner's
-Firebase project to build SPEDA GO.
+Firebase project to build Speda GO.
 
 ### 1.3 What Atomix does with it (the payoff)
 
@@ -288,7 +288,7 @@ class HealthDataSkill(Skill):
 ```
 
 - Registered at startup with every other Tier 1 skill; **not** restricted to
-  Atomix (`restricted_to=None`) — SPEDA may legitimately relay ("ask Atomix
+  Atomix (`restricted_to=None`) — Speda may legitimately relay ("ask Atomix
   about my sleep" shouldn't require a dispatch just to read a number), and the
   roster is trusted (single-owner system). Revisit if sensitivity demands
   `restricted_to={"atomix"}`.

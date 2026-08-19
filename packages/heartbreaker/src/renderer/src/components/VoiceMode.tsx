@@ -13,7 +13,7 @@ import { useT } from '../lib/i18n'
  * the mode is that the owner is listening, not reading a scrollback — so what
  * shows is only the current exchange, and it follows whichever session is
  * selected. The composer stays put underneath (ChatMain still owns it): the
- * owner types, SPEDA answers aloud.
+ * owner types, Speda answers aloud.
  *
  * ── Two layouts, one rule ──────────────────────────────────────────────────
  * SPOKEN: the orb owns the screen and the words run along the bottom edge. The
@@ -299,7 +299,7 @@ export default function VoiceMode({
         </div>
 
         <div style={{ display: 'flex', gap: 4 }}>
-        {/* REFLOW — hands the board back to SPEDA. Only meaningful once there
+        {/* REFLOW — hands the board back to Speda. Only meaningful once there
             is a board, and only worth offering once the owner has moved
             something on it. */}
         {hasCanvas && (

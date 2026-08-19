@@ -84,7 +84,7 @@ export interface StreamOpts {
 }
 
 /**
- * Surface + locale for this client, so SPEDA knows the owner is on the desktop
+ * Surface + locale for this client, so Speda knows the owner is on the desktop
  * app (or the dev web build) rather than the phone or Telegram. The backend
  * stamps it onto the live turn only — never stored (see app/core/surface.py).
  */
@@ -116,7 +116,7 @@ export async function* streamChat(
       ...(opts.keepMessages != null ? { keep_messages: opts.keepMessages } : {}),
       ...(opts.regenerate ? { regenerate: true } : {}),
       ...(opts.cwd ? { cwd: opts.cwd } : {}),
-      // Surface awareness — tell SPEDA whether this turn came from the desktop
+      // Surface awareness — tell Speda whether this turn came from the desktop
       // app or the web build. (The Android app and Telegram set their own.)
       client_context: desktopClientContext(),
     }),
@@ -283,7 +283,7 @@ export interface MemoryFileInfo {
   editable?: boolean
 }
 
-/** SPEDA's knowledge bank — the /memories virtual filesystem. */
+/** Speda's knowledge bank — the /memories virtual filesystem. */
 export async function fetchMemoryFiles(config: AppConfig): Promise<MemoryFileInfo[]> {
   try {
     const res = await fetch(`${config.apiBase}/memory/files`, { headers: authHeaders(config)})
@@ -421,7 +421,7 @@ export async function setConnection(config: AppConfig, server: string, active: b
   })
 }
 
-/* ── Automations — SPEDA's proactive n8n watchers ─────────────────────────── */
+/* ── Automations — Speda's proactive n8n watchers ─────────────────────────── */
 
 export interface AutomationInfo {
   id: number

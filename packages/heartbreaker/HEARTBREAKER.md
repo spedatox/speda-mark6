@@ -1,10 +1,10 @@
-# Heartbreaker — the SPEDA Mark VI client
+# Heartbreaker — the Speda Mark VI client
 
-**Heartbreaker is the primary user interface of SPEDA Mark VI.** It is the
+**Heartbreaker is the primary user interface of Speda Mark VI.** It is the
 Stark-tech desktop app the owner actually lives in — a holographic, fluid-glass
 command deck for the whole agent suite. What began as an experimental reskin of
 `packages/desktop` is now the product: the shipped installer is literally
-`SPEDA Mark VI` (`appId: com.spedatox.speda-mark6`), and `speda.ps1` boots this
+`Speda Mark VI` (`appId: com.spedatox.speda-mark6`), and `speda.ps1` boots this
 app, not the old one.
 
 > **Lineage note.** `packages/desktop` still exists as the original neutral
@@ -31,10 +31,10 @@ light, per-agent signature colour. It is real futurism, not toy sci-fi.
 |------|-------------|------------|
 | Chat deck | `ChatMain`, `MessageList`, `Message`, `InputBar` | The core conversation; streaming answers, tool-call disclosure, rich blocks (code, charts, calendars, files) |
 | Welcome | `WelcomeView` (in `ChatMain`) | Clock, agent identity, greeting + a **JARVIS remark** — a memory-aware one-liner in the agent's voice |
-| Roster switch | `AgentSwitcherOverlay` | Cinematic agent picker across the Superior Six + SPEDA |
+| Roster switch | `AgentSwitcherOverlay` | Cinematic agent picker across the Superior Six + Speda |
 | Systems Board | `SystemsBoard` | Live telemetry: model-routing matrix, MCP toolset shards, token budget, RTT trace, memory data-banks, **Forge link** status |
 | Comms | `CommsTray`, `CommBubble` | The inter-agent group channel — every `dispatch_agent` and its reply, with live "working…" state for background dispatches |
-| War Room | `PartyActivation`, `PartyRosterStrip`, `HousePartyWarning`, `RosterModelWindow` | The House Party Protocol takeover — SPEDA as mission commander, the whole roster staged |
+| War Room | `PartyActivation`, `PartyRosterStrip`, `HousePartyWarning`, `RosterModelWindow` | The House Party Protocol takeover — Speda as mission commander, the whole roster staged |
 | Header | `Header` | Session state, and for Optimus the **FORGE LINK / IN-PROCESS** engine jewel + workspace picker |
 | Settings | `SettingsModal`, `ConfigTab`, `AgentModelPicker` | Managed configuration, per-agent model pins, connections |
 | Ambient | `HudFrame`, `NeuralBackground`, `WidgetFrame`, `InteractionPrompt` | The holographic chrome and interaction prompts |
@@ -93,7 +93,7 @@ powershell -File build-app.ps1 -Agent ultron -ApiBase https://... -ApiKey <key>
 `-Agent` is the key trick: **one codebase, any brand.** It sets both the visual
 identity (name, model number, colour — see `profile/brands.ts`) and which
 backend agent the app addresses (`/chat/{agent}`). So the same Heartbreaker
-build ships as SPEDA, Ultron, Centurion, Sentinel, Atomix, NightCrawler, or
+build ships as Speda, Ultron, Centurion, Sentinel, Atomix, NightCrawler, or
 Optimus — each a fully-branded standalone app pointed at its own agent.
 
 The **teaser** (`src/teaser`, `npm run heartbreaker:teaser:dev`) is a separate

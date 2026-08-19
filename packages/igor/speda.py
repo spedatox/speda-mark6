@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SPEDA terminal client.
+Speda terminal client.
 Usage:
     python speda.py                  # interactive REPL
     python speda.py "your message"   # single shot
@@ -57,7 +57,7 @@ def chat(message: str, session_id: int | None = None) -> int | None:
 
                 elif etype == "chunk":
                     if first_chunk:
-                        print(f"{CYAN}SPEDA:{RESET}", end=" ", flush=True)
+                        print(f"{CYAN}Speda:{RESET}", end=" ", flush=True)
                         first_chunk = False
                     print(event.get("data", ""), end="", flush=True)
 
@@ -75,7 +75,7 @@ def chat(message: str, session_id: int | None = None) -> int | None:
 
 
 def repl():
-    print(f"{BOLD}SPEDA Mark VI — Terminal Client{RESET}")
+    print(f"{BOLD}Speda Mark VI — Terminal Client{RESET}")
     print(f"{DIM}Server: {BASE_URL}  |  type 'exit' or Ctrl+C to quit  |  'new' to start a fresh session{RESET}\n")
 
     session_id: int | None = None

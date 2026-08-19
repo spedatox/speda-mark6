@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 GRAPH = "https://graph.microsoft.com/v1.0"
 
-# The delegated scopes SPEDA asks for. Mail.ReadWrite rather than Mail.Read
+# The delegated scopes Speda asks for. Mail.ReadWrite rather than Mail.Read
 # because the watch marks handled mail with a category, and a category is a
 # write. offline_access is what makes the connection outlive the first hour.
 MS_SCOPES = [

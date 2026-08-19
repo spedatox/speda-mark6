@@ -44,7 +44,7 @@ class NewsHeadlinesSkill(Skill):
     deferred = True
     search_keywords = "news headlines current events article press media story"
     description = (
-        "Reads SPEDA's always-on Turkish/English news store — the deduplicated "
+        "Reads Speda's always-on Turkish/English news store — the deduplicated "
         "RSS headlines collected from NTV, Hürriyet, Sabah, Milliyet and other "
         "outlets, at zero API cost. Use it for the daily briefing, for 'bugün ne "
         "oldu?' / 'what's the latest on X' questions, and as the FIRST stop before "
@@ -438,7 +438,7 @@ class ReadArticleSkill(Skill):
         max_chars = min(max(int(args.get("max_chars", 6000) or 6000), 500), 20000)
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True,
-                                        headers={"User-Agent": "SPEDA-Mark-VI/1.0"}) as client:
+                                        headers={"User-Agent": "Speda-Mark-VI/1.0"}) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
         except Exception as e:  # noqa: BLE001

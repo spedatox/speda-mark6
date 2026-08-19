@@ -88,7 +88,7 @@ The only entity that knows which bot belongs to which agent:
 
 - Built in the lifespan handler from config tokens: `{agent_id: TelegramBot}`.
 - `bot_for(agent_id) -> TelegramBot` with a **fallback chain**: the agent's
-  own bot → SPEDA's bot (message prefixed `[Sentinel]` so attribution
+  own bot → Speda's bot (message prefixed `[Sentinel]` so attribution
   survives) → `None` (caller logs and stores the notification row instead).
   A missing token degrades a single agent, never the channel.
 - Owner linkage: the owner's private-chat id with a bot equals their Telegram
@@ -96,7 +96,7 @@ The only entity that knows which bot belongs to which agent:
   (existing deep-link flow) and stored in `runtime_state` as
   `telegram_owner_id`. Per-bot, the registry tracks a `started` flag —
   Telegram forbids a bot from messaging a user who never tapped Start on
-  *that* bot, so each unstarted bot falls back to SPEDA's until the owner
+  *that* bot, so each unstarted bot falls back to Speda's until the owner
   pairs it.
 - Startup mode switch (config `telegram_mode`):
   - `webhook` — production (Contabo, public HTTPS): calls `setWebhook` per
@@ -247,14 +247,14 @@ prompt; Telegram adds no second identity layer.
 
 ## 4. Linking Flow (one-time, per bot)
 
-1. Desktop app (or SPEDA in chat) surfaces `GET /telegram/link/{agent_id}` →
+1. Desktop app (or Speda in chat) surfaces `GET /telegram/link/{agent_id}` →
    `https://t.me/<botusername>?start=<nonce>`.
 2. Owner taps Start. The `/start <nonce>` update arrives via the normal
    ingress (webhook or poll) — no separate capture loop needed once ingress
    exists; the existing `capture_chat_id` polling hack is retired.
 3. Gateway validates the nonce, stores `telegram_owner_id` (first link) and
    the per-bot `started` flag, and the bot replies with its own greeting.
-4. Owner repeats per bot — or just links SPEDA and lets other agents ride the
+4. Owner repeats per bot — or just links Speda and lets other agents ride the
    fallback chain until they're paired.
 
 ---
@@ -286,6 +286,6 @@ Deliberately parked (revisit later, do not build now):
 | TG-5 | Webhook exempt from X-API-Key, guarded by Telegram secret_token + owner-id allowlist | Telegram can't send custom headers we mint; secret_token is the platform mechanism |
 | TG-6 | Sticky session per (agent, channel), `/new` to reset | Matches messaging UX; keeps app and Telegram transcripts coherent but separate |
 | TG-7 | Buffer-and-send in v1, no live message editing | Telegram edit rate limits; DONE-flush is reliable and simple |
-| TG-8 | Fallback chain: own bot → SPEDA bot (tagged) → DB notification row | A missing token or unpaired bot degrades one agent's voice, never drops the message |
+| TG-8 | Fallback chain: own bot → Speda bot (tagged) → DB notification row | A missing token or unpaired bot degrades one agent's voice, never drops the message |
 | TG-9 | Files go out via `sendDocument` from `temp_outputs_dir` only, jail-checked | Reuses the existing file jail + 24 h n8n cleanup; nothing stored on Telegram's behalf |
 | TG-10 | Existing single-bot `services/telegram.py` absorbed, not kept in parallel | Two Telegram clients = split-brain send paths; trigger router rewires to the registry |

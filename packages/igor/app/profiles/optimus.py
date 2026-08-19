@@ -32,7 +32,7 @@ class OptimusProfile(AgentProfile):
     doc_theme = DocTheme(accent="#2eb6ac")   # signature teal — matches the UI brand
     external_backend = True
 
-    # Unrestricted — all tools available (same as SPEDA). Previously a narrow
+    # Unrestricted — all tools available (same as Speda). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.
     tool_allowlist = None
 

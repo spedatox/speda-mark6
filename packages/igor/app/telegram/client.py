@@ -7,7 +7,7 @@ updates. Which agent a bot belongs to is the registry's concern, not this
 class's. Supersedes the old single-bot services/telegram.TelegramClient — the
 legacy connect helpers (configured / get_username / connect_deep_link /
 capture_chat_id) live on here so the existing "Connect Telegram" UI keeps
-working against SPEDA's bot.
+working against Speda's bot.
 """
 
 import asyncio

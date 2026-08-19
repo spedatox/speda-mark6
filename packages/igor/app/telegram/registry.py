@@ -3,7 +3,7 @@ TelegramBotRegistry — the only entity that knows which bot belongs to which
 agent. Built once in the lifespan handler from the per-agent tokens in config.
 
 Delivery goes through `bot_for(agent_id)`, which applies the fallback chain:
-the agent's own started bot → SPEDA's bot (message prefixed so attribution
+the agent's own started bot → Speda's bot (message prefixed so attribution
 survives) → None (the caller logs and stores a Notification row instead). A
 missing token or an unpaired bot degrades one agent's voice; it never drops a
 message and never takes down the channel.
@@ -31,7 +31,7 @@ _TOKEN_ATTRS: dict[str, str] = {
     "optimus": "telegram_bot_token_optimus",
 }
 
-# Human tag prepended when an agent's message rides SPEDA's bot (fallback), so
+# Human tag prepended when an agent's message rides Speda's bot (fallback), so
 # the owner still sees who it's from.
 _TAG = {
     "sentinel": "🛡️ Sentinel",
@@ -54,7 +54,7 @@ class TelegramBotRegistry:
     def from_config(cls, agent_ids: set[str]) -> "TelegramBotRegistry":
         """Build one TelegramBot per agent that has both a Telegram presence
         (agent_ids — profiles with telegram_enabled) and a configured token.
-        SPEDA absorbs the legacy telegram_bot_token when its own is unset."""
+        Speda absorbs the legacy telegram_bot_token when its own is unset."""
         reg = cls()
         for agent_id in sorted(agent_ids):
             attr = _TOKEN_ATTRS.get(agent_id)
@@ -88,7 +88,7 @@ class TelegramBotRegistry:
         """Resolve the bot that should DELIVER for `agent_id`, plus a prefix.
 
         - The agent's own bot, if configured and the owner has started it → ('', own bot).
-        - Otherwise SPEDA's bot with a '[Agent] ' tag → so attribution survives.
+        - Otherwise Speda's bot with a '[Agent] ' tag → so attribution survives.
         - Otherwise (None, '') → caller stores a Notification row and logs.
         """
         started = get_telegram_started()

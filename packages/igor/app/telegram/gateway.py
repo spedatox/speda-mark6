@@ -139,7 +139,7 @@ class TelegramGateway:
             await self._sessions.save_message(db, session.id, "user", user_content)
             history = await self._sessions.load_history(db, session.id)
 
-            # Surface awareness — SPEDA must know this turn arrived over Telegram
+            # Surface awareness — Speda must know this turn arrived over Telegram
             # (not the phone or desktop). Stamped onto the live tail only, never
             # persisted; same discipline as the chat router.
             annotate_last_user(history, telegram_context())

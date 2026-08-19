@@ -15,7 +15,7 @@ import kotlinx.serialization.Serializable
 import java.util.Locale
 
 /**
- * Ambient client context sent with each turn so SPEDA is platform- and
+ * Ambient client context sent with each turn so Speda is platform- and
  * location-aware (mirrors ChatRequest.client_context on the backend). Platform
  * fields are always present; [location] only when the owner has enabled sharing
  * and granted the permission.

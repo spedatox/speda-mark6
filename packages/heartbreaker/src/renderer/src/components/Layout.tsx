@@ -47,7 +47,7 @@ export default function Layout({
   const [switcherOpen, setSwitcherOpen] = useState(false)
   // ROSTER CORES model-config window — only meaningful inside the war room.
   const [coresOpen, setCoresOpen] = useState(false)
-  // House Party authorization modal — opened when SPEDA emits the hpp-warning
+  // House Party authorization modal — opened when Speda emits the hpp-warning
   // marker (via the in-chat trigger's `speda:hpp-authorize` event).
   const [hppAuth, setHppAuth] = useState<{ objective?: string } | null>(null)
   useEffect(() => {

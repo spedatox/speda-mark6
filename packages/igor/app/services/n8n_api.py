@@ -1,8 +1,8 @@
 """
-n8n REST API client — SPEDA's control plane over the automation engine.
+n8n REST API client — Speda's control plane over the automation engine.
 
 n8n owns all scheduling and polling (CLAUDE.md: "the sole scheduling and
-automation organ"). SPEDA never schedules internally; it composes workflow JSON
+automation organ"). Speda never schedules internally; it composes workflow JSON
 (see app/automations/composer.py) and uses this client to create / list /
 activate / delete those workflows and read their execution history.
 """

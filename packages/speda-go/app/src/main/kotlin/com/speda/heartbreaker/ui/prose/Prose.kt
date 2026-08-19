@@ -235,7 +235,7 @@ private fun Fence(language: String, code: String) {
  *
  * The wording is the client's half of the same answer the backend gives when a
  * phone tries to engage — see `DESKTOP_ONLY_NOTICE` in app/core/surface.py.
- * Kept short here because SPEDA will already have said it in prose; this is the
+ * Kept short here because Speda will already have said it in prose; this is the
  * card that would have been the passphrase window, telling the owner why there
  * is no window.
  */

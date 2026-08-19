@@ -82,7 +82,7 @@ fun AutomationsTab(config: AppConfig, graph: AppGraph) {
                 detail = when {
                     s == null -> "checking…"
                     !s.telegramConfigured -> "needs TELEGRAM_BOT_TOKEN in the backend .env"
-                    s.telegramConnected -> "connected — SPEDA can reach you"
+                    s.telegramConnected -> "connected — Speda can reach you"
                     else -> "bot ready — connect your chat below"
                 },
             )
@@ -132,7 +132,7 @@ fun AutomationsTab(config: AppConfig, graph: AppGraph) {
         }
 
         Spacer(Modifier.height(8.dp))
-        Hint("SPEDA creates these itself — just ask: “track this page for a month and tell me when my results are up”. When a watcher fires it pings you on Telegram.")
+        Hint("Speda creates these itself — just ask: “track this page for a month and tell me when my results are up”. When a watcher fires it pings you on Telegram.")
         Spacer(Modifier.height(24.dp))
     }
 }

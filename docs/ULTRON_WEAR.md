@@ -63,7 +63,7 @@ under test (`tests/test_attendance.py`, 14 cases).
                            │ POST /academic/attendance  (push + pull, 1 trip)
                            ▼
                      ┌───────────┐
-                     │   Igor    │ ── check_attendance skill ──► SPEDA / Ultron
+                     │   Igor    │ ── check_attendance skill ──► Speda / Ultron
                      └───────────┘
 ```
 

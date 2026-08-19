@@ -96,7 +96,7 @@ fun ChatScreen(
     var models by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
     LaunchedEffect(config) { models = graph.api.fetchModels(config) }
 
-    // Budget mode is SHARED state, not a client preference: SPEDA can flip it
+    // Budget mode is SHARED state, not a client preference: Speda can flip it
     // itself mid-turn, so the client reads it on entry and re-syncs after every
     // turn settles rather than trusting its own last write.
     var budgetMode by remember { mutableStateOf<Boolean?>(null) }

@@ -2,7 +2,7 @@
  * ChartBlock — Stark FUI chart renderer
  *
  * Triggered by ```chart code blocks in markdown.
- * SPEDA emits JSON matching ChartSpec. Rendered with Recharts, styled to the
+ * Speda emits JSON matching ChartSpec. Rendered with Recharts, styled to the
  * Iron Man 2 / Jayse Hansen holographic UI palette.
  *
  * ── Spec format ────────────────────────────────────────────────────────────

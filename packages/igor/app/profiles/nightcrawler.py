@@ -23,7 +23,7 @@ class NightCrawlerProfile(AgentProfile):
     domain = "OSINT, web surveillance & research"
     doc_theme = DocTheme(accent="#9165e6")   # signature violet — matches the UI brand
 
-    # Unrestricted — all tools available (same as SPEDA). Previously a narrow
+    # Unrestricted — all tools available (same as Speda). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.
     tool_allowlist = None
 

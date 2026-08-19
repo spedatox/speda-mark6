@@ -2,7 +2,7 @@
 Runtime-mutable application state that persists across restarts.
 
 Unlike app.config.settings (read once from env at startup), these values can be
-flipped at runtime — by the UI, an API call, or SPEDA itself via a tool — and are
+flipped at runtime — by the UI, an API call, or Speda itself via a tool — and are
 written to a small JSON file so they survive a restart.
 
 Currently holds the budget-mode flag. Add more runtime toggles here as needed.
@@ -205,7 +205,7 @@ def set_telegram_chat_id(chat_id: str) -> None:
 # The owner's Telegram user id is the SAME number in every bot's private chat,
 # so it is captured once and shared across the fleet. `telegram_started` records
 # which bots the owner has tapped Start on (Telegram forbids a bot from messaging
-# a user who never started it — an unstarted bot falls back to SPEDA's). Update
+# a user who never started it — an unstarted bot falls back to Speda's). Update
 # watermarks dedupe webhook retries and polling overlap per bot.
 
 def get_telegram_owner_id() -> str:
@@ -301,7 +301,7 @@ def set_notion_access_token(token: str) -> None:
 
 
 # ── Web watch snapshots ─────────────────────────────────────────────────────
-# One entry per watched page: the last text snapshot SPEDA has been told about,
+# One entry per watched page: the last text snapshot Speda has been told about,
 # plus a `pending` snapshot the scan produced but nobody has confirmed yet. Two
 # slots, not one, because committing at scan time would swallow a publication
 # whenever the trigger call that follows it failed — the change would be gone
@@ -561,11 +561,11 @@ def set_server_active(server: str, active: bool) -> bool:
 
 
 # ── Health sync demand ──────────────────────────────────────────────────────
-# A standing request for SPEDA GO to sync Health Connect NOW, rather than on its
+# A standing request for Speda GO to sync Health Connect NOW, rather than on its
 # next ~4h trickle. Atomix raises it when a turn needs data that describes the
 # present (a morning briefing), and the phone clears it by syncing.
 #
-# A flag rather than a push because SPEDA GO carries no Firebase — there is no
+# A flag rather than a push because Speda GO carries no Firebase — there is no
 # way to wake the app from the server side, so this is a message left where the
 # phone will find it: the app checks on foreground and after each sync. That
 # means a demand raised while the phone is asleep goes unanswered, which is

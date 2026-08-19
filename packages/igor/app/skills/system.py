@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class SystemSkill(Skill):
     name = "system_info"
     description = (
-        "Returns basic system information about the Contabo server SPEDA runs on, "
+        "Returns basic system information about the Contabo server Speda runs on, "
         "such as disk usage, memory usage, and uptime. "
         "Use this when the user asks about server health, available disk space, or system status. "
         "Do not use this for application-level metrics — use the /health endpoint for those. "

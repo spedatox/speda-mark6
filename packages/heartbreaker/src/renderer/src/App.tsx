@@ -79,7 +79,7 @@ function AppInner() {
   // ── House Party Protocol / War Room ───────────────────────────────────────
   // Three states. off: a normal agent. standby: the owner opened the war room
   // from the UI — full branded takeover (roster colour parade, warroom
-  // profile) but the protocol is NOT engaged. engaged: the owner told SPEDA to
+  // profile) but the protocol is NOT engaged. engaged: the owner told Speda to
   // run the protocol (backend flag) — same takeover, plus live dispatch and
   // STAND DOWN. Both war-room states parade the palette through the roster's
   // colours, so the background is never a flat single hue. Entering either
@@ -218,7 +218,7 @@ function AppInner() {
     else setWar(pendingRef.current)   // enter → 'standby' or 'engaged'
   }, [setWar])
 
-  // Watch the backend flag — the protocol is engaged by TELLING SPEDA.
+  // Watch the backend flag — the protocol is engaged by TELLING Speda.
   useEffect(() => {
     if (!config) return
     let live = true

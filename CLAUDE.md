@@ -1,4 +1,4 @@
-# CLAUDE.md — SPEDA Mark VI
+# CLAUDE.md — Speda Mark VI
 
 Read this file in full before touching a single file. This is not optional.
 
@@ -6,9 +6,9 @@ Read this file in full before touching a single file. This is not optional.
 
 ## What This Repo Is
 
-This is `speda-mark-vi` — **Igor**, the backend core of SPEDA (Specialized Personal Executive Digital Assistant). It is a single-user, proactive ambient AI assistant. Component names: **Igor** = this backend; **Heartbreaker** = the desktop client (packages/heartbreaker); **SPEDA GO** = the mobile client (packages/speda-go — never "Heartbreaker mobile" or "Heartbreaker Droid"; the Kotlin package id `com.speda.heartbreaker` stays as-is on purpose, renaming it would orphan every installed app's Keystore data); **The Legion** = the sub-agent worker system (wire name `Task`).
+This is `speda-mark-vi` — **Igor**, the backend core of Speda (Specialized Personal Executive Digital Assistant). It is a single-user, proactive ambient AI assistant. Component names: **Igor** = this backend; **Heartbreaker** = the desktop client (packages/heartbreaker); **Speda GO** = the mobile client (packages/speda-go — never "Heartbreaker mobile" or "Heartbreaker Droid"; the Kotlin package id `com.speda.heartbreaker` stays as-is on purpose, renaming it would orphan every installed app's Keystore data); **The Legion** = the sub-agent worker system (wire name `Task`).
 
-**Multi-tenant architecture.** SPEDA and five of the Superior Six — Sentinel, NightCrawler, Ultron, Centurion, Atomix — are **in-process agent profiles** inside this single backend, alongside **Orion**, the system's own maintenance & memory custodian. Each is an `AgentProfile` subclass with its own identity, model policy, tool allowlist, and prompt directory. They share one event loop, one database, one `CapabilityRegistry`, and one owner's memory. They are addressed by `agent_id` on every request. A separate `warroom` profile (a `SPEDAProfile` subclass) is the **House Party Protocol** command channel — the same brain and tools as SPEDA under a distinct `agent_id` so full-roster operations never bleed into the owner's day-to-day SPEDA session.
+**Multi-tenant architecture.** Speda and five of the Superior Six — Sentinel, NightCrawler, Ultron, Centurion, Atomix — are **in-process agent profiles** inside this single backend, alongside **Orion**, the system's own maintenance & memory custodian. Each is an `AgentProfile` subclass with its own identity, model policy, tool allowlist, and prompt directory. They share one event loop, one database, one `CapabilityRegistry`, and one owner's memory. They are addressed by `agent_id` on every request. A separate `warroom` profile (a `SPEDAProfile` subclass) is the **House Party Protocol** command channel — the same brain and tools as Speda under a distinct `agent_id` so full-roster operations never bleed into the owner's day-to-day Speda session.
 
 **Optimus is the single exception.** Optimus is a standalone, independently deployed framework. It connects back to this backend as an external WebSocket peer via `WebSocketManager`. It is not built here and does not run in-process. (Its in-process `optimus.py` profile is only the proxy/fallback stub: while the external peer is online, `/chat/optimus` turns and inter-agent dispatches route to it external-first.)
 
@@ -166,7 +166,7 @@ speda-mark-vi/
     ├── profiles/
     │   ├── base.py              # AgentProfile ABC — agent_id, domain, tool_allowlist, model policy
     │   ├── registry.py          # ProfileRegistry — loads all enabled profiles, lookup by agent_id
-    │   ├── speda.py             # SPEDA orchestrator profile
+    │   ├── speda.py             # Speda orchestrator profile
     │   ├── sentinel.py          # Sentinel — finance & budget intelligence
     │   ├── nightcrawler.py      # NightCrawler — OSINT, web surveillance, research
     │   ├── ultron.py            # Ultron — academic research, knowledge synthesis
@@ -459,14 +459,14 @@ Playwright in its own container (`packages/browser`), reached through
 The Legion is the sub-agent worker system (`app/legion/`). Wire name of the tool stays `Task` — "The Legion" is the branding carried by descriptions, prompts, docs, and logs.
 
 - The Legion is registered at startup as Tier 0, before all other tiers. It is a Core MVP feature, not a later addition.
-- SPEDA decides when to deploy legionnaires. The user does not configure this.
+- Speda decides when to deploy legionnaires. The user does not configure this.
 - Single loop for: lookups, reminders, calendar actions, short questions, any task completable in 1–3 tool calls.
 - The Legion for: research, briefings, multi-source synthesis, any task requiring 3+ independent sources.
 - Legionnaires ↔ effort: `scout` (pre-filter) `"low"` · `researcher` `"medium"` · `analyst` (synthesis) `"high"` · `judge` `"low"` · `archivist` (deep memory recall) `"medium"` · `general` `"inherit"`.
 - A legionnaire may declare `tool_scope` — an EXACT tool allowlist, narrower than the `read_only` bucket. Use it for specialists whose job is a handful of tools (`archivist` sees only the three recall tools): a worker that cannot see a tool cannot be tempted to misuse it, and does not pay for its description on every iteration.
 - Worker models resolve provider-agnostically: low/medium effort → `profile.background_model(parent_model)` (cheap tier, same provider); high/inherit → the parent model. Never hardcode worker model IDs in core (Rule 10). `LEGION_MODEL_OVERRIDE` (legacy alias `SUB_AGENT_MODEL`) pins all workers when set.
 - The judge legionnaire runs on briefings and reports only. Not on routine actions.
-- When legionnaires are deployed, SPEDA informs the user which workers ran. One sentence per worker.
+- When legionnaires are deployed, Speda informs the user which workers ran. One sentence per worker.
 
 ---
 

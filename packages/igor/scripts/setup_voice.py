@@ -31,7 +31,7 @@ from app import config as app_config                    # noqa: E402
 from app.config import Settings, write_managed_env      # noqa: E402
 
 DEFAULT_REGION = "germanywestcentral"
-SAMPLE = "Merhaba, ben SPEDA. Bugün iki toplantın var, ikisi de öğleden sonra."
+SAMPLE = "Merhaba, ben Speda. Bugün iki toplantın var, ikisi de öğleden sonra."
 OUT_DIR = Path(__file__).resolve().parent / "tts_samples"
 
 
@@ -85,7 +85,7 @@ async def main() -> int:
     if failed:
         return 1
     print(f"\nSamples are in {OUT_DIR}")
-    print("Play them, then tell me which voice you want as SPEDA's.")
+    print("Play them, then tell me which voice you want as Speda's.")
     return 0
 
 

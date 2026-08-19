@@ -377,7 +377,7 @@ export default function SettingsModal({ config, onClose }: Props) {
             {tab === 'connections' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>
-                  Toggle which services SPEDA can use. Disabling one hides its tools instantly
+                  Toggle which services Speda can use. Disabling one hides its tools instantly
                   (no restart) — which shrinks the prompt and keeps you under the rate limit.
                 </p>
 
@@ -578,7 +578,7 @@ export default function SettingsModal({ config, onClose }: Props) {
               </div>
             )}
 
-            {/* Automations tab — SPEDA's proactive n8n watchers */}
+            {/* Automations tab — Speda's proactive n8n watchers */}
             {tab === 'automations' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
@@ -597,7 +597,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                       ok: !!autoStatus?.telegram_connected,
                       detail: !autoStatus?.telegram_configured
                         ? 'needs TELEGRAM_BOT_TOKEN in the backend .env (create a bot with @BotFather)'
-                        : autoStatus?.telegram_connected ? 'connected — SPEDA can reach you' : 'bot ready — connect your chat below',
+                        : autoStatus?.telegram_connected ? 'connected — Speda can reach you' : 'bot ready — connect your chat below',
                     },
                   ].map(row => (
                     <div key={row.label} style={{
@@ -721,7 +721,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                 </div>
 
                 <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
-                  SPEDA creates these itself — just ask: <em style={{ color: 'var(--hb-amber)', fontStyle: 'normal' }}>“track this page for a month and tell me when my results are up”</em>. When a watcher fires, SPEDA composes the message and pings you on Telegram.
+                  Speda creates these itself — just ask: <em style={{ color: 'var(--hb-amber)', fontStyle: 'normal' }}>“track this page for a month and tell me when my results are up”</em>. When a watcher fires, Speda composes the message and pings you on Telegram.
                 </p>
               </div>
             )}
@@ -844,7 +844,7 @@ export default function SettingsModal({ config, onClose }: Props) {
                   </label>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.875rem', lineHeight: 1.55 }}>
                     One-time: mine durable facts about you from your entire history (Haiku),
-                    consolidate them, and write a profile to memory so SPEDA actually knows you.
+                    consolidate them, and write a profile to memory so Speda actually knows you.
                     Runs in the background; ~a couple of minutes, ~$2 once.
                   </p>
                   <button

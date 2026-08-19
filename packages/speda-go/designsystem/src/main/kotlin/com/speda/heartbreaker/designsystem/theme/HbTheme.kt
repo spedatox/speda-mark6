@@ -18,7 +18,7 @@ import com.speda.heartbreaker.designsystem.motion.Motion
 
 /**
  * The current agent palette, provided down the tree. Read it anywhere with
- * `LocalHbPalette.current`. Defaults to SPEDA so previews and tests render
+ * `LocalHbPalette.current`. Defaults to Speda so previews and tests render
  * without an explicit [HbTheme] wrapper.
  */
 val LocalHbPalette: ProvidableCompositionLocal<HbPalette> =
