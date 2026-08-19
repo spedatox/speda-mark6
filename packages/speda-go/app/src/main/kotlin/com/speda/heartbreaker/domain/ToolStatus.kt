@@ -1,12 +1,13 @@
 package com.speda.heartbreaker.domain
 
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Tool → natural-language status and one-line summaries. Literal port of the
- * TOOL_STATUS map, statusLabel, toolSummary, isSearchTool and shortPath in
- * Message.tsx.
+ * TOOL_STATUS map, statusLabel and shortPath in Message.tsx.
  */
 object ToolStatus {
 
@@ -33,13 +34,6 @@ object ToolStatus {
         "graph_overview" to "Mapping the codebase graph",
     )
 
-    private val SEARCH_TOOL_PATTERNS = listOf("tavily", "exa", "brave", "search", "fetch", "web")
-
-    fun isSearchTool(name: String): Boolean {
-        val n = name.lowercase()
-        return SEARCH_TOOL_PATTERNS.any { n.contains(it) }
-    }
-
     fun statusLabel(toolName: String): String =
         TOOL_STATUS[toolName] ?: "Using ${toolName.replace('_', ' ')}"
 
@@ -47,31 +41,6 @@ object ToolStatus {
     fun shortPath(p: String): String {
         val parts = p.split('/', '\\').filter { it.isNotEmpty() }
         return if (parts.size <= 2) p else "…/" + parts.takeLast(2).joinToString("/")
-    }
-
-    data class Summary(val verb: String, val target: String? = null)
-
-    fun toolSummary(tool: ToolBadge): Summary {
-        val path = tool.str("path")
-        return when (tool.name) {
-            "edit_file" -> Summary("Edited", path?.let(::shortPath))
-            "write_file" -> Summary("Wrote", path?.let(::shortPath))
-            "read_file" -> Summary("Read", path?.let(::shortPath))
-            "run_command" -> Summary("Ran", tool.str("command"))
-            "system_ops" -> when (tool.str("action")) {
-                "read_file" -> Summary("Read", path?.let(::shortPath))
-                "write_file" -> Summary("Wrote", path?.let(::shortPath))
-                else -> Summary("Ran", tool.str("command"))
-            }
-            "graph_query" -> Summary("Searched graph", tool.str("question"))
-            "graph_path" -> Summary("Traced the codebase graph")
-            "graph_overview" -> Summary("Mapped the codebase graph")
-            else -> if (isSearchTool(tool.name)) {
-                Summary("Searched", tool.str("query") ?: tool.str("question"))
-            } else {
-                Summary(tool.name.replace('_', ' ').replace('-', ' '))
-            }
-        }
     }
 }
 
@@ -93,4 +62,56 @@ fun ToolBadge.inputRows(): List<Pair<String, String>> {
         rows.add(k to if (value.length > 400) value.take(400) + "…" else value)
     }
     return rows
+}
+
+/** String rendering of a raw tool input value — content for a string primitive, else its JSON form. */
+private fun jsonValueString(v: JsonElement): String {
+    val prim = v as? JsonPrimitive
+    return if (prim != null && prim.isString) prim.content else v.toString()
+}
+
+// The arg a human would recognise the call by, in preference order.
+private val PREFERRED_ARG_KEYS = listOf(
+    "path", "file_path", "command", "query", "question", "url",
+    "name", "action", "agent_id", "prompt",
+)
+
+/**
+ * The single most identifying argument, rendered as `(key: value)`. Literal
+ * port of primaryArg in Message.tsx — used by the ToolFeed row's compact
+ * one-line summary alongside the tool's raw name.
+ */
+fun ToolBadge.primaryArg(): String? {
+    val obj = input as? JsonObject ?: return null
+    val keys = obj.keys.toList()
+    if (keys.isEmpty()) return null
+    val key = PREFERRED_ARG_KEYS.firstOrNull { k ->
+        val v = obj[k]
+        v != null && v !is JsonNull && jsonValueString(v).isNotEmpty()
+    } ?: keys.first()
+    val raw = obj[key] ?: return null
+    var value = jsonValueString(raw)
+    if (key == "path" || key == "file_path") value = ToolStatus.shortPath(value)
+    if (value.length > 44) value = value.take(44) + "…"
+    return "($key: $value)"
+}
+
+/** A short "what came back", taken from the real result text. Port of resultSummary. */
+fun ToolBadge.resultSummary(): String? {
+    val r = result ?: return null
+    val first = r.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: return null
+    if (first.isEmpty()) return null
+    return if (first.length > 38) first.take(38) + "…" else first
+}
+
+enum class ToolStepState { Running, Failed, Done }
+
+/** Done / running / failed — read off the result, never invented. Port of stepState. */
+fun ToolBadge.stepState(live: Boolean): ToolStepState {
+    if (live && result == null) return ToolStepState.Running
+    val r = (result ?: "").lowercase()
+    if (Regex("^(error|traceback|exception)\\b").containsMatchIn(r) || r.contains("error:")) {
+        return ToolStepState.Failed
+    }
+    return ToolStepState.Done
 }

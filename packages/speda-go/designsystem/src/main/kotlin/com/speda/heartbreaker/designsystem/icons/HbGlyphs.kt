@@ -115,6 +115,13 @@ object HbGlyphs {
         pathString("M14 3v5h5", color)
     }
 
+    /** Tool chain — the ToolFeed card header glyph (Message.tsx ToolFeed icon). */
+    @Composable
+    fun ToolChain(color: Color, size: Dp = 15.dp, modifier: Modifier = Modifier) = Glyph(size, modifier, stroke = 1.5f) {
+        line(12f, 20f, 21f, 20f, color)
+        pathString("M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z", color)
+    }
+
     // ── Message action bar (Message.tsx icons — path data copied verbatim) ────
 
     /** Copy — two overlapping sheets. */

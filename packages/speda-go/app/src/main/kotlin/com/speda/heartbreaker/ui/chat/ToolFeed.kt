@@ -6,18 +6,21 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -27,14 +30,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.speda.heartbreaker.domain.ToolBadge
-import com.speda.heartbreaker.domain.ToolStatus
+import com.speda.heartbreaker.domain.ToolStepState
 import com.speda.heartbreaker.domain.inputRows
+import com.speda.heartbreaker.domain.primaryArg
+import com.speda.heartbreaker.domain.resultSummary
+import com.speda.heartbreaker.domain.stepState
 import com.speda.heartbreaker.domain.str
+import com.speda.heartbreaker.designsystem.glass.HbGlassShape
+import com.speda.heartbreaker.designsystem.glass.HbGlassState
+import com.speda.heartbreaker.designsystem.glass.hbGlass
+import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.ui.HbText
@@ -45,61 +57,139 @@ private val ADD_FG = Color(red = 134, green = 239, blue = 172, alpha = 242)
 private val REM_BG = Color(red = 248, green = 113, blue = 113).copy(alpha = 0.09f)
 private val REM_FG = Color(red = 252, green = 165, blue = 165, alpha = 235)
 
-/** Live tool feed — one row per tool, click to expand diff / command / detail. */
+/** A tap without the Material ripple (MessageItem.kt's noRippleClick, ported here too). */
+private fun Modifier.noRippleClick(onClick: () -> Unit): Modifier = this.composed {
+    clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+}
+
+/**
+ * THE TOOL CHAIN — one card per run of steps, not a bracketed gutter. Port of
+ * the ToolFeed card in Message.tsx: a titled card stating how many steps ran
+ * and whether they are still running, with the steps as rows inside and each
+ * row's detail nesting underneath. Collapses to its header once read.
+ *
+ * No elapsed-time readout in the header, same reason as the web: ToolBadge
+ * carries no timestamps, so a duration here would be invented.
+ */
 @Composable
 fun ToolFeed(tools: List<ToolBadge>, streaming: Boolean, modifier: Modifier = Modifier) {
     if (tools.isEmpty()) return
     val palette = LocalHbPalette.current
+    var open by remember { mutableStateOf(true) }
+
+    val liveIdx = if (streaming) tools.lastIndex else -1
+    val running = streaming && tools.last().result == null
+    val failed = tools.count { it.stepState(live = false) == ToolStepState.Failed }
+
     Column(
-        modifier = modifier
-            .padding(vertical = 6.dp)
-            .clip(RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp))
-            .background(palette.void.copy(alpha = 0.35f))
-            .padding(start = 10.dp, top = 6.dp, bottom = 6.dp, end = 8.dp),
+        modifier
+            .padding(vertical = 4.dp)
+            .hbGlass(shape = HbGlassShape.Card, state = HbGlassState.Default),
     ) {
-        tools.forEachIndexed { i, t ->
-            ToolRow(tool = t, live = streaming && i == tools.lastIndex)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .noRippleClick { open = !open }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            HbGlyphs.ToolChain(palette.accent)
+            HbText(
+                "${tools.size} step${if (tools.size == 1) "" else "s"}${if (running) " · running" else ""}",
+                style = HbType.headerBar,
+                color = palette.textDim,
+                caps = true,
+            )
+            if (failed > 0) {
+                HbText("$failed failed", style = HbType.read.copy(fontSize = 13.sp), color = palette.red)
+            }
+            Spacer(Modifier.weight(1f))
+            if (open) HbGlyphs.ChevronUp(palette.textFaint) else HbGlyphs.ChevronDown(palette.textFaint)
+        }
+
+        if (open) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 2.dp).padding(bottom = 12.dp)) {
+                tools.forEachIndexed { i, t ->
+                    ToolRow(tool = t, live = i == liveIdx)
+                    if (i != tools.lastIndex) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 1.dp)
+                                .heightIn(min = 1.dp)
+                                .background(palette.line.copy(alpha = 0.35f)),
+                        ) {}
+                    }
+                }
+            }
         }
     }
 }
 
+// One row in the feed: always-visible summary; click to expand diff/output/detail.
 @Composable
 private fun ToolRow(tool: ToolBadge, live: Boolean) {
     val palette = LocalHbPalette.current
     var open by remember { mutableStateOf(false) }
-    val (verb, target) = ToolStatus.toolSummary(tool)
 
     val action = tool.str("action")
     val isEdit = tool.name == "edit_file"
     val isWrite = tool.name == "write_file" || (tool.name == "system_ops" && action == "write_file")
     val isCmd = tool.name == "run_command" || (tool.name == "system_ops" && action != "read_file" && action != "write_file")
     val hasDetail = isEdit || isWrite || isCmd || tool.result != null || tool.inputRows().isNotEmpty()
-    val pending = live && tool.result == null
+
+    val state = tool.stepState(live)
+    val arg = tool.primaryArg()
+    val summary = tool.resultSummary()
 
     Column {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
             modifier = Modifier
-                .then(if (hasDetail) Modifier.clickable { open = !open } else Modifier)
-                .padding(vertical = 3.dp),
+                .fillMaxWidth()
+                .then(if (hasDetail) Modifier.noRippleClick { open = !open } else Modifier)
+                .padding(vertical = 7.dp),
         ) {
-            if (pending) Spinner(size = 12.dp) else Box(
-                Modifier.size(6.dp).clip(CircleShape).background(palette.accentDim),
-            )
-            HbText(verb, style = HbType.code, color = palette.iconBright, maxLines = 1)
-            if (target != null) {
+            // Status glyph — a tick when it landed, a ring while it runs, a cross
+            // when the result came back an error. Three states, one column.
+            when (state) {
+                ToolStepState.Running -> Spinner(size = 13.dp)
+                ToolStepState.Failed -> HbGlyphs.Close(palette.red, size = 12.dp)
+                ToolStepState.Done -> HbGlyphs.Check(palette.green, size = 13.dp)
+            }
+
+            // The tool's real name — searchable when something goes wrong.
+            HbText(tool.name, style = HbType.read.copy(fontSize = 13.5.sp), color = palette.text, maxLines = 1)
+            if (arg != null) {
                 HbText(
-                    target,
-                    style = HbType.code,
-                    color = palette.textDim,
+                    arg,
+                    style = HbType.read.copy(fontSize = 13.sp),
+                    color = palette.textFaint,
                     maxLines = 1,
                     modifier = Modifier.weight(1f, fill = false),
                 )
             }
+
+            Spacer(Modifier.weight(1f))
+
+            if (summary != null) {
+                HbText(
+                    summary,
+                    style = HbType.read.copy(fontSize = 13.sp),
+                    color = palette.textFaint,
+                    maxLines = 1,
+                    modifier = Modifier.widthIn(max = 150.dp),
+                )
+            }
+            if (hasDetail) {
+                if (open) HbGlyphs.ChevronUp(palette.textFaint, size = 8.dp) else HbGlyphs.ChevronDown(palette.textFaint, size = 8.dp)
+            }
         }
         if (open && hasDetail) {
-            Box(Modifier.padding(start = 16.dp, top = 4.dp, bottom = 6.dp)) {
+            // Indented to clear the status column, matching the web's nesting.
+            Box(Modifier.padding(start = 22.dp, top = 2.dp, bottom = 8.dp)) {
                 when {
                     isEdit -> DiffBlock(removed = tool.str("old_string"), added = tool.str("new_string"))
                     isWrite -> DiffBlock(added = tool.str("content"))
