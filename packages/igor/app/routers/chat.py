@@ -151,10 +151,50 @@ async def delete_session(
     session_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy import delete
+    from sqlalchemy import delete, update
     from app.models.session import Session
     from app.models.message import Message
+    from app.models.message_embedding import MessageEmbedding
+    from app.models.tool_call import ToolCall
+    from app.models.agent import AgentRecord
+    from app.models.background_job import BackgroundJob
+    from app.models.memory import Memory
+    from app.models.observation import Observation
 
+    # Six other tables carry a foreign key to sessions.id (memory.py,
+    # observation.py, background_job.py, agent.py, message_embedding.py,
+    # tool_call.py) — none of that existed when this endpoint was first
+    # written, and a plain DELETE FROM messages started failing FOREIGN KEY
+    # constraint failed the moment tool_calls/message_embeddings picked up
+    # rows, taking the whole request (and, with it, the worker) down.
+    #
+    # Two different kinds of reference, two different responses. Memory,
+    # observations, background jobs, and an agent's "currently in" pointer
+    # merely CITE this session for context — they are durable by design
+    # (CLAUDE.md: a memory fact stops being current by acquiring a
+    # valid_until, never by deletion) and survive with the reference
+    # cleared. Message embeddings and tool-call audit rows exist BECAUSE
+    # this session's messages do, so they are deleted outright, in
+    # child-before-parent order so nothing downstream ever sees a dangling
+    # message_id or session_id mid-transaction.
+    await db.execute(
+        update(AgentRecord).where(AgentRecord.current_session_id == session_id)
+        .values(current_session_id=None)
+    )
+    await db.execute(
+        update(BackgroundJob).where(BackgroundJob.session_id == session_id)
+        .values(session_id=None)
+    )
+    await db.execute(
+        update(Memory).where(Memory.source_session_id == session_id)
+        .values(source_session_id=None)
+    )
+    await db.execute(
+        update(Observation).where(Observation.session_id == session_id)
+        .values(session_id=None)
+    )
+    await db.execute(delete(MessageEmbedding).where(MessageEmbedding.session_id == session_id))
+    await db.execute(delete(ToolCall).where(ToolCall.session_id == session_id))
     await db.execute(delete(Message).where(Message.session_id == session_id))
     await db.execute(delete(Session).where(Session.id == session_id))
     await db.commit()
