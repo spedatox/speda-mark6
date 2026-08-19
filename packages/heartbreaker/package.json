@@ -1,7 +1,7 @@
 {
   "name": "speda-mark6",
   "version": "2.0.0",
-  "description": "SPEDA Mark VI — primary desktop client (Stark FUI)",
+  "description": "SPEDA Mark VI — primary desktop client",
   "main": "./out/main/index.js",
   "author": "Ahmet Erol Bayrak",
   "scripts": {
