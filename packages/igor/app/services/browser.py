@@ -176,7 +176,15 @@ def portal_allows(portal: dict, agent_id: str) -> bool:
 
 async def login_portal(name: str) -> dict:
     """Sign in to a saved portal. The credential goes app → sidecar → page and
-    is never returned, logged, or handed to a caller."""
+    is never returned, logged, or handed to a caller.
+
+    Some portals (OSTİM's OBS among them) gate login behind an image captcha.
+    That is solved entirely inside the sidecar — see
+    packages/browser/server.py's solve_captcha_with_vision — rather than here:
+    OBS's login session expires faster than a capture-then-ask-Igor-then-
+    submit round trip takes, so solving has to happen in the same call that
+    fills and submits the form. This function stays a single POST.
+    """
     portal = get_portal(name)
     if not portal:
         raise BrowserUnavailable(

@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import io
 import json
 import logging
 import os
@@ -72,6 +73,11 @@ logger = logging.getLogger("browser")
 STATE_DIR = Path(os.environ.get("BROWSER_STATE_DIR", "/state"))
 ARTIFACT_DIR = STATE_DIR / "artifacts"
 TOKEN = os.environ.get("BROWSER_TOKEN", "")
+# Set only when the owner deliberately opted this container into it (see
+# solve_captcha_with_vision's docstring for why it lives here rather than in
+# Igor, despite the isolation rule this bends). Absent, captcha solving falls
+# straight back to the OCR path with no behavior change.
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip().strip('"').strip("'")
 PORT = int(os.environ.get("BROWSER_PORT", "9200"))
 HEADLESS = os.environ.get("BROWSER_HEADLESS", "1") != "0"
 
@@ -100,6 +106,32 @@ UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/140.0.0.0 Safari/537.36"
 )
+
+# Same spirit as the UA override above, not "evasion" in the adversarial
+# sense — these are the owner's own accounts, and this container exists
+# specifically to sign into them. But `navigator.webdriver`, a missing
+# `window.chrome`, and an empty `navigator.plugins` are the three signals
+# every headless-Chromium detector checks first, and a real Chrome window
+# never trips any of them. Left unpatched, a portal can reject an otherwise
+# byte-for-byte-correct login (right password, right captcha, well inside any
+# session window) for no reason a response body ever names — see OBS, which
+# did exactly that. Run before any page script via add_init_script.
+_STEALTH_INIT_JS = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+window.chrome = { runtime: {} };
+Object.defineProperty(navigator, 'plugins', {
+  get: () => [1, 2, 3, 4, 5].map(() => ({ name: 'Chrome PDF Plugin' })),
+});
+Object.defineProperty(navigator, 'languages', { get: () => ['tr-TR', 'tr', 'en-US', 'en'] });
+const origQuery = window.navigator.permissions && window.navigator.permissions.query;
+if (origQuery) {
+  window.navigator.permissions.query = (params) => (
+    params && params.name === 'notifications'
+      ? Promise.resolve({ state: Notification.permission })
+      : origQuery(params)
+  );
+}
+"""
 
 _PROFILE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
 
@@ -140,7 +172,8 @@ class Engine:
             # the seccomp upgrade path if this ever visits genuinely hostile
             # ground rather than the owner's portals and news sites.
             chromium_sandbox=False,
-            args=["--disable-dev-shm-usage", "--disable-gpu"],
+            args=["--disable-dev-shm-usage", "--disable-gpu",
+                  "--disable-blink-features=AutomationControlled"],
         )
         (STATE_DIR / "profiles").mkdir(parents=True, exist_ok=True)
         ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
@@ -166,7 +199,7 @@ class Engine:
                     state = json.loads(path.read_text(encoding="utf-8"))
                 except Exception as e:  # noqa: BLE001
                     logger.warning("profile_state_unreadable profile=%s err=%s", profile, e)
-        return await self.browser.new_context(
+        context = await self.browser.new_context(
             storage_state=state,
             user_agent=UA,
             locale=locale,
@@ -174,6 +207,8 @@ class Engine:
             viewport={"width": 1440, "height": 900},
             accept_downloads=True,
         )
+        await context.add_init_script(_STEALTH_INIT_JS)
+        return context
 
     async def save_profile(self, context: BrowserContext, profile: str) -> None:
         """Persist the cookie jar. Called after every profile-bound call, not
@@ -381,7 +416,14 @@ async def run_step(page: Page, step: dict, sess: dict | None = None) -> str:
         await page.locator(target).first.click(timeout=ACT_TIMEOUT)
         return f"click {target}"
     if action == "fill":
-        await page.locator(target).first.fill(str(value or ""), timeout=ACT_TIMEOUT)
+        loc = page.locator(target).first
+        # Same readonly-until-focus trick do_login guards against — a click
+        # first costs nothing on a normal field and unblocks a gated one.
+        try:
+            await loc.click(timeout=ACT_TIMEOUT)
+        except Exception:  # noqa: BLE001
+            pass
+        await loc.fill(str(value or ""), timeout=ACT_TIMEOUT)
         return f"fill {target}"
     if action == "select":
         await page.locator(target).first.select_option(str(value or ""), timeout=ACT_TIMEOUT)
@@ -443,6 +485,13 @@ _USERNAME_HINTS = (
 )
 _SUBMIT_HINTS = (
     "button[type=submit]", "input[type=submit]", "role=button[name=/giriş|login|sign in|oturum/i]",
+    # Plenty of WebForms-era portals style their login control as an <a>
+    # driving __doPostBack rather than a real <button> — no type=submit, no
+    # explicit role=button, so none of the hints above ever see it. Matched
+    # by text before the bare tag-name fallbacks below get a chance to grab
+    # the first UNRELATED <button> on the page (a password show/hide toggle,
+    # on OBS) and report a false "submitted".
+    "a:text-matches(\"giriş|log ?in|sign in|oturum aç\", \"i\")",
     "button", "input[type=button]",
 )
 
@@ -472,17 +521,257 @@ async def first_visible(frame, selectors: tuple[str, ...] | list[str]):
     return None, ""
 
 
-async def do_login(page: Page, spec: dict) -> dict:
+# ── The arithmetic captcha a surprising number of Turkish university portals
+# gate their login behind (OSTİM's OBS among them): a "what's N + M" challenge
+# rendered as an image, answered as a plain number. Not a security captcha in
+# any real sense — it stops a form-post bot, not a browser that can read an
+# image — and the owner already proved they're allowed through the door by
+# supplying the password. Reading it is squarely within what portal_login is
+# for: getting the owner's own account signed in, not defeating someone else's
+# access control.
+_CAPTCHA_IMG_HINTS = (
+    "img[id*=captcha i]", "img[id*=guvkod i]", "img[id*=güvkod i]",
+    "img[alt*=güvenlik i]", "img[alt*=captcha i]",
+    "img[title*=güvenlik i]", "img[title*=captcha i]",
+)
+_CAPTCHA_INPUT_HINTS = (
+    "input[id*=seccode i]", "input[name*=seccode i]",
+    "input[id*=captcha i]", "input[name*=captcha i]",
+)
+
+
+async def find_captcha(frame):
+    img = None
+    for sel in _CAPTCHA_IMG_HINTS:
+        try:
+            loc = frame.locator(sel).first
+            if await loc.count():
+                img = loc
+                break
+        except Exception:  # noqa: BLE001
+            continue
+    if img is None:
+        return None, None
+    inp = None
+    for sel in _CAPTCHA_INPUT_HINTS:
+        try:
+            loc = frame.locator(sel).first
+            if await loc.count():
+                inp = loc
+                break
+        except Exception:  # noqa: BLE001
+            continue
+    return img, inp
+
+
+async def solve_captcha_with_vision(png: bytes) -> str | None:
+    """Read a "N + M = ?" captcha image with a vision-capable model and
+    return the sum as a string, or None on any failure.
+
+    This is the primary solver, not a fallback: the noise these images carry
+    (wavy background lines, colored circles overlapping the digits — see
+    OSTİM's OBS) is specifically the kind of thing pixel-level OCR struggles
+    with and a vision model reads past without effort, the same way a human
+    glancing at the image does. It also runs from THIS container rather than
+    round-tripping to Igor and back — some portals expire the login session
+    faster than that round trip takes, so solving has to happen in the same
+    breath as the capture and the submit. That is the whole reason
+    OPENAI_API_KEY is configured here at all, bending the "this container
+    holds no secrets" isolation rule as a deliberate, narrow exception.
+    """
+    if not OPENAI_API_KEY:
+        return None
+    import base64
+    try:
+        import httpx
+    except ImportError:
+        return None
+    b64 = base64.b64encode(png).decode()
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": (
+                                "This is a captcha image showing an arithmetic "
+                                "expression like 'N + M = ?'. Reply with ONLY the "
+                                "computed numeric answer, nothing else — no words, "
+                                "no punctuation."
+                            )},
+                            {"type": "image_url", "image_url": {
+                                "url": f"data:image/png;base64,{b64}"
+                            }},
+                        ],
+                    }],
+                    "max_tokens": 10,
+                    "temperature": 0,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        text = (data["choices"][0]["message"]["content"] or "").strip()
+        digits = re.search(r"-?\d{1,4}", text)
+        return digits.group(0) if digits else None
+    except Exception as e:  # noqa: BLE001
+        logger.warning("captcha_vision_failed err=%s", str(e)[:200])
+        return None
+
+
+_CLICKABLE = "button, input[type=submit], input[type=button], a[href]"
+
+
+async def choose_element_by_reasoning(frame, description: str):
+    """Read every clickable element's own text/attributes and have a model
+    pick which one matches `description`, by understanding, not by pixels.
+
+    CSS-hint lists (_SUBMIT_HINTS and friends) encode an assumption about
+    markup — button vs. anchor, a type= attribute, an ARIA role someone
+    remembered to set — and a portal is free to change any of that without
+    changing what a human reads. OSTİM's OBS renders its login control as a
+    plain <a> driving a postback, which matched none of the "real button"
+    hints and let a later hint grab an unrelated <button> instead (the
+    password show/hide toggle).
+
+    A first attempt at the general fix asked a vision model to POINT at the
+    control in a screenshot — that failed too, off by over 100px on this
+    exact page, because pixel-grounding is a known weak spot for general
+    vision-chat models even when reading the same page's TEXT is trivial for
+    them. This asks a strictly easier question: given each candidate's own
+    label, does IT read as the login button — text classification, not
+    spatial guessing, so it plays to the model's actual strength.
+    """
+    if not OPENAI_API_KEY:
+        return None
+    try:
+        import httpx
+    except ImportError:
+        return None
+
+    candidates = frame.locator(_CLICKABLE)
+    try:
+        count = await candidates.count()
+    except Exception:  # noqa: BLE001
+        return None
+    if count == 0:
+        return None
+
+    rows = []
+    locs = []
+    for i in range(min(count, 40)):
+        loc = candidates.nth(i)
+        try:
+            if not await loc.is_visible():
+                continue
+            text = (await loc.inner_text()).strip()[:60]
+            aria = (await loc.get_attribute("aria-label") or "")[:60]
+            title = (await loc.get_attribute("title") or "")[:60]
+            tag = await loc.evaluate("el => el.tagName.toLowerCase()")
+        except Exception:  # noqa: BLE001
+            continue
+        rows.append(f"{len(locs)}: <{tag}> text={text!r} aria-label={aria!r} title={title!r}")
+        locs.append(loc)
+    if not rows:
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{
+                        "role": "user",
+                        "content": (
+                            "Clickable elements on a web page, one per line as "
+                            "index: <tag> text=... aria-label=... title=...\n\n"
+                            + "\n".join(rows)
+                            + f"\n\nWhich index is: {description}? "
+                            "Reply with ONLY the index number, or -1 if none match."
+                        ),
+                    }],
+                    "max_tokens": 10,
+                    "temperature": 0,
+                },
+            )
+            resp.raise_for_status()
+            text = (resp.json()["choices"][0]["message"]["content"] or "").strip()
+        m = re.search(r"-?\d+", text)
+        if not m:
+            return None
+        idx = int(m.group(0))
+        if idx < 0 or idx >= len(locs):
+            return None
+        return locs[idx]
+    except Exception as e:  # noqa: BLE001
+        logger.warning("choose_element_failed err=%s", str(e)[:200])
+        return None
+
+
+def solve_arithmetic_captcha(png: bytes) -> str | None:
+    """Read a two-number "N + M = ?" captcha image and return the sum as a
+    string, or None if it couldn't be read with any confidence.
+
+    This style renders the digits in a flat, desaturated color and buries them
+    in colored noise circles and wavy lines — the noise is what defeats a
+    plain OCR pass, and it is also the thing that gives the digits away: it is
+    saturated where the digits are not. Thresholding on saturation isolates
+    the glyphs before Tesseract ever sees the image, which is doing the actual
+    work here — not the OCR step.
+    """
+    try:
+        from PIL import Image
+        import pytesseract
+    except ImportError:
+        return None
+    try:
+        im = Image.open(io.BytesIO(png)).convert("RGB")
+        px = im.load()
+        mask = Image.new("L", im.size, 255)
+        mpx = mask.load()
+        for y in range(im.height):
+            for x in range(im.width):
+                r, g, b = px[x, y]
+                hi, lo = max(r, g, b), min(r, g, b)
+                if hi - lo < 40 and hi < 200:   # low saturation, not near-white
+                    mpx[x, y] = 0
+        text = pytesseract.image_to_string(
+            mask, config="--psm 7 -c tessedit_char_whitelist=0123456789+-x*="
+        )
+        m = re.search(r"(\d{1,3})\s*([+\-x*])\s*(\d{1,3})", text)
+        if not m:
+            return None
+        a, op, b_ = int(m.group(1)), m.group(2), int(m.group(3))
+        if op == "+":
+            return str(a + b_)
+        if op == "-":
+            return str(a - b_)
+        return str(a * b_)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def do_login(page: Page, spec: dict, skip_navigate: bool = False) -> dict:
     """Fill the form, submit, and decide honestly whether we're in.
 
     The verdict matters more than the mechanics. "Still on a page with a
     password box" is the one signal that survives every portal's habit of
     answering a bad password with HTTP 200 and a red span, so it is what we
     check first — before any success selector the owner configured.
+
+    `skip_navigate` is set when this is the second half of a captcha-audio
+    round trip: the caller already has a live session sitting on the login
+    page with a specific challenge loaded, and a fresh goto would swap that
+    challenge out from under the answer it just transcribed.
     """
     steps: list[str] = []
     login_url = spec.get("login_url") or ""
-    if login_url:
+    if login_url and not skip_navigate:
         await page.goto(login_url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
         steps.append(f"opened {login_url}")
     await settle(page, None, 600)
@@ -511,9 +800,66 @@ async def do_login(page: Page, spec: dict) -> dict:
                                         "Set the username selector on the portal.",
                 "steps": steps, **(await snapshot(page))}
 
-    await user_loc.fill(spec.get("username") or "", timeout=ACT_TIMEOUT)
-    await frame.locator(pass_sel).first.fill(spec.get("password") or "", timeout=ACT_TIMEOUT)
+    pass_loc = frame.locator(pass_sel).first
+    # Some WebForms-style portals ship the password box `readonly` and only drop
+    # that attribute on focus/mouseover (an anti-autofill trick, not a real
+    # disable — see e.g. OBS's txtParamT02). fill() requires "editable" and
+    # times out against it forever; a click first is what a real visit does
+    # anyway, and it's what fires the listener that unlocks the field.
+    try:
+        await user_loc.click(timeout=ACT_TIMEOUT)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        await user_loc.fill(spec.get("username") or "", timeout=ACT_TIMEOUT)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "message": f"Could not fill the username field "
+                                        f"({type(e).__name__}).",
+                "steps": steps, **(await snapshot(page))}
+    try:
+        await pass_loc.click(timeout=ACT_TIMEOUT)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        await pass_loc.fill(spec.get("password") or "", timeout=ACT_TIMEOUT)
+    except Exception:  # noqa: BLE001
+        # Playwright's own TimeoutError embeds the fill() argument — the
+        # password itself — in its call log. `e` is deliberately never touched
+        # below: not logged, not included in the response, not re-raised.
+        return {"ok": False, "message": "The password field never became "
+                "editable in time — the portal may gate it behind a "
+                "focus/click it didn't get, or blocked the session outright.",
+                "steps": steps, **(await snapshot(page))}
     steps.append(f"filled {user_sel} + password")
+
+    cap_img, cap_inp = await find_captcha(frame)
+    if cap_img is not None and cap_inp is not None:
+        answer, source = None, ""
+        if spec.get("captcha_answer"):
+            answer, source = str(spec["captcha_answer"]), "supplied"
+        else:
+            try:
+                answer = await solve_captcha_with_vision(await cap_img.screenshot())
+                source = "vision"
+            except Exception:  # noqa: BLE001
+                pass
+        if answer is None:
+            try:
+                answer = solve_arithmetic_captcha(await cap_img.screenshot())
+                source = "OCR best-effort"
+            except Exception:  # noqa: BLE001
+                pass
+
+        if answer:
+            try:
+                await cap_inp.click(timeout=ACT_TIMEOUT)
+                await cap_inp.fill(answer, timeout=ACT_TIMEOUT)
+                steps.append(f"filled captcha answer via {source}")
+            except Exception:  # noqa: BLE001
+                steps.append("read the captcha but could not fill the answer field")
+        else:
+            steps.append("a captcha is present and could not be solved — "
+                         "login will likely fail")
 
     # Extra fields — a student number, a captcha answer the owner pre-solved, a
     # department dropdown. Anything the page wants that isn't the two obvious.
@@ -524,14 +870,33 @@ async def do_login(page: Page, spec: dict) -> dict:
         except Exception as e:  # noqa: BLE001
             steps.append(f"extra field {extra_sel} failed: {e}")
 
+    # Finding the submit control by markup is exactly the kind of guess that
+    # breaks the moment a portal's template changes — no type=submit, no
+    # role=button, and the next heuristic down the list is free to grab an
+    # unrelated <button> that happens to render first (OBS's password
+    # show/hide toggle did precisely that). Reading every candidate's own
+    # label and having a model choose by understanding it — not by pixel
+    # position, see choose_element_by_reasoning's docstring for why — is the
+    # primary path whenever a key is configured; the CSS hints are the
+    # fallback for when it isn't, not the other way around.
+    submit_sel_desc = None
     if submit_sel:
         submit, submit_sel = frame.locator(submit_sel).first, submit_sel
+    elif OPENAI_API_KEY:
+        submit = await choose_element_by_reasoning(
+            frame, "the login/submit control that signs the user in (e.g. "
+                   "'Giriş', 'Login', 'Sign in') — NOT a password show/hide "
+                   "icon, NOT a language switcher, NOT a forgot-password link"
+        )
+        submit_sel_desc = "chosen by reasoning over labeled candidates"
+        if submit is None:
+            submit, submit_sel = await first_visible(frame, _SUBMIT_HINTS)
     else:
         submit, submit_sel = await first_visible(frame, _SUBMIT_HINTS)
     try:
         if submit is not None:
             await submit.click(timeout=ACT_TIMEOUT)
-            steps.append(f"submitted via {submit_sel}")
+            steps.append(f"submitted via {submit_sel_desc or submit_sel}")
         else:
             await frame.locator(pass_sel).first.press("Enter")
             steps.append("submitted via Enter")
@@ -693,12 +1058,17 @@ async def login(body: dict, x_browser_token: str | None = Header(default=None)):
     profile = check_profile(body.get("profile"))
     if not profile:
         raise HTTPException(status_code=400, detail="profile is required")
-    if not body.get("login_url"):
+    wants_sid = (body.get("session_id") or "").strip() or None
+    if not body.get("login_url") and not wants_sid:
         raise HTTPException(status_code=400, detail="login_url is required")
 
-    sid, sess = await engine.get_session(None, profile, body.get("locale") or "tr-TR")
+    sid, sess = await engine.get_session(wants_sid, profile, body.get("locale") or "tr-TR")
+    # Continuing the exact session the caller named, not a fresh one reaped
+    # under the same id — only then is a re-navigate skippable, per do_login's
+    # skip_navigate contract.
+    continuing = wants_sid is not None and sid == wants_sid
     try:
-        result = await do_login(sess["page"], body)
+        result = await do_login(sess["page"], body, skip_navigate=continuing)
         if result.get("ok"):
             await engine.save_profile(sess["context"], profile)
         logger.info("login profile=%s ok=%s", profile, result.get("ok"))

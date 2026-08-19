@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-speda}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-speda}
@@ -22,6 +23,7 @@ services:
     build:
       context: .                            # repo root — uv workspace + lock live here
       dockerfile: packages/igor/Dockerfile
+    restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
@@ -146,6 +148,12 @@ services:
       # halves agree without a second secret file.
       BROWSER_TOKEN: ${BROWSER_TOKEN:-}
       TZ: ${TZ:-Europe/Istanbul}
+      # Deliberate, narrow exception to "this container holds no secrets" —
+      # backs solve_captcha_with_vision() in server.py. A captcha solved by
+      # round-tripping through Igor is too slow for some portals' login
+      # session windows; the key has to live where the solve happens. Empty
+      # is a valid value — captcha solving then falls back to local OCR.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     volumes:
       # Cookie jars only. No host path, no .env, no database — this container
       # renders pages the owner did not write.

@@ -359,10 +359,21 @@ class PortalLoginSkill(Skill):
             return (f"Signed in to {label}. Landed on {result.get('title') or home}. "
                     f"Use browse_page with portal='{name}' to read pages there, or "
                     f"browser_act with portal='{name}' to work through it.")
-        return (f"Could not sign in to {label}: {result.get('message')}\n"
-                f"Tell the owner what happened and ask them to check the saved credentials "
-                f"in Settings → Connections → Web portals. Do not ask them to give you the "
-                f"password here.")
+        login_url = record.get("login_url") or ""
+        return (f"portal_login's automated heuristics could not sign in to {label}: "
+                f"{result.get('message')}\n"
+                f"This is NOT evidence the password is wrong — those heuristics guess at "
+                f"selectors (which button is the real submit, which field is the real "
+                f"username box) and a portal changing its markup even slightly breaks the "
+                f"guess while leaving the credentials perfectly fine. Do not tell the owner "
+                f"to check their password on the strength of this message alone. Before "
+                f"concluding anything, look yourself: call browse_page(url='{login_url}', "
+                f"portal='{name}', aria=true) to see the live page, then drive the actual "
+                f"login by hand with browser_act (same portal, session_id carried between "
+                f"calls) — click the real submit control, fill the real fields, read what "
+                f"comes back. Only report a credentials problem if a manual attempt you drove "
+                f"yourself also fails, and ideally with the site's own explicit wrong-password "
+                f"message, not just 'still on the login page.'")
 
 
 BROWSER_SKILLS = (BrowsePageSkill, BrowserActSkill, PortalLoginSkill)
