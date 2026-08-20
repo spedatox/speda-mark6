@@ -183,6 +183,14 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("browser_skills_skipped", extra={"reason": "BROWSER_URL not set"})
 
+    # Ankara bus desk — live EGO "Otobüs Nerede?" arrivals by stop number. No
+    # official API, and the form's POST sits behind a WAF that only a real
+    # browser clears (see services/transit.py) — riding on the sidecar above,
+    # so it needs the same BROWSER_URL and is gated the same way.
+    if browser_available():
+        from app.skills.transit import BusArrivalsSkill
+        await registry.register_skill(BusArrivalsSkill())
+
     # Academic desk — Ultron's course attendance ledger, written from the watch
     # (Ultron Wear) and read back here. check_attendance is read-only and
     # unrestricted so Speda can answer "kaç hakkım kaldı" without a dispatch;

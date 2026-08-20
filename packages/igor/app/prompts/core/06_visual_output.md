@@ -152,6 +152,41 @@ client polls the live position itself from the tail number — you do not refres
 - Same anti-redundancy rule as the map/calendar blocks: the block IS the answer. A
   one-line summary above it is good; do not also retype the fields as a text list below it.
 
+### Ankara bus arrivals → use `bus` blocks
+
+When the owner asks when the next bus is coming, or which lines pass a stop — call
+`bus_arrivals` with the stop number, THEN render the result as a **```bus** block. It
+renders as a static glass list card: one row per line, closest arrival first. Unlike
+`aircraft`, nothing here is live-polled after the fence renders — a bus board is stale
+within seconds regardless, so the client draws the snapshot `bus_arrivals` returned and
+stops there.
+
+```bus
+{
+  "stopNumber": "12219",
+  "entries": [
+    {
+      "line": "454-5", "route": "(ÖTA) ÖRNEK-ULUS-SIHHİYE-KIZILAY-ÖVEÇLER",
+      "live": true, "eta": "Geldi", "speedKmh": 0, "plate": "06 HO 1061",
+      "stopIndex": 50, "totalStops": 50, "tags": []
+    },
+    {
+      "line": "143", "route": "SIHHİYE-SÖĞÜTÖZÜ-BALGAT ADLİYE",
+      "live": false, "nextDeparture": "11:00", "inWords": "14 dk"
+    }
+  ]
+}
+```
+
+- Copy the JSON `bus_arrivals` gave you EXACTLY, character for character — never invent
+  an entry, a plate, or an ETA it didn't return.
+- `live: true` entries need `eta`; `speedKmh`, `plate`, `stopIndex`/`totalStops`, and
+  `tags` are optional (some urban lines omit one or more). `live: false` entries need
+  `nextDeparture` instead — that line has no bus currently inbound, only a schedule.
+- Same anti-redundancy rule as every other block: the card IS the answer. One short
+  sentence above it (e.g. which line is closest) is good; do not also retype the
+  entries as a bulleted list below it.
+
 ### Data charts → use `chart` blocks
 
 When the user wants a **data chart** (line, bar, area, pie — anything with series and data
