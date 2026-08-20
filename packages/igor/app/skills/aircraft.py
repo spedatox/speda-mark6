@@ -1,12 +1,14 @@
 """
-Aircraft desk (Tier 1) — live ADS-B tracking by tail number.
+Aircraft desk (Tier 1) — live ADS-B tracking by tail number or callsign.
 
-One read-only, network-gated tool over airplanes.live's free, keyless
-community feed. Unlike the navigation desk's route/place lookups, this does
-NOT park anything behind a generated id — see services/aircraft.py for why a
-live position is the wrong shape for that pattern. The client polls
-`/aircraft/track/{tail}` directly, keyed by the tail number the model already
-has, to move the marker after the initial ```aircraft fence renders it.
+One read-only, network-gated tool over adsb.lol's free, keyless community
+feed (see services/aircraft.py for why airplanes.live, the original source,
+is no longer the default). Unlike the navigation desk's route/place lookups,
+this does NOT park anything behind a generated id — see services/aircraft.py
+for why a live position is the wrong shape for that pattern. The client polls
+`/aircraft/track/{tail}` directly, keyed by the registration the lookup
+resolved to (returned in the result even when the owner gave a callsign), to
+move the marker after the initial ```aircraft fence renders it.
 """
 
 import logging
@@ -26,19 +28,23 @@ class TrackAircraftSkill(Skill):
         "airplanes.live squawk hijack transponder live position where is this plane"
     )
     description = (
-        "Looks up the live position and ADS-B status of an aircraft by its "
-        "registration/tail number (e.g. N12345, TC-JJA) via airplanes.live's "
-        "free, unfiltered community feed — the same kind of feed OSINT "
-        "researchers use, so it includes military and government traffic that "
-        "filtered commercial trackers hide. Use it when the owner asks to "
-        "track, locate, or check the status of a specific plane by its tail "
-        "number. Do NOT use it for commercial flight-schedule lookups like "
-        "gate, delay, or ETA — it only reports live telemetry (position, "
-        "altitude, speed, heading, squawk, on-ground/airborne), never airline "
-        "scheduling data, and it cannot find an aircraft that is not currently "
-        "broadcasting ADS-B. Returns a plain-text status summary and instructs "
-        "you to render the result as an ```aircraft``` block; the client then "
-        "polls the live position on its own without further tool calls."
+        "Looks up the live position and ADS-B status of an aircraft, either by "
+        "its registration/tail number (e.g. N12345, TC-JJA) or by its flight "
+        "number/callsign (e.g. THY7RN, PC5555), via adsb.lol's free, "
+        "unfiltered community feed — the same kind of feed OSINT researchers "
+        "use, so it includes military and government traffic that filtered "
+        "commercial trackers hide. Prefer whichever identifier the owner "
+        "actually gave you: most people know a flight number, not a tail "
+        "number, and this tool does NOT need to ask for the registration if a "
+        "callsign is available — pass tail_number when you have it, otherwise "
+        "pass flight_number. Do NOT use it for commercial flight-schedule "
+        "lookups like gate, delay, or ETA — it only reports live telemetry "
+        "(position, altitude, speed, heading, squawk, on-ground/airborne), "
+        "never airline scheduling data, and it cannot find an aircraft that is "
+        "not currently broadcasting ADS-B. Returns a plain-text status summary "
+        "and instructs you to render the result as an ```aircraft``` block; "
+        "the client then polls the live position on its own without further "
+        "tool calls."
     )
     read_only = True
     requires_network = True
@@ -47,23 +53,32 @@ class TrackAircraftSkill(Skill):
         "properties": {
             "tail_number": {
                 "type": "string",
-                "description": "Aircraft registration/tail number, e.g. 'N12345' or 'TC-JJA'.",
-            }
+                "description": "Aircraft registration/tail number, e.g. 'N12345' or 'TC-JJA'. Use this when you have it.",
+            },
+            "flight_number": {
+                "type": "string",
+                "description": (
+                    "Flight number/callsign, e.g. 'THY7RN' or 'PC5555'. Use this instead of "
+                    "tail_number when that's what the owner gave you — do not ask them to look "
+                    "up the registration first."
+                ),
+            },
         },
-        "required": ["tail_number"],
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
         tail = str(args.get("tail_number", "")).strip()
-        if not tail:
-            return "track_aircraft: no tail number provided."
+        flight = str(args.get("flight_number", "")).strip()
+        query = tail or flight
+        if not query:
+            return "track_aircraft: no tail number or flight number provided."
 
-        result = await aircraft_service.track(tail)
+        result = await aircraft_service.track(tail) if tail else await aircraft_service.track_by_callsign(flight)
         if result is None:
             return (
-                f"track_aircraft: no live ADS-B signal for '{tail}'. It may be on "
+                f"track_aircraft: no live ADS-B signal for '{query}'. It may be on "
                 "the ground without its transponder on, outside feeder coverage, "
-                "not currently airborne, or the registration may be wrong. Tell "
+                "not currently airborne, or the identifier may be wrong. Tell "
                 "the owner it isn't currently trackable rather than guessing a "
                 "position."
             )

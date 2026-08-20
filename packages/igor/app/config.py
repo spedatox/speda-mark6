@@ -510,11 +510,15 @@ class Settings(BaseSettings):
     owner_home_lng: float | None = None
 
     # ── Aircraft tracking (app/skills/aircraft.py) ──────────────────────────────
-    # Live ADS-B lookup by tail number/registration. Keyless — airplanes.live's
-    # community feed needs no signup. The base URL is overridable only so a
-    # compatible mirror (api.adsb.one, api.adsb.lol — same ADSBExchange v2
-    # response schema) can stand in if airplanes.live is rate-limited or down.
-    aircraft_tracking_base_url: str = "https://api.airplanes.live"
+    # Live ADS-B lookup by tail number/registration or callsign. Keyless —
+    # adsb.lol's community feed needs no signup. airplanes.live (the original
+    # default) started hard-403ing unregistered API callers in 2026 ("contact
+    # us" body, no amount of retrying gets through) — adsb.lol mirrors the same
+    # ADSBExchange v2 response schema (the "ac" array, same field names) without
+    # that wall, so it's a drop-in swap. The base URL stays overridable so
+    # another compatible mirror (api.adsb.one, or airplanes.live again if you've
+    # registered with them) can stand in if this one is ever rate-limited or down.
+    aircraft_tracking_base_url: str = "https://api.adsb.lol"
 
     # OSS Adapter URLs
     gpt_researcher_url: str = "http://localhost:8001"

@@ -1,13 +1,13 @@
 """
-Live aircraft position: stateless passthrough to airplanes.live, keyed by
-tail number.
+Live aircraft position: stateless passthrough to adsb.lol, keyed by tail
+number.
 
 Thin per Rule 1, mirrors routers/navigation.py — except there is no id-store
 behind it. A route/place lookup parks an immutable snapshot behind a
 generated id specifically to protect a long polyline from being retyped; a
 tail number is short and carries no such risk, and the position it points to
 changes every few seconds anyway. So this endpoint is what both clients poll
-directly by tail number to move a marker, with the airplanes.live call itself
+directly by tail number to move a marker, with the upstream call itself
 staying server-side (services/aircraft.py) rather than exposing that API to
 the client. Authenticated by `X-API-Key` via AuthMiddleware like every route.
 """

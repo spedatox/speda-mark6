@@ -235,10 +235,11 @@ CONFIG_GROUPS: list[ConfigGroup] = [
             ConfigField("blockchair_api_key", "Blockchair Key", "password", secret=True),
             ConfigField("aircraft_tracking_base_url", "Aircraft Tracking API Base URL", "url",
                         requires_restart=_LIVE,
-                        help="Powers track_aircraft. Defaults to airplanes.live's free, keyless "
-                             "feed. Override only to point at a compatible mirror (api.adsb.one, "
-                             "api.adsb.lol) if rate-limited.",
-                        placeholder="https://api.airplanes.live"),
+                        help="Powers track_aircraft. Defaults to adsb.lol's free, keyless feed "
+                             "(airplanes.live now 403s unregistered callers). Override to point "
+                             "at another compatible mirror (api.adsb.one) if this one is ever "
+                             "rate-limited or down.",
+                        placeholder="https://api.adsb.lol"),
         ],
     ),
     ConfigGroup(
