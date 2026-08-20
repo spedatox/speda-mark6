@@ -30,6 +30,7 @@ import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.BusEntry
 import com.speda.heartbreaker.domain.looksIncomplete
 import com.speda.heartbreaker.domain.parseBusSpec
+import com.speda.heartbreaker.i18n.LocalStrings
 
 /**
  * ```bus fences — the EGO "Otobüs Nerede?" arrivals board for one stop, a
@@ -40,9 +41,10 @@ import com.speda.heartbreaker.domain.parseBusSpec
  */
 @Composable
 fun BusBlock(raw: String, modifier: Modifier = Modifier) {
+    val t = LocalStrings.current
     val spec = remember(raw) { parseBusSpec(raw) }
     if (spec == null) {
-        if (looksIncomplete(raw)) Materializing("BUS", modifier) else ParseError("BUS", raw, modifier)
+        if (looksIncomplete(raw)) Materializing(t.proseKind.bus, modifier) else ParseError(t.proseKind.bus, raw, modifier)
         return
     }
     val palette = LocalHbPalette.current
@@ -56,7 +58,7 @@ fun BusBlock(raw: String, modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.Top,
             ) {
                 BasicText(
-                    AnnotatedString("BUS STOP ${spec.stopNumber}"),
+                    AnnotatedString(t.bus.busStop(spec.stopNumber)),
                     style = HbType.headerBar.copy(
                         fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.18.em,
                         color = Color.White,
@@ -64,7 +66,7 @@ fun BusBlock(raw: String, modifier: Modifier = Modifier) {
                     maxLines = 1,
                 )
                 BasicText(
-                    AnnotatedString(if (liveCount > 0) "$liveCount LIVE" else "SCHEDULE"),
+                    AnnotatedString(if (liveCount > 0) t.bus.live(liveCount) else t.bus.schedule),
                     style = HbType.readout.copy(
                         fontSize = 10.sp, letterSpacing = 0.12.em,
                         color = if (liveCount > 0) palette.green else palette.textFaint,

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import com.caverock.androidsvg.SVG
+import com.speda.heartbreaker.i18n.LocalStrings
 
 /**
  * ```svg fences — native vector rendering, the Android counterpart to the web's
@@ -31,13 +32,14 @@ import com.caverock.androidsvg.SVG
  */
 @Composable
 fun SvgBlock(raw: String, modifier: Modifier = Modifier) {
+    val t = LocalStrings.current
     val svg = remember(raw) { runCatching { SVG.getFromString(raw) }.getOrNull() }
     when {
         svg != null -> SvgSurface(svg, modifier)
         // A fence still streaming (no closing tag yet) shows the quiet skeleton,
         // not a scary parse error that vanishes a frame later.
-        looksLikeStreamingSvg(raw) -> Materializing("DIAGRAM", modifier)
-        else -> ParseError("SVG", raw, modifier)
+        looksLikeStreamingSvg(raw) -> Materializing(t.proseKind.diagram, modifier)
+        else -> ParseError(t.proseKind.svg, raw, modifier)
     }
 }
 

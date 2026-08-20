@@ -26,6 +26,7 @@ import com.speda.heartbreaker.designsystem.glass.HbGlassState
 import com.speda.heartbreaker.designsystem.glass.hbGlass
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.i18n.LocalStrings
 
 /**
  * First-run uplink setup — the user points the app at their own Igor backend and
@@ -35,6 +36,7 @@ import com.speda.heartbreaker.designsystem.type.HbType
 @Composable
 fun UplinkSetupScreen(onConnect: (apiBase: String, apiKey: String) -> Unit) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     var apiBase by remember { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
     val canConnect = apiBase.isNotBlank() && apiKey.isNotBlank()
@@ -46,11 +48,11 @@ fun UplinkSetupScreen(onConnect: (apiBase: String, apiKey: String) -> Unit) {
     ) {
         HbText("HEARTBREAKER", style = HbType.headerBar, color = palette.accentBright, caps = true)
         Spacer(Modifier.height(6.dp))
-        HbText("ESTABLISH UPLINK", style = HbType.label, color = palette.textDim, caps = true)
+        HbText(t.uplink.establishUplink, style = HbType.label, color = palette.textDim, caps = true)
         Spacer(Modifier.height(28.dp))
 
         UplinkField(
-            label = "API BASE",
+            label = t.uplink.apiBaseLabel,
             value = apiBase,
             onValueChange = { apiBase = it },
             placeholder = "https://host:port",
@@ -58,7 +60,7 @@ fun UplinkSetupScreen(onConnect: (apiBase: String, apiKey: String) -> Unit) {
         )
         Spacer(Modifier.height(14.dp))
         UplinkField(
-            label = "API KEY",
+            label = t.uplink.apiKeyLabel,
             value = apiKey,
             onValueChange = { apiKey = it },
             placeholder = "X-API-Key",
@@ -68,7 +70,7 @@ fun UplinkSetupScreen(onConnect: (apiBase: String, apiKey: String) -> Unit) {
         Spacer(Modifier.height(28.dp))
 
         HbGlassButton(
-            label = "Connect",
+            label = t.uplink.connect,
             onClick = { if (canConnect) onConnect(apiBase, apiKey) },
             state = if (canConnect) HbGlassState.Active else HbGlassState.Default,
             shape = HbGlassShape.Pill,

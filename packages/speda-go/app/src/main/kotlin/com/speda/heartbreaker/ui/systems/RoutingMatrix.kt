@@ -32,6 +32,7 @@ import com.speda.heartbreaker.designsystem.brand.Brands
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.designsystem.icons.HbGlyphs
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import com.speda.heartbreaker.ui.settings.HbToggle
 import com.speda.heartbreaker.ui.settings.Panel
@@ -63,16 +64,17 @@ fun RoutingMatrix(
     onPinLegionModel: (String, String?) -> Unit,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     Panel {
         val activeName = models.firstOrNull { it.id == activeModel }?.name
-            ?.ifEmpty { activeModel } ?: activeModel.ifEmpty { "PROFILE DEFAULT" }
+            ?.ifEmpty { activeModel } ?: activeModel.ifEmpty { t.routingMatrix.profileDefault }
         Section(
-            title = "CORES · ${models.size} MODELS",
+            title = t.routingMatrix.cores(models.size),
             summary = activeName,
             color = palette.accent,
         ) {
             if (models.isEmpty()) {
-                HbText("NOT FOUND", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
+                HbText(t.routingMatrix.notFound, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
             } else {
                 val providers = models.map { it.provider ?: "anthropic" }.distinct()
                 providers.forEach { p ->
@@ -95,12 +97,12 @@ fun RoutingMatrix(
 
         Spacer(Modifier.height(10.dp))
         Section(
-            title = "CONTEXT SHARDS · MCP TOOLSETS",
-            summary = "${servers.servers.count { it.active && it.connected }}/${servers.servers.size} LINKED",
+            title = t.routingMatrix.contextShards,
+            summary = t.routingMatrix.linkedCount(servers.servers.count { it.active && it.connected }, servers.servers.size),
             color = palette.amber,
         ) {
             if (servers.servers.isEmpty()) {
-                HbText("NO SHARDS", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
+                HbText(t.routingMatrix.noShards, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
             } else {
                 servers.servers.forEach { c -> ServerToggleRow(c) { onToggleServer(c) } }
             }
@@ -109,9 +111,9 @@ fun RoutingMatrix(
         if (agentInfos.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
             Section(
-                title = "AGENT CORES · PER-AGENT ROUTING",
+                title = t.routingMatrix.agentCores,
                 summary = agentInfos.count { it.override != null }.let { n ->
-                    if (n == 0) "ALL ON PROFILE" else "$n PINNED"
+                    if (n == 0) t.routingMatrix.allOnProfile else t.routingMatrix.pinned(n)
                 },
                 color = palette.accentBright,
             ) {
@@ -126,18 +128,17 @@ fun RoutingMatrix(
             val pinned = legionInfos.count { it.override != null }
             val deploymentPin = legionInfos.firstNotNullOfOrNull { it.deploymentPin }
             Section(
-                title = "LEGION CORES · WORKER ROUTING",
+                title = t.routingMatrix.legionCores,
                 summary = when {
-                    deploymentPin != null -> "ENV PIN → $deploymentPin"
-                    pinned == 0 -> "ALL ON EFFORT POLICY"
-                    else -> "$pinned PINNED"
+                    deploymentPin != null -> t.routingMatrix.envPin(deploymentPin)
+                    pinned == 0 -> t.routingMatrix.allOnEffortPolicy
+                    else -> t.routingMatrix.pinned(pinned)
                 },
                 color = palette.amber,
             ) {
                 if (deploymentPin != null) {
                     HbText(
-                        "LEGION_MODEL_OVERRIDE is set — every legionnaire runs on " +
-                            "$deploymentPin and these pins are inert until it is cleared.",
+                        t.routingMatrix.deploymentPinNotice(deploymentPin),
                         style = HbType.readout.copy(fontSize = 9.sp),
                         color = palette.amber,
                         modifier = Modifier.padding(bottom = 6.dp),
@@ -249,10 +250,11 @@ private fun ServerToggleRow(c: ConnectionInfo, onToggle: () -> Unit) {
 @Composable
 private fun AgentCoreRow(info: AgentModelInfo, models: List<ModelInfo>, onPin: (String?) -> Unit) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     var expanded by remember { mutableStateOf(false) }
     val color = hexColor(Brands.agentColor(info.agentId))
     val pinned = info.override != null
-    val profileLabel = "PROFILE (${info.defaultMain.substringAfterLast(':')})"
+    val profileLabel = t.routingMatrix.profileLabel(info.defaultMain.substringAfterLast(':'))
 
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(
@@ -269,7 +271,7 @@ private fun AgentCoreRow(info: AgentModelInfo, models: List<ModelInfo>, onPin: (
             Column(Modifier.weight(1f)) {
                 HbText(info.agentId.uppercase(Locale.ENGLISH), style = HbType.readout.copy(fontSize = 11.sp), color = color, maxLines = 1)
                 HbText(
-                    if (pinned) "PINNED → ${info.override}" else profileLabel,
+                    if (pinned) t.routingMatrix.pinnedTo(info.override.orEmpty()) else profileLabel,
                     style = HbType.readout.copy(fontSize = 9.sp),
                     color = if (pinned) palette.amber else palette.textFaint,
                     maxLines = 1,
@@ -293,11 +295,12 @@ private fun AgentCoreRow(info: AgentModelInfo, models: List<ModelInfo>, onPin: (
 @Composable
 private fun LegionCoreRow(info: LegionModelInfo, models: List<ModelInfo>, onPin: (String?) -> Unit) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     var expanded by remember { mutableStateOf(false) }
     val pinned = info.override != null
     // A legionnaire has no model of its own to fall back to — its default is a
     // RULE resolved against whichever agent deployed it, so name the rule.
-    val policyLabel = "EFFORT ${info.effort.uppercase(Locale.ENGLISH)} · ${info.derivedFrom.uppercase(Locale.ENGLISH)}"
+    val policyLabel = t.routingMatrix.effortLabel(info.effort.uppercase(Locale.ENGLISH), info.derivedFrom.uppercase(Locale.ENGLISH))
 
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(
@@ -314,7 +317,7 @@ private fun LegionCoreRow(info: LegionModelInfo, models: List<ModelInfo>, onPin:
             Column(Modifier.weight(1f)) {
                 HbText(info.workerId.uppercase(Locale.ENGLISH), style = HbType.readout.copy(fontSize = 11.sp), color = palette.amber, maxLines = 1)
                 HbText(
-                    if (pinned) "PINNED → ${info.override}" else policyLabel,
+                    if (pinned) t.routingMatrix.pinnedTo(info.override.orEmpty()) else policyLabel,
                     style = HbType.readout.copy(fontSize = 9.sp),
                     color = if (pinned) palette.amber else palette.textFaint,
                     maxLines = 1,

@@ -63,6 +63,7 @@ import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.CommTranscript
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import com.speda.heartbreaker.ui.prose.ProseText
 import kotlinx.coroutines.delay
@@ -89,6 +90,7 @@ private const val POLL_MS = 3000L
 @Composable
 fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
 
     var entries by remember { mutableStateOf<List<AgentCommEntry>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
@@ -146,9 +148,9 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Column(Modifier.weight(1f)) {
-                        HbText("Agent traffic", style = HbType.headerBar.copy(fontSize = 15.sp), color = palette.text)
+                        HbText(t.commsTray.agentTraffic, style = HbType.headerBar.copy(fontSize = 15.sp), color = palette.text)
                         HbText(
-                            if (live > 0) "$live working" else "${entries.size} messages",
+                            if (live > 0) t.commsTray.working(live) else t.commsTray.messages(entries.size),
                             style = HbType.read.copy(fontSize = 12.5.sp),
                             color = if (live > 0) palette.green else palette.textFaint,
                         )
@@ -159,7 +161,7 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
                         HbText(
-                            if (wide) "Retract" else "Expand",
+                            if (wide) t.commsTray.retract else t.commsTray.expand,
                             style = HbType.read.copy(fontSize = 13.sp),
                             color = if (wide) palette.accentBright else palette.accent,
                         )
@@ -173,7 +175,7 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
                 // ── Feed ─────────────────────────────────────────────────────
                 if (entries.isEmpty()) {
                     HbText(
-                        if (loaded) "No traffic yet — dispatches between agents appear here." else "Linking…",
+                        if (loaded) t.commsTray.noTraffic else t.commsTray.linking,
                         style = HbType.read.copy(fontSize = 14.sp),
                         color = palette.textFaint,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -229,6 +231,7 @@ private fun TimeChip(at: Long) {
 @Composable
 private fun CommLine(m: CommTranscript.Msg, head: Boolean, compact: Boolean) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val clipboard = LocalClipboardManager.current
     var open by remember { mutableStateOf(false) }
 
@@ -295,7 +298,7 @@ private fun CommLine(m: CommTranscript.Msg, head: Boolean, compact: Boolean) {
                     ) {
                         WorkingRing(c)
                         HbText(
-                            "working… " + elapsedLabel(m.since.orEmpty()),
+                            t.commsTray.workingEllipsis(elapsedLabel(m.since.orEmpty())),
                             style = HbType.read.copy(fontSize = 14.sp),
                             color = palette.textDim,
                         )
@@ -313,7 +316,7 @@ private fun CommLine(m: CommTranscript.Msg, head: Boolean, compact: Boolean) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (clipped) {
                             HbText(
-                                if (open) "Less" else "More",
+                                if (open) t.commsTray.less else t.commsTray.more,
                                 style = HbType.readout.copy(fontSize = 11.sp),
                                 color = if (open) palette.accentBright else palette.textFaint,
                                 modifier = Modifier.clickable { open = !open },

@@ -39,6 +39,8 @@ import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.AppStrings
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 
 /**
@@ -47,16 +49,16 @@ import com.speda.heartbreaker.ui.HbText
  * glyph per row too; a horizontal strip has no room for one without crowding
  * the label, so mobile states it in words instead.
  */
-private enum class SettingsTab(val label: String, val blurb: String) {
-    General("General", "Identity, behaviour and voice-mode preferences"),
-    Config("Configuration", "Managed server settings, applied live"),
-    Connections("Connections", "Accounts and services Speda can reach"),
-    Automations("Automations", "Scheduled work n8n runs on your behalf"),
-    Reminders("Reminders", "What Speda is holding for you, and when"),
-    Health("Health", "What Health Connect shares with Atomix"),
-    Interface("Interface", "How the deck itself looks and behaves"),
-    Data("Data", "Stored history, memory files and exports"),
-    Account("Account", "The owner this client is signed in as"),
+private enum class SettingsTab(val info: (AppStrings) -> AppStrings.TabInfo) {
+    General({ it.settingsTabs.general }),
+    Config({ it.settingsTabs.config }),
+    Connections({ it.settingsTabs.connections }),
+    Automations({ it.settingsTabs.automations }),
+    Reminders({ it.settingsTabs.reminders }),
+    Health({ it.settingsTabs.health }),
+    Interface({ it.settingsTabs.interfaceTab }),
+    Data({ it.settingsTabs.data }),
+    Account({ it.settingsTabs.account }),
 }
 
 /**
@@ -75,6 +77,7 @@ fun SettingsScreen(
     onClose: () -> Unit,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     var tab by remember { mutableStateOf(SettingsTab.General) }
 
     Column(
@@ -95,7 +98,7 @@ fun SettingsScreen(
                 Modifier.size(30.dp).hbGlass(shape = HbGlassShape.Tile).clickable(onClick = onClose),
                 contentAlignment = Alignment.Center,
             ) { HbGlyphs.Close(palette.iconBright, size = 13.dp) }
-            HbText("Settings", style = HbType.headerBar.copy(fontSize = 20.sp), color = palette.text)
+            HbText(t.settingsTabs.title, style = HbType.headerBar.copy(fontSize = 20.sp), color = palette.text)
             Spacer(Modifier.weight(1f))
             // The brand keeps its caps: this is the wordmark, not a label.
             HbText(brand.name, style = HbType.headerBar.copy(fontSize = 13.sp), color = palette.accent, caps = true, maxLines = 1)
@@ -111,12 +114,12 @@ fun SettingsScreen(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            SettingsTab.entries.forEach { t -> TabChip(t.label, active = t == tab) { tab = t } }
+            SettingsTab.entries.forEach { entry -> TabChip(entry.info(t).label, active = entry == tab) { tab = entry } }
         }
 
         // The pane says what it is for, once, before the fields start.
         HbText(
-            tab.blurb,
+            tab.info(t).blurb,
             style = HbType.read.copy(fontSize = 13.sp),
             color = palette.textFaint,
             modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 2.dp),

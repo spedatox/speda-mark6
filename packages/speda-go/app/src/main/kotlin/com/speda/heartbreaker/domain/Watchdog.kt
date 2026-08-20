@@ -1,12 +1,14 @@
 package com.speda.heartbreaker.domain
 
+import com.speda.heartbreaker.i18n.AppStrings
 import kotlin.math.roundToInt
 
 /**
  * Stream liveness watchdog — real status, not looped filler, and a hard stop if
  * the backend goes quiet. Port of the watchdog block in ChatMain.tsx. The
- * diagnostic strings are copied VERBATIM (the phase-specific reasons the message
- * shows on timeout).
+ * diagnostic strings mirror `chatMain` in the i18n dict — this object is plain
+ * Kotlin (no Compose), so callers hand it the resolved [AppStrings] rather than
+ * it reading `LocalStrings` itself.
  */
 object Watchdog {
     const val STALL_MS = 15_000L  // no events this long → tell the user it's slow
@@ -14,28 +16,22 @@ object Watchdog {
     const val TICK_MS = 1_000L
 
     /** The stall status line (idle ≥ STALL_MS, no tool running yet). */
-    fun stallStatus(modelName: String, waitedS: Int): String =
-        "Waiting on $modelName — ${waitedS}s, no tokens yet (may be rate-limited)"
+    fun stallStatus(modelName: String, waitedS: Int, t: AppStrings): String =
+        t.chatMain.waitingOnModel(modelName, waitedS)
 
     /**
      * The phase-specific timeout reason (idle ≥ DEAD_MS). Names the phase the turn
      * died in — a diagnostic, not "isn't responding".
      */
-    fun timeoutReason(gotStart: Boolean, gotTool: Boolean, modelName: String, waitedS: Int): String = when {
-        !gotStart ->
-            "No response from the backend in ${waitedS}s — it never acknowledged the request. " +
-                "The API server may be down, unreachable, or stuck before the model started."
-        gotTool ->
-            "A tool call ran ${waitedS}s with no further output, so the turn was cancelled — " +
-                "the tool or a service it calls is likely stuck."
-        else ->
-            "$modelName accepted the request but streamed nothing for ${waitedS}s — almost always " +
-                "rate-limited, overloaded, or queued upstream. Cancelled; try again in a moment."
+    fun timeoutReason(gotStart: Boolean, gotTool: Boolean, modelName: String, waitedS: Int, t: AppStrings): String = when {
+        !gotStart -> t.chatMain.timeoutNoAck(waitedS)
+        gotTool -> t.chatMain.timeoutToolStuck(waitedS)
+        else -> t.chatMain.timeoutNoStream(modelName, waitedS)
     }
 
     /** Model label for the copy: last `:`-segment of the model ref, uppercased. */
-    fun modelLabel(model: String?): String =
-        if (model.isNullOrEmpty()) "the model" else (model.substringAfterLast(':').ifEmpty { model }).uppercase()
+    fun modelLabel(model: String?, t: AppStrings): String =
+        if (model.isNullOrEmpty()) t.chatMain.modelFallback else (model.substringAfterLast(':').ifEmpty { model }).uppercase()
 
     fun elapsedSeconds(startedAtMs: Long, nowMs: Long): Int = ((nowMs - startedAtMs) / 1000.0).roundToInt()
 }

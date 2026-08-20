@@ -57,6 +57,7 @@ import com.speda.heartbreaker.designsystem.glass.hbGlass
 import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import java.util.Locale
 
@@ -84,6 +85,7 @@ fun Composer(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
@@ -237,7 +239,7 @@ fun Composer(
                         ) {
                             if (text.isEmpty()) {
                                 HbText(
-                                    "How can I help you today?",
+                                    t.composer.placeholder,
                                     style = HbType.read.copy(fontSize = 16.sp),
                                     color = palette.textFaint,
                                 )
@@ -324,18 +326,18 @@ fun Composer(
                         .widthIn(min = 180.dp)
                         .hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Menu),
                 ) {
-                    AttachItem("Photos") {
+                    AttachItem(t.composer.photos) {
                         plusOpen = false
                         pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }
-                    AttachItem("Files") {
+                    AttachItem(t.composer.files) {
                         plusOpen = false
                         pickFiles.launch(arrayOf("*/*"))
                     }
                     // Dictation — the transcript is APPENDED to whatever is
                     // already typed, never replaces it (InputBar.tsx does the
                     // same): speaking a second clause must not wipe the first.
-                    AttachItem("Voice input") {
+                    AttachItem(t.composer.voiceInput) {
                         plusOpen = false
                         runCatching { dictate.launch(speechIntent()) }
                     }
@@ -343,9 +345,9 @@ fun Composer(
                     // turn by the caller, because Speda can flip it itself.
                     AttachItem(
                         label = when (budgetMode) {
-                            true -> "Budget mode · FRUGAL"
-                            false -> "Budget mode · FULL"
-                            null -> "Budget mode · —"
+                            true -> t.composer.budgetFrugal
+                            false -> t.composer.budgetFull
+                            null -> t.composer.budgetUnknown
                         },
                         tint = when (budgetMode) {
                             true -> palette.green
@@ -368,7 +370,7 @@ fun Composer(
             horizontalArrangement = Arrangement.Center,
         ) {
             HbText(
-                "$agentName can make mistakes",
+                t.composer.canMakeMistakes(agentName),
                 style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.06.em),
                 color = palette.iconDim,
             )
@@ -442,6 +444,7 @@ private fun ModelInfo.providerKey(): String =
 @Composable
 private fun ModelPicker(models: List<ModelInfo>, current: String, onPick: (String) -> Unit) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
 
     // Provider order follows the backend's catalogue order, as the web does.
     val groups = remember(models) {
@@ -461,7 +464,7 @@ private fun ModelPicker(models: List<ModelInfo>, current: String, onPick: (Strin
     ) {
         if (models.isEmpty()) {
             HbText(
-                "// no models reported",
+                t.composer.noModelsReported,
                 style = HbType.readout.copy(fontSize = 10.sp),
                 color = palette.textFaint,
                 modifier = Modifier.padding(12.dp),

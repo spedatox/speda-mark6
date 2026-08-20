@@ -29,6 +29,7 @@ import com.speda.heartbreaker.data.HbSettings
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -36,6 +37,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun GeneralTab(config: AppConfig, graph: AppGraph, settings: HbSettings) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val scope = rememberCoroutineScope()
 
     var prompt by remember { mutableStateOf(settings.systemPrompt) }
@@ -49,20 +51,20 @@ fun GeneralTab(config: AppConfig, graph: AppGraph, settings: HbSettings) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
-        SectionHeader("System prompt")
+        SectionHeader(t.settingsGeneral.systemPrompt)
         Panel {
-            Hint("Defines the AI's behaviour and personality for all conversations, on top of the agent's own identity.")
+            Hint(t.settingsGeneral.systemPromptHint)
             Spacer(Modifier.height(8.dp))
-            GlassField(prompt, { prompt = it }, "You are a helpful assistant…", singleLine = false, minHeight = 120.dp)
+            GlassField(prompt, { prompt = it }, t.settingsGeneral.systemPromptPlaceholder, singleLine = false, minHeight = 120.dp)
         }
 
-        SectionHeader("Temperature")
+        SectionHeader(t.settingsGeneral.temperature)
         Panel {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                HbText("Sampling", style = HbType.read.copy(fontSize = 14.sp), color = palette.text, modifier = Modifier.weight(1f))
+                HbText(t.settingsGeneral.sampling, style = HbType.read.copy(fontSize = 14.sp), color = palette.text, modifier = Modifier.weight(1f))
                 HbText(String.format("%.1f", temp), style = HbType.readout.copy(fontSize = 13.sp), color = palette.accentBright)
             }
-            Hint("Lower = precise and deterministic. Higher = creative and varied.")
+            Hint(t.settingsGeneral.temperatureHint)
             Spacer(Modifier.height(6.dp))
             Slider(
                 value = temp,
@@ -77,16 +79,16 @@ fun GeneralTab(config: AppConfig, graph: AppGraph, settings: HbSettings) {
                 ),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                HbText("Precise (0.0)", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
-                HbText("Creative (1.0)", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
+                HbText(t.settingsGeneral.precise, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
+                HbText(t.settingsGeneral.creative, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
             }
         }
 
-        SectionHeader("Behaviour")
+        SectionHeader(t.settingsGeneral.behaviour)
         Panel {
             ToggleRow(
-                label = "Budget mode",
-                subtitle = "Concise answers, the Legion stood down. Turn off for deep research.",
+                label = t.settingsGeneral.budgetMode,
+                subtitle = t.settingsGeneral.budgetModeHint,
                 checked = budget == true,
                 enabled = budget != null,
                 onToggle = { next ->

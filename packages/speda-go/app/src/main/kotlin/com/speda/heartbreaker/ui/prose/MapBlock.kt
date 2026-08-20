@@ -70,6 +70,8 @@ import com.speda.heartbreaker.domain.RouteStep
 import com.speda.heartbreaker.domain.decodePolyline
 import com.speda.heartbreaker.domain.looksIncomplete
 import com.speda.heartbreaker.domain.parseMapSpec
+import com.speda.heartbreaker.i18n.AppStrings
+import com.speda.heartbreaker.i18n.LocalStrings
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLngBounds
@@ -134,10 +136,10 @@ private fun trafficColor(speed: String): Color = when (speed) {
     else -> TrafficClear
 }
 
-private fun trafficWord(speed: String): String = when (speed) {
-    "SLOW" -> "SLOW"
-    "TRAFFIC_JAM" -> "JAM"
-    else -> "CLEAR"
+private fun trafficWord(speed: String, t: AppStrings): String = when (speed) {
+    "SLOW" -> t.mapCard.trafficSlow
+    "TRAFFIC_JAM" -> t.mapCard.trafficJam
+    else -> t.mapCard.trafficClear
 }
 
 /**
@@ -157,6 +159,7 @@ private fun trafficWord(speed: String): String = when (speed) {
  */
 @Composable
 fun MapBlock(raw: String, modifier: Modifier = Modifier) {
+    val t = LocalStrings.current
     val spec = remember(raw) { parseMapSpec(raw) }
     val resolve = LocalRouteResolver.current
 
@@ -186,15 +189,16 @@ fun MapBlock(raw: String, modifier: Modifier = Modifier) {
 
     when {
         ready != null -> MapCard(ready!!, modifier)
-        spec != null -> Materializing("MAP", modifier)      // fetching geometry
-        looksIncomplete(raw) -> Materializing("MAP", modifier)
-        else -> ParseError("MAP", raw, modifier)
+        spec != null -> Materializing(t.proseKind.map, modifier)      // fetching geometry
+        looksIncomplete(raw) -> Materializing(t.proseKind.map, modifier)
+        else -> ParseError(t.proseKind.map, raw, modifier)
     }
 }
 
 @Composable
 private fun MapCard(spec: MapSpec, modifier: Modifier) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val context = LocalContext.current
     val resolvePlaces = LocalPlaceResolver.current
 
@@ -647,6 +651,7 @@ internal fun rememberMapViewWithLifecycle(): MapView {
 @Composable
 private fun MapHeader(title: String?, primary: MapRoute?, placeCount: Int?, palette: HbPalette) {
     if (title.isNullOrBlank() && primary == null && placeCount == null) return
+    val t = LocalStrings.current
     Box(
         Modifier
             .fillMaxWidth()
@@ -657,18 +662,18 @@ private fun MapHeader(title: String?, primary: MapRoute?, placeCount: Int?, pale
     ) {
         val i = (title ?: "").indexOf('_')
         val text = buildAnnotatedString {
-            val t = title ?: "MAP"
-            withStyle(SpanStyle(color = Color.White)) { append(if (i > -1) t.substring(0, i) else t) }
-            if (i > -1) withStyle(SpanStyle(color = palette.accent)) { append(t.substring(i)) }
+            val titleText = title ?: t.mapCard.fallbackTitle
+            withStyle(SpanStyle(color = Color.White)) { append(if (i > -1) titleText.substring(0, i) else titleText) }
+            if (i > -1) withStyle(SpanStyle(color = palette.accent)) { append(titleText.substring(i)) }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             BasicText(text, style = HbType.headerBar.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.2.em))
             val readout = when {
                 primary != null -> listOf(
-                    primary.distanceKm?.let { "${fmt(it)} KM" }.orEmpty(),
-                    primary.durationMin?.let { "$it MIN" }.orEmpty(),
+                    primary.distanceKm?.let { "${fmt(it)} ${t.mapCard.km}" }.orEmpty(),
+                    primary.durationMin?.let { "$it ${t.mapCard.min}" }.orEmpty(),
                 ).filter { it.isNotBlank() }.joinToString(" · ")
-                placeCount != null -> "$placeCount FOUND"
+                placeCount != null -> t.mapCard.found(placeCount)
                 else -> ""
             }
             if (readout.isNotBlank()) {
@@ -688,6 +693,7 @@ private fun MapHeader(title: String?, primary: MapRoute?, placeCount: Int?, pale
  */
 @Composable
 private fun RouteTabs(routes: List<MapRoute>, selected: Int, palette: HbPalette, onSelect: (Int) -> Unit) {
+    val t = LocalStrings.current
     val fastest = routes.indices.minByOrNull { routes[it].durationMin ?: Int.MAX_VALUE }
     Row(
         Modifier
@@ -723,7 +729,7 @@ private fun RouteTabs(routes: List<MapRoute>, selected: Int, palette: HbPalette,
                         ),
                     )
                     BasicText(
-                        AnnotatedString("MIN"),
+                        AnnotatedString(t.mapCard.min),
                         style = HbType.readout.copy(
                             fontSize = 9.sp, letterSpacing = 0.12.em,
                             color = if (on) palette.accentBright else palette.textDim,
@@ -731,7 +737,7 @@ private fun RouteTabs(routes: List<MapRoute>, selected: Int, palette: HbPalette,
                     )
                     if (i == fastest && routes.size > 1) {
                         BasicText(
-                            AnnotatedString("FASTEST"),
+                            AnnotatedString(t.mapCard.fastest),
                             style = HbType.readout.copy(fontSize = 8.sp, letterSpacing = 0.1.em, color = TrafficClear),
                         )
                     }
@@ -739,7 +745,7 @@ private fun RouteTabs(routes: List<MapRoute>, selected: Int, palette: HbPalette,
                 val sub = listOfNotNull(
                     r.distanceKm?.let { "${fmt(it)} km" },
                     r.label?.takeIf { it.isNotBlank() },
-                ).joinToString(" · ").ifBlank { "ROUTE" }
+                ).joinToString(" · ").ifBlank { t.mapCard.route }
                 BasicText(
                     AnnotatedString(sub),
                     style = HbType.readout.copy(fontSize = 10.sp, color = palette.textFaint),
@@ -747,7 +753,7 @@ private fun RouteTabs(routes: List<MapRoute>, selected: Int, palette: HbPalette,
                 )
                 if (delay != null && delay > 0) {
                     BasicText(
-                        AnnotatedString("+$delay MIN TRAFFIC"),
+                        AnnotatedString(t.mapCard.trafficDelay(delay)),
                         style = HbType.readout.copy(
                             fontSize = 9.sp, letterSpacing = 0.08.em,
                             color = if (heavy) palette.amber else palette.textFaint,
@@ -766,6 +772,7 @@ private fun RouteTabs(routes: List<MapRoute>, selected: Int, palette: HbPalette,
  */
 @Composable
 private fun TrafficBar(route: MapRoute, palette: HbPalette) {
+    val t = LocalStrings.current
     val spans = remember(route) {
         val acc = linkedMapOf("NORMAL" to 0, "SLOW" to 0, "TRAFFIC_JAM" to 0)
         route.traffic.forEach { b ->
@@ -798,14 +805,14 @@ private fun TrafficBar(route: MapRoute, palette: HbPalette) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Box(Modifier.size(7.dp).clip(RoundedCornerShape(2.dp)).background(trafficColor(speed)))
                     BasicText(
-                        AnnotatedString("${Math.round(100f * span / total)}% ${trafficWord(speed)}"),
+                        AnnotatedString("${Math.round(100f * span / total)}% ${trafficWord(speed, t)}"),
                         style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.1.em, color = palette.textFaint),
                     )
                 }
             }
             if (delay != null && delay > 0) {
                 BasicText(
-                    AnnotatedString("+$delay MIN VS FREE-FLOW"),
+                    AnnotatedString(t.mapCard.vsFreeFlow(delay)),
                     style = HbType.readout.copy(
                         fontSize = 10.sp, letterSpacing = 0.1.em,
                         color = if (heavy) palette.amber else palette.textDim,
@@ -818,6 +825,7 @@ private fun TrafficBar(route: MapRoute, palette: HbPalette) {
 
 @Composable
 private fun ExpandChip(expanded: Boolean, palette: HbPalette, modifier: Modifier, onClick: () -> Unit) {
+    val t = LocalStrings.current
     Box(
         modifier
             .padding(8.dp)
@@ -828,7 +836,7 @@ private fun ExpandChip(expanded: Boolean, palette: HbPalette, modifier: Modifier
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
         BasicText(
-            AnnotatedString(if (expanded) "⤡ SHRINK" else "⤢ EXPAND"),
+            AnnotatedString(if (expanded) t.mapCard.shrink else t.mapCard.expand),
             style = HbType.headerBar.copy(
                 fontSize = 10.sp, letterSpacing = 0.14.em,
                 fontWeight = FontWeight.Bold, color = palette.accentBright,
@@ -843,6 +851,7 @@ private fun ExpandChip(expanded: Boolean, palette: HbPalette, modifier: Modifier
  *  otherwise identical results. */
 @Composable
 private fun PlaceMeta(p: MapPlace, palette: HbPalette) {
+    val t = LocalStrings.current
     val text = buildAnnotatedString {
         var first = true
         fun sep() { if (!first) append("  ·  "); first = false }
@@ -857,7 +866,7 @@ private fun PlaceMeta(p: MapPlace, palette: HbPalette) {
         if (open != null) {
             sep()
             withStyle(SpanStyle(color = if (open) TrafficClear else palette.amber)) {
-                append(if (open) "OPEN" else "CLOSED")
+                append(if (open) t.mapCard.open else t.mapCard.closed)
             }
         }
         p.distanceKm?.let { sep(); append("${fmt(it)} km") }
@@ -929,6 +938,7 @@ private fun PlaceList(places: List<MapPlace>, open: Int?, palette: HbPalette, on
  *  act on it — call, open the site, see it on Google. */
 @Composable
 private fun PlaceDetail(p: MapPlace, context: Context, palette: HbPalette, onClose: () -> Unit) {
+    val t = LocalStrings.current
     var hoursOpen by remember(p.placeId, p.name) { mutableStateOf(false) }
     Column(
         Modifier
@@ -968,7 +978,7 @@ private fun PlaceDetail(p: MapPlace, context: Context, palette: HbPalette, onClo
         if (p.hours.isNotEmpty()) {
             Box(Modifier.clickable { hoursOpen = !hoursOpen }.padding(top = 6.dp)) {
                 BasicText(
-                    AnnotatedString(if (hoursOpen) "▾ HOURS" else "▸ HOURS"),
+                    AnnotatedString((if (hoursOpen) "▾ " else "▸ ") + t.mapCard.hours),
                     style = HbType.readout.copy(
                         fontSize = 10.sp, letterSpacing = 0.12.em,
                         fontWeight = FontWeight.Bold, color = palette.accent,
@@ -1001,10 +1011,10 @@ private fun PlaceDetail(p: MapPlace, context: Context, palette: HbPalette, onClo
                 }
             }
             p.website?.let { url ->
-                ActionChip("⧉ WEBSITE", filled = false, palette = palette) { openUrl(context, url) }
+                ActionChip(t.mapCard.website, filled = false, palette = palette) { openUrl(context, url) }
             }
             p.mapsUri?.let { url ->
-                ActionChip("◎ GOOGLE PAGE", filled = false, palette = palette) { openUrl(context, url) }
+                ActionChip(t.mapCard.googlePage, filled = false, palette = palette) { openUrl(context, url) }
             }
         }
     }
@@ -1016,11 +1026,12 @@ private fun PlaceDetail(p: MapPlace, context: Context, palette: HbPalette, onClo
  *  "which way, exactly" only when asked. */
 @Composable
 private fun StepList(steps: List<RouteStep>, open: Boolean, palette: HbPalette, onToggle: () -> Unit) {
+    val t = LocalStrings.current
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
         Box(Modifier.clickable(onClick = onToggle)) {
             BasicText(
                 AnnotatedString(
-                    "${if (open) "▾" else "▸"} ${steps.size} ${if (steps.size == 1) "STEP" else "STEPS"}",
+                    "${if (open) "▾" else "▸"} ${t.mapCard.steps(steps.size)}",
                 ),
                 style = HbType.readout.copy(
                     fontSize = 11.sp, letterSpacing = 0.14.em,
@@ -1063,6 +1074,7 @@ private fun MapActionBar(
     context: Context,
     palette: HbPalette,
 ) {
+    val t = LocalStrings.current
     // NAVIGATE targets whatever the card is currently about: an opened place
     // first, then the fence's own target, then a destination marker. Naming it
     // matters once a place is open — an unlabelled NAVIGATE would be a coin
@@ -1075,7 +1087,7 @@ private fun MapActionBar(
         ?: spec.markers.firstOrNull { it.kind != "origin" }?.let { MapNavigate(it.lat, it.lng) }
     if (target == null) return
 
-    val label = place?.let { "▸ NAVIGATE · ${it.name.uppercase(Locale.getDefault())}" } ?: "▸ NAVIGATE"
+    val label = place?.let { t.mapCard.navigateTo(it.name.uppercase(Locale.getDefault())) } ?: t.mapCard.navigate
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1083,7 +1095,7 @@ private fun MapActionBar(
         ActionChip(label, filled = true, palette = palette, modifier = Modifier.weight(1f)) {
             launchNavigation(context, target)
         }
-        ActionChip("⧉ OPEN IN MAPS", filled = false, palette = palette, modifier = Modifier.weight(1f)) {
+        ActionChip(t.mapCard.openInMaps, filled = false, palette = palette, modifier = Modifier.weight(1f)) {
             openInMaps(context, target)
         }
     }
@@ -1119,6 +1131,7 @@ private fun ActionChip(
 
 @Composable
 private fun AutoNavigateCountdown(nav: MapNavigate, context: Context, palette: HbPalette) {
+    val t = LocalStrings.current
     val streaming = LocalMessageStreaming.current
     // Eligible only if this card first mounted while its message was live — a
     // history replay mounts with streaming=false and must never auto-fire.
@@ -1145,11 +1158,11 @@ private fun AutoNavigateCountdown(nav: MapNavigate, context: Context, palette: H
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         BasicText(
-            AnnotatedString("OPENING GOOGLE MAPS IN $remaining…"),
+            AnnotatedString(t.mapCard.openingGoogleMapsIn(remaining)),
             style = HbType.readout.copy(fontSize = 11.sp, letterSpacing = 0.1.em, color = palette.accentBright),
             modifier = Modifier.weight(1f),
         )
-        ActionChip("CANCEL", filled = false, palette = palette) { consumed = true }
+        ActionChip(t.mapCard.cancel, filled = false, palette = palette) { consumed = true }
     }
 }
 

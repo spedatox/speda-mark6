@@ -65,6 +65,7 @@ import com.speda.heartbreaker.designsystem.brand.Brands
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.theme.ThemeEngine
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -85,6 +86,7 @@ fun AgentSwitcherOverlay(
     onSelect: (String) -> Unit,
     onClose: () -> Unit,
 ) {
+    val t = LocalStrings.current
     val roster = Brands.ROSTER
     var selected by remember { mutableIntStateOf(roster.indexOf(currentAgentId).coerceAtLeast(0)) }
     var confirming by remember { mutableStateOf<Int?>(null) }
@@ -149,9 +151,9 @@ fun AgentSwitcherOverlay(
             verticalArrangement = Arrangement.Center,
         ) {
             // ── Title ─────────────────────────────────────────────────────────
-            HbText("ARMOURY // Speda MARK VI", style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.28.em), color = selColor, caps = true)
+            HbText(t.agentSwitcher.eyebrow, style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.28.em), color = selColor, caps = true)
             Spacer(Modifier.height(10.dp))
-            HbText("SELECT YOUR AGENT", style = HbType.headerBar.copy(fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.24.em), color = Color(0xFFEEF7FA), caps = true)
+            HbText(t.agentSwitcher.title, style = HbType.headerBar.copy(fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.24.em), color = Color(0xFFEEF7FA), caps = true)
             Spacer(Modifier.height(10.dp))
             Box(
                 Modifier.width(200.dp).height(2.dp)
@@ -235,7 +237,7 @@ fun AgentSwitcherOverlay(
 
             // ── Hint ──────────────────────────────────────────────────────────
             HbText(
-                "TAP TO SELECT · TAP AGAIN TO ENGAGE",
+                t.agentSwitcher.hint,
                 style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.14.em),
                 color = LocalHbPalette.current.amberBright,
                 caps = true,

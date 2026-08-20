@@ -30,6 +30,7 @@ import com.speda.heartbreaker.designsystem.glass.hbSeamTop
 import com.speda.heartbreaker.designsystem.theme.HbPalette
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbGlassButton
 import com.speda.heartbreaker.ui.HbText
 import dev.chrisbanes.haze.HazeState
@@ -51,6 +52,7 @@ fun TokenGalleryScreen(
     onResetUplink: () -> Unit,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
@@ -58,7 +60,7 @@ fun TokenGalleryScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         // ── Controls ──────────────────────────────────────────────────────
-        SectionLabel("THEME ENGINE")
+        SectionLabel(t.gallery.themeEngine)
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -76,14 +78,14 @@ fun TokenGalleryScreen(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HbGlassButton(
-                label = if (partyEngaged) "STAND DOWN" else "HOUSE PARTY",
+                label = if (partyEngaged) t.gallery.standDown else t.gallery.housePartyBtn,
                 onClick = onPartyToggle,
                 state = if (partyEngaged) HbGlassState.Amber else HbGlassState.Default,
                 shape = HbGlassShape.Pill,
                 contentColor = if (partyEngaged) palette.amberBright else palette.iconBright,
             )
             HbGlassButton(
-                label = "RESET UPLINK",
+                label = t.gallery.resetUplink,
                 onClick = onResetUplink,
                 shape = HbGlassShape.Pill,
                 contentColor = palette.textFaint,
@@ -91,23 +93,23 @@ fun TokenGalleryScreen(
         }
 
         // ── Palette swatches ──────────────────────────────────────────────
-        SectionLabel("PALETTE — ${agentId.uppercase()}")
+        SectionLabel(t.gallery.palette(agentId.uppercase()))
         SwatchGrid(palette)
 
         // ── Glass states (top-level over the void → real backdrop blur) ────
-        SectionLabel("GLASS MATERIAL")
+        SectionLabel(t.gallery.glassMaterial)
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            GlassTile("DEFAULT", haze, HbGlassState.Default)
-            GlassTile("ACTIVE", haze, HbGlassState.Active)
-            GlassTile("AMBER", haze, HbGlassState.Amber)
-            GlassTile("TINT", haze, HbGlassState.Tint(palette.accent))
+            GlassTile(t.gallery.default, haze, HbGlassState.Default)
+            GlassTile(t.gallery.active, haze, HbGlassState.Active)
+            GlassTile(t.gallery.amber, haze, HbGlassState.Amber)
+            GlassTile(t.gallery.tint, haze, HbGlassState.Tint(palette.accent))
         }
 
         // ── Seams ─────────────────────────────────────────────────────────
-        SectionLabel("ETCHED SEAMS")
+        SectionLabel(t.gallery.etchedSeams)
         Box(
             Modifier
                 .fillMaxWidth()
@@ -117,15 +119,15 @@ fun TokenGalleryScreen(
                 .hbSeamBottom(),
             contentAlignment = Alignment.Center,
         ) {
-            HbText("groove + light-catch, dissolving toward the ends", style = HbType.label, color = palette.textDim)
+            HbText(t.gallery.seamDesc, style = HbType.label, color = palette.textDim)
         }
 
         // ── Type ramp ─────────────────────────────────────────────────────
-        SectionLabel("TYPE RAMP")
+        SectionLabel(t.gallery.typeRamp)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             HbText("HB-LABEL · 0.18EM CAPS", style = HbType.label, color = palette.textDim, caps = true)
             HbText("HEADER BAR — RAJDHANI 700", style = HbType.headerBar, color = palette.text, caps = true)
-            HbText("Inter body copy — the quick petrol fox drifts behind glass.", style = HbType.read, color = palette.text)
+            HbText(t.gallery.bodyCopyDemo, style = HbType.read, color = palette.text)
             HbText("readout 0.04em", style = HbType.readout, color = palette.accentBright)
             HbText("val x = 0xDEADBEEF // mono", style = HbType.code, color = palette.text)
         }

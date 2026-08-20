@@ -36,6 +36,7 @@ import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AircraftSpec
 import com.speda.heartbreaker.domain.looksIncomplete
 import com.speda.heartbreaker.domain.parseAircraftSpec
+import com.speda.heartbreaker.i18n.LocalStrings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -78,6 +79,7 @@ private fun isEmergency(spec: AircraftSpec): Boolean =
  */
 @Composable
 fun AircraftBlock(raw: String, modifier: Modifier = Modifier) {
+    val t = LocalStrings.current
     val seed = remember(raw) { parseAircraftSpec(raw) }
     val resolve = LocalAircraftResolver.current
 
@@ -101,8 +103,8 @@ fun AircraftBlock(raw: String, modifier: Modifier = Modifier) {
     val current = live ?: seed
     when {
         current != null -> AircraftCard(current, stale = misses >= 3, modifier)
-        looksIncomplete(raw) -> Materializing("AIRCRAFT", modifier)
-        else -> ParseError("AIRCRAFT", raw, modifier)
+        looksIncomplete(raw) -> Materializing(t.proseKind.aircraft, modifier)
+        else -> ParseError(t.proseKind.aircraft, raw, modifier)
     }
 }
 
@@ -132,16 +134,17 @@ private fun AircraftCard(spec: AircraftSpec, stale: Boolean, modifier: Modifier)
 
 @Composable
 private fun AircraftHeader(spec: AircraftSpec, stale: Boolean, emergency: Boolean, palette: HbPalette) {
+    val t = LocalStrings.current
     val statusColor = when {
         emergency -> EmergencyRed
         stale -> palette.amber
         else -> palette.accentBright
     }
     val statusWord = when {
-        emergency -> "EMERGENCY"
-        stale -> "SIGNAL LOST"
-        spec.onGround -> "ON GROUND"
-        else -> "AIRBORNE"
+        emergency -> t.aircraft.emergency
+        stale -> t.aircraft.signalLost
+        spec.onGround -> t.aircraft.onGround
+        else -> t.aircraft.airborne
     }
     Row(
         Modifier
@@ -237,20 +240,21 @@ private fun aircraftFeature(spec: AircraftSpec) =
 
 @Composable
 private fun StatusReadout(spec: AircraftSpec, stale: Boolean, emergency: Boolean, palette: HbPalette) {
+    val t = LocalStrings.current
     val rows = buildList {
-        add("TYPE" to (spec.aircraftType ?: "—"))
+        add(t.aircraft.type to (spec.aircraftType ?: "—"))
         add(
-            "ALT" to when {
-                spec.onGround -> "GROUND"
+            t.aircraft.alt to when {
+                spec.onGround -> t.aircraft.ground
                 spec.altitudeFt != null -> "${spec.altitudeFt} FT"
                 else -> "—"
             },
         )
         if (!spec.onGround) {
-            add("SPEED" to (spec.groundSpeedKt?.let { "${it.toInt()} KT" } ?: "—"))
-            add("HEADING" to (spec.headingDeg?.let { "${it.toInt()}°" } ?: "—"))
+            add(t.aircraft.speed to (spec.groundSpeedKt?.let { "${it.toInt()} KT" } ?: "—"))
+            add(t.aircraft.heading to (spec.headingDeg?.let { "${it.toInt()}°" } ?: "—"))
         }
-        add("SQUAWK" to (spec.squawk ?: "—"))
+        add(t.aircraft.squawk to (spec.squawk ?: "—"))
     }
 
     Row(
@@ -287,14 +291,14 @@ private fun StatusReadout(spec: AircraftSpec, stale: Boolean, emergency: Boolean
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         ) {
             BasicText(
-                AnnotatedString("⚠ Emergency squawk$squawkPart$kindPart"),
+                AnnotatedString("${t.aircraft.emergencySquawkPrefix}$squawkPart$kindPart"),
                 style = HbType.readout.copy(fontSize = 12.sp, color = EmergencyRed),
             )
         }
     } else if (stale) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 10.dp)) {
             BasicText(
-                AnnotatedString("No recent update — the last known position may be stale."),
+                AnnotatedString(t.aircraft.staleWarning),
                 style = HbType.readout.copy(fontSize = 12.sp, color = palette.amber),
             )
         }

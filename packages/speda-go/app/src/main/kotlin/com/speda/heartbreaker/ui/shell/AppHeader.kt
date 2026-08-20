@@ -27,6 +27,7 @@ import com.speda.heartbreaker.designsystem.glass.hbSeamBottom
 import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import dev.chrisbanes.haze.HazeState
 
@@ -47,6 +48,7 @@ fun AppHeader(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -69,7 +71,7 @@ fun AppHeader(
         // Active session title — the ":ANTON VANKO" query box, now free to run
         // the width of the plate.
         QueryBox(
-            title = sessionTitle?.ifBlank { null } ?: "NEW LINK",
+            title = sessionTitle?.ifBlank { null } ?: t.sidebar.newLink,
             modifier = Modifier.weight(1f, fill = false),
         )
     }

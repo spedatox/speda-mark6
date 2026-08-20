@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbFonts
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.i18n.LocalStrings
 import kotlinx.coroutines.delay
 import java.util.Locale
 
@@ -47,6 +48,7 @@ import java.util.Locale
 @Composable
 fun CodeBlockView(language: String, code: String, modifier: Modifier = Modifier) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
     LaunchedEffect(copied) {
@@ -79,7 +81,7 @@ fun CodeBlockView(language: String, code: String, modifier: Modifier = Modifier)
                     ),
                 )
                 BasicText(
-                    text = AnnotatedString(".${lang.take(3).uppercase(Locale.ENGLISH)} document"),
+                    text = AnnotatedString(".${lang.take(3).uppercase(Locale.ENGLISH)}${t.codeBlock.documentSuffix}"),
                     style = HbType.readout.copy(
                         fontSize = 9.sp, letterSpacing = 0.08.em, color = palette.textFaint,
                     ),
@@ -94,7 +96,7 @@ fun CodeBlockView(language: String, code: String, modifier: Modifier = Modifier)
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 BasicText(
-                    text = AnnotatedString(if (copied) "COPIED" else "COPY"),
+                    text = AnnotatedString(if (copied) t.codeBlock.copied else t.codeBlock.copy),
                     style = HbType.headerBar.copy(
                         fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.14.em,
                         color = if (copied) palette.green else palette.textDim,

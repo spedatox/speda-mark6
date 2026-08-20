@@ -31,10 +31,10 @@ import com.speda.heartbreaker.data.ReminderOption
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.launch
 
-private val DAY_LABELS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 private val AGENTS = listOf("speda", "atomix", "ultron", "sentinel", "nightcrawler", "centurion", "orion")
 
 /** "1,3,5" ⇄ chips. "*" is every day. */
@@ -57,6 +57,7 @@ private fun setToDays(set: Set<Int>): String =
 @Composable
 fun RemindersTab(config: AppConfig, graph: AppGraph) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val scope = rememberCoroutineScope()
     val api = graph.api
 
@@ -76,18 +77,14 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
-        SectionHeader("Reminders")
-        Hint(
-            "Sent over the agent's Telegram bot with answer buttons, and re-asked every " +
-                "few minutes until you tap one. The text is sent exactly as written.",
-        )
+        SectionHeader(t.settingsReminders.title)
+        Hint(t.settingsReminders.intro)
         Spacer(Modifier.height(8.dp))
 
         Panel {
             if (defs.isEmpty()) {
                 HbText(
-                    "None configured. Reminders an agent writes itself still run — they " +
-                        "just aren't defined here.",
+                    t.settingsReminders.noneConfigured,
                     style = HbType.readout.copy(fontSize = 12.sp),
                     color = palette.textFaint,
                 )
@@ -110,9 +107,9 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                             style = HbType.read.copy(fontSize = 14.sp),
                             color = if (d.enabled) palette.text else palette.textFaint,
                         )
-                        val days = if (d.days == "*") "every day"
+                        val days = if (d.days == "*") t.settingsReminders.everyDay
                         else d.days.split(",").mapNotNull { it.trim().toIntOrNull() }
-                            .joinToString(" ") { DAY_LABELS[it - 1] }
+                            .joinToString(" ") { t.settingsReminders.dayLabels[it - 1] }
                         HbText(
                             "${d.id} · ${d.agent} · $days · every ${d.everyMinutes}m, max ${d.maxAsks}",
                             style = HbType.readout.copy(fontSize = 11.sp),
@@ -136,20 +133,20 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
 
         val editing = draft
         if (editing == null) {
-            SettingsButton("+ NEW REMINDER", onClick = {
+            SettingsButton(t.settingsReminders.newReminder, onClick = {
                 draft = ReminderDefinition(
                     id = "", agent = "atomix", text = "", at = "09:00", days = "*",
-                    options = listOf(ReminderOption("✅ Done", "done")),
+                    options = listOf(ReminderOption(t.settingsReminders.defaultDoneLabel, "done")),
                     everyMinutes = 5, maxAsks = 10, enabled = true,
                 )
                 error = ""
             })
         } else {
             val isNew = defs.none { it.id == editing.id }
-            SectionHeader(if (isNew) "New reminder" else "Edit ${editing.id}")
+            SectionHeader(if (isNew) t.settingsReminders.newReminderTitle else t.settingsReminders.editReminder(editing.id))
             Panel {
                 if (isNew) {
-                    FieldLabel("ID (permanent — renaming starts a fresh record)")
+                    FieldLabel(t.settingsReminders.idLabel)
                     GlassField(
                         value = editing.id,
                         onValueChange = { v ->
@@ -161,7 +158,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                     Spacer(Modifier.height(10.dp))
                 }
 
-                FieldLabel("MESSAGE (sent verbatim)")
+                FieldLabel(t.settingsReminders.messageLabel)
                 GlassField(
                     value = editing.text,
                     onValueChange = { draft = editing.copy(text = it) },
@@ -173,7 +170,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Column(Modifier.weight(1f)) {
-                        FieldLabel("TIME (HH:MM)")
+                        FieldLabel(t.settingsReminders.timeLabel)
                         GlassField(
                             value = editing.at,
                             onValueChange = { draft = editing.copy(at = it.take(5)) },
@@ -181,7 +178,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                         )
                     }
                     Column(Modifier.weight(1f)) {
-                        FieldLabel("RE-ASK EVERY (MIN)")
+                        FieldLabel(t.settingsReminders.reaskLabel)
                         GlassField(
                             value = editing.everyMinutes.toString(),
                             onValueChange = { v ->
@@ -191,7 +188,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                         )
                     }
                     Column(Modifier.weight(1f)) {
-                        FieldLabel("Give up after")
+                        FieldLabel(t.settingsReminders.giveUpLabel)
                         GlassField(
                             value = editing.maxAsks.toString(),
                             onValueChange = { v ->
@@ -203,9 +200,9 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                 }
                 Spacer(Modifier.height(10.dp))
 
-                FieldLabel("Days")
+                FieldLabel(t.settingsReminders.daysLabel)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DAY_LABELS.forEachIndexed { i, dl ->
+                    t.settingsReminders.dayLabels.forEachIndexed { i, dl ->
                         val n = i + 1
                         val set = daysToSet(editing.days)
                         TabChip(dl, active = set.contains(n)) {
@@ -217,7 +214,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                 }
                 Spacer(Modifier.height(10.dp))
 
-                FieldLabel("Asked by")
+                FieldLabel(t.settingsReminders.askedByLabel)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     AGENTS.take(4).forEach { a ->
                         TabChip(a, active = editing.agent == a) { draft = editing.copy(agent = a) }
@@ -225,7 +222,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                 }
                 Spacer(Modifier.height(10.dp))
 
-                FieldLabel("ANSWER BUTTONS (first is the expected answer)")
+                FieldLabel(t.settingsReminders.answerButtonsLabel)
                 editing.options.forEachIndexed { i, opt ->
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 3.dp),
@@ -261,7 +258,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                 }
                 if (editing.options.size < 6) {
                     Spacer(Modifier.height(4.dp))
-                    TabChip("+ button", active = false) {
+                    TabChip(t.settingsReminders.addButton, active = false) {
                         draft = editing.copy(options = editing.options + ReminderOption("", ""))
                     }
                 }
@@ -273,21 +270,21 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
 
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SettingsButton(if (busy) "SAVING…" else "SAVE", enabled = !busy, onClick = {
+                    SettingsButton(if (busy) t.settingsReminders.saving else t.settingsReminders.save, enabled = !busy, onClick = {
                         if (editing.id.isBlank() || editing.text.isBlank()) {
-                            error = "An id and the message text are both required."
+                            error = t.settingsReminders.idRequired
                         } else {
                             busy = true; error = ""
                             scope.launch {
                                 val ok = api.saveReminder(config, editing)
                                 busy = false
-                                if (ok) { draft = null; reload() } else error = "Could not save — is Igor reachable?"
+                                if (ok) { draft = null; reload() } else error = t.settingsReminders.saveFailed
                             }
                         }
                     })
-                    SettingsButton("Cancel", onClick = { draft = null; error = "" })
+                    SettingsButton(t.settingsReminders.cancel, onClick = { draft = null; error = "" })
                     if (!isNew) {
-                        SettingsButton("Delete", tint = palette.amber, onClick = {
+                        SettingsButton(t.settingsReminders.delete, tint = palette.amber, onClick = {
                             scope.launch {
                                 api.deleteReminder(config, editing.id)
                                 draft = null
@@ -301,7 +298,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
 
         if (history.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
-            SectionHeader("Recent")
+            SectionHeader(t.settingsReminders.recent)
             Panel {
                 history.forEach { h ->
                     Row(
@@ -314,7 +311,7 @@ fun RemindersTab(config: AppConfig, graph: AppGraph) {
                         HbText(h.reminderId, style = HbType.readout.copy(fontSize = 11.sp),
                             color = palette.textDim, modifier = Modifier.weight(1f))
                         HbText(
-                            if (h.status == "answered") h.answer else "no answer",
+                            if (h.status == "answered") h.answer else t.settingsReminders.noAnswer,
                             style = HbType.readout.copy(fontSize = 11.sp),
                             color = if (h.status == "answered") palette.accentBright else palette.amber,
                         )

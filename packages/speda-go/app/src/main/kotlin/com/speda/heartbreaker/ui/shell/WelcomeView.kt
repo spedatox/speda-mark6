@@ -45,6 +45,7 @@ import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbFonts
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
@@ -69,6 +70,7 @@ fun WelcomeView(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val isWarroom = brand.agentId == "warroom"
     val displayName = userName.trim().ifEmpty { brand.userName }
 
@@ -84,18 +86,22 @@ fun WelcomeView(
     val dateLine = remember(now.dayOfYear) { now.format(DATE_FMT).uppercase(Locale.ENGLISH) }
 
     // ── Greeting typewriter (42ms/char) ──────────────────────────────────────
-    val fullGreeting = remember(displayName, isWarroom, now.hour) {
+    val fullGreeting = remember(displayName, isWarroom, now.hour, t) {
         val salutation = when {
-            now.hour < 12 -> "Good morning"
-            now.hour < 18 -> "Good afternoon"
-            else -> "Good evening"
+            now.hour < 12 -> t.welcome.goodMorning
+            now.hour < 18 -> t.welcome.goodAfternoon
+            else -> t.welcome.goodEvening
         }
         val text = if (isWarroom) {
-            if (displayName.isNotEmpty()) "All hands on deck, $displayName" else "All hands on deck"
+            if (displayName.isNotEmpty()) t.welcome.allHandsOnDeck(displayName) else t.welcome.allHandsOnDeckBare
         } else {
             if (displayName.isNotEmpty()) "$salutation, $displayName" else salutation
         }
-        text.uppercase(Locale.ENGLISH)
+        // Locale.ENGLISH uppercasing turns Turkish "i" into "I" (losing "İ") —
+        // wrong only for this greeting, the one string here that's actually
+        // Turkish text rather than a fixed HUD/brand term.
+        val upperLocale = if (t === com.speda.heartbreaker.i18n.Tr) Locale("tr", "TR") else Locale.ENGLISH
+        text.uppercase(upperLocale)
     }
     var typed by remember { mutableStateOf("") }
     var greetingDone by remember { mutableStateOf(false) }

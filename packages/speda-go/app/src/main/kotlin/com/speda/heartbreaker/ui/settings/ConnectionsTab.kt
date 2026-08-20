@@ -32,6 +32,8 @@ import com.speda.heartbreaker.data.ConnectionsResult
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.AppStrings
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -39,6 +41,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val api = graph.api
@@ -58,11 +61,11 @@ fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
 
     fun connect(provider: String, onMsg: (String) -> Unit, onDone: () -> Unit) {
         scope.launch {
-            onMsg("Opening sign-in…")
+            onMsg(t.settingsConnections.openingSignIn)
             val url = api.oauthLoginUrl(config, provider)
-            if (url == null) { onMsg("Couldn't start sign-in."); return@launch }
+            if (url == null) { onMsg(t.settingsConnections.couldntStartSignIn); return@launch }
             openUrl(context, url)
-            onMsg("Finish in your browser, then come back — it connects automatically.")
+            onMsg(t.settingsConnections.finishInBrowser)
             repeat(20) {
                 delay(3000)
                 reload()
@@ -74,10 +77,10 @@ fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
-        SectionHeader("Managed accounts")
+        SectionHeader(t.settingsConnections.managedAccounts)
         OAuthCard(
             name = "Google Workspace",
-            desc = if (google) "Connected — Gmail, Calendar, Drive & Contacts are live." else "Connect for Gmail, Calendar and Drive.",
+            desc = if (google) t.settingsConnections.googleConnected else t.settingsConnections.googleDisconnected,
             connected = google,
             message = googleMsg,
             onConnect = { connect("google", { googleMsg = it }, { google = true }) },
@@ -86,14 +89,14 @@ fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
         Spacer(Modifier.height(10.dp))
         OAuthCard(
             name = "Notion Workspace",
-            desc = if (notion) "Connected — search, fetch and page tools are live." else "Connect your workspace for search, fetch and page creation.",
+            desc = if (notion) t.settingsConnections.notionConnected else t.settingsConnections.notionDisconnected,
             connected = notion,
             message = notionMsg,
             onConnect = { connect("notion", { notionMsg = it }, { notion = true }) },
             onDisconnect = { scope.launch { api.oauthDisconnect(config, "notion"); notion = false; notionMsg = ""; reload() } },
         )
 
-        SectionHeader("Tool budget")
+        SectionHeader(t.settingsConnections.toolBudget)
         Panel {
             val used = data.activeToolTokens
             val limit = data.itpmLimit.coerceAtLeast(1)
@@ -101,7 +104,7 @@ fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
             val over = used > limit
             val col = if (over) palette.red else if (pct > 0.8f) palette.amber else palette.green
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                HbText("Active tool tokens", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textDim)
+                HbText(t.settingsConnections.activeToolTokens, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textDim)
                 HbText("~$used / $limit", style = HbType.readout.copy(fontSize = 10.sp), color = col)
             }
             Spacer(Modifier.height(6.dp))
@@ -110,18 +113,18 @@ fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
             }
             if (over) {
                 Spacer(Modifier.height(6.dp))
-                HbText("Over the cold-write limit — disable a server (Notion is heaviest).", style = HbType.readout.copy(fontSize = 10.sp), color = palette.red)
+                HbText(t.settingsConnections.overLimit, style = HbType.readout.copy(fontSize = 10.sp), color = palette.red)
             }
         }
 
-        SectionHeader("Toolsets")
+        SectionHeader(t.settingsConnections.toolsets)
         Panel {
             if (data.servers.isEmpty()) {
-                HbText("No MCP servers loaded.", style = HbType.readout.copy(fontSize = 11.sp), color = palette.textFaint)
+                HbText(t.settingsConnections.noMcpServers, style = HbType.readout.copy(fontSize = 11.sp), color = palette.textFaint)
             } else {
                 data.servers.forEachIndexed { i, c ->
                     if (i > 0) Spacer(Modifier.height(6.dp))
-                    ServerRow(c) { active ->
+                    ServerRow(c, t) { active ->
                         data = data.copy(servers = data.servers.map { if (it.server == c.server) it.copy(active = active) else it })
                         scope.launch { api.setConnection(config, c.server, active); reload() }
                     }
@@ -143,6 +146,7 @@ private fun OAuthCard(
     onDisconnect: () -> Unit,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     Panel {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f)) {
@@ -150,9 +154,9 @@ private fun OAuthCard(
                 HbText(desc, style = HbType.readout.copy(fontSize = 11.sp), color = palette.textFaint)
             }
             if (connected) {
-                SettingsButton("Disconnect", onClick = onDisconnect, tint = palette.textDim)
+                SettingsButton(t.common.disconnect, onClick = onDisconnect, tint = palette.textDim)
             } else {
-                SettingsButton("Connect", onClick = onConnect)
+                SettingsButton(t.common.connect, onClick = onConnect)
             }
         }
         if (message.isNotEmpty()) {
@@ -163,15 +167,15 @@ private fun OAuthCard(
 }
 
 @Composable
-private fun ServerRow(c: ConnectionInfo, onToggle: (Boolean) -> Unit) {
+private fun ServerRow(c: ConnectionInfo, t: AppStrings, onToggle: (Boolean) -> Unit) {
     val palette = LocalHbPalette.current
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         StatusDot(ok = c.connected, warnColor = palette.red)
         Column(Modifier.weight(1f)) {
             HbText(c.label.ifEmpty { c.server }, style = HbType.read.copy(fontSize = 13.5.sp), color = palette.text, maxLines = 1)
             HbText(
-                if (c.connected) "${c.tools} tools · ${if (c.alwaysOn) "always on" else "on demand"}"
-                else (c.needs?.let { "needs $it" } ?: "offline"),
+                if (c.connected) (if (c.alwaysOn) t.settingsConnections.toolsAlwaysOn(c.tools) else t.settingsConnections.toolsOnDemand(c.tools))
+                else (c.needs?.let { t.settingsConnections.needs(it) } ?: t.settingsConnections.offline),
                 style = HbType.readout.copy(fontSize = 10.sp),
                 color = palette.textFaint,
                 maxLines = 1,

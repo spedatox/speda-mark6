@@ -39,6 +39,8 @@ import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.health.HealthConnectSource
 import com.speda.heartbreaker.health.HealthSyncManager
 import com.speda.heartbreaker.health.HealthType
+import com.speda.heartbreaker.i18n.AppStrings
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -60,8 +62,11 @@ private val AtomixGreen = Color(0xFF3FAE74)
 @Composable
 fun HealthTab(config: AppConfig, graph: AppGraph) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // HealthSyncManager is plain Kotlin, not @Composable — keep it in sync.
+    graph.healthSync.strings = t
 
     var state by remember { mutableStateOf<HealthSyncManager.SyncState?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -83,16 +88,16 @@ fun HealthTab(config: AppConfig, graph: AppGraph) {
     ) { granted ->
         scope.launch {
             if (granted.isEmpty()) {
-                message = "Nothing granted — Atomix still can't see your health data."
+                message = t.settingsHealth.nothingGranted
                 isError = true
                 graph.settings.setHealthEnabled(false)
             } else {
                 graph.settings.setHealthEnabled(true)
                 graph.healthSync.ensureScheduled()
                 busy = true
-                message = "Backfilling the last ${HealthSyncManager.BACKFILL_DAYS} days…"
+                message = t.settingsHealth.backfilling(HealthSyncManager.BACKFILL_DAYS)
                 isError = false
-                message = describe(graph.healthSync.sync(config))
+                message = describe(graph.healthSync.sync(config), t)
                 busy = false
             }
             refresh()
@@ -103,35 +108,26 @@ fun HealthTab(config: AppConfig, graph: AppGraph) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
-        SectionHeader("Atomix health link")
+        SectionHeader(t.settingsHealth.title)
         Panel {
             when (s?.availability) {
                 HealthConnectSource.Availability.UNSUPPORTED -> {
-                    Hint(
-                        "Health Connect isn't supported on this device, so there's no way to " +
-                            "read Samsung Health data here. Nothing else on this tab will work.",
-                    )
+                    Hint(t.settingsHealth.unsupported)
                 }
                 HealthConnectSource.Availability.NOT_INSTALLED -> {
                     // Deep-link rather than fail silently (§2, "UX details that matter").
-                    Hint(
-                        "Health Connect isn't installed or needs an update. It's the system " +
-                            "health store Samsung Health syncs into — install it, enable the " +
-                            "sync in Samsung Health ▸ Settings ▸ Health Connect, then come back.",
-                    )
+                    Hint(t.settingsHealth.notInstalled)
                     Spacer(Modifier.height(10.dp))
                     SettingsButton(
-                        "Get Health Connect",
+                        t.settingsHealth.getHealthConnect,
                         onClick = { openUrl(context, HealthConnectSource.PLAY_LISTING) },
                         tint = AtomixGreen,
                     )
                 }
                 else -> {
                     ToggleRow(
-                        label = "Sync Samsung Health to Atomix",
-                        subtitle = "Steps · sleep · heart rate · exercise · weight — read from " +
-                            "Health Connect and synced to your backend. Atomix reads it; " +
-                            "nothing leaves your server.",
+                        label = t.settingsHealth.syncToggleLabel,
+                        subtitle = t.settingsHealth.syncToggleHint,
                         checked = s?.enabled == true,
                         enabled = !busy && s != null,
                     ) { on ->
@@ -145,7 +141,7 @@ fun HealthTab(config: AppConfig, graph: AppGraph) {
                                 // otherwise would be a lie about who holds them.
                                 graph.settings.setHealthEnabled(false)
                                 graph.healthSync.cancelSchedule()
-                                message = "Sync paused. Your data stays on the server until you wipe it."
+                                message = t.settingsHealth.syncPaused
                                 isError = false
                                 refresh()
                             }
@@ -156,17 +152,18 @@ fun HealthTab(config: AppConfig, graph: AppGraph) {
         }
 
         if (s != null && s.availability == HealthConnectSource.Availability.AVAILABLE) {
-            SectionHeader("Data types")
+            SectionHeader(t.settingsHealth.dataTypes)
             Panel {
-                Hint("Unchecking a type stops reading and syncing it. Revoking the OS grant is separate — do that in Health Connect itself.")
+                Hint(t.settingsHealth.dataTypesHint)
                 Spacer(Modifier.height(8.dp))
                 HealthType.entries.forEach { type ->
                     val selected = type in s.selectedTypes
                     TypeRow(
-                        label = type.label,
+                        label = healthTypeLabel(type, t),
                         checked = selected,
                         granted = type in s.grantedTypes,
                         enabled = !busy,
+                        notGrantedLabel = t.settingsHealth.notGranted,
                     ) { on ->
                         scope.launch {
                             val next = if (on) s.selectedTypes + type else s.selectedTypes - type
@@ -182,7 +179,7 @@ fun HealthTab(config: AppConfig, graph: AppGraph) {
                 }
                 Spacer(Modifier.height(6.dp))
                 SettingsButton(
-                    "Manage grants in Health Connect",
+                    t.settingsHealth.manageGrants,
                     onClick = {
                         runCatching {
                             context.startActivity(
@@ -194,28 +191,28 @@ fun HealthTab(config: AppConfig, graph: AppGraph) {
                 )
             }
 
-            SectionHeader("Sync")
+            SectionHeader(t.settingsHealth.syncSection)
             Panel {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     StatusDot(ok = s.lastSyncMillis > 0L)
                     HbText(
-                        if (s.lastSyncMillis > 0L) "Last sync ${formatStamp(s.lastSyncMillis)}" else "Never synced",
+                        if (s.lastSyncMillis > 0L) t.settingsHealth.lastSync(formatStamp(s.lastSyncMillis)) else t.settingsHealth.neverSynced,
                         style = HbType.read.copy(fontSize = 13.5.sp),
                         color = palette.textDim,
                     )
                     serverSamples?.let {
-                        HbText("· $it on server", style = HbType.read.copy(fontSize = 13.5.sp), color = palette.textFaint)
+                        HbText(t.settingsHealth.onServer(it), style = HbType.read.copy(fontSize = 13.5.sp), color = palette.textFaint)
                     }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SettingsButton(
-                        if (busy) "Syncing…" else "Sync now",
+                        if (busy) t.settingsHealth.syncing else t.settingsHealth.syncNow,
                         onClick = {
                             scope.launch {
                                 busy = true; message = ""; isError = false
                                 val result = graph.healthSync.sync(config)
-                                message = describe(result)
+                                message = describe(result, t)
                                 isError = result is HealthSyncManager.Result.Failed ||
                                     result is HealthSyncManager.Result.NotPermitted
                                 busy = false
@@ -226,16 +223,12 @@ fun HealthTab(config: AppConfig, graph: AppGraph) {
                         tint = AtomixGreen,
                     )
                     SettingsButton(
-                        "Disconnect + wipe",
+                        t.settingsHealth.disconnectWipe,
                         onClick = {
                             scope.launch {
                                 busy = true
                                 val ok = graph.healthSync.disconnectAndWipe(config)
-                                message = if (ok) {
-                                    "Disconnected. Every health sample was deleted from the server."
-                                } else {
-                                    "Couldn't reach the server — nothing was deleted. Sync is off locally."
-                                }
+                                message = if (ok) t.settingsHealth.disconnected else t.settingsHealth.disconnectFailed
                                 isError = !ok
                                 busy = false
                                 refresh()
@@ -268,6 +261,7 @@ private fun TypeRow(
     checked: Boolean,
     granted: Boolean,
     enabled: Boolean,
+    notGrantedLabel: String,
     onToggle: (Boolean) -> Unit,
 ) {
     val palette = LocalHbPalette.current
@@ -297,18 +291,26 @@ private fun TypeRow(
         }
         HbText(label, style = HbType.read.copy(fontSize = 14.sp), color = palette.text, modifier = Modifier.weight(1f))
         if (checked && !granted) {
-            HbText("Not granted", style = HbType.read.copy(fontSize = 13.sp), color = palette.amberBright)
+            HbText(notGrantedLabel, style = HbType.read.copy(fontSize = 13.sp), color = palette.amberBright)
         }
     }
 }
 
-private fun describe(result: HealthSyncManager.Result): String = when (result) {
-    is HealthSyncManager.Result.Synced ->
-        "${result.read} records → Igor" +
-            (if (result.duplicates > 0) " (${result.accepted} new, ${result.duplicates} already had)" else "")
-    HealthSyncManager.Result.NothingNew -> "Up to date — nothing new since the last sync."
-    HealthSyncManager.Result.NotPermitted ->
-        "No data types are granted yet. Flip the toggle and approve them in Health Connect's sheet."
+/** [HealthType.label] is a fixed English default (the enum can't read
+ *  `LocalStrings`); resolved to the display string here instead. */
+private fun healthTypeLabel(type: HealthType, t: AppStrings): String = when (type) {
+    HealthType.Steps -> t.settingsHealth.typeSteps
+    HealthType.Sleep -> t.settingsHealth.typeSleep
+    HealthType.HeartRate -> t.settingsHealth.typeHeartRate
+    HealthType.Exercise -> t.settingsHealth.typeExercise
+    HealthType.Weight -> t.settingsHealth.typeWeight
+    HealthType.OxygenSaturation -> t.settingsHealth.typeOxygen
+}
+
+private fun describe(result: HealthSyncManager.Result, t: AppStrings): String = when (result) {
+    is HealthSyncManager.Result.Synced -> t.settingsHealth.syncedRecords(result.read, result.accepted, result.duplicates)
+    HealthSyncManager.Result.NothingNew -> t.settingsHealth.upToDate
+    HealthSyncManager.Result.NotPermitted -> t.settingsHealth.notPermitted
     is HealthSyncManager.Result.Failed -> result.message
 }
 

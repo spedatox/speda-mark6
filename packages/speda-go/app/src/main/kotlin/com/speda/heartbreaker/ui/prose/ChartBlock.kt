@@ -54,6 +54,7 @@ import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.ChartSpec
 import com.speda.heartbreaker.domain.looksIncomplete
 import com.speda.heartbreaker.domain.parseChartSpec
+import com.speda.heartbreaker.i18n.LocalStrings
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.cos
@@ -71,13 +72,14 @@ import kotlin.math.sin
  */
 @Composable
 fun ChartBlock(raw: String, modifier: Modifier = Modifier) {
+    val t = LocalStrings.current
     val spec = remember(raw) { parseChartSpec(raw) }
     when {
         spec != null -> ChartPanel(spec.title, modifier) { StarkChart(spec) }
         // Unbalanced JSON means it's still streaming, not malformed — a quiet
         // placeholder beats a scary error that vanishes a second later.
-        looksIncomplete(raw) -> Materializing("CHART", modifier)
-        else -> ParseError("CHART", raw, modifier)
+        looksIncomplete(raw) -> Materializing(t.proseKind.chart, modifier)
+        else -> ParseError(t.proseKind.chart, raw, modifier)
     }
 }
 
@@ -124,14 +126,15 @@ fun ChartPanel(title: String?, modifier: Modifier = Modifier, content: @Composab
 @Composable
 fun Materializing(kind: String, modifier: Modifier = Modifier) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     ChartPanel(title = null, modifier = modifier) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
-            val t = rememberInfiniteTransition(label = "materializing")
-            val a by t.animateFloat(
+            val transition = rememberInfiniteTransition(label = "materializing")
+            val a by transition.animateFloat(
                 initialValue = 0.3f,
                 targetValue = 0.6f,
                 animationSpec = infiniteRepeatable(tween(1400), RepeatMode.Reverse),
@@ -139,7 +142,7 @@ fun Materializing(kind: String, modifier: Modifier = Modifier) {
             )
             Box(Modifier.size(6.dp).clip(CircleShape).background(palette.accentBright.copy(alpha = a)))
             BasicText(
-                AnnotatedString("$kind // MATERIALIZING"),
+                AnnotatedString("$kind // ${t.proseKind.materializing}"),
                 style = HbType.readout.copy(fontSize = 11.sp, letterSpacing = 0.14.em, color = palette.textFaint),
             )
         }
@@ -148,6 +151,7 @@ fun Materializing(kind: String, modifier: Modifier = Modifier) {
 
 @Composable
 fun ParseError(kind: String, raw: String, modifier: Modifier = Modifier) {
+    val t = LocalStrings.current
     Column(
         modifier
             .fillMaxWidth()
@@ -157,7 +161,7 @@ fun ParseError(kind: String, raw: String, modifier: Modifier = Modifier) {
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         BasicText(
-            AnnotatedString("$kind // PARSE ERROR"),
+            AnnotatedString("$kind // ${t.proseKind.parseError}"),
             style = HbType.readout.copy(fontSize = 11.5.sp, letterSpacing = 0.05.em, color = Color(0xFFC84A3A)),
         )
         BasicText(

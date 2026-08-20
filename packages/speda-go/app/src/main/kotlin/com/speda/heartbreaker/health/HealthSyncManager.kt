@@ -14,6 +14,8 @@ import androidx.work.WorkManager
 import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.data.SettingsStore
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.AppStrings
+import com.speda.heartbreaker.i18n.Tr
 import kotlinx.coroutines.flow.first
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -36,6 +38,14 @@ class HealthSyncManager(
 ) {
     private val appContext = context.applicationContext
     val source = HealthConnectSource(appContext)
+
+    /** The owner's chosen interface language, for the [Result.Failed] messages
+     *  HealthTab surfaces verbatim. Plain `var` — this class isn't @Composable,
+     *  so it can't read `LocalStrings` itself; the settings tab keeps it in sync
+     *  before every user-triggered sync. Background workers never read
+     *  `.message` for display (only `Log.w`), so the Turkish default is fine
+     *  for the unattended trickle sync too. */
+    var strings: AppStrings = Tr
 
     /** What the Settings tab renders. */
     data class SyncState(
@@ -83,7 +93,7 @@ class HealthSyncManager(
         val s = settings.settings.first()
         if (!s.healthEnabled) return Result.NotPermitted
         if (source.availability != HealthConnectSource.Availability.AVAILABLE) {
-            return Result.Failed("Health Connect isn't available on this device.")
+            return Result.Failed(strings.settingsHealth.healthConnectUnavailable)
         }
 
         val selected = selectedTypes(s.healthTypes)
@@ -130,7 +140,7 @@ class HealthSyncManager(
 
         for (chunk in samples.chunked(4000)) {
             val result = api.ingestHealth(config, deviceName(), chunk)
-                ?: return Result.Failed("Igor didn't accept the batch — will retry.")
+                ?: return Result.Failed(strings.settingsHealth.batchRejected)
             totalAccepted += result.accepted
             totalDuplicates += result.duplicates
         }

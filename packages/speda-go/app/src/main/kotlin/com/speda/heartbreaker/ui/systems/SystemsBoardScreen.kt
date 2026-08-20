@@ -49,6 +49,7 @@ import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import com.speda.heartbreaker.ui.settings.Panel
 import com.speda.heartbreaker.ui.settings.SectionHeader
@@ -77,6 +78,7 @@ fun SystemsBoardScreen(
     onClose: () -> Unit,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val scope = rememberCoroutineScope()
     val api = graph.api
 
@@ -145,22 +147,22 @@ fun SystemsBoardScreen(
         }
 
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 2.dp)) {
-            SectionHeader("Uplink status")
+            SectionHeader(t.systemsBoard.uplinkStatus)
             Panel {
-                KV("LINK", if (health.online) "ONLINE" else "DENY", if (health.online) palette.green else palette.red)
-                KV("HOST", config.apiBase.removePrefix("https://").removePrefix("http://"), palette.textDim, alt = true)
-                KV("RTT", health.latencyMs?.let { "${it}ms" } ?: "--", if ((health.latencyMs ?: Long.MAX_VALUE) < 400) palette.green else palette.amber)
-                KV("TOOLS REG.", health.tools?.toString() ?: "--", palette.textDim, alt = true)
-                KV("SESSIONS", sessionCount.toString().padStart(3, '0'), palette.textDim)
-                KV("BUDGET MODE", if (budgetMode) "ENGAGED" else "OFF", if (budgetMode) palette.amber else palette.textFaint, alt = true)
-                KV("OLLAMA NODE", if (ollamaUp) "LOCAL ACTIVE" else "NOT DETECTED", if (ollamaUp) palette.green else palette.textFaint)
-                KV("FORGE LINK", if (forgePeer) "OPTIMUS · MK II" else "IN-PROCESS", if (forgePeer) palette.green else palette.textFaint, alt = true)
+                KV(t.systemsBoard.link, if (health.online) t.systemsBoard.online else t.systemsBoard.deny, if (health.online) palette.green else palette.red)
+                KV(t.systemsBoard.host, config.apiBase.removePrefix("https://").removePrefix("http://"), palette.textDim, alt = true)
+                KV(t.systemsBoard.rtt, health.latencyMs?.let { "${it}ms" } ?: "--", if ((health.latencyMs ?: Long.MAX_VALUE) < 400) palette.green else palette.amber)
+                KV(t.systemsBoard.toolsReg, health.tools?.toString() ?: "--", palette.textDim, alt = true)
+                KV(t.systemsBoard.sessions, sessionCount.toString().padStart(3, '0'), palette.textDim)
+                KV(t.systemsBoard.budgetMode, if (budgetMode) t.systemsBoard.engaged else t.systemsBoard.off, if (budgetMode) palette.amber else palette.textFaint, alt = true)
+                KV(t.systemsBoard.ollamaNode, if (ollamaUp) t.systemsBoard.localActive else t.systemsBoard.notDetected, if (ollamaUp) palette.green else palette.textFaint)
+                KV(t.systemsBoard.forgeLink, if (forgePeer) "OPTIMUS · MK II" else t.systemsBoard.inProcess, if (forgePeer) palette.green else palette.textFaint, alt = true)
             }
 
-            SectionHeader("Network nodes")
+            SectionHeader(t.systemsBoard.networkNodes)
             Panel {
                 if (servers.servers.isEmpty()) {
-                    HbText("// NO NODES", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
+                    HbText(t.systemsBoard.noNodes, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
                 } else {
                     servers.servers.forEachIndexed { i, c ->
                         if (i > 0) Spacer(Modifier.height(6.dp))
@@ -181,7 +183,7 @@ fun SystemsBoardScreen(
                             Column(Modifier.weight(1f)) {
                                 HbText(c.label.ifEmpty { c.server }, style = HbType.readout.copy(fontSize = 11.sp), color = if (c.connected) palette.textDim else Color(0xFF7D6660), caps = true, maxLines = 1)
                                 HbText(
-                                    if (!c.connected) "MEDIA DISCONNECTED" else if (c.active) "LINKED · ${c.tools} TOOLS" else "STANDBY",
+                                    if (!c.connected) t.systemsBoard.mediaDisconnected else if (c.active) t.systemsBoard.linkedTools(c.tools) else t.systemsBoard.standby,
                                     style = HbType.readout.copy(fontSize = 9.sp),
                                     color = if (!c.connected) palette.red else if (c.active) palette.accent else palette.icon,
                                 )
@@ -191,7 +193,7 @@ fun SystemsBoardScreen(
                 }
             }
 
-            SectionHeader("Core routing matrix")
+            SectionHeader(t.systemsBoard.coreRoutingMatrix)
             RoutingMatrix(
                 models = models,
                 servers = servers,
@@ -216,11 +218,11 @@ fun SystemsBoardScreen(
                 },
             )
 
-            SectionHeader("Token budget")
+            SectionHeader(t.systemsBoard.tokenBudget)
             Panel {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
                     HbText("${pct}%", style = HbType.headerBar.copy(fontSize = 28.sp), color = gaugeColor)
-                    HbText("PREFIX\nSATURATION", style = HbType.readout.copy(fontSize = 9.sp), color = palette.icon)
+                    HbText(t.systemsBoard.prefixSaturation, style = HbType.readout.copy(fontSize = 9.sp), color = palette.icon)
                 }
                 Spacer(Modifier.height(6.dp))
                 SegBar(pct = pct, color = gaugeColor)
@@ -242,16 +244,16 @@ fun SystemsBoardScreen(
                 }
             }
 
-            SectionHeader("Response trace")
+            SectionHeader(t.systemsBoard.responseTrace)
             Panel {
                 RttSpark(samples = rtt)
                 Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    HbText("RTT / 4s PROBE", style = HbType.readout.copy(fontSize = 9.sp), color = palette.icon)
+                    HbText(t.systemsBoard.rttProbe, style = HbType.readout.copy(fontSize = 9.sp), color = palette.icon)
                     HbText(health.latencyMs?.let { "${it}ms" } ?: "--", style = HbType.readout.copy(fontSize = 9.sp), color = palette.accent)
                 }
             }
 
-            SectionHeader("Data banks // knowledge")
+            SectionHeader(t.systemsBoard.dataBanks)
             KnowledgeBank(config = config, api = api)
 
             Spacer(Modifier.height(24.dp))
@@ -288,9 +290,10 @@ private fun SegBar(pct: Int, color: Color) {
 @Composable
 private fun RttSpark(samples: List<Long>) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     if (samples.size < 2) {
         Box(Modifier.fillMaxWidth().height(56.dp), contentAlignment = Alignment.Center) {
-            HbText("AWAITING TELEMETRY_", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
+            HbText(t.systemsBoard.awaitingTelemetry, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
         }
         return
     }

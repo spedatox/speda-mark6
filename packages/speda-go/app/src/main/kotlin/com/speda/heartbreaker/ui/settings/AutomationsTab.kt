@@ -36,6 +36,7 @@ import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -45,6 +46,7 @@ private val KIND_LABEL = mapOf("web_watch" to "WEB", "rss_watch" to "RSS", "sche
 @Composable
 fun AutomationsTab(config: AppConfig, graph: AppGraph) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val api = graph.api
@@ -62,44 +64,44 @@ fun AutomationsTab(config: AppConfig, graph: AppGraph) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
-        SectionHeader("Pipeline")
+        SectionHeader(t.settingsAutomations.pipeline)
         Panel {
             val s = status
             StatusLine(
-                "n8n engine",
+                t.settingsAutomations.n8nEngine,
                 ok = s?.n8nOnline == true,
                 detail = when {
-                    s == null -> "checking…"
-                    !s.n8nConfigured -> "needs N8N_API_KEY in the backend .env"
+                    s == null -> t.settingsAutomations.checking
+                    !s.n8nConfigured -> t.settingsAutomations.n8nNeedsKey
                     s.n8nOnline -> s.n8nUrl
-                    else -> "unreachable — is the n8n container running?"
+                    else -> t.settingsAutomations.n8nUnreachable
                 },
             )
             Spacer(Modifier.height(6.dp))
             StatusLine(
-                "Telegram delivery",
+                t.settingsAutomations.telegramDelivery,
                 ok = s?.telegramConnected == true,
                 detail = when {
-                    s == null -> "checking…"
-                    !s.telegramConfigured -> "needs TELEGRAM_BOT_TOKEN in the backend .env"
-                    s.telegramConnected -> "connected — Speda can reach you"
-                    else -> "bot ready — connect your chat below"
+                    s == null -> t.settingsAutomations.checking
+                    !s.telegramConfigured -> t.settingsAutomations.telegramNeedsToken
+                    s.telegramConnected -> t.settingsAutomations.telegramConnected
+                    else -> t.settingsAutomations.telegramReady
                 },
             )
             if (s?.telegramConfigured == true && !s.telegramConnected) {
                 Spacer(Modifier.height(10.dp))
-                SettingsButton("Connect Telegram", onClick = {
+                SettingsButton(t.settingsAutomations.connectTelegram, onClick = {
                     scope.launch {
-                        tgMsg = "Opening Telegram…"
+                        tgMsg = t.settingsAutomations.openingTelegram
                         val link = api.telegramConnect(config)
-                        if (link == null) { tgMsg = "Couldn't start the connect flow."; return@launch }
+                        if (link == null) { tgMsg = t.settingsAutomations.couldntStartConnect; return@launch }
                         openUrl(context, link)
-                        tgMsg = "Tap START in Telegram — connecting…"
+                        tgMsg = t.settingsAutomations.tapStart
                         repeat(40) {
                             delay(3000)
                             if (api.telegramConnected(config)) { tgMsg = ""; reload(); return@launch }
                         }
-                        tgMsg = "No response yet — try Connect again."
+                        tgMsg = t.settingsAutomations.noResponseYet
                     }
                 })
                 if (tgMsg.isNotEmpty()) {
@@ -109,10 +111,10 @@ fun AutomationsTab(config: AppConfig, graph: AppGraph) {
             }
         }
 
-        SectionHeader("Watchers")
+        SectionHeader(t.settingsAutomations.watchers)
         Panel {
             if (autos.isEmpty()) {
-                HbText("Nothing is being watched yet.", style = HbType.readout.copy(fontSize = 11.sp), color = palette.textFaint)
+                HbText(t.settingsAutomations.nothingWatched, style = HbType.readout.copy(fontSize = 11.sp), color = palette.textFaint)
             } else {
                 autos.forEachIndexed { i, a ->
                     if (i > 0) Spacer(Modifier.height(8.dp))
@@ -132,7 +134,7 @@ fun AutomationsTab(config: AppConfig, graph: AppGraph) {
         }
 
         Spacer(Modifier.height(8.dp))
-        Hint("Speda creates these itself — just ask: “track this page for a month and tell me when my results are up”. When a watcher fires it pings you on Telegram.")
+        Hint(t.settingsAutomations.footer)
         Spacer(Modifier.height(24.dp))
     }
 }

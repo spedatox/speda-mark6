@@ -39,6 +39,7 @@ import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.FileMeta
+import com.speda.heartbreaker.i18n.LocalStrings
 import kotlinx.coroutines.launch
 
 /**
@@ -54,6 +55,7 @@ fun FileCard(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(false) }
@@ -111,7 +113,7 @@ fun FileCard(
         ) {
             DownloadGlyph(Color(0xFFF6D9A8))
             BasicText(
-                AnnotatedString(if (busy) "…" else if (done) "SAVED" else "DOWNLOAD"),
+                AnnotatedString(if (busy) "…" else if (done) t.fileCard.saved else t.fileCard.download),
                 style = HbType.headerBar.copy(
                     fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.1.em,
                     color = if (done) palette.green else Color(0xFFF6D9A8),

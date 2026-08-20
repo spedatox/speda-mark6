@@ -40,6 +40,7 @@ import com.speda.heartbreaker.designsystem.glass.LocalAmbientHazeState
 import com.speda.heartbreaker.designsystem.glass.LocalHazeState
 import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HudStrip
 import com.speda.heartbreaker.ui.comms.AgentCommsScreen
 import com.speda.heartbreaker.ui.settings.SettingsScreen
@@ -85,6 +86,9 @@ fun ChatScreen(
     val vm: ChatViewModel = viewModel(
         factory = viewModelFactory { initializer { ChatViewModel(graph.api, graph.messageCache) } },
     )
+    // ChatViewModel is plain Kotlin, not @Composable — it can't read LocalStrings
+    // itself, so the shell keeps it in sync on every recomposition.
+    vm.strings = LocalStrings.current
     val config = remember(uplink, agentId) { AppConfig(uplink.apiBase, uplink.apiKey, agentId) }
     LaunchedEffect(config) { vm.onConfig(config) }
 

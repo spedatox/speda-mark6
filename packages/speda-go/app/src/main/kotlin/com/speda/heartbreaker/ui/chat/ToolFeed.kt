@@ -49,6 +49,7 @@ import com.speda.heartbreaker.designsystem.glass.hbGlass
 import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 
 // Fixed diff colours (not themed — same in the web).
@@ -75,6 +76,7 @@ private fun Modifier.noRippleClick(onClick: () -> Unit): Modifier = this.compose
 fun ToolFeed(tools: List<ToolBadge>, streaming: Boolean, modifier: Modifier = Modifier) {
     if (tools.isEmpty()) return
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     var open by remember { mutableStateOf(true) }
 
     val liveIdx = if (streaming) tools.lastIndex else -1
@@ -96,13 +98,13 @@ fun ToolFeed(tools: List<ToolBadge>, streaming: Boolean, modifier: Modifier = Mo
         ) {
             HbGlyphs.ToolChain(palette.accent)
             HbText(
-                "${tools.size} step${if (tools.size == 1) "" else "s"}${if (running) " · running" else ""}",
+                t.toolFeed.steps(tools.size) + (if (running) t.toolFeed.running else ""),
                 style = HbType.headerBar,
                 color = palette.textDim,
                 caps = true,
             )
             if (failed > 0) {
-                HbText("$failed failed", style = HbType.read.copy(fontSize = 13.sp), color = palette.red)
+                HbText(t.toolFeed.failed(failed), style = HbType.read.copy(fontSize = 13.sp), color = palette.red)
             }
             Spacer(Modifier.weight(1f))
             if (open) HbGlyphs.ChevronUp(palette.textFaint) else HbGlyphs.ChevronDown(palette.textFaint)

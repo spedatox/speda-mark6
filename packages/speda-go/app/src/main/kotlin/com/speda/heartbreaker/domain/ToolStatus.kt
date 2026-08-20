@@ -1,5 +1,6 @@
 package com.speda.heartbreaker.domain
 
+import com.speda.heartbreaker.i18n.AppStrings
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -7,35 +8,14 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Tool → natural-language status and one-line summaries. Literal port of the
- * TOOL_STATUS map, statusLabel and shortPath in Message.tsx.
+ * TOOL_STATUS map, statusLabel and shortPath in Message.tsx. Plain Kotlin, not
+ * @Composable, so the label text itself lives in the i18n dict
+ * (`AppStrings.toolStatus`) and is handed in by the caller.
  */
 object ToolStatus {
 
-    /** Raw tool name → present-progressive status. */
-    val TOOL_STATUS: Map<String, String> = mapOf(
-        "read_skill" to "Reviewing capabilities",
-        "generate_document" to "Preparing the document",
-        "system_info" to "Checking system status",
-        "text_to_speech" to "Generating audio",
-        "speech_to_text" to "Transcribing audio",
-        "send_push_notification" to "Sending a notification",
-        "web_search" to "Searching the web",
-        "WebSearch" to "Searching the web",
-        "web_fetch" to "Reading the page",
-        "WebFetch" to "Reading the page",
-        "Task" to "Deploying the Legion",
-        "legion_status" to "Checking on the Legion",
-        "run_command" to "Running a command",
-        "read_file" to "Reading a file",
-        "write_file" to "Writing a file",
-        "edit_file" to "Editing a file",
-        "graph_query" to "Searching the codebase graph",
-        "graph_path" to "Tracing the codebase graph",
-        "graph_overview" to "Mapping the codebase graph",
-    )
-
-    fun statusLabel(toolName: String): String =
-        TOOL_STATUS[toolName] ?: "Using ${toolName.replace('_', ' ')}"
+    fun statusLabel(toolName: String, t: AppStrings): String =
+        t.toolStatus.labels[toolName] ?: t.toolStatus.usingTool(toolName)
 
     /** Keep the last two path segments so long paths stay readable. */
     fun shortPath(p: String): String {

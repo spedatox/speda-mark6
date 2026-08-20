@@ -44,6 +44,7 @@ import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.MemoryTree
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import com.speda.heartbreaker.ui.prose.ProseText
 import com.speda.heartbreaker.ui.settings.GlassField
@@ -74,6 +75,7 @@ import java.util.Locale
 @Composable
 fun KnowledgeBank(config: AppConfig, api: IgorApi) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
 
     var files by remember { mutableStateOf<List<MemoryFileInfo>>(emptyList()) }
     var openPath by remember { mutableStateOf<String?>(null) }
@@ -87,12 +89,12 @@ fun KnowledgeBank(config: AppConfig, api: IgorApi) {
 
     Panel {
         if (files.isEmpty()) {
-            HbText("No records", style = HbType.read.copy(fontSize = 14.sp), color = palette.textFaint)
+            HbText(t.knowledgeBank.noRecords, style = HbType.read.copy(fontSize = 14.sp), color = palette.textFaint)
             return@Panel
         }
 
         HbText(
-            "${files.size} files · ${tree.size} folders",
+            t.knowledgeBank.filesFolders(files.size, tree.size),
             style = HbType.read.copy(fontSize = 13.sp),
             color = palette.textFaint,
             modifier = Modifier.padding(bottom = 8.dp),
@@ -165,6 +167,7 @@ private fun FolderRow(dir: String, count: Int, open: Boolean, onToggle: () -> Un
 @Composable
 private fun FileRow(label: String, indented: Boolean, editable: Boolean, onClick: () -> Unit) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     Row(
         Modifier
             .fillMaxWidth()
@@ -188,7 +191,7 @@ private fun FileRow(label: String, indented: Boolean, editable: Boolean, onClick
         // Only the canonical files can be written by hand; saying so here saves
         // opening one to find out.
         if (editable) {
-            HbText("editable", style = HbType.read.copy(fontSize = 11.5.sp), color = palette.textFaint)
+            HbText(t.knowledgeBank.editable, style = HbType.read.copy(fontSize = 11.5.sp), color = palette.textFaint)
         }
         HbGlyphs.ChevronRight(palette.textFaint, size = 12.dp)
     }
@@ -207,6 +210,7 @@ private fun MemoryFileWindow(
     onFileChanged: (MemoryFileInfo) -> Unit,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val scope = rememberCoroutineScope()
 
     var editing by remember(file.path) { mutableStateOf(false) }
@@ -221,13 +225,13 @@ private fun MemoryFileWindow(
         scope.launch {
             when (val res = api.commitMemoryFile(config, file.path, draft, file.updatedAt)) {
                 is MemoryCommitResult.Ok -> {
-                    onFileChanged(res.file); editing = false; saveMsg = "Saved."
+                    onFileChanged(res.file); editing = false; saveMsg = t.knowledgeBank.saved
                 }
                 is MemoryCommitResult.Conflict -> {
-                    saveMsg = "Changed on the server — reloaded."
+                    saveMsg = t.knowledgeBank.changedOnServer
                     res.current?.let { onFileChanged(it); draft = it.content }
                 }
-                else -> saveMsg = "Save failed."
+                else -> saveMsg = t.knowledgeBank.saveFailed
             }
             saving = false
         }
@@ -238,8 +242,8 @@ private fun MemoryFileWindow(
             // The revision id identifies the file too — the endpoint takes it
             // alone, no path.
             val fresh = api.restoreMemoryRevision(config, id)
-            if (fresh != null) { onFileChanged(fresh); revs = null; saveMsg = "Restored." }
-            else saveMsg = "Restore failed."
+            if (fresh != null) { onFileChanged(fresh); revs = null; saveMsg = t.knowledgeBank.restored }
+            else saveMsg = t.knowledgeBank.restoreFailed
         }
     }
 
@@ -298,7 +302,7 @@ private fun MemoryFileWindow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val note = saveMsg
-                    ?: file.updatedAt?.takeIf { !editing && revs == null }?.let { "Last write ${fmtDate(it)}" }
+                    ?: file.updatedAt?.takeIf { !editing && revs == null }?.let { t.knowledgeBank.lastWrite(fmtDate(it)) }
                 if (note != null) {
                     HbText(
                         note,
@@ -311,21 +315,21 @@ private fun MemoryFileWindow(
                 }
                 when {
                     editing -> {
-                        SettingsButton("Cancel", onClick = { editing = false }, enabled = !saving)
+                        SettingsButton(t.knowledgeBank.cancel, onClick = { editing = false }, enabled = !saving)
                         SettingsButton(
-                            if (saving) "Saving…" else "Commit",
+                            if (saving) t.knowledgeBank.saving else t.knowledgeBank.commit,
                             onClick = ::commit,
                             enabled = !saving,
                             tint = palette.amberBright,
                         )
                     }
-                    revs != null -> SettingsButton("Close history", onClick = { revs = null })
+                    revs != null -> SettingsButton(t.knowledgeBank.closeHistory, onClick = { revs = null })
                     file.editable -> {
-                        SettingsButton("History", onClick = {
+                        SettingsButton(t.knowledgeBank.history, onClick = {
                             scope.launch { revs = api.fetchMemoryRevisions(config, file.path) }
                         })
                         SettingsButton(
-                            "Edit",
+                            t.knowledgeBank.edit,
                             onClick = { draft = file.content; saveMsg = null; editing = true },
                             tint = palette.accent,
                         )
@@ -348,7 +352,7 @@ private fun MemoryFileWindow(
                     )
                     revs != null -> RevisionList(revs.orEmpty(), onRestore = ::restore)
                     file.content.isBlank() -> HbText(
-                        "Empty — Speda has not written here yet.",
+                        t.knowledgeBank.emptyFile,
                         style = HbType.read.copy(fontSize = 14.sp),
                         color = palette.textFaint,
                     )
@@ -362,8 +366,9 @@ private fun MemoryFileWindow(
 @Composable
 private fun RevisionList(revs: List<MemoryRevisionInfo>, onRestore: (Int) -> Unit) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     if (revs.isEmpty()) {
-        HbText("No revisions yet.", style = HbType.read.copy(fontSize = 14.sp), color = palette.textFaint)
+        HbText(t.knowledgeBank.noRevisionsYet, style = HbType.read.copy(fontSize = 14.sp), color = palette.textFaint)
         return
     }
     Column {
@@ -389,7 +394,7 @@ private fun RevisionList(revs: List<MemoryRevisionInfo>, onRestore: (Int) -> Uni
                     color = palette.textDim,
                     modifier = Modifier.weight(1f),
                 )
-                SettingsButton("Restore", onClick = { onRestore(r.id) })
+                SettingsButton(t.knowledgeBank.restore, onClick = { onRestore(r.id) })
             }
         }
     }

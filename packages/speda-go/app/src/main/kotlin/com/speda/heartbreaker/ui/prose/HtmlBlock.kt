@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.speda.heartbreaker.designsystem.theme.HbPalette
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
+import com.speda.heartbreaker.i18n.LocalStrings
 
 /**
  * ```html fences — the Android counterpart to WidgetFrame.tsx.
@@ -61,6 +62,7 @@ fun HtmlBlock(raw: String, modifier: Modifier = Modifier) {
     }
 
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val uriHandler = LocalUriHandler.current
 
     // Only COMMIT complete markup. While the fence streams, the body grows every
@@ -71,7 +73,7 @@ fun HtmlBlock(raw: String, modifier: Modifier = Modifier) {
     if (complete && stable != raw) stable = raw
 
     if (stable.isBlank()) {
-        Materializing("WIDGET", modifier)
+        Materializing(t.proseKind.widget, modifier)
         return
     }
 

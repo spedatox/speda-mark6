@@ -32,6 +32,7 @@ import com.speda.heartbreaker.designsystem.brand.Brand
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.delay
 
@@ -44,6 +45,7 @@ fun AccountTab(
     onResetUplink: () -> Unit,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     var name by remember { mutableStateOf(settings.userName) }
     LaunchedEffect(name) { delay(400); graph.settings.setUserName(name) }
 
@@ -74,21 +76,21 @@ fun AccountTab(
             }
         }
 
-        SectionHeader("Your name")
+        SectionHeader(t.settingsAccount.yourName)
         Panel {
-            Hint("Used in the greeting on the home screen.")
+            Hint(t.settingsAccount.yourNameHint)
             Spacer(Modifier.height(8.dp))
-            GlassField(name, { name = it }, "Enter your name…", singleLine = true)
+            GlassField(name, { name = it }, t.settingsAccount.namePlaceholder, singleLine = true)
         }
 
-        SectionHeader("Uplink")
+        SectionHeader(t.settingsAccount.uplink)
         Panel {
-            FieldLabel("Backend")
+            FieldLabel(t.settingsAccount.backend)
             HbText(config.apiBase, style = HbType.readout.copy(fontSize = 12.sp), color = palette.textDim, maxLines = 1)
             Spacer(Modifier.height(12.dp))
-            Hint("Disconnect from this Igor backend and re-enter the URL + key.")
+            Hint(t.settingsAccount.resetHint)
             Spacer(Modifier.height(8.dp))
-            SettingsButton("Reset uplink", onClick = onResetUplink, tint = palette.red)
+            SettingsButton(t.settingsAccount.resetUplink, onClick = onResetUplink, tint = palette.red)
         }
 
         Spacer(Modifier.height(24.dp))

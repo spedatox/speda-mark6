@@ -72,6 +72,8 @@ import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.Session
 import com.speda.heartbreaker.domain.groupSessions
+import com.speda.heartbreaker.i18n.AppStrings
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.delay
 
@@ -109,6 +111,7 @@ fun SidebarDrawer(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     // The drawer sits OVER the transcript (outside its backdrop), so it refracts it.
     val haze = LocalHazeState.current
     var footerMenuOpen by remember { mutableStateOf(false) }
@@ -269,7 +272,7 @@ fun SidebarDrawer(
                         modifier = Modifier.weight(1f),
                         decorationBox = { inner ->
                             if (search.isEmpty()) {
-                                HbText("SEARCH SESSIONS", style = HbType.readout.copy(fontSize = 11.5.sp, letterSpacing = 0.1.em), color = palette.textFaint)
+                                HbText(t.sidebar.searchSessions, style = HbType.readout.copy(fontSize = 11.5.sp, letterSpacing = 0.1.em), color = palette.textFaint)
                             }
                             inner()
                         },
@@ -289,7 +292,7 @@ fun SidebarDrawer(
             ) {
                 HbGlyphs.Plus(palette.iconDim)
                 HbText(
-                    "New conversation",
+                    t.sidebar.newConversation,
                     style = HbType.headerBar.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.14.em),
                     color = palette.iconBright,
                     caps = true,
@@ -300,7 +303,7 @@ fun SidebarDrawer(
             if (groups.isEmpty()) {
                 Box(Modifier.fillMaxWidth().weight(1f).padding(top = 32.dp), contentAlignment = Alignment.TopCenter) {
                     HbText(
-                        if (search.isNotBlank()) "// No results" else "// No sessions",
+                        if (search.isNotBlank()) "// ${t.sidebar.noResults}" else "// ${t.sidebar.noSessions}",
                         style = HbType.readout.copy(fontSize = 10.sp, letterSpacing = 0.12.em),
                         color = palette.iconDim,
                         caps = true,
@@ -309,7 +312,7 @@ fun SidebarDrawer(
             } else {
                 LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 6.dp)) {
                     groups.forEach { group ->
-                        item(key = "g:${group.label}") { GroupLabel(group.label) }
+                        item(key = "g:${group.label}") { GroupLabel(translateGroupLabel(group.label, t)) }
                         items(group.items, key = { it.id }) { s ->
                             SessionRow(
                                 session = s,
@@ -318,6 +321,7 @@ fun SidebarDrawer(
                                 onClick = { onSelectSession(s.id); onClose() },
                                 onRename = { title -> onRenameSession(s.id, title) },
                                 onDelete = { onDeleteSession(s.id) },
+                                t = t,
                             )
                         }
                     }
@@ -330,10 +334,10 @@ fun SidebarDrawer(
             // No War room entry: the House Party Protocol is a desktop surface.
             if (footerMenuOpen) {
                 Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Menu)) {
-                    MenuItem("Settings", { footerMenuOpen = false; onOpenSettings() }) { HbGlyphs.Sliders(it, size = 13.dp) }
-                    MenuItem("Comms", { footerMenuOpen = false; onToggleComms() }) { HbGlyphs.Comms(it, size = 13.dp) }
-                    MenuItem("Systems board", { footerMenuOpen = false; onToggleBoard() }) { HbGlyphs.Sys(it, size = 13.dp) }
-                    MenuItem("Reset uplink", { footerMenuOpen = false; onResetUplink() }) { HbGlyphs.Close(it, size = 13.dp) }
+                    MenuItem(t.sidebar.settings, { footerMenuOpen = false; onOpenSettings() }) { HbGlyphs.Sliders(it, size = 13.dp) }
+                    MenuItem(t.sidebar.comms, { footerMenuOpen = false; onToggleComms() }) { HbGlyphs.Comms(it, size = 13.dp) }
+                    MenuItem(t.sidebar.systemsBoard, { footerMenuOpen = false; onToggleBoard() }) { HbGlyphs.Sys(it, size = 13.dp) }
+                    MenuItem(t.sidebar.resetUplink, { footerMenuOpen = false; onResetUplink() }) { HbGlyphs.Close(it, size = 13.dp) }
                 }
             }
             Row(
@@ -438,6 +442,17 @@ private fun GroupLabel(label: String) {
  * A session row — flat and sharp; the selected row goes AMBER. Long-press opens
  * a menu: Rename (inline edit, commit on ⏎) or Delete (with a confirm step).
  */
+/** [com.speda.heartbreaker.domain.groupSessions]'s labels are fixed English
+ *  keys (SessionGrouping.kt); translated here at the display edge rather than
+ *  in the domain layer, which stays locale-agnostic. */
+private fun translateGroupLabel(label: String, t: AppStrings): String = when (label) {
+    "Today" -> t.sidebar.groupToday
+    "Yesterday" -> t.sidebar.groupYesterday
+    "This week" -> t.sidebar.groupWeek
+    "This month" -> t.sidebar.groupMonth
+    else -> t.sidebar.groupOlder
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionRow(
@@ -447,6 +462,7 @@ private fun SessionRow(
     onClick: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
+    t: AppStrings,
 ) {
     val palette = LocalHbPalette.current
     var menuOpen by remember { mutableStateOf(false) }
@@ -493,7 +509,7 @@ private fun SessionRow(
                 )
             } else {
                 HbText(
-                    session.title ?: "New conversation",
+                    session.title ?: t.sidebar.newConversation,
                     style = HbType.read.copy(fontSize = 13.5.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal),
                     color = if (active) Color(0xFFF3E2C4) else palette.textDim,
                     maxLines = 1,
@@ -514,13 +530,13 @@ private fun SessionRow(
         if (menuOpen) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp).hbGlass(shape = HbGlassShape.Tile, state = HbGlassState.Menu)) {
                 if (!confirmDelete) {
-                    SessionMenuRow("Rename", palette.iconBright) {
+                    SessionMenuRow(t.sidebar.rename, palette.iconBright) {
                         menuOpen = false; draft = session.title ?: ""; editing = true
                     }
-                    SessionMenuRow("Delete", palette.red) { confirmDelete = true }
+                    SessionMenuRow(t.sidebar.delete, palette.red) { confirmDelete = true }
                 } else {
-                    SessionMenuRow("Confirm delete", palette.red) { menuOpen = false; confirmDelete = false; onDelete() }
-                    SessionMenuRow("Cancel", palette.iconDim) { menuOpen = false; confirmDelete = false }
+                    SessionMenuRow(t.sidebar.confirmDelete, palette.red) { menuOpen = false; confirmDelete = false; onDelete() }
+                    SessionMenuRow(t.common.cancel, palette.iconDim) { menuOpen = false; confirmDelete = false }
                 }
             }
         }

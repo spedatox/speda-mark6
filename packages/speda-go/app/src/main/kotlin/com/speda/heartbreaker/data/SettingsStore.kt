@@ -33,6 +33,9 @@ data class HbSettings(
     val healthBackfillDone: Boolean = false,
     /** One-time "Atomix can read your health data" banner, per §1.1. */
     val healthNudgeSeen: Boolean = false,
+    /** The interface language — Turkish ("tr") by default, mirroring
+     *  store/settings.ts's `locale`. Wire value for [com.speda.heartbreaker.i18n.AppLocale]. */
+    val locale: String = "tr",
 )
 
 /** store/settings.ts DEFAULT.model — the routing default until the owner picks. */
@@ -55,6 +58,7 @@ class SettingsStore(private val context: Context) {
         val HEALTH_LAST_SYNC = longPreferencesKey("health_last_sync")
         val HEALTH_BACKFILL_DONE = booleanPreferencesKey("health_backfill_done")
         val HEALTH_NUDGE_SEEN = booleanPreferencesKey("health_nudge_seen")
+        val LOCALE = stringPreferencesKey("locale")
     }
 
     val settings: Flow<HbSettings> = context.settingsDataStore.data.map { p ->
@@ -71,6 +75,7 @@ class SettingsStore(private val context: Context) {
             healthLastSync = p[Keys.HEALTH_LAST_SYNC] ?: 0L,
             healthBackfillDone = p[Keys.HEALTH_BACKFILL_DONE] ?: false,
             healthNudgeSeen = p[Keys.HEALTH_NUDGE_SEEN] ?: false,
+            locale = p[Keys.LOCALE]?.ifEmpty { null } ?: "tr",
         )
     }
 
@@ -80,6 +85,7 @@ class SettingsStore(private val context: Context) {
     suspend fun setTemperature(temp: Float) = context.settingsDataStore.edit { it[Keys.TEMPERATURE] = temp.toString() }.let { }
     suspend fun setLocationEnabled(on: Boolean) = context.settingsDataStore.edit { it[Keys.LOCATION_ENABLED] = on }.let { }
     suspend fun setLocationPrompted(done: Boolean) = context.settingsDataStore.edit { it[Keys.LOCATION_PROMPTED] = done }.let { }
+    suspend fun setLocale(locale: String) = context.settingsDataStore.edit { it[Keys.LOCALE] = locale }.let { }
 
     // ── Atomix health sync ────────────────────────────────────────────────────
 

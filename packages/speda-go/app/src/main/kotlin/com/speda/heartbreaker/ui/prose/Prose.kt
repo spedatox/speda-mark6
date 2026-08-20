@@ -55,6 +55,7 @@ import com.speda.heartbreaker.domain.MarkdownPrep
 import com.speda.heartbreaker.domain.MathExtract
 import com.speda.heartbreaker.domain.TableColumns
 import com.speda.heartbreaker.domain.MathSpan
+import com.speda.heartbreaker.i18n.LocalStrings
 import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
@@ -244,6 +245,7 @@ private fun Fence(language: String, code: String) {
 @Composable
 private fun DesktopOnlyNotice() {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     Row(
         Modifier
             .fillMaxWidth()
@@ -253,7 +255,7 @@ private fun DesktopOnlyNotice() {
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         HbText(
-            "The House Party Protocol runs on the desktop app. Ask for it from there.",
+            t.proseKind.desktopOnlyNotice,
             style = HbType.read.copy(fontSize = 14.sp),
             color = palette.amberBright,
         )

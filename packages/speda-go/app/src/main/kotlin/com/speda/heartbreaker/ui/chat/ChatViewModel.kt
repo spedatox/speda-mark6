@@ -14,6 +14,8 @@ import com.speda.heartbreaker.domain.Role
 import com.speda.heartbreaker.domain.UploadedFile
 import com.speda.heartbreaker.domain.Watchdog
 import com.speda.heartbreaker.domain.reduce
+import com.speda.heartbreaker.i18n.AppStrings
+import com.speda.heartbreaker.i18n.Tr
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -56,6 +58,11 @@ class ChatViewModel(
      * by the shell; applied to every send, including regenerate/edit-and-resend.
      */
     var clientContextProvider: (suspend () -> com.speda.heartbreaker.data.ClientContext?)? = null
+
+    /** The owner's chosen interface language — Turkish by default, kept in sync
+     *  with the shell's `LocalStrings.current` on every recomposition. Plain
+     *  `var`, not a CompositionLocal read: this class isn't @Composable. */
+    var strings: AppStrings = Tr
 
     fun dispatch(action: ChatAction) = _state.update { reduce(it, action) }
 
@@ -177,7 +184,7 @@ class ChatViewModel(
         val assistantId = makeId()
         dispatch(
             ChatAction.AddAssistantMessage(
-                ChatMessage(id = assistantId, role = Role.Assistant, content = "", isStreaming = true, status = "Connecting"),
+                ChatMessage(id = assistantId, role = Role.Assistant, content = "", isStreaming = true, status = strings.chatMain.statusConnecting),
             ),
         )
         val sessionAtSend = state.value.activeSessionId
@@ -269,7 +276,7 @@ class ChatViewModel(
             val assistantId = makeId()
             dispatch(
                 ChatAction.AddAssistantMessage(
-                    ChatMessage(id = assistantId, role = Role.Assistant, content = "", isStreaming = true, status = "Reconnecting", sessionId = sessionId),
+                    ChatMessage(id = assistantId, role = Role.Assistant, content = "", isStreaming = true, status = strings.chatMain.statusReconnecting, sessionId = sessionId),
                 ),
             )
             runId = run.requestId
@@ -359,17 +366,17 @@ class ChatViewModel(
         val flusher = launch { while (isActive) { delay(16); flush() } }
 
         val watchdog = if (watchdogModel != null) launch {
-            val model = Watchdog.modelLabel(watchdogModel)
+            val model = Watchdog.modelLabel(watchdogModel, strings)
             while (isActive) {
                 delay(Watchdog.TICK_MS)
                 if (gotContent) continue // tokens flowing — the cursor is the status now
                 val idle = System.currentTimeMillis() - lastActivity
                 if (idle >= Watchdog.DEAD_MS) {
                     timedOut = true
-                    timeoutReason = Watchdog.timeoutReason(gotStart, gotTool, model, Watchdog.elapsedSeconds(startedAt, System.currentTimeMillis()))
+                    timeoutReason = Watchdog.timeoutReason(gotStart, gotTool, model, Watchdog.elapsedSeconds(startedAt, System.currentTimeMillis()), strings)
                     scope.cancel()
                 } else if (idle >= Watchdog.STALL_MS && !gotTool) {
-                    dispatch(ChatAction.SetStatus(assistantId, Watchdog.stallStatus(model, Watchdog.elapsedSeconds(startedAt, System.currentTimeMillis()))))
+                    dispatch(ChatAction.SetStatus(assistantId, Watchdog.stallStatus(model, Watchdog.elapsedSeconds(startedAt, System.currentTimeMillis()), strings)))
                 }
             }
         } else {
@@ -391,7 +398,7 @@ class ChatViewModel(
                                 turnSessionId = event.sessionId
                                 dispatch(ChatAction.TagMessageSession(assistantId, event.sessionId))
                             }
-                            dispatch(ChatAction.SetStatus(assistantId, "Thinking"))
+                            dispatch(ChatAction.SetStatus(assistantId, strings.chatMain.statusThinking))
                         }
                         "chunk" -> {
                             gotContent = true
@@ -423,7 +430,7 @@ class ChatViewModel(
                         }
                         "error" -> {
                             flush(); settled = true
-                            dispatch(ChatAction.ErrorMessage(assistantId, strOf(event.data) ?: "The turn failed."))
+                            dispatch(ChatAction.ErrorMessage(assistantId, strOf(event.data) ?: strings.chatMain.turnFailed))
                         }
                     }
                 }
@@ -433,7 +440,7 @@ class ChatViewModel(
             } catch (e: CancellationException) {
                 flush()
                 if (timedOut) {
-                    dispatch(ChatAction.ErrorMessage(assistantId, timeoutReason.ifEmpty { "The backend went silent and the request timed out." }))
+                    dispatch(ChatAction.ErrorMessage(assistantId, timeoutReason.ifEmpty { strings.chatMain.timedOutFallback }))
                 } else if (!settled) {
                     // User-initiated stop or a view switch — keep whatever streamed.
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
@@ -444,7 +451,7 @@ class ChatViewModel(
                     reattachAttempts++
                     gotContent = false; gotTool = false
                     lastActivity = System.currentTimeMillis()
-                    dispatch(ChatAction.SetStatus(assistantId, "Reconnecting…"))
+                    dispatch(ChatAction.SetStatus(assistantId, "${strings.chatMain.statusReconnecting}…"))
                     val newFlow = reattach()
                     if (newFlow != null) { currentFlow = newFlow; continue }
                 }
@@ -452,8 +459,7 @@ class ChatViewModel(
                 if (softLanding) {
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
                 } else {
-                    dispatch(ChatAction.ErrorMessage(assistantId,
-                        "Couldn't reach the backend — network error. Is the API server running and reachable from this host?"))
+                    dispatch(ChatAction.ErrorMessage(assistantId, strings.chatMain.networkError))
                 }
                 break
             } catch (e: Exception) {
@@ -463,7 +469,7 @@ class ChatViewModel(
                     reattachAttempts++
                     gotContent = false; gotTool = false
                     lastActivity = System.currentTimeMillis()
-                    dispatch(ChatAction.SetStatus(assistantId, "Reconnecting…"))
+                    dispatch(ChatAction.SetStatus(assistantId, "${strings.chatMain.statusReconnecting}…"))
                     val newFlow = reattach()
                     if (newFlow != null) { currentFlow = newFlow; continue }
                 }
@@ -472,8 +478,8 @@ class ChatViewModel(
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
                 } else {
                     dispatch(ChatAction.ErrorMessage(assistantId,
-                        if (net) "Couldn't reach the backend — network error. Is the API server running and reachable from this host?"
-                        else msg.ifEmpty { "The request failed." }))
+                        if (net) strings.chatMain.networkError
+                        else msg.ifEmpty { strings.chatMain.requestFailed }))
                 }
                 break
             }

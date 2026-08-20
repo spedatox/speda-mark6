@@ -63,6 +63,7 @@ import com.speda.heartbreaker.domain.Segment
 import com.speda.heartbreaker.domain.ToolStatus
 import com.speda.heartbreaker.domain.Typewriter
 import com.speda.heartbreaker.domain.buildSegments
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import com.speda.heartbreaker.ui.prose.LocalMessageStreaming
 import com.speda.heartbreaker.ui.prose.ProseText
@@ -103,6 +104,7 @@ private fun UserRow(
     onEditAndResend: ((String) -> Unit)?,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     var showActions by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var editValue by remember(message.id) { mutableStateOf(message.content) }
@@ -113,8 +115,8 @@ private fun UserRow(
         Column(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalAlignment = Alignment.End) {
             EditBox(value = editValue, onValueChange = { editValue = it })
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PillButton("Cancel", tint = null) { editing = false; editValue = message.content; showActions = false }
-                PillButton("Save & Send", tint = palette.accentBright) {
+                PillButton(t.common.cancel, tint = null) { editing = false; editValue = message.content; showActions = false }
+                PillButton(t.message.saveAndSend, tint = palette.accentBright) {
                     val v = editValue.trim()
                     editing = false; showActions = false
                     if (v.isNotEmpty() && v != message.content) onEditAndResend?.invoke(v)
@@ -226,6 +228,7 @@ private fun AssistantRow(
     onRegenerate: (() -> Unit)?,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val hasCodeBlock = message.content.contains("```")
     var showActions by remember { mutableStateOf(false) }
 
@@ -310,7 +313,7 @@ private fun AssistantRow(
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
                     HbText(
-                        message.errorNote ?: message.content.ifEmpty { "Something went wrong." },
+                        message.errorNote ?: message.content.ifEmpty { t.message.somethingWentWrong },
                         style = HbType.read,
                         color = Color(0xFFF87171),
                     )
@@ -461,7 +464,8 @@ private fun EditBox(value: String, onValueChange: (String) -> Unit) {
 @Composable
 private fun WorkingStatus(lastToolName: String?, status: String?) {
     val palette = LocalHbPalette.current
-    val label = if (lastToolName != null) ToolStatus.statusLabel(lastToolName) else (status ?: "Thinking")
+    val t = LocalStrings.current
+    val label = if (lastToolName != null) ToolStatus.statusLabel(lastToolName, t) else (status ?: t.message.thinking)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(9.dp),

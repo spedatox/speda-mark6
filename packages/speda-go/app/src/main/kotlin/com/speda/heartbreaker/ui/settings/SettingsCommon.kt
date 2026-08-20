@@ -39,6 +39,7 @@ import com.speda.heartbreaker.designsystem.glass.hbGlass
 import com.speda.heartbreaker.designsystem.glass.toShape
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 
 /** Open a URL in the system browser (OAuth consent, Telegram deep link). */
@@ -180,7 +181,7 @@ internal fun ServiceRow(
 
 /** "Connected", with the dot the whole deck uses for a live thing. */
 @Composable
-internal fun LiveDot(label: String = "Connected") {
+internal fun LiveDot(label: String = LocalStrings.current.common.connected) {
     val palette = LocalHbPalette.current
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(Modifier.size(6.dp).background(palette.green, CircleShape))

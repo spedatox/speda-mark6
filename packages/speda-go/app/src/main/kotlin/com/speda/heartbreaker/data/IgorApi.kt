@@ -13,6 +13,8 @@ import com.speda.heartbreaker.health.HealthIngestRequest
 import com.speda.heartbreaker.health.HealthIngestResult
 import com.speda.heartbreaker.health.HealthSampleDto
 import com.speda.heartbreaker.health.HealthStatusDto
+import com.speda.heartbreaker.i18n.AppStrings
+import com.speda.heartbreaker.i18n.Tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -425,11 +427,11 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
-    suspend fun saveConfig(config: AppConfig, values: Map<String, JsonElement>): ConfigSaveResult = withContext(Dispatchers.IO) {
+    suspend fun saveConfig(config: AppConfig, values: Map<String, JsonElement>, t: AppStrings = Tr): ConfigSaveResult = withContext(Dispatchers.IO) {
         runCatching {
             val body = buildJsonObject { put("values", JsonObject(values)) }
             putJson(config, "/config", body)?.let { json.decodeFromString<ConfigSaveResult>(it) }
-        }.getOrNull() ?: ConfigSaveResult(rejected = listOf("Save failed — the backend didn't accept the change."))
+        }.getOrNull() ?: ConfigSaveResult(rejected = listOf(t.settingsConfig.saveFailedBackend))
     }
 
     suspend fun getMemorySources(config: AppConfig): MemorySources = withContext(Dispatchers.IO) {
@@ -613,7 +615,12 @@ class IgorApi(
 
     // ── Data (import chats, index history) ──────────────────────────────────────
 
-    suspend fun importChats(config: AppConfig, fileName: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
+    /** Whether the import failed used to be inferred by the caller matching an
+     *  English string prefix on the returned message — which breaks the moment
+     *  that message is localized. [ok] carries the outcome explicitly instead. */
+    data class ImportOutcome(val ok: Boolean, val message: String)
+
+    suspend fun importChats(config: AppConfig, fileName: String, bytes: ByteArray, t: AppStrings = Tr): ImportOutcome = withContext(Dispatchers.IO) {
         runCatching {
             val part = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -626,19 +633,20 @@ class IgorApi(
                 .build()
             restClient.newCall(request).execute().use { res ->
                 val body = res.body?.string().orEmpty()
-                if (!res.isSuccessful) return@use "Import failed (HTTP ${res.code})."
-                json.parseToJsonElement(body).jsonObject["message"]?.jsonPrimitive?.contentOrNull
-                    ?: "Import started in the background."
+                if (!res.isSuccessful) return@use ImportOutcome(false, t.settingsData.importFailedHttp(res.code))
+                val message = json.parseToJsonElement(body).jsonObject["message"]?.jsonPrimitive?.contentOrNull
+                    ?: t.settingsData.importStartedBackground
+                ImportOutcome(true, message)
             }
-        }.getOrElse { "Import failed: ${it.message}" }
+        }.getOrElse { ImportOutcome(false, t.settingsData.importFailedError(it.message.orEmpty())) }
     }
 
-    suspend fun indexHistory(config: AppConfig): String = withContext(Dispatchers.IO) {
+    suspend fun indexHistory(config: AppConfig, t: AppStrings = Tr): String = withContext(Dispatchers.IO) {
         runCatching {
             postEmpty(config, "/admin/index-history")?.let {
                 json.parseToJsonElement(it).jsonObject["message"]?.jsonPrimitive?.contentOrNull
-            } ?: "Indexing started in the background."
-        }.getOrElse { "Indexing failed: ${it.message}" }
+            } ?: t.settingsData.indexingStartedBackground
+        }.getOrElse { t.settingsData.indexFailedError(it.message.orEmpty()) }
     }
 
     // ── Atomix health sync (docs/ATOMIX_HEALTH_SYNC.md §3.1) ───────────────────

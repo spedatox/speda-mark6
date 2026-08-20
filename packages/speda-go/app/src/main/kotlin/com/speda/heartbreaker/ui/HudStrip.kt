@@ -37,6 +37,7 @@ import com.speda.heartbreaker.designsystem.glass.hbSeamBottom
 import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.i18n.LocalStrings
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -58,6 +59,7 @@ fun HudStrip(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     var diagOpen by remember { mutableStateOf(false) }
 
     var now by remember { mutableStateOf(LocalDateTime.now()) }
@@ -123,7 +125,7 @@ fun HudStrip(
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
                     HbText(
-                        "DIAG",
+                        t.hud.diag,
                         style = HbType.hud.copy(fontSize = 9.sp, letterSpacing = 0.1.em),
                         color = if (diagOpen) palette.accentBright else palette.textDim,
                     )
@@ -142,18 +144,18 @@ fun HudStrip(
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                DiagRow("LINK", if (health.online) "ONLINE" else "OFFLINE", linkColor)
-                DiagRow("MODEL", shortModel(model), palette.accentBright)
-                DiagRow("HOST", hostOf(apiBase), palette.textDim)
-                DiagRow("TOOLS", health.tools?.toString() ?: "--", palette.textDim)
+                DiagRow(t.hud.link, if (health.online) t.hud.online else t.hud.offline, linkColor)
+                DiagRow(t.hud.model, shortModel(model), palette.accentBright)
+                DiagRow(t.hud.host, hostOf(apiBase), palette.textDim)
+                DiagRow(t.hud.tools, health.tools?.toString() ?: "--", palette.textDim)
                 DiagRow(
-                    "RTT",
+                    t.hud.rtt,
                     health.latencyMs?.let { "${it}ms" } ?: "--",
                     if ((health.latencyMs ?: Long.MAX_VALUE) < 400) palette.green else palette.amber,
                 )
-                DiagRow("SESS", sessionCount.toString().padStart(2, '0'), palette.textDim)
-                DiagRow("DATE", now.format(DATE_TAG).uppercase(Locale.ENGLISH), palette.amber)
-                DiagRow("TIME", now.format(CLOCK), palette.accentBright)
+                DiagRow(t.hud.sess, sessionCount.toString().padStart(2, '0'), palette.textDim)
+                DiagRow(t.hud.date, now.format(DATE_TAG).uppercase(Locale.ENGLISH), palette.amber)
+                DiagRow(t.hud.time, now.format(CLOCK), palette.accentBright)
             }
         }
     }

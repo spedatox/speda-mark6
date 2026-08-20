@@ -1,5 +1,6 @@
 package com.speda.heartbreaker.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,8 @@ import com.speda.heartbreaker.designsystem.glass.hbGlass
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.AppLocale
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.launch
 
@@ -35,6 +38,7 @@ import kotlinx.coroutines.launch
 fun InterfaceTab(config: AppConfig, graph: AppGraph) {
     val scope = rememberCoroutineScope()
     val settings by graph.settings.settings.collectAsStateWithLifecycle(initialValue = HbSettings())
+    val t = LocalStrings.current
 
     // Enabling from Settings requests the permission if it isn't granted yet.
     val locationPermission = rememberLauncherForActivityResult(
@@ -44,21 +48,34 @@ fun InterfaceTab(config: AppConfig, graph: AppGraph) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
-        SectionHeader("Theme")
+        SectionHeader(t.settingsInterface.language, first = true)
         Panel {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ThemeChip("Dark", active = true)
-                ThemeChip("Light (soon)", active = false)
+                AppLocale.entries.forEach { locale ->
+                    ThemeChip(locale.label, active = settings.locale == locale.wire) {
+                        scope.launch { graph.settings.setLocale(locale.wire) }
+                    }
+                }
             }
             Spacer(Modifier.height(8.dp))
-            Hint("The command deck is AMOLED-black by design; the whole palette re-hues to the active agent's accent.")
+            Hint(t.settingsInterface.languageHint)
         }
 
-        SectionHeader("Location awareness")
+        SectionHeader(t.settingsInterface.theme)
+        Panel {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ThemeChip(t.settingsInterface.dark, active = true)
+                ThemeChip(t.settingsInterface.lightSoon, active = false)
+            }
+            Spacer(Modifier.height(8.dp))
+            Hint(t.settingsInterface.themeHint)
+        }
+
+        SectionHeader(t.settingsInterface.locationAwareness)
         Panel {
             ToggleRow(
-                label = "Share location with Speda",
-                subtitle = "Sends your device's precise position each turn, so Speda can answer location-aware questions.",
+                label = t.settingsInterface.shareLocation,
+                subtitle = t.settingsInterface.shareLocationHint,
                 checked = settings.locationEnabled,
                 enabled = true,
                 onToggle = { on ->
@@ -74,15 +91,12 @@ fun InterfaceTab(config: AppConfig, graph: AppGraph) {
                 },
             )
             Spacer(Modifier.height(8.dp))
-            Hint(
-                "Your device model, OS and app version always travel with a turn so Speda knows it's on the phone. " +
-                    "Location is opt-in and never stored — it rides only the message you send.",
-            )
+            Hint(t.settingsInterface.locationFooter)
         }
 
-        SectionHeader("Display")
+        SectionHeader(t.settingsInterface.display)
         Panel {
-            Hint("Switch agents from the drawer to recolour the entire interface. The House Party Protocol parades the full roster's colours.")
+            Hint(t.settingsInterface.displayHint)
         }
 
         Spacer(Modifier.height(24.dp))
@@ -90,11 +104,12 @@ fun InterfaceTab(config: AppConfig, graph: AppGraph) {
 }
 
 @Composable
-private fun ThemeChip(label: String, active: Boolean) {
+private fun ThemeChip(label: String, active: Boolean, onClick: () -> Unit = {}) {
     val palette = LocalHbPalette.current
     Box(
         Modifier
             .hbGlass(shape = HbGlassShape.Tile, state = if (active) HbGlassState.Tint(palette.accent) else HbGlassState.Default)
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {

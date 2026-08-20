@@ -42,10 +42,8 @@ import com.speda.heartbreaker.domain.CalDay
 import com.speda.heartbreaker.domain.CalEvent
 import com.speda.heartbreaker.domain.looksIncomplete
 import com.speda.heartbreaker.domain.parseCalendarSpec
+import com.speda.heartbreaker.i18n.LocalStrings
 import java.time.LocalDate
-
-private val WEEKDAYS = listOf("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT")
-private val MONTHS = listOf("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
 
 /**
  * ```calendar fences — the Jarvis holographic calendar, a port of
@@ -57,15 +55,16 @@ private val MONTHS = listOf("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AU
  */
 @Composable
 fun CalendarBlock(raw: String, modifier: Modifier = Modifier) {
+    val t = LocalStrings.current
     val spec = remember(raw) { parseCalendarSpec(raw) }
     if (spec == null) {
-        if (looksIncomplete(raw)) Materializing("CALENDAR", modifier) else ParseError("CALENDAR", raw, modifier)
+        if (looksIncomplete(raw)) Materializing(t.proseKind.calendar, modifier) else ParseError(t.proseKind.calendar, raw, modifier)
         return
     }
     val palette = LocalHbPalette.current
     val today = remember { LocalDate.now() }
     val first = spec.days.firstOrNull()?.let { it.localDate }
-    val monthLabel = first?.let { "${MONTHS[it.monthValue - 1]} ${it.year}" }.orEmpty()
+    val monthLabel = first?.let { "${t.calendar.months[it.monthValue - 1]} ${it.year}" }.orEmpty()
 
     Box(modifier.fillMaxWidth().padding(vertical = 14.dp)) {
         // Layered glass ghosts behind — the stacked depth of the reference.
@@ -99,7 +98,7 @@ fun CalendarBlock(raw: String, modifier: Modifier = Modifier) {
                 ) {
                     Column(Modifier.weight(1f)) {
                         BasicText(
-                            AnnotatedString(spec.title ?: "CALENDAR"),
+                            AnnotatedString(spec.title ?: t.calendar.fallbackTitle),
                             style = HbType.headerBar.copy(
                                 fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.22.em,
                                 color = Color.White,
@@ -186,9 +185,10 @@ private fun HudRing(modifier: Modifier = Modifier) {
 @Composable
 private fun DayColumn(day: CalDay, today: LocalDate) {
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     val d = day.localDate
     val isToday = d == today
-    val wd = day.label ?: d?.let { WEEKDAYS[it.dayOfWeek.value % 7] } ?: "—"
+    val wd = day.label ?: d?.let { t.calendar.weekdays[it.dayOfWeek.value % 7] } ?: "—"
     val num = d?.dayOfMonth?.toString().orEmpty()
     val events = remember(day) { day.events.sortedBy { it.time ?: "" } }
 

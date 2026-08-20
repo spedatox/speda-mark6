@@ -50,6 +50,8 @@ import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.i18n.AppStrings
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
@@ -67,6 +69,7 @@ import kotlinx.serialization.json.jsonPrimitive
 @Composable
 fun ConfigTabView(config: AppConfig, graph: AppGraph) {
     val scope = rememberCoroutineScope()
+    val t = LocalStrings.current
 
     var groups by remember { mutableStateOf<List<ConfigGroupInfo>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -105,25 +108,21 @@ fun ConfigTabView(config: AppConfig, graph: AppGraph) {
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 4.dp),
         ) {
-            SectionHeader("Configuration")
-            Hint(
-                "Everything the backend can be configured with — API keys, bot tokens, endpoints and flags. " +
-                    "Values are stored in a managed override file that wins over the checked-in .env. A restart-required " +
-                    "field is saved now and takes effect on the next backend restart.",
-            )
+            SectionHeader(t.settingsTabs.config.label)
+            Hint(t.settingsConfig.intro)
             Spacer(Modifier.height(12.dp))
 
             SourceOfTruthPanel(config, graph)
             Spacer(Modifier.height(12.dp))
 
             if (loading) {
-                Hint("Loading configuration…")
+                Hint(t.settingsConfig.loading)
             } else {
                 // Search
                 GlassField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = "Search settings (e.g. telegram, openai, n8n)…",
+                    placeholder = t.settingsConfig.searchPlaceholder,
                     singleLine = true,
                 )
                 Spacer(Modifier.height(12.dp))
@@ -138,6 +137,7 @@ fun ConfigTabView(config: AppConfig, graph: AppGraph) {
                         onToggle = { open[g.id] = !(open[g.id] == true) },
                         edits = edits,
                         reveal = reveal,
+                        t = t,
                     )
                     Spacer(Modifier.height(10.dp))
                 }
@@ -156,7 +156,7 @@ fun ConfigTabView(config: AppConfig, graph: AppGraph) {
                     if (edits.isNotEmpty() && !saving) {
                         scope.launch {
                             saving = true; result = null
-                            val r = graph.api.saveConfig(config, edits.toMap())
+                            val r = graph.api.saveConfig(config, edits.toMap(), t)
                             result = r
                             edits.clear()
                             load()
@@ -164,6 +164,7 @@ fun ConfigTabView(config: AppConfig, graph: AppGraph) {
                         }
                     }
                 },
+                t = t,
             )
         }
     }
@@ -177,6 +178,7 @@ private fun ConfigGroup(
     onToggle: () -> Unit,
     edits: MutableMap<String, JsonElement>,
     reveal: MutableMap<String, Boolean>,
+    t: AppStrings,
 ) {
     val palette = LocalHbPalette.current
     Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.Ctl)) {
@@ -198,7 +200,7 @@ private fun ConfigGroup(
                 Box(
                     Modifier.border(1.dp, palette.amber.copy(alpha = 0.5f)).padding(horizontal = 6.dp, vertical = 2.dp),
                 ) {
-                    HbText("$dirtyCount edited", style = HbType.readout.copy(fontSize = 9.sp), color = palette.amber)
+                    HbText(t.settingsConfig.groupEdited(dirtyCount), style = HbType.readout.copy(fontSize = 9.sp), color = palette.amber)
                 }
             }
         }
@@ -216,6 +218,7 @@ private fun ConfigGroup(
                         onReveal = { reveal[f.key] = !(reveal[f.key] == true) },
                         onChange = { edits[f.key] = it },
                         onReset = { edits.remove(f.key) },
+                        t = t,
                     )
                 }
             }
@@ -232,6 +235,7 @@ private fun ConfigFieldRow(
     onReveal: () -> Unit,
     onChange: (JsonElement) -> Unit,
     onReset: () -> Unit,
+    t: AppStrings,
 ) {
     val palette = LocalHbPalette.current
     Column(Modifier.fillMaxWidth()) {
@@ -251,14 +255,14 @@ private fun ConfigFieldRow(
                         .border(1.dp, palette.amber.copy(alpha = 0.28f), CircleShape)
                         .padding(horizontal = 9.dp, vertical = 1.dp),
                 ) {
-                    HbText("restart", style = HbType.read.copy(fontSize = 12.sp), color = palette.amberBright)
+                    HbText(t.settingsConfig.restart, style = HbType.read.copy(fontSize = 12.sp), color = palette.amberBright)
                 }
             }
-            if (dirty) HbText("● edited", style = HbType.read.copy(fontSize = 12.5.sp), color = palette.accentBright)
+            if (dirty) HbText(t.settingsConfig.editedDot, style = HbType.read.copy(fontSize = 12.5.sp), color = palette.accentBright)
             Spacer(Modifier.weight(1f))
             if (dirty) {
                 HbText(
-                    "revert",
+                    t.settingsConfig.revert,
                     style = HbType.readout.copy(fontSize = 10.sp),
                     color = palette.textFaint,
                     modifier = Modifier.clickable(onClick = onReset),
@@ -287,14 +291,14 @@ private fun ConfigFieldRow(
                         GlassField(
                             value = typed,
                             onValueChange = { onChange(JsonPrimitive(it)) },
-                            placeholder = if (f.isSet) "stored ${f.hint ?: "••••"} — type to replace" else (f.placeholder.ifEmpty { "not set" }),
+                            placeholder = if (f.isSet) t.settingsConfig.storedTypeReplace(f.hint ?: "••••") else (f.placeholder.ifEmpty { t.settingsConfig.notSet }),
                             singleLine = true,
                             dirty = dirty,
                             mono = true,
                             visualTransformation = if (revealed) VisualTransformation.None else PasswordVisualTransformation(),
                         )
                     }
-                    SettingsButton(if (revealed) "Hide" else "Show", onClick = onReveal)
+                    SettingsButton(if (revealed) t.common.hide else t.common.show, onClick = onReveal)
                 }
             }
 
@@ -326,7 +330,7 @@ private fun ConfigFieldRow(
         // Clear a stored secret (send empty string → backend clears it).
         if (f.secret && f.isSet && !dirty) {
             HbText(
-                "clear stored",
+                t.settingsConfig.clearStored,
                 style = HbType.readout.copy(fontSize = 10.sp),
                 color = palette.red,
                 modifier = Modifier.padding(top = 4.dp).clickable { onChange(JsonPrimitive("")) },
@@ -376,6 +380,7 @@ private fun SaveBar(
     result: ConfigSaveResult?,
     onDiscard: () -> Unit,
     onSave: () -> Unit,
+    t: AppStrings,
 ) {
     val palette = LocalHbPalette.current
     Row(
@@ -387,26 +392,26 @@ private fun SaveBar(
             if (result != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (result.appliedLive.isNotEmpty()) {
-                        HbText("✓ ${result.appliedLive.size} live", style = HbType.readout.copy(fontSize = 11.sp), color = palette.green)
+                        HbText(t.settingsConfig.appliedLive(result.appliedLive.size), style = HbType.readout.copy(fontSize = 11.sp), color = palette.green)
                     }
                     if (result.restartRequired.isNotEmpty()) {
-                        HbText("↻ ${result.restartRequired.size} restart", style = HbType.readout.copy(fontSize = 11.sp), color = palette.amber)
+                        HbText(t.settingsConfig.needsRestartN(result.restartRequired.size), style = HbType.readout.copy(fontSize = 11.sp), color = palette.amber)
                     }
                     if (result.rejected.isNotEmpty()) {
-                        HbText("✕ ${result.rejected.size} rejected", style = HbType.readout.copy(fontSize = 11.sp), color = palette.red)
+                        HbText(t.settingsConfig.rejected(result.rejected.size), style = HbType.readout.copy(fontSize = 11.sp), color = palette.red)
                     }
                 }
             } else {
                 HbText(
-                    if (dirtyCount > 0) "$dirtyCount unsaved change${if (dirtyCount > 1) "s" else ""}" else "No changes",
+                    if (dirtyCount > 0) t.settingsConfig.unsavedChanges(dirtyCount) else t.settingsConfig.noChanges,
                     style = HbType.readout.copy(fontSize = 11.sp),
                     color = palette.textFaint,
                 )
             }
         }
-        if (dirtyCount > 0) SettingsButton("Discard", onClick = onDiscard)
+        if (dirtyCount > 0) SettingsButton(t.settingsConfig.discard, onClick = onDiscard)
         SettingsButton(
-            if (saving) "Saving…" else "Save changes",
+            if (saving) t.settingsConfig.saving else t.settingsConfig.saveChanges,
             onClick = onSave,
             enabled = dirtyCount > 0 && !saving,
         )
@@ -422,6 +427,7 @@ private fun SaveBar(
 private fun SourceOfTruthPanel(config: AppConfig, graph: AppGraph) {
     val scope = rememberCoroutineScope()
     val palette = LocalHbPalette.current
+    val t = LocalStrings.current
     var data by remember { mutableStateOf<MemorySources?>(null) }
     var busy by remember { mutableStateOf<String?>(null) }
 
@@ -433,8 +439,8 @@ private fun SourceOfTruthPanel(config: AppConfig, graph: AppGraph) {
     fun fileName(p: String) = p.removePrefix("/memories/")
 
     Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.Ctl).padding(12.dp)) {
-        HbText("Agent Source of Truth", style = HbType.read.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold), color = palette.text)
-        Hint("The one /memories file each agent reads its domain data from and writes every update back to. Pick any existing memory file.")
+        HbText(t.settingsConfig.sourceOfTruthTitle, style = HbType.read.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold), color = palette.text)
+        Hint(t.settingsConfig.sourceOfTruthHint)
         Spacer(Modifier.height(8.dp))
         d.agents.forEach { a ->
             val options = buildList {
@@ -453,8 +459,8 @@ private fun SourceOfTruthPanel(config: AppConfig, graph: AppGraph) {
                 }
                 Box(Modifier.weight(1f)) {
                     InlineSelect(
-                        value = if (current.isEmpty()) (a.default?.let { "default (${fileName(it)})" } ?: "none") else fileName(current),
-                        options = options.map { if (it.isEmpty()) (a.default?.let { d0 -> "default (${fileName(d0)})" } ?: "none") else fileName(it) },
+                        value = if (current.isEmpty()) (a.default?.let { t.settingsConfig.default(fileName(it)) } ?: t.settingsConfig.none) else fileName(current),
+                        options = options.map { if (it.isEmpty()) (a.default?.let { d0 -> t.settingsConfig.default(fileName(d0)) } ?: t.settingsConfig.none) else fileName(it) },
                     ) { picked ->
                         // Map the display label back to the wire path.
                         val path = d.files.firstOrNull { fileName(it) == picked }
