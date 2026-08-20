@@ -61,7 +61,7 @@ Estimated 14 weeks from kick-off.
 
 ### PDF
 
-Same Markdown structure as DOCX. Rendered with ReportLab — supports bold, italic, and `code` inline.
+Same Markdown structure as DOCX. Rendered to HTML/CSS and converted with WeasyPrint — supports bold, italic, and `code` inline.
 
 ## Tool call
 

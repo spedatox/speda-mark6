@@ -7,8 +7,16 @@ FROM python:3.11-slim
 
 # openssh-client: the system_ops host bridge — the containerized backend SSHes
 # to the real host (host.docker.internal) for Orion/Optimus server maintenance.
+# libpango/libcairo/libgdk-pixbuf: WeasyPrint's native rendering stack — every
+# generated PDF (generic reports and Atomix's branded daily program) renders
+# HTML/CSS through these, not a browser. No fonts-* package needed here: every
+# document embeds the bundled DejaVu/Barlow files itself (see app/skills/fonts),
+# so rendering is identical regardless of what the container image ships.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openssh-client \
+    && apt-get install -y --no-install-recommends \
+        openssh-client \
+        libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 \
+        libgdk-pixbuf-2.0-0 libcairo2 libffi8 shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js + npm/npx — every Tier-2 stdio MCP server (tavily, exa, notion,

@@ -1,7 +1,8 @@
 """
 Atomix's daily training-program document — a fixed, designed HTML/CSS template
 (app/templates/reports/atomix_daily_program_template.html) filled with the
-session's content and delivered as a downloadable file.
+session's content and rendered straight to PDF for delivery as a downloadable
+(and Telegram-sendable) file.
 
 The design (Barlow Condensed masthead, the Atomix mark, the dossier grid) is
 locked. Claude never authors HTML for this document — it only supplies the
@@ -10,6 +11,12 @@ session fields below; this module does plain marker-based substitution
 prompts/loader.py::load_section) so the template can never be mangled by a
 generation turn. If the template's markers are ever edited incompatibly,
 rendering fails loudly instead of silently emitting broken markup.
+
+This is the ONLY path that produces the daily training-program document.
+Do not reach for generate_document (generic reports) or the sandbox (ad hoc
+scripts) for this — both bypass the locked design and are exactly what caused
+the same session to yield three different-looking, sometimes-logo-less PDFs
+before this module rendered straight to PDF itself.
 """
 
 import base64
@@ -148,18 +155,20 @@ class GenerateDailyTrainingProgramSkill(Skill):
     read_only = False
     description = (
         "Renders today's already-decided training session — the goal, warm-up, main-work "
-        "table, finisher, and safety rules — into Atomix's branded, print-ready daily program "
-        "document and delivers it as a downloadable HTML file the owner can open in a browser "
-        "and print, or save as PDF from the browser's print dialog. Use this ONLY after you "
-        "have actually worked out today's session per the Training Protocol (read the session "
-        "ledger, checked recovery, chosen the exercises against his record) and he wants it as "
-        "a physical or printable document — not for describing the plan in chat, which stays "
-        "in the conversation as normal text. The visual design is a locked template (fonts, "
-        "layout, the Atomix mark); you only ever supply the session's content fields below — "
-        "never hand-write or paste raw HTML/CSS yourself for this document, this tool is the "
-        "only path to it and is what keeps the design from ever being broken by a generation "
-        "turn. Returns confirmation that the file was generated and delivered as a download "
-        "card; do not paste its path or contents back to him."
+        "table, finisher, and safety rules — into Atomix's branded daily program PDF and "
+        "delivers it as a downloadable file (and, if the owner also wants Telegram, the "
+        "file to hand send_telegram_file). Use this ONLY after you have actually worked out "
+        "today's session per the Training Protocol (read the session ledger, checked "
+        "recovery, chosen the exercises against his record) and he wants it as a document — "
+        "not for describing the plan in chat, which stays in the conversation as normal "
+        "text. This is the ONLY tool that produces this document: do NOT use generate_document "
+        "(generic reports, unbranded) or write an ad hoc script in the sandbox to build a PDF "
+        "yourself — both bypass the locked design and produce a different-looking, "
+        "sometimes logo-less file every time, which is exactly the inconsistency this tool "
+        "exists to prevent. The visual design (fonts, layout, the Atomix mark) is locked; "
+        "you only ever supply the session's content fields below — never hand-write or paste "
+        "raw HTML/CSS yourself. Returns confirmation that the PDF was generated and "
+        "delivered as a download card; do not paste its path or contents back to him."
     )
     input_schema = {
         "type": "object",
@@ -210,10 +219,19 @@ class GenerateDailyTrainingProgramSkill(Skill):
             )
             return f"Couldn't render the daily program document: {e}"
 
+        from weasyprint import HTML  # type: ignore[import]
+
         out_dir = Path(settings.temp_outputs_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        path = out_dir / f"{uuid.uuid4().hex[:8]}_gunluk-program-{data.date}.html"
-        path.write_text(rendered, encoding="utf-8")
+        path = out_dir / f"{uuid.uuid4().hex[:8]}_gunluk-program-{data.date}.pdf"
+        try:
+            HTML(string=rendered).write_pdf(str(path))
+        except Exception as e:  # noqa: BLE001
+            logger.error(
+                "atomix_daily_program_pdf_failed",
+                extra={"request_id": context.request_id, "error": str(e)},
+            )
+            return f"Couldn't render the daily program PDF: {e}"
 
         meta = register_file(context, str(path), title=f"Günlük Antrenman Programı — {data.date_human}")
         logger.info(
@@ -221,7 +239,8 @@ class GenerateDailyTrainingProgramSkill(Skill):
             extra={"request_id": context.request_id, "file_name": meta["name"], "size": meta["size"]},
         )
         return (
-            f"Generated the daily training program document ({meta['name']}, {meta['kind']}, "
+            f"Generated the daily training program PDF ({meta['name']}, {meta['kind']}, "
             f"{meta['size']} bytes) and delivered it to the owner as a downloadable file. "
-            f"Do NOT paste its path or contents — just tell him it's ready to open or print."
+            f"Do NOT paste its path or contents — just tell him it's ready. If he also wants "
+            f"it on Telegram, pass this same file to send_telegram_file — do not regenerate it."
         )

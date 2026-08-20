@@ -1,3 +1,4 @@
+import html
 import logging
 import os
 import re
@@ -12,51 +13,39 @@ from app.skills.base import Skill
 logger = logging.getLogger(__name__)
 
 # ── PDF fonts ───────────────────────────────────────────────────────────────
-# ReportLab's built-in Helvetica is CP1252-encoded and has no glyphs for the
-# Turkish-specific letters ğ ş ı İ (they render as ▮). We bundle the DejaVu Sans
-# family (full Unicode, permissive licence) and register it so PDFs render
-# Turkish — and any Latin/Cyrillic/Greek — correctly on every deployment,
-# independent of system fonts (Contabo container ships only what we bundle).
+# The DejaVu Sans family (full Unicode, permissive licence) covers the
+# Turkish-specific letters ğ ş ı İ that many system font fallbacks lack. Each
+# generated PDF's CSS declares @font-face against these bundled files (via
+# file:// URIs — see _pdf_font_faces) rather than relying on whatever fonts the
+# container image happens to ship, so rendering is identical on every
+# deployment regardless of host font packages.
 _FONTS_DIR = Path(__file__).parent / "fonts"
+
+_PDF_FONT_VARIANTS = [
+    ("DejaVu Sans", "normal", "normal", "DejaVuSans.ttf"),
+    ("DejaVu Sans", "bold", "normal", "DejaVuSans-Bold.ttf"),
+    ("DejaVu Sans", "normal", "italic", "DejaVuSans-Oblique.ttf"),
+    ("DejaVu Sans", "bold", "italic", "DejaVuSans-BoldOblique.ttf"),
+    ("DejaVu Sans Mono", "normal", "normal", "DejaVuSansMono.ttf"),
+]
 
 
 @lru_cache(maxsize=1)
-def _register_pdf_fonts() -> dict[str, str]:
-    """
-    Register the bundled DejaVu family with ReportLab once per process and
-    return the {role: font-name} map the PDF styles use. On any failure (fonts
-    missing), fall back to the Helvetica family so generation never breaks —
-    Turkish glyphs are lost but the document is still produced.
-    """
-    from reportlab.pdfbase import pdfmetrics            # type: ignore[import]
-    from reportlab.pdfbase.ttfonts import TTFont        # type: ignore[import]
-
-    fallback = {"normal": "Helvetica", "bold": "Helvetica-Bold",
-                "italic": "Helvetica-Oblique", "mono": "Courier"}
-    try:
-        variants = {
-            "DejaVuSans": "DejaVuSans.ttf",
-            "DejaVuSans-Bold": "DejaVuSans-Bold.ttf",
-            "DejaVuSans-Oblique": "DejaVuSans-Oblique.ttf",
-            "DejaVuSans-BoldOblique": "DejaVuSans-BoldOblique.ttf",
-            "DejaVuSansMono": "DejaVuSansMono.ttf",
-        }
-        for name, fname in variants.items():
-            pdfmetrics.registerFont(TTFont(name, str(_FONTS_DIR / fname)))
-        # Family mapping lets inline <b>/<i> markup resolve to the right variant.
-        pdfmetrics.registerFontFamily(
-            "DejaVuSans",
-            normal="DejaVuSans", bold="DejaVuSans-Bold",
-            italic="DejaVuSans-Oblique", boldItalic="DejaVuSans-BoldOblique",
+def _pdf_font_faces() -> str:
+    """Build the @font-face CSS block for the bundled DejaVu family. A missing
+    file is skipped (logged) rather than raising — the document still renders,
+    just falls back to whatever font WeasyPrint substitutes."""
+    faces: list[str] = []
+    for family, weight, style, fname in _PDF_FONT_VARIANTS:
+        path = _FONTS_DIR / fname
+        if not path.exists():
+            logger.warning("pdf_font_missing", extra={"file": fname})
+            continue
+        faces.append(
+            f"@font-face {{ font-family: '{family}'; font-weight: {weight}; "
+            f"font-style: {style}; src: url('{path.resolve().as_uri()}'); }}"
         )
-        return {"normal": "DejaVuSans", "bold": "DejaVuSans-Bold",
-                "italic": "DejaVuSans-Oblique", "mono": "DejaVuSansMono"}
-    except Exception as e:
-        logger.warning(
-            "pdf_font_register_failed",
-            extra={"error": str(e), "fonts_dir": str(_FONTS_DIR)},
-        )
-        return fallback
+    return "\n".join(faces)
 
 
 # ── Markdown parsing ──────────────────────────────────────────────────────────
@@ -167,13 +156,13 @@ def _strip_md(text: str) -> str:
     return text
 
 
-def _md_to_reportlab(text: str, mono: str = "Courier") -> str:
-    """Convert inline **bold** and *italic* to reportlab XML markup."""
-    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-    text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
-    text = re.sub(r"`(.+?)`", rf"<font name='{mono}'>\1</font>", text)
-    # Escape bare ampersands not part of markup
-    text = re.sub(r"&(?!amp;|lt;|gt;|quot;|apos;|#)", "&amp;", text)
+def _md_to_html(text: str) -> str:
+    """Escape text for safe HTML embedding, then convert inline **bold**,
+    *italic*, and `code` markers to their tag equivalents."""
+    text = html.escape(text, quote=False)
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(r"\*(.+?)\*", r"<em>\1</em>", text)
+    text = re.sub(r"`(.+?)`", r"<code>\1</code>", text)
     return text
 
 
@@ -378,93 +367,21 @@ def _generate_docx(title: str, content: str, accent: str = _DEFAULT_ACCENT) -> s
 
 
 def _generate_pdf(title: str, content: str, accent: str = _DEFAULT_ACCENT) -> str:
-    from reportlab.lib import colors                           # type: ignore[import]
-    from reportlab.lib.enums import TA_LEFT                     # type: ignore[import]
-    from reportlab.lib.pagesizes import A4                      # type: ignore[import]
-    from reportlab.lib.styles import (                          # type: ignore[import]
-        ParagraphStyle, getSampleStyleSheet,
-    )
-    from reportlab.lib.units import cm                          # type: ignore[import]
-    from reportlab.platypus import (                            # type: ignore[import]
-        HRFlowable, ListFlowable, ListItem, Paragraph,
-        SimpleDocTemplate, Spacer, Table, TableStyle,
-    )
+    from weasyprint import HTML  # type: ignore[import]
 
-    # ── Palette — derived from the agent's accent ────────────────────────────
     pal = _palette(accent)
-    ink = colors.HexColor(pal["ink"])
-    accent = colors.HexColor(pal["accent"])
-    heading = colors.HexColor(pal["heading"])
-    muted = colors.HexColor(pal["muted"])
-    rule = colors.HexColor(pal["rule"])
-    header_bg = colors.HexColor(pal["header_bg"])
-    zebra = colors.HexColor(pal["zebra"])
-
-    # Unicode fonts (Turkish-safe). `md` threads the mono font into inline `code`.
-    fonts = _register_pdf_fonts()
-    reg, bold, mono = fonts["normal"], fonts["bold"], fonts["mono"]
-
-    def md(text: str) -> str:
-        return _md_to_reportlab(text, mono)
-
-    base = getSampleStyleSheet()
-    styles = {
-        "Title": ParagraphStyle(
-            "DocTitle", parent=base["Title"], fontName=bold, fontSize=22, leading=27,
-            textColor=ink, spaceAfter=4,
-        ),
-        "h1": ParagraphStyle(
-            "DocH1", parent=base["Heading1"], fontName=bold, fontSize=15, leading=19,
-            textColor=ink, spaceBefore=14, spaceAfter=5,
-        ),
-        "h2": ParagraphStyle(
-            "DocH2", parent=base["Heading2"], fontName=bold, fontSize=12.5, leading=16,
-            textColor=heading, spaceBefore=11, spaceAfter=4,
-        ),
-        "h3": ParagraphStyle(
-            "DocH3", parent=base["Heading3"], fontName=bold, fontSize=11, leading=14,
-            textColor=ink, spaceBefore=8, spaceAfter=3,
-        ),
-        "body": ParagraphStyle(
-            "DocBody", parent=base["Normal"], fontName=reg, fontSize=10, leading=15,
-            textColor=ink, alignment=TA_LEFT, spaceAfter=4,
-        ),
-        "cell": ParagraphStyle(
-            "DocCell", parent=base["Normal"], fontName=reg, fontSize=9.5, leading=13,
-            textColor=ink,
-        ),
-        "cellhead": ParagraphStyle(
-            "DocCellHead", parent=base["Normal"], fontName=bold, fontSize=9.5, leading=13,
-            textColor=ink,
-        ),
-    }
-
-    path = _output_path(title, "pdf")
-    doc = SimpleDocTemplate(
-        path, pagesize=A4,
-        leftMargin=2.2 * cm, rightMargin=2.2 * cm,
-        topMargin=2.2 * cm, bottomMargin=2.2 * cm,
-        title=title, author="Speda Mark VI",
-    )
-
-    story: list = [Paragraph(title, styles["Title"])]
-    story.append(HRFlowable(width="100%", thickness=1.2, color=accent,
-                            spaceBefore=2, spaceAfter=12))
 
     # Buffer consecutive bullet/ordered items so they render as one tight list.
-    pending: list = []
+    body: list[str] = []
+    pending: list[str] = []
     pending_kind: str | None = None
 
     def flush_list():
         nonlocal pending, pending_kind
         if not pending:
             return
-        story.append(ListFlowable(
-            pending,
-            bulletType="bullet" if pending_kind == "bullet" else "1",
-            bulletColor=accent, leftIndent=14, bulletFontSize=8,
-            spaceBefore=2, spaceAfter=6,
-        ))
+        tag = "ul" if pending_kind == "bullet" else "ol"
+        body.append(f"<{tag}>" + "".join(pending) + f"</{tag}>")
         pending = []
         pending_kind = None
 
@@ -475,48 +392,57 @@ def _generate_pdf(title: str, content: str, accent: str = _DEFAULT_ACCENT) -> st
             if pending_kind and pending_kind != kind:
                 flush_list()
             pending_kind = kind
-            pending.append(ListItem(
-                Paragraph(md(block["text"]), styles["body"]),
-                leftIndent=14,
-            ))
+            pending.append(f"<li>{_md_to_html(block['text'])}</li>")
             continue
 
         flush_list()
 
         if kind == "hr":
-            story.append(HRFlowable(width="100%", thickness=0.6, color=rule,
-                                    spaceBefore=8, spaceAfter=8))
+            body.append('<hr class="thin">')
         elif kind in ("h1", "h2", "h3"):
-            story.append(Paragraph(md(block["text"]), styles[kind]))
+            body.append(f"<{kind}>{_md_to_html(block['text'])}</{kind}>")
         elif kind == "table":
-            header = [Paragraph(md(c), styles["cellhead"]) for c in block["header"]]
-            data = [header] + [
-                [Paragraph(md(c), styles["cell"]) for c in row]
+            head_cells = "".join(f"<th>{_md_to_html(c)}</th>" for c in block["header"])
+            row_html = "".join(
+                "<tr>" + "".join(f"<td>{_md_to_html(c)}</td>" for c in row) + "</tr>"
                 for row in block["rows"]
-            ]
-            tbl = Table(data, repeatRows=1, hAlign="LEFT")
-            ts = [
-                ("BACKGROUND", (0, 0), (-1, 0), header_bg),
-                ("LINEBELOW", (0, 0), (-1, 0), 0.8, muted),
-                ("GRID", (0, 0), (-1, -1), 0.4, rule),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 7),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 7),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ]
-            for r in range(1, len(data)):
-                if r % 2 == 0:
-                    ts.append(("BACKGROUND", (0, r), (-1, r), zebra))
-            tbl.setStyle(TableStyle(ts))
-            story.append(Spacer(1, 0.1 * cm))
-            story.append(tbl)
-            story.append(Spacer(1, 0.2 * cm))
+            )
+            body.append(f"<table><thead><tr>{head_cells}</tr></thead><tbody>{row_html}</tbody></table>")
         else:
-            story.append(Paragraph(md(block["text"]), styles["body"]))
+            body.append(f"<p>{_md_to_html(block['text'])}</p>")
 
     flush_list()
-    doc.build(story)
+
+    doc_html = f"""<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8"><title>{html.escape(title)}</title><style>
+{_pdf_font_faces()}
+@page {{ size: A4; margin: 2.2cm; }}
+* {{ box-sizing: border-box; }}
+body {{ font-family: 'DejaVu Sans', sans-serif; color: {pal['ink']}; font-size: 10.5pt; line-height: 1.5; margin: 0; }}
+h1.doc-title {{ font-weight: bold; font-size: 22pt; margin: 0 0 4pt; color: {pal['ink']}; }}
+hr.title-rule {{ border: none; border-top: 1.2pt solid {pal['accent']}; margin: 2pt 0 14pt; }}
+h1 {{ font-size: 15pt; margin: 14pt 0 5pt; color: {pal['ink']}; }}
+h2 {{ font-size: 12.5pt; margin: 11pt 0 4pt; color: {pal['heading']}; }}
+h3 {{ font-size: 11pt; margin: 8pt 0 3pt; color: {pal['ink']}; }}
+p {{ margin: 0 0 4pt; }}
+ul, ol {{ margin: 2pt 0 6pt 0; padding-left: 14pt; }}
+li {{ margin-bottom: 2pt; }}
+li::marker {{ color: {pal['accent']}; }}
+hr.thin {{ border: none; border-top: 0.6pt solid {pal['rule']}; margin: 8pt 0; }}
+table {{ width: 100%; border-collapse: collapse; margin: 6pt 0 8pt; font-size: 9.5pt; }}
+th, td {{ border: 0.4pt solid {pal['rule']}; padding: 5pt 7pt; text-align: left; vertical-align: middle; }}
+th {{ background: {pal['header_bg']}; border-bottom: 0.8pt solid {pal['muted']}; font-weight: bold; }}
+tbody tr:nth-child(even) td {{ background: {pal['zebra']}; }}
+code {{ font-family: 'DejaVu Sans Mono', monospace; }}
+</style></head>
+<body>
+<h1 class="doc-title">{html.escape(title)}</h1>
+<hr class="title-rule">
+{''.join(body)}
+</body></html>"""
+
+    path = _output_path(title, "pdf")
+    HTML(string=doc_html).write_pdf(path)
     return path
 
 
@@ -531,7 +457,7 @@ _GENERATORS = {
 _REQUIRED_LIBS = {
     "pptx": "python-pptx",
     "docx": "python-docx",
-    "pdf": "reportlab",
+    "pdf": "weasyprint",
 }
 
 
