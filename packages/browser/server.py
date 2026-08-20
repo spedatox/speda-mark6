@@ -317,11 +317,24 @@ def _safe(name: str) -> str:
 # scrubbing needed, and none is done: dropping <nav> would put this extractor
 # out of step with services/web_watch.py's extract_lines(), which keeps it, and
 # those two feed one snapshot.
+#
+# `main, article, [role=main]` picks the FIRST match in document order, and
+# that is not always the real content — ego.gov.tr (and other sites of its
+# generation) ships a decorative `<div role="main"><hr></div>` near the top of
+# every page purely to satisfy an accessibility-landmark checker, with the
+# actual content living elsewhere in the body as an unrelated sibling. That
+# scoped the whole extraction to one empty <hr> and made a page with a real,
+# populated results list read as zero characters of text — not absent, just
+# wrong, the same failure mode the block above already calls out for a cloned
+# node. A short/empty match is therefore treated as no match: fall through to
+# document.body, which always has the real content somewhere inside it.
 _EXTRACT_JS = """
 () => {
-  const scope = document.querySelector('main, article, [role=main]') || document.body;
-  if (!scope) return { text: '', links: [] };
-  const text = (scope.innerText || '').replace(/\\n{3,}/g, '\\n\\n').trim();
+  const MIN_LEN = 40;
+  const landmark = document.querySelector('main, article, [role=main]');
+  let text = landmark ? (landmark.innerText || '').trim() : '';
+  if (text.length < MIN_LEN) text = (document.body.innerText || '').trim();
+  text = text.replace(/\\n{3,}/g, '\\n\\n').trim();
   const links = [];
   const seen = new Set();
   for (const a of document.querySelectorAll('a[href]')) {
