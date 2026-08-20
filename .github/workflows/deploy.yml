@@ -20,6 +20,7 @@ on:
     paths:
       - "packages/igor/**"
       - "packages/sandbox/**"
+      - "packages/browser/**"
       - "docker-compose.yml"
       - "deploy.sh"
       - "Caddyfile"
