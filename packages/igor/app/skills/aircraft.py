@@ -80,14 +80,30 @@ class TrackAircraftSkill(Skill):
         if not query:
             return "track_aircraft: no tail number or flight number provided."
 
-        result = await aircraft_service.track(tail) if tail else await aircraft_service.track_by_callsign(flight)
+        # Whichever field the caller used is a label, not a guarantee — a
+        # callsign called "tail_number" (or a registration called
+        # "flight_number") is a routine mislabel, by the model or by the
+        # owner repeating a value they saw somewhere. So a miss on the
+        # expected endpoint gets one fallback try on the other before giving
+        # up, rather than trusting the label all the way to a false negative.
+        if tail:
+            result = await aircraft_service.track(tail)
+            if result is None:
+                result = await aircraft_service.track_by_callsign(tail)
+        else:
+            result = await aircraft_service.track_by_callsign(flight)
+            if result is None:
+                result = await aircraft_service.track(flight)
         if result is None:
             return (
                 f"track_aircraft: no live ADS-B signal for '{query}'. It may be on "
                 "the ground without its transponder on, outside feeder coverage, "
-                "not currently airborne, or the identifier may be wrong. Tell "
-                "the owner it isn't currently trackable rather than guessing a "
-                "position."
+                "not currently airborne, or the identifier may be wrong — both "
+                "the registration and callsign endpoints were tried regardless of "
+                "which field you passed it in. Tell the owner it isn't currently "
+                "trackable. Do NOT retry this tool with a different guessed "
+                "identifier — if you don't have another identifier the owner "
+                "actually gave you, stop here rather than fabricating one."
             )
 
         alt = "on the ground" if result["onGround"] else f"{result['altitudeFt']:,} ft" if result["altitudeFt"] is not None else "altitude unknown"
