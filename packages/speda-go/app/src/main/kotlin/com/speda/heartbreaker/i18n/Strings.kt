@@ -424,6 +424,13 @@ data class AppStrings(
         val squawk: String,
         val emergencySquawkPrefix: String,
         val staleWarning: String,
+        val live: String,
+        val paused: String,
+        val resumeHint: String,
+        val pauseHint: String,
+        val landedPausedWarning: String,
+        val signalLostPausedWarning: String,
+        val pausedManualWarning: String,
     )
 
     data class Bus(

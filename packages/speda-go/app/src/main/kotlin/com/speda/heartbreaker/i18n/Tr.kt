@@ -368,6 +368,13 @@ val Tr = AppStrings(
         squawk = "SQUAWK",
         emergencySquawkPrefix = "⚠ Acil squawk",
         staleWarning = "Yakın zamanda güncelleme yok — son bilinen konum güncel olmayabilir.",
+        live = "Canlı",
+        paused = "Durakladı",
+        resumeHint = "Canlı takibi sürdür",
+        pauseHint = "Canlı takibi duraklat",
+        landedPausedWarning = "İndi — otomatik olarak duraklatıldı. Taksi yaparken izlemeye devam etmek için Canlı'ya dokun.",
+        signalLostPausedWarning = "Sinyal kayboldu — 5 dakika sessizlikten sonra otomatik duraklatıldı. Tekrar denemek için Canlı'ya dokun.",
+        pausedManualWarning = "Duraklatıldı. Sürdürmek için Canlı'ya dokun.",
     ),
     bus = AppStrings.Bus(
         busStop = { n -> "OTOBÜS DURAĞI $n" },

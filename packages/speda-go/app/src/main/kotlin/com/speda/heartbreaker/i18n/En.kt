@@ -368,6 +368,13 @@ val En = AppStrings(
         squawk = "SQUAWK",
         emergencySquawkPrefix = "⚠ Emergency squawk",
         staleWarning = "No recent update — the last known position may be stale.",
+        live = "Live",
+        paused = "Paused",
+        resumeHint = "Resume live tracking",
+        pauseHint = "Pause live tracking",
+        landedPausedWarning = "Landed — paused automatically. Tap Live to keep watching it taxi.",
+        signalLostPausedWarning = "Signal lost — paused automatically after 5 minutes of silence. Tap Live to try again.",
+        pausedManualWarning = "Paused. Tap Live to resume.",
     ),
     bus = AppStrings.Bus(
         busStop = { n -> "BUS STOP $n" },

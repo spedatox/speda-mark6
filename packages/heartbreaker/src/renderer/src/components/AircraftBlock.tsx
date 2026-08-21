@@ -49,18 +49,44 @@ interface AircraftSpec {
 
 const EMERGENCY_SQUAWKS = new Set(['7500', '7600', '7700'])
 
+// Landing auto-pauses the card — once the feed confirms the aircraft is
+// down, further movement is gate/apron-scale and not worth a standing poll.
+// 20 consecutive misses (~5min) auto-pauses it the other way: a permanently
+// lost signal (landed with the transponder off before we caught the ground
+// report, out of coverage for good) rather than a plane that's genuinely
+// still up. Either is just the DEFAULT guess though — the owner has the
+// final say via the header button, which un-pauses (with a fresh miss count)
+// or pauses on demand regardless of what auto-pause decided. Without either
+// of these, a chat window left open would poll every 15s forever.
+const GIVE_UP_AFTER_MISSES = 20
+
+interface LiveTrack {
+  spec: AircraftSpec | null
+  stale: boolean
+  paused: boolean
+  autoPaused: boolean
+  toggle: () => void
+}
+
 /** Live-polls the tail number this card is about. Starts from the fence's own
  * snapshot; a failed poll (404 = no current signal, or a network hiccup)
- * keeps the last-known position rather than blanking the card. */
-function useLiveTrack(seed: AircraftSpec | null): { spec: AircraftSpec | null; stale: boolean } {
+ * keeps the last-known position rather than blanking the card. Polling can
+ * stop two ways — the card deciding on its own (`autoPaused`, see
+ * GIVE_UP_AFTER_MISSES above) or the owner clicking the header button
+ * (`userPaused`) — `toggle` always resumes from either. */
+function useLiveTrack(seed: AircraftSpec | null): LiveTrack {
   const igor = useIgor()
   const [live, setLive] = useState<AircraftSpec | null>(null)
   const [misses, setMisses] = useState(0)
+  const [autoPaused, setAutoPaused] = useState(false)
+  const [userPaused, setUserPaused] = useState(false)
 
-  useEffect(() => { setLive(null); setMisses(0) }, [seed?.tail])
+  useEffect(() => { setLive(null); setMisses(0); setAutoPaused(false); setUserPaused(false) }, [seed?.tail])
+
+  const paused = autoPaused || userPaused
 
   useEffect(() => {
-    if (!seed?.tail) return
+    if (!seed?.tail || paused) return
     let alive = true
     const poll = async (): Promise<void> => {
       const body = await igor(`/aircraft/track/${encodeURIComponent(seed.tail)}`)
@@ -68,18 +94,36 @@ function useLiveTrack(seed: AircraftSpec | null): { spec: AircraftSpec | null; s
       if (body && typeof body.lat === 'number' && typeof body.lng === 'number') {
         setLive(body as AircraftSpec)
         setMisses(0)
+        if (body.onGround) setAutoPaused(true)
       } else {
-        setMisses(m => m + 1)
+        setMisses(m => {
+          const next = m + 1
+          if (next >= GIVE_UP_AFTER_MISSES) setAutoPaused(true)
+          return next
+        })
       }
     }
     const id = setInterval(poll, 15000)
     return () => { alive = false; clearInterval(id) }
-  }, [seed?.tail, igor])
+  }, [seed?.tail, igor, paused])
+
+  const toggle = (): void => {
+    if (paused) {
+      // Resuming always gets a clean slate, whether the owner is overriding
+      // an auto-pause or just un-pausing manually — no reason to make a
+      // fresh "try again" carry the old miss count into GIVE_UP_AFTER_MISSES.
+      setAutoPaused(false)
+      setUserPaused(false)
+      setMisses(0)
+    } else {
+      setUserPaused(true)
+    }
+  }
 
   const spec = live ?? seed
   // Three consecutive misses (~45s) before the card admits the feed went
   // quiet — one dropped poll is normal network noise, not a lost signal.
-  return { spec, stale: misses >= 3 }
+  return { spec, stale: misses >= 3, paused, autoPaused, toggle }
 }
 
 /* ── Component ───────────────────────────────────────────────────────────── */
@@ -96,7 +140,7 @@ export default function AircraftBlock({ children }: { children: string }): React
     }
   }, [children])
 
-  const { spec, stale } = useLiveTrack(parsed)
+  const { spec, stale, paused, autoPaused, toggle } = useLiveTrack(parsed)
 
   if (!parsed) return looksIncomplete(children) ? <Materializing /> : <ParseError raw={children} />
   if (!spec) return <Materializing />
@@ -106,17 +150,18 @@ export default function AircraftBlock({ children }: { children: string }): React
     (!!spec.squawk && EMERGENCY_SQUAWKS.has(spec.squawk))
 
   return (
-    <AircraftPanel spec={spec} stale={stale} emergency={emergency}>
+    <AircraftPanel spec={spec} stale={stale} emergency={emergency} paused={paused} onToggle={toggle}>
       <AircraftCanvas spec={spec} />
-      <StatusReadout spec={spec} stale={stale} emergency={emergency} />
+      <StatusReadout spec={spec} stale={stale} paused={paused} autoPaused={autoPaused} emergency={emergency} />
     </AircraftPanel>
   )
 }
 
 /* ── Header panel ────────────────────────────────────────────────────────── */
 
-function AircraftPanel({ spec, stale, emergency, children }: {
-  spec: AircraftSpec; stale: boolean; emergency: boolean; children: React.ReactNode
+function AircraftPanel({ spec, stale, emergency, paused, onToggle, children }: {
+  spec: AircraftSpec; stale: boolean; emergency: boolean; paused: boolean; onToggle: () => void
+  children: React.ReactNode
 }): React.ReactElement {
   const borderColor = emergency ? 'rgba(224,83,61,0.55)' : 'var(--hb-edge)'
   return (
@@ -128,7 +173,7 @@ function AircraftPanel({ spec, stale, emergency, children }: {
     }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        height: 28, padding: '0 0.75rem',
+        height: 28, padding: '0 0.4rem 0 0.75rem',
         background: emergency ? 'rgba(224,83,61,0.14)' : 'rgba(var(--hb-accent-rgb),0.1)',
         boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.14)',
         borderBottom: `1px solid ${emergency ? 'rgba(224,83,61,0.35)' : 'rgba(var(--hb-accent-rgb),0.22)'}`,
@@ -139,15 +184,49 @@ function AircraftPanel({ spec, stale, emergency, children }: {
           <span style={{ color: '#fff' }}>{spec.tail}</span>
           {spec.callsign && <span style={{ color: 'var(--hb-cyan)' }}> · {spec.callsign}</span>}
         </span>
-        <span style={{
-          color: emergency ? '#e0533d' : stale ? 'var(--hb-amber)' : 'var(--hb-cyan-bright)',
-          fontSize: '0.72rem', letterSpacing: '0.1em',
-        }}>
-          {emergency ? 'EMERGENCY' : stale ? 'SIGNAL LOST' : spec.onGround ? 'ON GROUND' : 'AIRBORNE'}
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{
+            color: emergency ? '#e0533d' : stale ? 'var(--hb-amber)' : 'var(--hb-cyan-bright)',
+            fontSize: '0.72rem', letterSpacing: '0.1em',
+          }}>
+            {emergency ? 'EMERGENCY' : stale ? 'SIGNAL LOST' : spec.onGround ? 'ON GROUND' : 'AIRBORNE'}
+          </span>
+          <LiveToggle paused={paused} onToggle={onToggle} />
         </span>
       </div>
       <div style={{ padding: '0.6rem 0' }}>{children}</div>
     </div>
+  )
+}
+
+/** The owner's own on/off switch for the 15s poll — always available
+ * regardless of why polling is or isn't running (still tracking, landed,
+ * gave up after GIVE_UP_AFTER_MISSES, or a manual pause from a prior
+ * click). Resuming always restarts with a clean miss count. */
+function LiveToggle({ paused, onToggle }: { paused: boolean; onToggle: () => void }): React.ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={paused ? 'Resume live tracking' : 'Pause live tracking'}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '0.3rem',
+        padding: '0.15rem 0.45rem', borderRadius: 999,
+        background: paused ? 'rgba(255,255,255,0.06)' : 'rgba(var(--hb-accent-rgb),0.16)',
+        border: `1px solid ${paused ? 'var(--hb-edge)' : 'rgba(var(--hb-accent-rgb),0.4)'}`,
+        color: paused ? 'var(--hb-text-faint)' : 'var(--hb-cyan-bright)',
+        fontFamily: "'Rajdhani', sans-serif", fontSize: '0.68rem', fontWeight: 700,
+        letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer',
+        lineHeight: 1,
+      }}
+    >
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%',
+        background: paused ? 'var(--hb-text-faint)' : 'var(--hb-cyan-bright)',
+        boxShadow: paused ? 'none' : '0 0 5px var(--hb-cyan-bright)',
+      }} />
+      {paused ? 'Paused' : 'Live'}
+    </button>
   )
 }
 
@@ -248,8 +327,8 @@ function AircraftCanvas({ spec }: { spec: AircraftSpec }): React.ReactElement {
 
 /* ── Status readout ──────────────────────────────────────────────────────── */
 
-function StatusReadout({ spec, stale, emergency }: {
-  spec: AircraftSpec; stale: boolean; emergency: boolean
+function StatusReadout({ spec, stale, paused, autoPaused, emergency }: {
+  spec: AircraftSpec; stale: boolean; paused: boolean; autoPaused: boolean; emergency: boolean
 }): React.ReactElement {
   const rows: [string, string][] = []
   rows.push(['TYPE', spec.aircraftType || '—'])
@@ -280,11 +359,17 @@ function StatusReadout({ spec, stale, emergency }: {
           ⚠ Emergency squawk{spec.squawk ? ` ${spec.squawk}` : ''}{spec.emergency && spec.emergency !== 'none' ? ` — ${spec.emergency}` : ''}
         </div>
       )}
-      {stale && !emergency && (
+      {!emergency && (paused || stale) && (
         <div style={{
           flexBasis: '100%', marginTop: 4, fontSize: '0.8125rem', color: 'var(--hb-amber)',
         }}>
-          No recent update — the last known position may be stale.
+          {paused
+            ? spec.onGround
+              ? 'Landed — paused automatically. Tap Live to keep watching it taxi.'
+              : autoPaused
+                ? 'Signal lost — paused automatically after 5 minutes of silence. Tap Live to try again.'
+                : 'Paused. Tap Live to resume.'
+            : 'No recent update — the last known position may be stale.'}
         </div>
       )}
     </div>

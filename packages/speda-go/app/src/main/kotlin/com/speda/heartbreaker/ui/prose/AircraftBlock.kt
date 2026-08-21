@@ -2,6 +2,7 @@ package com.speda.heartbreaker.ui.prose
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,7 +11,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -21,11 +24,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -71,11 +76,25 @@ private fun isEmergency(spec: AircraftSpec): Boolean =
     (!spec.emergency.isNullOrBlank() && spec.emergency != "none") ||
         (spec.squawk != null && spec.squawk in EMERGENCY_SQUAWKS)
 
+// Landing auto-pauses the card — once the feed confirms the aircraft is
+// down, further movement is gate/apron-scale and not worth a standing poll.
+// 20 consecutive misses (~5min) auto-pauses it the other way: a permanently
+// lost signal (landed with the transponder off before we caught the ground
+// report, out of coverage for good) rather than a plane that's genuinely
+// still up. Either is just the DEFAULT guess though — the owner has the
+// final say via the header chip, which un-pauses (with a fresh miss count)
+// or pauses on demand regardless of what auto-pause decided. Without either
+// of these, a chat screen left open would poll every 15s forever.
+private const val GIVE_UP_AFTER_MISSES = 20
+
 /**
  * ```aircraft fences — the live ADS-B tracking card. Renders the model's
  * initial snapshot immediately, then polls [LocalAircraftResolver] every 15s
  * (well under airplanes.live's 1 req/s guidance) to move the marker — no
  * further tool call, no id, just the tail number the fence already carries.
+ * Polling stops either on its own (see GIVE_UP_AFTER_MISSES above) or from
+ * the owner tapping the header's Live/Paused chip; either way, resuming
+ * always restarts with a clean miss count.
  */
 @Composable
 fun AircraftBlock(raw: String, modifier: Modifier = Modifier) {
@@ -85,31 +104,54 @@ fun AircraftBlock(raw: String, modifier: Modifier = Modifier) {
 
     var live by remember(seed?.tail) { mutableStateOf<AircraftSpec?>(null) }
     var misses by remember(seed?.tail) { mutableIntStateOf(0) }
+    var autoPaused by remember(seed?.tail) { mutableStateOf(false) }
+    var userPaused by remember(seed?.tail) { mutableStateOf(false) }
+    val paused = autoPaused || userPaused
 
-    LaunchedEffect(seed?.tail) {
+    LaunchedEffect(seed?.tail, paused) {
         val tail = seed?.tail ?: return@LaunchedEffect
+        if (paused) return@LaunchedEffect
         while (isActive) {
             delay(15_000)
             val next = resolve(tail)
             if (next != null) {
                 live = next
                 misses = 0
+                if (next.onGround) autoPaused = true
             } else {
                 misses += 1
+                if (misses >= GIVE_UP_AFTER_MISSES) autoPaused = true
             }
+        }
+    }
+
+    val toggle: () -> Unit = {
+        if (paused) {
+            autoPaused = false
+            userPaused = false
+            misses = 0
+        } else {
+            userPaused = true
         }
     }
 
     val current = live ?: seed
     when {
-        current != null -> AircraftCard(current, stale = misses >= 3, modifier)
+        current != null -> AircraftCard(current, stale = misses >= 3, paused = paused, autoPaused = autoPaused, onToggle = toggle, modifier = modifier)
         looksIncomplete(raw) -> Materializing(t.proseKind.aircraft, modifier)
         else -> ParseError(t.proseKind.aircraft, raw, modifier)
     }
 }
 
 @Composable
-private fun AircraftCard(spec: AircraftSpec, stale: Boolean, modifier: Modifier) {
+private fun AircraftCard(
+    spec: AircraftSpec,
+    stale: Boolean,
+    paused: Boolean,
+    autoPaused: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier,
+) {
     val palette = LocalHbPalette.current
     val emergency = isEmergency(spec)
     val borderColor = if (emergency) EmergencyRed.copy(alpha = 0.55f) else palette.edge
@@ -122,18 +164,25 @@ private fun AircraftCard(spec: AircraftSpec, stale: Boolean, modifier: Modifier)
             .background(Color(0xFF060E16).copy(alpha = 0.6f))
             .border(1.dp, borderColor, RoundedCornerShape(12.dp)),
     ) {
-        AircraftHeader(spec, stale, emergency, palette)
+        AircraftHeader(spec, stale, emergency, paused, onToggle, palette)
 
         Box(Modifier.fillMaxWidth().height(200.dp)) {
             AircraftSurface(spec, palette)
         }
 
-        StatusReadout(spec, stale, emergency, palette)
+        StatusReadout(spec, stale, paused, autoPaused, emergency, palette)
     }
 }
 
 @Composable
-private fun AircraftHeader(spec: AircraftSpec, stale: Boolean, emergency: Boolean, palette: HbPalette) {
+private fun AircraftHeader(
+    spec: AircraftSpec,
+    stale: Boolean,
+    emergency: Boolean,
+    paused: Boolean,
+    onToggle: () -> Unit,
+    palette: HbPalette,
+) {
     val t = LocalStrings.current
     val statusColor = when {
         emergency -> EmergencyRed
@@ -151,17 +200,58 @@ private fun AircraftHeader(spec: AircraftSpec, stale: Boolean, emergency: Boolea
             .fillMaxWidth()
             .height(28.dp)
             .background(if (emergency) EmergencyRed.copy(alpha = 0.14f) else palette.accent.copy(alpha = 0.1f))
-            .padding(horizontal = 12.dp),
+            .padding(start = 12.dp, end = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         val title = spec.tail + (spec.callsign?.let { " · $it" } ?: "")
         BasicText(
             AnnotatedString(title),
             style = HbType.readout.copy(fontSize = 12.5.sp, letterSpacing = 0.16.em, color = Color.White),
         )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BasicText(
+                AnnotatedString(statusWord),
+                style = HbType.readout.copy(fontSize = 10.5.sp, letterSpacing = 0.1.em, color = statusColor),
+            )
+            LiveToggle(paused, onToggle, palette)
+        }
+    }
+}
+
+/** The owner's own on/off switch for the 15s poll — always available
+ * regardless of why polling is or isn't running (still tracking, landed,
+ * gave up after GIVE_UP_AFTER_MISSES, or a manual pause from a prior tap).
+ * Resuming always restarts with a clean miss count. */
+@Composable
+private fun LiveToggle(paused: Boolean, onToggle: () -> Unit, palette: HbPalette) {
+    val t = LocalStrings.current
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (paused) Color.White.copy(alpha = 0.06f) else palette.accent.copy(alpha = 0.16f))
+            .border(
+                1.dp,
+                if (paused) palette.edge else palette.accent.copy(alpha = 0.4f),
+                RoundedCornerShape(999.dp),
+            )
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 9.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(if (paused) palette.textFaint else palette.accentBright),
+        )
         BasicText(
-            AnnotatedString(statusWord),
-            style = HbType.readout.copy(fontSize = 10.5.sp, letterSpacing = 0.1.em, color = statusColor),
+            AnnotatedString(if (paused) t.aircraft.paused else t.aircraft.live),
+            style = HbType.readout.copy(
+                fontSize = 9.5.sp, letterSpacing = 0.08.em, fontWeight = FontWeight.Bold,
+                color = if (paused) palette.textFaint else palette.accentBright,
+            ),
         )
     }
 }
@@ -239,7 +329,14 @@ private fun aircraftFeature(spec: AircraftSpec) =
 /* ── Status readout ──────────────────────────────────────────────────────── */
 
 @Composable
-private fun StatusReadout(spec: AircraftSpec, stale: Boolean, emergency: Boolean, palette: HbPalette) {
+private fun StatusReadout(
+    spec: AircraftSpec,
+    stale: Boolean,
+    paused: Boolean,
+    autoPaused: Boolean,
+    emergency: Boolean,
+    palette: HbPalette,
+) {
     val t = LocalStrings.current
     val rows = buildList {
         add(t.aircraft.type to (spec.aircraftType ?: "—"))
@@ -295,10 +392,16 @@ private fun StatusReadout(spec: AircraftSpec, stale: Boolean, emergency: Boolean
                 style = HbType.readout.copy(fontSize = 12.sp, color = EmergencyRed),
             )
         }
-    } else if (stale) {
+    } else if (paused || stale) {
+        val message = when {
+            !paused -> t.aircraft.staleWarning
+            spec.onGround -> t.aircraft.landedPausedWarning
+            autoPaused -> t.aircraft.signalLostPausedWarning
+            else -> t.aircraft.pausedManualWarning
+        }
         Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 10.dp)) {
             BasicText(
-                AnnotatedString(t.aircraft.staleWarning),
+                AnnotatedString(message),
                 style = HbType.readout.copy(fontSize = 12.sp, color = palette.amber),
             )
         }
