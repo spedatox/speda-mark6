@@ -30,21 +30,25 @@ class TrackAircraftSkill(Skill):
     description = (
         "Looks up the live position and ADS-B status of an aircraft, either by "
         "its registration/tail number (e.g. N12345, TC-JJA) or by its flight "
-        "number/callsign (e.g. THY7RN, PC5555), via adsb.lol's free, "
-        "unfiltered community feed — the same kind of feed OSINT researchers "
-        "use, so it includes military and government traffic that filtered "
-        "commercial trackers hide. Prefer whichever identifier the owner "
-        "actually gave you: most people know a flight number, not a tail "
-        "number, and this tool does NOT need to ask for the registration if a "
-        "callsign is available — pass tail_number when you have it, otherwise "
-        "pass flight_number. Do NOT use it for commercial flight-schedule "
-        "lookups like gate, delay, or ETA — it only reports live telemetry "
-        "(position, altitude, speed, heading, squawk, on-ground/airborne), "
-        "never airline scheduling data, and it cannot find an aircraft that is "
-        "not currently broadcasting ADS-B. Returns a plain-text status summary "
-        "and instructs you to render the result as an ```aircraft``` block; "
-        "the client then polls the live position on its own without further "
-        "tool calls."
+        "number (the IATA code on a boarding pass, e.g. EK212, TK1980) or ICAO "
+        "callsign (e.g. UAE212, THY7RN), via adsb.lol's free, unfiltered "
+        "community feed — the same kind of feed OSINT researchers use, so it "
+        "includes military and government traffic that filtered commercial "
+        "trackers hide. Prefer whichever identifier the owner actually gave "
+        "you and pass it through EXACTLY as given, in flight_number for a "
+        "flight/callsign or tail_number for a registration — this tool "
+        "already handles the IATA-to-ICAO callsign conversion for major "
+        "carriers internally, so never invent, guess, or hand-convert an "
+        "identifier yourself (e.g. do not turn 'EK212' into a fabricated tail "
+        "number); if the lookup misses, say it isn't currently trackable "
+        "rather than making up a registration to retry with. Do NOT use it "
+        "for commercial flight-schedule lookups like gate, delay, or ETA — it "
+        "only reports live telemetry (position, altitude, speed, heading, "
+        "squawk, on-ground/airborne), never airline scheduling data, and it "
+        "cannot find an aircraft that is not currently broadcasting ADS-B. "
+        "Returns a plain-text status summary and instructs you to render the "
+        "result as an ```aircraft``` block; the client then polls the live "
+        "position on its own without further tool calls."
     )
     read_only = True
     requires_network = True
@@ -58,9 +62,12 @@ class TrackAircraftSkill(Skill):
             "flight_number": {
                 "type": "string",
                 "description": (
-                    "Flight number/callsign, e.g. 'THY7RN' or 'PC5555'. Use this instead of "
-                    "tail_number when that's what the owner gave you — do not ask them to look "
-                    "up the registration first."
+                    "IATA flight number as the owner would say it (e.g. 'EK212', 'TK1980') or "
+                    "the ICAO callsign directly (e.g. 'UAE212', 'THY7RN'). Pass it exactly as "
+                    "given — do not convert or guess it yourself, the tool converts IATA to "
+                    "ICAO internally for major carriers. Use this instead of tail_number when "
+                    "that's what the owner gave you — do not ask them to look up the "
+                    "registration first."
                 ),
             },
         },
