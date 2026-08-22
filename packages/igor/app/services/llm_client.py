@@ -89,6 +89,45 @@ def parse_model_ref(ref: str) -> tuple[str, str]:
     return "anthropic", ref
 
 
+# Providers whose entire chat line takes images, so nothing has to be matched
+# by name: every Claude model since 3.0 and every Gemini since 1.5 is
+# multimodal, and the non-chat ids (embeddings, imagen/veo) are filtered out of
+# the catalog before they can reach here.
+_VISION_PROVIDERS = {"anthropic", "gemini"}
+
+# Substrings that mark a vision model on a provider whose line is otherwise
+# text-only. DeepSeek serves images on exactly ONE id
+# (deepseek-v4-flash-vision-exp) and returns 400 for an image sent to any
+# other; z.ai, Ollama and NVIDIA all carry a handful of multimodal builds in a
+# mostly-text catalog. Matching by marker rather than by an exhaustive id list
+# means a new "…-vision" / "…-vl" release works the day it ships.
+_VISION_MARKERS = (
+    "vision", "-vl", "vl-", "llava", "omni", "multimodal", "gemma3", "minicpm-v",
+)
+
+
+def supports_vision(model_ref: str) -> bool:
+    """Can this model read an `image` content block?
+
+    Sending an image to a model that cannot is not a soft degradation — the
+    provider rejects the whole request, so a single screenshot poisons every
+    later turn of that session (the image stays in the history). The
+    orchestrator asks this before the call and reroutes rather than failing;
+    see AgentProfile.vision_tier.
+
+    Unknown ids on a marker-matched provider answer False, which is the safe
+    direction: the worst case is a needless reroute to a model that CAN see."""
+    provider, model = parse_model_ref(model_ref)
+    if provider in _VISION_PROVIDERS:
+        return True
+    model_l = model.lower()
+    if provider == "openai":
+        # Every gpt-4o/4.1/5.x and o-series reasoning model is multimodal; only
+        # the legacy 3.5 line is text-only.
+        return "3.5" not in model_l
+    return any(mark in model_l for mark in _VISION_MARKERS)
+
+
 # OpenAI codenames of the gpt-5.6 reasoning family (gpt-5.6-luna/sol/terra).
 _GPT56_CODENAMES = ("luna", "sol", "terra")
 
@@ -389,6 +428,12 @@ _CATALOG = {
             "name": "DeepSeek V4 Flash",
             "description": "Fast and very inexpensive — 1M context, aggressive context caching",
             "tags": ["fast"],
+        },
+        {
+            "id": "deepseek:deepseek-v4-flash-vision-exp",
+            "name": "DeepSeek V4 Flash Vision",
+            "description": "DeepSeek's only multimodal model — reads images; V4-Flash text quality, experimental",
+            "tags": ["fast", "vision"],
         },
     ],
 }

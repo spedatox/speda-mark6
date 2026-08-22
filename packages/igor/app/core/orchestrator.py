@@ -8,7 +8,7 @@ from app.core.registry import CapabilityRegistry
 from app.models.tool_call import ToolCall
 from app.profiles.registry import ProfileRegistry
 from app.schemas.sse import SSEEvent, SSEEventType
-from app.services.llm_client import LLMClient, blocks_to_dicts
+from app.services.llm_client import LLMClient, blocks_to_dicts, supports_vision
 from app.skills.memory import MemoryRecallCache, recall_for_context, recall_sessions_for_context
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,20 @@ MAX_TOOL_ITERATIONS = 30  # Safety guard — Rule 4a
 # the UI), bounded so one tool that returns a page of HTML doesn't make this
 # table the thing that fills the disk.
 _TOOL_RESULT_STORE_CHARS = 4000
+
+
+def _carries_image(history: list[dict]) -> bool:
+    """Whether any message in this turn's history holds an image block. Scans
+    the WHOLE history, not just the newest message: an image stays in the
+    conversation once it is sent, so every later turn keeps carrying it — and a
+    text-only model rejects the request on turn 9 exactly as it did on turn 1."""
+    for message in history:
+        content = message.get("content")
+        if isinstance(content, list) and any(
+            isinstance(block, dict) and block.get("type") == "image" for block in content
+        ):
+            return True
+    return False
 
 
 async def _timed(tool_name: str, args: dict, context: AgentContext, registry: CapabilityRegistry):
@@ -89,6 +103,36 @@ class AgentOrchestrator:
         """
         log = logger.getChild("run")
 
+        profile = self._profiles.require(context.agent_id)
+
+        # ── Vision routing ──────────────────────────────────────────────────
+        # Providers disagree on where images are allowed. Anthropic, Gemini and
+        # OpenAI take one on any chat model; DeepSeek serves them on a single
+        # experimental id and returns 400 for every other, and a rejected
+        # request is not a degraded answer — it is the turn failing, and then
+        # failing again on every later turn, because the image never leaves the
+        # history. So when this turn carries an image the pinned model cannot
+        # read, move it to the vision model ON THE SAME PROVIDER first.
+        #
+        # The swap is per-turn and derived from the history, which makes it
+        # sticky for exactly as long as the image is in context — the follow-up
+        # question about that screenshot still reaches a model that can see it.
+        # It is done HERE, before the system prompt is built, so "Active model"
+        # in the prompt and the model on every SSE event name what actually ran.
+        # A provider with no vision model declared is left alone (vision_tier).
+        if not supports_vision(context.model) and _carries_image(context.conversation_history):
+            rerouted = profile.vision_tier(context.model)
+            if rerouted != context.model:
+                log.info(
+                    "vision_reroute",
+                    extra={
+                        "request_id": context.request_id,
+                        "from_model": context.model,
+                        "model": rerouted,
+                    },
+                )
+                context.model = rerouted
+
         # Build the system prompt as TWO fully-cacheable blocks. The ENTIRE
         # system is stable now — no clock anywhere in the prefix:
         #
@@ -110,7 +154,6 @@ class AgentOrchestrator:
         # full registry, e.g. Speda the orchestrator) governs what this agent can
         # see and load. Resolved once here and stored on the context so the
         # toolset catalog, the tool list, and Legion workers all share one scope.
-        profile = self._profiles.require(context.agent_id)
         allowlist = (
             set(profile.tool_allowlist) if profile.tool_allowlist is not None else None
         )

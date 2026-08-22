@@ -99,6 +99,21 @@ class AgentProfile(ABC):
     # Ollama reuses the active local model (it's the only one in a dead zone).
     background_models: dict[str, str] = {}
 
+    # Per-provider VISION model — the one id on that provider that accepts an
+    # image block, used when the model the turn is running on cannot see one.
+    # Rule 10 keeps model IDs out of core, and this is the profile layer; it
+    # sits on the base rather than in each roster file because which DeepSeek id
+    # reads an image is a fact about DeepSeek, not a personality trait. A
+    # profile that wants a different one still overrides it.
+    #
+    # Anthropic, Gemini and OpenAI need no entry — their whole chat line is
+    # multimodal (llm_client.supports_vision). DeepSeek serves images on exactly
+    # one experimental id; Ollama depends entirely on which weights are pulled,
+    # so it declares nothing and an image there fails as itself.
+    vision_models: dict[str, str] = {
+        "deepseek": "deepseek:deepseek-v4-flash-vision-exp",
+    }
+
     @abstractmethod
     def build_system_prompt(self, context_vars: dict) -> str:
         """Build the full system prompt string from the template and runtime context vars."""
@@ -128,6 +143,27 @@ class AgentProfile(ABC):
         if provider == "anthropic" and ":" not in model_ref:
             return self.haiku_model
         return model_ref
+
+    def vision_tier(self, model_ref: str) -> str:
+        """The vision-capable model on `model_ref`'s OWN provider — or
+        `model_ref` untouched when it already reads images, or when its provider
+        declares no vision model at all.
+
+        Same contract as cheap_tier, for the same reason: it NEVER returns a
+        different provider than it was given. An image must not be the thing
+        that quietly moves the owner's turn (and its bill) onto Anthropic
+        because that is where the engine knows a vision model lives.
+
+        Returning the ref unchanged is a deliberate outcome, not a failure — the
+        call then fails as the model the owner actually chose, which is legible,
+        rather than succeeding on a model they never picked.
+        """
+        from app.services.llm_client import parse_model_ref, supports_vision
+
+        if supports_vision(model_ref):
+            return model_ref
+        provider, _ = parse_model_ref(model_ref)
+        return self.vision_models.get(provider) or model_ref
 
     def background_model(self, active_model_ref: str) -> str:
         """

@@ -140,6 +140,14 @@ Translation happens only at the wire boundary — internally everything speaks
 Anthropic content-block format. `LLM_FALLBACK_CHAIN` retries the next provider on
 failure; the UI picker only shows providers with configured credentials.
 
+**Images route themselves.** Anthropic, Gemini and OpenAI read an image on any
+chat model; DeepSeek serves them on exactly one id and rejects the request on
+every other. So a turn whose history carries an image is moved to the vision
+model on the SAME provider before the call — `deepseek:deepseek-v4-pro` →
+`deepseek:deepseek-v4-flash-vision-exp` — and stays there while the image is in
+context. Never across providers: a provider with no vision model declared
+(`AgentProfile.vision_models`) keeps the model the owner pinned.
+
 ---
 
 ## HTTP API

@@ -28,6 +28,7 @@ from app.services.llm_client import (
     _thought_signature,
     _usage_from,
     blocks_to_dicts,
+    supports_vision,
     TextBlock,
     ToolUseBlock,
     _to_openai_params,
@@ -154,6 +155,56 @@ def test_background_model_follows_active_provider(unpinned):
     assert p.background_model("deepseek:deepseek-v4-pro") == "deepseek:deepseek-v4-flash"
     # Dead Zone: the local model is the only one that exists.
     assert p.background_model("ollama:llama3.1:8b") == "ollama:llama3.1:8b"
+
+
+# ── Vision routing ───────────────────────────────────────────────────────────
+# An image sent to a text-only model is not a degraded answer — the provider
+# rejects the whole request, and keeps rejecting it, because the image stays in
+# the history. The reroute must fix that WITHOUT ever changing provider.
+
+
+def test_supports_vision_knows_which_models_read_images():
+    # Whole-line multimodal providers need no per-id knowledge.
+    assert supports_vision("claude-sonnet-4-6")
+    assert supports_vision("gemini:gemini-2.5-flash")
+    assert supports_vision("openai:gpt-5-mini")
+    assert not supports_vision("openai:gpt-3.5-turbo")
+    # DeepSeek serves images on exactly one id.
+    assert supports_vision("deepseek:deepseek-v4-flash-vision-exp")
+    assert not supports_vision("deepseek:deepseek-v4-pro")
+    assert not supports_vision("deepseek:deepseek-v4-flash")
+    # Ollama depends entirely on which weights were pulled.
+    assert supports_vision("ollama:llava:13b")
+    assert not supports_vision("ollama:llama3.1:8b")
+
+
+def test_vision_tier_stays_on_the_owners_provider():
+    p = SPEDAProfile()
+    # Text-only DeepSeek → DeepSeek's vision model, same provider.
+    assert p.vision_tier("deepseek:deepseek-v4-pro") == "deepseek:deepseek-v4-flash-vision-exp"
+    # Already sees images → untouched (no needless downgrade).
+    assert p.vision_tier("claude-sonnet-4-6") == "claude-sonnet-4-6"
+    assert p.vision_tier("deepseek:deepseek-v4-flash-vision-exp") == "deepseek:deepseek-v4-flash-vision-exp"
+    # No vision model on that provider → the pin is kept and fails as itself.
+    # An image must never be the thing that moves a turn onto Anthropic.
+    for ref in ("zai:glm-4.6", "ollama:llama3.1:8b", "nvidia:meta/llama-3.1-8b-instruct"):
+        assert p.vision_tier(ref) == ref
+
+
+def test_an_image_is_found_anywhere_in_the_history():
+    from app.core.orchestrator import _carries_image
+
+    image = {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "x"}}
+    assert not _carries_image([{"role": "user", "content": "hello"}])
+    assert not _carries_image([{"role": "user", "content": [{"type": "text", "text": "hello"}]}])
+    # Turn 1 sent the screenshot; turn 9 still carries it, and still cannot be
+    # sent to a text-only model.
+    history = [
+        {"role": "user", "content": [image, {"type": "text", "text": "what is this"}]},
+        {"role": "assistant", "content": "a chart"},
+        {"role": "user", "content": [{"type": "text", "text": "and the y axis?"}]},
+    ]
+    assert _carries_image(history)
 
 
 # ── The routing matrix is the authority ──────────────────────────────────────
