@@ -166,8 +166,10 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
         />
       )}
 
-      {/* Agent name + mark — the hero, biggest element on screen */}
-      <div data-brand-text style={{
+      {/* Agent name + mark — the hero, biggest element on screen. lang="en"
+          because the wordmark is an English proper noun: under the document's
+          tr locale, CSS uppercase would render Atomix as ATOMİX. */}
+      <div data-brand-text lang="en" style={{
         display: 'flex', alignItems: 'baseline', gap: '0.7rem',
         marginBottom: '0.5rem',
         animation: 'fadeSlideIn 0.5s 0.15s ease both',
@@ -198,7 +200,7 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
       </div>
 
       {/* Domain tagline */}
-      <p data-brand-text style={{
+      <p data-brand-text lang="en" style={{
         fontFamily: "var(--font-mono)",
         fontSize: '0.97rem', letterSpacing: '0.24em', textTransform: 'uppercase',
         color: 'var(--hb-text-faint)',

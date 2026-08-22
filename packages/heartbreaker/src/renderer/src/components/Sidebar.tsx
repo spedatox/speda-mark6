@@ -446,8 +446,9 @@ function AgentRow({ brand, active, onClick }: {
         style={{ flexShrink: 0, opacity: active || hover ? 1 : 0.65,
                  transition: 'opacity 0.12s' }}
       />
-      {/* Name + mark */}
-      <div style={{ minWidth: 0, flex: 1 }}>
+      {/* Name + mark — lang="en" keeps CSS uppercase off Turkish casing
+          rules, which would otherwise print ATOMİX / SENTİNEL. */}
+      <div lang="en" style={{ minWidth: 0, flex: 1 }}>
         <span style={{
           fontFamily: "'Rajdhani',sans-serif",
           fontSize: '0.72rem', fontWeight: 700,
@@ -522,7 +523,7 @@ function SidebarHeader({ profile, onToggle, onSearch, searchActive, switchAgent 
             beside them is centred against the pair rather than sitting on it —
             otherwise the two fall out of line whenever nameSize changes.
             Only the name may shrink; the model number never truncates. */}
-        <span style={{
+        <span lang="en" style={{
           display: 'flex', alignItems: 'baseline', gap: '0.4rem',
           minWidth: 0,
         }}>

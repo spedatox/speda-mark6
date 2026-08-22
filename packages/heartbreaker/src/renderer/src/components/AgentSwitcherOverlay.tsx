@@ -250,8 +250,9 @@ export default function AgentSwitcherOverlay({
                 </div>
               </div>
 
-              {/* name + mark */}
-              <div style={{ textAlign: 'center' }}>
+              {/* name + mark — lang="en" so CSS uppercase does not apply
+                  Turkish casing to the English brand words (ATOMİX). */}
+              <div lang="en" style={{ textAlign: 'center' }}>
                 <div style={{
                   fontFamily: "'Rajdhani', sans-serif", fontWeight: 700,
                   fontSize: isSel ? '1.05rem' : '0.9rem', letterSpacing: '0.14em',
@@ -293,7 +294,7 @@ export default function AgentSwitcherOverlay({
           background: `linear-gradient(90deg, transparent, ${selColor}33, transparent)`,
           animation: `sweep 0.7s ${SMOOTH}`,
         }} />
-        <div key={`desig-${selectedIndex}`} style={{ animation: `desigIn 0.4s ${SMOOTH}` }}>
+        <div key={`desig-${selectedIndex}`} lang="en" style={{ animation: `desigIn 0.4s ${SMOOTH}` }}>
           <div style={{
             fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: '1.15rem',
             letterSpacing: '0.22em', textTransform: 'uppercase', color: '#eef7fa',

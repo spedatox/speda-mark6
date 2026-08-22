@@ -71,6 +71,11 @@ function AppInner() {
   // `text-transform: uppercase` — used all over the deck's FUI labels — when
   // the document's language is actually declared. Without this, every such
   // label in Turkish renders with an ASCII-only uppercase pass.
+  //
+  // The flip side: brand text (agent name, model number, tagline — all English
+  // constants from profile/brands.ts) must NOT get those rules, or Atomix reads
+  // ATOMİX and Sentinel SENTİNEL. Every element carrying brand text declares
+  // lang="en" of its own; see ChatMain, Sidebar and AgentSwitcherOverlay.
   const { settings: rootSettings } = useSettings()
   useEffect(() => {
     document.documentElement.lang = rootSettings.locale
