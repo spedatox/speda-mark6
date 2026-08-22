@@ -79,6 +79,25 @@ not prose")
 ## Open questions
 (things still unclear about the owner)
 """,
+    "/memories/patterns.md": """\n# Patterns — what he repeatedly does, and what to do about it
+
+_Induced, not stated. Every line is `- [YYYY-MM-DD, agent_id, confidence] the
+pattern → the move it calls for`, where confidence is high (5+ supporting
+facts), medium (3-4) or low (2). This file is in front of every agent on every
+turn for one reason: a pattern is only worth anything BEFORE it fires. Act on it
+silently, the way you act on the dossier. It is induced from evidence and can be
+wrong, so a low-confidence line is a hypothesis to watch, not a fact to assert —
+and never read one aloud or cite it to him._
+
+## Behaviour
+(what he repeatedly DOES, in situations that recur)
+
+## Tendencies
+(how he repeatedly leans — pace, ambition, follow-through, what he defers)
+
+## Correlations
+(when X, then Y — the conditional ones: a state that predicts an outcome)
+""",
     # projects.md and social.md are deliberately absent: they are REGISTRIES and
     # each is now one file per entity under /memories/projects/ and
     # /memories/social/<category>/ (memory_spec.COLLECTIONS). A collection has

@@ -43,6 +43,7 @@ _INJECTED_PATHS = frozenset({
     "/memories/current.md",
     "/memories/dossier.md",
     "/memories/history.md",
+    "/memories/patterns.md",
 })
 
 # `- [2026-07-06, sentinel] wants totals before breakdowns.` — the dossier's
@@ -224,7 +225,46 @@ def _member_violations(path: str, content: str) -> list[str]:
     return problems
 
 
+# `- [2026-08-22, ultron, medium] plans made after a night shift slip → schedule
+# the light block first.` Same attribution stamp as the dossier plus a
+# confidence, because a pattern is INDUCED and can be wrong, and one more thing:
+# the arrow. A line with no countermeasure is an observation that wandered into
+# the wrong document — the record already holds those, findable by meaning, and
+# this file is only worth its place in every prompt if every line tells an agent
+# what to DO before the pattern fires.
+_PATTERN_ENTRY = re.compile(
+    r"^\s*[-*]\s+\[\d{4}-\d{2}-\d{2},\s*[a-z0-9_+ ]+,\s*(high|medium|low)\]"
+)
+_PATTERN_ARROW = ("→", "->")
+
+
+def _patterns_violations(content: str) -> list[str]:
+    """Every entry is attributed, carries a confidence, and names its move."""
+    problems: list[str] = []
+    for i, line in enumerate(content.splitlines(), 1):
+        if not _DOSSIER_ENTRY.match(line):
+            continue
+        if not _PATTERN_ENTRY.match(line):
+            problems.append(
+                f"patterns.md line {i} is missing its "
+                f"`[YYYY-MM-DD, agent_id, confidence]` stamp (confidence is one of "
+                f"high/medium/low — 'high' for 5+ supporting facts, 'medium' for "
+                f"3-4, 'low' for 2). An induced claim without its strength reads "
+                f"as a certainty, and this file is acted on before anyone checks."
+            )
+            continue
+        if not any(a in line for a in _PATTERN_ARROW):
+            problems.append(
+                f"patterns.md line {i} states a pattern but not the move it calls "
+                f"for. Write `pattern → what to do about it`. A pattern with no "
+                f"countermeasure belongs in the observation record, not in the "
+                f"block every agent is billed for on every turn."
+            )
+    return problems
+
+
 _FILE_CHECKS = {
+    "/memories/patterns.md": _patterns_violations,
     "/memories/dossier.md": _dossier_violations,
     "/memories/social.md": _social_violations,
     "/memories/current.md": _current_violations,

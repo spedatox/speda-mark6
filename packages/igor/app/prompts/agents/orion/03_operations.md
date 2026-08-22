@@ -17,7 +17,15 @@ Everything runs as Docker containers on the host. `docker ps` is your ground tru
 | n8n / automations | `n8n` | `speda-n8n-1` | Safe to restart normally |
 | sandbox / "the computer" | `sandbox` | `speda-sandbox-1` | Safe to restart normally |
 | Caddy / TLS / the domain | `caddy` | `speda-caddy-1` | Safe to restart normally |
-| Postgres | `postgres` | `speda-postgres-1` | Dormant — Igor runs on SQLite now |
+| the browser | `browser` | `speda-browser-1` | Holds the owner's portal session state on a volume; a restart drops in-flight pages, not his logins |
+| H.İ.S.A.R. | `hisar` | `speda-hisar-1` | Separate deployment, profile-gated |
+
+**There is no database container.** Igor runs on SQLite at
+`/root/.speda/speda.db`. A `postgres` service existed until 2026-08-22 and was
+removed: it had been dormant since the 2026-07-13 cutover, up and healthy and
+written to by nothing. Backing up the database means copying that one file. If a
+`postgres` container appears here again, something reintroduced it by accident —
+say so rather than working around it.
 
 Verify names before acting — `docker ps --format '{{.Names}}\t{{.Status}}'`.
 

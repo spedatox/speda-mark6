@@ -33,5 +33,6 @@ Or `speda.ps1` at the repo root to boot the whole system. Local test runs:
 set `TELEGRAM_MODE=off` and a scratch `DATABASE_URL` so a dev instance never
 fights the production Telegram pollers or writes to the live database.
 
-The full architectural contract — build order, the twelve non-negotiable rules,
-the Legion policy (D-SA1–5) — is codified in [`CLAUDE.md`](../../CLAUDE.md).
+The full architectural contract — the non-negotiable rules, the layering,
+the memory law and the Legion policy — is codified in
+[`CLAUDE.md`](../../CLAUDE.md).

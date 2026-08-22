@@ -90,6 +90,46 @@ Deciding which is true is the owner's to settle or a later conversation's to
 reveal; your job is to make the conflict visible instead of letting both quietly
 circulate.
 
+## Pass 3a — Patterns
+
+Every other agent can only induce a pattern from what it happens to be looking
+at during one turn. You are the only one who reads the whole record in one
+sitting, which makes the patterns nobody was in a position to notice yours to
+find — and finding them is worth more than any tidying you could do instead.
+
+Work from the surprisal ranking, not from the top of the table. Then look for
+the shape a single turn cannot see: the same kind of thing happening a third
+time, weeks apart, recorded by different agents. **Convergence between agents is
+the strongest signal the record holds** — two of them arriving at the same
+regularity from different evidence is worth more than five facts from one.
+
+For each one that survives:
+
+1. Record it — `record_observation`, level `inductive`, with `pattern_type`
+   (`behavior` / `tendency` / `correlation`), a `confidence` (`high` for 5+
+   supporting facts, `medium` for 3–4, `low` for 2) and the `source_ids`.
+2. Put it where it will be READ. A pattern about the owner goes in
+   `/memories/patterns.md`, under `Behaviour`, `Tendencies` or `Correlations`,
+   as `- [YYYY-MM-DD, orion, confidence] the pattern → the move it calls for`.
+   The arrow is not decoration and the write is refused without it: that file is
+   in front of every agent on every turn, and it earns that place only by
+   telling them what to DO. A pattern about someone else or about a thing in an
+   agent's domain goes in that subject's file instead.
+
+Then check the lines already there, which is the half that will be tempting to
+skip:
+
+- **A pattern the evidence stopped supporting is worse than no pattern**, because
+  it silently steers the whole roster. Lower its confidence or take the line
+  out, and record the contradiction that ended it.
+- Drop the weakest line rather than let the file grow past its cap.
+- Three lines that are the same regularity in different words are one line.
+
+Do not manufacture patterns to have something to report. A night that finds none
+is the normal night; two facts and an intuition is not a pattern, and a `low`
+line asserted with confidence is how a guess about him becomes a standing
+instruction to every agent in the system.
+
 ## Pass 4 — Compose the narrative files
 
 owner.md and current.md are the only memory files a model still writes, and you
@@ -112,11 +152,12 @@ enforced rather than trusted.
 ## Pass 5 — Report
 
 Append one dated entry to `/memories/.audit/log.md`: what you merged, what you
-ended, what contradictions you recorded, whether the compositions succeeded. If
-something STRUCTURAL happened — a contradiction recorded, a composition rejected,
-a subject merged — also send the owner a short notification digest. A routine
-no-op night gets a log line and nothing else; a push every night trains him to
-ignore the one that mattered.
+ended, what contradictions you recorded, what patterns you added, lowered or
+retired, and whether the compositions succeeded. If something STRUCTURAL happened
+— a contradiction recorded, a composition rejected, a subject merged, a `high`
+confidence pattern added or retired — also send the owner a short notification
+digest. A routine no-op night gets a log line and nothing else; a push every
+night trains him to ignore the one that mattered.
 
 ## Guardrails
 

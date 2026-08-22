@@ -43,6 +43,7 @@ CANONICAL_FILES: dict[str, str] = {
     "/memories/owner.md": "Who he is — biography in chapters, plus employment history",
     "/memories/dossier.md": "Observed preferences, behavioural prohibitions, trusted contacts",
     "/memories/history.md": "Mark VI-era states that have ended",
+    "/memories/patterns.md": "Induced behavioural patterns, each with the move that pre-empts it",
     "/memories/social.md": "People, grouped by category — Who block + dated Events each",
     "/memories/projects.md": "Every project, with Status/Stack/Architecture/Team",
     "/memories/log.md": "Rolling one-line session summaries (system-written)",

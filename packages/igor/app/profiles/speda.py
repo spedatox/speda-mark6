@@ -41,6 +41,7 @@ PROMPT_SECTIONS = [
     "core/08_memory.md",          # persistent memory protocol (Anthropic memory pattern)
     "core/09_agent_network.md",   # inter-agent dispatch + House Party Protocol
     "core/10_environment.md",   # Mark VI ecosystem glossary (Igor/Heartbreaker/Legion/Forge/sandbox/n8n)
+    "core/11_patterns.md",   # the pattern loop: induce a repeat, pre-empt it next time
 ]
 
 

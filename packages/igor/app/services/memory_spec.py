@@ -745,6 +745,42 @@ SPECS: dict[str, DocumentSpec] = {
         injected=True,
         max_bytes=12_000,
     ),
+    "/memories/patterns.md": DocumentSpec(
+        path="/memories/patterns.md",
+        kind=OBSERVATIONS,
+        summary="Induced behavioural patterns, each with the move that pre-empts it",
+        # INJECTED, and that is the whole point. A pattern that has to be
+        # searched for is a diary entry: by the time anyone thinks to look it up,
+        # the owner has already walked into the thing it predicted. The value of
+        # this document is entirely in being in front of every agent BEFORE the
+        # turn starts, which is why it is small, capped hard, and carries the
+        # countermeasure on the same line as the observation.
+        #
+        # Deliberately NOT a dossier member. The dossier records what he likes,
+        # dislikes and forbids — claims that are true because he said so. A
+        # pattern is INDUCED from several facts, carries a confidence, and can
+        # simply be wrong. Filing a fallible inference beside a binding
+        # prohibition is how the two stop being told apart, which is the exact
+        # defect v4 §2.2 records one storey down.
+        injected=True,
+        # 12K, not the 8K this file wants, because `memory_schema.max_bytes_for`
+        # resolves an injected path from INJECTED_FILE_MAX_BYTES and never reads
+        # the cap declared here — the same reason current.md's declared 6K is not
+        # the 12K actually enforced on it. Declaring a number that is not the one
+        # applied is how a spec starts lying, so this matches reality; the prompt
+        # carries the "stay short" half.
+        max_bytes=12_000,
+        sections=("Behaviour", "Tendencies", "Correlations"),
+        # The vocabulary is `observations.PATTERN_TYPES` minus the two the
+        # dossier already owns (`preference`, `personality`). Reusing the record's
+        # words rather than inventing prose headings is what lets an inductive
+        # observation and its line here be recognised as the same claim.
+        notes=(
+            "Every line is `- [YYYY-MM-DD, agent_id, confidence] pattern → the move`. "
+            "The arrow is required: a pattern with no countermeasure is an "
+            "observation, and observations belong in the record, not here."
+        ),
+    ),
     "/memories/social.md": DocumentSpec(
         path="/memories/social.md",
         kind=REGISTRY,

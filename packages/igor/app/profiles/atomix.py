@@ -15,6 +15,7 @@ PROMPT_SECTIONS = [
     "core/08_memory.md",
     "core/09_agent_network.md",
     "core/10_environment.md",   # Mark VI ecosystem glossary (Forge/Heartbreaker/sandbox/n8n)
+    "core/11_patterns.md",   # the pattern loop: induce a repeat, pre-empt it next time
 ]
 
 

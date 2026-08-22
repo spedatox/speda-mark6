@@ -2,556 +2,619 @@
 
 Read this file in full before touching a single file. This is not optional.
 
+This is the **repo-wide contract**: the rules that hold across every package and
+the boundaries you may not cross. It is not an inventory. Each package carries
+its own doc for what lives inside it, and every module's docstring says why it
+exists — those are the detail, this is the law.
+
+| Package | Doc | What it is |
+|---|---|---|
+| `packages/igor` | [`IGOR.md`](packages/igor/IGOR.md) | **Igor** — the backend core. One FastAPI process: event loop, database, memory, orchestrator, every capability tier |
+| `packages/heartbreaker` | `HEARTBREAKER.md` | **Heartbreaker** — the desktop client, full roster, Stark command deck |
+| `packages/striker` | `STRIKER.md` | **Striker** ("Speda Mark VI Core") — the single-agent public build. Same backend, Speda only, calm theme |
+| `packages/speda-go` | `README.md` | **Speda GO** — the mobile client. Never "Heartbreaker mobile"; the Kotlin id `com.speda.heartbreaker` stays as-is on purpose (renaming it orphans every installed app's Keystore data) |
+| `packages/browser` | [`docs/BROWSER.md`](docs/BROWSER.md) | Playwright in its own container — the render fallback and the owner's portal logins |
+| `packages/sandbox` | — | Command execution sidecar |
+
+Deployment target: Contabo Cloud, via GitOps — **push to main rewrites the
+server.** Code lands in production before any migration you were planning to run
+by hand. Write every change so both sides of that window work.
+
 ---
 
-## What This Repo Is
+## What This Is
 
-This is `speda-mark-vi` — **Igor**, the backend core of Speda (Specialized Personal Executive Digital Assistant). It is a single-user, proactive ambient AI assistant. Component names: **Igor** = this backend; **Heartbreaker** = the desktop client (packages/heartbreaker); **Speda GO** = the mobile client (packages/speda-go — never "Heartbreaker mobile" or "Heartbreaker Droid"; the Kotlin package id `com.speda.heartbreaker` stays as-is on purpose, renaming it would orphan every installed app's Keystore data); **The Legion** = the sub-agent worker system (wire name `Task`).
+Speda (Specialized Personal Executive Digital Assistant) is a single-user,
+proactive ambient AI assistant. It serves one owner.
 
-**Multi-tenant architecture.** Speda and five of the Superior Six — Sentinel, NightCrawler, Ultron, Centurion, Atomix — are **in-process agent profiles** inside this single backend, alongside **Orion**, the system's own maintenance & memory custodian. Each is an `AgentProfile` subclass with its own identity, model policy, tool allowlist, and prompt directory. They share one event loop, one database, one `CapabilityRegistry`, and one owner's memory. They are addressed by `agent_id` on every request. A separate `warroom` profile (a `SPEDAProfile` subclass) is the **House Party Protocol** command channel — the same brain and tools as Speda under a distinct `agent_id` so full-roster operations never bleed into the owner's day-to-day Speda session.
+**Multi-tenant, single process.** Speda and five of the Superior Six — Sentinel,
+NightCrawler, Ultron, Centurion, Atomix — are **in-process agent profiles**
+inside Igor, alongside **Orion**, the system's own maintenance and memory
+custodian. Each is an `AgentProfile` subclass with its own identity, model
+policy, tool allowlist and prompt directory. They share one event loop, one
+database, one `CapabilityRegistry` and one owner's memory. They are addressed by
+`agent_id` on every request.
 
-**Optimus is the single exception.** Optimus is a standalone, independently deployed framework. It connects back to this backend as an external WebSocket peer via `WebSocketManager`. It is not built here and does not run in-process. (Its in-process `optimus.py` profile is only the proxy/fallback stub: while the external peer is online, `/chat/optimus` turns and inter-agent dispatches route to it external-first.)
+A separate `warroom` profile (a `SPEDAProfile` subclass) is the **House Party
+Protocol** command channel — the same brain and tools as Speda under a distinct
+`agent_id`, so full-roster operations never bleed into the owner's day-to-day
+Speda session.
 
-Deployment target: Contabo Cloud. Production-grade from day one.
+**Optimus is the single exception.** Optimus is ONE agent whose identity, memory,
+prompts and session history live here — but its work can execute on a separate
+machine (the Forge peer), reached as an external WebSocket peer. The peer is
+stateless per turn: which machine a turn runs on is a transport detail, decided
+in exactly one place (`app/core/peer_routing.py`), never a second Optimus. The
+in-process `optimus.py` profile is the proxy/fallback; while the external peer is
+online, `/chat/optimus` turns and inter-agent dispatches route to it
+external-first.
 
 ---
 
 ## Non-Negotiable Architecture Rules
 
 **1. Never put logic in routers.**
-Routers call `orchestrator.run(context)` and stream the result. Zero business logic. Zero system prompt construction. Zero tool registration. If you are writing more than 10 lines of non-trivial code in a router, you are doing it wrong.
+Routers call `orchestrator.run(context)` and stream the result. Zero business
+logic. Zero system prompt construction. Zero tool registration. If you are
+writing more than 10 lines of non-trivial code in a router, you are doing it
+wrong.
 
-**2. System prompt is owned exclusively by `AgentOrchestrator`.**
-`build_system_prompt()` lives in `app/core/orchestrator.py`. Nowhere else. Never in a router, never in a service, never inline.
+**2. The system prompt is owned exclusively by `AgentOrchestrator`.**
+`build_system_prompt()` lives in `app/core/orchestrator.py`. Nowhere else. Never
+in a router, never in a service, never inline.
 
 **3. `AgentContext` is the single source of truth for request state.**
-Every module that needs user, session, DB, model, or timezone information receives it via `AgentContext`. No module-level globals. No ad-hoc dicts. No `context={"timezone": str}`.
+Every module that needs user, session, DB, model or timezone information receives
+it via `AgentContext`. No module-level globals. No ad-hoc dicts. No
+`context={"timezone": str}`.
 
 **4. The agentic loop handles all stop reasons explicitly.**
-- `end_turn` — Claude is done. Return response to user.
-- `tool_use` — Execute tool(s), append results, continue loop.
-- `max_tokens` — Response was truncated. Retry with higher max_tokens.
-- `pause_turn` — Server tool loop hit its iteration limit. Continue the conversation.
 
-The loop runs until `end_turn`. It never breaks on `tool_use`. It never breaks after N iterations unless the safety guard (Rule 4a) fires.
+| Stop reason | Behaviour |
+|---|---|
+| `end_turn` | Claude is done. Return the response. |
+| `tool_use` | Execute tool(s), append results, **continue the loop**. |
+| `max_tokens` | Truncated. Retry with a higher `max_tokens`. |
+| `pause_turn` | Server tool loop hit its limit. Continue the conversation. |
 
-**4a. The agentic loop has a hard safety guard of 30 tool_use iterations.**
-If the loop exceeds 30 iterations, yield an `ERROR` SSEEvent and terminate gracefully. This is not a feature limit — it is a safety guard against runaway loops caused by tool errors or unexpected model behaviour.
+The loop runs until `end_turn`. It never breaks on `tool_use`. It never breaks
+after N iterations unless the safety guard fires.
+
+**4a. The loop has a hard safety guard of 30 tool_use iterations**
+(`MAX_TOOL_ITERATIONS`). Past it, yield an `ERROR` SSEEvent and terminate
+gracefully. This is not a feature limit — it is protection against a runaway loop
+caused by a tool error or unexpected model behaviour.
 
 **5. `CapabilityRegistry` is the only entity that knows what tools exist.**
-`AgentOrchestrator` calls `registry.list_tools()`. It never hardcodes tool definitions. Adding a new capability = drop a file into `skills/`, `mcp/`, or `adapters/` and register at startup. The orchestrator never changes.
+The orchestrator calls `registry.list_tools()` and never hardcodes a tool
+definition. Adding a capability = drop a file into `skills/`, `mcp/` or
+`adapters/` and register it at startup. The orchestrator does not change.
 
 **6. No module-level globals. Everything lives on `app.state`.**
-Routers access via `request.app.state`. Initialized in the lifespan handler. In that order.
+Routers reach it via `request.app.state`. Initialised in the lifespan handler, in
+order.
 
-**7. Memory extraction and title generation are always `BackgroundTask`s.**
-Never inside the SSE generator. Never blocking the stream.
+**7. Post-turn work is never done inside the SSE generator.**
+Memory extraction, titles, recaps, compaction and embedding are durable
+background jobs (`app/services/task_queue.py`) — committed to `background_jobs`
+before they run, drained inline, recovered at startup. Never blocking the stream.
 
 **8. Anthropic `tool_use` / `tool_result` content block format exclusively.**
 Never OpenAI wire format. Never hardcoded tool call IDs.
 
-**9. All research and retrieval skills must be annotated read-only.**
-This enables true parallel tool execution. Tavily, Exa, arXiv, Alpha Vantage, Brave Search, Fetch — all read-only annotated.
+**9. All research and retrieval capabilities are annotated read-only.**
+This is what enables true parallel tool execution. Search, fetch, page reads,
+market data, recall — read-only annotated.
 
 **10. Zero identity strings in core. All identity lives in `app/profiles/`.**
-Agent name, personality, system prompt template, tool allowlist, and model policy live in `app/profiles/{agent_id}.py`. The engine is untouched by identity. Model IDs (`claude-sonnet-4-6`, `claude-haiku-4-5-20251001`) live exclusively in individual profile files under `app/profiles/`. They must not appear in `config.py`, `orchestrator.py`, or any core module.
+Agent name, personality, system prompt sections, tool allowlist and model policy
+live in `app/profiles/{agent_id}.py`. The engine is untouched by identity.
+**Model IDs live exclusively in profile files** — never in `config.py`,
+`orchestrator.py` or any core module.
 
 **11. Every tool description is a minimum of 3–4 sentences.**
-State: what the tool does, when to use it, when NOT to use it, and what it returns. This is the most critical factor in Claude's tool selection accuracy per Anthropic's own documentation. A one-line description makes a good tool unusable. Enforce this at skill authoring time, not at runtime.
+State what the tool does, when to use it, when NOT to use it, and what it
+returns. Per Anthropic's own guidance this is the single largest factor in tool
+selection accuracy. A one-line description makes a good tool unusable. Enforce it
+at authoring time, not at runtime.
 
-**11a. Memory has ONE write path: the observation record.**
-A durable fact enters via `record_observation` and nowhere else. The markdown
-files under `/memories` are derived — six rendered mechanically
-(`services/memory_render.py`), two composed by Orion with verified citations
-(`services/memory_compose.py`). Never write a memory file directly from a skill,
-service or router; `memory_schema.check_write` refuses it. A fact stops being
-current by acquiring a `valid_until`, never by being moved or deleted, and a
-changed value is linked with `superseded_by` rather than overwritten. Full
-contract: `docs/MEMORY_ARCHITECTURE_V3.md`.
+**12. All endpoints require authentication.**
+`AuthMiddleware` validates **`X-API-Key`** on every request before any router
+logic runs, in constant time against `SPEDA_API_KEY`. Unauthenticated paths are
+exactly: `/health`, the OAuth callbacks
+(`/oauth/{google,notion,microsoft}/callback`), and
+`/telegram/webhook/{agent_id}`. The callbacks are exempt for one structural
+reason — the provider sends the OWNER'S BROWSER there, and a browser navigation
+cannot attach a header; **adding an OAuth provider means adding its callback to
+that list**, or consent succeeds and the redirect lands on a 401 that looks like
+the provider's fault. The Telegram webhook authenticates with
+`X-Telegram-Bot-Api-Secret-Token` plus an owner-id allowlist instead. The n8n
+trigger and the probes additionally validate `X-N8N-Secret`. `/docs`, `/redoc`
+and `/openapi.json` are disabled outside `DEBUG`.
 
-**11b. Recall is HYBRID, and both halves are maintained together.**
+**13. Past tense is a claim, and it needs a receipt.**
+Never say you did something you did not do. This is not advisory: prompt text
+alone was tried and failed, so `app/services/claim_audit.py` checks assistant
+messages asserting a side effect against the tools the turn actually ran.
+
+**14. There is one clock.** `app/core/clock.py` is the only place that knows what
+time it is. Never call `datetime.now()` in a feature module.
+
+---
+
+## Memory
+
+Full contract: [`docs/MEMORY_ARCHITECTURE_V4.md`](docs/MEMORY_ARCHITECTURE_V4.md).
+The prompt-side protocol every agent reads is `app/prompts/core/08_memory.md`;
+keep the two in step.
+
+**15. The documents under `/memories` ARE the record.**
+They are not derived and nothing rebuilds them: what is written is what exists.
+`owner.md` and `current.md` are the exception — Orion composes those from the
+observation record, with citations verified mechanically
+(`services/memory_compose.py`).
+
+**16. Memory is a TREE of small documents, split by TOPIC — never by index key.**
+One question, one file. A file answers one question about one thing, so an agent
+opens the file the task is about and pays for nothing else. Split `wellness` into
+profile / program / gym / log; do **not** split a ledger into one file per month
+— that turns "compare July with August" into N reads and cuts a repayment
+schedule in half.
+
+**17. Every document declares its shape, and the shape is enforced.**
+`app/services/memory_spec.py` is the grammar, `memory_schema.check_write` the
+gate, `memory_verify` the report. A write that invents a section, writes above
+the H1, drops a required section or grows an injected file past its cap is
+**refused**, with the rule named and the fix stated. Checks are delta-only — a
+document with pre-existing problems must stay editable, or nothing could ever be
+repaired. **When a document legitimately grows a new section, widen its spec in
+the same commit.** A spec that lags its document turns the verifier into noise,
+and a noisy verifier gets ignored.
+
+**18. An agent writes its own domain, and only its own.**
+`finance/` is Sentinel's, `wellness/` Atomix's, `academic/` Ultron's, `cybersec/`
+Centurion's, `ops/` Orion's. A write to someone else's document is refused by the
+tool, not merely discouraged — hand it over with `dispatch_agent`. The owner and
+Orion are exempt: the first is ground truth, the second is the custodian.
+
+**19. A fact that stops being true acquires an end date. It is never deleted.**
+Deletion is for what was never true. Something that stopped being true is
+history: give it a `valid_until`, link a changed value with `superseded_by`, and
+let it stay findable.
+
+**20. Recall is HYBRID, and both halves are maintained together.**
 `search_memory` and `recall_conversations` each run a vector pass (cosine over
-L2-normalized embeddings) AND a keyword pass (BM25 over FTS5), fused by
+L2-normalised embeddings) AND a keyword pass (BM25 over FTS5), fused by
 Reciprocal Rank Fusion in `services/lexical.py`. Vector-only recall reliably
 loses the rare literal token — a course code, a name, an amount, a Turkish word —
 which is exactly what a recall query is usually built around. Anything that adds
-a searchable row writes BOTH indexes, and the backfills for both run off the same
-job; an index that only one path maintains is an index that silently goes stale.
-Turkish text is folded to ASCII on both sides before it reaches FTS5 (`ı`→`i` in
-particular: it is a distinct letter, not a diacritic, so no tokeniser setting
-will do it for you).
+a searchable row writes BOTH indexes, and both backfills run off the same job; an
+index only one path maintains is an index that silently goes stale. Turkish text
+is folded to ASCII on both sides before it reaches FTS5 (`ı`→`i` in particular:
+it is a distinct letter, not a diacritic, so no tokeniser setting will do it for
+you).
 
-**12. All endpoints require authentication.**
-`AuthMiddleware` validates the **`X-API-Key`** header on every request before any router logic runs, comparing it in constant time against `SPEDA_API_KEY` (from the environment). The n8n trigger endpoint additionally validates `X-N8N-Secret`. The only unauthenticated paths are `/health` and `/oauth/google/callback`. Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are disabled outside `DEBUG`. There is no public data endpoint.
+**21. The record is separate from the documents, and both are written.**
+`record_observation` makes an individual fact findable by meaning, with its
+source, its date and its place on the evidence ladder (`explicit` → `deductive` →
+`inductive` → `contradiction`). Anything above `explicit` must cite the
+`source_ids` it rests on; an uncited deduction is rejected. Record the
+observation *and* write the document line — they answer different questions.
+
+### 22. The pattern loop — observe, induce, pre-empt
+
+A pattern is only worth anything **before** it fires. Noticing afterwards that he
+missed a third deadline the same way is a diary entry; noticing while the plan is
+being built is the point. The loop has three parts and all three are
+load-bearing:
+
+| Part | Where | Rule |
+|---|---|---|
+| **Observe** | `record_observation` | already happens — facts accumulate with sources and dates |
+| **Induce** | level `inductive`, with `pattern_type` + `confidence` + 2+ `source_ids` | one event is a fact, two a coincidence; **a pattern is what survives the third** |
+| **Pre-empt** | `/memories/patterns.md`, injected every turn | the line carries the COUNTERMEASURE, not just the finding |
+
+- `/memories/patterns.md` is injected into every agent's prompt on every turn.
+  That is deliberate and it is the whole design: a pattern that has to be
+  searched for arrives too late by construction.
+- Every line is `- [YYYY-MM-DD, agent_id, confidence] the pattern → the move`.
+  **The arrow is required and the write is refused without it**
+  (`memory_schema._patterns_violations`). A pattern with no countermeasure is an
+  observation, and observations already have a home.
+- Confidence governs how hard an agent leans: `high` pre-empt, `medium` build the
+  counter in, `low` a hypothesis under watch. What the owner says now outranks
+  any pattern — a pattern predicts, it does not overrule the man it is about.
+- It is **not** a dossier member. The dossier records what he likes, dislikes and
+  forbids — claims true because he said so. A pattern is induced, carries a
+  confidence and can be wrong; filing a fallible inference beside a binding
+  prohibition is how the two stop being told apart.
+- `patterns.md` holds patterns about the OWNER. A pattern about a person or about
+  a thing in an agent's domain — how a lecturer sets exams, which month spending
+  overshoots — is induced identically but lives in **that subject's file**.
+- Two paths feed it: any agent that notices a repeat mid-turn, and **Orion's
+  nightly audit Pass 3a** — the only reader of the whole record in one sitting,
+  working from the surprisal ranking rather than the top of the table.
+- A stale pattern is worse than no pattern, because it silently steers the whole
+  roster. Contradicting evidence lowers the confidence or removes the line.
+
+The governing prompt is `app/prompts/core/11_patterns.md`, loaded by every
+profile.
 
 ---
 
 ## Transport Channels
 
-Three distinct communication channels exist. Do not confuse them.
+Three distinct channels. Do not confuse them.
 
-| Channel | Protocol | Used For |
-|---------|----------|----------|
-| `POST /chat/{agent_id}` | HTTP + SSE | User sends a message to a specific agent; response streams back |
-| `WS /ws` | WebSocket | Flutter real-time chat (bidirectional, for voice/low-latency) |
-| `websocket/manager.py` | WebSocket | **Optimus ONLY** — external peer presence, dispatch, results |
+| Channel | Protocol | Used for |
+|---|---|---|
+| `POST /chat/{agent_id}` | HTTP + SSE | A user message to a specific agent; the response streams back |
+| `WS /ws` | WebSocket | Client real-time chat (bidirectional — voice, low latency) |
+| `websocket/manager.py` | WebSocket | **The external peer ONLY** — Optimus/Forge presence, dispatch, results |
 
-`WebSocketManager` manages the Optimus external connection. It is not used for in-process agents (Sentinel, NightCrawler, Ultron, Centurion, Atomix, Orion are profiles, not sockets) and not used for Flutter user sessions. If you are writing Flutter chat logic, use either `POST /chat/{agent_id}` (SSE) or `WS /ws` — not `WebSocketManager`.
+`WebSocketManager` is not used for in-process agents (they are profiles, not
+sockets) and not for client chat sessions.
 
 ---
 
 ## Output Modes
 
-`output_mode` is set at context construction time and controls what the orchestrator does with the result. The orchestrator always yields `SSEEvent` — the router decides what to do with it based on this field.
+`output_mode` is set at context construction and decides what the caller does
+with the result. The orchestrator always yields `SSEEvent`; the loop is identical
+for all three.
 
-| output_mode | Behaviour |
-|-------------|-----------|
-| `"respond"` | Stream SSE back to Flutter — user is waiting for a response |
-| `"push"` | Silent processing; result delivered as Flutter push notification |
-| `"silent"` | Background execution; result stored to DB only — no notification |
+| `output_mode` | Behaviour |
+|---|---|
+| `respond` | Stream SSE back — the user is waiting |
+| `push` | Silent processing; delivered as a push notification |
+| `silent` | Background execution; stored to the DB only |
 
-User-triggered requests always use `"respond"`. n8n specifies `"push"` or `"silent"` in the trigger payload. The orchestrator loop is identical for all three.
-
----
-
-## Build Order
-
-Build in this exact sequence. Nothing is built before what it depends on exists.
-
-| Phase | Module | Notes |
-|-------|--------|-------|
-| 1 | `app/config.py`, `app/database.py` | Everything else imports from here |
-| 2 | `app/models/` | All ORM models |
-| 3 | `app/schemas/` | Pydantic schemas |
-| 3.5 | `app/middleware/auth.py` | API key middleware — protects all routes |
-| 4 | `app/services/anthropic_client.py` | Orchestrator depends on this |
-| 5 | `app/skills/base.py` + all Python Skills | Registry depends on these |
-| 6 | `app/mcp/client.py` + `app/mcp/servers.py` | Registry depends on these |
-| 7 | `app/adapters/base.py` + all OSS Adapters | Registry depends on these |
-| 8 | `app/core/registry.py` (CapabilityRegistry) | Orchestrator depends on this |
-| 9 | `app/core/context.py` (AgentContext) | Orchestrator depends on this |
-| 9.5 | `app/core/session_manager.py` (SessionManager) | AgentContext construction depends on this |
-| 10 | `app/websocket/manager.py` (WebSocketManager) + `app/websocket/protocol.py` | AgentRegistry depends on this |
-| 11 | `app/core/agent_registry.py` (AgentRegistry) | Routers depend on this |
-| 12 | `app/core/orchestrator.py` (AgentOrchestrator) | Routers depend on this |
-| 13 | `app/services/memory.py`, `app/services/n8n.py` | Background services |
-| 14 | `app/routers/` (chat, trigger, agents, health, admin) | Depend on everything above |
-| 15 | `app/main.py` (lifespan + app factory) | Assembled last |
-
----
-
-## Directory Structure
-
-This tree reflects the codebase as actually built — it has grown well past the
-original Phase-1 skeleton (Legion, News, Telegram, Automations, the detached
-turn runner, external-peer proxying) but every addition still lives inside the
-tier/profile/service boundaries the rules above define. If you add a module,
-add it here too — this list is the contract, not a historical snapshot.
-
-```
-speda-mark-vi/
-├── CLAUDE.md
-├── Dockerfile
-├── docker-compose.yml
-├── pyproject.toml
-├── .env.example
-└── app/
-    ├── main.py                  # lifespan + app factory — assembled last
-    ├── config.py                # Settings (env-backed)
-    ├── config_schema.py         # Declarative schema for the owner-facing /config UI
-    ├── database.py
-    ├── middleware/
-    │   ├── auth.py              # X-API-Key validation — applied to all routes
-    │   └── security.py
-    ├── profiles/
-    │   ├── base.py              # AgentProfile ABC — agent_id, domain, tool_allowlist, model policy
-    │   ├── registry.py          # ProfileRegistry — loads all enabled profiles, lookup by agent_id
-    │   ├── speda.py             # Speda orchestrator profile
-    │   ├── sentinel.py          # Sentinel — finance & budget intelligence
-    │   ├── nightcrawler.py      # NightCrawler — OSINT, web surveillance, research
-    │   ├── ultron.py            # Ultron — academic research, knowledge synthesis
-    │   ├── centurion.py         # Centurion — cyber security (owns cve_intelligence)
-    │   ├── atomix.py            # Atomix — personal health (the owner's health, not system health)
-    │   ├── optimus.py           # Optimus — proxy/fallback stub for the external Forge peer
-    │   ├── orion.py             # Orion — Mark VI maintenance: memory custodian & host ops
-    │   └── warroom.py           # War Room — House Party Protocol session-scope alias (SPEDAProfile subclass)
-    ├── prompts/
-    │   ├── loader.py            # Prompt assembly
-    │   ├── core/                # Common sections: formatting, memory protocol, agent network, output rules
-    │   └── agents/               # Per-agent identity/voice/boundary prompts (one dir per agent_id)
-    ├── core/
-    │   ├── orchestrator.py      # AgentOrchestrator — owns the agentic loop + system prompt
-    │   ├── context.py           # AgentContext dataclass
-    │   ├── registry.py          # CapabilityRegistry — all four tiers unified
-    │   ├── agent_registry.py    # AgentRegistry — WebSocket-based agent presence
-    │   ├── session_manager.py   # SessionManager — session lifecycle + history loading
-    │   ├── turn_runner.py       # TurnRegistry — detached turns survive client disconnects (BgOps)
-    │   ├── trigger_runner.py    # n8n turns run as persisted chat turns on the TurnRegistry
-    │   ├── dispatch.py          # Agent-to-agent dispatch primitive — direct AND House Party broadcast
-    │   ├── external_proxy.py    # ExternalAgentProxy — wired peer proxy for Optimus/Forge (app.state.agent_proxy)
-    │   ├── external_chat.py     # Superseded by external_proxy.py — not constructed anywhere; confirm before touching
-    │   ├── runtime_state.py     # Persisted runtime flags (budget mode, House Party engaged) —
-    │   │                        #   not a scheduler. Also the credential vaults: owner-added
-    │   │                        #   MCP servers, and web PORTALS (the browser's logins)
-    │   ├── surface.py           # Client-surface annotation for the live user turn
-    │   └── files.py             # Generated-file bookkeeping under /tmp/speda_outputs/
-    ├── legion/                  # The Legion (D-SA1–D-SA5) — Tier 0, registered before all other tiers
-    │   ├── roster.py            # Legionnaire definitions (scout/researcher/analyst/judge/general)
-    │   └── runner.py
-    ├── news/                    # NightCrawler's briefing pipeline
-    │   ├── collector.py
-    │   ├── dedup.py
-    │   ├── escalate.py
-    │   └── feeds.py
-    ├── telegram/                # Telegram channel (per-agent bots, in/out of the same orchestrator loop)
-    │   ├── client.py
-    │   ├── gateway.py           # Inbound update → normal orchestrator run
-    │   ├── linking.py
-    │   ├── registry.py
-    │   └── renderer.py
-    ├── automations/             # n8n-facing composer/manager (no internal scheduler — n8n still owns cron)
-    │   ├── composer.py
-    │   └── manager.py
-    ├── routers/
-    │   ├── browser.py           # /connections/portals — the owner's saved web logins
-    │   │                        #   (CRUD + test sign-in + sign-out). Vault is runtime_state.
-    │   ├── chat.py              # POST /chat[/{agent_id}] (SSE), WS /ws — Flutter user-facing
-    │   ├── trigger.py           # POST /trigger/{agent_id} — n8n webhook
-    │   ├── agents.py            # GET /agents, House Party toggle, agent WebSocket presence
-    │   ├── admin.py             # /admin/outputs, /admin/tasks/drain, /admin/memory/{shadow,render,compose,reindex}
-    │   ├── automations.py
-    │   ├── config.py            # Owner-facing settings UI, backed by config_schema.py
-    │   ├── connections.py       # OAuth connections (Google, Notion)
-    │   ├── files.py
-    │   ├── import_chats.py
-    │   ├── mail.py              # POST /mail/watch/{scan,seen} — n8n's LLM-free Gmail probe
-    │   ├── outlook.py           # POST /outlook/watch/{scan,seen} — the same probe for the
-    │   │                        #   owner's Microsoft 365 university mailbox (Ultron's)
-    │   ├── web_watch.py         # POST /web/watch/{scan,ack} — n8n's LLM-free page-change probe
-    │   │                        #   + GET /web/watch, DELETE /web/watch/{id} — owner-facing list/reset
-    │   ├── memory.py
-    │   ├── navigation.py        # GET /navigation/route/{id}, /navigation/places/{id} — what the
-    │   │                        #   map card resolves its geometry, traffic and POI records from
-    │   ├── news.py
-    │   ├── telegram.py
-    │   └── health.py
-    ├── skills/
-    │   ├── base.py              # Skill ABC
-    │   ├── memory.py            # Memory tool + recall_for_context/recall_sessions_for_context + MemoryRecallCache
-    │   ├── observations.py      # record_observation / search_memory / forget_observation (the sourced-fact layer)
-    │   ├── dispatch.py          # dispatch_agent / house_party tools
-    │   ├── osint.py             # NightCrawler's threat-intel lookups (IP/URL/hash/breach/dark-web/crypto)
-    │   ├── browser.py           # browse_page / browser_act / portal_login — the Playwright
-    │   │                        #   sidecar's tool surface. Plan B for every HTTP-only read.
-    │   ├── navigation.py
-    │   ├── news.py
-    │   ├── system_ops.py
-    │   ├── documents.py         # PPTX / DOCX / PDF generation
-    │   ├── tts.py                # Kokoro TTS
-    │   ├── stt.py                # Whisper STT
-    │   ├── notifications.py     # Flutter push
-    │   ├── legion.py             # The Legion's Task-tool surface
-    │   ├── automations.py, budget.py, health_data.py, read_skill.py, sandbox.py,
-    │   │   save_file.py, search_history.py, semantic_search.py, telegram.py,
-    │   │   toolsets.py, system.py
-    │   └── fonts/, skill_docs/  # static assets, not modules
-    ├── mcp/
-    │   ├── client.py            # MCPClient base
-    │   ├── servers.py           # All MCP server registrations, incl. owner-defined servers
-    │   │                        #   added by hand from Settings → Connections
-    │   ├── google_rest.py       # Google Workspace REST bridge — Gmail, Calendar (full
-    │   │                        #   recurrence/RSVP/multi-calendar), Tasks, Drive, Contacts
-    │   └── microsoft_rest.py    # Microsoft Graph REST bridge — the owner's UNIVERSITY
-    │                            #   mailbox (@ostimteknik.edu.tr). Separate estate, separate
-    │                            #   OAuth client; same duck-typed MCPClient surface.
-    ├── adapters/
-    │   ├── base.py              # OSSAdapter ABC
-    │   ├── gpt_researcher.py
-    │   └── shannon.py
-    ├── services/
-    │   ├── anthropic_client.py, llm_client.py   # Multi-provider LLM routing (llm_client) + model catalog
-    │   ├── memory.py, memory_store.py           # Post-turn tasks (title/recap/compaction), revision log
-    │   ├── memory_schema.py     # Write gate for /memories — refuses hand edits to derived files
-    │   ├── observations.py      # THE RECORD: evidence ladder, subject/domain routing, validity, supersession
-    │   ├── memory_render.py     # The six derived surfaces — pure function, no model, plus shadow-mode diff
-    │   ├── memory_compose.py    # owner.md + current.md — prose from the record, citations verified
-    │   ├── memory_reindex.py    # Seed from pre-v3 files + rebuild the record from raw history
-    │   ├── surprisal.py         # Which observations deserve attention — novelty + near-duplicate detection
-    │   ├── task_queue.py        # Durable post-turn work (background_jobs) — enqueue/drain/recover, NOT a scheduler
-    │   ├── attachments.py       # Upload text extraction + build_user_content (turn content-block assembly)
-    │   ├── chat_history.py      # rows_from_messages — stored-message → UI-row shaping
-    │   ├── errors.py            # friendly_provider_error — cross-provider error translation
-    │   ├── welcome.py           # Home-screen welcome remark + WelcomeCache
-    │   ├── compaction.py, embeddings.py, embedding_indexer.py, history_indexer.py
-    │   ├── health.py            # Atomix health-sample ingestion
-    │   ├── mail_watch.py        # Gmail domain scan + SPEDA-Seen labelling (no LLM) — see "Cheap probes"
-    │   ├── outlook_watch.py     # The same for Microsoft 365: Graph scan + SPEDA-Seen
-    │   │                        #   CATEGORY (Outlook's label). Imports mail_watch's
-    │   │                        #   domain_matches — one answer to "is it really from them".
-    │   ├── lexical.py           # The KEYWORD half of recall: FTS5/BM25 + Turkish folding +
-    │   │                        #   Reciprocal Rank Fusion. Recall is hybrid, not vector-only.
-    │   ├── browser.py           # The browser desk — client for packages/browser, portal
-    │   │                        #   lookup + login, and the page→text shaping the model reads
-    │   ├── web_watch.py         # Page fetch + line-level publish diff (no LLM) — see "Cheap probes"
-    │   ├── routes.py, places.py # Map-card stores — geometry + congestion + turns, and
-    │   │                        #   find_places result sets. Served by routers/navigation.py
-    │   │                        #   as GET /navigation/{route,places}/{id}; the fence carries the id.
-    │   ├── forge_peer.py, sandbox_launcher.py   # External backend (Forge) process/session bridge
-    │   ├── pending_asks.py      # Permission asks relayed from external peers
-    │   ├── telegram.py
-    │   └── n8n.py, n8n_api.py   # Webhook auth (X-N8N-Secret), n8n REST client
-    ├── models/                  # ORM models — one file per table (user, session, message, agent,
-    │                            # agent_message, automation, health_sample, memory/memory_file/memory_revision,
-    │                            # message_embedding, observation, background_job,
-    │                            # news_item/news_quota/news_watch, notification, tool_call,
-    │                            # route/place — map payloads the model references by id, never retypes)
-    ├── schemas/
-    │   ├── chat.py, sse.py, agent.py, trigger.py, health.py
-    ├── websocket/
-    │   ├── manager.py           # WebSocketManager — Optimus/Forge external peer connections ONLY
-    │   └── protocol.py          # WebSocket message type definitions (no startup step)
-    └── templates/               # (currently empty)
-```
+User-triggered requests always use `respond`. n8n specifies `push` or `silent` in
+the trigger payload.
 
 ---
 
 ## Capability Tiers
 
-| Tier | Type | When to use |
-|------|------|-------------|
-| 0 | Task (SDK built-in) | Parallel multi-source tasks requiring context isolation — registered FIRST at startup, before all other tiers |
-| 1 | Python Skill | We own the logic; pure Python; low-latency required |
-| 2 | MCP Server | Third-party integration with existing MCP server |
-| 3 | OSS Adapter | Full OSS application wrapped via HTTP or subprocess |
+| Tier | Type | When |
+|---|---|---|
+| 0 | The Legion (wire name `Task`) | Parallel multi-source work needing context isolation |
+| 1 | Python Skill | We own the logic; pure Python; low latency |
+| 2 | MCP Server | Third-party integration with an existing MCP server |
+| 3 | OSS Adapter | A full OSS application wrapped over HTTP or subprocess |
 
-Claude sees all four tiers identically in the tools array. The registry is the only entity that knows the difference.
+Claude sees all four tiers identically in the tools array. The registry is the
+only entity that knows the difference.
 
-**Startup registration order:** Tier 0 (Task tool) → Tier 1 (Skills) → Tier 2 (MCP) → Tier 3 (Adapters). This order is non-negotiable.
+**Registration order at startup is non-negotiable:** Tier 0 → Tier 1 → Tier 2 →
+Tier 3. Within Tier 1, `read_skill` and `tool_search` register first — they are
+the progressive-disclosure meta-tools, and a `deferred` tool nobody can look up
+is a tool that does not exist.
+
+**Two flags shape what an agent sees:**
+
+- `restricted_to` — the skill is registered only for named agents (`system_ops`
+  is Orion's; the training generator is Atomix's).
+- `deferred` — the schema loads on demand through `tool_search` instead of
+  sitting in every prompt prefix. Use it for long Rule-11 descriptions that
+  overlap with each other.
+
+A capability that cannot run must not be registered at all. Tools advertising a
+dead dependency cost a turn to discover, every turn — which is why the browser
+skills are skipped entirely when `BROWSER_URL` is unset.
 
 ---
 
-## AgentContext Contract
+## Contracts
+
+### AgentContext
 
 ```python
 @dataclass
 class AgentContext:
-    agent_id: str                             # which agent is running — "speda", "sentinel", etc.
+    agent_id: str                             # selects the profile; scopes sessions, automations, tools
     user_id: int
     session_id: int
-    request_id: str                           # UUID, generated at context construction, in every log line
+    request_id: str                           # UUID, in every log line and SSE event
     triggered_by: Literal["user", "n8n", "agent"]
     trigger_payload: dict                     # raw trigger data, unmodified
     output_mode: Literal["respond", "push", "silent"]
-    model: str                                # set by profile.allocate_model() — never hardcoded here
-    system_prompt: str                        # built by AgentOrchestrator, injected here
+    model: str                                # set by profile.allocate_model() — never hardcoded
+    system_prompt: str                        # built by AgentOrchestrator
     conversation_history: list[dict]          # Anthropic messages format
     db: AsyncSession
-    timezone: str
+    timezone: str = "UTC"
+    extra: dict = field(default_factory=dict)
 ```
 
-`agent_id` is the discriminator that selects the profile, scopes sessions, scopes automations, and filters tool allowlists. It is the first field resolved at context construction time.
+`agent_id` is the first field resolved. `request_id` propagates through every log
+statement, tool call record, SSE event and background job — it is the only way to
+trace a request through a multi-tool, multi-worker execution.
 
-`triggered_by` has exactly three values: `"user"`, `"n8n"`, `"agent"`. There is no `"schedule"` value — n8n is the catch-all for everything automated including scheduled jobs.
+**`triggered_by` has exactly three values.** There is no `"schedule"` — n8n is
+the catch-all for everything automated, scheduled jobs included. Do not add a
+fourth.
 
-`request_id` propagates through every log statement, every tool call record, and every SSE event. It is the only way to trace a request through a multi-tool, multi-worker execution.
-
----
-
-## SessionManager Contract
+### SessionManager
 
 ```python
 class SessionManager:
     async def get_or_create(self, user_id: int, agent_id: str, triggered_by: str) -> Session
     async def close(self, session_id: int) -> None
-    async def load_history(self, session_id: int) -> list[dict]  # Anthropic messages format
+    async def load_history(self, session_id: int) -> list[dict]
     async def list_sessions(self, user_id: int, agent_id: str) -> list[Session]
 ```
 
-Sessions are scoped by `(user_id, agent_id)` — Sentinel's conversation history never appears in Ultron's session list. `agent_id` is a required parameter for all session creation and listing calls.
+Sessions are scoped by `(user_id, agent_id)` — Sentinel's history never appears
+in Ultron's session list. `agent_id` is required on every creation and listing
+call.
 
-SessionManager lives at Phase 9.5 in the build order. AgentContext construction depends on it. It is injected into `app.state` in the lifespan handler alongside the orchestrator and registry.
+---
+
+## Layering
+
+Import direction is one-way. A module may import from the layers above it and
+never from the layers below.
+
+```
+config, database, clock
+  → models → schemas
+  → services (llm client, memory, lexical, embeddings, …)
+  → skills / mcp / adapters / legion
+  → core (registry → context → session_manager → orchestrator)
+  → routers
+  → main (lifespan + app factory, assembled last)
+```
+
+Middleware sits beside routers; `profiles/` sits beside core and is imported by
+it, never the reverse. A service that imports a router, or core that reads a
+profile's model ID, is the bug — not the layering.
 
 ---
 
 ## n8n Integration
 
-n8n is the sole scheduling and automation organ. The backend never manages schedules internally.
+n8n is the sole scheduling organ. **The backend never schedules anything.**
 
-- The backend exposes `POST /trigger/{agent_id}`
-- n8n authenticates via shared secret in the `X-N8N-Secret` header
-- `triggered_by="n8n"` is set on the AgentContext
-- `output_mode` is specified by n8n in the trigger payload: `"push"` or `"silent"`
-- The orchestrator loop is identical regardless of trigger source
+- The backend exposes `POST /trigger/{agent_id}`.
+- n8n authenticates with `X-N8N-Secret` in addition to `X-API-Key`.
+- `triggered_by="n8n"`; `output_mode` comes from the payload.
+- The orchestrator loop is identical regardless of trigger source.
 
-Example n8n trigger payloads:
 ```json
 {"type": "cron", "job": "morning_brief", "output_mode": "push"}
-{"type": "watchdog", "from": "NightCrawler", "event": "market_alert", "ticker": "AAPL", "output_mode": "push"}
 {"type": "agent_signal", "from": "Sentinel", "event": "budget_exceeded", "output_mode": "silent"}
 ```
 
-**Temp file cleanup:** n8n runs a daily scheduled workflow that calls `DELETE /admin/outputs`. This endpoint clears files in `/tmp/speda_outputs/` older than 24 hours. The endpoint requires the `X-API-Key` header. Do not implement any other cleanup mechanism.
+The `background_jobs` queue (`services/task_queue.py`) is **not** a scheduler and
+must not become one. It owns *whether work happened*; n8n owns *when to come and
+ask*. Nothing in it fires at a time — `run_after` only withholds a failing job
+from the very next drain, and something external always has to invoke it. n8n
+calls `POST /admin/tasks/drain` hourly and `DELETE /admin/outputs` daily.
 
-**Background job sweep:** post-turn work (session log, recap, title, compaction, embedding) is committed to the `background_jobs` table before it runs and drained inline, so a failure or a restart leaves something to retry from instead of losing the work silently (`app/services/task_queue.py`). n8n calls `POST /admin/tasks/drain` hourly to pick up whatever inline draining and startup recovery could not.
-
-The queue is **not** a scheduler and must not become one. It owns *whether work happened*; n8n still owns *when to come and ask*. Nothing in it fires at a time — `run_after` only withholds a failing job from the very next drain, and something external always has to invoke it.
-
-Do not implement any internal scheduler. Do not add cron logic to the backend. Ever.
+Shipped workflows live in `packages/igor/scripts/n8n/*.json` — import, edit the
+marked fields, activate. Their node `notes` are the documentation; keep them
+accurate when you change a node. `services/n8n_drift.py` probes whether n8n is
+actually running what the repo says it runs.
 
 ### Cheap probes — a poll must not cost a turn
 
-A watcher that fires `POST /trigger/{agent_id}` on every tick spends a full agentic turn to discover that nothing happened. At a ten-minute cadence that is ~144 turns a day to answer "no". So a watcher is split in two, and the split is the rule:
+A watcher that fires `POST /trigger/{agent_id}` on every tick spends a full
+agentic turn to discover that nothing happened. At a ten-minute cadence that is
+~144 turns a day to answer "no". So a watcher is split in two, and the split is
+the rule:
 
 | Half | What it is | Cost |
-|------|-----------|------|
-| **The probe** | A plain endpoint that answers one deterministic question — `/academic/ask-pending`, `/mail/watch/scan`, `/outlook/watch/scan`, `/web/watch/scan` | One HTTP call. Zero tokens. |
+|---|---|---|
+| **The probe** | A plain endpoint answering one deterministic question — `/mail/watch/scan`, `/outlook/watch/scan`, `/web/watch/scan`, `/academic/ask-pending` | One HTTP call. Zero tokens. |
 | **The trigger** | `POST /trigger/{agent_id}`, reached only when the probe returned a hit | One agentic turn. |
 
-- A probe holds **no reasoning** — "did anyone from this domain write", "did a new line appear on this page", "did a lecture just end". If answering needs judgement, it belongs in the turn, not the probe.
-- Probes live in `app/services/` behind a thin router (Rule 1) and require `X-API-Key` **plus** `X-N8N-Secret` — they read the owner's mail and browsing targets, so the poller proves it is the poller.
-- The workflow's gate is a **Code node returning `[]`** when it should not fire (n8n stops the branch on an empty return) — fewer schema surfaces than an IF node across n8n versions, and the empty return *is* the cost boundary.
-- **Exactly-once is the probe's job, and it commits last.** The scan never marks its own findings as handled; n8n acks (`/mail/watch/seen`, `/web/watch/ack`) only *after* the trigger was accepted. A failed notify therefore repeats next poll instead of vanishing. Never reorder these — a duplicate push is recoverable, a swallowed exam result is not.
-- **Give the agent the data it already cost you to fetch.** The probe's findings ride in the trigger payload and the `intent` says so explicitly, so the turn does not re-fetch (and re-pay for) what the probe just read.
-- Health failures are reported on the **edge**, not per poll — a revoked token must produce one push, not one every ten minutes.
-- **A probe that finds nothing readable may render once, and only once.** `/web/watch/scan` fetches over plain HTTP; when that comes back with no text — a JS-rendered exam-results page, a block page — it retries through the browser container (`browser_fallback_enabled`) rather than returning a permanent error on a watch the owner believes is working. A render is more expensive than a GET and still nothing next to a turn, which is the boundary this whole section defends. The scan reports `rendered: true` when it happened, so a watch that quietly started costing a render every poll is visible rather than deduced from a CPU graph.
+- A probe holds **no reasoning** — "did anyone from this domain write", "did a new
+  line appear on this page", "did a lecture just end". If answering needs
+  judgement, it belongs in the turn.
+- Probes live in `app/services/` behind a thin router (Rule 1) and require
+  `X-API-Key` **plus** `X-N8N-Secret` — they read the owner's mail and browsing
+  targets, so the poller proves it is the poller.
+- The workflow's gate is a **Code node returning `[]`** when it should not fire
+  (n8n stops the branch on an empty return). Fewer schema surfaces than an IF
+  node across n8n versions, and the empty return *is* the cost boundary.
+- **Exactly-once is the probe's job, and it commits last.** The scan never marks
+  its own findings handled; n8n acks (`/mail/watch/seen`, `/web/watch/ack`) only
+  *after* the trigger was accepted, so a failed notify repeats next poll instead
+  of vanishing. Never reorder these — a duplicate push is recoverable, a
+  swallowed exam result is not.
+- **Give the agent the data it already cost you to fetch.** Findings ride in the
+  trigger payload and the `intent` says so, so the turn does not re-fetch what
+  the probe just read.
+- Health failures are reported on the **edge**, not per poll — a revoked token
+  produces one push, not one every ten minutes.
+- **A probe that finds nothing readable may render once, and only once.**
+  `/web/watch/scan` fetches over plain HTTP; when that returns no text — a
+  JS-rendered results page, a block page — it retries through the browser
+  container rather than failing a watch the owner believes is working. It reports
+  `rendered: true` when that happened, so a watch that quietly started costing a
+  render every poll is visible rather than deduced from a CPU graph.
 
-Shipped workflows live in `packages/igor/scripts/n8n/*.json` — import, edit the marked fields, activate. Their node `notes` are the documentation; keep them accurate when you change a node.
+---
+
+## The Legion (Tier 0)
+
+`app/legion/`. The wire name stays `Task`; "the Legion" is the branding carried
+by descriptions, prompts, docs and logs.
+
+- Registered at startup **before all other tiers**.
+- Speda decides when to deploy legionnaires. The owner does not configure this.
+- **Single loop** for lookups, reminders, calendar actions, short questions —
+  anything completable in 1–3 tool calls. **The Legion** for research, briefings,
+  multi-source synthesis, anything needing 3+ independent sources.
+- Roster ↔ effort: `scout` (pre-filter) `low` · `researcher` `medium` ·
+  `analyst` (synthesis) `high` · `judge` `low` · `archivist` (deep recall)
+  `medium` · `general` `inherit`.
+- A legionnaire may declare `tool_scope` — an EXACT allowlist, narrower than the
+  `read_only` bucket (`archivist` sees only the recall tools). A worker that
+  cannot see a tool cannot misuse it, and does not pay for its description on
+  every iteration.
+- Worker models resolve provider-agnostically: low/medium →
+  `profile.background_model(parent_model)`; high/inherit → the parent model.
+  Never hardcode a worker model ID in core (Rule 10). `LEGION_MODEL_OVERRIDE`
+  pins all workers when set.
+- The `judge` runs on briefings and reports. Not on routine actions.
+- When legionnaires are deployed, say which ones ran. One sentence per worker.
+
+---
+
+## Model Allocation
+
+| Context | Model |
+|---|---|
+| User-facing interactive response | Sonnet tier |
+| Background monitoring, pre-filter, classification | Haiku tier |
+| Agent-to-agent subtasks | Haiku tier (Sonnet if complexity demands) |
+| House Party Protocol (engaged) | Interactive grade across the whole roster |
+
+Each `AgentProfile` governs its own allocation via `allocate_model()`. Model IDs
+live only in profile files.
+
+**The routing matrix outranks this table.** The owner's per-agent pin
+(`runtime_state.get_agent_models()`, set from the UI) wins over everything, for
+*every* trigger source — app, n8n or inter-agent. The table is what an
+**unpinned** agent falls back to.
+
+**Never cross providers on the engine's own initiative.** `background_model()`
+derives the cheap tier from the model the turn is actually running on, via
+`cheap_tier()` — same provider or nothing. If a provider declares no cheap tier,
+the model in hand is used unchanged. No code path may substitute an Anthropic
+model for one the owner routed elsewhere, and **no module outside
+`app/profiles/` may read `haiku_model` / `sonnet_model` directly** — that read is
+what silently pulled background jobs back onto Anthropic.
+
+---
+
+## House Party Protocol
+
+The all-hands mode that rallies every in-process agent at once, gated by a
+passphrase rather than a build flag.
+
+- **State:** one persisted runtime flag, `runtime_state.get_house_party()` /
+  `set_house_party()`. Process-wide, like budget mode — not per session.
+- **Engaging it:** `POST /agents/house-party` (owner, desktop-only, passphrase
+  compared in constant time) or the `house_party` tool (`app/skills/dispatch.py`,
+  same gate, only on the owner's explicit instruction — never at an agent's own
+  initiative). Standing down needs no passphrase.
+- **While engaged:** `app/core/dispatch.py`'s broadcast primitive
+  (`kind="broadcast", protocol="house_party"`) becomes available; model policy
+  escalates to full interactive grade for every agent's subtasks; the
+  orchestrator injects a `## HOUSE PARTY PROTOCOL — ACTIVE` block. Outside the
+  protocol, broadcast is refused and dispatch stays strictly one-to-one.
+- **War Room** (`agent_id="warroom"`) is the session scope it plays out in. It
+  has `dispatch_target=False`: agents dispatch to `speda`, never to `warroom`.
+- **Do not add a second engage path.** The passphrase gate is the only
+  authorization boundary and both entry points must go through it.
 
 ---
 
 ## The Browser
 
 Playwright in its own container (`packages/browser`), reached through
-`app/services/browser.py` and exposed as three Tier-1 skills. Full contract:
-`docs/BROWSER.md`.
+`app/services/browser.py`. Full contract: [`docs/BROWSER.md`](docs/BROWSER.md).
 
 - **It is plan B, not last resort.** `fetch`, Tavily, Exa and the news reader all
   speak HTTP and take what the server says, which is nothing on a page whose
   content arrives by JavaScript. `browse_page` renders. It costs seconds where a
   fetch costs milliseconds, so it goes second — but a page the owner can read in
   Chrome must never be a page their assistant cannot read.
-- **A portal is an account, not a scraping target.** The owner's saved logins
-  (`Settings → Connections → Web portals`) are records in `runtime_state.json`;
-  the browser container keeps the COOKIES, this side keeps the credentials, and
-  the two never swap jobs. `portal_login` takes a portal NAME. No tool anywhere
-  in this system accepts a password as an argument, and no agent may ask for one
-  in chat — see Security.
-- **Sessions persist.** `storage_state` per profile, saved after every call, so
-  a student portal signed into in September is still signed in in November and
-  `browse_page(url, portal="obs")` simply works. `ensure_logged_in()` is what
-  every caller should use: it visits, notices a login wall, signs in, revisits.
-- **The three tools split by verb.** `browse_page` reads (read-only, parallel-
-  safe per Rule 9). `browser_act` clicks, fills and downloads, keyed by a
-  `session_id` the model passes back to stay on the same tab. `portal_login`
-  authenticates. Anything a page hands back as a download is pulled across and
-  registered through `app/core/files.py`, so it reaches the owner as a file card
-  rather than a path they cannot open.
-- **All three are `deferred`.** Rule 11 descriptions are long and these three
-  overlap with `fetch` and each other; they load on demand through `tool_search`
-  rather than sitting in every prompt prefix.
-- Registration is skipped entirely when `BROWSER_URL` is unset. Three tools
-  advertising a capability that cannot run costs a turn to discover, every turn.
-
----
-
-## The Legion (D-SA1 through D-SA5)
-
-The Legion is the sub-agent worker system (`app/legion/`). Wire name of the tool stays `Task` — "The Legion" is the branding carried by descriptions, prompts, docs, and logs.
-
-- The Legion is registered at startup as Tier 0, before all other tiers. It is a Core MVP feature, not a later addition.
-- Speda decides when to deploy legionnaires. The user does not configure this.
-- Single loop for: lookups, reminders, calendar actions, short questions, any task completable in 1–3 tool calls.
-- The Legion for: research, briefings, multi-source synthesis, any task requiring 3+ independent sources.
-- Legionnaires ↔ effort: `scout` (pre-filter) `"low"` · `researcher` `"medium"` · `analyst` (synthesis) `"high"` · `judge` `"low"` · `archivist` (deep memory recall) `"medium"` · `general` `"inherit"`.
-- A legionnaire may declare `tool_scope` — an EXACT tool allowlist, narrower than the `read_only` bucket. Use it for specialists whose job is a handful of tools (`archivist` sees only the three recall tools): a worker that cannot see a tool cannot be tempted to misuse it, and does not pay for its description on every iteration.
-- Worker models resolve provider-agnostically: low/medium effort → `profile.background_model(parent_model)` (cheap tier, same provider); high/inherit → the parent model. Never hardcode worker model IDs in core (Rule 10). `LEGION_MODEL_OVERRIDE` (legacy alias `SUB_AGENT_MODEL`) pins all workers when set.
-- The judge legionnaire runs on briefings and reports only. Not on routine actions.
-- When legionnaires are deployed, Speda informs the user which workers ran. One sentence per worker.
-
----
-
-## Model Allocation (D-C4)
-
-| Context | Model |
-|---------|-------|
-| User-facing interactive response | claude-sonnet-4-6 |
-| Background monitoring, pre-filter, classification | claude-haiku-4-5-20251001 |
-| Agent-to-agent subtasks | claude-haiku-4-5-20251001 (Sonnet if complexity demands) |
-| House Party Protocol (engaged) | claude-sonnet-4-6 across all agents — full interactive grade, not the background tier |
-
-Each agent's `AgentProfile` governs its own model allocation via `allocate_model()`. Model IDs live exclusively in individual profile files under `app/profiles/`. The `ProfileRegistry` loads all profiles at startup and attaches them to `app.state`. The orchestrator resolves the correct profile from `context.agent_id` and calls its `allocate_model()` at context construction time.
-
-**The routing matrix outranks this table.** The owner's per-agent pin (`runtime_state.get_agent_models()`, set from the UI) wins over everything, for *every* trigger source — app, n8n, or inter-agent. The table above is only what an **unpinned** agent falls back to.
-
-**Never cross providers on the engine's own initiative.** `background_model()` derives the cheap tier from the model the turn is actually running on, via `cheap_tier()` — same provider or nothing. If a provider declares no cheap tier, the model in hand is used unchanged. No code path may substitute an Anthropic model for one the owner routed elsewhere, and no module outside `app/profiles/` may read `haiku_model`/`sonnet_model` directly (that read is what silently pulled background jobs back onto Anthropic).
-
----
-
-## House Party Protocol
-
-Shipped (D-C4's "future" row above is live) — the all-hands mode that rallies every in-process agent at once, gated by a passphrase rather than a build flag.
-
-- **State:** a single persisted runtime flag, `app/core/runtime_state.py::get_house_party()` / `set_house_party()`. Not a session or per-agent setting — it is process-wide, like budget mode.
-- **Engaging it:**
-  - Owner-driven: `POST /agents/house-party` (`app/routers/agents.py`). Engaging requires the `house_party_passphrase` (constant-time compare); standing down does not.
-  - Agent-driven: the `house_party` tool (`app/skills/dispatch.py`) — same passphrase gate, invocable only on the owner's explicit instruction, never at an agent's own initiative.
-- **What changes while engaged:**
-  - `app/core/dispatch.py`'s broadcast primitive (`kind="broadcast", protocol="house_party"`) becomes available — fan `task` out to every in-process agent at once. It is refused outside the protocol; normal dispatch stays strictly direct, one-to-one.
-  - Model policy escalates to full interactive grade (`profile.allocate_model("user")`) for every agent's subtasks, not the background tier — this is what makes House Party Protocol expensive and why it defaults off.
-  - `AgentOrchestrator.build_system_prompt()` injects a `## HOUSE PARTY PROTOCOL — ACTIVE` block so every agent knows the mode is live and how to hand it back down.
-- **War Room** (`app/profiles/warroom.py`, `agent_id="warroom"`) is the session-scope channel this plays out in — see "What This Repo Is" above. It is a `SPEDAProfile` subclass with `dispatch_target=False`: agents still dispatch to `speda`, never to `warroom` directly.
-- Do not add a second engage path (e.g. a raw runtime-state write from a router or skill outside `agents.py`/`dispatch.py`) — the passphrase gate is the only authorization boundary and both entry points must go through it.
+- **A portal is an account, not a scraping target.** Saved logins are records in
+  runtime state; the container keeps the COOKIES, this side keeps the
+  credentials, and the two never swap jobs. Sessions persist per profile via
+  `storage_state`, so a portal signed into in September still works in November.
+- **The three tools split by verb.** `browse_page` reads (read-only,
+  parallel-safe per Rule 9). `browser_act` clicks, fills and downloads, keyed by
+  a `session_id` the model passes back to stay on the same tab. `portal_login`
+  authenticates — **by portal NAME**. Anything a page hands back as a download is
+  pulled across and registered through `app/core/files.py`, so it reaches the
+  owner as a file card rather than a path they cannot open.
+- All three are `deferred`; registration is skipped entirely when `BROWSER_URL`
+  is unset.
 
 ---
 
 ## Security
 
-- **API key auth:** All endpoints require `X-API-Key` header. Validated in `app/middleware/auth.py` before routing.
-- **n8n trigger auth:** `POST /trigger/{agent_id}` additionally validates `X-N8N-Secret`. Both checks must pass.
-- **The browser (`packages/browser`):** Playwright runs in its OWN container, never in the API container, and is never published — no host port, no Caddy site, internal network only. This is CVE-2025-9611's rule (CSRF in `@playwright/mcp`) applied to every Playwright surface, plus a second reason of its own: the container holds live session cookies for the owner's portals. `BROWSER_TOKEN` gates every call on top of the network boundary, because a shared Docker network makes a service reachable, not authorized. It mounts no host path, holds no `.env`, cannot reach the database, and runs as `pwuser` with all capabilities dropped. Optimus manages its own Playwright isolation as a standalone deployment.
-- **Portal credentials:** stored in `~/.speda/runtime_state.json` (the file already holding the Google/Microsoft refresh tokens), masked on every read the UI performs, and passed to the browser container only at login time. A password must never reach a model: `portal_login` takes a portal NAME, and the credential travels app → container → page. Nothing in a completion, the message table, the embedding index or the memory pipeline may ever contain one. Do not add a tool that accepts a password as an argument.
-- **MCP transport:** STDIO for all local MCP servers (subprocess on Contabo). HTTP/SSE only for officially managed remote servers (Google Workspace, Notion) with OAuth 2.1. No community servers exposed on public ports.
+- **API key auth** on every endpoint (Rule 12). Constant-time compare, before
+  routing.
+- **The browser container** never runs in the API container and is never
+  published — no host port, no Caddy site, internal network only. This is
+  CVE-2025-9611's rule applied to every Playwright surface, plus a second reason
+  of its own: the container holds live session cookies for the owner's portals.
+  `BROWSER_TOKEN` gates every call on top of the network boundary, because a
+  shared Docker network makes a service reachable, not authorized. It mounts no
+  host path, holds no `.env`, cannot reach the database, and runs as `pwuser`
+  with all capabilities dropped.
+- **A password must never reach a model.** Portal credentials live in runtime
+  state beside the OAuth refresh tokens, are masked on every read the UI
+  performs, and travel app → container → page at login time only. Nothing in a
+  completion, the message table, the embedding index or the memory pipeline may
+  ever contain one. **Do not write a tool that takes a password as an argument,
+  and never ask the owner for one in chat.**
+- **MCP transport:** STDIO for local servers. HTTP/SSE only for officially
+  managed remote servers (Google Workspace, Notion, Microsoft Graph) with
+  OAuth 2.1. No community servers on public ports.
+- **Lockdown Protocol** (`app/services/lockdown.py`) drops external inbound
+  traffic the moment the flag flips, and removes exactly the rules it added on
+  stand-down. **It stops deploys. That is the point — know it before you engage
+  it.**
 
 ---
 
 ## Observability
 
-- Every request gets a UUID `request_id` at context construction time.
-- `request_id` is attached to `AgentContext` and propagated through every log statement, tool call record, SSE event, and background task.
-- Log format: structured JSON. Fields: `timestamp`, `level`, `request_id`, `module`, `message`.
-- Log level: `INFO` in production. `DEBUG` enabled via `LOG_LEVEL=DEBUG` in `.env`.
-- Do not use `print()`. Use the standard `logging` module configured in `app/config.py`.
+- Every request gets a UUID `request_id` at context construction.
+- It is attached to `AgentContext` and propagated through every log statement,
+  tool call record, SSE event and background job.
+- Structured JSON logs: `timestamp`, `level`, `request_id`, `module`, `message`.
+- `INFO` in production; `DEBUG` via `LOG_LEVEL=DEBUG`.
+- **Never `print()`.** Use the `logging` module configured in `app/config.py`.
 
 ---
 
 ## What Not To Do
 
-- Do not break the build order. Phase N assumes Phase N-1 is complete and tested.
 - Do not write system prompt logic in any router.
-- Do not hardcode any tool definition in the orchestrator.
+- Do not hardcode a tool definition in the orchestrator.
 - Do not use OpenAI wire format for tool calls.
-- Do not add internal scheduling logic. n8n handles all of that.
-- Do not give agents direct access to each other. In-process agents dispatch through `app/core/dispatch.py` (the orchestrator-routed primitive); Optimus communicates only via WebSocket through `WebSocketManager`.
-- Do not put identity strings (agent name, persona, model policy, tool allowlist) in core modules. They belong in `app/profiles/{agent_id}.py`.
-- Do not add a House Party engage path outside `POST /agents/house-party` and the `house_party` tool — both are the only places the passphrase gate is enforced (see the House Party Protocol section).
-- Do not use `break` after the first tool call. The loop runs until `end_turn`.
-- Do not store generated files permanently. `/tmp/speda_outputs/` with 24-hour cleanup via n8n → `DELETE /admin/outputs`.
-- Do not run Playwright anywhere but its own container. CVE-2025-9611. Internal network only, never a published port.
-- Do not write a tool that takes a password as an argument, or ask the owner for one in chat. Portals are named; the credential is fetched by the backend (see Security).
-- Do not write one-line tool descriptions. Minimum 3–4 sentences per Rule 11.
-- Do not hardcode model IDs outside of `app/profiles/`. Each agent's model IDs live in its own profile file only.
-- Do not add a fourth value to `triggered_by`. n8n covers all automated triggers including scheduled jobs.
+- **Do not add internal scheduling logic.** n8n handles all of it. The task queue
+  is durability, not timing.
+- Do not give agents direct access to each other. In-process agents dispatch
+  through `app/core/dispatch.py`; the external peer goes through
+  `WebSocketManager`.
+- Do not put identity strings — name, persona, model policy, tool allowlist — in
+  core modules.
+- Do not add a House Party engage path outside `POST /agents/house-party` and the
+  `house_party` tool.
+- Do not `break` after the first tool call. The loop runs until `end_turn`.
+- Do not store generated files permanently. `/tmp/speda_outputs/`, cleaned via
+  n8n → `DELETE /admin/outputs`.
+- Do not run Playwright anywhere but its own container. Internal network only,
+  never a published port.
+- Do not write a tool that takes a password as an argument.
+- Do not write a one-line tool description (Rule 11).
+- Do not hardcode model IDs outside `app/profiles/`.
+- Do not add a fourth value to `triggered_by`.
+- Do not write a memory file by hand where a spec governs it — widen the spec, or
+  use the verb that owns the shape.
+- Do not "tidy while you are in there". The last thing that rewrote memory
+  wholesale destroyed a financial ledger.
 
 ---
 
-## Done Signal for Phase 1
+## Keeping This File Honest
 
-All of the following must pass before Phase 1 is considered complete:
+This document rots the moment it describes something that is no longer true, and
+a rotted contract is worse than none: the next session builds against the wrong
+model with full confidence. So:
 
-1. `main.py` lifespan handler runs clean from top to bottom with zero errors.
-2. All capabilities registered. All health checks pass (degraded adapters logged, not fatal).
-3. WebSocket endpoint accepts a connection from a test agent and receives the registration handshake.
-4. A full synthetic chat round-trip completes end-to-end: user message → `AgentOrchestrator.run()` → at least one tool call → tool result appended → `end_turn` → SSE stream closed cleanly.
-5. Auth middleware rejects a request with a missing or invalid `X-API-Key` with HTTP 401.
-
-All five. Not four.
+- **A rule change ships in the same commit as the code that changes it.**
+- **Never add an exhaustive file listing here.** It cannot survive a week of
+  work. Module docstrings are the inventory; this file is the law.
+- When you find this file disagreeing with the code, the code wins — **say so and
+  fix the file**, rather than writing around it.
