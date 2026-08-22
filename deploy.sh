@@ -126,12 +126,14 @@ else
   say "No ${HISAR_DIR}/.env — skipping H.İ.S.A.R. (see hisar-mk1/deploy/README.md)"
 fi
 
-# ── Postgres credentials + n8n's callback secrets ──────────────────────────--
-# Exported (from the one secret file) so compose interpolates them into the
-# postgres service AND the app's DATABASE_URL — they stay in sync, and nothing
-# sensitive lives in the repo. Note: POSTGRES_PASSWORD only takes effect on a
-# FRESH database volume; to rotate it on an existing volume, change it in
-# postgres directly (ALTER ROLE) or recreate the volume.
+# ── n8n's callback secrets + the browser's shared token ────────────────────--
+# Exported (from the one secret file) so compose can interpolate them, and
+# nothing sensitive lives in the repo.
+#
+# POSTGRES_USER / _PASSWORD / _DB used to be exported here too. They are not any
+# more: the postgres service was removed on 2026-08-22, and exporting credentials
+# for a service that no longer exists is how a deploy script starts describing a
+# stack nobody is running.
 #
 # SPEDA_API_KEY / N8N_SECRET are here for the same reason: workflows call back
 # into Igor with both headers and read them as {{ $env.* }}. env_file only feeds
@@ -162,13 +164,13 @@ BROWSER_TOKEN=%s
   say "Generated a BROWSER_TOKEN for the browser sidecar (packages/igor/.env)"
 fi
 
-for var in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB SPEDA_API_KEY N8N_SECRET BROWSER_TOKEN; do
+for var in SPEDA_API_KEY N8N_SECRET BROWSER_TOKEN; do
   val="$(grep -E "^${var}=" packages/igor/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' || true)"
   [[ -n "${val}" ]] && export "${var}=${val}"
 done
 
 # ── Build + start ────────────────────────────────────────────────────────────
-say "Building and starting the stack (postgres + sandbox + api${DOMAIN:+ + caddy})…"
+say "Building and starting the stack (sandbox + api${DOMAIN:+ + caddy})…"
 docker compose "${PROFILE[@]}" up -d --build
 
 # Editing a mounted Caddyfile does not recreate the container, so a config
@@ -212,9 +214,13 @@ if [[ -n "${MIGRATE_DB}" ]]; then
   say "Importing memory from ${MIGRATE_DB} (sessions, messages, memory files)…"
   docker compose cp "${MIGRATE_DB}" app:/tmp/import.db
   # --dest is intentionally omitted: the script falls back to the container's
-  # DATABASE_URL, which compose builds from POSTGRES_PASSWORD. Hardcoding a URL
-  # here would use the wrong password on any server with a real (non-default) DB
-  # password and fail with InvalidPasswordError.
+  # DATABASE_URL, which compose pins to the server's SQLite file.
+  #
+  # NOTE (2026-08-22): with postgres gone this path now imports SQLite INTO
+  # SQLite, despite the script's name. It is opt-in (`--migrate`) and never runs
+  # on a normal deploy, so it is left in place rather than half-removed — but it
+  # is a one-time bootstrap that has already happened, and it should go the next
+  # time this script is touched.
   docker compose exec -T app python scripts/migrate_sqlite_to_postgres.py \
     --source /tmp/import.db
 fi

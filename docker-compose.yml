@@ -1,24 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-speda}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-speda}
-      POSTGRES_DB: ${POSTGRES_DB:-speda}
-    ports:
-      # localhost-only — the database is NEVER exposed to the internet. The app
-      # reaches it over the internal compose network (postgres:5432) regardless.
-      # For admin, tunnel in: ssh -L 5432:127.0.0.1:5432 <server>
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U speda"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   app:
     build:
       context: .                            # repo root — uv workspace + lock live here
@@ -31,11 +11,19 @@ services:
       - packages/igor/.env
     environment:
       # SQLite in production (single-user workload). This MUST be an explicit
-      # override, not a removal: the server's packages/igor/.env still defines a
-      # Postgres DATABASE_URL, and compose's `environment:` is the only layer that
-      # outranks `env_file:`. Four slashes = absolute path; it maps through the
-      # bind mount below to the server's /opt/speda/speda.db. The postgres service
-      # is left dormant (app no longer depends on it); remove it once confident.
+      # override, not a removal: the server's packages/igor/.env may still define
+      # a Postgres DATABASE_URL, and compose's `environment:` is the only layer
+      # that outranks `env_file:`. Four slashes = absolute path; it maps through
+      # the bind mount below to the server's /root/.speda/speda.db.
+      #
+      # The postgres service is GONE (2026-08-22). It had been dormant since the
+      # 2026-07-13 cutover to SQLite: up, healthy, holding 180 MB and a container
+      # of RAM, written to by nothing. Its final state is archived on the server
+      # at /root/backups/postgres-speda-2026-08-22.sql.gz — which is where the 46
+      # messages of 2026-07-13 live, the one day the cutover dump did not carry
+      # across. Do not reintroduce a database service without moving DATABASE_URL
+      # with it; a second store that nothing writes to is how "which database is
+      # the real one" became a question worth an afternoon.
       DATABASE_URL: sqlite+aiosqlite:////root/.speda/speda.db
       # The browser sidecar (packages/browser) — Playwright behind a small HTTP
       # surface. This supersedes the PLAYWRIGHT_MCP_URL that used to sit here
@@ -220,7 +208,6 @@ services:
       - app
 
 volumes:
-  postgres_data:
   sandbox_workspace:
   browser_state:
   n8n_data:

@@ -8,16 +8,24 @@ fresh Hetzner CX33 (or any Ubuntu box) but works anywhere Docker runs.
 ## 0. What you're deploying
 
 ```
-server (Docker)                         your PC
-┌────────────────────────────┐          ┌─────────────────────┐
-│ postgres   (data + memory) │          │ Speda Mark VI .exe  │
-│ app        (FastAPI :8000) │◀── API ──│ (Electron desktop)  │
-│ sandbox    (capable comp.) │          └─────────────────────┘
-└────────────────────────────┘
+server (Docker)                          your PC
+┌─────────────────────────────┐          ┌─────────────────────┐
+│ app       (FastAPI :8000)   │◀── API ──│ Speda Mark VI .exe  │
+│ sandbox   (capable compute) │          │ (Electron desktop)  │
+│ browser   (Playwright)      │          └─────────────────────┘
+│ caddy     (TLS, optional)   │
+└─────────────────────────────┘
 ```
 
-The desktop app talks to the server over HTTP. Postgres holds all sessions,
-messages, and memory (migrated from your current SQLite — no re-indexing).
+The desktop app talks to the server over HTTP.
+
+**The database is SQLite**, at `/root/.speda/speda.db` on the server, pinned by
+`DATABASE_URL` in `docker-compose.yml`. There is no database service: a postgres
+container ran here until 2026-08-22, dormant since the SQLite cutover on
+2026-07-13 and written to by nothing. Its final dump is kept at
+`/root/backups/postgres-speda-2026-08-22.sql.gz`. Single-user workload, one
+file, backed up by copying it — do not add a database service back without
+moving `DATABASE_URL` along with it.
 
 ---
 
@@ -43,26 +51,22 @@ cp packages/igor/.env.example packages/igor/.env
 # Optional: TAVILY_API_KEY, NOTION_API_KEY, GOOGLE_* etc. See the file's comments.
 ```
 
-## 3. Bring up Postgres + sandbox first
+## 3. Bring up the sandbox first
 
 ```bash
-docker compose up -d postgres sandbox
+docker compose up -d sandbox
 ```
 
-## 4. Migrate your existing data (ONE TIME — preserves the 1989 facts)
+## 4. Bring your existing data (ONE TIME)
 
-Copy your local `~/.speda/speda.db` to the server, then run the migrator from
-inside a temporary app container (or locally pointing at the server's Postgres):
+The database is a single SQLite file. Copy your local `~/.speda/speda.db` to the
+server at `/root/.speda/speda.db` before first boot and the whole history —
+sessions, messages, memory files, embeddings — is simply there. No migration
+step, and nothing to re-index.
 
 ```bash
-# from packages/igor, with the venv:
-python scripts/migrate_sqlite_to_postgres.py \
-  --source /path/to/speda.db \
-  --dest "postgresql+asyncpg://speda:speda@localhost:5432/speda"
+scp ~/.speda/speda.db root@<server>:/root/.speda/speda.db
 ```
-
-Verify first with `--dry-run`. Expect ~440 sessions / ~14k messages / 7 memory
-files. This is why you never re-pay for indexing.
 
 ## 5. Start the API
 
@@ -116,6 +120,6 @@ Add an `n8n` service to the same compose network, point its HTTP nodes at
 | Bring everything up | `docker compose up -d` |
 | Tail API logs | `docker compose logs -f app` |
 | Rebuild after code change | `docker compose up -d --build app` |
-| Migrate data (dry run) | `python scripts/migrate_sqlite_to_postgres.py --dry-run` |
+| Back up the database | `scp root@<server>:/root/.speda/speda.db ./speda-backup.db` |
 | Build desktop installer | `npm run dist` (in packages/heartbreaker) |
 | Toggle budget mode | UI button, ask Speda, or `BUDGET_MODE` in .env |

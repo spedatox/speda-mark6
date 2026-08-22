@@ -95,11 +95,6 @@ ANTHROPIC_API_KEY=sk-ant-your-key-here
 SPEDA_API_KEY=your-strong-random-api-key
 N8N_SECRET=your-strong-random-n8n-secret
 
-# Database — CHANGE THE PASSWORD (only takes effect on a fresh DB volume)
-POSTGRES_USER=speda
-POSTGRES_PASSWORD=your-strong-db-password
-POSTGRES_DB=speda
-
 # Domain (enables Caddy auto-HTTPS; omit for plain HTTP on :8000)
 DOMAIN=speda.yourdomain.com
 
@@ -125,8 +120,8 @@ This will:
 
 1. Check that Docker and Compose are installed
 2. Read `DOMAIN` from your `.env` — if set, it starts Caddy for automatic HTTPS
-3. Export Postgres credentials so the compose file interpolates them
-4. Build and start all services: **postgres** → **sandbox** → **app** → **n8n** → **caddy** (if domain set)
+3. Export the callback secrets so the compose file interpolates them
+4. Build and start all services: **sandbox** → **app** → **browser** → **n8n** → **caddy** (if domain set)
 5. Poll the `/health` endpoint until the API reports healthy (up to 120s)
 6. Print the live URL
 
@@ -137,15 +132,18 @@ This will:
 - Registers all 7 agent profiles
 - Connects available MCP servers (skips those missing API keys)
 
-### Importing existing data
+### Bringing existing data
 
-If you have an existing SQLite database from local development:
+The database is a single SQLite file, in development and in production alike.
+Copy your local one to the server before first boot and the entire history —
+sessions, messages, memory files, embeddings — is simply there:
 
 ```bash
-./deploy.sh --migrate ~/.speda/speda.db
+scp ~/.speda/speda.db root@<server>:/root/.speda/speda.db
 ```
 
-This copies sessions, messages, and memory files from SQLite into Postgres (one-time).
+Backing it up is the same operation in reverse. There is no migration step and
+nothing to re-index.
 
 ### Verify
 
@@ -387,7 +385,6 @@ is the one file the sync deliberately leaves alone.
 
 | Service | Image | Port | Exposed to internet? | Purpose |
 |---|---|---|---|---|
-| **postgres** | `postgres:16-alpine` | `127.0.0.1:5432` | No (SSH tunnel) | Database |
 | **app** | Built from `packages/igor/Dockerfile` | `8000` | Yes (via Caddy) | API backend |
 | **n8n** | `docker.n8n.io/n8nio/n8n:latest` | `127.0.0.1:5678` | No (SSH tunnel) | Automation engine |
 | **sandbox** | Built from `packages/sandbox/Dockerfile` | internal `9000` | No | Isolated command execution |
@@ -397,7 +394,6 @@ is the one file the sync deliberately leaves alone.
 
 | Volume | Purpose |
 |---|---|
-| `postgres_data` | Database files (persistent) |
 | `n8n_data` | n8n workflows + state (persistent) |
 | `sandbox_workspace` | Sandbox command outputs (ephemeral) |
 | `caddy_data` | TLS certificates (persistent) |
@@ -414,16 +410,21 @@ The sandbox container is resource-capped and privilege-restricted:
 - No host mounts, no secrets, no public port
 - Only the `app` service can reach it (internal compose network)
 
-### Postgres admin access
+### Database admin access
 
-The database is never exposed to the internet. To administer it:
+The database is a SQLite file on the server, reachable only over SSH — it is not
+a service and has no port:
 
 ```bash
-# SSH tunnel
-ssh -L 5432:127.0.0.1:5432 user@your-server-ip
+ssh user@your-server-ip
+sqlite3 /root/.speda/speda.db
+```
 
-# Then connect locally
-psql -h localhost -U speda -d speda
+Copy it down to inspect it locally instead of editing it in place on a running
+server:
+
+```bash
+scp user@your-server-ip:/root/.speda/speda.db ./speda-inspect.db
 ```
 
 ### n8n editor access
@@ -475,9 +476,6 @@ ssh -L 5678:127.0.0.1:5678 user@your-server-ip
 | Variable | Default | Description |
 |---|---|---|
 | `DATABASE_URL` | `sqlite+aiosqlite:///$HOME/.speda/speda.db` | Full connection string. Docker overrides via compose. |
-| `POSTGRES_USER` | `speda` | Postgres role (compose interpolation) |
-| `POSTGRES_PASSWORD` | `speda` | Postgres password. **Change for production.** Only takes effect on fresh volumes. |
-| `POSTGRES_DB` | `speda` | Postgres database name |
 
 ### Auth & Security
 
@@ -588,11 +586,10 @@ Before exposing the server to the internet:
 
 - [ ] **Change `SPEDA_API_KEY`** from `dev-key` to a strong random value
 - [ ] **Change `N8N_SECRET`** from `dev-n8n-secret` to a strong random value
-- [ ] **Change `POSTGRES_PASSWORD`** from `speda` to a strong value (only on fresh volumes)
 - [ ] **Set `DEBUG=false`** (disables `/docs`, `/redoc`, `/openapi.json`)
 - [ ] **Set `DOMAIN`** so Caddy provisions HTTPS (API should never be plain HTTP on the internet)
 - [ ] **Leave `CORS_ALLOWED_ORIGINS` empty** (the desktop app doesn't need CORS; never use `*`)
-- [ ] **Verify ports**: Postgres (`5432`) and n8n (`5678`) are bound to `127.0.0.1` only
+- [ ] **Verify ports**: n8n (`5678`) is bound to `127.0.0.1` only
 - [ ] **Firewall**: only ports 80, 443, and SSH open to the internet
 
 ### What's enforced automatically
@@ -648,7 +645,6 @@ docker compose logs app
 
 Common causes:
 - Missing `ANTHROPIC_API_KEY` in `.env`
-- Postgres not healthy yet (the app waits for it, but check `docker compose logs postgres`)
 - Python import error (check the logs for the traceback)
 
 ### MCP server skipped
@@ -694,7 +690,7 @@ ssh -L 5678:127.0.0.1:5678 user@your-server
 
 ```bash
 docker compose down
-docker volume rm speda-mark6_postgres_data
+mv /root/.speda/speda.db /root/.speda/speda.db.old
 docker compose up -d
 # Fresh database created on next boot
 ```

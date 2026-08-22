@@ -11,10 +11,11 @@ architectural contract is [`CLAUDE.md`](../CLAUDE.md).
 ```
                         ┌──────────────────── server (Docker / Contabo) ─────────────────┐
 ┌─────────────────┐     │  ┌────────────────────────────┐  ┌──────────┐  ┌─────────────┐ │
-│  Heartbreaker   │     │  │  app (FastAPI :8000)       │  │ postgres │  │ n8n (:5678) │ │
-│  Electron+React │◀───▶│  │   AgentOrchestrator        │◀▶│ sessions │  │ watchers:   │ │
-│  SSE / WebSocket│     │  │   agentic loop             │  │ memory   │  │ cron·web·rss│ │
-└─────────────────┘     │  │   CapabilityRegistry       │  └──────────┘  └──────┬──────┘ │
+│  Heartbreaker   │     │  │  app (FastAPI :8000)       │  │ speda.db │  │ n8n (:5678) │ │
+│  Electron+React │◀───▶│  │   AgentOrchestrator        │◀▶│ sqlite   │  │ watchers:   │ │
+│  SSE / WebSocket│     │  │   agentic loop             │  │ sessions │  │ cron·web·rss│ │
+└─────────────────┘     │  │   CapabilityRegistry       │  │ memory   │  └──────┬──────┘ │
+                        │  │                            │  └──────────┘         │        │
                         │  └───────────┬────────────────┘                       │        │
 ┌─────────────────┐     │  ┌───────────▼────────┐  ┌──────────┐   POST /trigger/{agent}  │
 │  Telegram (push)│◀────│  │ TurnRegistry       │  │ sandbox  │◀─────────┘               │
@@ -209,7 +210,7 @@ Settings load from `packages/igor/.env` via pydantic-settings, layered over
 | `ANTHROPIC_API_KEY` | yes | Primary model provider |
 | `SPEDA_API_KEY` | yes | API auth (`X-API-Key`) |
 | `N8N_SECRET` | yes* | Shared secret for `/trigger` and `/news/poll` |
-| `DATABASE_URL` | no | SQLite default; `postgresql+asyncpg://…` in prod |
+| `DATABASE_URL` | no | SQLite, in dev and in prod alike — compose pins it to `/root/.speda/speda.db`. There is no database service |
 | `OPENAI_API_KEY` / `GEMINI_API_KEY` / `ZAI_API_KEY` / `DEEPSEEK_API_KEY` / `NVIDIA_API_KEY` / `OLLAMA_BASE_URL` | no | Additional providers |
 | `LLM_MAIN_MODEL` / `LLM_BACKGROUND_MODEL` / `LLM_FALLBACK_CHAIN` | no | Model policy overrides |
 | `N8N_API_URL` / `N8N_API_KEY` | no | Automation control plane |

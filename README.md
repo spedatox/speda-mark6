@@ -262,8 +262,8 @@ in Android Studio from `packages/speda-go` (Gradle 8.11 + JDK 21);
 point it at your backend on first launch and the key is kept in the Android
 Keystore.
 
-**Full stack** (`docker compose up -d`) brings up Postgres, the app, the sandbox,
-and n8n together. **`./deploy.sh`** is the one-shot production runbook (server,
+**Full stack** (`docker compose up -d`) brings up the app, the sandbox, the
+browser and n8n together — the database is a SQLite file, not a service. **`./deploy.sh`** is the one-shot production runbook (server,
 domain + TLS, memory import, app packaging). Ship a branded desktop installer for
 any agent with **`build-app.ps1 -Agent <name> -ApiBase <url> -ApiKey <key>`**.
 
