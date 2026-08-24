@@ -80,10 +80,12 @@ it via `AgentContext`. No module-level globals. No ad-hoc dicts. No
 The loop runs until `end_turn`. It never breaks on `tool_use`. It never breaks
 after N iterations unless the safety guard fires.
 
-**4a. The loop has a hard safety guard of 30 tool_use iterations**
+**4a. The loop has a hard safety guard of 200 tool_use iterations**
 (`MAX_TOOL_ITERATIONS`). Past it, yield an `ERROR` SSEEvent and terminate
-gracefully. This is not a feature limit — it is protection against a runaway loop
-caused by a tool error or unexpected model behaviour.
+gracefully. This is not a feature limit — it is a last-resort backstop against a
+tool that always errors or a model that never reaches `end_turn`, raised well
+above anything a real task should ever need so it stays out of the way of
+legitimate long-horizon work.
 
 **5. `CapabilityRegistry` is the only entity that knows what tools exist.**
 The orchestrator calls `registry.list_tools()` and never hardcodes a tool

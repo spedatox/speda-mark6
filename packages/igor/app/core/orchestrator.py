@@ -13,7 +13,7 @@ from app.skills.memory import MemoryRecallCache, recall_for_context, recall_sess
 
 logger = logging.getLogger(__name__)
 
-MAX_TOOL_ITERATIONS = 30  # Safety guard — Rule 4a
+MAX_TOOL_ITERATIONS = 200  # Safety guard — Rule 4a
 
 # Cap on what a tool_calls row stores of a result — generous enough for real
 # debugging (unlike the 1500-char SSE preview, which only has to look right in
