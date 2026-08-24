@@ -237,6 +237,57 @@ async def _run_chat(
     request_id = str(uuid.uuid4())
     user_id = 1
 
+    # /bg <task> — background-dispatch THIS agent and return immediately,
+    # skipping the whole orchestrator/external-proxy turn below. No other
+    # agent's judgment call is in the loop: the owner is already authenticated
+    # by the time a request reaches this router (X-API-Key, middleware/auth.py),
+    # which is exactly the authority `dispatch_agent` normally borrows from
+    # whichever agent calls it — here the owner IS the caller, so dispatching
+    # to the agent this request addresses (`from_agent == to_agent`) is
+    # correct, not a loop risk. Mirrors app/telegram/gateway.py's /bg handler;
+    # keep the two in sync if this changes.
+    if body.message.strip().startswith("/bg"):
+        task_text = body.message.strip()[len("/bg"):].strip()
+        from app.schemas.sse import SSEEvent, SSEEventType
+
+        session = await session_manager.get_or_create(
+            db=db, user_id=user_id, triggered_by="user",
+            model_used=body.model or profile.allocate_model("user"),
+            agent_id=profile.agent_id, session_id=body.session_id,
+        )
+        await session_manager.save_message(db, session.id, "user", body.message)
+
+        if not task_text:
+            reply = "Usage: /bg <what to do>"
+        else:
+            dispatcher = request.app.state.dispatcher
+            if dispatcher is None:
+                reply = "Background dispatch isn't wired up yet."
+            else:
+                ticket = await dispatcher.spawn(
+                    from_agent=profile.agent_id, to_agent=profile.agent_id,
+                    task=task_text, user_id=user_id, request_id=request_id,
+                    origin_session_id=session.id, allow_self=True,
+                )
+                # See the Telegram gateway's identical check: spawn() has no
+                # structured status, so the one success shape's prefix is the
+                # only signal available without changing a method the
+                # model-facing dispatch_agent tool also depends on.
+                reply = (
+                    f"🚀 Started in the background — I'll message you here "
+                    f"when it's done.\n\n{task_text}"
+                    if ticket.startswith("Background dispatch ") else f"⚠️ {ticket}"
+                )
+        await session_manager.save_message(
+            db, session.id, "assistant", [{"type": "text", "text": reply}])
+
+        async def _ack():
+            yield SSEEvent(type=SSEEventType.CHUNK, data=reply,
+                          session_id=session.id, request_id=request_id).to_sse()
+            yield SSEEvent(type=SSEEventType.DONE, data={},
+                          session_id=session.id, request_id=request_id).to_sse()
+        return StreamingResponse(_ack(), media_type="text/event-stream")
+
     model = body.model or profile.allocate_model("user")
     system_prompt = body.system_prompt or ""
 

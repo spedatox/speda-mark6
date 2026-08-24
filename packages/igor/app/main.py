@@ -317,6 +317,7 @@ async def lifespan(app: FastAPI):
         bots=telegram_bots,
         ws_manager=ws_manager,
         agent_proxy=agent_proxy,
+        dispatcher=dispatcher,
     )
     telegram_poll_tasks = await telegram_bots.start(telegram_gateway)
 

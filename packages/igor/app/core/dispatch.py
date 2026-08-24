@@ -306,12 +306,25 @@ class AgentDispatcher:
         )
         return result
 
-    def _precheck(self, from_agent: str, to_agent: str, depth: int) -> str | None:
+    def _precheck(self, from_agent: str, to_agent: str, depth: int,
+                  *, allow_self: bool = False) -> str | None:
         """Shared guard for dispatch() and spawn(). Returns an error string to
-        relay, or None when the dispatch may proceed."""
+        relay, or None when the dispatch may proceed.
+
+        `allow_self` exists for exactly one caller: an owner-authenticated
+        `/bg` command typed directly to an agent's own channel, where "dispatch
+        to yourself" is the whole request, not a model deciding to loop. The
+        model-facing `dispatch_agent` tool never sets it, so a model still
+        cannot talk itself into self-dispatching — the guard below is unchanged
+        for that path. The report turn this produces (agent_id == to_agent) is
+        already handled correctly by `_start_report_turn`'s room-mismatch
+        fallback (trigger_runner.py), which exists for the case one arm of a
+        chain backgrounds a dispatch of its own — self-dispatch is just the
+        shortest such chain.
+        """
         if self._orchestrator is None:
             return "Dispatch engine is not wired yet — backend still starting up."
-        if to_agent == from_agent:
+        if to_agent == from_agent and not allow_self:
             return "Refused: you cannot dispatch a task to yourself. Do it directly."
         if depth >= MAX_DISPATCH_DEPTH:
             return (
@@ -376,12 +389,17 @@ class AgentDispatcher:
         depth: int = 0,
         cwd: str | None = None,
         origin_session_id: int | None = None,
+        allow_self: bool = False,
     ) -> str:
         """Background dispatch: start `task` on `to_agent` in a detached task and
         return a ticket IMMEDIATELY so the caller's own turn can finish. The
         result lands in the agent channel / comms tray (status running → ok) and
-        is retrievable via dispatch_status. Never raises."""
-        precheck = self._precheck(from_agent, to_agent, depth)
+        is retrievable via dispatch_status. Never raises.
+
+        `allow_self`: see `_precheck`. False for every model-facing caller
+        (`dispatch_agent`); the owner-typed `/bg` command is the one caller
+        that passes True."""
+        precheck = self._precheck(from_agent, to_agent, depth, allow_self=allow_self)
         if precheck is not None:
             return precheck
         live = sum(1 for t in self._background if not t.done())

@@ -28,13 +28,18 @@ _OWNER_USER_ID = 1  # single-user system (CLAUDE.md)
 
 
 class TelegramGateway:
-    def __init__(self, orchestrator, session_manager, profiles, bots, ws_manager, agent_proxy) -> None:
+    def __init__(self, orchestrator, session_manager, profiles, bots, ws_manager, agent_proxy,
+                 dispatcher=None) -> None:
         self._orchestrator = orchestrator
         self._sessions = session_manager
         self._profiles = profiles
         self._bots = bots                 # TelegramBotRegistry
         self._ws_manager = ws_manager
         self._agent_proxy = agent_proxy
+        # Optional: only /bg needs it. Kept optional rather than required so a
+        # caller wiring the gateway before the dispatcher exists (or a test
+        # double) does not have to fabricate one just to construct this class.
+        self._dispatcher = dispatcher
         # De-dupe across webhook retries AND poll/webhook overlap: last update_id
         # seen per (agent). Poll also persists a watermark; this is the in-process
         # guard that covers the webhook path and rapid retries.
@@ -110,6 +115,54 @@ class TelegramGateway:
             async with AsyncSessionLocal() as db:
                 await self._sessions.reset_channel_session(db, "telegram", agent_id)
             await bot.send_message("🆕 Started a fresh conversation.", chat_id=chat_id)
+            return
+
+        # 4b. /bg <task> — background-dispatch THIS agent, no orchestrator turn
+        # and no other agent's judgment call in between. Owner identity is
+        # already confirmed above (step 3), which is exactly the authority
+        # `dispatch_agent` normally borrows from whichever agent calls it — here
+        # the owner IS the caller, so `from_agent == to_agent` is correct, not a
+        # loop risk (allow_self exists in AgentDispatcher for precisely this).
+        if text.startswith("/bg"):
+            task_text = text[len("/bg"):].strip()
+            if not task_text:
+                await bot.send_message(
+                    "Usage: /bg <what to do> — e.g. \"/bg prototype a habit "
+                    "tracker and deposit it when you're done\".", chat_id=chat_id)
+                return
+            if self._dispatcher is None:
+                await bot.send_message(
+                    "Background dispatch isn't wired up yet.", chat_id=chat_id)
+                return
+            async with AsyncSessionLocal() as db:
+                session = await self._sessions.get_or_create(
+                    db=db, user_id=_OWNER_USER_ID, triggered_by="user",
+                    model_used=self._profiles.get(agent_id).allocate_telegram_model()
+                    if self._profiles.get(agent_id) else "",
+                    agent_id=agent_id, channel="telegram",
+                )
+                await self._sessions.save_message(
+                    db, session.id, "user",
+                    [{"type": "text", "text": f"/bg {task_text}"}])
+                session_id = session.id
+            ticket = await self._dispatcher.spawn(
+                from_agent=agent_id, to_agent=agent_id, task=task_text,
+                user_id=_OWNER_USER_ID, request_id=str(uuid.uuid4()),
+                origin_session_id=session_id, allow_self=True,
+            )
+            # spawn() has no structured status — every refusal path (not wired,
+            # over the concurrency cap, depth limit) returns prose starting
+            # differently from the one success shape ("Background dispatch #N
+            # → …"), so that prefix is the only signal available without
+            # changing a method the model-facing tool also depends on. Refused
+            # or not, the returned text is already human-readable — show it
+            # rather than a blanket "started" that would lie on refusal.
+            if ticket.startswith("Background dispatch "):
+                await bot.send_message(
+                    f"🚀 Started in the background — I'll message you here "
+                    f"when it's done.\n\n{task_text}", chat_id=chat_id)
+            else:
+                await bot.send_message(f"⚠️ {ticket}", chat_id=chat_id)
             return
 
         profile = self._profiles.get(agent_id)
