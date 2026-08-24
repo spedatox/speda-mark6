@@ -49,6 +49,7 @@ import asyncio
 import logging
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import select
@@ -81,6 +82,47 @@ BACKGROUND_TIMEOUT_S = 900.0
 CHANNEL_WINDOW = 20
 CHANNEL_TASK_CHARS = 280
 CHANNEL_RESULT_CHARS = 340
+
+# The owner-facing "run this in the background" command. Defined once here
+# because two entry points parse it (the Telegram gateway and the web chat
+# router) and a command that means one thing in one surface and nothing in the
+# other is the kind of drift a single source of truth exists to prevent.
+BG_COMMAND = "/bg"
+
+
+@dataclass
+class SpawnOutcome:
+    """What `spawn()` hands back: a structured result, not a status to be
+    recovered by matching prose.
+
+    `message` is still the model-facing text the `dispatch_agent` tool relays
+    verbatim (it tells the model not to fabricate the result, to report back
+    when woken, etc.). `started`/`ticket_id` are for callers that need to BRANCH
+    on the outcome — the `/bg` handlers, which show the owner a confirmation on
+    success and the refusal reason on failure, and must not read either out of
+    the message string."""
+    started: bool
+    message: str
+    ticket_id: int | None = None
+
+
+def bg_ack(outcome: "SpawnOutcome") -> str:
+    """The owner-facing reply to a `/bg` command, shared by every surface that
+    accepts one so they cannot drift.
+
+    On refusal it shows the dispatcher's own reason verbatim. On success it does
+    NOT echo the task back — the owner just typed it — and it hands over the
+    ticket id so progress is checkable on demand from the same conversation
+    (ask the agent, which reads it via dispatch_status; the finished result also
+    lands back in this conversation on its own)."""
+    if not outcome.started:
+        return outcome.message
+    handle = f" (#{outcome.ticket_id})" if outcome.ticket_id is not None else ""
+    return (
+        f"On it — running in the background{handle}. "
+        "Ask me how it's going whenever you like; I'll also report back here "
+        "the moment it lands."
+    )
 
 
 async def channel_transcript(
@@ -390,24 +432,28 @@ class AgentDispatcher:
         cwd: str | None = None,
         origin_session_id: int | None = None,
         allow_self: bool = False,
-    ) -> str:
+    ) -> SpawnOutcome:
         """Background dispatch: start `task` on `to_agent` in a detached task and
-        return a ticket IMMEDIATELY so the caller's own turn can finish. The
-        result lands in the agent channel / comms tray (status running → ok) and
-        is retrievable via dispatch_status. Never raises.
+        return IMMEDIATELY so the caller's own turn can finish. The result lands
+        in the agent channel / comms tray (status running → ok) and is
+        retrievable via dispatch_status. Never raises.
+
+        Returns a `SpawnOutcome`: `.message` is the text a model-facing caller
+        relays, `.started`/`.ticket_id` let an owner-facing caller branch. See
+        `SpawnOutcome`.
 
         `allow_self`: see `_precheck`. False for every model-facing caller
         (`dispatch_agent`); the owner-typed `/bg` command is the one caller
         that passes True."""
         precheck = self._precheck(from_agent, to_agent, depth, allow_self=allow_self)
         if precheck is not None:
-            return precheck
+            return SpawnOutcome(started=False, message=precheck)
         live = sum(1 for t in self._background if not t.done())
         if live >= MAX_BACKGROUND:
-            return (
+            return SpawnOutcome(started=False, message=(
                 f"Refused: already running {live} background dispatches (max "
                 f"{MAX_BACKGROUND}). Wait for one to finish, or run this one inline."
-            )
+            ))
 
         protocol = "house_party" if get_house_party() else "direct"
         msg_id = await self._log_start(
@@ -423,7 +469,7 @@ class AgentDispatcher:
         self._background.add(task_obj)
         task_obj.add_done_callback(self._background.discard)
         ticket = f"#{msg_id}" if msg_id is not None else "(untracked)"
-        return (
+        return SpawnOutcome(started=True, ticket_id=msg_id, message=(
             f"Background dispatch {ticket} → {to_agent.upper()} started. The result "
             "is NOT available yet, so never guess or fabricate it. When "
             f"{to_agent.upper()} finishes you will be woken with its answer and you "
@@ -431,7 +477,7 @@ class AgentDispatcher:
             "you will report back, and do NOT promise to check on it yourself or ask "
             f"him to remind you. dispatch_status (id={msg_id}) is only for when he "
             "asks before it lands."
-        )
+        ))
 
     async def _run_and_finish(
         self, *, msg_id: int | None, from_agent: str, to_agent: str, task: str,
@@ -533,7 +579,7 @@ class AgentDispatcher:
             return "No other agents are registered."
 
         if background:
-            tickets = await asyncio.gather(*[
+            outcomes = await asyncio.gather(*[
                 self.spawn(
                     from_agent=from_agent, to_agent=t, task=task,
                     user_id=user_id, request_id=request_id, depth=depth,
@@ -541,7 +587,8 @@ class AgentDispatcher:
                 )
                 for t in targets
             ])
-            return "House Party broadcast dispatched in the background:\n\n" + "\n".join(tickets)
+            return ("House Party broadcast dispatched in the background:\n\n"
+                    + "\n".join(o.message for o in outcomes))
 
         await self._log_start(
             request_id=request_id, from_agent=from_agent, to_agent="all",

@@ -206,7 +206,7 @@ async def test_a_finished_background_dispatch_wakes_the_caller_with_the_answer(m
         reports.append(kw)
 
     d.set_report_hook(_hook)
-    ticket = await d.spawn(
+    outcome = await d.spawn(
         from_agent="sentinel", to_agent="ultron", task="Read the 2023 papers on X.",
         user_id=1, request_id="req-bg", origin_session_id=42,
     )
@@ -214,7 +214,7 @@ async def test_a_finished_background_dispatch_wakes_the_caller_with_the_answer(m
         await t
 
     # The agent must not promise to chase it itself — the wake-up is automatic.
-    assert "report back" in ticket
+    assert "report back" in outcome.message
     assert len(reports) == 1
     rep = reports[0]
     assert rep["agent_id"] == "sentinel"          # who gets woken: the sender

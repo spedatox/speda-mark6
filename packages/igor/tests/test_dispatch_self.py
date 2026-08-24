@@ -20,7 +20,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core import dispatch as dp
-from app.core.dispatch import AgentDispatcher
+from app.core.dispatch import AgentDispatcher, BG_COMMAND, SpawnOutcome, bg_ack
 from app.core.session_manager import SessionManager
 from app.database import Base
 from app.schemas.sse import SSEEvent, SSEEventType
@@ -75,6 +75,35 @@ def _dispatcher():
     return d
 
 
+# ── bg_ack: the owner-facing reply, pure ─────────────────────────────────────
+
+
+def test_bg_ack_does_not_echo_the_task_back():
+    """The owner just typed the task — repeating it back is noise. The ack must
+    confirm and hand over a status handle, never parrot the request."""
+    task = "prototype a habit tracker and deposit it when done"
+    ack = bg_ack(SpawnOutcome(started=True, message="(model prose)", ticket_id=42))
+    assert task not in ack
+    assert "(model prose)" not in ack, "the model-facing prose is not for the owner"
+    assert "#42" in ack, "the ack hands over the ticket so status is checkable"
+
+
+def test_bg_ack_shows_the_refusal_reason_verbatim_on_failure():
+    ack = bg_ack(SpawnOutcome(started=False, message="Refused: over the cap."))
+    assert ack == "Refused: over the cap."
+
+
+def test_bg_ack_without_a_ticket_id_still_confirms():
+    ack = bg_ack(SpawnOutcome(started=True, message="x", ticket_id=None))
+    assert "background" in ack.lower()
+    assert "#" not in ack
+
+
+def test_bg_command_is_a_single_source_of_truth():
+    """Both surfaces import this; it must be the literal they parse."""
+    assert BG_COMMAND == "/bg"
+
+
 # ── _precheck: pure, no DB ───────────────────────────────────────────────────
 
 
@@ -108,11 +137,13 @@ def test_precheck_still_refuses_other_pairs_normally():
 
 async def test_spawn_refuses_self_dispatch_by_default(maker):
     d = _dispatcher()
-    ticket = await d.spawn(
+    outcome = await d.spawn(
         from_agent="ultron", to_agent="ultron", task="do a thing",
         user_id=1, request_id="req-self-1",
     )
-    assert "cannot dispatch a task to yourself" in ticket
+    assert outcome.started is False
+    assert outcome.ticket_id is None
+    assert "cannot dispatch a task to yourself" in outcome.message
     assert len(d._background) == 0, "a refused dispatch must not start a background task"
 
 
@@ -124,12 +155,13 @@ async def test_spawn_allows_self_dispatch_with_allow_self(maker):
         reports.append(kw)
 
     d.set_report_hook(_hook)
-    ticket = await d.spawn(
+    outcome = await d.spawn(
         from_agent="ultron", to_agent="ultron", task="prototype something",
         user_id=1, request_id="req-self-2", origin_session_id=7,
         allow_self=True,
     )
-    assert ticket.startswith("Background dispatch")
+    assert outcome.started is True
+    assert outcome.ticket_id is not None
     for t in list(d._background):
         await t
 

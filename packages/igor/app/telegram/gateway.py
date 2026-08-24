@@ -16,6 +16,7 @@ import uuid
 
 from app.config import settings
 from app.core.context import AgentContext
+from app.core.dispatch import BG_COMMAND, bg_ack
 from app.core.runtime_state import get_telegram_owner_id
 from app.core.surface import annotate_last_user, telegram_context
 from app.database import AsyncSessionLocal
@@ -123,46 +124,38 @@ class TelegramGateway:
         # `dispatch_agent` normally borrows from whichever agent calls it — here
         # the owner IS the caller, so `from_agent == to_agent` is correct, not a
         # loop risk (allow_self exists in AgentDispatcher for precisely this).
-        if text.startswith("/bg"):
-            task_text = text[len("/bg"):].strip()
+        # The command, the owner-facing reply, and the branch on success/refusal
+        # all live in app.core.dispatch, shared with the web chat router so the
+        # two surfaces cannot drift.
+        if text.startswith(BG_COMMAND):
+            task_text = text[len(BG_COMMAND):].strip()
             if not task_text:
                 await bot.send_message(
-                    "Usage: /bg <what to do> — e.g. \"/bg prototype a habit "
-                    "tracker and deposit it when you're done\".", chat_id=chat_id)
+                    f"Usage: {BG_COMMAND} <what to do>", chat_id=chat_id)
                 return
             if self._dispatcher is None:
                 await bot.send_message(
-                    "Background dispatch isn't wired up yet.", chat_id=chat_id)
+                    "Background dispatch isn't available.", chat_id=chat_id)
                 return
             async with AsyncSessionLocal() as db:
+                profile = self._profiles.get(agent_id)
                 session = await self._sessions.get_or_create(
                     db=db, user_id=_OWNER_USER_ID, triggered_by="user",
-                    model_used=self._profiles.get(agent_id).allocate_telegram_model()
-                    if self._profiles.get(agent_id) else "",
+                    model_used=profile.allocate_telegram_model() if profile else "",
                     agent_id=agent_id, channel="telegram",
                 )
+                # The command IS the owner's turn in this conversation, so it is
+                # persisted like any other — the finished report threads back
+                # into the same session (origin_session_id below).
                 await self._sessions.save_message(
-                    db, session.id, "user",
-                    [{"type": "text", "text": f"/bg {task_text}"}])
+                    db, session.id, "user", [{"type": "text", "text": text}])
                 session_id = session.id
-            ticket = await self._dispatcher.spawn(
+            outcome = await self._dispatcher.spawn(
                 from_agent=agent_id, to_agent=agent_id, task=task_text,
                 user_id=_OWNER_USER_ID, request_id=str(uuid.uuid4()),
                 origin_session_id=session_id, allow_self=True,
             )
-            # spawn() has no structured status — every refusal path (not wired,
-            # over the concurrency cap, depth limit) returns prose starting
-            # differently from the one success shape ("Background dispatch #N
-            # → …"), so that prefix is the only signal available without
-            # changing a method the model-facing tool also depends on. Refused
-            # or not, the returned text is already human-readable — show it
-            # rather than a blanket "started" that would lie on refusal.
-            if ticket.startswith("Background dispatch "):
-                await bot.send_message(
-                    f"🚀 Started in the background — I'll message you here "
-                    f"when it's done.\n\n{task_text}", chat_id=chat_id)
-            else:
-                await bot.send_message(f"⚠️ {ticket}", chat_id=chat_id)
+            await bot.send_message(bg_ack(outcome), chat_id=chat_id)
             return
 
         profile = self._profiles.get(agent_id)

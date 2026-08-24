@@ -637,6 +637,11 @@ function Thumb({ file, alt }: { file: File; alt: string }) {
   )
 }
 
+/* The background-dispatch command, as typed into the composer. Must stay in
+ * lock-step with the backend's BG_COMMAND (app/core/dispatch.py); typing it
+ * plus a space lifts the composer into Background mode (see onChangeValue). */
+const BG_PREFIX = '/bg '
+
 /* ── Main component ───────────────────────────────────────────────────────── */
 export default function InputBar({
   onSend, onStop, config, voiceMode, agentSpeaking, onSpeechStart, onMicState, micLevelRef,
@@ -654,6 +659,7 @@ export default function InputBar({
   const [models, setModels]         = useState<ModelInfo[]>([])
   const [voices, setVoices]         = useState<ModelInfo[]>([])
   const [budget, setBudget]         = useState(true)
+  const [bgMode, setBgMode]         = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragDepth = useRef(0)
@@ -733,13 +739,30 @@ export default function InputBar({
     addFiles(Array.from(e.dataTransfer.files))
   }
 
+  /* Typing the background command + space flips the composer into Background
+   * mode: the literal prefix is lifted out of the field and shown as a chip, so
+   * what the owner types and sees afterward is just the task — never the command
+   * echoed back. submit() re-prepends it. The chip's × exits the mode and keeps
+   * whatever task text was already typed as an ordinary message. */
+  const onChangeValue = (next: string) => {
+    if (!bgMode && next.startsWith(BG_PREFIX)) {
+      setBgMode(true)
+      setValue(next.slice(BG_PREFIX.length))
+      return
+    }
+    setValue(next)
+  }
+
   /* ── Submit ───────────────────────────────────────────────────────────── */
   const submit = async () => {
-    const msg = value.trim()
+    const task = value.trim()
+    // In Background mode an empty field is a no-op, not a bare "/bg" send.
+    if (bgMode && !task) return
+    const msg = bgMode ? `${BG_PREFIX}${task}` : task
     if ((!msg && attachments.length === 0) || state.isStreaming) return
     const imageFiles = attachments.filter(a => a.isImage).map(a => a.file)
     const docFiles   = attachments.filter(a => !a.isImage).map(a => a.file)
-    setValue(''); clearAttachments(); setTimeout(resize, 0)
+    setValue(''); setBgMode(false); clearAttachments(); setTimeout(resize, 0)
 
     let images: ImageBlock[] = []
     if (imageFiles.length) {
@@ -924,18 +947,45 @@ export default function InputBar({
             </div>
           )}
 
+          {/* Background-mode chip — shown instead of the literal "/bg " prefix
+              once the composer is in Background mode. Bold, dismissable; on
+              send the prefix is re-applied so the backend routes it. */}
+          {bgMode && (
+            <div style={{ padding: '0.85rem 1.05rem 0' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                padding: '0.2rem 0.55rem', borderRadius: 999,
+                background: 'rgba(var(--hb-accent-rgb),0.16)',
+                border: '1px solid rgba(var(--hb-accent-rgb),0.4)',
+                color: 'var(--hb-text)', fontSize: '0.8rem',
+                fontFamily: "'SamsungOne','Inter',sans-serif",
+              }}>
+                <strong style={{ fontWeight: 700 }}>Background mode</strong>
+                <button
+                  onClick={() => { setBgMode(false); textareaRef.current?.focus() }}
+                  title="Exit background mode"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: 'var(--hb-icon-bright)', padding: 0, lineHeight: 1,
+                    fontSize: '0.9rem', display: 'flex', alignItems: 'center',
+                  }}
+                >×</button>
+              </span>
+            </div>
+          )}
+
           {/* Textarea */}
           <div style={{ padding: '1.05rem 1.05rem 0.5rem' }}>
             <textarea
               ref={textareaRef}
               rows={1}
               value={value}
-              onChange={e => setValue(e.target.value)}
+              onChange={e => onChangeValue(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={onPaste}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
-              placeholder={t.inputBar.placeholder}
+              placeholder={bgMode ? 'Describe the background task…' : t.inputBar.placeholder}
               style={{
                 width: '100%', background: 'transparent', border: 'none', outline: 'none',
                 resize: 'none', color: 'var(--hb-text)',

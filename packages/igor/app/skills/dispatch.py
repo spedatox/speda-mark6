@@ -124,11 +124,12 @@ class DispatchAgentSkill(Skill):
                 depth=depth, background=background, origin_session_id=room,
             )
         if background:
-            return await self._dispatcher.spawn(
+            outcome = await self._dispatcher.spawn(
                 from_agent=context.agent_id, to_agent=agent, task=task,
                 user_id=context.user_id, request_id=context.request_id,
                 depth=depth, cwd=cwd, origin_session_id=room,
             )
+            return outcome.message
         return await self._dispatcher.dispatch(
             from_agent=context.agent_id, to_agent=agent, task=task,
             user_id=context.user_id, request_id=context.request_id,
