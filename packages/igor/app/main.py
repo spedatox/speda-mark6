@@ -219,6 +219,12 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(AgentChannelSkill())
     await registry.register_skill(DispatchStatusSkill())
     await registry.register_skill(HousePartySkill())
+    # Orion's push of the composed owner memory out to a connected Forge peer
+    # (docs: the Forge owner-memory bridge). Shares `dispatcher` with
+    # DispatchAgentSkill above — same late-bind-via-wire() pattern, since
+    # WebSocketManager doesn't exist yet at this point in startup.
+    from app.skills.forge_sync import SyncOwnerMemoryToForgeSkill
+    await registry.register_skill(SyncOwnerMemoryToForgeSkill(dispatcher))
     # Emergency inbound containment. Owner-only by construction (the skill
     # refuses any non-user trigger) — see app/skills/lockdown.py.
     from app.skills.lockdown import LockdownProtocolSkill

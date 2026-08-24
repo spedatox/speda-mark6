@@ -217,6 +217,84 @@ def test_the_router_holds_no_logic():
         assert leak not in body, leak
 
 
+# ── The second skill: record_observation, for the Forge queue flush ─────────
+
+def _observation_skill(monkeypatch, result="Recorded 1 observation(s):\n  [id:9] ...",
+                        *, capture=None):
+    class _Skill:
+        async def execute(self, args, context):
+            if capture is not None:
+                capture.append((args, context))
+            return result
+
+    monkeypatch.setattr(peer_memory, "RecordObservationSkill", _Skill)
+
+
+@pytest.mark.asyncio
+async def test_a_record_observation_frame_reaches_the_skill(monkeypatch):
+    seen: list = []
+    _observation_skill(monkeypatch, capture=seen)
+
+    response = await peer_memory.run_memory_command("optimus", {
+        "request_id": "o1", "skill": "record_observation",
+        "content": "Prefers dark mode.", "level": "explicit", "domain": "state",
+    })
+
+    assert response["ok"] is True
+    assert response["request_id"] == "o1"
+    args, context = seen[0]
+    assert args == {"observations": [
+        {"content": "Prefers dark mode.", "level": "explicit", "domain": "state"},
+    ]}
+    assert context.agent_id == "optimus"      # same author rule as the memory path
+
+
+@pytest.mark.asyncio
+async def test_the_default_skill_is_still_the_flat_memory_path(monkeypatch):
+    """`skill` absent from the frame must not silently change behaviour for
+    every peer that predates this feature."""
+    seen: list = []
+    _skill(monkeypatch, capture=seen)
+
+    await peer_memory.run_memory_command("optimus", {
+        "request_id": "o2", "command": "view", "path": "/memories/current.md",
+    })
+
+    assert seen[0][0] == {"command": "view", "path": "/memories/current.md"}
+
+
+@pytest.mark.asyncio
+async def test_a_record_observation_frame_missing_required_fields_is_refused(monkeypatch):
+    def _never(*_a, **_k):
+        raise AssertionError("should not have opened a session")
+
+    monkeypatch.setattr(peer_memory, "AsyncSessionLocal", _never)
+
+    response = await peer_memory.run_memory_command("optimus", {
+        "request_id": "o3", "skill": "record_observation", "content": "no domain or level",
+    })
+
+    assert response["ok"] is False
+    assert "content, level and domain" in response["result"]
+
+
+@pytest.mark.asyncio
+async def test_a_record_observation_that_could_not_run_is_a_failure(monkeypatch):
+    class _Broken:
+        async def execute(self, args, context):
+            raise RuntimeError("the database is gone")
+
+    monkeypatch.setattr(peer_memory, "RecordObservationSkill", _Broken)
+
+    response = await peer_memory.run_memory_command("optimus", {
+        "request_id": "o4", "skill": "record_observation",
+        "content": "x", "level": "explicit", "domain": "state",
+    })
+
+    assert response["ok"] is False
+    assert "the database is gone" in response["result"]
+
+
 def test_the_response_is_the_shape_the_peer_parks_on():
     """request_id correlates the reply to the call; `ok` travels explicitly
     because a successful `delete` says almost nothing and guessing from an

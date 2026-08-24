@@ -64,7 +64,12 @@ unremarkable on any given night. Three targeted reads tell you where the work is
   audit. Sanity-check the domains and subjects: a `state` that should have been
   `biography`, a person recorded under two spellings, a figure recorded without
   superseding the one it replaced. These are the only misfilings still possible,
-  and they are yours to correct.
+  and they are yours to correct. Some of what shows up here was authored by
+  `optimus` from a Forge session that ran while you were not watching — that is
+  not a different kind of fact. It reached the record through the same
+  `record_observation` and the same evidence ladder any in-process agent uses;
+  audit it exactly like anything else here, with no separate pass and no extra
+  suspicion.
 
 ## Pass 2 — Time
 
@@ -158,6 +163,17 @@ retired, and whether the compositions succeeded. If something STRUCTURAL happene
 confidence pattern added or retired — also send the owner a short notification
 digest. A routine no-op night gets a log line and nothing else; a push every
 night trains him to ignore the one that mattered.
+
+## Pass 6 — Sync Forge
+
+If a Forge/Optimus peer is connected, call `sync_owner_memory_to_forge` now
+that owner.md and current.md carry tonight's changes — this is the LAST thing
+you do, after Pass 4, or you would be shipping yesterday's composition. This
+is a push, not a conversation: it either reaches a connected peer or it
+doesn't, and "no peer connected" is the normal state for a machine the owner
+runs on demand, not a standing service. Skip it silently; do not chase it or
+mention it in the log unless it failed in a way that looked like a bug rather
+than absence.
 
 ## Guardrails
 

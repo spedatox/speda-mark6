@@ -235,6 +235,23 @@ class AgentDispatcher:
             return []
         return [p.agent_id for p in self._profiles.roster() if p.dispatch_target]
 
+    async def push_to_peers(self, agent_id: str, frame: dict) -> int:
+        """Fire-and-forget a frame to every connected host for `agent_id`.
+
+        For unsolicited server-initiated pushes (the owner-memory sync to
+        Forge, not a request/response like task_dispatch) — there is no
+        result to correlate, only "how many peers got this". Returns 0 (and
+        sends nothing) when the dispatcher has not been wired yet or nobody
+        is connected; a caller checks that to know whether to tell the model
+        the push actually reached anyone.
+        """
+        if self._ws_manager is None:
+            return 0
+        hosts = self._ws_manager.hosts(agent_id)
+        for host in hosts:
+            await self._ws_manager.send(agent_id, frame, host=host)
+        return len(hosts)
+
     async def dispatch(
         self,
         *,

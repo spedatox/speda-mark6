@@ -13,6 +13,18 @@ This is the missing half. The peer sends `memory_request`, this executes the
 SAME `MemorySkill` every in-process agent uses, and the router sends back
 `memory_response`.
 
+**A second skill rides the same frame.** A Forge session that notices
+something about the owner while offline queues it locally
+(forge/agents/owner_memory.py's `pending_observations.jsonl`) and, once
+reconnected, flushes the queue as `memory_request` frames carrying
+`"skill": "record_observation"` instead of a `command`. This runs the SAME
+`RecordObservationSkill` any in-process agent uses — the fact lands in the
+observation record authored as `optimus` (Rule 18 enforcement applies
+identically; Optimus owns no domain folder, so it can never write one via this
+path either), and Orion's regular nightly audit consolidates it exactly like
+any other agent's observation. Nothing here decides what the fact means or
+whether it survives — that judgement stays Orion's, on its own schedule.
+
 **The same skill, deliberately.** Not a reimplementation and not a subset. Path
 validation, the file law, per-document ownership, the revision trail and the
 schema advisories are all enforced here exactly as they are for Sentinel or
@@ -40,6 +52,7 @@ import uuid
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal
 from app.skills.memory import MemorySkill
+from app.skills.observations import RecordObservationSkill
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +71,16 @@ _ARGUMENT_KEYS = (
 passed through wholesale: the frame also carries routing fields (request_id,
 chat_id, type) that are Igor's business and not the skill's, and a peer that
 one day adds a field must not be able to reach the skill's kwargs with it."""
+
+_OBSERVATION_KEYS = (
+    "content", "level", "source_ids", "premises", "sources",
+    "pattern_type", "confidence", "subject", "domain",
+    "valid_from", "valid_until", "supersedes",
+)
+"""One observation's fields, per RecordObservationSkill.input_schema. A queued
+Forge fact is always ONE fact per frame (owner_memory.py flushes its local
+queue line by line), so this wraps into the single-element `observations` list
+the skill expects rather than exposing Forge to that shape directly."""
 
 
 def _context(agent_id: str, db, request_id: str) -> AgentContext:
@@ -90,8 +113,21 @@ async def run_memory_command(agent_id: str, frame: dict) -> dict:
     exception that escaped would leave it waiting out its own timeout with
     nothing to tell the model — the worst available outcome for a WRITE, where
     silence and success are indistinguishable from the far side.
+
+    `frame["skill"]` picks which skill runs — absent or `"memory"` is the
+    original flat MemorySkill path; `"record_observation"` is the Forge
+    pending-observations flush (see module docstring). Same envelope either
+    way: one request_id, one `memory_response`, the skill's own text verbatim.
     """
     request_id = str(frame.get("request_id", ""))
+    skill_name = str(frame.get("skill") or "memory")
+
+    if skill_name == "record_observation":
+        return await _run_record_observation(agent_id, frame, request_id)
+    return await _run_memory_skill(agent_id, frame, request_id)
+
+
+async def _run_memory_skill(agent_id: str, frame: dict, request_id: str) -> dict:
     command = str(frame.get("command", ""))
     path = str(frame.get("path", ""))
 
@@ -133,6 +169,47 @@ async def run_memory_command(agent_id: str, frame: dict) -> dict:
     # the model as its result. Only a command that could not be run at all is
     # a failure, because that is the only case where the peer must not believe
     # anything about what happened.
+    return {
+        "type": "memory_response",
+        "request_id": request_id,
+        "ok": True,
+        "result": result,
+    }
+
+
+async def _run_record_observation(agent_id: str, frame: dict, request_id: str) -> dict:
+    observation = {k: frame[k] for k in _OBSERVATION_KEYS if k in frame}
+    if not observation.get("content") or not observation.get("level") or not observation.get("domain"):
+        return {
+            "type": "memory_response",
+            "request_id": request_id,
+            "ok": False,
+            "result": "record_observation needs at least content, level and domain.",
+        }
+
+    try:
+        async with AsyncSessionLocal() as db:
+            context = _context(agent_id, db, request_id or uuid.uuid4().hex)
+            result = await RecordObservationSkill().execute(
+                {"observations": [observation]}, context,
+            )
+    except Exception as e:  # noqa: BLE001 — see run_memory_command's docstring
+        logger.exception(
+            "peer_memory_observation_failed",
+            extra={"agent_id": agent_id, "domain": observation.get("domain")},
+        )
+        return {
+            "type": "memory_response",
+            "request_id": request_id,
+            "ok": False,
+            "result": f"The memory backend failed to record this: "
+                      f"{type(e).__name__}: {e}",
+        }
+
+    logger.info(
+        "peer_memory_observation",
+        extra={"agent_id": agent_id, "domain": observation.get("domain")},
+    )
     return {
         "type": "memory_response",
         "request_id": request_id,
