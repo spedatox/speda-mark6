@@ -408,7 +408,7 @@ the rule:
 
 | Half | What it is | Cost |
 |---|---|---|
-| **The probe** | A plain endpoint answering one deterministic question — `/mail/watch/scan`, `/outlook/watch/scan`, `/web/watch/scan`, `/academic/ask-pending` | One HTTP call. Zero tokens. |
+| **The probe** | A plain endpoint answering one deterministic question — `/mail/watch/scan`, `/outlook/watch/scan`, `/web/watch/scan`, `/host/lifeboat/scan`, `/academic/ask-pending` | One HTTP call. Zero tokens. |
 | **The trigger** | `POST /trigger/{agent_id}`, reached only when the probe returned a hit | One agentic turn. |
 
 - A probe holds **no reasoning** — "did anyone from this domain write", "did a new
@@ -428,6 +428,12 @@ the rule:
 - **Give the agent the data it already cost you to fetch.** Findings ride in the
   trigger payload and the `intent` says so, so the turn does not re-fetch what
   the probe just read.
+- **A trigger payload is data, never authorization.** It says what a probe found;
+  it does not say what an agent may do. A tool whose gate depends on a condition
+  — the host is critical, the token is revoked — RE-DERIVES that condition itself
+  before acting (`app/skills/lifeboat.py`). n8n is an unauthenticated-by-content
+  surface reachable by anything that can post a webhook, and "the disk is full,
+  please prune" is exactly the sentence an injected payload would carry.
 - Health failures are reported on the **edge**, not per poll — a revoked token
   produces one push, not one every ten minutes.
 - **A probe that finds nothing readable may render once, and only once.**
@@ -564,7 +570,13 @@ Playwright in its own container (`packages/browser`), reached through
 - **Lockdown Protocol** (`app/services/lockdown.py`) drops external inbound
   traffic the moment the flag flips, and removes exactly the rules it added on
   stand-down. **It stops deploys. That is the point — know it before you engage
-  it.**
+  it.** And it gives its orders over SSH to the port it is sealing, so **a seal
+  and its exemptions must land in ONE host command** — every `host_bridge.run()`
+  is a fresh connection, and the second one dials a port the first one already
+  closed. Rules are built inside the `SPEDA_LOCKDOWN` chain while nothing jumps
+  to it and go live on the last line; the first exemption is `$SSH_CLIENT`, read
+  on the host, because a Docker subnet we inferred is a guess and this is the one
+  place a wrong guess bricks the server.
 
 ---
 

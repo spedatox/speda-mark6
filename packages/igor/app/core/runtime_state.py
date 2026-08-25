@@ -90,6 +90,30 @@ def set_lockdown(value: bool) -> bool:
     return bool(value)
 
 
+# ── Lifeboat Protocol ───────────────────────────────────────────────────────
+# What the owner has last been TOLD about host resource pressure — not what the
+# host currently is. services/lifeboat.py owns the reading; this is only the
+# memory of the last report, which is what turns a poll into an edge.
+#
+# {level, reported_at, pending}. Two slots, like the web watches and for the
+# same reason: a scan parks an escalation as `pending` and n8n promotes it via
+# /host/lifeboat/ack only after the trigger was accepted. Committing at scan
+# time would swallow the escalation whenever the notify call failed, and a
+# disk filling up is precisely the thing that must not be reported once into a
+# dropped connection and then never again.
+
+def get_lifeboat() -> dict:
+    """Last reported pressure level and any parked-but-unacknowledged one."""
+    return dict(_load().get("lifeboat", {}))
+
+
+def set_lifeboat(state: dict) -> dict:
+    store = _load()
+    store["lifeboat"] = dict(state)
+    _save()
+    return dict(state)
+
+
 # ── Per-agent model overrides ───────────────────────────────────────────────
 # The owner can pin any agent to a specific model ref ("provider:model", bare =
 # Anthropic) from the UI. An override replaces the profile's interactive AND

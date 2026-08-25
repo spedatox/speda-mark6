@@ -11,8 +11,14 @@
 #
 # Orion runs this over system_ops on the host:
 #     bash /opt/speda/lifeboat.sh --assess     # report only, changes nothing (default)
+#     bash /opt/speda/lifeboat.sh --bail        # Tier 1 ONLY — never escalates
 #     bash /opt/speda/lifeboat.sh --activate    # bail water, then jettison if needed
 #     bash /opt/speda/lifeboat.sh --restore     # rebuild the arsenal (disk must be healthy)
+#
+# --bail exists because the protocol is owner-led: Tier 1 deletes only what was
+# already garbage and is safe to authorize on its own, while Tier 2 costs a
+# 45-minute rebuild and is the owner's decision. --activate makes that decision
+# for them, so the agent path (app/skills/lifeboat.py) uses --bail and asks.
 #
 # Thresholds (env-overridable):
 #     LIFEBOAT_ACTIVATE_PCT  used%% at/above which activation is warranted   (default 85)
@@ -169,6 +175,21 @@ case "$MODE" in
       log "used $(used_pct)% < ${ACTIVATE_PCT}% — healthy. No action."
     fi
     ;;
+  --bail)
+    # Tier 1 and nothing else. Deliberately does NOT escalate: the caller wanted
+    # the safe reclamation, and silently throwing the arsenal overboard because
+    # it was not enough is exactly the decision they did not delegate.
+    report
+    tier1_bail
+    head "FINAL STATE"; report
+    if safe_now; then
+      log "Healthy again — $(gb "$(avail_bytes)") GB free. Arsenal untouched."
+    else
+      log "Still only $(gb "$(avail_bytes)") GB free (< ${TARGET_FREE_GB}GB)."
+      log "Tier 1 was not enough. Tier 2 (jettison the arsenal) needs a decision:"
+      log "  bash $0 --force-jettison"
+    fi
+    ;;
   --activate)
     report
     tier1_bail
@@ -187,7 +208,7 @@ case "$MODE" in
     restore_arsenal
     ;;
   *)
-    echo "usage: $0 [--assess|--activate|--force-jettison|--restore]" >&2
+    echo "usage: $0 [--assess|--bail|--activate|--force-jettison|--restore]" >&2
     exit 2
     ;;
 esac

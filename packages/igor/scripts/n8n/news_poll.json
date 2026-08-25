@@ -1,0 +1,91 @@
+{
+  "name": "News poll",
+  "meta": {
+    "description": "Ticks the Tier-1 RSS collector (app/news/collector.py) so the news_headlines tool has something to read. Pure Python on the backend — no model, no tokens — fetch/dedup/store across every enabled feed, plus watchlist matching. A keyword hit escalates itself to a NightCrawler push turn from inside the collector; this workflow does not do that part. Safe to activate as-is."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/10 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "news-poll-cron",
+      "name": "Every 10 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "News is cheap to over-poll — it's a handful of RSS fetches, not a per-item LLM turn — so every 10 minutes keeps the store fresh without meaningfully touching the host. Dedup in the collector means a quiet cycle inserts ~0 rows."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://app:8000/news/poll",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"prune\": true }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "news-poll-call",
+      "name": "Igor: poll news",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 15000,
+      "notes": "Returns {enabled, feeds, fetched, new, flagged}. `enabled:false` means NEWS_POLL_ENABLED is off in the backend's own settings — this workflow ticking is not what controls that.\n\nneverError: one bad cycle (a slow feed, a transient 5xx) must not turn into a failed n8n execution logged every 10 minutes forever. There is nothing here to react to per-run; if the store stays empty for a long stretch that's a backend log to check (news_feed_failed), not something this workflow should retry hard for."
+    }
+  ],
+  "connections": {
+    "Every 10 minutes": {
+      "main": [
+        [
+          {
+            "node": "Igor: poll news",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "pinData": {}
+}

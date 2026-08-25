@@ -632,6 +632,34 @@ class Settings(BaseSettings):
     # the way out is always available.
     lockdown_protocol_enabled: bool = False
 
+    # ── Lifeboat Protocol ─────────────────────────────────────────────────────
+    # The host-resource watch and the tiered disk reclamation it authorises
+    # (app/services/lifeboat.py, runbook in docs/LIFEBOAT_PROTOCOL.md). OFF by
+    # default: it runs maintenance shell on the real host, so it needs the
+    # system_ops host bridge configured above to reach it at all, and a
+    # deployment must opt in deliberately.
+    lifeboat_protocol_enabled: bool = False
+    lifeboat_script: str = "/opt/speda/lifeboat.sh"
+    lifeboat_watch_fs: str = "/"
+    # Disk and inode thresholds. `watch` tells the owner and waits for them;
+    # `critical` is the only level at which Orion may run Tier 1 unattended, so
+    # the gap between them is the size of the owner's decision window — keep it
+    # wide enough that a normal week never reaches the upper one.
+    lifeboat_watch_pct: int = 85
+    lifeboat_critical_pct: int = 92
+    # Free space at which reclamation stops (mirrors LIFEBOAT_TARGET_FREE_GB in
+    # the script; set both if you change one).
+    lifeboat_target_free_gb: int = 30
+    # Memory runs hot legitimately — a box with caches doing its job reads high —
+    # so its thresholds sit above the disk ones. Memory never authorises a
+    # lifeboat run: the script reclaims disk, and RAM is a container question.
+    lifeboat_mem_watch_pct: int = 90
+    lifeboat_mem_critical_pct: int = 96
+    # How long an unhealthy host stays quiet after being reported once. Edges are
+    # the rule; this is the single nudge that stops a problem nobody fixed from
+    # being mentioned exactly once and then never again.
+    lifeboat_renotify_hours: int = 24
+
 
 settings = Settings()
 

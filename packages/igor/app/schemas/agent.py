@@ -76,7 +76,11 @@ class LockdownState(BaseModel):
     """Lockdown Protocol state. `engaged` is the flag; `rules` is what the host
     firewall actually shows, keyed by what each rule seals. They are reported
     separately because a drift between them (flag on, rules gone) is exactly the
-    failure the owner needs to see rather than have averaged into one boolean."""
+    failure the owner needs to see rather than have averaged into one boolean.
+
+    An EMPTY `rules` means the host could not be reached, not that nothing is
+    sealed — render it as unknown. A host that has sealed itself against its own
+    bridge is unreachable precisely because containment is working."""
 
     engaged: bool
     enabled: bool = False

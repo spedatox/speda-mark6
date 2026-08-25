@@ -576,6 +576,48 @@ def test_usage_counts_hidden_reasoning_as_output():
     assert _usage_from(None).input_tokens == 0
 
 
+def test_usage_extracts_zai_cached_tokens():
+    # z.ai (like OpenAI/Gemini) reports cache hits under
+    # usage.prompt_tokens_details.cached_tokens, and prompt_tokens INCLUSIVE of
+    # that span (docs.z.ai/guides/capabilities/cache) — same convention as the
+    # Responses API path in test_responses_output_parsing. input_tokens must be
+    # the FULL-RATE remainder, not the inclusive total, or every cache hit would
+    # double-count against cache_read_input_tokens.
+    u = _usage_from(SimpleNamespace(
+        prompt_tokens=1200,
+        completion_tokens=300,
+        total_tokens=1500,
+        prompt_tokens_details=SimpleNamespace(cached_tokens=800),
+    ))
+    assert u.cache_read_input_tokens == 800
+    assert u.input_tokens == 400
+    assert u.input_tokens + u.cache_read_input_tokens == 1200
+
+    # A cold turn (no cache hit yet) must not be treated as a 0-token miss —
+    # cached_tokens=0 is valid and simply means nothing was reused.
+    u_cold = _usage_from(SimpleNamespace(
+        prompt_tokens=1200,
+        completion_tokens=300,
+        total_tokens=1500,
+        prompt_tokens_details=SimpleNamespace(cached_tokens=0),
+    ))
+    assert u_cold.cache_read_input_tokens == 0
+    assert u_cold.input_tokens == 1200
+
+    # DeepSeek's own field name is the fallback and must still work when
+    # prompt_tokens_details is absent entirely (DeepSeek reports the hit count
+    # directly on the usage object, not nested).
+    u_deepseek = _usage_from(SimpleNamespace(
+        prompt_tokens=500,
+        completion_tokens=50,
+        total_tokens=550,
+        prompt_tokens_details=None,
+        prompt_cache_hit_tokens=300,
+    ))
+    assert u_deepseek.cache_read_input_tokens == 300
+    assert u_deepseek.input_tokens == 200
+
+
 async def test_stream_asks_every_provider_for_usage():
     # Usage is only reported on a stream when it is explicitly requested — and
     # Gemini, which used to reject the parameter, now accepts it. Skipping it

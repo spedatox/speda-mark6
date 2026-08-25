@@ -230,6 +230,11 @@ async def lifespan(app: FastAPI):
     from app.skills.lockdown import LockdownProtocolSkill
 
     await registry.register_skill(LockdownProtocolSkill())
+    # Host resource reclamation. Orion/Optimus only (restricted_to), and the
+    # destructive tiers refuse any non-user trigger — see app/skills/lifeboat.py.
+    from app.skills.lifeboat import LifeboatProtocolSkill
+
+    await registry.register_skill(LifeboatProtocolSkill())
     # Legion background-ticket retrieval (Tier 0's async mode companion).
     from app.skills.legion import LegionStatusSkill
     await registry.register_skill(LegionStatusSkill())
@@ -525,7 +530,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar
+    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar, lifeboat as lifeboat_router
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -546,6 +551,7 @@ def create_app() -> FastAPI:
     app.include_router(mail.router)
     app.include_router(outlook.router)
     app.include_router(web_watch.router)
+    app.include_router(lifeboat_router.router)
     app.include_router(reminders.router)
     app.include_router(navigation.router)
     app.include_router(aircraft.router)

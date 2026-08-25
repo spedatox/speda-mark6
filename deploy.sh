@@ -39,6 +39,26 @@ docker compose version >/dev/null 2>&1 || { echo "Docker Compose v2 required."; 
   exit 1
 }
 
+# ── Lifeboat script → the host ───────────────────────────────────────────────
+# The Lifeboat Protocol's reclamation lives in this repo but RUNS on the host, at
+# the path app/services/lifeboat.py calls (settings.lifeboat_script). Nothing
+# used to put it there: the file was copied by hand once, and the repo copy then
+# drifted away from the one actually being executed — so a flag added here simply
+# did not exist on the box, and the tool that called it failed in a way that
+# looked like a broken host rather than a stale file.
+#
+# /opt/speda is the data dir already bind-mounted into the app container, so this
+# is the same directory the SSH key and runtime state live in. Non-fatal on
+# failure: a deploy that cannot write there is still a valid deploy, it just has
+# no lifeboat, and that is worth a warning rather than a dead stack.
+if [[ -f lifeboat.sh ]]; then
+  if mkdir -p /opt/speda 2>/dev/null && install -m 0755 lifeboat.sh /opt/speda/lifeboat.sh 2>/dev/null; then
+    say "Installed lifeboat.sh → /opt/speda/lifeboat.sh"
+  else
+    say "⚠ Could not install lifeboat.sh into /opt/speda (permissions?) — the Lifeboat Protocol will run whatever is already there, or fail. Fix with: sudo install -m 0755 lifeboat.sh /opt/speda/lifeboat.sh"
+  fi
+fi
+
 # ── Domain? ──────────────────────────────────────────────────────────────────
 DOMAIN="$(grep -E '^DOMAIN=' packages/igor/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' || true)"
 PROFILE=()

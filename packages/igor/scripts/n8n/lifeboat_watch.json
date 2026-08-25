@@ -1,0 +1,187 @@
+{
+  "name": "Lifeboat watch",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "lifeboat-cron",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        0
+      ],
+      "notes": "Fifteen minutes is the worst-case time to hear that the host started filling up — 96 scans a day, each one HTTP request and zero tokens.\n\nTighten to */5 if you want; the cost is the same and the probe is idempotent. Widening past an hour is the real risk: disk does not fill gradually when a Docker build goes wrong, it fills in minutes.\n\nThis workflow lives INSIDE the stack it watches. It catches a filling disk, not a dead server — for that you want an outside pinger."
+    },
+    {
+      "parameters": {
+        "url": "http://app:8000/host/lifeboat/scan",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "lifeboat-scan",
+      "name": "Igor: scan host",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        20,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "THE CHEAP HALF — nothing to edit here. One SSH round trip to the host, reading disk %, free space, inodes, memory, swap and the Docker footprint, compared against the thresholds in Igor's config (LIFEBOAT_WATCH_PCT / LIFEBOAT_CRITICAL_PCT / LIFEBOAT_MEM_*). No LLM, so a healthy host costs nothing.\n\nThe thresholds live in Igor, NOT here, on purpose: a second copy in n8n is a second thing to keep in step, and this workflow has no tests.\n\nonError continueRegularOutput: an unreachable host must not fail the run — the Gate inspects the response and handles it."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════\n//  THE COST BOUNDARY. Everything above this node is free; everything below\n//  spends an agentic turn. On a healthy host this returns [] and the branch\n//  stops — which is what happens on the overwhelming majority of runs.\n// ═══════════════════════════════════════════════════════════════════════\n//\n//  There is deliberately NO threshold logic here. The probe already decided,\n//  on the host, whether this is an edge worth waking Orion for — escalation,\n//  recovery, or a once-a-day nudge that an unhealthy box is still unhealthy.\n//  Re-deciding it here would put a second, divergent copy of the thresholds\n//  in n8n, where nothing tests it.\n\nconst res = $input.first().json || {};\nconst store = $getWorkflowStaticData('global');\n\nif (res.status === 'disabled') {\n  // LIFEBOAT_PROTOCOL_ENABLED is off on this deployment. Nothing to do, and\n  // nothing to complain about every fifteen minutes.\n  return [];\n}\n\nif (res.status === 'error') {\n  // The host could not be read. Do NOT wake an agent for this on every poll:\n  // an unreachable box is usually unreachable for a reason already producing\n  // its own alarms, and 96 pushes a day would bury it. EDGE-triggered — one\n  // push when the probe starts failing, one when it recovers.\n  if (store.probeBroken) return [];\n  store.probeBroken = true;\n  return [{ json: {\n    alert: true,\n    level: '',\n    intent: 'The Lifeboat watchdog cannot read the host right now (' +\n      (res.detail || 'no detail') + '). Tell the owner in ONE short line that ' +\n      'the resource watch is blind and the system_ops host bridge probably ' +\n      'needs looking at. Do not call any tool.'\n  }}];\n}\n\nstore.probeBroken = false;\n\nif (!res.changed) return [];\n\n// What Orion is being woken up to DO. Four different situations; wording them\n// identically is how a \"the host recovered\" push arrives sounding like a fire.\nlet intent;\nif (res.reason === 'recovered') {\n  intent = 'The host is back to healthy. Tell the owner in ONE line with the ' +\n    'numbers (' + res.summary + '). Do not run any reclamation and do not ' +\n    'write a report.';\n} else if (res.level === 'critical') {\n  intent = 'The host is CRITICAL: ' + res.summary + '. Run ' +\n    'lifeboat_protocol(action=\"bail\") NOW — Tier 1 only, it deletes nothing ' +\n    'that was not already garbage — then push the owner ONE message saying ' +\n    'that you ran it unasked, what it reclaimed, and what is still pressed. ' +\n    'Do NOT jettison the arsenal: if Tier 1 was not enough, give him the ' +\n    'numbers and what Tier 2 costs and let him decide.';\n} else if (res.reason === 'still_unhealthy') {\n  intent = 'The host has been under resource pressure for a while and nobody ' +\n    'has fixed it: ' + res.summary + '. Remind the owner in one short message ' +\n    'with the numbers and the recommendation (' + res.recommendation + '). Do ' +\n    'NOT reclaim anything — he has already been told once and has not asked ' +\n    'you to act.';\n} else {\n  intent = 'The host has crossed into resource pressure: ' + res.summary +\n    '. Tell the owner, with the numbers and what you propose (' +\n    res.recommendation + '), and ASK before reclaiming anything. Do NOT call ' +\n    'lifeboat_protocol with any action other than assess.';\n}\n\nreturn [{ json: Object.assign({}, res, { intent: intent }) }];\n"
+      },
+      "id": "lifeboat-gate",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "notes": "The cost boundary — everything downstream spends money, everything upstream does not. On a healthy host this returns no items and the branch stops.\n\nIt also writes the `intent`. Escalation, critical, still-unhealthy and recovery are four different instructions to Orion; giving them one shared wording is how a recovery notice arrives sounding like a fire."
+    },
+    {
+      "parameters": {
+        "url": "http://app:8000/trigger/orion",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"payload\": { \"type\": \"watchdog\", \"event\": \"host_resource_pressure\", \"job\": \"lifeboat_watch\", \"automation\": \"Lifeboat watch\", \"level\": $json.level, \"previous_level\": $json.previous_level, \"reason\": $json.reason, \"pressed\": $json.pressed, \"by_resource\": $json.by_resource, \"readings\": $json.readings, \"summary\": $json.summary, \"recommendation\": $json.recommendation, \"target_free_gb\": $json.target_free_gb, \"intent\": $json.intent }, \"output_mode\": \"push\" }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "lifeboat-trigger",
+      "name": "Igor: trigger Orion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        0
+      ],
+      "notes": "THE EXPENSIVE HALF — one agentic turn, and only on an edge. Nothing to edit.\n\nEvery number the probe read rides in the payload, so Orion does not re-fetch what this poll already paid for.\n\nNo onError, deliberately: a failure must kill the branch BEFORE the ack, leaving the level uncommitted so the next poll reports the same escalation again. A duplicate push is recoverable; a swallowed 'the disk is full' is not."
+    },
+    {
+      "parameters": {
+        "url": "http://app:8000/host/lifeboat/ack",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"level\": $('Gate').item.json.level }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "lifeboat-ack",
+      "name": "Igor: ack level",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Records that the owner has now been told about THIS level, so the next poll stays quiet until the situation actually moves.\n\nDeliberately AFTER the trigger: committing first would lose the escalation whenever the notify call failed. On the blind-probe alert path there is no level to ack and this is a harmless no-op."
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Igor: scan host",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Igor: scan host": {
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate": {
+      "main": [
+        [
+          {
+            "node": "Igor: trigger Orion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Igor: trigger Orion": {
+      "main": [
+        [
+          {
+            "node": "Igor: ack level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}
