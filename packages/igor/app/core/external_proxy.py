@@ -101,6 +101,12 @@ class ExternalAgentProxy:
         self._memory_cache = memory_cache
         self._pending: dict[str, asyncio.Queue] = {}          # chat_id → event queue
         self._owner: dict[str, tuple[str, str]] = {}          # chat_id → (agent_id, host)
+        # request_id → (chat_id, agent_id, host) for the in-flight turn, so a
+        # steer routed by request_id (the id the turn registry and the clients
+        # both hold) can find the peer chat it belongs to. Steering only reaches
+        # an EXTERNAL turn — the inbox that claims it lives in the Forge engine,
+        # not the in-process orchestrator.
+        self._by_request: dict[str, tuple[str, str, str]] = {}
 
     # ── Frame ingress (called from the agents WebSocket route) ──────────────
 
@@ -112,6 +118,33 @@ class ExternalAgentProxy:
             return False
         queue.put_nowait(event)
         return True
+
+    async def steer(self, request_id: str, text: str) -> bool:
+        """Inject `text` into the running external turn identified by
+        `request_id`, without interrupting it. Returns True if a live external
+        turn accepted it, False if there was none (an in-process turn, or none
+        running — the caller then handles the message the normal way).
+
+        The peer queues it and its engine claims it at the next safe loop
+        boundary (forge/warden/inbox.py), so a steer can never corrupt the
+        transcript by landing mid-tool. Fire-and-forget on the socket: delivery
+        is the peer's problem from here, exactly like a chat_cancel."""
+        text = (text or "").strip()
+        if not text:
+            return False
+        entry = self._by_request.get(request_id)
+        if entry is None:
+            return False
+        chat_id, agent_id, host = entry
+        try:
+            await self._ws.send(agent_id, {
+                "type": "chat_steer", "chat_id": chat_id, "text": text,
+            }, host)
+            return True
+        except Exception:  # noqa: BLE001 — a dropped steer is not the turn's problem
+            logger.warning("external_steer_failed",
+                           extra={"request_id": request_id, "agent_id": agent_id})
+            return False
 
     def fail_agent(self, agent_id: str, host: str | None = None) -> None:
         """A peer disconnected: terminate every chat it owned with an ERROR so
@@ -188,6 +221,7 @@ class ExternalAgentProxy:
         queue: asyncio.Queue = asyncio.Queue()
         self._pending[chat_id] = queue
         self._owner[chat_id] = (agent_id, host or "")
+        self._by_request[context.request_id] = (chat_id, agent_id, host or "")
         terminal_seen = False
         # The peer streams its running token count as `usage` frames; the
         # UI reads the turn's spend off the DONE event's data (the shape an
@@ -282,6 +316,7 @@ class ExternalAgentProxy:
         finally:
             self._pending.pop(chat_id, None)
             self._owner.pop(chat_id, None)
+            self._by_request.pop(context.request_id, None)
             if not terminal_seen:
                 # Abnormal end (client disconnect / idle timeout / error in the
                 # SSE pipeline): tell the peer to stop burning tokens.

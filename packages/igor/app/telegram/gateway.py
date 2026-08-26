@@ -30,7 +30,7 @@ _OWNER_USER_ID = 1  # single-user system (CLAUDE.md)
 
 class TelegramGateway:
     def __init__(self, orchestrator, session_manager, profiles, bots, ws_manager, agent_proxy,
-                 dispatcher=None) -> None:
+                 dispatcher=None, turns=None) -> None:
         self._orchestrator = orchestrator
         self._sessions = session_manager
         self._profiles = profiles
@@ -41,6 +41,10 @@ class TelegramGateway:
         # caller wiring the gateway before the dispatcher exists (or a test
         # double) does not have to fabricate one just to construct this class.
         self._dispatcher = dispatcher
+        # The turn registry, for /break (cancel the in-flight turn) and for
+        # steering (route a mid-turn message into a running external turn rather
+        # than starting a second one). Optional for the same reason as above.
+        self._turns = turns
         # De-dupe across webhook retries AND poll/webhook overlap: last update_id
         # seen per (agent). Poll also persists a watermark; this is the in-process
         # guard that covers the webhook path and rapid retries.
@@ -163,6 +167,38 @@ class TelegramGateway:
             await bot.send_message(f"Unknown agent '{agent_id}'.", chat_id=chat_id)
             return
 
+        # 4c. /break — stop this agent's in-flight turn at its next SAFE point.
+        # Cancelling the turn unwinds its stream; for an external agent that
+        # sends chat_cancel to the peer, whose engine aborts at a loop boundary,
+        # never mid-tool (forge/warden/engine.py). Nothing running is a no-op the
+        # owner is told about, not an error.
+        if text.startswith("/break"):
+            sticky = await self._sticky_session_id(agent_id, profile)
+            active = (self._turns.active(agent_id=agent_id, session_id=sticky)
+                      if (self._turns is not None and sticky is not None) else [])
+            if not active:
+                await bot.send_message("Nothing is running to stop.", chat_id=chat_id)
+                return
+            for t in active:
+                await self._turns.cancel(t["request_id"])
+            await bot.send_message("🛑 Stopping at the next safe point.", chat_id=chat_id)
+            return
+
+        # 4d. A plain message that arrives WHILE a turn is already running is
+        # steering, not a new turn: hand it to the running turn so its engine
+        # reads it at the next safe boundary (forge/warden/inbox.py) instead of
+        # making the owner wait or starting a second turn over the same session.
+        # Only an EXTERNAL turn can be steered — the inbox lives in the Forge
+        # engine, not the in-process orchestrator — so an in-process agent falls
+        # through and behaves exactly as before.
+        if text and not text.startswith("/") and getattr(profile, "external_backend", False):
+            sticky = await self._sticky_session_id(agent_id, profile)
+            active = (self._turns.active(agent_id=agent_id, session_id=sticky)
+                      if (self._turns is not None and sticky is not None) else [])
+            if active and await self._agent_proxy.steer(active[0]["request_id"], text):
+                await bot.send_message("↪️ Added to what I'm working on.", chat_id=chat_id)
+                return
+
         # 5. Inbound media (T3): voice → STT; photo/document → attachments text.
         user_content, note = await self._build_user_content(bot, message, text)
         if note:
@@ -278,6 +314,24 @@ class TelegramGateway:
             extra={"agent_id": agent_id, "cycle": cycle_id,
                    "status": result.get("status")},
         )
+
+    async def _sticky_session_id(self, agent_id: str, profile) -> int | None:
+        """The id of this agent's sticky Telegram session, without running a
+        turn. Used to ask the turn registry whether one is already in flight
+        (for /break and steering). get_or_create is idempotent — it returns the
+        existing channel session, only materialising an empty one on the first
+        ever message, which the next real turn would have created anyway."""
+        try:
+            async with AsyncSessionLocal() as db:
+                session = await self._sessions.get_or_create(
+                    db=db, user_id=_OWNER_USER_ID, triggered_by="user",
+                    model_used=profile.allocate_telegram_model(),
+                    agent_id=agent_id, channel="telegram",
+                )
+                return session.id
+        except Exception:  # noqa: BLE001 — a failed lookup just means "no steer/break"
+            logger.warning("telegram_sticky_lookup_failed", extra={"agent_id": agent_id})
+            return None
 
     async def _build_user_content(self, bot, message: dict, text: str):
         """Turn an inbound Telegram message into a user-turn content payload.

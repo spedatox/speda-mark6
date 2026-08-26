@@ -158,3 +158,51 @@ def test_done_without_any_usage_is_an_empty_dict():
     done = [e for e in out if e.type == SSEEventType.DONE]
     assert len(done) == 1
     assert done[0].data == {}
+
+
+# ── Steering: inject a mid-turn message into a running external turn ──────────
+
+def test_steer_sends_a_chat_steer_to_the_running_turns_peer():
+    async def go():
+        ws = _FakeWs()
+        proxy = ExternalAgentProxy(ws)
+        ctx = _Ctx()
+        gen = proxy.run(ctx)
+
+        # Start the turn so its chat_id/request_id are registered, then steer.
+        steered = {}
+        async def feed():
+            for _ in range(200):
+                if proxy._by_request:
+                    break
+                await asyncio.sleep(0)
+            steered["ok"] = await proxy.steer(ctx.request_id, "also update the README")
+            chat_id = next(iter(proxy._pending))
+            proxy.deliver(chat_id, {"type": "done", "data": "x"})
+
+        task = asyncio.create_task(feed())
+        async for _ in gen:
+            pass
+        await task
+
+        # The steer went out as a chat_steer frame to the peer, carrying the text.
+        frames = [f for (_a, f, _h) in ws.sent if f.get("type") == "chat_steer"]
+        assert len(frames) == 1
+        assert frames[0]["text"] == "also update the README"
+        assert steered["ok"] is True
+    asyncio.run(go())
+
+
+def test_steer_for_an_unknown_request_is_false():
+    async def go():
+        proxy = ExternalAgentProxy(_FakeWs())
+        assert await proxy.steer("no-such-request", "hi") is False
+    asyncio.run(go())
+
+
+def test_blank_steer_is_false():
+    async def go():
+        proxy = ExternalAgentProxy(_FakeWs())
+        proxy._by_request["r1"] = ("c1", "optimus", "server")
+        assert await proxy.steer("r1", "   ") is False
+    asyncio.run(go())
