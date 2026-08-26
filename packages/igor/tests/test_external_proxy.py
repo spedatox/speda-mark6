@@ -68,3 +68,93 @@ def test_stringify_handles_none_string_and_blocks():
     assert _stringify_content(None) == ""
     assert _stringify_content("plain") == "plain"
     assert _stringify_content([{"type": "text", "text": "a"}, {"text": "b"}]) == "a\nb"
+
+
+# ── Token usage folded onto DONE (external agents' spend reaches the readout) ──
+#
+# An in-process turn's DONE carries {"usage": {input, output}} and the UI folds
+# that into its header. The peer streams `usage` frames instead; the proxy keeps
+# the latest and puts it on DONE so Optimus/Centurion report tokens the same way.
+
+import asyncio
+
+import pytest
+
+from app.core.external_proxy import ExternalAgentProxy
+from app.core.peer_routing import PeerInfo
+from app.schemas.sse import SSEEventType
+
+
+class _FakeWs:
+    def __init__(self):
+        self.sent = []
+
+    def peers(self, agent_id):
+        return [PeerInfo(agent_id=agent_id, host="server", platform="linux", roots=[])]
+
+    def is_connected(self, agent_id):
+        return True
+
+    async def send(self, agent_id, frame, host=None):
+        self.sent.append((agent_id, frame, host))
+
+
+class _Ctx:
+    def __init__(self):
+        self.agent_id = "optimus"
+        self.session_id = 1
+        self.request_id = "req-1"
+        self.conversation_history = []
+        self.user_id = 1
+        self.db = None
+        self.extra = {}
+
+
+async def _drive(events):
+    """Run one proxied turn, feeding `events` into its queue in order, and
+    collect the SSEEvents it yields."""
+    proxy = ExternalAgentProxy(_FakeWs())
+    ctx = _Ctx()
+    out = []
+    gen = proxy.run(ctx)
+
+    async def feed():
+        # Wait for the stream to register its queue (the START yield), then push.
+        for _ in range(200):
+            if proxy._pending:
+                break
+            await asyncio.sleep(0)
+        chat_id = next(iter(proxy._pending))
+        for ev in events:
+            proxy.deliver(chat_id, ev)
+
+    task = asyncio.create_task(feed())
+    async for sse in gen:
+        out.append(sse)
+    await task
+    return out
+
+
+def test_usage_frame_is_folded_into_done_not_yielded():
+    events = [
+        {"type": "chunk", "data": "hello"},
+        {"type": "usage", "data": {"input": 10, "output": 2, "turns": 1}},
+        {"type": "usage", "data": {"input": 30, "output": 8, "turns": 2}},  # cumulative
+        {"type": "done", "data": "final text ignored"},
+    ]
+    out = asyncio.run(_drive(events))
+
+    # No usage event leaks through as its own SSE.
+    assert all(e.type != "usage" for e in out)
+    done = [e for e in out if e.type == SSEEventType.DONE]
+    assert len(done) == 1
+    # The LAST (cumulative) snapshot rides on DONE, in the UI's shape.
+    assert done[0].data == {"usage": {"input": 30, "output": 8}}
+
+
+def test_done_without_any_usage_is_an_empty_dict():
+    events = [{"type": "chunk", "data": "hi"}, {"type": "done", "data": "text"}]
+    out = asyncio.run(_drive(events))
+    done = [e for e in out if e.type == SSEEventType.DONE]
+    assert len(done) == 1
+    assert done[0].data == {}

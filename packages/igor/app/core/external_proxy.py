@@ -189,6 +189,12 @@ class ExternalAgentProxy:
         self._pending[chat_id] = queue
         self._owner[chat_id] = (agent_id, host or "")
         terminal_seen = False
+        # The peer streams its running token count as `usage` frames; the
+        # UI reads the turn's spend off the DONE event's data (the shape an
+        # in-process turn also uses). Keep the latest snapshot and fold it
+        # into DONE below, so an external agent's tokens reach the same
+        # readout instead of being dropped as an unmapped event.
+        last_usage: dict | None = None
 
         try:
             await self._ws.send(agent_id, {
@@ -235,6 +241,17 @@ class ExternalAgentProxy:
                     return
 
                 etype = str(event.get("type", ""))
+
+                # Usage is metadata, not a rendered event: remember the latest
+                # snapshot (cumulative over the turn) and carry it on DONE, the
+                # same place an in-process turn puts its spend. It has no SSE type
+                # of its own, so it is handled here, before the _EVENT_MAP lookup.
+                if etype == "usage":
+                    snap = event.get("data") or {}
+                    last_usage = {"input": int(snap.get("input", 0) or 0),
+                                  "output": int(snap.get("output", 0) or 0)}
+                    continue
+
                 sse_type = _EVENT_MAP.get(etype)
                 if sse_type is None:
                     logger.warning(
@@ -248,6 +265,11 @@ class ExternalAgentProxy:
                     # Bridge the peer's Anthropic-native shape onto the {id,
                     # result} contract every consumer reads (see _EVENT_MAP note).
                     data = _normalize_tool_result(data)
+                elif etype == "done":
+                    # DONE carries the turn's token spend for the UI readout, as
+                    # an in-process DONE does — never the final text (that arrived
+                    # as chunks). Without a snapshot, {} — nothing to fold in.
+                    data = {"usage": last_usage} if last_usage else {}
                 yield SSEEvent(
                     type=sse_type,
                     data=data,
