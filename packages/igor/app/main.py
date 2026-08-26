@@ -235,6 +235,21 @@ async def lifespan(app: FastAPI):
     from app.skills.lifeboat import LifeboatProtocolSkill
 
     await registry.register_skill(LifeboatProtocolSkill())
+    # Moving the deployment to a new domain. Orion/Optimus only, and every
+    # phase refuses a non-user trigger — see app/skills/doormat.py.
+    from app.skills.doormat import DoormatProtocolSkill
+
+    await registry.register_skill(DoormatProtocolSkill())
+    # Database backup to the owner's Drive. Orion/Optimus only; `backup` is the
+    # one action an automated trigger may take — see app/skills/octavius.py.
+    from app.skills.octavius import OctaviusProtocolSkill
+
+    await registry.register_skill(OctaviusProtocolSkill())
+    # The owner's launch rail. Speda only, owner-only, and it can ARM but never
+    # fire — the countdown on their screen is what fires. See app/skills/skyfall.py.
+    from app.skills.skyfall import SkyfallProtocolSkill
+
+    await registry.register_skill(SkyfallProtocolSkill())
     # Legion background-ticket retrieval (Tier 0's async mode companion).
     from app.skills.legion import LegionStatusSkill
     await registry.register_skill(LegionStatusSkill())
@@ -315,6 +330,14 @@ async def lifespan(app: FastAPI):
     # webhooks; polling spawns one long-poll task per bot; off = outbound-only).
     from app.telegram.gateway import TelegramGateway
 
+    # The detached turn runner is created HERE, before the gateway and its
+    # pollers start, so /break and steering can find an in-flight turn from the
+    # first message. It is otherwise the same instance the rest of the app uses
+    # via app.state.turns below.
+    from app.core.turn_runner import TurnRegistry
+
+    turns = TurnRegistry(session_manager)
+
     telegram_gateway = TelegramGateway(
         orchestrator=orchestrator,
         session_manager=session_manager,
@@ -323,6 +346,7 @@ async def lifespan(app: FastAPI):
         ws_manager=ws_manager,
         agent_proxy=agent_proxy,
         dispatcher=dispatcher,
+        turns=turns,
     )
     telegram_poll_tasks = await telegram_bots.start(telegram_gateway)
 
@@ -345,10 +369,10 @@ async def lifespan(app: FastAPI):
     # ── 8.5 Detached turn runner (BgOps) ───────────────────────────────────────
     # Runs chat turns in their own asyncio tasks, decoupled from the HTTP request,
     # so a client disconnect can never lose a turn and a client can re-attach to
-    # a live stream. One instance on app.state (Rule 6).
-    from app.core.turn_runner import TurnRegistry
-
-    app.state.turns = TurnRegistry(session_manager)
+    # a live stream. One instance on app.state (Rule 6). Created above (before the
+    # gateway) so /break and steering have it from the first message; published
+    # here.
+    app.state.turns = turns
 
     # Background legionnaires report in when they finish. Wired HERE, not at
     # Tier-0 registration: the callback closes over the orchestrator, the turn
@@ -530,7 +554,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar, lifeboat as lifeboat_router
+    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar, lifeboat as lifeboat_router, doormat as doormat_router, octavius as octavius_router, skyfall as skyfall_router
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -552,6 +576,9 @@ def create_app() -> FastAPI:
     app.include_router(outlook.router)
     app.include_router(web_watch.router)
     app.include_router(lifeboat_router.router)
+    app.include_router(doormat_router.router)
+    app.include_router(octavius_router.router)
+    app.include_router(skyfall_router.router)
     app.include_router(reminders.router)
     app.include_router(navigation.router)
     app.include_router(aircraft.router)

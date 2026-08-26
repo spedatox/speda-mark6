@@ -18,7 +18,6 @@ dies after the ~1h access-token lifetime.
 import base64
 import logging
 import re
-import time
 import urllib.parse
 from email.message import EmailMessage
 from typing import Awaitable, Callable
@@ -26,6 +25,7 @@ from typing import Awaitable, Callable
 import httpx
 
 from app.config import settings
+from app.services.google_auth import GoogleToken
 
 logger = logging.getLogger(__name__)
 
@@ -37,50 +37,11 @@ _TASKS = "https://tasks.googleapis.com/tasks/v1"
 
 
 # ── Shared access-token cache ─────────────────────────────────────────────────
-
-class _Token:
-    """One cached access token shared across every Google REST client. Refreshed
-    from the stored refresh token + OAuth client when it's within 60s of expiry."""
-
-    _access: str | None = None
-    _exp: float = 0.0
-
-    @classmethod
-    async def get(cls) -> str | None:
-        from app.core.runtime_state import get_google_refresh_token
-
-        now = time.time()
-        if cls._access and now < cls._exp - 60:
-            return cls._access
-
-        rt = get_google_refresh_token()
-        if not (rt and settings.google_client_id and settings.google_client_secret):
-            return None
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as c:
-                r = await c.post(
-                    "https://oauth2.googleapis.com/token",
-                    data={
-                        "client_id": settings.google_client_id,
-                        "client_secret": settings.google_client_secret,
-                        "refresh_token": rt,
-                        "grant_type": "refresh_token",
-                    },
-                )
-            if r.status_code != 200:
-                logger.error(
-                    "google_token_refresh_failed",
-                    extra={"status": r.status_code, "body": r.text[:200]},
-                )
-                return None
-            tok = r.json()
-        except Exception as e:  # noqa: BLE001
-            logger.error("google_token_refresh_error", extra={"error": str(e)})
-            return None
-
-        cls._access = tok.get("access_token")
-        cls._exp = now + int(tok.get("expires_in", 3600))
-        return cls._access
+# Lives in services/google_auth.py now: a SERVICE (the Octavius Protocol's Drive
+# upload) needs a token too, and services may not import from `mcp/` — that is
+# the wrong way down the layering. Aliased here so every call site below, and
+# routers/connections.py clearing the cache on disconnect, stay unchanged.
+_Token = GoogleToken
 
 
 async def _req(method: str, url: str, token: str, **kwargs) -> httpx.Response:

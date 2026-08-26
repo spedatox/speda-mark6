@@ -1,4 +1,4 @@
-import type { AppConfig, SSEEvent, ModelInfo, ImageBlock, DocBlock, PendingAsk } from './types'
+import type { AppConfig, SSEEvent, ModelInfo, ImageBlock, DocBlock, PendingAsk, Session } from './types'
 
 /** Auth header for every backend call — the service X-API-Key. */
 export function authHeaders(
@@ -81,6 +81,10 @@ export interface StreamOpts {
   regenerate?: boolean
   /** Working directory for an external-backend agent (the Forge / Optimus). */
   cwd?: string
+  /** The reply will be SPOKEN. Changes how the backend asks for it to be
+   *  written — prose to be heard, artefacts fenced for the canvas — so it has to
+   *  be known before the turn runs, not filtered out of it afterwards. */
+  voice?: boolean
 }
 
 /**
@@ -118,7 +122,7 @@ export async function* streamChat(
       ...(opts.cwd ? { cwd: opts.cwd } : {}),
       // Surface awareness — tell Speda whether this turn came from the desktop
       // app or the web build. (The Android app and Telegram set their own.)
-      client_context: desktopClientContext(),
+      client_context: { ...desktopClientContext(), ...(opts.voice ? { voice: true } : {}) },
     }),
     signal,
   })
@@ -201,6 +205,25 @@ export interface ActiveRun {
   idle_s: number
 }
 
+export interface MemoryFolderInfo {
+  path: string
+  summary: string
+  owner_agent: string | null
+  open: boolean
+}
+
+/** Folders the store DECLARES — including ones holding no file yet.
+ *  A folder with no files does not exist in the table, so without this the
+ *  knowledge bank cannot show the owner where a thing will go before
+ *  something has gone there. */
+export async function fetchMemoryFolders(config: AppConfig): Promise<MemoryFolderInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/memory/folders`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return res.json()
+  } catch { return [] }
+}
+
 /** Detached turns the backend is currently running (optionally one session). */
 export async function fetchActiveRuns(config: AppConfig, sessionId?: number): Promise<ActiveRun[]> {
   try {
@@ -238,7 +261,7 @@ export async function fetchMessages(
 export async function fetchSessions(
   config: AppConfig,
   limit = 500
-): Promise<Array<{ id: number; title: string | null; started_at: string }>> {
+): Promise<Session[]> {
   const res = await fetch(`${config.apiBase}/sessions?agent_id=${config.agentId}&limit=${limit}`, {
     headers: authHeaders(config),
   })
@@ -388,6 +411,76 @@ export async function googleStatus(config: AppConfig): Promise<boolean> {
 export async function googleDisconnect(config: AppConfig): Promise<void> {
   await fetch(`${config.apiBase}/connections/google/disconnect`, {
     method: 'POST',
+    headers: authHeaders(config),
+  })
+}
+
+export async function microsoftLoginUrl(config: AppConfig): Promise<{ auth_url?: string; error?: string }> {
+  const res = await fetch(`${config.apiBase}/connections/microsoft/login`, { headers: authHeaders(config)})
+  if (!res.ok) return { error: `HTTP ${res.status}` }
+  return res.json()
+}
+
+export async function microsoftStatus(config: AppConfig): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/connections/microsoft/status`, { headers: authHeaders(config)})
+    if (!res.ok) return false
+    return (await res.json()).connected === true
+  } catch { return false }
+}
+
+export async function microsoftDisconnect(config: AppConfig): Promise<void> {
+  await fetch(`${config.apiBase}/connections/microsoft/disconnect`, {
+    method: 'POST',
+    headers: authHeaders(config),
+  })
+}
+
+/* ── Hand-added MCP servers ───────────────────────────────────────────────
+   A server is a command or a URL plus credentials, so the owner can wire one
+   up without a code change — which is the whole point of MCP as a tier. */
+
+export interface CustomMcpServer {
+  name: string
+  transport: 'stdio' | 'http'
+  command: string | string[]
+  url: string
+  /** Credential values come back MASKED; sending one back unchanged keeps the
+      stored secret rather than overwriting it with the placeholder. */
+  env: Record<string, string>
+  headers: Record<string, string>
+  enabled: boolean
+  note: string
+  added_at?: string
+  connected?: boolean
+  tools?: number
+  tokens?: number
+}
+
+export async function getCustomMcpServers(
+  config: AppConfig,
+): Promise<{ servers: CustomMcpServer[]; reserved: string[] }> {
+  const res = await fetch(`${config.apiBase}/connections/mcp`, { headers: authHeaders(config) })
+  if (!res.ok) return { servers: [], reserved: [] }
+  return res.json()
+}
+
+export async function saveCustomMcpServer(
+  config: AppConfig,
+  server: Partial<CustomMcpServer>,
+): Promise<{ connected?: boolean; tools?: number; error?: string; message?: string }> {
+  const res = await fetch(`${config.apiBase}/connections/mcp`, {
+    method: 'POST',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(server),
+  })
+  if (!res.ok) return { error: `HTTP ${res.status}` }
+  return res.json()
+}
+
+export async function deleteCustomMcpServer(config: AppConfig, name: string): Promise<void> {
+  await fetch(`${config.apiBase}/connections/mcp/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
     headers: authHeaders(config),
   })
 }
@@ -560,9 +653,37 @@ export async function importChats(
 
 export async function indexHistory(
   config: AppConfig
-): Promise<{ accepted: boolean; message: string }> {
+): Promise<{ accepted: boolean; job_id?: number; message: string }> {
   const res = await fetch(`${config.apiBase}/admin/index-history`, {
     method: 'POST',
+    headers: authHeaders(config),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => `HTTP ${res.status}`)
+    throw new Error(text)
+  }
+  return res.json()
+}
+
+export interface MemoryStatus {
+  job: {
+    id: number
+    status: 'pending' | 'running' | 'done' | 'failed'
+    attempts: number
+    last_error: string | null
+    /** Written by the running rebuild itself, so a long job reports where it is. */
+    progress?: { done: number; total: number; stored: number } | null
+  } | null
+  observations: number
+  by_origin: Record<string, number>
+  at_risk_facts: number
+  thin_compositions: string[]
+  verdict: string
+}
+
+/** Where the memory record stands. Cheap (no model call) — safe to poll. */
+export async function memoryStatus(config: AppConfig): Promise<MemoryStatus> {
+  const res = await fetch(`${config.apiBase}/admin/memory/status`, {
     headers: authHeaders(config),
   })
   if (!res.ok) {
@@ -616,12 +737,17 @@ export async function getHouseParty(config: AppConfig): Promise<boolean> {
   }
 }
 
+/** Stand the protocol down (and, historically, the un-gated toggle).
+ *
+ *  Engaging goes through engageHouseParty, which carries the passphrase. This
+ *  still sends `platform` so an engage attempted through here is judged by the
+ *  same rule rather than slipping past it. */
 export async function setHouseParty(config: AppConfig, engaged: boolean): Promise<boolean> {
   try {
     const res = await fetch(`${config.apiBase}/agents/house-party`, {
       method: 'POST',
       headers: authHeaders(config, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ engaged }),
+      body: JSON.stringify({ engaged, platform: desktopClientContext().platform }),
     })
     if (!res.ok) return engaged
     return !!(await res.json()).engaged
@@ -641,9 +767,16 @@ export async function engageHouseParty(
     const res = await fetch(`${config.apiBase}/agents/house-party`, {
       method: 'POST',
       headers: authHeaders(config, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ engaged: true, passphrase }),
+      // `platform` gates the engage: the backend refuses any surface that is
+      // not the deck, and a client that does not name itself counts as not the
+      // deck. This is the path that must always carry it.
+      body: JSON.stringify({ engaged: true, passphrase, platform: desktopClientContext().platform }),
     })
     if (res.status === 403) return { ok: false, error: 'Authorization denied — incorrect passphrase.' }
+    if (res.status === 409) {
+      const detail = await res.json().catch(() => null)
+      return { ok: false, error: detail?.detail ?? 'The protocol is available on the desktop app only.' }
+    }
     if (!res.ok) return { ok: false, error: `Engage failed (HTTP ${res.status}).` }
     return { ok: !!(await res.json()).engaged }
   } catch {
@@ -805,6 +938,48 @@ export async function pinTelegramModel(
   }
 }
 
+/* ── Legion worker model routing ──────────────────────────────────────────── */
+
+export interface LegionModelInfo {
+  worker_id: string
+  when_to_use: string
+  effort: string
+  /** Human-readable description of the effort rule used when nothing is pinned. */
+  derived_from: string
+  override: string | null
+  /** LEGION_MODEL_OVERRIDE from the deployment env — outranks every pin. */
+  deployment_pin: string | null
+}
+
+export async function fetchLegionModels(config: AppConfig): Promise<LegionModelInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/legion-models`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
+/** Pin a legionnaire to a model ref; null clears it (back to effort policy). */
+export async function pinLegionModel(
+  config: AppConfig,
+  workerId: string,
+  model: string | null,
+): Promise<LegionModelInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/agents/legion-models`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ worker_id: workerId, model }),
+    })
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
 /* ── Online external peers (the Forge link) ───────────────────────────────── */
 
 /** One external peer agent currently connected over WS /agents/ws/<id> — i.e.
@@ -861,4 +1036,66 @@ export async function answerAsk(
     body: JSON.stringify({ approved, remember, note }),
   })
   return res.ok
+}
+
+/* ── Persistent reminders ─────────────────────────────────────────────────────
+ * Standing reminders the owner configures in Settings ▸ Reminders. Igor asks
+ * them on a schedule and keeps asking until answered; these endpoints are the
+ * definitions, not the runs (see app/models/reminder_definition.py).
+ */
+
+export interface ReminderOption { label: string; value: string }
+export interface ReminderDefinition {
+  id: string
+  agent: string
+  text: string
+  at: string
+  days: string
+  options: ReminderOption[]
+  every_minutes: number
+  max_asks: number
+  enabled: boolean
+  updated_at?: string
+}
+export interface ReminderCycleInfo {
+  reminder_id: string; day: string; status: string
+  answer: string; via: string; asks: number; closed_at: string
+}
+
+export async function getReminders(config: AppConfig): Promise<ReminderDefinition[]> {
+  const res = await fetch(`${config.apiBase}/reminders/definitions`, { headers: authHeaders(config) })
+  if (!res.ok) return []
+  return (await res.json()).definitions ?? []
+}
+
+export async function saveReminder(
+  config: AppConfig,
+  def: ReminderDefinition,
+): Promise<{ status: string; detail?: string }> {
+  const { id, ...body } = def
+  const res = await fetch(`${config.apiBase}/reminders/definitions/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) return { status: 'error', detail: `HTTP ${res.status}` }
+  return await res.json()
+}
+
+export async function deleteReminder(config: AppConfig, id: string): Promise<void> {
+  await fetch(`${config.apiBase}/reminders/definitions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(config),
+  })
+}
+
+/** Recently closed cycles — what was actually taken or missed. */
+export async function getReminderHistory(
+  config: AppConfig, limit = 30,
+): Promise<ReminderCycleInfo[]> {
+  const res = await fetch(`${config.apiBase}/reminders/history?limit=${limit}`, {
+    headers: authHeaders(config),
+  })
+  if (!res.ok) return []
+  return (await res.json()).history ?? []
 }

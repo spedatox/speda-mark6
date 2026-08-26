@@ -62,6 +62,29 @@ object MessageJson {
         )
     }
 
+    /**
+     * A `skyfall_arm` SSE payload — Speda opened a launch countdown.
+     *
+     * Parsed by hand like everything else here rather than through a serializer,
+     * so the view model needs no Json instance of its own. Returns null on
+     * anything that does not carry a project id: a malformed arm must leave the
+     * screen unopened, never open a countdown for an unnamed target.
+     */
+    fun skyfallArmFrom(e: JsonElement): SkyfallArm? {
+        val o = e as? JsonObject ?: return null
+        val id = o["project_id"].asStringOrNull().orEmpty()
+        if (id.isEmpty()) return null
+        return SkyfallArm(
+            projectId = id,
+            name = o["name"].asStringOrNull().orEmpty(),
+            description = o["description"].asStringOrNull().orEmpty(),
+            method = o["method"].asStringOrNull() ?: "POST",
+            url = o["url"].asStringOrNull().orEmpty(),
+            countdownSeconds = o["countdown_seconds"].asIntOrNull() ?: 10,
+            armedAt = o["armed_at"].asStringOrNull().orEmpty(),
+        )
+    }
+
     /** Parse a single tool/file from an SSE `data` element (tool / file events). */
     fun toolFrom(e: JsonElement): ToolBadge? = (e as? JsonObject)?.let(::parseTool)
     fun fileFrom(e: JsonElement): FileMeta? = (e as? JsonObject)?.let(::parseFile)

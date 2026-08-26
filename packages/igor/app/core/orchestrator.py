@@ -677,6 +677,20 @@ class AgentOrchestrator:
                         request_id=context.request_id,
                     )
 
+                # 2e. Skyfall arming. Unlike the two above this is not an
+                # authorization request — the owner has already said which
+                # project. It opens the countdown, and the countdown is what
+                # decides: let it run and the endpoint fires, abort and nothing
+                # was ever sent. The agent's part ends here.
+                arm = context.extra.pop("skyfall_arm", None)
+                if arm is not None:
+                    yield SSEEvent(
+                        type=SSEEventType.SKYFALL_ARM,
+                        data=arm,
+                        session_id=context.session_id,
+                        request_id=context.request_id,
+                    )
+
                 # 3. Zip the results back to their respective tool blocks
                 tool_results = [
                     {

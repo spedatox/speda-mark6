@@ -1,0 +1,477 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import VoiceOrb, { type OrbState } from './VoiceOrb'
+import VoiceCanvas from './VoiceCanvas'
+import { splitPanels, hasArtifacts } from '../lib/voicePanels'
+import { TextSegment } from './Message'
+import type { MicState } from '../lib/mic'
+import { useT } from '../lib/i18n'
+
+/**
+ * Voice mode's surface: the orb, and the reply as it is being spoken.
+ *
+ * It replaces the transcript rather than sitting beside it. The whole point of
+ * the mode is that the owner is listening, not reading a scrollback — so what
+ * shows is only the current exchange, and it follows whichever session is
+ * selected. The composer stays put underneath (ChatMain still owns it): the
+ * owner types, Speda answers aloud.
+ *
+ * ── Two layouts, one rule ──────────────────────────────────────────────────
+ * SPOKEN: the orb owns the screen and the words run along the bottom edge. The
+ * orb NEVER shrinks to make room for prose — it lifts clear of it — because a
+ * talking orb that shrinks reads as the agent backing away mid-sentence.
+ *
+ * THE CANVAS: the moment the answer carries something to SHOW — a chart, a map,
+ * a worked equation, a widget — the mode becomes a workspace. The orb docks
+ * into the corner and the answer is taken apart into windows (VoiceCanvas).
+ * That is a different gesture from shrinking: the orb steps aside for something
+ * it is presenting.
+ */
+
+const LOCALES: { id: string; label: string }[] = [
+  { id: 'tr-TR', label: 'TR' },
+  { id: 'en-US', label: 'EN' },
+]
+
+/** The band the canvas gets: below the top bar + the owner's prompt line, above
+ *  the status line. Windows are packed inside it, so it has to be real pixels
+ *  rather than padding — the packer cannot see padding. */
+const CANVAS_TOP = 68
+const CANVAS_BOTTOM = 34
+
+/** How tightly the docked orb is framed. The assembly is built to be seen whole,
+ *  with a dust shell around it that costs a third of the canvas; parked in a
+ *  corner that spare ring is what makes a big box look like a small orb. Pushing
+ *  in crops dust that the screen edge is cutting anyway. */
+const ORB_DOCK_ZOOM = 1.55
+
+/**
+ * How much of `text` is safe to render right now.
+ *
+ * While a turn is streaming, an odd number of ``` fences means the last one is
+ * still open — its body is half-written. Rendering that would mount a widget
+ * iframe (or a chart parser) against a truncated document on every chunk. So
+ * the reveal holds at the start of the open fence; everything before it, and
+ * every CLOSED block, still streams. This mirrors `safeTarget` in Message.tsx.
+ */
+function renderable(text: string, streaming: boolean): string {
+  if (!streaming) return text
+  let idx = -1
+  let count = 0
+  for (let i = text.indexOf('```'); i !== -1; i = text.indexOf('```', i + 3)) {
+    count++
+    idx = i
+  }
+  return count % 2 === 1 ? text.slice(0, idx) : text
+}
+
+interface Props {
+  state: OrbState
+  amplitude: () => number
+  spectrum?: (out: Float32Array) => void
+  /** The owner's mic level — the orb reacts to both voices. */
+  inputLevel?: () => number
+  /** The reply so far — the LIVE assistant turn, or the last answer in whatever
+   *  session is selected. Sourced from the chat store rather than kept locally,
+   *  so switching agent or session changes what the orb screen is showing. */
+  reply: string
+  /** True while that reply is still being written (gates partial-fence render). */
+  streaming: boolean
+  /** What the owner last said, kept small above the orb for context. */
+  prompt: string
+  locale: string
+  onLocale: (locale: string) => void
+  onClose: () => void
+  /** Cut playback without leaving the mode. */
+  onStopSpeaking: () => void
+  /** Mic state, owned by the composer's mic button. Reported here so the status
+   *  line distinguishes an open mic from one that is actually hearing speech —
+   *  identical-looking states are why people talk to a muted machine. */
+  micState: MicState
+  /** False when the backend has no Azure key — the mode is unusable, say so
+   *  rather than silently never speaking. */
+  configured: boolean
+  agentName: string
+  /** The owner's own placement for the docked orb — see AppSettings.voiceOrbDock. */
+  dock: { dx: number; dy: number; scale: number }
+  onDock: (dock: { dx: number; dy: number; scale: number }) => void
+}
+
+export default function VoiceMode({
+  state, amplitude, spectrum, inputLevel, reply, streaming, prompt, locale, onLocale,
+  onClose, onStopSpeaking, micState, configured, agentName, dock, onDock,
+}: Props) {
+  const t = useT()
+  const visible = useMemo(() => renderable(reply, streaming), [reply, streaming])
+  const hasText = visible.trim().length > 0
+  const panels = useMemo(() => splitPanels(visible), [visible])
+  const hasCanvas = useMemo(() => hasArtifacts(panels), [panels])
+  // Bumped by REFLOW — hands every window the owner dragged back to the layout.
+  const [reflow, setReflow] = useState(0)
+
+  // Show the tail of the reply, not the head: while it is being spoken the
+  // interesting part is what is being said now.
+  const tailRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    tailRef.current?.scrollTo({ top: tailRef.current.scrollHeight, behavior: 'smooth' })
+  }, [visible])
+
+  /* ── Size ────────────────────────────────────────────────────────────────
+   * The orb owns the screen. Driven off the pane's measured height rather than
+   * a fixed pixel count so it fills a large display instead of floating in it,
+   * and it keeps that size while speaking — the reply is an overlay along the
+   * bottom edge and the orb lifts clear of it instead of scaling down.
+   * The transition lives on the canvas box (VoiceOrb), which re-reads its own
+   * size every frame — so a dock/undock scales smoothly rather than jumping. */
+  const boxRef = useRef<HTMLDivElement>(null)
+  // `left`/`top` are the pane's offset inside the WINDOW. The canvas is laid out
+  // in pane space, but the docked orb belongs to the window's corner — which is
+  // below the pane, past the composer — so it needs both frames of reference.
+  const [box, setBox] = useState({ w: 0, h: 0, left: 0, top: 0 })
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    // Measured, not derived from innerHeight: this pane sits under the header
+    // and above the composer, so the viewport is a good deal taller than the
+    // room actually available, and sizing off it overflows.
+    const measure = () => {
+      const r = el.getBoundingClientRect()
+      setBox({ w: el.clientWidth, h: el.clientHeight, left: r.left, top: r.top })
+    }
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    measure()
+    return () => ro.disconnect()
+  }, [])
+
+  // Bounded by width as well as height — on a wide, short window the limit is
+  // vertical, on a narrow one it is horizontal, and only the smaller fits.
+  const room = Math.min(box.h || 520, box.w || 520)
+  const orbSize = Math.round(
+    hasCanvas
+      ? Math.max(300, Math.min(560, room * 0.62)) * dock.scale
+      : Math.max(280, Math.min(720, room * 0.92)),
+  )
+
+  /* ── The orb's box ────────────────────────────────────────────────────────
+   * Both states are expressed the SAME way — left/top/width/height in pixels —
+   * for one reason: that is what lets the browser interpolate between them. The
+   * centred state used to be `inset:0` with flex centring and the docked state
+   * `right/bottom`, and no transition can tween between two different
+   * positioning schemes, so the orb teleported into the corner.
+   *
+   * Docked, it sits IN the corner rather than near it: a quarter of it hangs
+   * off both edges so the glow bleeds out of frame instead of the whole
+   * assembly floating inside a margin, which reads as a widget parked in the
+   * corner rather than an object pushed aside. */
+  // The only concession the centred orb makes to the text: rise by a fraction of
+  // the pane so the bottom overlay is not sitting on its face. Small enough that
+  // the ~8% of empty margin the assembly carries absorbs it.
+  const lift = hasCanvas || !hasText ? 0 : -Math.round(Math.min(96, room * 0.07))
+  /* Arm the transition only after the real geometry has been PAINTED once.
+   *
+   * The first render has no box (the ResizeObserver hasn't fired), so the orb's
+   * first geometry is nonsense — a 478px orb at −239,−239. Arming on the render
+   * that measures is not enough: React commits the new left/top and the new
+   * transition property together, the browser never painted the un-transitioned
+   * value, and it animates from the nonsense one. So the mode opens with the orb
+   * swooping in from off-screen, which is not the dock — it is a glitch that
+   * looks like one. A frame's delay is what makes the difference. */
+  const [animate, setAnimate] = useState(false)
+  useEffect(() => {
+    if (box.w === 0 || animate) return
+    const id = requestAnimationFrame(() => setAnimate(true))
+    return () => cancelAnimationFrame(id)
+  }, [box.w, animate])
+
+  /* Docked, the corner it goes to is the WINDOW's, not the pane's.
+   *
+   * The pane stops above the composer, so anchoring to it parks the orb on a
+   * ledge with a strip of empty screen underneath — flush on the right, floating
+   * on the bottom, which is what "the positioning is even worse" looked like.
+   * The orb is positioned inside the pane, so the window's corner is expressed
+   * in pane coordinates; the app root's own clip is what cuts it at the screen
+   * edge.
+   *
+   * ORB_MARGIN is the empty ring the assembly carries inside its own canvas: at
+   * ORB_DOCK_ZOOM the lit rings and core span ~78% of the frame and the rest is
+   * particle dust. Position the BOX against the corner and the visible orb lands
+   * a long way short of it. Spending that margin — plus a little more, so the lit
+   * edge spills past — is what actually puts the orb IN the corner. */
+  const ORB_MARGIN = 0.11
+  const bleed = Math.round(orbSize * (ORB_MARGIN + 0.09))
+  const orbLeft = hasCanvas
+    ? Math.round(window.innerWidth - box.left - orbSize + bleed) + dock.dx
+    : Math.round((box.w - orbSize) / 2)
+  const orbTop = hasCanvas
+    ? Math.round(window.innerHeight - box.top - orbSize + bleed) + dock.dy
+    : Math.round((box.h - orbSize) / 2) + lift
+
+  /* ── The owner's hands ────────────────────────────────────────────────────
+   * Drag the docked orb to place it; scroll over it to size it. Both persist.
+   *
+   * The computed corner above is a DEFAULT, not a verdict. Where the orb should
+   * sit is a judgement about a particular screen — it carries an invisible dust
+   * halo, it shares an edge with the composer, and it lands differently at every
+   * window size — and deriving it from viewport arithmetic has been wrong on
+   * this machine repeatedly. Grabbing it takes a second; describing it does not. */
+  const [dragging, setDragging] = useState(false)
+  // Both gestures read the dock through a ref, never through the render's copy.
+  // A wheel tick landing in the same frame as a drag would otherwise spread a
+  // dock captured BEFORE the drag and quietly undo it — and settings round-trip
+  // through a provider, so "before" can be a frame or two behind.
+  const dockRef = useRef(dock)
+  dockRef.current = dock
+
+  const grabOrb = (e: React.PointerEvent) => {
+    if (!hasCanvas) return
+    e.preventDefault()
+    setDragging(true)
+    const fromX = e.clientX, fromY = e.clientY
+    const base = { ...dockRef.current }
+    const move = (ev: PointerEvent) =>
+      onDock({ ...dockRef.current, dx: base.dx + ev.clientX - fromX, dy: base.dy + ev.clientY - fromY })
+    const up = () => {
+      setDragging(false)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  const sizeOrb = (e: React.WheelEvent) => {
+    if (!hasCanvas) return
+    const cur = dockRef.current
+    // Clamped hard at both ends: an orb scrolled to nothing cannot be grabbed
+    // again, and one scrolled past the ceiling swallows the board.
+    const scale = Math.max(0.5, Math.min(2.6, cur.scale * (e.deltaY < 0 ? 1.06 : 1 / 1.06)))
+    onDock({ ...cur, scale })
+  }
+
+  // The mic outranks the agent's own state while it is hearing speech: during
+  // barge-in both are true at once, and what the owner needs confirmed at that
+  // instant is that they are being heard, not that the agent is still talking.
+  const label =
+    !configured ? t.voiceMode.notConfigured
+    : micState === 'hearing' ? t.voiceMode.listening
+    : micState === 'recognizing' ? t.voiceMode.transcribing
+    : state === 'speaking' ? t.voiceMode.speaking
+    : state === 'thinking' ? t.voiceMode.thinking
+    : micState === 'listening' ? t.voiceMode.micOpen
+    : t.voiceMode.standingBy
+
+  const chip = {
+    height: 24, padding: '0 0.6rem',
+    fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem',
+    fontWeight: 700, letterSpacing: '0.16em',
+  } as const
+
+  return (
+    <div
+      ref={boxRef}
+      style={{
+        flex: 1, minHeight: 0, position: 'relative',
+        // NOT clipped: the docked orb deliberately hangs off the corner, and a
+        // pane that clips would cut the bleed back to a flush edge. The canvas
+        // does its own clipping, so windows still cannot escape.
+        overflow: 'visible',
+        animation: 'fadeIn 0.25s ease',
+      }}
+    >
+      {/* Top bar — language + exit */}
+      <div style={{
+        position: 'absolute', top: 12, left: 0, right: 0, zIndex: 4,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 1rem',
+      }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {LOCALES.map(l => (
+            <button
+              key={l.id}
+              className={locale === l.id ? 'hb-btn hb-btn-tint' : 'hb-btn'}
+              onClick={() => onLocale(l.id)}
+              title={t.voiceMode.speakRepliesIn(l.id)}
+              style={{ ...chip, ...(locale === l.id ? { color: 'var(--hb-cyan-bright)' } : {}) }}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 4 }}>
+        {/* REFLOW — hands the board back to Speda. Only meaningful once there
+            is a board, and only worth offering once the owner has moved
+            something on it. */}
+        {hasCanvas && (
+          <button
+            className="hb-btn"
+            onClick={() => { setReflow(n => n + 1); onDock({ dx: 0, dy: 0, scale: 1 }) }}
+            title={t.voiceMode.reflowTitle}
+            style={{ ...chip }}
+          >
+            {t.voiceMode.reflow}
+          </button>
+        )}
+
+        <button
+          className="hb-btn"
+          onClick={onClose}
+          title={t.voiceMode.leaveVoiceModeEsc}
+          style={{ ...chip, gap: '0.35rem' }}
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+          {t.voiceMode.exit}
+        </button>
+        </div>
+      </div>
+
+      {/* What the owner asked — small, above everything */}
+      {prompt && (
+        <div style={{
+          position: 'absolute', top: 46, left: 0, right: 0, zIndex: 3,
+          padding: '0 4rem', textAlign: 'center',
+          fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+          letterSpacing: '0.04em', color: 'var(--hb-text-faint)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+        }}>
+          {prompt}
+        </div>
+      )}
+
+      {/* THE CANVAS. Sits between the top bar and the status line; each window is
+          placed clear of the orb's corner (see VoiceCanvas's packer). Sized off
+          the measured box, so the layout is computed in the pixels it is drawn
+          in rather than in percentages that lie during a resize. */}
+      {hasCanvas && box.w > 0 && (
+        <div style={{
+          position: 'absolute', left: 0, right: 0,
+          top: CANVAS_TOP, bottom: CANVAS_BOTTOM, zIndex: 2,
+        }}>
+          <VoiceCanvas
+            panels={panels}
+            width={box.w}
+            height={Math.max(200, box.h - CANVAS_TOP - CANVAS_BOTTOM)}
+            // The keep-out quadrant is the orb's own box, taken from the same
+            // numbers that place it — derived twice, they drift.
+            reserveX={orbLeft}
+            reserveY={orbTop - CANVAS_TOP}
+            reflow={reflow}
+          />
+        </div>
+      )}
+
+      {/* The orb. Centred and full-size by default; flies to the bottom-right
+          corner, shrinking on the way, when the canvas takes the pane — one
+          animation over one set of properties, so it MOVES rather than cuts.
+          pointerEvents:none so a drag that passes over the dock still belongs to
+          the window underneath it. */}
+      <div
+        onPointerDown={grabOrb}
+        onWheel={sizeOrb}
+        title={hasCanvas ? t.voiceMode.dragToPlace : undefined}
+        style={{
+          position: 'absolute', zIndex: 3,
+          // Grabbable only when docked. Centred, it owns the screen and must not
+          // eat the drags meant for the windows underneath it.
+          pointerEvents: hasCanvas ? 'auto' : 'none',
+          cursor: hasCanvas ? (dragging ? 'grabbing' : 'grab') : 'default',
+          left: orbLeft, top: orbTop, width: orbSize, height: orbSize,
+          // No easing while it is in the owner's hand — a 0.7s tween on a drag
+          // is lag, and it makes the orb feel like it is resisting.
+          transition: !animate || dragging ? 'none' : `
+            left 0.7s cubic-bezier(0.65, 0, 0.35, 1),
+            top 0.7s cubic-bezier(0.65, 0, 0.35, 1),
+            width 0.7s cubic-bezier(0.65, 0, 0.35, 1),
+            height 0.7s cubic-bezier(0.65, 0, 0.35, 1)`,
+        }}
+      >
+        {/* The mic outranks the agent's own state, for the same reason the label
+            does: during barge-in both are live at once, and the orb showing that
+            it hears you is the more urgent of the two. */}
+        <VoiceOrb
+          state={micState === 'hearing' ? 'listening' : state}
+          amplitude={amplitude}
+          spectrum={spectrum}
+          inputLevel={inputLevel}
+          zoom={hasCanvas ? ORB_DOCK_ZOOM : 1}
+        />
+      </div>
+
+      {/* Bottom stack — the spoken reply, the status line, the stop control.
+          Anchored to the bottom edge and grows upward, so nothing below it ever
+          moves as text arrives. */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 4,
+        display: 'flex', flexDirection: 'column',
+        // With the orb in the corner the centre of the bottom edge is under it,
+        // so the status line moves to the free side rather than under the glow.
+        alignItems: hasCanvas ? 'flex-start' : 'center',
+        gap: '0.75rem', pointerEvents: 'none',
+        padding: hasCanvas
+          ? `0.4rem ${orbSize}px 0.55rem 1.2rem`
+          : '3rem 1.5rem 1.1rem',
+        // A wash under the text, so prose stays legible over the orb's glow.
+        background: hasText && !hasCanvas
+          ? 'linear-gradient(to top, rgba(4,8,10,0.92) 42%, rgba(4,8,10,0.72) 68%, rgba(4,8,10,0))'
+          : 'none',
+      }}>
+        {/* The reply, as it is spoken. Rendered through the transcript's own
+            markdown pipeline — headings, lists, tables and code all read the
+            way they do in chat. */}
+        {!hasCanvas && hasText && (
+          <div
+            ref={tailRef}
+            className="prose"
+            style={{
+              maxWidth: 640, maxHeight: '11rem', overflowY: 'auto',
+              pointerEvents: 'auto', fontSize: '1.02rem',
+              overflowWrap: 'anywhere', minWidth: 0,
+            }}
+          >
+            <TextSegment text={visible} />
+          </div>
+        )}
+
+        {/* Status line */}
+        <div
+          className={state === 'thinking' ? 'thinking-shimmer' : undefined}
+          style={{
+            fontFamily: "'Rajdhani', sans-serif", fontSize: '0.7rem',
+            fontWeight: 700, letterSpacing: '0.22em',
+            color: configured ? 'var(--hb-cyan-dim)' : '#f87171',
+          }}
+        >
+          {label}
+        </div>
+
+        {state === 'speaking' && (
+          <button
+            className="hb-btn"
+            onClick={onStopSpeaking}
+            title={t.voiceMode.stopSpeaking}
+            style={{ ...chip, height: 26, padding: '0 0.75rem', gap: '0.4rem', pointerEvents: 'auto' }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="5" y="5" width="14" height="14" rx="2" />
+            </svg>
+            {t.voiceMode.stop}
+          </button>
+        )}
+
+        {!hasText && (
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+            letterSpacing: '0.06em', color: 'var(--hb-icon-dim)', textAlign: 'center',
+          }}>
+            {configured
+              ? t.voiceMode.typeOrTalk(agentName)
+              : t.voiceMode.voiceNotEnabled}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

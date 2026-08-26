@@ -567,6 +567,39 @@ Playwright in its own container (`packages/browser`), reached through
 - **MCP transport:** STDIO for local servers. HTTP/SSE only for officially
   managed remote servers (Google Workspace, Notion, Microsoft Graph) with
   OAuth 2.1. No community servers on public ports.
+- **Adding an OAuth provider means adding its callback to two places**, not one:
+  the unauthenticated-paths list in Rule 12, and `_derived()` in
+  `app/services/doormat.py`. A redirect URI the Doormat Protocol does not know
+  about is one that silently keeps naming the old domain after a move, and it
+  fails at sign-in, weeks later, with nothing pointing back here.
+- **Skyfall Protocol** (`app/services/skyfall.py`) fires an endpoint the owner
+  configured, behind a full-screen countdown with an abort. Its whole design is
+  one property — **nothing fires without a countdown the owner could have
+  aborted** — and three rules keep it: the tool ARMS and has no path to `fire()`
+  (the client's clock fires); **only the owner writes a project**, because an
+  agent that could write the target and pull the trigger could hit anything; and
+  a client whose frames stalled stands the launch DOWN rather than fire a clock
+  nobody watched. Arming refuses on any surface that cannot draw the countdown —
+  see `can_arm_skyfall()` in `app/core/surface.py`, the same rule that keeps
+  House Party off the phone, satisfied here rather than excepted.
+- **Octavius Protocol** (`app/services/octavius.py`) snapshots Igor's own
+  database to the owner's Drive. Two rules carry it: the snapshot is
+  **`VACUUM INTO`**, never a file copy — the database is in WAL mode, so
+  `speda.db` on its own is missing whatever is still in the journal — and
+  **whether a backup exists is read from Drive, never from a local note that one
+  was made**, because such a note survives exactly the failures it exists to
+  catch. `runtime_state.json` and the managed `.env` are never uploaded and there
+  is no flag to make them be: the credentials to every account, inside one of
+  those accounts, turns one compromise into all of them.
+- **Doormat Protocol** (`app/services/doormat.py`) moves the deployment to a new
+  domain in three deliberate phases, and its rule is that **the old door stays
+  open until the new one is proven** — Caddy serves both hostnames, so there is
+  never a moment where neither works. Staging refuses a domain whose DNS does not
+  already resolve here (an ACME retry loop against a rate-limited CA is not a
+  recoverable mistake), the protocol's site file only ever names *the other*
+  door so it cannot collide with `{$DOMAIN}`, and every phase but `status`
+  refuses a non-user trigger. The half it cannot automate — the OAuth consoles —
+  is generated as a checklist from what the deployment actually uses.
 - **Lockdown Protocol** (`app/services/lockdown.py`) drops external inbound
   traffic the moment the flag flips, and removes exactly the rules it added on
   stand-down. **It stops deploys. That is the point — know it before you engage
@@ -608,6 +641,9 @@ Playwright in its own container (`packages/browser`), reached through
 - Do not `break` after the first tool call. The loop runs until `end_turn`.
 - Do not store generated files permanently. `/tmp/speda_outputs/`, cleaned via
   n8n → `DELETE /admin/outputs`.
+- Do not copy `speda.db` with `cp`/`scp` and call it a backup. WAL mode means the
+  file is not the database; use the Octavius Protocol, which snapshots with
+  `VACUUM INTO`.
 - Do not run Playwright anywhere but its own container. Internal network only,
   never a published port.
 - Do not write a tool that takes a password as an argument.

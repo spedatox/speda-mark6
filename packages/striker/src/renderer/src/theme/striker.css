@@ -994,3 +994,112 @@ input[type=range]::-webkit-slider-thumb {
   background: rgba(var(--hb-accent-rgb), 0.08);
 }
 .hb-mem-md img { max-width: 100%; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   HEARTBREAKER PARITY LAYER
+   The chat-surface components are shared with Heartbreaker, and the deck moved
+   its corner radii out of inline styles into a named scale (--r-*) plus a
+   handful of opt-in classes. Core answers the same names with ROUNDED values,
+   so one component tree renders sharp on the deck and soft here without a
+   single `if (striker)` in a .tsx file.
+   ════════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* The radius scale, Core's reading of it. Heartbreaker's is 0–4px. */
+  --r-island: 18px;   /* full-height structural panels */
+  --r-card:   14px;   /* cards, bubbles, widgets */
+  --r-ctl:    12px;   /* controls, agent bubbles */
+  --r-tile:   10px;   /* rows, wells, small tiles */
+
+  /* The deck's second glass layer — a lighter sheen used where a surface sits
+     ON another glass surface. Core keeps it fainter than the deck does. */
+  --glass-sheen: linear-gradient(rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012));
+}
+
+.hb-island      { border-radius: var(--r-island) !important; }
+.hb-tile,
+.hb-well        { border-radius: var(--r-tile) !important; }
+.hb-widget-round{ border-radius: var(--r-card) !important; }
+
+/* Chat bubbles. The clipped corner points at the speaker — the one piece of
+   FUI geometry Core keeps, because it carries meaning rather than theatre. */
+.hb-bubble-user {
+  border-radius: var(--r-card) var(--r-card) 6px var(--r-card) !important;
+  background: linear-gradient(160deg,
+    rgba(var(--hb-accent-rgb), 0.16), rgba(var(--hb-accent-rgb), 0.05));
+  border: 1px solid rgba(var(--hb-accent-rgb), 0.26);
+}
+.hb-bubble-agent      { border-radius: var(--r-ctl) var(--r-ctl) var(--r-ctl) 4px !important; }
+.hb-bubble-agent-mine { border-radius: var(--r-ctl) var(--r-ctl) 4px var(--r-ctl) !important; }
+
+/* A rendered widget is READING material, not instrumentation: it drops the
+   deck's caps/tracking/mono and renders as body copy. */
+.hb-widget {
+  font-family: var(--font-read);
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--hb-text);
+  background: none;
+  white-space: normal;
+}
+
+/* Selectable rows — sessions, files, list items. */
+.hb-row {
+  border-radius: var(--r-tile) !important;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.hb-row:hover { background: var(--glass-tint); }
+.hb-row-active {
+  background: var(--glass-sheen);
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+/* Settings inputs pick the scale up without every field repeating a radius. */
+.hb-settings input:not([type=range]),
+.hb-settings textarea,
+.hb-settings select { border-radius: var(--r-tile) !important; }
+.hb-settings button:not([class]) { border-radius: 9999px !important; }
+
+/* ── Loading skeletons ─────────────────────────────────────────────────────
+   Shown while a transcript, a file list or a settings pane is in flight. The
+   shimmer reuses the textShimmer keyframes already declared above. */
+.hb-skeleton {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-tile);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.hb-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg,
+    transparent 25%,
+    rgba(var(--hb-cyan-bright-rgb), 0.14) 50%,
+    transparent 75%);
+  background-size: 250% 100%;
+  animation: textShimmer 1.8s ease-in-out infinite;
+}
+/* Staggered so a list of rows breathes instead of flashing in lockstep. */
+.hb-skeleton-group .hb-skeleton::after { animation-delay: var(--hb-skeleton-delay, 0s); }
+
+/* ── Syntax highlighting ───────────────────────────────────────────────────
+   Token colours for CodeBlock, keyed to Core's palette. */
+.hb-code .token.keyword, .hb-code .token.builtin, .hb-code .token.class-name,
+.hb-code .token.tag, .hb-code .token.selector, .hb-code .token.important,
+.hb-code .token.atrule { color: var(--hb-cyan) !important; }
+.hb-code .token.function, .hb-code .token.attr-name,
+.hb-code .token.property { color: var(--hb-cyan-bright) !important; }
+.hb-code .token.string, .hb-code .token.char, .hb-code .token.attr-value,
+.hb-code .token.inserted { color: #8fd39a !important; }
+.hb-code .token.number, .hb-code .token.boolean, .hb-code .token.constant,
+.hb-code .token.symbol, .hb-code .token.regex { color: var(--hb-amber) !important; }
+.hb-code .token.comment, .hb-code .token.prolog, .hb-code .token.doctype,
+.hb-code .token.cdata { color: var(--hb-text-faint) !important; font-style: italic; }
+.hb-code .token.operator, .hb-code .token.punctuation, .hb-code .token.entity,
+.hb-code .token.url { color: var(--hb-text-dim) !important; background: none !important; }
+.hb-code .token.deleted { color: #e88a7c !important; }

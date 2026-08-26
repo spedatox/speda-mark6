@@ -104,6 +104,38 @@ def is_desktop_surface(platform: str | None) -> bool:
     return (platform or "").strip().lower() in _DESKTOP_SURFACES
 
 
+# Surfaces that can render the Skyfall countdown — the full-screen arming clock
+# with its abort. A DIFFERENT question from the war room's, and deliberately a
+# wider answer: the Android app builds this screen, so it qualifies.
+#
+# The rule underneath both is the same one, though, and it is worth stating
+# plainly because it is what stops this from being an exception: a protocol the
+# owner cannot SEE running must refuse rather than run invisibly. House Party
+# fails that on the phone because there is no war room there. Skyfall passes it,
+# because the screen is the protocol. Telegram fails it for both — there is no
+# countdown to show and no abort to press, and a Skyfall that fired without one
+# would be the whole design thrown away.
+_ARMING_SURFACES = frozenset({"desktop", "web", "android", "ios"})
+
+
+def can_arm_skyfall(platform: str | None) -> bool:
+    """Whether `platform` can show a countdown the owner is able to abort.
+
+    Unknown or missing is NOT armable, for the same reason it is not desktop: a
+    client that will not say what it is cannot be assumed to have a screen.
+    """
+    return (platform or "").strip().lower() in _ARMING_SURFACES
+
+
+#: What every Skyfall refusal says when the surface cannot show the clock.
+NO_COUNTDOWN_NOTICE = (
+    "The Skyfall Protocol cannot be armed from this channel. Arming opens a "
+    "full-screen countdown with an abort — that screen IS the protocol, and "
+    "this channel has nowhere to draw it. Firing without one would remove the "
+    "only chance to stop it. Ask again from the desktop app or the phone."
+)
+
+
 #: What every refusal path tells the owner, in one place so the tool, the
 #: router and the client cannot drift into three different explanations.
 DESKTOP_ONLY_NOTICE = (

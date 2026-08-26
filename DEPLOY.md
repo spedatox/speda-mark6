@@ -120,6 +120,13 @@ Add an `n8n` service to the same compose network, point its HTTP nodes at
 | Bring everything up | `docker compose up -d` |
 | Tail API logs | `docker compose logs -f app` |
 | Rebuild after code change | `docker compose up -d --build app` |
-| Back up the database | `scp root@<server>:/root/.speda/speda.db ./speda-backup.db` |
+| Back up the database | The Octavius Protocol — ask Orion, or `POST /admin/octavius/backup`. See [docs/OCTAVIUS_PROTOCOL.md](docs/OCTAVIUS_PROTOCOL.md) |
 | Build desktop installer | `npm run dist` (in packages/heartbreaker) |
 | Toggle budget mode | UI button, ask Speda, or `BUDGET_MODE` in .env |
+
+> **Do not `scp` the database file.** It runs in WAL mode, so recent commits
+> live in `speda.db-wal` until a checkpoint: copying `speda.db` alone gives you
+> a database silently missing however many hours were still in the journal, and
+> copying all three while the process is writing gives you a torn set. This
+> table used to recommend exactly that. The Octavius Protocol snapshots with
+> `VACUUM INTO` instead, which is consistent and online.

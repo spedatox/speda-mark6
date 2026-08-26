@@ -9,6 +9,8 @@ PROMPT_SECTIONS = [
     "agents/orion/02_audit.md",
     "agents/orion/03_operations.md",   # server ops runbook (system_ops host bridge)
     "agents/orion/04_lifeboat.md",     # host resource pressure — owner-led reclamation
+    "agents/orion/05_doormat.md",      # moving the deployment to a new domain
+    "agents/orion/06_octavius.md",     # the database backup, and how to restore one
     "core/02_voice.md",   # shared register — see prompts/core/02_voice.md
     "core/05_output_policy.md",
     "core/07_formatting.md",

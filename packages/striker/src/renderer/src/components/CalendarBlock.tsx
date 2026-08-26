@@ -3,8 +3,8 @@
  *
  * Triggered by ```calendar code blocks in markdown. The agent emits JSON
  * matching CalendarSpec (a week or agenda of events) and it renders as a
- * layered fluid-glass hologram in the .hb-holo material — frosted panel,
- * concentric HUD ring, today's date as a large glowing numeral.
+ * single fluid-glass card in the .hb-holo material — a week strip of day
+ * columns, today's column lit, each event a small accent card.
  *
  * ── Spec format ────────────────────────────────────────────────────────────
  * {
@@ -61,58 +61,36 @@ function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
-/* ── Background HUD ring — faint concentric arcs, like the Jarvis interface ── */
-function HudRing() {
-  return (
-    <svg
-      viewBox="0 0 200 200"
-      style={{
-        position: 'absolute', right: -34, top: '50%', transform: 'translateY(-50%)',
-        width: 260, height: 260, opacity: 0.5, pointerEvents: 'none',
-        color: 'var(--hb-cyan)',
-      }}
-    >
-      <circle cx="100" cy="100" r="92" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.18" />
-      <circle cx="100" cy="100" r="72" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.30"
-        strokeDasharray="2 5" />
-      <circle cx="100" cy="100" r="50" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.16" />
-      <path d="M100 8 A92 92 0 0 1 192 100" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.5" />
-      <path d="M100 192 A92 92 0 0 1 8 100" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.3" />
-    </svg>
-  )
-}
-
 /* ── One event chip ───────────────────────────────────────────────────────── */
 function EventChip({ ev }: { ev: CalEvent }) {
   const accent = ev.color ?? 'var(--hb-cyan)'
   return (
-    <div style={{
+    // An event is a small accent card, per the deck — not a 2px stripe against
+    // a wash. Title first at reading size, time under it in the accent.
+    <div className="hb-glass-xs" style={{
       position: 'relative',
-      padding: '0.3rem 0.4rem 0.32rem 0.55rem',
-      marginBottom: '0.3rem',
-      background: 'rgba(var(--hb-accent-rgb),0.07)',
-      borderRadius: 6,
-      borderLeft: `2px solid ${accent}`,
+      padding: '10px 12px',
+      marginBottom: 6,
+      background: 'rgba(var(--hb-accent-rgb),0.08)',
+      border: `1px solid ${ev.color ? `${accent}38` : 'rgba(var(--hb-accent-rgb),0.22)'}`,
+      boxShadow: 'none',
       overflow: 'hidden',
     }}>
-      {ev.time && (
-        <div style={{
-          fontFamily: "var(--font-mono)", fontSize: '0.6rem',
-          letterSpacing: '0.06em', color: 'var(--hb-cyan-bright)',
-        }}>
-          {ev.time}{ev.end ? `–${ev.end}` : ''}
-        </div>
-      )}
       <div style={{
-        fontFamily: "'Rajdhani', sans-serif", fontSize: '0.74rem', fontWeight: 600,
-        lineHeight: 1.2, color: 'var(--hb-text)', letterSpacing: '0.01em',
+        fontSize: '0.875rem', fontWeight: 500,
+        lineHeight: 1.35, color: 'var(--hb-text)',
       }}>
         {ev.title}
       </div>
+      {ev.time && (
+        <div style={{ fontSize: '0.78rem', color: accent, marginTop: 3 }}>
+          {ev.time}{ev.end ? `–${ev.end}` : ''}
+        </div>
+      )}
       {ev.location && (
         <div style={{
-          fontFamily: "var(--font-mono)", fontSize: '0.55rem',
-          color: 'var(--hb-text-faint)', letterSpacing: '0.04em', marginTop: 1,
+          fontSize: '0.78rem',
+          color: 'var(--hb-text-faint)', marginTop: 2,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {ev.location}
@@ -131,29 +109,28 @@ function DayColumn({ day, today }: { day: CalDay; today: Date }) {
   const events = (day.events ?? []).slice().sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
 
   return (
-    <div style={{
+    <div className={isToday ? 'hb-glass-sm' : undefined} style={{
       flex: '1 1 0', minWidth: 0,
-      padding: '0.55rem 0.4rem 0.6rem',
-      borderRadius: 10,
+      padding: '10px 8px 12px',
       background: isToday ? 'rgba(var(--hb-accent-rgb),0.10)' : 'transparent',
-      border: isToday ? '1px solid var(--hb-edge-bright)' : '1px solid transparent',
-      boxShadow: isToday ? '0 0 18px rgba(var(--hb-accent-rgb),0.18) inset' : 'none',
+      border: isToday ? '1px solid rgba(var(--hb-accent-rgb),0.4)' : '1px solid transparent',
+      boxShadow: 'none',
     }}>
       {/* day header */}
-      <div style={{ textAlign: 'center', marginBottom: '0.45rem' }}>
+      <div style={{ textAlign: 'center', marginBottom: 10 }}>
         <div style={{
-          fontFamily: "var(--font-mono)", fontSize: '0.56rem',
-          letterSpacing: '0.18em',
+          fontSize: '0.78rem', letterSpacing: '0.14em',
           color: isToday ? 'var(--hb-cyan-bright)' : 'var(--hb-text-faint)',
         }}>
           {wd}
         </div>
+        {/* Today is stated by the lit cell it sits in, not by doubling its
+            point size — the old 2.1rem/1.25rem jump made the week strip lurch. */}
         <div style={{
-          fontFamily: "'Rajdhani', sans-serif", fontWeight: 300,
-          fontSize: isToday ? '2.1rem' : '1.25rem', lineHeight: 1,
-          marginTop: 2,
-          color: isToday ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
-          textShadow: isToday ? '0 0 14px rgba(var(--hb-cyan-bright-rgb),0.6)' : 'none',
+          fontFamily: "'Rajdhani', sans-serif", fontWeight: isToday ? 600 : 400,
+          fontSize: '1.35rem', lineHeight: 1,
+          marginTop: 3,
+          color: isToday ? 'var(--hb-text)' : 'var(--hb-text-dim)',
         }}>
           {num}
         </div>
@@ -164,8 +141,8 @@ function DayColumn({ day, today }: { day: CalDay; today: Date }) {
         ? events.map((ev, i) => <EventChip key={i} ev={ev} />)
         : (
           <div style={{
-            textAlign: 'center', color: 'var(--hb-text-faint)', opacity: 0.4,
-            fontFamily: "var(--font-mono)", fontSize: '0.7rem', marginTop: '0.3rem',
+            textAlign: 'center', color: 'var(--hb-text-faint)', opacity: 0.35,
+            fontSize: '0.875rem', marginTop: 4,
           }}>
             ·
           </div>
@@ -181,13 +158,11 @@ function ParseError({ raw }: { raw: string }) {
       padding: '0.5rem 0.75rem',
       background: 'rgba(200,74,58,0.09)',
       border: '1px solid rgba(200,74,58,0.35)',
-      borderRadius: 8,
-      fontFamily: "var(--font-mono)",
-      fontSize: '0.71rem', color: '#c84a3a',
-      margin: '0.5rem 0', letterSpacing: '0.05em',
+      fontSize: '0.875rem', color: '#e88a7c',
+      margin: '0.5rem 0',
     }}>
-      CALENDAR // PARSE ERROR<br />
-      <span style={{ color: 'var(--hb-text-faint)', fontSize: '0.65rem' }}>{raw.slice(0, 120)}</span>
+      Calendar — could not parse<br />
+      <span style={{ color: 'var(--hb-text-faint)', fontSize: '0.8125rem' }}>{raw.slice(0, 120)}</span>
     </div>
   )
 }
@@ -205,10 +180,9 @@ function Materializing() {
         background: 'var(--hb-cyan-bright)', animation: 'skeletonPulse 1.4s ease-in-out infinite',
       }} />
       <span style={{
-        fontFamily: "var(--font-mono)", fontSize: '0.68rem',
-        letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--hb-text-faint)',
+        fontSize: '0.875rem', color: 'var(--hb-text-faint)',
       }}>
-        CALENDAR // MATERIALIZING
+        Building the calendar…
       </span>
     </div>
   )
@@ -237,63 +211,41 @@ export default function CalendarBlock({ children }: { children: string }) {
   const monthLabel = first ? `${MONTHS[first.getMonth()]} ${first.getFullYear()}` : ''
 
   return (
-    <div style={{ position: 'relative', margin: '0.85rem 0', animation: 'widgetEntrance 0.4s ease both' }}>
-      {/* layered glass ghosts behind — stacked-depth like the reference */}
-      <div style={{
-        position: 'absolute', inset: '8px -10px -10px 8px', borderRadius: 16,
-        border: '1px solid rgba(var(--hb-accent-rgb),0.10)',
-        background: 'rgba(190,215,235,0.018)', pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute', inset: '4px -5px -5px 4px', borderRadius: 16,
-        border: '1px solid rgba(var(--hb-accent-rgb),0.14)',
-        background: 'rgba(190,215,235,0.025)', pointerEvents: 'none',
-      }} />
-
-      {/* main holographic panel */}
-      <div className="hb-holo" style={{ position: 'relative', overflow: 'hidden', padding: '0.85rem 0.95rem 0.95rem' }}>
-        <HudRing />
+    <div className="hb-widget" style={{ position: 'relative', margin: '0.85rem 0', animation: 'widgetEntrance 0.4s ease both' }}>
+      {/* The two offset "glass ghost" plates and the dashed HudRing reticle that
+          used to sit behind/over this panel are gone. They were movie-prop
+          decoration in the same family as the banned corner brackets, and the
+          reference deck draws a calendar as one clean card. */}
+      <div className="hb-holo" style={{ position: 'relative', overflow: 'hidden', padding: '22px 24px' }}>
 
         {/* header */}
         <div style={{
           display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-          marginBottom: '0.7rem', position: 'relative', zIndex: 1, gap: '0.75rem',
+          marginBottom: 16, gap: 12,
         }}>
           <div style={{ minWidth: 0 }}>
             <div style={{
-              fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: '0.92rem',
-              letterSpacing: '0.22em', textTransform: 'uppercase', color: '#ffffff',
+              fontFamily: "'Rajdhani', sans-serif", fontWeight: 600, fontSize: '1.06rem',
+              letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--hb-text)',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>
               {title}
             </div>
             {spec.range && (
-              <div style={{
-                fontFamily: "var(--font-mono)", fontSize: '0.62rem',
-                letterSpacing: '0.1em', color: 'var(--hb-text-faint)', marginTop: 2,
-              }}>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', marginTop: 3 }}>
                 {spec.range}
               </div>
             )}
           </div>
           {monthLabel && (
-            <div style={{
-              fontFamily: "var(--font-mono)", fontSize: '0.62rem',
-              letterSpacing: '0.14em', color: 'var(--hb-cyan)', whiteSpace: 'nowrap',
-            }}>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--hb-text-dim)', whiteSpace: 'nowrap' }}>
               {monthLabel}
             </div>
           )}
         </div>
 
-        {/* hairline divider */}
-        <div style={{
-          height: 1, marginBottom: '0.6rem', position: 'relative', zIndex: 1,
-          background: 'linear-gradient(90deg, var(--hb-edge-bright), transparent)',
-        }} />
-
         {/* day columns */}
-        <div style={{ display: 'flex', gap: '0.3rem', position: 'relative', zIndex: 1, overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: 5, overflowX: 'auto' }}>
           {spec.days.map((day, i) => (
             <DayColumn key={i} day={day} today={today} />
           ))}

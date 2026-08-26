@@ -38,6 +38,7 @@ import com.speda.heartbreaker.designsystem.glass.hbSeamBottom
 import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.data.SkyfallArm
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.i18n.AppStrings
 import com.speda.heartbreaker.i18n.LocalStrings
@@ -57,6 +58,7 @@ private enum class SettingsTab(val info: (AppStrings) -> AppStrings.TabInfo) {
     Reminders({ it.settingsTabs.reminders }),
     Health({ it.settingsTabs.health }),
     Interface({ it.settingsTabs.interfaceTab }),
+    Protocols({ it.settingsTabs.protocols }),
     Data({ it.settingsTabs.data }),
     Account({ it.settingsTabs.account }),
 }
@@ -74,6 +76,11 @@ fun SettingsScreen(
     models: List<ModelInfo>,
     brand: Brand,
     onResetUplink: () -> Unit,
+    /** Hands a Skyfall arming payload UP to the shell, which owns the one
+     *  countdown screen both entry routes land on. This pane deliberately does
+     *  not draw its own — a second countdown is how a protocol ends up with a
+     *  path that skips its own safety. */
+    onArmSkyfall: (SkyfallArm) -> Unit,
     onClose: () -> Unit,
 ) {
     val palette = LocalHbPalette.current
@@ -135,6 +142,7 @@ fun SettingsScreen(
                 SettingsTab.Reminders -> RemindersTab(config, graph)
                 SettingsTab.Health -> HealthTab(config, graph)
                 SettingsTab.Interface -> InterfaceTab(config, graph)
+                SettingsTab.Protocols -> ProtocolsTab(config, graph, onArmSkyfall)
                 SettingsTab.Data -> DataTab(config, graph)
                 SettingsTab.Account -> AccountTab(config, graph, settings, brand, onResetUplink)
             }

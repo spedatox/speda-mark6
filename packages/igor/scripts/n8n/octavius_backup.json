@@ -1,0 +1,145 @@
+{
+  "name": "Octavius backup",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "17 4 * * *"
+            }
+          ]
+        }
+      },
+      "id": "octavius-cron",
+      "name": "Nightly 04:17",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        0
+      ],
+      "notes": "Once a night, in the quiet hour. 04:17 rather than 04:00 on purpose — every other cron on this box fires on the hour, and a database snapshot competing with them for disk is slower for no reason.\n\nThis is one of the deliberate 'go and do work' schedules, not a watcher. But unlike the daily briefings it costs NO tokens: the backup endpoint does the whole job itself. Only a FAILURE spends a turn.\n\nKeep it inside OCTAVIUS_STALE_HOURS (default 48) or `status` will report stale on a healthy deployment."
+    },
+    {
+      "parameters": {
+        "url": "http://app:8000/admin/octavius/backup",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 900000
+        }
+      },
+      "id": "octavius-backup",
+      "name": "Igor: back up the brain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        40,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "THE WHOLE JOB, and nothing to edit. Igor snapshots the database with VACUUM INTO (consistent even though it is live and in WAL mode), runs an integrity check on the snapshot, gzips it, uploads it to the Drive folder named by OCTAVIUS_DRIVE_FOLDER, confirms the stored size, and trashes everything past OCTAVIUS_KEEP.\n\n15-minute timeout: on a large database the snapshot and upload take real time, and a node that gives up at 30s would report a failure for a backup that then completes.\n\nonError continueRegularOutput: the endpoint returns 200 with ok:false when a backup fails, so the Gate can tell a failed backup apart from an unreachable Igor. This covers the second case."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════\n//  THE COST BOUNDARY — INVERTED.\n//\n//  Every other watcher in this folder polls something cheap and spends a turn\n//  when the answer is YES. Here the cheap half IS the work: the backup node\n//  above already snapshotted the database, verified it, uploaded it and pruned\n//  the old copies, for zero tokens and no agent.\n//\n//  So this Gate fires on FAILURE. A successful backup returns no items and the\n//  branch stops — which is what happens every night. Orion is woken only when\n//  the owner's protection is actually gone.\n// ═══════════════════════════════════════════════════════════════════════\n\nconst res = $input.first().json || {};\nconst store = $getWorkflowStaticData('global');\n\nif (res.ok) {\n  // Recovered after a run of failures? Say so once, then go quiet again.\n  if (store.broken) {\n    store.broken = false;\n    return [{ json: {\n      recovered: true,\n      intent: 'The nightly database backup is working again — ' + res.name +\n        ' uploaded cleanly. Tell the owner in ONE line. Do not call any tool.'\n    }}];\n  }\n  return [];\n}\n\n// EDGE-triggered: a revoked Google token fails identically every night, and a\n// push a night would bury the one that mattered. One on the transition.\nif (store.broken) return [];\nstore.broken = true;\n\nconst stage = res.stage || 'unknown';\nlet intent;\n\nif (stage === 'integrity') {\n  // Not a backup problem. The snapshot of the LIVE database failed its integrity\n  // check, and that is the most serious thing this workflow can discover.\n  intent = 'URGENT: the nightly backup snapshot FAILED ITS INTEGRITY CHECK (' +\n    (res.error || '') + '). This is a statement about the LIVE DATABASE, not ' +\n    'about the backup. Tell the owner immediately and in exactly those terms, ' +\n    'say that no backup was uploaded, and recommend he stop writing to it until ' +\n    'it is looked at. Do not describe this as a transient error.';\n} else if (stage === 'google' || stage === 'disabled') {\n  intent = 'The nightly database backup cannot run: ' + (res.error || '') +\n    ' This will fail identically every night until it is fixed, so say that ' +\n    'rather than implying it might pass tomorrow. Tell the owner in one short ' +\n    'message what to do. Do not call any tool.';\n} else {\n  intent = 'The nightly database backup FAILED at the \"' + stage + '\" stage: ' +\n    (res.error || 'no detail') + '. Tell the owner he is NOT backed up, in that ' +\n    'sentence. You may run octavius_protocol(action=\"backup\") ONCE to retry — ' +\n    'if it fails again, report both failures and stop.';\n}\n\nreturn [{ json: { stage: stage, error: res.error || '', intent: intent } }];\n"
+      },
+      "id": "octavius-gate",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "notes": "Fires on FAILURE, not on success — the work already happened upstream for free. A good night returns no items and stops here.\n\nEdge-triggered via static data: a revoked Google token fails identically every night, and one push a night would bury the one that mattered."
+    },
+    {
+      "parameters": {
+        "url": "http://app:8000/trigger/orion",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ \"payload\": { \"type\": \"watchdog\", \"event\": \"backup_failed\", \"job\": \"octavius_backup\", \"automation\": \"Octavius backup\", \"stage\": $json.stage, \"error\": $json.error, \"intent\": $json.intent }, \"output_mode\": \"push\" }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "octavius-trigger",
+      "name": "Igor: tell Orion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "notes": "One agentic turn, only when the owner's protection is actually gone. The intent differs by failure stage — an integrity failure is a statement about the LIVE database and must not arrive worded like a flaky upload."
+    }
+  ],
+  "connections": {
+    "Nightly 04:17": {
+      "main": [
+        [
+          {
+            "node": "Igor: back up the brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Igor: back up the brain": {
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate": {
+      "main": [
+        [
+          {
+            "node": "Igor: tell Orion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}

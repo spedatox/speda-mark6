@@ -186,8 +186,12 @@ export interface SSEEvent {
   // subagent panel, and switched on it before the union admitted it existed.
   // `lockdown_auth` — the backend is asking the owner to authorize the Lockdown
   // Protocol; Layout opens the authorization modal on it.
+  // `skyfall_arm` — Speda armed a launch project; Layout opens the countdown.
+  // NOT an authorization ask and not a launch: nothing has been sent when this
+  // arrives, and nothing will be unless the owner lets the clock run out.
   type: 'start' | 'chunk' | 'tool' | 'tool_result' | 'file' | 'done' | 'error'
       | 'subagent' | 'permission_request' | 'house_party_auth' | 'lockdown_auth'
+      | 'skyfall_arm'
   data: unknown
   session_id: number
   request_id: string

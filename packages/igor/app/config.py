@@ -660,6 +660,32 @@ class Settings(BaseSettings):
     # being mentioned exactly once and then never again.
     lifeboat_renotify_hours: int = 24
 
+    # ── Doormat Protocol ──────────────────────────────────────────────────────
+    # Moving the deployment to a new domain: a staged Caddy site, the derived
+    # OAuth/Telegram settings, and the retirement of the old hostname
+    # (app/services/doormat.py, runbook in docs/DOORMAT_PROTOCOL.md). OFF by
+    # default — it edits the host's reverse-proxy config and the deployment .env,
+    # so it needs the system_ops host bridge, and a deployment must opt in.
+    doormat_protocol_enabled: bool = False
+
+    # ── Octavius Protocol ─────────────────────────────────────────────────────
+    # Igor's own database, snapshotted and shipped to the owner's Google Drive
+    # (app/services/octavius.py, runbook in docs/OCTAVIUS_PROTOCOL.md). OFF by
+    # default. Unlike the other host protocols this one needs NO ssh bridge — the
+    # snapshot is taken through Igor's own SQLAlchemy engine — but it does need
+    # Google connected, with the full `drive` scope the Connections flow already
+    # requests.
+    octavius_protocol_enabled: bool = False
+    octavius_drive_folder: str = "Speda Mark VI — Backups"
+    # How many backups to keep. Older ones are TRASHED, not deleted: Drive holds
+    # trash for 30 days, so a retention number typed with one digit too few stays
+    # a mistake the owner can undo.
+    octavius_keep: int = 14
+    # Age at which the newest backup stops counting as protection. Set from the
+    # cron's period, not from taste — at a nightly cadence anything past ~48h
+    # means two runs in a row failed silently.
+    octavius_stale_hours: int = 48
+
 
 settings = Settings()
 

@@ -114,6 +114,72 @@ def set_lifeboat(state: dict) -> dict:
     return dict(state)
 
 
+# ── Doormat Protocol ────────────────────────────────────────────────────────
+# Where a domain change has got to: {phase, target, previous, staged_at,
+# cutover_at}. services/doormat.py owns every transition.
+#
+# Persisted because the protocol spans DAYS, not one turn: the owner stages a
+# domain, goes and edits three third-party consoles, and comes back tomorrow to
+# cut over. A phase held in memory would be lost to the very restart that
+# cutover itself requires, and the protocol would forget that an old domain is
+# still being served and still owes a retirement.
+
+def get_doormat() -> dict:
+    return dict(_load().get("doormat", {}))
+
+
+def set_doormat(state: dict) -> dict:
+    store = _load()
+    store["doormat"] = dict(state)
+    _save()
+    logger.info("doormat_state_set", extra={"phase": state.get("phase") or "idle",
+                                            "target": state.get("target", "")})
+    return dict(state)
+
+
+# ── Skyfall Protocol projects ───────────────────────────────────────────────
+# One entry per launch target the owner has configured: name, description, the
+# endpoint it hits (url/method/body/headers) and how long its countdown runs.
+# services/skyfall.py owns the shape; this is only where they live.
+#
+# Header VALUES are secrets and are treated like portal passwords — stored here,
+# masked by skyfall.mask() on every read that leaves the process, and never put
+# anywhere a model can read them. A project's `Authorization: Bearer …` must not
+# come back out in a chat message.
+#
+# ONLY the owner writes these, through the settings pane. No tool creates or
+# edits a project: an agent that could write the target AND pull the trigger
+# could hit anything, and the countdown would be guarding a URL the owner never
+# chose.
+
+def get_skyfall_projects() -> dict[str, dict]:
+    return dict(_load().get("skyfall_projects", {}))
+
+
+def get_skyfall_project(project_id: str) -> dict:
+    return dict(_load().get("skyfall_projects", {}).get(project_id, {}))
+
+
+def save_skyfall_project(project_id: str, record: dict) -> dict:
+    store = _load()
+    projects = dict(store.get("skyfall_projects", {}))
+    projects[project_id] = dict(record)
+    store["skyfall_projects"] = projects
+    _save()
+    return dict(record)
+
+
+def delete_skyfall_project(project_id: str) -> bool:
+    store = _load()
+    projects = dict(store.get("skyfall_projects", {}))
+    existed = projects.pop(project_id, None) is not None
+    store["skyfall_projects"] = projects
+    _save()
+    logger.info("skyfall_project_deleted",
+                extra={"project": project_id, "existed": existed})
+    return existed
+
+
 # ── Per-agent model overrides ───────────────────────────────────────────────
 # The owner can pin any agent to a specific model ref ("provider:model", bare =
 # Anthropic) from the UI. An override replaces the profile's interactive AND

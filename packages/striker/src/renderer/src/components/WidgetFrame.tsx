@@ -12,10 +12,10 @@ const BASE_STYLES = `
     -webkit-font-smoothing: antialiased;
   }
   :root {
-    --bg-primary: #060c0f; --bg-sidebar: #0b1a22;
-    --bg-hover: rgba(70,150,175,0.12); --bg-active: rgba(var(--hb-accent-rgb),0.16);
+    --bg-primary: #080b10; --bg-sidebar: #0e1319;
+    --bg-hover: rgba(190,215,235,0.06); --bg-active: rgba(var(--hb-accent-rgb),0.16);
     --text-primary: var(--hb-text); --text-secondary: var(--hb-text-dim); --text-muted: var(--hb-text-faint);
-    --border: rgba(var(--hb-accent-rgb),0.26); --border-focus: rgba(var(--hb-accent-rgb),0.55);
+    --border: rgba(219,230,236,0.08); --border-focus: rgba(var(--hb-accent-rgb),0.30);
     --accent: var(--hb-cyan); --accent-hover: var(--hb-cyan-bright);
   }
 </style>`
@@ -175,20 +175,22 @@ export default function WidgetFrame({ language, children }: Props) {
     })
   }
 
+  // A hover control on the deck is a glass pill at reading size. It used to be
+  // a 0.64rem Rajdhani cap with 0.14em tracking on an opaque slab — a rack
+  // label sitting on top of a rendered widget.
   const btnBase: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: '0.3rem',
-    padding: '0.28rem 0.6rem',
-    border: '1px solid rgba(var(--hb-accent-rgb),0.3)',
-    background: 'rgba(6,14,19,0.82)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
+    display: 'flex', alignItems: 'center', gap: 6,
+    height: 30, padding: '0 12px',
+    border: '1px solid rgba(255,255,255,0.12)',
+    background: 'var(--glass-menu)',
+    backdropFilter: 'blur(20px) saturate(160%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14)',
     color: 'var(--hb-text-dim)',
-    fontSize: '0.64rem',
-    fontFamily: "'Rajdhani', sans-serif",
-    fontWeight: 700,
+    fontSize: '0.8125rem',
+    fontFamily: 'var(--font-read)',
+    fontWeight: 500,
     cursor: 'pointer',
-    letterSpacing: '0.14em',
-    textTransform: 'uppercase',
     transition: 'background 0.12s, color 0.12s, border-color 0.12s',
     userSelect: 'none',
   }
@@ -204,18 +206,18 @@ export default function WidgetFrame({ language, children }: Props) {
         stableContent ? (
           <div
             ref={svgHostRef}
+            className="hb-widget-round"
             style={{
               overflowX: 'auto',
-              borderRadius: '0.75rem',
               animation: 'fadeIn 0.3s ease both',
             }}
             dangerouslySetInnerHTML={{ __html: stableContent }}
           />
         ) : (
           // Streaming — SVG not closed yet. Calm placeholder, no flicker.
-          <div style={{
+          <div className="hb-widget-round" style={{
             minHeight: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 6, borderRadius: '0.75rem', background: 'rgba(255,255,255,0.015)',
+            gap: 6, background: 'rgba(255,255,255,0.015)',
           }}>
             {[0, 0.18, 0.36].map((delay, i) => (
               <span key={i} style={{
@@ -226,19 +228,17 @@ export default function WidgetFrame({ language, children }: Props) {
           </div>
         )
       ) : (
-        <div style={{
+        <div className="hb-widget-round" style={{
           position: 'relative',
-          borderRadius: '0.75rem',
           overflow: 'hidden',
           animation: 'widgetEntrance 0.4s cubic-bezier(0.16,1,0.3,1) both',
         }}>
           {/* Skeleton dots while iframe loads */}
           {!frameLoaded && (
-            <div style={{
+            <div className="hb-widget-round" style={{
               position: 'absolute', inset: 0, minHeight: 240,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               gap: 6, pointerEvents: 'none', background: 'rgba(255,255,255,0.015)',
-              borderRadius: '0.75rem',
             }}>
               {[0, 0.18, 0.36].map((delay, i) => (
                 <span key={i} style={{
@@ -254,6 +254,7 @@ export default function WidgetFrame({ language, children }: Props) {
             key={frameId.current}
             srcDoc={buildSrcdoc(stableContent || children)}
             sandbox="allow-scripts allow-downloads allow-same-origin allow-forms"
+            className="hb-widget-round"
             scrolling="no"
             onLoad={() => setTimeout(() => setFrameLoaded(true), 120)}
             style={{
@@ -262,7 +263,6 @@ export default function WidgetFrame({ language, children }: Props) {
               border: 'none',
               display: 'block',
               background: 'transparent',
-              borderRadius: '0.75rem',
               opacity: frameLoaded ? 1 : 0,
               transition: 'opacity 0.35s ease, height 0.3s ease',
               overflow: 'hidden',
@@ -312,9 +312,8 @@ export default function WidgetFrame({ language, children }: Props) {
 
       {/* ── Code panel — slides in below the render ──────────────── */}
       {showCode && (
-        <div style={{
+        <div className="hb-widget-round" style={{
           marginTop: '0.5rem',
-          borderRadius: '0.75rem',
           overflow: 'hidden',
           border: '1px solid var(--border)',
           animation: 'fadeSlideIn 0.2s ease both',

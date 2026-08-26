@@ -43,6 +43,8 @@ import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HudStrip
 import com.speda.heartbreaker.ui.comms.AgentCommsScreen
+import com.speda.heartbreaker.data.SkyfallArm
+import com.speda.heartbreaker.ui.skyfall.SkyfallCountdown
 import com.speda.heartbreaker.ui.settings.SettingsScreen
 import com.speda.heartbreaker.ui.systems.SystemsBoardScreen
 import com.speda.heartbreaker.ui.switcher.AgentSwitcherOverlay
@@ -135,6 +137,15 @@ fun ChatScreen(
 
     var drawerOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
+    // The Skyfall countdown, from EITHER route: Speda arming it over chat lands
+    // on the view model's channel below, and the Protocols pane hands one up
+    // through onArmSkyfall. One piece of state, one screen — so neither route
+    // can reach a launch without the clock and its abort.
+    var skyfallArm by remember { mutableStateOf<SkyfallArm?>(null) }
+    val armedBySpeda by vm.skyfallArm.collectAsStateWithLifecycle()
+    LaunchedEffect(armedBySpeda) {
+        armedBySpeda?.let { skyfallArm = it; vm.clearSkyfall() }
+    }
     var commsOpen by remember { mutableStateOf(false) }
     var boardOpen by remember { mutableStateOf(false) }
     var switcherOpen by remember { mutableStateOf(false) }
@@ -289,6 +300,12 @@ fun ChatScreen(
                 settings = settings,
                 models = models,
                 brand = brand,
+                onArmSkyfall = { armed ->
+                    // Close settings first: the countdown is the only thing that
+                    // should be on screen while it runs.
+                    settingsOpen = false
+                    skyfallArm = armed
+                },
                 onResetUplink = { settingsOpen = false; onResetUplink() },
                 onClose = { settingsOpen = false },
             )
@@ -308,6 +325,20 @@ fun ChatScreen(
                 settings = settings,
                 sessionCount = state.sessions.size,
                 onClose = { boardOpen = false },
+            )
+        }
+
+        // SKYFALL — the launch countdown. Last in the stack so it covers every
+        // other overlay: while a clock is running, nothing else is the thing on
+        // screen. Back is not wired to it; the two outcomes are named on two
+        // buttons, and a launch screen you can leave by accident lies about what
+        // leaving did.
+        skyfallArm?.let { armed ->
+            SkyfallCountdown(
+                config = config,
+                api = graph.api,
+                arm = armed,
+                onClose = { skyfallArm = null },
             )
         }
 

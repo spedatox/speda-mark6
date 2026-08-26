@@ -504,6 +504,166 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
+    // ── The standing protocols ──────────────────────────────────────────────
+    //
+    // Read-only status for the four host protocols, plus the whole of Skyfall.
+    // Every read stamps `reachable = true` on success and returns the fallback
+    // with `reachable = false` otherwise: an unreachable server is NOT evidence
+    // that a protocol is disabled, and the pane needs to be able to tell those
+    // apart or it will send the owner to change a setting that was never wrong.
+    //
+    // House Party is deliberately absent. It stages the whole roster in a war
+    // room the phone does not build, so the backend refuses to engage it from
+    // here (app/core/surface.py) — the pane shows it as desktop-only rather than
+    // offering a control that would be refused.
+
+    suspend fun fetchLockdown(config: AppConfig): LockdownState = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/agents/lockdown")
+                ?.let { json.decodeFromString<LockdownState>(it).copy(reachable = true) }
+        }.getOrNull() ?: LockdownState()
+    }
+
+    /** Stand containment down. Never takes a passphrase — the way out of a
+     *  lockdown must always be available, including from the phone. */
+    suspend fun standDownLockdown(config: AppConfig): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            postJson(config, "/agents/lockdown", buildJsonObject { put("engaged", false) })
+        }.getOrNull()
+    }
+
+    /** Engage containment with the owner's authorization passphrase. */
+    suspend fun engageLockdown(config: AppConfig, passphrase: String): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                postJson(config, "/agents/lockdown", buildJsonObject {
+                    put("engaged", true); put("passphrase", passphrase)
+                }) != null
+            }.getOrDefault(false)
+        }
+
+    suspend fun fetchLifeboat(config: AppConfig): LifeboatState = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/host/lifeboat")
+                ?.let { json.decodeFromString<LifeboatState>(it).copy(reachable = true) }
+        }.getOrNull() ?: LifeboatState()
+    }
+
+    suspend fun fetchOctavius(config: AppConfig): OctaviusState = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/admin/octavius")
+                ?.let { json.decodeFromString<OctaviusState>(it).copy(reachable = true) }
+        }.getOrNull() ?: OctaviusState()
+    }
+
+    /** Take a backup now. Minutes on a large database, so the caller keeps its
+     *  button disabled throughout rather than assuming speed. */
+    suspend fun runOctaviusBackup(config: AppConfig): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            postEmpty(config, "/admin/octavius/backup")?.let {
+                json.parseToJsonElement(it).jsonObject["ok"]?.jsonPrimitive?.booleanOrNull
+            } ?: false
+        }.getOrDefault(false)
+    }
+
+    suspend fun fetchDoormat(config: AppConfig): DoormatState = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/host/doormat")
+                ?.let { json.decodeFromString<DoormatState>(it).copy(reachable = true) }
+        }.getOrNull() ?: DoormatState()
+    }
+
+    // ── Skyfall ─────────────────────────────────────────────────────────────
+
+    suspend fun fetchSkyfallProjects(config: AppConfig): List<SkyfallProject> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                getString(config, "/protocols/skyfall/projects")?.let {
+                    json.decodeFromString<List<SkyfallProject>>(it)
+                }
+            }.getOrNull() ?: emptyList()
+        }
+
+    /** Create or update a project. Returns the server's own words on a refusal —
+     *  it owns the rules, and a second copy of them here would drift. */
+    suspend fun saveSkyfallProject(
+        config: AppConfig,
+        project: SkyfallProject,
+    ): String? = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("id", project.id)
+            put("name", project.name)
+            put("description", project.description)
+            put("url", project.url)
+            put("method", project.method)
+            put("body", project.body)
+            put("countdown_seconds", project.countdownSeconds)
+            put("headers", buildJsonObject { project.headers.forEach { (k, v) -> put(k, v) } })
+        }
+        val request = Request.Builder()
+            .url("${config.apiBase}/protocols/skyfall/projects")
+            .header("X-API-Key", config.apiKey)
+            .put(body.toString().toRequestBody(jsonMedia))
+            .build()
+        runCatching {
+            restClient.newCall(request).execute().use { res ->
+                val text = res.body?.string().orEmpty()
+                if (res.isSuccessful) null
+                else json.parseToJsonElement(text).jsonObject["detail"]
+                    ?.jsonPrimitive?.contentOrNull ?: "HTTP ${res.code}"
+            }
+        }.getOrElse { "Could not reach the server." }
+    }
+
+    suspend fun deleteSkyfallProject(config: AppConfig, id: String): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching { deleteRequest(config, "/protocols/skyfall/projects/$id") != null }
+                .getOrDefault(false)
+        }
+
+    /** The countdown payload for a project picked from the list. Sends nothing —
+     *  arming IS opening the clock, and the clock belongs to the screen. */
+    suspend fun armSkyfall(config: AppConfig, id: String): SkyfallArm? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                postEmpty(config, "/protocols/skyfall/arm/$id")?.let {
+                    json.decodeFromString<SkyfallArm>(it)
+                }
+            }.getOrNull()
+        }
+
+    /** The clock reached zero. The countdown screen is the only caller. */
+    suspend fun fireSkyfall(config: AppConfig, id: String): SkyfallResult =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                postJson(config, "/protocols/skyfall/fire", buildJsonObject { put("project_id", id) })
+                    ?.let { json.decodeFromString<SkyfallResult>(it) }
+                // A null body is a non-2xx: a deleted or unusable project, which
+                // means nothing was sent. Say that rather than implying a launch.
+                    ?: SkyfallResult(fired = false, error = "The project could not be fired.")
+            }.getOrElse {
+                // The request may or may not have left the phone. `fired = true`
+                // is the honest answer — the screen must not report that nothing
+                // happened when it cannot know that.
+                SkyfallResult(
+                    fired = true, ok = false,
+                    error = "Lost contact mid-launch — whether the request went out is unknown.",
+                )
+            }
+        }
+
+    /** Record that the owner stopped the clock. Best-effort: the abort already
+     *  happened by NOT firing, and this only writes it down. */
+    suspend fun abortSkyfall(config: AppConfig, id: String, remaining: Double) {
+        withContext(Dispatchers.IO) {
+            runCatching {
+                postJson(config, "/protocols/skyfall/abort", buildJsonObject {
+                    put("project_id", id); put("remaining_seconds", remaining)
+                })
+            }
+        }
+    }
+
     /*
      * getHouseParty / setHouseParty used to live here. The House Party Protocol
      * is a desktop surface now — the backend refuses to ENGAGE it from a

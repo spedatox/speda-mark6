@@ -308,3 +308,152 @@ def test_the_response_is_the_shape_the_peer_parks_on():
     response = _asyncio.run(scenario())
     assert set(response) == {"type", "request_id", "ok", "result"}
     assert response["type"] == "memory_response"
+
+
+# ── The read skills: recall_conversations and read_agent_channel ─────────────
+
+def _read_skill(monkeypatch, name, result="...", *, capture=None):
+    """Swap the class a read route builds, capturing (args, context)."""
+    class _Skill:
+        async def execute(self, args, context):
+            if capture is not None:
+                capture.append((args, context))
+            return result
+
+    monkeypatch.setitem(
+        peer_memory._READ_SKILLS,                                  # noqa: SLF001
+        name,
+        peer_memory._ReadSkill(                                    # noqa: SLF001
+            _Skill,
+            keys=peer_memory._READ_SKILLS[name].keys,              # noqa: SLF001
+            required=peer_memory._READ_SKILLS[name].required,      # noqa: SLF001
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_recall_frame_reaches_the_semantic_search_skill(monkeypatch):
+    seen: list = []
+    _read_skill(monkeypatch, "recall_conversations",
+                "Found 2 relevant exchange(s)...", capture=seen)
+
+    response = await peer_memory.run_memory_command("optimus", {
+        "type": "memory_request", "request_id": "s1",
+        "skill": "recall_conversations",
+        "query": "the migration we discussed", "after": "2026-06-01", "limit": 5,
+    })
+
+    assert response["ok"] is True
+    assert response["request_id"] == "s1"
+    assert "Found 2 relevant" in response["result"]
+    args, context = seen[0]
+    assert args == {"query": "the migration we discussed",
+                    "after": "2026-06-01", "limit": 5}
+    # The load-bearing field on the read path too: recall runs AS the peer, so
+    # its agent_id filter and per-user scope are the peer's, not somebody else's.
+    assert context.agent_id == "optimus"
+    assert context.user_id == 1
+
+
+@pytest.mark.asyncio
+async def test_a_read_agent_channel_frame_reaches_its_skill(monkeypatch):
+    """The cross-agent half: Optimus reading the channel is how it learns what
+    Centurion has been doing, through the one skill that already renders it."""
+    seen: list = []
+    _read_skill(monkeypatch, "read_agent_channel",
+                "AGENT NETWORK CHANNEL...", capture=seen)
+
+    response = await peer_memory.run_memory_command("centurion", {
+        "request_id": "s2", "skill": "read_agent_channel",
+        "agent": "optimus", "limit": 10,
+    })
+
+    assert response["ok"] is True
+    assert seen[0][0] == {"agent": "optimus", "limit": 10}
+    assert seen[0][1].agent_id == "centurion"
+
+
+@pytest.mark.asyncio
+async def test_only_the_read_skills_own_arguments_are_forwarded(monkeypatch):
+    """Routing fields (request_id, chat_id, type, skill) are Igor's business;
+    a peer that adds a field must not reach the skill's kwargs with it."""
+    seen: list = []
+    _read_skill(monkeypatch, "recall_conversations", capture=seen)
+
+    await peer_memory.run_memory_command("optimus", {
+        "type": "memory_request", "request_id": "s3", "chat_id": "c1",
+        "skill": "recall_conversations", "query": "x", "surprise": "!!",
+    })
+
+    assert seen[0][0] == {"query": "x"}
+
+
+@pytest.mark.asyncio
+async def test_recall_without_a_query_is_refused_before_the_database(monkeypatch):
+    """A required arg the skill cannot run without, named before a session is
+    opened — the same discipline the write paths use."""
+    def _never(*_a, **_k):
+        raise AssertionError("should not have opened a session")
+
+    monkeypatch.setattr(peer_memory, "AsyncSessionLocal", _never)
+
+    response = await peer_memory.run_memory_command("optimus", {
+        "request_id": "s4", "skill": "recall_conversations", "query": "   ",
+    })
+
+    assert response["ok"] is False
+    assert "query" in response["result"]
+
+
+@pytest.mark.asyncio
+async def test_an_empty_channel_is_a_successful_read_not_a_failure(monkeypatch):
+    """'The channel is empty' is a real answer written for a model, not a
+    backend failure the peer should retry."""
+    _read_skill(monkeypatch, "read_agent_channel",
+                "The agent network channel is empty — no inter-agent traffic yet.")
+
+    response = await peer_memory.run_memory_command("optimus", {
+        "request_id": "s5", "skill": "read_agent_channel",
+    })
+
+    assert response["ok"] is True
+    assert "empty" in response["result"]
+
+
+@pytest.mark.asyncio
+async def test_a_read_skill_that_could_not_run_is_a_failure(monkeypatch):
+    class _Broken:
+        async def execute(self, args, context):
+            raise RuntimeError("the embedder is down")
+
+    monkeypatch.setitem(
+        peer_memory._READ_SKILLS,                                  # noqa: SLF001
+        "recall_conversations",
+        peer_memory._ReadSkill(_Broken, keys=("query",), required=("query",)),  # noqa: SLF001
+    )
+
+    response = await peer_memory.run_memory_command("optimus", {
+        "request_id": "s6", "skill": "recall_conversations", "query": "x",
+    })
+
+    assert response["ok"] is False
+    assert "the embedder is down" in response["result"]
+
+
+def test_the_read_routes_track_the_skills_they_claim_to_run():
+    """The route's declared arg keys must be a subset of what the skill's schema
+    accepts — a key the skill never reads is a silent drop, the exact failure
+    the argument allowlist exists to prevent."""
+    from app.skills.dispatch import AgentChannelSkill
+    from app.skills.semantic_search import SemanticSearchSkill
+
+    pairs = {
+        "recall_conversations": SemanticSearchSkill,
+        "read_agent_channel": AgentChannelSkill,
+    }
+    for name, cls in pairs.items():
+        route = peer_memory._READ_SKILLS[name]                     # noqa: SLF001
+        assert route.factory is cls
+        declared = set(cls.input_schema["properties"])
+        assert set(route.keys) <= declared, (name, set(route.keys) - declared)
+        assert set(route.required) <= set(route.keys)

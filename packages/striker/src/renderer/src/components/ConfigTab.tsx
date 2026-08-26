@@ -3,6 +3,9 @@ import { getConfig, saveConfig, getMemorySources, setMemorySource } from '../lib
 import type { AppConfig } from '../lib/types'
 import type { ConfigFieldInfo, ConfigGroupInfo, ConfigSaveResult, MemorySources } from '../lib/api'
 import GlassSelect from './GlassSelect'
+import { Switch } from './settingsUI'
+import { Skeleton, SkeletonText, SkeletonList } from './Skeleton'
+import { useT } from '../lib/i18n'
 
 /**
  * ConfigTab — the full backend configuration surface: every API key, token,
@@ -16,6 +19,7 @@ const MONO = 'var(--font-mono)'
 type EditVal = string | number | boolean
 
 export default function ConfigTab({ config }: { config: AppConfig }) {
+  const t = useT()
   const [groups, setGroups] = useState<ConfigGroupInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -27,11 +31,15 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
 
   const load = async () => {
     setLoading(true)
-    const g = await getConfig(config)
-    setGroups(g)
-    // Open the first group by default so the panel isn't a wall of collapsed rows.
-    setOpen(o => (Object.keys(o).length ? o : g.length ? { [g[0].id]: true } : {}))
-    setLoading(false)
+    try {
+      const g = await getConfig(config)
+      setGroups(g)
+      // Open the first group by default so the panel isn't a wall of collapsed rows.
+      setOpen(o => (Object.keys(o).length ? o : g.length ? { [g[0].id]: true } : {}))
+    } finally {
+      // Always clear — an unreachable backend must not skeleton this pane forever.
+      setLoading(false)
+    }
   }
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -70,15 +78,29 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
   }
 
   if (loading) {
-    return <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: MONO }}>Loading configuration…</p>
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '4.5rem' }}>
+        <SkeletonText lines={2} lastWidth="55%" />
+        <Skeleton height={44} />
+        <div className="hb-skeleton-group" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {[220, 160, 190].map((w, i) => (
+            <div key={i} style={{ border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)', padding: '0.85rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', ['--hb-skeleton-delay' as string]: `${i * 0.07}s` }}>
+                <Skeleton width={11} height={11} radius={3} />
+                <Skeleton width={w} height={13} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '4.5rem' }}>
       <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>
-        Everything the backend can be configured with — API keys, bot tokens, endpoints and flags.
-        Values are stored in a managed override file that wins over the checked-in <code style={{ fontFamily: MONO }}>.env</code>.
-        A <span style={{ color: 'var(--hb-amber)' }}>restart-required</span> field is saved now and takes effect on the next backend restart.
+        {t.configTab.introPre} <code style={{ fontFamily: MONO }}>.env</code>{t.configTab.introMid}{' '}
+        <span style={{ color: 'var(--hb-amber)' }}>{t.configTab.restartRequiredLabel}</span> {t.configTab.introPost}
       </p>
 
       <SourceOfTruthPanel config={config} />
@@ -87,7 +109,7 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
       <input
         value={query}
         onChange={e => setQuery(e.target.value)}
-        placeholder="Search settings (e.g. telegram, openai, n8n)…"
+        placeholder={t.configTab.searchPlaceholder}
         style={{
           width: '100%', background: 'var(--glass-fill)',
           boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35)',
@@ -123,11 +145,12 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
                 </span>
               </span>
               {groupDirty > 0 && (
-                <span style={{
-                  flexShrink: 0, fontSize: '0.6rem', fontFamily: MONO, color: 'var(--hb-amber)',
-                  border: '1px solid rgba(242,183,92,0.5)', padding: '1px 5px',
+                <span className="glass-round" style={{
+                  flexShrink: 0, fontSize: '0.78rem', color: 'var(--hb-amber-bright)',
+                  background: 'rgba(217,156,68,0.1)',
+                  border: '1px solid rgba(217,156,68,0.32)', padding: '2px 10px',
                 }}>
-                  {groupDirty} edited
+                  {t.configTab.groupEdited(groupDirty)}
                 </span>
               )}
             </button>
@@ -165,13 +188,13 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           {result ? (
             <span style={{ fontSize: '0.72rem', fontFamily: MONO, color: 'var(--text-secondary)' }}>
-              {result.applied_live.length > 0 && <span style={{ color: 'var(--hb-green)' }}>✓ {result.applied_live.length} applied live. </span>}
-              {result.restart_required.length > 0 && <span style={{ color: 'var(--hb-amber)' }}>↻ {result.restart_required.length} need a restart. </span>}
-              {result.rejected.length > 0 && <span style={{ color: 'var(--hb-red)' }}>✕ {result.rejected.length} rejected.</span>}
+              {result.applied_live.length > 0 && <span style={{ color: 'var(--hb-green)' }}>{t.configTab.appliedLive(result.applied_live.length)}</span>}
+              {result.restart_required.length > 0 && <span style={{ color: 'var(--hb-amber)' }}>{t.configTab.needsRestart(result.restart_required.length)}</span>}
+              {result.rejected.length > 0 && <span style={{ color: 'var(--hb-red)' }}>{t.configTab.rejected(result.rejected.length)}</span>}
             </span>
           ) : (
             <span style={{ fontSize: '0.72rem', fontFamily: MONO, color: 'var(--text-muted)' }}>
-              {dirtyKeys.length ? `${dirtyKeys.length} unsaved change${dirtyKeys.length > 1 ? 's' : ''}` : 'No changes'}
+              {dirtyKeys.length ? t.configTab.unsavedChanges(dirtyKeys.length) : t.configTab.noChanges}
             </span>
           )}
         </div>
@@ -181,7 +204,7 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
             className="hb-btn"
             style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem' }}
           >
-            Discard
+            {t.configTab.discard}
           </button>
         )}
         <button
@@ -195,7 +218,7 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
             cursor: dirtyKeys.length && !saving ? 'pointer' : 'not-allowed',
           }}
         >
-          {saving ? 'Saving…' : 'Save changes'}
+          {saving ? t.configTab.saving : t.configTab.saveChanges}
         </button>
       </div>
     </div>
@@ -211,31 +234,42 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
   onChange: (v: EditVal) => void
   onReset: () => void
 }) {
+  const t = useT()
   const labelRow = (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.3rem' }}>
-      <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{f.label}</label>
+      <label style={{ fontSize: '0.9375rem', color: 'var(--hb-text)' }}>{f.label}</label>
       {f.requires_restart && (
-        <span title="Takes effect after a backend restart" style={{ fontSize: '0.58rem', fontFamily: MONO, color: 'var(--hb-amber)', letterSpacing: '0.06em' }}>
-          RESTART
+        <span
+          title={t.configTab.restartEffectTitle}
+          className="glass-round"
+          style={{
+            fontSize: '0.72rem', color: 'var(--hb-amber-bright)',
+            background: 'rgba(217,156,68,0.1)', border: '1px solid rgba(217,156,68,0.28)',
+            padding: '1px 9px',
+          }}
+        >
+          {t.configTab.restartChip}
         </span>
       )}
-      {dirty && <span style={{ fontSize: '0.58rem', fontFamily: MONO, color: 'var(--hb-cyan-bright)' }}>● edited</span>}
+      {dirty && <span style={{ fontSize: '0.78rem', color: 'var(--hb-cyan-bright)' }}>{t.configTab.editedDot}</span>}
       <span style={{ flex: 1 }} />
       {dirty && (
-        <button onClick={onReset} title="Revert this field"
-          style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.68rem', fontFamily: MONO }}>
-          revert
+        <button onClick={onReset} title={t.configTab.revertFieldTitle}
+          style={{ border: 'none', background: 'transparent', color: 'var(--hb-text-faint)', cursor: 'pointer', fontSize: '0.8125rem' }}>
+          {t.configTab.revert}
         </button>
       )}
     </div>
   )
 
+  // Same 44px field the rest of the settings pane uses; the corner comes from
+  // the `.hb-settings` scope, which outranks the theme's blanket reset.
   const inputStyle: React.CSSProperties = {
-    width: '100%', background: 'var(--glass-fill)',
-    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.35)',
-    border: `1px solid ${dirty ? 'rgba(var(--hb-cyan-bright-rgb),0.5)' : 'var(--hb-edge)'}`,
-    padding: '0.5rem 0.65rem', color: 'var(--text-primary)',
-    fontSize: '0.84rem', fontFamily: f.secret ? MONO : 'inherit',
+    width: '100%', height: 44,
+    background: 'rgba(255,255,255,0.03)',
+    border: `1px solid ${dirty ? 'rgba(var(--hb-accent-rgb),0.45)' : 'rgba(255,255,255,0.09)'}`,
+    padding: '0 16px', color: 'var(--hb-text)',
+    fontSize: '0.9375rem', fontFamily: f.secret ? MONO : 'var(--font-read)',
     outline: 'none', transition: 'border-color 0.15s',
   }
 
@@ -243,22 +277,8 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
 
   if (f.type === 'bool') {
     const current = dirty ? Boolean(edit) : Boolean(f.value)
-    control = (
-      <button
-        onClick={() => onChange(!current)}
-        title={current ? 'On — click to turn off' : 'Off — click to turn on'}
-        style={{
-          width: 42, height: 24, borderRadius: 999, border: 'none', position: 'relative', cursor: 'pointer',
-          background: current ? 'rgba(var(--hb-accent-rgb),0.55)' : 'rgba(var(--hb-accent-rgb),0.2)',
-          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.3)',
-        }}
-      >
-        <span style={{
-          position: 'absolute', top: 3, left: current ? 21 : 3, width: 18, height: 18, borderRadius: '50%',
-          background: 'rgba(255,255,255,0.85)', boxShadow: '0 1px 3px rgba(0,0,0,0.45)', transition: 'left 0.15s',
-        }} />
-      </button>
-    )
+    control = <Switch on={current} onChange={onChange}
+      title={current ? t.configTab.onClickToTurnOff : t.configTab.offClickToTurnOn} />
   } else if (f.type === 'select') {
     const current = String(dirty ? edit : (f.value ?? f.options[0] ?? ''))
     control = (
@@ -280,14 +300,19 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
           type={revealed ? 'text' : 'password'}
           value={dirty ? String(edit) : ''}
           onChange={e => onChange(e.target.value)}
-          placeholder={f.is_set ? `stored ${f.hint || '••••'} — type to replace` : (f.placeholder || 'not set')}
+          placeholder={f.is_set ? t.configTab.storedTypeToReplace(f.hint || '••••') : (f.placeholder || t.configTab.notSet)}
           style={{ ...inputStyle, flex: 1 }}
           autoComplete="off"
           spellCheck={false}
         />
-        <button onClick={onReveal} className="hb-btn" title={revealed ? 'Hide' : 'Show what you typed'}
-          style={{ padding: '0 0.6rem', fontSize: '0.72rem', flexShrink: 0 }}>
-          {revealed ? 'Hide' : 'Show'}
+        <button onClick={onReveal} className="hb-tile" title={revealed ? t.configTab.hide : t.configTab.showWhatYouTyped}
+          style={{
+            padding: '0 14px', height: 44, flexShrink: 0, cursor: 'pointer',
+            fontFamily: 'var(--font-read)', fontSize: '0.845rem',
+            border: '1px solid rgba(255,255,255,0.09)',
+            background: 'rgba(255,255,255,0.03)', color: 'var(--hb-text-dim)',
+          }}>
+          {revealed ? t.configTab.hide : t.common.show}
         </button>
       </div>
     )
@@ -310,12 +335,12 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
       {labelRow}
       {control}
       {f.help && (
-        <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.3rem 0 0', lineHeight: 1.45 }}>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', margin: '6px 0 0', lineHeight: 1.5 }}>
           {f.help}
           {f.secret && f.is_set && !dirty && (
-            <button onClick={() => onChange('')} title="Clear this stored secret"
-              style={{ marginLeft: '0.5rem', border: 'none', background: 'transparent', color: 'var(--hb-red)', cursor: 'pointer', fontSize: '0.7rem', fontFamily: MONO }}>
-              clear stored
+            <button onClick={() => onChange('')} title={t.configTab.clearSecretTitle}
+              style={{ marginLeft: 8, border: 'none', background: 'transparent', color: '#e5897c', cursor: 'pointer', fontSize: '0.8125rem' }}>
+              {t.configTab.clearStored}
             </button>
           )}
         </p>
@@ -331,9 +356,17 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
  */
 function SourceOfTruthPanel({ config }: { config: AppConfig }) {
   const [data, setData] = useState<MemorySources | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
 
-  const load = async () => setData(await getMemorySources(config))
+  const load = async () => {
+    try {
+      setData(await getMemorySources(config))
+    } finally {
+      // Always clear — an unreachable backend must not skeleton this forever.
+      setLoaded(true)
+    }
+  }
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const assign = async (agentId: string, path: string) => {
@@ -345,6 +378,13 @@ function SourceOfTruthPanel({ config }: { config: AppConfig }) {
     finally { setBusy(null) }
   }
 
+  if (!loaded) {
+    return (
+      <div style={{ border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)', padding: '0.85rem' }}>
+        <SkeletonList rows={2} mark={false} />
+      </div>
+    )
+  }
   if (!data || data.agents.length === 0) return null
   const fileName = (p: string) => p.replace('/memories/', '')
 
@@ -370,8 +410,8 @@ function SourceOfTruthPanel({ config }: { config: AppConfig }) {
           return (
             <div key={a.agent_id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <div style={{ width: 130, flexShrink: 0 }}>
-                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{a.name}</div>
-                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontFamily: MONO }}>
+                <div style={{ fontSize: '0.9375rem', color: 'var(--hb-text)' }}>{a.name}</div>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>
                   {a.source ? fileName(a.source) : '—'}
                 </div>
               </div>

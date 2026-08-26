@@ -18,6 +18,8 @@ import RosterModelWindow from './RosterModelWindow'
 import AgentSwitcherOverlay from './AgentSwitcherOverlay'
 import HousePartyModal from './HousePartyModal'
 import LockdownModal from './LockdownModal'
+import SkyfallCountdown from './SkyfallCountdown'
+import type { SkyfallArm } from '../lib/api'
 
 interface LayoutProps {
   profile: AppProfile
@@ -63,13 +65,23 @@ export default function Layout({
   // opens it directly (setLockAuth below), and an agent asking for authorization
   // mid-chat raises the same event House Party uses.
   const [lockAuth, setLockAuth] = useState<{ reason?: string } | null>(null)
+  // Skyfall arming, from EITHER route: Speda's tool raises the SSE event that
+  // ChatMain forwards here, and the settings pane dispatches the identical
+  // event after arming from the project list. One listener, one screen, so
+  // there is no second path that could skip the countdown.
+  const [skyfallArm, setSkyfallArm] = useState<SkyfallArm | null>(null)
   useEffect(() => {
     const onAuth = (e: Event) => {
       const detail = (e as CustomEvent).detail || {}
       setLockAuth({ reason: detail.reason || undefined })
     }
+    const onArm = (e: Event) => setSkyfallArm((e as CustomEvent).detail as SkyfallArm)
     window.addEventListener('speda:lockdown-authorize', onAuth)
-    return () => window.removeEventListener('speda:lockdown-authorize', onAuth)
+    window.addEventListener('speda:skyfall-arm', onArm as EventListener)
+    return () => {
+      window.removeEventListener('speda:lockdown-authorize', onAuth)
+      window.removeEventListener('speda:skyfall-arm', onArm as EventListener)
+    }
   }, [])
 
   // Esc leaves voice mode. Registered before the agent-switcher handler below
@@ -250,6 +262,16 @@ export default function Layout({
           reason={lockAuth.reason}
           onClose={() => setLockAuth(null)}
           onEngaged={() => window.dispatchEvent(new CustomEvent('speda:lockdown-engaged'))}
+        />
+      )}
+      {/* Above the settings window on purpose: the owner can arm from the
+          Protocols pane and the countdown must not open behind the pane they
+          armed it from. */}
+      {skyfallArm && (
+        <SkyfallCountdown
+          config={config}
+          arm={skyfallArm}
+          onClose={() => setSkyfallArm(null)}
         />
       )}
       {switcherOpen && (

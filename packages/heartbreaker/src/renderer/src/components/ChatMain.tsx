@@ -615,6 +615,11 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           // passphrase — never the transcript.
           const d = (event.data ?? {}) as { reason?: string }
           window.dispatchEvent(new CustomEvent('speda:lockdown-authorize', { detail: { reason: d.reason } }))
+        } else if (event.type === 'skyfall_arm') {
+          // Speda armed a launch project. The countdown belongs to the app, not
+          // to the transcript — the abort has to be a button the owner can hit,
+          // and a line of text is not one.
+          window.dispatchEvent(new CustomEvent('speda:skyfall-arm', { detail: event.data }))
         } else if (event.type === 'file') {
           dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
         } else if (event.type === 'done') {
@@ -828,6 +833,8 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           } else if (event.type === 'lockdown_auth') {
             const d = (event.data ?? {}) as { reason?: string }
             window.dispatchEvent(new CustomEvent('speda:lockdown-authorize', { detail: { reason: d.reason } }))
+          } else if (event.type === 'skyfall_arm') {
+            window.dispatchEvent(new CustomEvent('speda:skyfall-arm', { detail: event.data }))
           } else if (event.type === 'file') {
             dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
           } else if (event.type === 'done') {

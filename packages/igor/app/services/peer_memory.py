@@ -13,7 +13,21 @@ This is the missing half. The peer sends `memory_request`, this executes the
 SAME `MemorySkill` every in-process agent uses, and the router sends back
 `memory_response`.
 
-**A second skill rides the same frame.** A Forge session that notices
+**Read skills ride the same frame.** The memory redesign gave in-process agents
+more than the `memory` tool: `recall_conversations` searches the owner's ENTIRE
+history by meaning, and `read_agent_channel` reads the shared inter-agent log —
+and the block Igor injects names both by name (`prompts/core/08_memory.md`,
+`09_agent_network.md`). The peer got the block and had neither tool, so the same
+gap that made `memory` necessary applies to these: an agent told to recall a
+past conversation, or to check what another agent has been doing, was being told
+to use something it did not have. A frame carrying `"skill": "recall_conversations"`
+or `"skill": "read_agent_channel"` runs the SAME skill in-process agents run —
+read-only, so it needs neither the file law's write checks nor an observation's
+shape, only the query arguments the skill declares. This is also how the two
+Forge peers come to know each other: Optimus reading the channel sees
+Centurion's traffic and vice versa, through the one skill that already renders it.
+
+**A second write skill rides the same frame.** A Forge session that notices
 something about the owner while offline queues it locally
 (forge/agents/owner_memory.py's `pending_observations.jsonl`) and, once
 reconnected, flushes the queue as `memory_request` frames carrying
@@ -51,8 +65,10 @@ import uuid
 
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal
+from app.skills.dispatch import AgentChannelSkill
 from app.skills.memory import MemorySkill
 from app.skills.observations import RecordObservationSkill
+from app.skills.semantic_search import SemanticSearchSkill
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +97,43 @@ _OBSERVATION_KEYS = (
 Forge fact is always ONE fact per frame (owner_memory.py flushes its local
 queue line by line), so this wraps into the single-element `observations` list
 the skill expects rather than exposing Forge to that shape directly."""
+
+
+class _ReadSkill:
+    """One read-only skill the peer may reach over the memory frame.
+
+    `keys` is the allowlist the same way `_ARGUMENT_KEYS` is: the frame also
+    carries routing fields (request_id, chat_id, type, skill) that are Igor's,
+    not the skill's, and a peer that one day adds a field must not reach the
+    skill's kwargs with it. `required` is the minimum the skill cannot run
+    without — checked here so an obviously empty call is named before a session
+    is opened, exactly as the write paths do.
+    """
+
+    __slots__ = ("factory", "keys", "required")
+
+    def __init__(self, factory, keys: tuple[str, ...], required: tuple[str, ...] = ()):
+        self.factory = factory
+        self.keys = keys
+        self.required = required
+
+
+# The read skills reachable over the peer frame, keyed by the `skill` field. Each
+# runs the SAME class an in-process agent runs, so recall and the agent channel
+# answer an external agent exactly as they answer Sentinel — there is no second
+# implementation to drift. Read-only: no file law, no revision trail, no
+# observation shape, only the query the skill declares.
+_READ_SKILLS: dict[str, _ReadSkill] = {
+    "recall_conversations": _ReadSkill(
+        SemanticSearchSkill,
+        keys=("query", "after", "before", "agent_id", "context_window", "limit"),
+        required=("query",),
+    ),
+    "read_agent_channel": _ReadSkill(
+        AgentChannelSkill,
+        keys=("limit", "agent"),
+    ),
+}
 
 
 def _context(agent_id: str, db, request_id: str) -> AgentContext:
@@ -116,14 +169,19 @@ async def run_memory_command(agent_id: str, frame: dict) -> dict:
 
     `frame["skill"]` picks which skill runs — absent or `"memory"` is the
     original flat MemorySkill path; `"record_observation"` is the Forge
-    pending-observations flush (see module docstring). Same envelope either
-    way: one request_id, one `memory_response`, the skill's own text verbatim.
+    pending-observations flush; `"recall_conversations"` and
+    `"read_agent_channel"` are the read skills (see module docstring). Same
+    envelope every way: one request_id, one `memory_response`, the skill's own
+    text verbatim.
     """
     request_id = str(frame.get("request_id", ""))
     skill_name = str(frame.get("skill") or "memory")
 
     if skill_name == "record_observation":
         return await _run_record_observation(agent_id, frame, request_id)
+    read = _READ_SKILLS.get(skill_name)
+    if read is not None:
+        return await _run_read_skill(agent_id, frame, request_id, skill_name, read)
     return await _run_memory_skill(agent_id, frame, request_id)
 
 
@@ -209,6 +267,57 @@ async def _run_record_observation(agent_id: str, frame: dict, request_id: str) -
     logger.info(
         "peer_memory_observation",
         extra={"agent_id": agent_id, "domain": observation.get("domain")},
+    )
+    return {
+        "type": "memory_response",
+        "request_id": request_id,
+        "ok": True,
+        "result": result,
+    }
+
+
+async def _run_read_skill(
+    agent_id: str, frame: dict, request_id: str, skill_name: str, read: _ReadSkill,
+) -> dict:
+    """Run one read-only peer skill — recall or the agent channel.
+
+    Read skills report `ok=True` on any result the skill produced, refusals
+    included, for the same reason the write paths do: "no relevant past
+    exchanges" and "the channel is empty" are real answers written to be read by
+    a model, not backend failures the peer should retry. `ok=False` is reserved,
+    exactly as elsewhere, for the one case where the command could not run at all
+    and the peer must believe nothing about what happened.
+    """
+    args = {k: frame[k] for k in read.keys if k in frame}
+    missing = [k for k in read.required if not str(args.get(k, "")).strip()]
+    if missing:
+        return {
+            "type": "memory_response",
+            "request_id": request_id,
+            "ok": False,
+            "result": f"{skill_name} needs at least {', '.join(read.required)}.",
+        }
+
+    try:
+        async with AsyncSessionLocal() as db:
+            context = _context(agent_id, db, request_id or uuid.uuid4().hex)
+            result = await read.factory().execute(args, context)
+    except Exception as e:  # noqa: BLE001 — see run_memory_command's docstring
+        logger.exception(
+            "peer_memory_read_failed",
+            extra={"agent_id": agent_id, "skill": skill_name},
+        )
+        return {
+            "type": "memory_response",
+            "request_id": request_id,
+            "ok": False,
+            "result": f"The memory backend failed to run {skill_name}: "
+                      f"{type(e).__name__}: {e}",
+        }
+
+    logger.info(
+        "peer_memory_read",
+        extra={"agent_id": agent_id, "skill": skill_name},
     )
     return {
         "type": "memory_response",

@@ -840,6 +840,14 @@ export async function setHouseParty(config: AppConfig, engaged: boolean): Promis
 /* ── Lockdown Protocol ────────────────────────────────────────────────────── */
 
 export interface LockdownState {
+  /** Client-side only: false when THIS APP could not reach Igor at all. Without
+   *  it the fallback below reads as `enabled: false`, and the panel then says
+   *  "disabled on this deployment — set LOCKDOWN_PROTOCOL_ENABLED" about a
+   *  server it never managed to ask. Same distinction the three host protocols
+   *  carry, and it belongs here for the same reason: the comment below already
+   *  said an unreachable backend is not proof containment is off, but nothing
+   *  downstream could tell. */
+  reachable: boolean
   engaged: boolean
   enabled: boolean
   /** What the host firewall actually shows, keyed by what each rule seals.
@@ -852,12 +860,12 @@ export interface LockdownState {
 export async function getLockdown(config: AppConfig): Promise<LockdownState> {
   try {
     const res = await fetch(`${config.apiBase}/agents/lockdown`, { headers: authHeaders(config) })
-    if (!res.ok) return { engaged: false, enabled: false, rules: {} }
-    return res.json()
+    if (!res.ok) return { reachable: false, engaged: false, enabled: false, rules: {} }
+    return { ...(await res.json()), reachable: true }
   } catch {
     // Unreachable backend is NOT proof containment is off — say nothing rather
     // than render an all-clear the server never sent.
-    return { engaged: false, enabled: false, rules: {} }
+    return { reachable: false, engaged: false, enabled: false, rules: {} }
   }
 }
 
@@ -877,6 +885,339 @@ export async function standDownLockdown(
     return { ok: true, report: body.report }
   } catch {
     return { ok: false, error: "Couldn't reach the backend to stand down." }
+  }
+}
+
+
+/* ── The host protocols ────────────────────────────────────────────────────
+ *
+ * Read-only status for the three protocols the owner drives through Orion, plus
+ * the one action worth its own button.
+ *
+ * All four follow the rule getLockdown established: an unreachable backend is
+ * NOT evidence that everything is fine. Each fallback is the shape that reads as
+ * "unknown / no protection" rather than a green light the server never sent —
+ * `status: 'error'` for the lifeboat, `stale: true` for Octavius. Otherwise the
+ * panel reports a healthy disk and a fresh backup at precisely the moment the
+ * server stopped answering.
+ *
+ * They are also deliberately absent from the pane's 5-second poll: a lifeboat
+ * read is an SSH round trip to the host and an Octavius read is a Google API
+ * call. Neither answer changes meaningfully in five seconds, and paying for them
+ * at that rate for as long as a settings window is open would be absurd.
+ */
+
+export interface LifeboatReadings {
+  filesystem?: string
+  disk_pct?: number
+  disk_free_gb?: number
+  disk_total_gb?: number
+  inode_pct?: number
+  mem_pct?: number
+  mem_available_gb?: number
+  mem_total_gb?: number
+  swap_pct?: number
+  docker_reclaimable_gb?: number
+}
+
+export interface LifeboatState {
+  /** Client-side only: false when THIS APP could not reach Igor at all. Kept
+   *  apart from `status` because the three failures need different answers —
+   *  the app cannot reach Igor, Igor cannot reach the host, or the protocol is
+   *  switched off. Collapsing them is how a panel tells you a protocol is
+   *  disabled when in fact nobody asked it anything. */
+  reachable: boolean
+  /** ok | error | disabled */
+  status: string
+  /** healthy | watch | critical — the WORST of disk, inodes and memory. */
+  level: string
+  by_resource: Record<string, string>
+  pressed: string[]
+  readings: LifeboatReadings
+  summary: string
+  recommendation: string
+  target_free_gb: number
+  detail: string
+}
+
+const lifeboatUnknown = (): LifeboatState => ({
+  reachable: false, status: 'error', level: 'healthy', by_resource: {}, pressed: [],
+  readings: {}, summary: '', recommendation: '', target_free_gb: 0, detail: '',
+})
+
+export async function getLifeboat(config: AppConfig): Promise<LifeboatState> {
+  try {
+    const res = await fetch(`${config.apiBase}/host/lifeboat`, { headers: authHeaders(config) })
+    if (!res.ok) return lifeboatUnknown()
+    return { ...(await res.json()), reachable: true }
+  } catch {
+    return lifeboatUnknown()
+  }
+}
+
+export interface DoormatChecklistItem {
+  provider: string
+  where: string
+  field: string
+  value: string
+  note: string
+}
+
+export interface DoormatState {
+  /** Client-side only — see LifeboatState.reachable. */
+  reachable: boolean
+  enabled: boolean
+  /** '' (idle) | 'staged' | 'cutover' */
+  phase: string
+  target: string
+  previous: string
+  staged_at: string
+  cutover_at: string
+  current_domain: string
+  /** null while idle; otherwise whether the new domain actually answers. */
+  target_serving: boolean | null
+  /** Cutover written but Igor not restarted, so it still runs on the old domain. */
+  restart_pending: boolean
+  checklist: DoormatChecklistItem[]
+  detail: string
+}
+
+const doormatUnknown = (): DoormatState => ({
+  reachable: false, enabled: false, phase: '', target: '', previous: '', staged_at: '', cutover_at: '',
+  current_domain: '', target_serving: null, restart_pending: false,
+  checklist: [], detail: '',
+})
+
+export async function getDoormat(config: AppConfig): Promise<DoormatState> {
+  try {
+    const res = await fetch(`${config.apiBase}/host/doormat`, { headers: authHeaders(config) })
+    if (!res.ok) return doormatUnknown()
+    return { ...(await res.json()), reachable: true }
+  } catch {
+    return doormatUnknown()
+  }
+}
+
+export interface BackupEntry {
+  id: string
+  name: string
+  bytes: number
+  mb: number
+  created: string
+  sha256: string
+}
+
+export interface OctaviusState {
+  /** Client-side only — see LifeboatState.reachable. */
+  reachable: boolean
+  enabled: boolean
+  count: number
+  latest: BackupEntry | null
+  age_hours: number | null
+  /** Newest copy too old, none at all, or Drive unreachable. All three mean the
+   *  same thing to whoever is reading: no protection you can count on. */
+  stale: boolean
+  detail: string
+}
+
+const octaviusUnknown = (): OctaviusState => ({
+  reachable: false, enabled: false, count: 0, latest: null, age_hours: null, stale: true, detail: '',
+})
+
+export async function getOctavius(config: AppConfig): Promise<OctaviusState> {
+  try {
+    const res = await fetch(`${config.apiBase}/admin/octavius`, { headers: authHeaders(config) })
+    if (!res.ok) return octaviusUnknown()
+    return { ...(await res.json()), reachable: true }
+  } catch {
+    return octaviusUnknown()
+  }
+}
+
+/** Take a backup now. Minutes on a large database — snapshot, gzip, upload — so
+ *  the caller keeps its button disabled throughout rather than assuming speed.
+ *  A failed run returns ok:false with the STAGE it stopped at, which the panel
+ *  shows: an 'integrity' failure is a statement about the live database, not
+ *  about the backup, and must not read as "try again later". */
+export async function runOctaviusBackup(
+  config: AppConfig,
+): Promise<{ ok: boolean; name?: string; stage?: string; error?: string }> {
+  try {
+    const res = await fetch(`${config.apiBase}/admin/octavius/backup`, {
+      method: 'POST',
+      headers: authHeaders(config),
+    })
+    if (!res.ok) return { ok: false, error: `Backup failed (HTTP ${res.status}).` }
+    const body = await res.json()
+    return { ok: !!body.ok, name: body.name, stage: body.stage, error: body.error }
+  } catch {
+    return { ok: false, error: 'Could not reach the server.' }
+  }
+}
+
+
+/* ── Skyfall ───────────────────────────────────────────────────────────────
+ *
+ * Projects are the owner's own launch targets. Two things about this client are
+ * load-bearing:
+ *
+ * 1. **Header values never arrive here.** The server sends the header NAMES
+ *    mapped to a mask; the values stay behind it. Saving a form rendered from
+ *    that data sends the mask straight back, which the server reads as "leave
+ *    this one alone" — so the owner does not have to retype every secret to
+ *    change a description.
+ *
+ * 2. **`fire` is what the countdown calls at zero, and nothing else calls it.**
+ *    Aborting is not an API call at all: it is this app never making one. That
+ *    is the strongest form the abort can take — there is no request in flight to
+ *    race, and a crashed renderer fails toward "did not fire".
+ */
+
+export interface SkyfallProject {
+  id: string
+  name: string
+  description: string
+  url: string
+  method: string
+  body: string
+  /** Header NAMES → a mask. Values live on the server only. */
+  headers: Record<string, string>
+  has_body: boolean
+  countdown_seconds: number
+  created_at: string
+  updated_at: string
+  last_fired_at: string
+  last_result: string
+}
+
+/** What the countdown screen needs. No body, no headers — the request is
+ *  assembled server-side at zero, so this app never holds the secret and cannot
+ *  turn an armed countdown into a different request than the one armed. */
+export interface SkyfallArm {
+  project_id: string
+  name: string
+  description: string
+  method: string
+  url: string
+  countdown_seconds: number
+  armed_at: string
+}
+
+export interface SkyfallResult {
+  /** Did a request leave? Separate from `ok` on purpose: "went out and came back
+   *  500" and "never left" are different events and must not render alike. */
+  fired: boolean
+  ok: boolean
+  status: number
+  body: string
+  truncated: boolean
+  error: string
+  started_at: string
+  finished_at: string
+}
+
+export async function listSkyfallProjects(config: AppConfig): Promise<SkyfallProject[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/protocols/skyfall/projects`, {
+      headers: authHeaders(config),
+    })
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
+export async function saveSkyfallProject(
+  config: AppConfig,
+  project: Partial<SkyfallProject>,
+): Promise<{ ok: boolean; project?: SkyfallProject; error?: string }> {
+  try {
+    const res = await fetch(`${config.apiBase}/protocols/skyfall/projects`, {
+      method: 'PUT',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(project),
+    })
+    const body = await res.json().catch(() => ({}))
+    // The server validates and answers in words the pane can show as-is —
+    // re-wording it here would put a second, drifting copy of the rules in the UI.
+    if (!res.ok) return { ok: false, error: body?.detail || `HTTP ${res.status}` }
+    return { ok: true, project: body }
+  } catch {
+    return { ok: false, error: 'Could not reach the server.' }
+  }
+}
+
+export async function deleteSkyfallProject(config: AppConfig, id: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/protocols/skyfall/projects/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(config),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+/** Get the countdown payload for a project picked from the list. Sends nothing. */
+export async function armSkyfall(config: AppConfig, id: string): Promise<SkyfallArm | null> {
+  try {
+    const res = await fetch(`${config.apiBase}/protocols/skyfall/arm/${id}`, {
+      method: 'POST',
+      headers: authHeaders(config),
+    })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  }
+}
+
+/** The clock reached zero. This is the only caller. */
+export async function fireSkyfall(config: AppConfig, id: string): Promise<SkyfallResult> {
+  try {
+    const res = await fetch(`${config.apiBase}/protocols/skyfall/fire`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ project_id: id }),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      // A 409 means nothing was sent — a deleted or unusable project. Say that,
+      // rather than letting the screen imply a launch that never happened.
+      return {
+        fired: false, ok: false, status: 0, body: '', truncated: false,
+        error: body?.detail || `HTTP ${res.status}`, started_at: '', finished_at: '',
+      }
+    }
+    return body
+  } catch {
+    // The request may or may not have left this machine. `fired: true` is the
+    // honest answer — the screen must not tell the owner nothing happened when
+    // it cannot know that.
+    return {
+      fired: true, ok: false, status: 0, body: '', truncated: false,
+      error: 'Lost contact with the server mid-launch — whether the request went '
+        + 'out is unknown. Check the target before firing again.',
+      started_at: '', finished_at: '',
+    }
+  }
+}
+
+/** Record that the owner stopped the clock. Best-effort: the abort already
+ *  happened by NOT firing, and this call only writes it down. */
+export async function abortSkyfall(
+  config: AppConfig, id: string, remaining: number,
+): Promise<void> {
+  try {
+    await fetch(`${config.apiBase}/protocols/skyfall/abort`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ project_id: id, remaining_seconds: remaining }),
+    })
+  } catch {
+    /* nothing was sent either way */
   }
 }
 

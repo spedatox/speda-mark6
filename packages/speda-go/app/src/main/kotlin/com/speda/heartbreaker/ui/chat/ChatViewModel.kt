@@ -23,6 +23,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import com.speda.heartbreaker.data.SkyfallArm
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,6 +52,23 @@ class ChatViewModel(
 
     private val _state = MutableStateFlow(ChatState())
     val state: StateFlow<ChatState> = _state.asStateFlow()
+
+    /**
+     * A Skyfall countdown Speda has armed, waiting for the shell to draw it.
+     *
+     * It sits beside [state] rather than inside it because it is not part of the
+     * transcript and must never be reduced into one: the countdown is a screen
+     * the owner acts on, and a launch you can only stop by scrolling to the
+     * right message is not a launch you can stop. The shell collects this, shows
+     * the full-screen clock, and calls [clearSkyfall] when it closes.
+     *
+     * Arming carries no decision. Nothing has been sent when this becomes
+     * non-null, and nothing will be unless the clock runs out on screen.
+     */
+    private val _skyfallArm = MutableStateFlow<SkyfallArm?>(null)
+    val skyfallArm: StateFlow<SkyfallArm?> = _skyfallArm.asStateFlow()
+
+    fun clearSkyfall() { _skyfallArm.value = null }
 
     /**
      * Supplies the ambient client/platform/location context for a turn, resolved
@@ -418,6 +436,14 @@ class ChatViewModel(
                             }
                         }
                         "file" -> MessageJson.fileFrom(event.data)?.let { dispatch(ChatAction.AddFile(assistantId, it)) }
+                        // Speda armed a launch project. Unlike `house_party_auth`
+                        // below, this one IS handled here: the phone draws the
+                        // countdown, so the backend permits arming from it
+                        // (app/core/surface.py). The event carries no decision —
+                        // nothing has been sent, and the clock on screen is what
+                        // decides whether anything is.
+                        "skyfall_arm" ->
+                            MessageJson.skyfallArmFrom(event.data)?.let { _skyfallArm.value = it }
                         // `house_party_auth` is deliberately unhandled: the
                         // protocol is a desktop surface, and the backend refuses
                         // to engage it from here before any authorization window
