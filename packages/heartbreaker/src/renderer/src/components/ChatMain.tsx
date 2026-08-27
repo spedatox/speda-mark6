@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
-import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, fetchWelcome, answerAsk } from '../lib/api'
+import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, steerRun, fetchWelcome, answerAsk } from '../lib/api'
 import { useProfile } from './Sidebar'
 import MessageList from './MessageList'
 import PartyStream from './PartyStream'
@@ -722,6 +722,17 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     abortRef.current?.abort()
   }, [config])
 
+  // Steer: inject text into the run CURRENTLY streaming, rather than starting
+  // a second one. False (never throws) when there is no run to steer — nothing
+  // in flight, or the in-flight one is in-process (the inbox that claims a
+  // steer lives in the Forge engine, not the orchestrator) — the composer then
+  // keeps the text instead of losing it or silently going nowhere.
+  const steer = useCallback(async (text: string): Promise<boolean> => {
+    const rid = runIdRef.current
+    if (!rid) return false
+    return steerRun(config, rid, text).catch(() => false)
+  }, [config])
+
   // ── Barge-in ──────────────────────────────────────────────────────────────
   // The owner started talking over the agent. Interrupting has to cut BOTH the
   // audio and the turn producing it: silencing playback alone leaves the
@@ -1024,6 +1035,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       <InputBar
         onSend={send}
         onStop={stop}
+        onSteer={steer}
         config={config}
         voiceMode={!!voiceOpen}
         agentSpeaking={orbState === 'speaking'}

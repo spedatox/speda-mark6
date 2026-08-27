@@ -247,6 +247,23 @@ export async function cancelRun(config: AppConfig, requestId: string): Promise<b
   } catch { return false }
 }
 
+/** Inject `text` into the turn `requestId` is currently streaming, instead of
+ *  waiting for it to finish. Resolves false (never throws) when the turn is
+ *  not steerable — in-process, or it already ended — so the caller can keep
+ *  the composer text rather than losing it. */
+export async function steerRun(config: AppConfig, requestId: string, text: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.apiBase}/chat/steer/${requestId}`, {
+      method: 'POST',
+      headers: { ...authHeaders(config), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+    if (!res.ok) return false
+    const d = await res.json()
+    return !!d.steered
+  } catch { return false }
+}
+
 export async function fetchMessages(
   config: AppConfig,
   sessionId: number

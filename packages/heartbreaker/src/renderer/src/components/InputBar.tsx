@@ -22,6 +22,12 @@ interface AttachedFile {
 interface Props {
   onSend: (message: string, opts?: { images?: ImageBlock[]; documents?: DocBlock[]; uploads?: UploadedFile[] }) => void
   onStop?: () => void
+  /** Inject `message` into the turn that is CURRENTLY streaming, instead of
+   *  waiting for it to finish. Resolves to whether it landed — false means the
+   *  running turn is not steerable (in-process, or it just ended), and the
+   *  composer keeps the text rather than losing it. Absent entirely on a
+   *  surface with no steering (only ChatMain wires this today). */
+  onSteer?: (message: string) => Promise<boolean>
   config: AppConfig
   /** In voice mode a finished utterance IS the turn and sends itself. Outside
    *  it, the same mic dictates into the composer for the owner to edit. */
@@ -108,12 +114,15 @@ function ToolBtn({
 }
 
 /* ── Send / Stop button ───────────────────────────────────────────────────── */
-function SendBtn({ canSend, isStreaming, onSend, onStop }: {
-  canSend: boolean; isStreaming: boolean; onSend: () => void; onStop?: () => void
+function SendBtn({ canSend, isStreaming, canSteer, onSend, onStop }: {
+  canSend: boolean; isStreaming: boolean; canSteer?: boolean; onSend: () => void; onStop?: () => void
 }) {
   const t = useT()
   const [press, setPress] = useState(false)
-  if (isStreaming) {
+  // Typing something into a streaming turn swaps Stop for Send: the button now
+  // offers to inject what's in the composer rather than end the run. An empty
+  // composer keeps Stop — clear the text to get it back.
+  if (isStreaming && !canSteer) {
     return (
       <button
         className="hb-glass-xs"
@@ -138,26 +147,30 @@ function SendBtn({ canSend, isStreaming, onSend, onStop }: {
       </button>
     )
   }
+  // Two ways to reach this render: a normal composer (canSend) or a streaming
+  // one with steerable text (canSteer, isStreaming true). Either enables it;
+  // the title says which this click will do.
+  const active = isStreaming ? !!canSteer : canSend
   return (
     <button
       className="hb-glass-xs"
-      title={t.inputBar.sendMessage}
+      title={isStreaming ? t.inputBar.steerMessage : t.inputBar.sendMessage}
       onClick={onSend}
-      disabled={!canSend}
-      onMouseDown={() => { if (canSend) setPress(true) }}
+      disabled={!active}
+      onMouseDown={() => { if (active) setPress(true) }}
       onMouseUp={() => setPress(false)}
       style={{
         width: 32, height: 32,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: canSend ? '1px solid rgba(var(--hb-cyan-bright-rgb),0.7)' : '1px solid var(--hb-edge)',
-        background: canSend ? 'rgba(var(--hb-accent-rgb),0.35)' : 'var(--hb-holo-fill)',
+        border: active ? '1px solid rgba(var(--hb-cyan-bright-rgb),0.7)' : '1px solid var(--hb-edge)',
+        background: active ? 'rgba(var(--hb-accent-rgb),0.35)' : 'var(--hb-holo-fill)',
         backdropFilter: 'var(--hb-holo-blur)',
         WebkitBackdropFilter: 'var(--hb-holo-blur)',
-        boxShadow: canSend
+        boxShadow: active
           ? 'inset 0 1px 0 0 rgba(255,255,255,0.3)'
           : 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
-        color: canSend ? 'var(--hb-cyan-bright)' : 'var(--hb-icon-dim)',
-        cursor: canSend ? 'pointer' : 'default',
+        color: active ? 'var(--hb-cyan-bright)' : 'var(--hb-icon-dim)',
+        cursor: active ? 'pointer' : 'default',
         transform: press ? 'scale(0.9)' : 'scale(1)',
         transition: 'background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s',
       }}
@@ -644,7 +657,7 @@ const BG_PREFIX = '/bg '
 
 /* ── Main component ───────────────────────────────────────────────────────── */
 export default function InputBar({
-  onSend, onStop, config, voiceMode, agentSpeaking, onSpeechStart, onMicState, micLevelRef,
+  onSend, onStop, onSteer, config, voiceMode, agentSpeaking, onSpeechStart, onMicState, micLevelRef,
 }: Props) {
   const t = useT()
   const { state } = useChatContext()
@@ -759,7 +772,20 @@ export default function InputBar({
     // In Background mode an empty field is a no-op, not a bare "/bg" send.
     if (bgMode && !task) return
     const msg = bgMode ? `${BG_PREFIX}${task}` : task
-    if ((!msg && attachments.length === 0) || state.isStreaming) return
+
+    // A turn is already streaming: this is steering, not a second turn. Text
+    // only — Background mode and attachments still wait for the composer to
+    // free up, since /bg starts an unrelated job and an attachment has nowhere
+    // to go in a steer. Failure (not an external turn, or it just ended) keeps
+    // the text in the composer rather than losing it or silently sending late.
+    if (state.isStreaming) {
+      if (bgMode || attachments.length > 0 || !msg || !onSteer) return
+      const landed = await onSteer(msg)
+      if (landed) { setValue(''); setTimeout(resize, 0) }
+      return
+    }
+
+    if (!msg && attachments.length === 0) return
     const imageFiles = attachments.filter(a => a.isImage).map(a => a.file)
     const docFiles   = attachments.filter(a => !a.isImage).map(a => a.file)
     setValue(''); setBgMode(false); clearAttachments(); setTimeout(resize, 0)
@@ -861,6 +887,10 @@ export default function InputBar({
   useEffect(() => () => { micRef.current?.stop() }, [])
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !state.isStreaming
+  // While a turn streams, the up-arrow steers it instead of starting a new
+  // one — text only, and only when there is somewhere to steer INTO.
+  const canSteer = state.isStreaming && !bgMode && attachments.length === 0
+                   && value.trim().length > 0 && !!onSteer
 
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (
@@ -1103,6 +1133,7 @@ export default function InputBar({
               <SendBtn
                 canSend={canSend}
                 isStreaming={state.isStreaming}
+                canSteer={canSteer}
                 onSend={submit}
                 onStop={onStop}
               />

@@ -99,3 +99,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     session_id: int
     request_id: str
+
+
+class SteerRequest(BaseModel):
+    text: str

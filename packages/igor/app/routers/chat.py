@@ -12,7 +12,7 @@ from app.config import settings
 from app.core.context import AgentContext
 from app.core.dispatch import BG_COMMAND, bg_ack
 from app.database import AsyncSessionLocal, get_db
-from app.schemas.chat import ChatRequest
+from app.schemas.chat import ChatRequest, SteerRequest
 from app.core.surface import annotate_last_user
 from app.services.errors import friendly_provider_error
 
@@ -485,6 +485,20 @@ async def chat_cancel(request_id: str, request: Request):
     is persisted with a marker. Returns {cancelled: bool}."""
     ok = await request.app.state.turns.cancel(request_id)
     return {"cancelled": ok}
+
+
+@router.post("/chat/steer/{request_id}")
+async def chat_steer(request_id: str, body: SteerRequest, request: Request):
+    """Inject a message into a running turn instead of starting a second one —
+    the desktop counterpart of the Telegram gateway's steering (app/telegram/
+    gateway.py). Only reaches an EXTERNAL turn: the inbox that claims it lives
+    in the Forge engine (forge/warden/inbox.py), not the in-process
+    orchestrator, so an in-process turn has nothing to steer into. `steered:
+    false` means the composer should fall back to sending a normal message —
+    the turn already ended, or was never external to begin with."""
+    proxy = request.app.state.agent_proxy
+    ok = await proxy.steer(request_id, body.text) if proxy is not None else False
+    return {"steered": ok}
 
 
 @router.websocket("/ws")
