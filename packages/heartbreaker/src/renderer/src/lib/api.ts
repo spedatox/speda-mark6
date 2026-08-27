@@ -597,8 +597,51 @@ export async function setConnection(config: AppConfig, server: string, active: b
 
 /* ── Automations — Speda's proactive n8n watchers ─────────────────────────── */
 
+/** Which of the three things the owner can build from Settings. */
+export type AutomationTemplate = 'briefing' | 'reminder_once' | 'proactive_ask'
+
+export type AutomationFrequency = 'once' | 'daily' | 'weekly' | 'monthly'
+
+/**
+ * When an automation fires, as STRUCTURE.
+ *
+ * The backend deliberately does not send a sentence: this pane renders in two
+ * languages, and "Günde bir" chosen server-side would have picked one for the
+ * owner. `cron` rides along for debugging only — never show it. See
+ * packages/igor/app/automations/schedule.py.
+ */
+export interface AutomationSchedule {
+  frequency: AutomationFrequency
+  at: string                    // 'HH:MM' in the owner's timezone
+  days?: number[]               // weekly — 1=Mon … 7=Sun
+  dom?: number                  // monthly — day of month
+  date?: string                 // once — 'YYYY-MM-DD'
+  skips_short_months?: boolean  // monthly on the 29th+ — February eats it
+  timezone: string
+  cron: string | null
+}
+
+/**
+ * A weekday class this automation's agent must be TOLD rather than left to work
+ * out — "gym günü" on Mon/Wed/Fri. Computed by n8n at fire time and appended to
+ * the instruction, because a model asked to derive it from a prose schedule
+ * once told the owner he had trained on a day he had not.
+ */
+export interface AutomationDayFlag {
+  label: string
+  days: number[]   // 1=Mon … 7=Sun
+}
+
+/** One agent that can own an automation, for the form's picker. */
+export interface AutomationAgent {
+  agent_id: string
+  name: string
+  domain: string
+}
+
 export interface AutomationInfo {
   id: number
+  agent_id: string
   n8n_workflow_id: string | null
   name: string
   kind: 'schedule' | 'web_watch' | 'rss_watch' | 'webhook' | string
@@ -608,6 +651,37 @@ export interface AutomationInfo {
   expires_at: string | null
   last_fired_at: string | null
   summary: string
+  /** Null for a watcher created by an agent — it has no clock and no template. */
+  template: AutomationTemplate | null
+  schedule: AutomationSchedule | null
+  /** The editable content half: what the owner asked for, possibly rewritten. */
+  instruction: string | null
+  /** His original wording, kept even after a polish so the editor can show it. */
+  instruction_raw: string | null
+  intent_status: 'raw' | 'polished' | 'failed' | null
+  options: string[] | null
+  every_minutes: number | null
+  max_asks: number | null
+  day_flags: AutomationDayFlag[] | null
+}
+
+/** The form's payload. Mirrors the composer spec; the backend validates it. */
+export interface AutomationDraft {
+  agent_id: string
+  template: AutomationTemplate
+  name: string
+  schedule: {
+    frequency: AutomationFrequency
+    at: string
+    days?: number[]
+    dom?: number
+    date?: string
+  }
+  instruction: string
+  options?: string[]
+  every_minutes?: number
+  max_asks?: number
+  day_flags?: AutomationDayFlag[]
 }
 
 export interface AutomationsStatus {
@@ -637,6 +711,49 @@ export async function deleteAutomation(config: AppConfig, id: number): Promise<v
     method: 'DELETE',
     headers: authHeaders(config),
   })
+}
+
+export async function getAutomationAgents(config: AppConfig): Promise<AutomationAgent[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/automations/agents`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return (await res.json()).agents ?? []
+  } catch { return [] }
+}
+
+/**
+ * Create an automation. Resolves to the created row, or `{ error }` carrying the
+ * backend's own message — which names the field and the fix, and is the only
+ * feedback the form has to give.
+ */
+export async function createAutomation(
+  config: AppConfig, draft: AutomationDraft,
+): Promise<AutomationInfo | { error: string }> {
+  try {
+    const res = await fetch(`${config.apiBase}/automations`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(draft),
+    })
+    if (!res.ok) return { error: `HTTP ${res.status}` }
+    return await res.json()
+  } catch (e) { return { error: String(e) } }
+}
+
+/** Edit in place. The n8n workflow is updated, never recreated, so its "already
+ *  fired today" memory and execution history survive the edit. */
+export async function updateAutomation(
+  config: AppConfig, id: number, draft: Partial<AutomationDraft>,
+): Promise<AutomationInfo | { error: string }> {
+  try {
+    const res = await fetch(`${config.apiBase}/automations/${id}`, {
+      method: 'PUT',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(draft),
+    })
+    if (!res.ok) return { error: `HTTP ${res.status}` }
+    return await res.json()
+  } catch (e) { return { error: String(e) } }
 }
 
 export async function getAutomationsStatus(config: AppConfig): Promise<AutomationsStatus | null> {

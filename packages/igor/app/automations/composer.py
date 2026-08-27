@@ -20,6 +20,8 @@ fragile IF node — far fewer schema surfaces to get wrong across n8n versions.
 import json
 import uuid
 
+from app.automations import schedule as sched
+from app.automations import templates
 from app.config import settings
 
 # Pinned node type versions known-good on modern n8n (1.x).
@@ -62,21 +64,35 @@ def _interval_rule(minutes: int) -> dict:
     return {"interval": [{"field": "minutes", "minutesInterval": minutes}]}
 
 
-def _callback_body(kind: str, name: str, intent: str) -> str:
+def _callback_body(kind: str, name: str, intent: str, output_mode: str = "push",
+                   with_facts: bool = False) -> str:
     """n8n expression building the /trigger/speda body. Static strings are
     JSON-escaped (valid JS literals); `$json` carries the upstream item so Speda
-    sees what actually fired (the new email, the changed page, the feed item)."""
+    sees what actually fired (the new email, the changed page, the feed item).
+
+    `output_mode` is a parameter rather than a constant because a proactive-ask
+    automation MUST fire silent — the `reminders` tool does its delivering, with
+    the answer buttons attached, and a push would send the same checklist a
+    second time in a form nobody can answer (app/automations/templates.py).
+    """
+    # With a day-flags node upstream, the computed facts are APPENDED to the
+    # intent here rather than baked into it — they are only knowable at fire
+    # time, and a workflow that stored "today is a gym day" would be wrong by
+    # the next morning.
+    intent_expr = json.dumps(intent) + (" + ($json.facts || '')" if with_facts else "")
     return (
         "={{ ({ \"payload\": { "
         f"\"type\": {json.dumps(kind)}, "
         "\"event\": \"automation_fired\", "
         f"\"automation\": {json.dumps(name)}, "
-        f"\"intent\": {json.dumps(intent)}, "
-        "\"data\": $json }, \"output_mode\": \"push\" }) }}"
+        f"\"intent\": {intent_expr}, "
+        "\"data\": $json }, "
+        f"\"output_mode\": {json.dumps(output_mode)} }}) }}}}"
     )
 
 
-def _callback_node(kind: str, name: str, intent: str, x: int, agent_id: str = "speda") -> dict:
+def _callback_node(kind: str, name: str, intent: str, x: int, agent_id: str = "speda",
+                   output_mode: str = "push", with_facts: bool = False) -> dict:
     """The terminal HTTP Request → the owning agent. Carries both required
     secrets and fires /trigger/{agent_id} so the push is composed in that
     agent's voice."""
@@ -90,7 +106,7 @@ def _callback_node(kind: str, name: str, intent: str, x: int, agent_id: str = "s
         ]},
         "sendBody": True,
         "specifyBody": "json",
-        "jsonBody": _callback_body(kind, name, intent),
+        "jsonBody": _callback_body(kind, name, intent, output_mode, with_facts),
         "options": {},
     })
 
@@ -128,6 +144,55 @@ return fire ? [{{ json: {{ changed: true, matched: lookFor || null }} }}] : [];
 """.strip()
 
 
+def _day_flags_code(flags: list[dict]) -> str:
+    """JS computing whether today and tomorrow carry each declared day-flag.
+
+    THIS IS THE ONE THING A MODEL MAY NOT WORK OUT FOR ITSELF. Atomix once told
+    the owner "you trained today, tomorrow is a rest day" on a Tuesday, having
+    derived it from a prose description of his gym schedule. A calendar never
+    gets that wrong, so the calendar settles it here and the model is handed the
+    answer — deterministic input, prose output, never the reverse.
+
+    The block also restates today's date and both weekdays. That is redundant
+    with the `[Ddd YYYY-MM-DD HH:MM TZ]` stamp every user message carries, and
+    deliberately so: the intents that depend on this block were written against
+    exactly this wording, and both sources compute the same fact from the same
+    real clock in the same zone, so they state one truth twice rather than
+    competing. The FLAGS are the half a stamp cannot supply — which weekdays
+    count as gym days is this automation's own configuration.
+
+    The zone is read explicitly rather than trusted from the container's TZ: a
+    container assumed to be in the owner's zone is what once put every schedule
+    in this system three hours out.
+    """
+    return (
+        f"const TZ = {json.dumps(settings.owner_timezone)};\n"
+        f"const FLAGS = {json.dumps(flags, ensure_ascii=False)};\n"
+        "const DOW = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };\n"
+        "const TR = ['', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', "
+        "'Cumartesi', 'Pazar'];\n"
+        "const p = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour12: false,\n"
+        "  year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })\n"
+        "  .formatToParts(new Date())\n"
+        "  .reduce((a, x) => (a[x.type] = x.value, a), {});\n"
+        "const today = DOW[p.weekday];\n"
+        "const tomorrow = (today % 7) + 1;\n"
+        "const NL = String.fromCharCode(10);\n"
+        "let out = NL + NL + '— DEĞİŞMEZ GERÇEKLER (hesaplama, aynen kullan) —'\n"
+        "  + NL + 'Bugün: ' + p.year + '-' + p.month + '-' + p.day + ', ' "
+        "+ TR[today] + '.'\n"
+        "  + NL + 'Yarın: ' + TR[tomorrow] + '.';\n"
+        "for (const f of FLAGS) {\n"
+        "  const days = (f.days || []).map(Number);\n"
+        "  out += NL + 'Bugün ' + f.label + ': ' + "
+        "(days.includes(today) ? 'EVET' : 'HAYIR') + '.';\n"
+        "  out += NL + 'Yarın ' + f.label + ': ' + "
+        "(days.includes(tomorrow) ? 'EVET' : 'HAYIR') + '.';\n"
+        "}\n"
+        "return [{ json: { facts: out } }];"
+    )
+
+
 def _expiry_gate_code(expires_at: str) -> str:
     """JS for a pure expiry gate (schedules): pass the item through until the
     deadline, then fire nothing ever again."""
@@ -153,23 +218,52 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
     /trigger/{agent_id} so the push is composed in that agent's voice."""
     kind = spec.get("kind")
     name = spec.get("name") or "Speda automation"
-    intent = spec.get("intent") or name
     expires_at = spec.get("expires_at")
+    # A templated automation's instruction is assembled, never taken raw: the
+    # transport mechanics (push vs silent, the reminders call) are bolted on by
+    # the template rather than trusted to whoever wrote the spec. Untemplated
+    # specs — the agent-facing tool's own kinds — keep the old behaviour.
+    template = spec.get("template")
+    if template:
+        intent = templates.build_intent(spec)
+        mode = templates.output_mode(template)
+    else:
+        intent = spec.get("intent") or name
+        mode = "push"
 
     if kind == "schedule":
-        cron = spec.get("cron")
+        # Structured schedule first: cron is compiled from it, never stored as
+        # the source of truth (app/automations/schedule.py). `cron` is still
+        # accepted for specs written before this existed and for the agent tool.
+        if spec.get("schedule"):
+            cron = sched.to_cron(spec["schedule"])
+            expires_at = expires_at or sched.expiry_for(spec["schedule"])
+        else:
+            cron = spec.get("cron")
         if not cron:
-            raise ValueError("schedule automations need a 'cron' expression")
+            raise ValueError(
+                "schedule automations need either a 'schedule' block "
+                "(frequency/at/…) or a raw 'cron' expression"
+            )
         trigger = _node("Schedule", _T_SCHEDULE, 0, {
             "rule": {"interval": [{"field": "cronExpression", "expression": cron}]}
         })
+        flags = spec.get("day_flags") or []
+        nodes, chain = [trigger], ["Schedule"]
+        x = 220
         if expires_at:
-            gate = _node("Gate", _T_CODE, 220, {"jsCode": _expiry_gate_code(expires_at)})
-            cb = _callback_node(kind, name, intent, 440, agent_id)
-            nodes, chain = [trigger, gate, cb], ("Schedule", "Gate", "Notify Speda")
-        else:
-            cb = _callback_node(kind, name, intent, 220, agent_id)
-            nodes, chain = [trigger, cb], ("Schedule", "Notify Speda")
+            nodes.append(_node("Gate", _T_CODE, x, {"jsCode": _expiry_gate_code(expires_at)}))
+            chain.append("Gate")
+            x += 220
+        if flags:
+            # LAST before the callback, so a gate that returned [] stops the
+            # branch before this runs — and so nothing downstream can drop the
+            # facts item the callback reads.
+            nodes.append(_node("Day facts", _T_CODE, x, {"jsCode": _day_flags_code(flags)}))
+            chain.append("Day facts")
+            x += 220
+        nodes.append(_callback_node(kind, name, intent, x, agent_id, mode, bool(flags)))
+        chain.append("Notify Speda")
 
     elif kind == "web_watch":
         url = spec.get("url")
@@ -234,9 +328,25 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
     }
 
 
+def display(spec: dict) -> dict | None:
+    """The STRUCTURED schedule for the owner's screen, or None for a spec with
+    no clock (a watcher fires on an event, not at a time).
+
+    Structure rather than a sentence, because Heartbreaker renders it in the
+    owner's chosen language — a backend that returned "Günde bir" would have
+    picked one for him. See app/automations/schedule.py.
+    """
+    if not spec.get("schedule"):
+        return None
+    return sched.describe(spec["schedule"])
+
+
 def describe(spec: dict) -> str:
-    """One-line human summary for logs / confirmations."""
+    """One-line ENGLISH summary for logs, confirmations and the agent-facing
+    tool. Never the owner-facing rendering — that is `display()`."""
     kind = spec.get("kind")
+    if spec.get("template"):
+        return templates.summarize(spec)
     if kind == "schedule":
         return f"Scheduled ({spec.get('cron')}) → {spec.get('intent')}"
     if kind == "web_watch":

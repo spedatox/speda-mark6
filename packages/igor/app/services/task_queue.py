@@ -125,6 +125,19 @@ def _handlers() -> dict:
 
         await reindex(user_id, model, request_id=request_id)
 
+    async def _automation_intent(session_id, request_id, user_id, model):
+        """Upgrade the owner's plain-language automation wishes into executable
+        instructions, and republish the affected n8n workflows.
+
+        Enqueued when an automation is created or edited from Settings. It lives
+        here for the same reason the reindex does — so a create never waits on a
+        provider round-trip (Rule 7), and so a failed polish is visible and
+        retried instead of silently leaving the wording alone.
+        """
+        from app.services.automation_intent import polish_pending
+
+        await polish_pending(request_id=request_id, model=model)
+
     return {
         "session_log": update_session_log,
         "session_recap": update_session_recap,
@@ -135,6 +148,7 @@ def _handlers() -> dict:
         "embed_observations": _embed_observations,
         "render_surfaces": _render_surfaces,
         "memory_reindex": _memory_reindex,
+        "automation_intent_polish": _automation_intent,
     }
 
 

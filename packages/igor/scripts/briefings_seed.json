@@ -1,0 +1,63 @@
+[
+  {
+    "legacy_id": "morning_brief",
+    "agent_id": "speda",
+    "template": "briefing",
+    "name": "Sabah briefingi",
+    "schedule": {
+      "frequency": "daily",
+      "at": "08:00"
+    },
+    "instruction": "GÜNLÜK SABAH BRIEFİNGİ — bu bir iş akışıdır, GERÇEK araçlarla çalıştır.\n\nÖNCE VERİYİ TOPLA. Bu adımların hiçbirini owner'a anlatma, sadece yap:\n1. use_toolset ile google_gmail'i yükle → son 24 saatin mailleri.\n2. use_toolset ile google_calendar'ı yükle → bugün ve önümüzdeki 3 gün.\n3. news_deep_dive (country='tr') → son 24 saatin haberleri.\n4. system_info (metric=all) → disk, bellek, uptime.\n\nSONRA BRIEFING'İ YAZ. Bu bir pano değil, bir rapordur: başlıklar ve madde listeleri yerine akıcı Türkçe paragraflar.\n\n- İLK CÜMLE owner'ın bugün karar vermesi gereken tek şeydir. Öyle bir şey yoksa bunu söyle ve geç (\"sakin bir sabah\") — uydurma bir aciliyet yaratma.\n- SAYIYI DEĞİL ANLAMINI yaz. \"Enflasyon %31,75\" veridir; \"kira artış tavanı %31,9, yenileme bu orandan gider\" analizdir. Analize ulaşamıyorsan veriyi de yazma.\n- SADECE İSTİSNAYI RAPORLA. Sunucu sağlıklıysa tek cümle ya da hiç. Takvim hafta boyu aynıysa dört kez tekrarlama — \"vardiya hafta boyu sabit, tek değişken çarşamba ve cuma akşamı\" de.\n- HABER FİLTRESİ: owner'ın parasına, sağlığına, işine veya güvenliğine dokunmayan haber YAZILMAZ. Popüler olması yetmez. En fazla 2-4 haber.\n- MAİL: önemli olanı yaz, gerisini tek cümlede topla (\"kalanı bülten ve kargo bildirimi\").\n- HANGİ ARACI KULLANDIĞINI, hangisinin boş döndüğünü, sırada ne yapacağını ASLA yazma. Bir kaynak hiç çalışmadıysa en sonda tek sade cümle: \"haber akışı bugün sessiz.\"\n- YAPMADIĞIN ŞEYİ YAPTIM DEME. \"Sentinel'e işlettim\", \"sayfayı açtım\", \"hatırlatma kurdum\" — sadece o aracı bu turda GERÇEKTEN çağırdıysan. Çağırmadıysan teklif et: \"istersen Sentinel'e işleteyim.\"\n- ELİNDE OLMAYAN VERİYİ UYDURMA. Kira tutarı, sözleşme tarihi, hava durumu, yol süresi — bunları bir araç ya da hafıza vermediyse o cümleyi hiç kurma. Yuvarlak bir tahmin, yazılmamış cümleden daha kötüdür.\n- Sonda kısa bir teklifle kapat.\n\nUzunluk: 150-200 kelime. Sesli okunduğunda takip edilebilmeli."
+  },
+  {
+    "legacy_id": "news_briefing",
+    "agent_id": "nightcrawler",
+    "template": "briefing",
+    "name": "Gündem briefingi",
+    "schedule": {
+      "frequency": "daily",
+      "at": "07:30"
+    },
+    "instruction": "GÜNLÜK GÜNDEM BRİFİNGİ — bu bir iş akışıdır, GERÇEK araçlarla çalıştır.\n\nÖNCE VERİYİ TOPLA. Adımları owner'a anlatma, sadece yap:\n1. news_headlines(since_hours=24) çağır — RSS deposundaki başlıklar bu turun ana kaynağıdır, ilk ve varsayılan adım budur.\n2. Bir haber gerçekten önemliyse ve doğrulama, geçmiş ya da ilgili gelişme gerektiriyorsa EN FAZLA 1-2 news_deep_dive çağrısı yap. Sıradan bir başlık için asla çağırma — bütçe sınırlı ve paylaşımlı.\n3. news_watch listesindeki izlenen kelimelere değen bir şey varsa öne çıkar.\n\nSONRA GÜNDEMİ YAZ. Bu bir liste dökümü değil, bir brifingdir:\n- Kategoriye göre grupla: Türkiye, dünya, ekonomi, teknoloji/siber — sadece dolu olan kategorileri yaz.\n- Her haber TEK cümle: ne oldu ve neden önemli. Başlığı olduğu gibi kopyalama, kendi cümlenle özetle.\n- İzlenen kelimelerle eşleşen haberler en başta.\n- Önem sırala, kronolojik sıralama değil. Magazin ya da owner'ı ilgilendirmeyen haberi atla — popüler olması yetmez.\n- news_headlines boş ya da sessizse tek cümlede söyle: bugün akışta önemli bir şey yok. Uydurma haber yazma.\n- Hangi aracı çağırdığını, kaç haber döndüğünü ya da hangi kaynaktan geldiğini asla yazma — sadece gündemi anlat.\n- Elinde olmayan detayı (kaynak linki, tam rakam, spekülasyon) uydurma.\n\nUzunluk: 150-220 kelime, akıcı Türkçe."
+  },
+  {
+    "legacy_id": "atomix_health",
+    "agent_id": "atomix",
+    "template": "briefing",
+    "name": "Sağlık briefingi",
+    "schedule": {
+      "frequency": "daily",
+      "at": "08:00"
+    },
+    "instruction": "GÜNLÜK SAĞLIK BRIEFİNGİ — bu bir iş akışıdır, GERÇEK araçlarla çalıştır.\n\nVERİYİ ÇEK: health_data aracını live=true ile çağır. Bu, telefondan taze senkron ister ve veri bayatsa sana sayı VERMEZ, hata döner.\n  metrics: ['sleep_session','heart_rate','resting_heart_rate','steps'], range: '7d', live: true\n7 gün istiyoruz çünkü tek bir gecenin sayısı, geçmiş hafta olmadan hiçbir şey ifade etmez — hafta baseline'dır, dün konudur.\n\nARAÇ \"REFUSED\" DÖNERSE: BRIEFING BUDUR. Hangi metriğin ne zamandan beri gelmediğini söyle; saatin takılı ve eşleşmiş olduğunu, Speda GO'da Health sekmesinin canlı göründüğünü kontrol etmesini öner. Eski sayıları ASLA bugünün verisiymiş gibi yazma, \"en son şu veri var\" diye de sunma. Bu eksik bir briefing değil, doğru briefingdir.\n\nVERİ GELDİYSE — bu da bir pano değil, bir rapordur:\n\n- İLK İKİ CÜMLE \"iyi miyim?\" sorusunu cevaplar. Her şey normal aralıktaysa bunu söyle ve bitir; üç cümlelik briefing geçerli briefingdir.\n- HER SAYI KENDİ BASELINE'IYLA GELİR. \"Nabız 98\" hiçbir şey demektir; \"nabız 98, senin normalin 62-64\" her şey demektir. Baseline'ı 7 günlük veriden çıkar.\n- METRİK METRİK DEĞİL, GÜN GÜN ANLAT. Uyku, nabız ve adım aynı haftanın üç görüntüsüdür; aralarındaki örüntüyü kur (toparlanma → yük → durgunluk gibi).\n- TEŞHİSİ SEN DARALT. \"Cihaz hatası mı, stres mi, hastalık mı?\" diye owner'a sorma — elindeki diğer metriklerle şıkları ele, sonra geriye kalan TEK ayırt edici soruyu sor.\n- SADECE İNSANIN BİLDİĞİNİ SOR. Nasıl hissettiği senin ölçemediğin bir veridir; briefingi onunla kapat.\n- EKSİK VERİ BÖLÜM DEĞİL DİPNOTTUR: en sonda tek cümle, muhtemel sebebiyle.\n- SAMPLE SAYISI, TABLO ADI, \"şu metrik dönmedi\" gibi şeyleri ASLA yazma. Bir veriye güvenmiyorsan bir kez \"bu ölçüme güvenmiyorum\" de ve geç.\n- TAKVİM VE GYM PROGRAMI SENİN ALANIN DEĞİL (o Speda'da). Senin katkın \"bugün ağır antrenman değil, yürüyüş\" gibi bir ÖNERİDİR — programın kendisi değil.\n- KIRMIZI ÇİZGİ: gün boyuna yayılmış nabız yükselmesi baseline'ın 25+ bpm üstündeyse ya da üç günden uzun sürüyorsa, tavsiye vermeyi bırak ve doktora görünmesini söyle.\n\nUzunluk: 120-180 kelime, akıcı Türkçe."
+  },
+  {
+    "legacy_id": "atomix_evening",
+    "agent_id": "atomix",
+    "template": "proactive_ask",
+    "name": "Akşam hatırlatması",
+    "schedule": {
+      "frequency": "daily",
+      "at": "23:00"
+    },
+    "instruction": "EVENING REMINDER — bu Atomix'in kişisel hatırlatmasıdır ve owner'ın ONAYLAMASI gerekir.\n\nAşağıdaki GERÇEKLER bölümü sana hangi günde olduğunu ve gym durumunu SÖYLER. Günü, haftanın gününü veya gym gününü KENDİN HESAPLAMA, ÇIKARIM YAPMA — sadece aşağıda yazanı kullan. Orada yazmayan bir şeyi varsayma.\n\nMesajın içeriği:\n1. 150 mg Lustral al — HER GÜN, istisnasız.\n2. 5 g kreatin al — HER GÜN, istisnasız.\n3. Spor salonu giriş kartını al — SADECE yarın gym günüyse. Değilse bu maddeyi hiç yazma.\n4. Yarınki antrenman için spor çantanı hazırla — SADECE yarın gym günüyse. Değilse bu maddeyi hiç yazma.\n\nTon ve ek not:\n- Bugün gym günüyse: 'bugün antrenman yaptın' diyebilirsin. Gym günü DEĞİLSE bunu ASLA yazma — owner bugün antrenman yapmadı.\n- Yarın gym günüyse: çanta ve kart vurgusunu güçlendir.\n- Ne bugün ne yarın gym günü değilse: sadece ilaç ve kreatini hatırlat, kısa tut.\n- Hafta sonuysa daha rahat bir ton kullan.\nMesajı Atomix'in sesiyle yaz — doğal, kısa, ilgilendiğini gösteren. Statik metin gibi olmasın.",
+    "reminder_id": "atomix_evening",
+    "options": [
+      "✅ Hepsini yaptım",
+      "⏭️ Bugün atlıyorum"
+    ],
+    "every_minutes": 5,
+    "max_asks": 10,
+    "day_flags": [
+      {
+        "label": "gym günü",
+        "days": [
+          1,
+          3,
+          5
+        ]
+      }
+    ]
+  }
+]

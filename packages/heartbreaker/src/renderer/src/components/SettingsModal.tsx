@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
-import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, microsoftLoginUrl, microsoftStatus, microsoftDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
+import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, microsoftLoginUrl, microsoftStatus, microsoftDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationAgents, createAutomation, updateAutomation, telegramConnect, telegramStatus } from '../lib/api'
+import { AutomationBuilder, describeSchedule } from './AutomationBuilder'
 import { memoryStatus } from '../lib/api'
-import type { ConnectionInfo, AutomationInfo, AutomationsStatus, MemoryStatus } from '../lib/api'
+import type { ConnectionInfo, AutomationInfo, AutomationsStatus, AutomationAgent, AutomationDraft, MemoryStatus } from '../lib/api'
 import RemindersTab from './RemindersTab'
 import ProtocolsTab from './ProtocolsTab'
 import type { AppConfig } from '../lib/types'
@@ -99,16 +100,36 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
   const [autoStatus, setAutoStatus] = useState<AutomationsStatus | null>(null)
   const [autosLoaded, setAutosLoaded] = useState(false)
   const [tgMsg, setTgMsg] = useState('')
+  const [autoAgents, setAutoAgents] = useState<AutomationAgent[]>([])
+  // null = the list. 'new' = the empty builder. An AutomationInfo = editing it.
+  const [building, setBuilding] = useState<AutomationInfo | 'new' | null>(null)
   const loadAutos = async () => {
     try {
       setAutos(await getAutomations(config))
       setAutoStatus(await getAutomationsStatus(config))
+      setAutoAgents(await getAutomationAgents(config))
     } finally {
       // Always clear — an unreachable backend must not skeleton this forever.
       setAutosLoaded(true)
     }
   }
   useEffect(() => { if (tab === 'automations') loadAutos() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Leaving the tab closes the builder. Coming back to a half-filled form the
+  // owner had walked away from reads as a bug, not as a saved draft.
+  useEffect(() => { if (tab !== 'automations') setBuilding(null) }, [tab])
+  /**
+   * Save a draft, then reload. Returns null on success, or the backend's own
+   * message — it names the field and the fix, and the form has no better one.
+   */
+  const handleSaveAuto = async (draft: AutomationDraft): Promise<string | null> => {
+    const res = building && building !== 'new'
+      ? await updateAutomation(config, building.id, draft)
+      : await createAutomation(config, draft)
+    if ('error' in res) return res.error
+    setBuilding(null)
+    await loadAutos()
+    return null
+  }
   const handleToggleAuto = async (id: number, active: boolean) => {
     setAutos(as => as.map(a => a.id === id ? { ...a, active } : a)) // optimistic
     await toggleAutomation(config, id, active)
@@ -697,8 +718,19 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
             {tab === 'reminders' && <RemindersTab config={config} />}
             {tab === 'protocols' && <ProtocolsTab config={config} onEngageLockdown={onEngageLockdown} />}
 
+            {/* The builder takes over the whole tab while it is open — see the
+                note in AutomationBuilder on why it is not a nested modal. */}
+            {tab === 'automations' && building !== null && (
+              <AutomationBuilder
+                existing={building === 'new' ? undefined : building}
+                agents={autoAgents}
+                onCancel={() => setBuilding(null)}
+                onSave={handleSaveAuto}
+              />
+            )}
+
             {/* Automations tab — Speda's proactive n8n watchers */}
-            {tab === 'automations' && (
+            {tab === 'automations' && building === null && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
                 <SettingsSection title={t.settingsAutomations.pipeline} first />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
@@ -750,6 +782,11 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                 </div>
 
                 <SettingsSection title={t.settingsAutomations.watchers} />
+                <div style={{ marginTop: -8 }}>
+                  <PillBtn tone="accent" onClick={() => setBuilding('new')}>
+                    {t.settingsAutomations.add}
+                  </PillBtn>
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
                   {!autosLoaded ? (
                     <SkeletonList rows={3} mark={false} />
@@ -774,7 +811,15 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                         background: a.active ? 'rgba(var(--hb-accent-rgb),0.12)' : 'rgba(255,255,255,0.03)',
                         border: `1px solid ${a.active ? 'rgba(var(--hb-accent-rgb),0.3)' : 'rgba(255,255,255,0.08)'}`,
                       }}>
-                        {{ web_watch: 'web', rss_watch: 'rss', schedule: 'cron', webhook: 'hook' }[a.kind] ?? a.kind}
+                        {/* A templated automation is named by what it IS. Only an
+                            agent-made watcher still shows its wire kind — and
+                            never "cron", which is what this module exists to
+                            stop putting in front of the owner. */}
+                        {a.template
+                          ? { briefing: t.settingsAutomations.tplBriefing,
+                              reminder_once: t.settingsAutomations.tplOnce,
+                              proactive_ask: t.settingsAutomations.tplAsk }[a.template]
+                          : ({ web_watch: 'web', rss_watch: 'rss', schedule: t.settingsAutomations.scheduled, webhook: 'hook' } as Record<string, string>)[a.kind] ?? a.kind}
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
@@ -782,16 +827,38 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
                           {a.name}
+                          <span style={{ color: 'var(--hb-text-faint)', fontSize: '0.8125rem' }}>
+                            {' · '}{autoAgents.find(g => g.agent_id === a.agent_id)?.name ?? a.agent_id}
+                          </span>
                         </div>
                         <div style={{
                           fontSize: '0.8125rem', color: 'var(--hb-text-faint)', marginTop: 2,
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
-                          {a.summary}
+                          {/* "Günde bir · 09:00", never "0 9 * * *". */}
+                          {a.schedule ? describeSchedule(a.schedule, t) : a.summary}
                           {a.last_fired_at && t.settingsAutomations.lastFired(new Date(a.last_fired_at).toLocaleString())}
                           {a.expires_at && t.settingsAutomations.until(new Date(a.expires_at).toLocaleDateString())}
                         </div>
+                        {/* The polisher's state, shown only when it is not the
+                            happy path — a wording still being upgraded, or one
+                            that failed and is running the owner's own words. */}
+                        {a.intent_status === 'raw' && (
+                          <div style={{ fontSize: '0.78125rem', color: 'var(--hb-text-faint)', marginTop: 2, opacity: 0.8 }}>
+                            {t.settingsAutomations.statusRaw}
+                          </div>
+                        )}
+                        {a.intent_status === 'failed' && (
+                          <div style={{ fontSize: '0.78125rem', color: 'var(--hb-amber-bright)', marginTop: 2 }}>
+                            {t.settingsAutomations.statusFailed}
+                          </div>
+                        )}
                       </div>
+                      {a.template && (
+                        <PillBtn onClick={() => setBuilding(a)} title={t.settingsAutomations.edit}>
+                          {t.settingsAutomations.edit}
+                        </PillBtn>
+                      )}
                       <Switch
                         on={a.active}
                         onChange={v => handleToggleAuto(a.id, v)}

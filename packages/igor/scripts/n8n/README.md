@@ -27,7 +27,6 @@ majority of runs.
 | `lifeboat_watch.json` | The host running out of disk, inodes or RAM | the pressure level actually changes |
 | `octavius_backup.json` | *(nothing — it backs up)* | the backup **fails**; a successful one costs nothing |
 | `persistent_reminders.json` | *(nothing — it asks)* | never; asking and answering are free |
-| `daily_briefings.json` | *(nothing — it schedules)* | **every firing, by design** |
 | `memory_audit.json` | *(nothing — it schedules)* | **once a night, by design** |
 | `task_queue_drain.json` | Post-turn work that failed or was orphaned | only when a job actually needs re-running |
 | `ultron_wear_attendance.json` | A lecture ending unanswered | never; it pushes to the watch directly |
@@ -36,10 +35,16 @@ majority of runs.
 half IS the work — Igor snapshots, verifies and uploads the database itself, for
 zero tokens — and the Gate spends a turn only when that FAILS.
 
-`daily_briefings.json` and `memory_audit.json` are the deliberate exceptions: you
-are asking an agent to go and do work, so of course it costs a turn. Keep watchers
-out of them. Anything shaped like *"check whether X happened"* belongs in one of
-the watch templates, where checking is free.
+`memory_audit.json` is the deliberate exception: you are asking an agent to go
+and do work, so of course it costs a turn. Keep watchers out of it. Anything
+shaped like *"check whether X happened"* belongs in one of the watch templates,
+where checking is free.
+
+**Scheduled briefings no longer live here.** They were a hand-edited JS array in
+`daily_briefings.json`; they are now rows in the `automations` table, each with
+its own workflow and its own real cron, created and edited from Heartbreaker
+under Settings → Automations. `scripts/migrate_briefings.py` performed that move
+and documents it. Add a new briefing from the UI, not by importing a template.
 
 **`memory_audit.json` is not optional.** It is the only thing that fires Orion's
 nightly custodian pass (`docs/MEMORY_ARCHITECTURE.md` §3.3). Without it imported

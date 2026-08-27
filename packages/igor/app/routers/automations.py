@@ -5,7 +5,7 @@ to automations.manager (Rule 1)."""
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -25,9 +25,98 @@ def _speda_bot(request: Request):
     return bots.get("speda") if bots else None
 
 
+def _polish_model(request: Request, agent_id: str) -> str:
+    """The background-tier model the intent polisher runs on for this agent.
+
+    Resolved HERE because this is the layer that has app.state.profiles, and the
+    profile is the only thing allowed to name a model (Rule 10). Derived from
+    what the agent is actually ROUTED to, so pinning it to another provider
+    moves this job with it rather than quietly leaving it on Anthropic.
+    """
+    try:
+        profiles = request.app.state.profiles
+        profile = profiles.get(agent_id) or profiles.default
+        return profile.background_model(profile.allocate_model("user"))
+    except Exception as exc:  # noqa: BLE001 — no model just means "don't polish"
+        logger.warning("polish_model_unresolved", extra={"agent": agent_id, "error": str(exc)})
+        return ""
+
+
+def _drain_soon(background: BackgroundTasks) -> None:
+    """Work the queue as soon as this response is out.
+
+    The intent polisher is queued for durability, not for timing — n8n's hourly
+    /admin/tasks/drain is the safety net, not the schedule. Without this nudge
+    an automation created at 08:05 would keep the owner's raw wording until the
+    top of the next hour, which reads as the feature being broken.
+    """
+    from app.services.task_queue import drain
+
+    background.add_task(drain)
+
+
 @router.get("/automations")
 async def list_automations(db: AsyncSession = Depends(get_db)):
     return {"automations": await manager.list_automations(db)}
+
+
+@router.get("/automations/agents")
+async def automation_agents(request: Request):
+    """The roster the create/edit form's agent picker offers.
+
+    Session-scope aliases are filtered out the same way the model matrix filters
+    them (routers/agents.py): War Room mirrors Speda's brain and is a place a
+    conversation happens, not something that should own a 08:00 briefing.
+    """
+    return {
+        "agents": [
+            {"agent_id": p.agent_id, "name": p.name, "domain": p.domain}
+            for p in request.app.state.profiles.roster()
+            if p.dispatch_target
+        ]
+    }
+
+
+@router.post("/automations")
+async def create_automation(
+    body: dict, request: Request, background: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create an automation from the Settings form. The body is the composer
+    spec — template, name, schedule block, instruction, and the ask fields for a
+    proactive reminder. Validation errors come back as `error` with the field
+    and the fix named, because this form is the owner's only feedback channel."""
+    agent_id = str(body.get("agent_id") or "speda")
+    spec = dict(body.get("spec") or body)
+    spec.pop("agent_id", None)
+    try:
+        created = await manager.create_automation(
+            spec, db, agent_id=agent_id, model=_polish_model(request, agent_id)
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
+    _drain_soon(background)
+    return created
+
+
+@router.put("/automations/{automation_id}")
+async def update_automation(
+    automation_id: int, body: dict, request: Request, background: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Edit a live automation. Recomposes and PUTs over the same n8n workflow, so
+    the execution history and the gate node's 'already fired today' memory
+    survive the edit (see manager.update_automation)."""
+    agent_id = str(body.get("agent_id") or "")
+    try:
+        updated = await manager.update_automation(
+            automation_id, body, db,
+            model=_polish_model(request, agent_id or "speda"),
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
+    _drain_soon(background)
+    return updated
 
 
 @router.get("/automations/drift")
