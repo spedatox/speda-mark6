@@ -51,7 +51,11 @@ _MAX_CHARS = 4000
 
 _SYSTEM = """You turn a short wish into an EXECUTABLE instruction that an AI agent will run by itself, on a schedule, with no human present.
 
-The agent reading your output is the same agent that will run it. Write in the second person, as an instruction to itself. Write in the SAME LANGUAGE the owner used.
+The agent reading your output is the same agent that will run it. Write in the second person, as an instruction to itself.
+
+LANGUAGE — read this twice. The owner's wish below is written in one language. EVERY word you write — section labels, rules, the instruction itself — must be in that SAME language. Do not write section headers like "COLLECTION" or "OUTPUT" in English when the wish is in Turkish or any other language: translate them too ("TOPLAMA", "ÇIKTI", or whatever that language would naturally use). A bilingual instruction, half in English and half in the owner's language, is a wrong answer even if every sentence in it is individually correct.
+
+GENDER — never assume the owner's gender. Refer to "the owner" (or that word's exact equivalent in the wish's language) rather than a gendered pronoun. If the wish's language has no grammatical gender (Turkish, for instance — "o" covers everyone), this is automatic and needs no extra care; if you are writing in a language that does (English "he/she"), do not guess — write "the owner" or a neutral form instead.
 
 Your output must have two phases:
 
