@@ -615,7 +615,7 @@ export async function setConnection(config: AppConfig, server: string, active: b
 /* ── Automations — Speda's proactive n8n watchers ─────────────────────────── */
 
 /** Which of the three things the owner can build from Settings. */
-export type AutomationTemplate = 'briefing' | 'reminder_once' | 'proactive_ask'
+export type AutomationTemplate = 'briefing' | 'reminder' | 'proactive_ask'
 
 export type AutomationFrequency = 'once' | 'daily' | 'weekly' | 'monthly'
 
@@ -715,12 +715,25 @@ export async function getAutomations(config: AppConfig): Promise<AutomationInfo[
   return (await res.json()).automations ?? []
 }
 
-export async function toggleAutomation(config: AppConfig, id: number, active: boolean): Promise<void> {
-  await fetch(`${config.apiBase}/automations/${id}/toggle`, {
-    method: 'POST',
-    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ active }),
-  })
+/** Toggle a watcher on/off. The backend refuses the flip — and leaves the row
+ *  untouched — when it can't also sync n8n (unreachable, not configured), so
+ *  the caller must check for `error` and revert its optimistic update rather
+ *  than assume the POST landed. */
+export async function toggleAutomation(
+  config: AppConfig, id: number, active: boolean,
+): Promise<{ error: string } | null> {
+  try {
+    const res = await fetch(`${config.apiBase}/automations/${id}/toggle`, {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ active }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || data?.error) return { error: data?.error || `Request failed (${res.status})` }
+    return null
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Could not reach the backend.' }
+  }
 }
 
 export async function deleteAutomation(config: AppConfig, id: number): Promise<void> {
@@ -770,6 +783,28 @@ export async function updateAutomation(
     })
     if (!res.ok) return { error: `HTTP ${res.status}` }
     return await res.json()
+  } catch (e) { return { error: String(e) } }
+}
+
+/**
+ * Fire an automation's stored intent right now — the exact turn n8n would
+ * start when its schedule comes due, not a mock. A push automation really
+ * pushes to Telegram; a proactive ask really nags with real buttons. Never
+ * touches n8n's own "already fired today" latch, so it cannot cause or be
+ * mistaken for a duplicate real firing.
+ */
+export async function testAutomation(
+  config: AppConfig, id: number,
+): Promise<{ started: true; request_id: string } | { error: string }> {
+  try {
+    const res = await fetch(`${config.apiBase}/automations/${id}/test`, {
+      method: 'POST',
+      headers: authHeaders(config),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) return { error: body?.error || `HTTP ${res.status}` }
+    if (body.error) return { error: body.error }
+    return { started: true, request_id: body.request_id }
   } catch (e) { return { error: String(e) } }
 }
 

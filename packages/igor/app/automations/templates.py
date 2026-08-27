@@ -2,6 +2,14 @@
 The three automation templates the owner picks from in Heartbreaker, and the
 deterministic half of the instruction each one fires with.
 
+`reminder` is deliberately schedule-agnostic — it started as a one-off-only
+template ("reminder_once") and was generalized because the owner's actual need
+("hatırlat, haftada bir") is the same content whether it fires once or every
+week; forcing a template switch to get a different frequency would have been
+the module drawing a distinction the owner never asked for. A 'once' schedule
+still retires itself (schedule.expiry_for) — that behaviour rides on the
+SCHEDULE, not on which template chose it.
+
 An automation's `intent` is not a message — it is an instruction the agent
 executes with no human in the loop when n8n calls back. Two things go into it:
 
@@ -33,7 +41,7 @@ import re
 
 from app.automations import schedule as sched
 
-TEMPLATES = ("briefing", "reminder_once", "proactive_ask")
+TEMPLATES = ("briefing", "reminder", "proactive_ask")
 
 # What every push-mode automation must be told, once, at the end. Kept here
 # rather than in the polisher's prompt because it is a fact about the transport,
@@ -123,14 +131,10 @@ def validate(spec: dict) -> None:
                     f"{d!r} — must be 1 (Monday) to 7 (Sunday)."
                 )
 
-    if spec.get("template") == "reminder_once":
-        freq = (spec.get("schedule") or {}).get("frequency")
-        if freq != "once":
-            raise TemplateError(
-                "A one-off reminder must use a 'once' schedule with a date. "
-                f"Got frequency {freq!r} — pick the briefing template for a "
-                "recurring one."
-            )
+    # No frequency restriction on 'reminder' — that is precisely the point of
+    # this template over the old 'reminder_once': the owner picks 'once' for a
+    # single date (it retires itself, see schedule.expiry_for) or any other
+    # frequency for a plain recurring push, without switching templates.
 
 
 def build_intent(spec: dict) -> str:
@@ -146,11 +150,13 @@ def build_intent(spec: dict) -> str:
         return _ask_intent(spec, body)
 
     parts = [body]
-    if template == "reminder_once":
-        # A one-off has no tomorrow to correct a mistake in, and the date is
-        # already fixed in the cron — restating it here keeps the agent from
-        # re-deriving "today" and reminding him about the wrong day.
-        when = (spec.get("schedule") or {}).get("date")
+    # Keyed off the SCHEDULE, not the template: any push automation firing on a
+    # 'once' schedule has no tomorrow to correct a mistake in, and the date is
+    # already fixed in the cron — restating it here keeps the agent from
+    # re-deriving "today" and reminding him about the wrong day.
+    schedule = spec.get("schedule") or {}
+    if schedule.get("frequency") == "once":
+        when = schedule.get("date")
         if when:
             parts.append(
                 f"Bu tek seferlik bir hatırlatmadır ve bugün {when} tarihinde "

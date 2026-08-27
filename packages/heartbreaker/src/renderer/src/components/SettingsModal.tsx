@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
-import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, microsoftLoginUrl, microsoftStatus, microsoftDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationAgents, createAutomation, updateAutomation, telegramConnect, telegramStatus } from '../lib/api'
+import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, microsoftLoginUrl, microsoftStatus, microsoftDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationAgents, createAutomation, updateAutomation, testAutomation, telegramConnect, telegramStatus } from '../lib/api'
 import { AutomationBuilder, describeSchedule } from './AutomationBuilder'
 import { memoryStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus, AutomationAgent, AutomationDraft, MemoryStatus } from '../lib/api'
@@ -100,10 +100,16 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
   const [autoStatus, setAutoStatus] = useState<AutomationsStatus | null>(null)
   const [autosLoaded, setAutosLoaded] = useState(false)
   const [tgMsg, setTgMsg] = useState('')
+  const [autoErr, setAutoErr] = useState('')
   const [autoAgents, setAutoAgents] = useState<AutomationAgent[]>([])
   // null = the list. 'new' = the empty builder. An AutomationInfo = editing it.
   const [building, setBuilding] = useState<AutomationInfo | 'new' | null>(null)
+  // Per-row transient feedback for the Test button — 'sending' while the
+  // request is in flight, then the result for a few seconds before it clears.
+  // Keyed by automation id since every row can fire independently.
+  const [testState, setTestState] = useState<Record<number, 'sending' | 'sent' | string>>({})
   const loadAutos = async () => {
+    setAutoErr('')
     try {
       setAutos(await getAutomations(config))
       setAutoStatus(await getAutomationsStatus(config))
@@ -132,13 +138,36 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
   }
   const handleToggleAuto = async (id: number, active: boolean) => {
     setAutos(as => as.map(a => a.id === id ? { ...a, active } : a)) // optimistic
-    await toggleAutomation(config, id, active)
+    const res = await toggleAutomation(config, id, active)
+    if (res) {
+      // The backend refused the flip (n8n unreachable/not configured) and left
+      // the row untouched — undo the optimistic flip instead of silently
+      // reloading, which would re-show the old value with no explanation and
+      // read as "it turned itself back on".
+      setAutos(as => as.map(a => a.id === id ? { ...a, active: !active } : a))
+      setAutoErr(res.error)
+      return
+    }
+    setAutoErr('')
     loadAutos()
   }
   const handleDeleteAuto = async (id: number) => {
     setAutos(as => as.filter(a => a.id !== id))
     await deleteAutomation(config, id)
     loadAutos()
+  }
+  /** Fire an automation now. Feeds the row's inline status, then clears it —
+   *  the real result (a Telegram push, a real nagging ask) shows up on its
+   *  own, this is just "yes, it went". */
+  const handleTestAuto = async (id: number) => {
+    setTestState(s => ({ ...s, [id]: 'sending' }))
+    const res = await testAutomation(config, id)
+    setTestState(s => ({ ...s, [id]: 'error' in res ? res.error : 'sent' }))
+    setTimeout(() => setTestState(s => {
+      const { [id]: _drop, ...rest } = s
+      return rest
+    }), 5000)
+    if (!('error' in res)) loadAutos() // last_fired_at just moved
   }
   const handleTelegramConnect = async () => {
     setTgMsg('Opening Telegram…')
@@ -786,6 +815,11 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                   <PillBtn tone="accent" onClick={() => setBuilding('new')}>
                     {t.settingsAutomations.add}
                   </PillBtn>
+                  {autoErr && (
+                    <p style={{ marginTop: 8, fontSize: '0.8125rem', color: '#e5897c' }}>
+                      {autoErr}
+                    </p>
+                  )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
                   {!autosLoaded ? (
@@ -817,7 +851,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                             stop putting in front of the owner. */}
                         {a.template
                           ? { briefing: t.settingsAutomations.tplBriefing,
-                              reminder_once: t.settingsAutomations.tplOnce,
+                              reminder: t.settingsAutomations.tplOnce,
                               proactive_ask: t.settingsAutomations.tplAsk }[a.template]
                           : ({ web_watch: 'web', rss_watch: 'rss', schedule: t.settingsAutomations.scheduled, webhook: 'hook' } as Record<string, string>)[a.kind] ?? a.kind}
                       </span>
@@ -854,6 +888,29 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                           </div>
                         )}
                       </div>
+                      {/* Every automation gets Test — including agent-authored
+                          watchers with no template — since it just replays
+                          the stored intent and doesn't care what built it. */}
+                      {testState[a.id] === 'sending' ? (
+                        <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>
+                          {t.settingsAutomations.testSending}
+                        </span>
+                      ) : testState[a.id] === 'sent' ? (
+                        <span style={{ fontSize: '0.8125rem', color: 'var(--hb-green)' }}>
+                          {t.settingsAutomations.testSent}
+                        </span>
+                      ) : testState[a.id] ? (
+                        <span style={{ fontSize: '0.8125rem', color: '#e5897c' }} title={testState[a.id]}>
+                          {t.settingsAutomations.testFailed}
+                        </span>
+                      ) : (
+                        <PillBtn
+                          onClick={() => handleTestAuto(a.id)}
+                          title={t.settingsAutomations.testTitle}
+                        >
+                          {t.settingsAutomations.test}
+                        </PillBtn>
+                      )}
                       {a.template && (
                         <PillBtn onClick={() => setBuilding(a)} title={t.settingsAutomations.edit}>
                           {t.settingsAutomations.edit}

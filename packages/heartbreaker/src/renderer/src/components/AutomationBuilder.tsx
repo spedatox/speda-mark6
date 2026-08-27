@@ -35,12 +35,18 @@ import type {
 /** ISO weekday numbers, the vocabulary the backend speaks. 1=Mon … 7=Sun. */
 const WEEK: number[] = [1, 2, 3, 4, 5, 6, 7]
 
-const TEMPLATES: AutomationTemplate[] = ['briefing', 'reminder_once', 'proactive_ask']
+const TEMPLATES: AutomationTemplate[] = ['briefing', 'reminder', 'proactive_ask']
 
-/** Which frequencies each template may use. A one-off has exactly one. */
+/**
+ * Which frequencies each template may use. 'reminder' is schedule-agnostic —
+ * a plain nudge is exactly as sensible fired once as it is every Monday, so it
+ * gets every option. Briefing and proactive-ask stay recurring-only: a
+ * one-off "briefing" isn't a briefing, and a one-off ask has nothing to nag
+ * about a second time — see packages/igor/app/automations/templates.py.
+ */
 function allowedFrequencies(template: AutomationTemplate): AutomationFrequency[] {
-  return template === 'reminder_once'
-    ? ['once']
+  return template === 'reminder'
+    ? ['once', 'daily', 'weekly', 'monthly']
     : ['daily', 'weekly', 'monthly']
 }
 
@@ -193,8 +199,8 @@ export function AutomationBuilder({ existing, agents, onCancel, onSave }: {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 }}>
           {TEMPLATES.map(tpl => {
             const on = template === tpl
-            const label = { briefing: a.tplBriefing, reminder_once: a.tplOnce, proactive_ask: a.tplAsk }[tpl]
-            const desc = { briefing: a.tplBriefingDesc, reminder_once: a.tplOnceDesc, proactive_ask: a.tplAskDesc }[tpl]
+            const label = { briefing: a.tplBriefing, reminder: a.tplOnce, proactive_ask: a.tplAsk }[tpl]
+            const desc = { briefing: a.tplBriefingDesc, reminder: a.tplOnceDesc, proactive_ask: a.tplAskDesc }[tpl]
             return (
               <button
                 key={tpl}

@@ -3,14 +3,18 @@ plus the one-time Telegram connect flow. Zero business logic beyond delegation
 to automations.manager (Rule 1)."""
 
 import asyncio
+import json
 import logging
+import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.runtime_state import get_telegram_owner_id
+from app.core.trigger_runner import start_trigger_turn
 from app.database import get_db
+from app.models.automation import Automation
 from app.automations import manager
 
 logger = logging.getLogger(__name__)
@@ -117,6 +121,71 @@ async def update_automation(
         return {"error": str(exc)}
     _drain_soon(background)
     return updated
+
+
+@router.post("/automations/{automation_id}/test")
+async def test_automation(automation_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    """Fire an automation's stored intent RIGHT NOW — exactly as n8n would when
+    its schedule comes due, through the same in-process turn machinery
+    /trigger/{agent_id} uses (start_trigger_turn): same seed, same output mode,
+    same delivery. This is how the owner finds out a briefing actually works
+    before trusting a 07:30 cron to run it unattended.
+
+    Deliberately bypasses n8n entirely rather than pinging its webhook: a test
+    never touches the workflow's own 'already fired today' latch, so it can
+    never cause — or be mistaken for — a duplicate real firing. The real
+    schedule and this button simply do not share any state.
+
+    A push automation really pushes to Telegram; a proactive ask really nags
+    with real buttons. That is intentional — a mocked test would not have
+    caught the polisher's English-header bug this module shipped with days
+    earlier, because the bug only showed up in the real generated text.
+    """
+    row = await db.get(Automation, automation_id)
+    if row is None:
+        return {"error": f"No automation with id {automation_id}."}
+    profile = request.app.state.profiles.get(row.agent_id)
+    if profile is None:
+        return {"error": f"Agent '{row.agent_id}' is not registered."}
+
+    from app.automations import templates
+
+    try:
+        spec = json.loads(row.spec or "{}")
+    except ValueError:
+        spec = {}
+    output_mode = templates.output_mode(spec.get("template") or "")
+
+    request_id = str(uuid.uuid4())
+    started, session_id = await start_trigger_turn(
+        db=db,
+        profile=profile,
+        payload={
+            "type": row.kind,
+            # Distinct from the real "automation_fired" n8n sends, so a log or
+            # a support conversation can tell a manual test from a real firing
+            # at a glance — nothing downstream branches on this value.
+            "event": "automation_test",
+            "automation": row.name,
+            "intent": row.intent,
+        },
+        output_mode=output_mode,
+        request_id=request_id,
+        orchestrator=request.app.state.orchestrator,
+        turns=request.app.state.turns,
+        session_manager=request.app.state.session_manager,
+        telegram_bots=request.app.state.telegram_bots,
+        agent_proxy=request.app.state.agent_proxy,
+        ws_manager=request.app.state.ws_manager,
+        triggered_by="n8n",
+    )
+    if started is None:
+        return {"error": "Too many turns are running at once — retry shortly."}
+    logger.info(
+        "automation_test_fired",
+        extra={"automation_id": automation_id, "agent_id": row.agent_id, "request_id": request_id},
+    )
+    return {"started": True, "request_id": request_id, "session_id": session_id, "agent_id": row.agent_id}
 
 
 @router.get("/automations/drift")
