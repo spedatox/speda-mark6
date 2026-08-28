@@ -11,14 +11,20 @@
  * 1. The password comes back MASKED and is sent back masked. The backend reads
  *    an unchanged mask as "keep the stored one", so editing a label never costs
  *    the owner a credential they can no longer read off the screen.
- * 2. Saving SIGNS IN. A stored-but-never-tried credential is indistinguishable
- *    from a working one until an agent needs it, which is always the worst
- *    moment to find the typo. The verdict is shown immediately, in the same
- *    words the browser reported.
+ * 2. Saving does NOT sign in. It used to — but a login attempt on every save
+ *    means every typo, every slow captcha, every portal having a bad moment
+ *    surfaces as a scary red error on what the owner meant as "just store
+ *    this". Saving now only stores the credential, same as writing a line to
+ *    an .env file. The per-portal "Test" button (and the automatic sign-in
+ *    the FIRST time an agent actually opens the portal) are what confirm it
+ *    works, when the owner actually wants to know.
  *
- * The advanced block (selectors, success check) stays folded away because it is
- * almost never needed: the login form is the one form on the web with a
- * reliable shape, and the backend finds it by looking for the password box.
+ * The advanced block (landing page, agent restriction, note, selectors) stays
+ * folded away because none of it is required to get going: a name, the
+ * sign-in page, and the credentials are the whole of what's needed. The login
+ * form is also the one form on the web with a reliable shape, so the backend
+ * finds it by looking for the password box without the selectors below ever
+ * being filled in.
  */
 
 import { useEffect, useState } from 'react'
@@ -125,17 +131,16 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
       allowed_agents: allowed,
       note: draft.note,
       enabled: true,
+      // Just store it — see the module docstring for why saving no longer
+      // signs in on its own. The "Test" button is right there for whenever
+      // the owner actually wants that checked.
+      test: false,
     })
     setBusy(null)
     await load()
     if (r.error) { setMsg({ text: r.error, ok: false }); return }
-    setMsg({
-      text: r.ok
-        ? `${t.portalsPanel.signedInDot}${r.landed_on ? t.portalsPanel.signedInLandedOn(r.landed_on) : ''}.`
-        : (r.message || t.portalsPanel.saved),
-      ok: Boolean(r.ok),
-    })
-    if (r.ok) setTimeout(reset, 1800)
+    setMsg({ text: r.message || t.portalsPanel.saved, ok: true })
+    setTimeout(reset, 1200)
   }
 
   const test = async (name: string) => {
@@ -288,17 +293,6 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
               onChange={e => setDraft(d => ({ ...d, login_url: e.target.value }))}
             />
           </div>
-          <div>
-            <Label>{t.portalsPanel.landingPage}</Label>
-            <input
-              style={{ ...fieldStyle, fontFamily: 'var(--font-mono)' }}
-              value={draft.home_url}
-              placeholder="https://obs.example.edu.tr/dashboard"
-              onChange={e => setDraft(d => ({ ...d, home_url: e.target.value }))}
-            />
-            <Hint>{t.portalsPanel.landingPageHint}</Hint>
-          </div>
-
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
               <Label>{t.portalsPanel.username}</Label>
@@ -322,38 +316,6 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
             </div>
           </div>
 
-          {agents.length > 0 && (
-            <div>
-              <Label>{t.portalsPanel.whichAgents}</Label>
-              <Hint>{t.portalsPanel.whichAgentsHint}</Hint>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-                {agents.map(a => {
-                  const on = allowed.includes(a)
-                  return (
-                    <PillBtn
-                      key={a}
-                      tone={on ? 'accent' : undefined}
-                      onClick={() => setAllowed(list => on ? list.filter(x => x !== a) : [...list, a])}
-                    >
-                      {a}
-                    </PillBtn>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <Label>{t.portalsPanel.note}</Label>
-            <input
-              style={fieldStyle}
-              value={draft.note}
-              placeholder={t.portalsPanel.notePlaceholder}
-              onChange={e => setDraft(d => ({ ...d, note: e.target.value }))}
-            />
-            <Hint>{t.portalsPanel.noteHint}</Hint>
-          </div>
-
           <div>
             <PillBtn onClick={() => setAdvanced(v => !v)}>
               {advanced ? t.portalsPanel.hideAdvanced : t.portalsPanel.showAdvanced}
@@ -362,8 +324,51 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
 
           {advanced && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <Label>{t.portalsPanel.landingPage}</Label>
+                <input
+                  style={{ ...fieldStyle, fontFamily: 'var(--font-mono)' }}
+                  value={draft.home_url}
+                  placeholder="https://obs.example.edu.tr/dashboard"
+                  onChange={e => setDraft(d => ({ ...d, home_url: e.target.value }))}
+                />
+                <Hint>{t.portalsPanel.landingPageHint}</Hint>
+              </div>
+
+              {agents.length > 0 && (
+                <div>
+                  <Label>{t.portalsPanel.whichAgents}</Label>
+                  <Hint>{t.portalsPanel.whichAgentsHint}</Hint>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                    {agents.map(a => {
+                      const on = allowed.includes(a)
+                      return (
+                        <PillBtn
+                          key={a}
+                          tone={on ? 'accent' : undefined}
+                          onClick={() => setAllowed(list => on ? list.filter(x => x !== a) : [...list, a])}
+                        >
+                          {a}
+                        </PillBtn>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <Label>{t.portalsPanel.note}</Label>
+                <input
+                  style={fieldStyle}
+                  value={draft.note}
+                  placeholder={t.portalsPanel.notePlaceholder}
+                  onChange={e => setDraft(d => ({ ...d, note: e.target.value }))}
+                />
+                <Hint>{t.portalsPanel.noteHint}</Hint>
+              </div>
+
               <Hint>
-                {t.portalsPanel.advancedHint}
+                {t.portalsPanel.advancedSelectorsHint}
               </Hint>
               {([
                 ['username_selector', t.portalsPanel.usernameSelector, '#txtParamT01'],
@@ -397,7 +402,7 @@ export default function PortalsPanel({ config }: { config: AppConfig }) {
               tone="accent"
               title={canSave ? undefined : t.portalsPanel.needsFields}
             >
-              {busy === 'save' ? t.portalsPanel.signingIn : t.portalsPanel.saveAndSignIn}
+              {busy === 'save' ? t.portalsPanel.saving : t.portalsPanel.save}
             </PillBtn>
             <PillBtn onClick={reset}>{t.mcpServersPanel.cancel}</PillBtn>
           </div>

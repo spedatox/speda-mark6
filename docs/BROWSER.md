@@ -110,9 +110,16 @@ A portal is one record in `~/.speda/runtime_state.json`, added from
 | `success_selector` / `success_url_contains` | how to prove we got in |
 | `allowed_agents` | empty = every agent. Right for a library; wrong for a bank. |
 
-**Saving signs in.** A credential that was stored but never tried is
-indistinguishable from one that works, right up until an agent needs it at 2am.
-The verdict comes back in the browser's own words.
+**Saving just stores it — like a line in an `.env` file.** It used to sign in
+immediately on save, but that means every typo, slow captcha or portal having a
+bad moment shows up as a scary red error on what the owner meant as "just
+remember this." The desktop panel's "Test" button (`POST
+/connections/portals/{name}/login`) signs in on demand, in the browser's own
+words, whenever the owner actually wants to know — and the very first real
+`browse_page`/`browser_act`/`portal_login` call against it will sign in anyway.
+The API itself still supports testing on save (`test: true`, or simply omitting
+`test`) for a caller that wants the old behavior; the desktop panel just no
+longer asks for it by default.
 
 ### Why selectors are usually blank
 
