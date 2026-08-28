@@ -55,6 +55,7 @@ private enum class SettingsTab(val info: (AppStrings) -> AppStrings.TabInfo) {
     Config({ it.settingsTabs.config }),
     Connections({ it.settingsTabs.connections }),
     Automations({ it.settingsTabs.automations }),
+    Voices({ it.settingsTabs.voices }),
     Reminders({ it.settingsTabs.reminders }),
     Health({ it.settingsTabs.health }),
     Interface({ it.settingsTabs.interfaceTab }),
@@ -139,6 +140,7 @@ fun SettingsScreen(
                 SettingsTab.Config -> ConfigTabView(config, graph)
                 SettingsTab.Connections -> ConnectionsTab(config, graph)
                 SettingsTab.Automations -> AutomationsTab(config, graph)
+                SettingsTab.Voices -> VoicesTab(config, graph)
                 SettingsTab.Reminders -> RemindersTab(config, graph)
                 SettingsTab.Health -> HealthTab(config, graph)
                 SettingsTab.Interface -> InterfaceTab(config, graph)

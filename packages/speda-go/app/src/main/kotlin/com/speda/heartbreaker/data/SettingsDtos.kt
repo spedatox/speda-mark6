@@ -37,6 +37,7 @@ data class ConnectionsResult(
 @Serializable
 data class AutomationInfo(
     val id: Int,
+    @SerialName("agent_id") val agentId: String = "speda",
     val name: String = "",
     val kind: String = "",
     val intent: String = "",
@@ -44,7 +45,126 @@ data class AutomationInfo(
     val summary: String = "",
     @SerialName("last_fired_at") val lastFiredAt: String? = null,
     @SerialName("expires_at") val expiresAt: String? = null,
+    /** Null for a raw agent-authored watcher — it has no template at all. */
+    val template: String? = null,
+    /** Null for a Hook or a raw watcher — neither has a clock. */
+    val schedule: AutomationSchedule? = null,
+    /** Null for anything that isn't a Hook. */
+    val hook: AutomationHook? = null,
+    /** The editable content half: what the owner asked for, possibly rewritten. */
+    val instruction: String? = null,
+    /** His original wording, kept even after a polish so the editor can show it. */
+    @SerialName("instruction_raw") val instructionRaw: String? = null,
+    @SerialName("intent_status") val intentStatus: String? = null,   // raw | polished | failed
+    val options: List<String>? = null,
+    @SerialName("every_minutes") val everyMinutes: Int? = null,
+    @SerialName("max_asks") val maxAsks: Int? = null,
+    @SerialName("day_flags") val dayFlags: List<AutomationDayFlag>? = null,
+    val url: String? = null,
+    @SerialName("look_for") val lookFor: String? = null,
+    val domain: String? = null,
+    val recipient: String? = null,
+    @SerialName("interval_minutes") val intervalMinutes: Int? = null,
+    /** Push automations only — reply spoken in the firing agent's TTS voice and
+     *  sent as a Telegram audio message instead of text. Always false for
+     *  proactive_ask, which already delivers through the reminders tool. */
+    val voice: Boolean = false,
 )
+
+/**
+ * When an automation fires, as STRUCTURE — never a sentence. The backend
+ * deliberately withholds a rendered string here: this pane speaks two
+ * languages, and a server-picked "Every day" would have picked one for the
+ * owner. `cron` rides along for debugging only, never shown.
+ */
+@Serializable
+data class AutomationSchedule(
+    val frequency: String = "daily",   // once | daily | weekly | monthly
+    val at: String = "09:00",          // 'HH:MM' in the owner's timezone
+    val days: List<Int>? = null,       // weekly — 1=Mon … 7=Sun
+    val dom: Int? = null,              // monthly — day of month
+    val date: String? = null,          // once — 'YYYY-MM-DD'
+    @SerialName("skips_short_months") val skipsShortMonths: Boolean? = null,
+    val timezone: String = "",
+    val cron: String? = null,
+)
+
+/** A weekday class this automation's agent must be TOLD rather than left to
+ *  work out — "gym day" on Mon/Wed/Fri. Computed at fire time and appended to
+ *  the instruction. */
+@Serializable
+data class AutomationDayFlag(
+    val label: String = "",
+    val days: List<Int> = emptyList(),   // 1=Mon … 7=Sun
+)
+
+/** A Hook's structured watcher config — url/domain and polling interval,
+ *  never a sentence, same reason [AutomationSchedule] is structural. */
+@Serializable
+data class AutomationHook(
+    val type: String = "",     // keyword | address | mail
+    val url: String? = null,
+    @SerialName("look_for") val lookFor: String? = null,
+    val domain: String? = null,
+    val recipient: String? = null,
+    @SerialName("interval_minutes") val intervalMinutes: Int = 360,
+)
+
+/** One agent that can own an automation, for the builder's picker
+ *  (GET /automations/agents). */
+@Serializable
+data class AutomationAgent(
+    @SerialName("agent_id") val agentId: String,
+    val name: String = "",
+    val domain: String = "",
+)
+
+/**
+ * The builder's payload for POST /automations (create) and PUT /automations/{id}
+ * (edit, as a partial). `explicitNulls = false` on the shared [Json] instance
+ * means a null field here is OMITTED from the wire body rather than sent as
+ * `null` — so the SAME shape serves both a full create and a partial edit
+ * without a second type, matching the desktop's `Partial<AutomationDraft>`.
+ */
+@Serializable
+data class AutomationDraft(
+    @SerialName("agent_id") val agentId: String,
+    val template: String,
+    val name: String,
+    val instruction: String,
+    /** Required for the three schedule templates; absent for the three Hooks. */
+    val schedule: AutomationDraftSchedule? = null,
+    val options: List<String>? = null,
+    @SerialName("every_minutes") val everyMinutes: Int? = null,
+    @SerialName("max_asks") val maxAsks: Int? = null,
+    @SerialName("day_flags") val dayFlags: List<AutomationDayFlag>? = null,
+    /** Hook fields — hook_keyword/hook_address use url(+lookFor); hook_mail
+     *  uses domain(+recipient). intervalMinutes applies to all three. */
+    val url: String? = null,
+    @SerialName("look_for") val lookFor: String? = null,
+    val domain: String? = null,
+    val recipient: String? = null,
+    @SerialName("interval_minutes") val intervalMinutes: Int? = null,
+    /** Any push template except proactive_ask. */
+    val voice: Boolean? = null,
+)
+
+@Serializable
+data class AutomationDraftSchedule(
+    val frequency: String,
+    val at: String,
+    val days: List<Int>? = null,
+    val dom: Int? = null,
+    val date: String? = null,
+)
+
+/** Result of a create/update — the created/edited row, or the backend's own
+ *  refusal message (names the field and the fix, the only feedback the form
+ *  has to give). */
+sealed interface AutomationSaveResult {
+    data class Ok(val automation: AutomationInfo) : AutomationSaveResult
+    data class Error(val message: String) : AutomationSaveResult
+}
 
 /** GET /automations/status — the n8n + Telegram pipeline health. */
 @Serializable

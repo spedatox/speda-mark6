@@ -289,6 +289,49 @@ internal fun StatusDot(ok: Boolean, warnColor: Color = LocalHbPalette.current.am
 }
 
 /**
+ * A labelled slider row — value readout above, low/high captions below. Used
+ * by the voice tuning knobs (ElevenLabs' four parameters); GeneralTab's
+ * temperature slider predates this and stays inline for now.
+ */
+@Composable
+internal fun SliderField(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    low: String,
+    high: String,
+    onChange: (Float) -> Unit,
+    onChangeFinished: () -> Unit = {},
+    format: (Float) -> String = { "%.2f".format(it) },
+) {
+    val palette = LocalHbPalette.current
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            HbText(label, style = HbType.read.copy(fontSize = 13.5.sp), color = palette.textDim)
+            HbText(format(value), style = HbType.readout.copy(fontSize = 13.sp), color = palette.accentBright)
+        }
+        Spacer(Modifier.height(6.dp))
+        androidx.compose.material3.Slider(
+            value = value,
+            onValueChange = onChange,
+            onValueChangeFinished = onChangeFinished,
+            valueRange = range,
+            steps = steps,
+            colors = androidx.compose.material3.SliderDefaults.colors(
+                thumbColor = palette.accent,
+                activeTrackColor = palette.accent,
+                inactiveTrackColor = palette.accent.copy(alpha = 0.25f),
+            ),
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            HbText(low, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
+            HbText(high, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
+        }
+    }
+}
+
+/**
  * A pill action (Connect / Import / Save …) — the pane's only button shape.
  * It was a caps label on a tinted tile; the deck's actions are sentence-case
  * pills, and a settings form is the last place that needs shouting.

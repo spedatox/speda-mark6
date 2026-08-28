@@ -477,6 +477,68 @@ class IgorApi(
         }
     }
 
+    /** Agents that can own an automation, for the builder's picker. */
+    suspend fun getAutomationAgents(config: AppConfig): List<AutomationAgent> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/automations/agents")?.let {
+                json.parseToJsonElement(it).jsonObject["agents"]
+                    ?.let { agents -> json.decodeFromJsonElement<List<AutomationAgent>>(agents) }
+            }
+        }.getOrNull() ?: emptyList()
+    }
+
+    /** Create an automation. The backend validates; a refusal names the field
+     *  and the fix, which is the only feedback the form has to give. */
+    suspend fun createAutomation(config: AppConfig, draft: AutomationDraft): AutomationSaveResult =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url("${config.apiBase}/automations")
+                .header("X-API-Key", config.apiKey)
+                .post(json.encodeToString(AutomationDraft.serializer(), draft).toRequestBody(jsonMedia))
+                .build()
+            runAutomationRequest(request)
+        }
+
+    /** Edit in place. The n8n workflow is updated, never recreated, so its
+     *  "already fired today" memory and execution history survive the edit. */
+    suspend fun updateAutomation(config: AppConfig, id: Int, draft: AutomationDraft): AutomationSaveResult =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url("${config.apiBase}/automations/$id")
+                .header("X-API-Key", config.apiKey)
+                .put(json.encodeToString(AutomationDraft.serializer(), draft).toRequestBody(jsonMedia))
+                .build()
+            runAutomationRequest(request)
+        }
+
+    private fun runAutomationRequest(request: Request): AutomationSaveResult =
+        runCatching {
+            restClient.newCall(request).execute().use { res ->
+                val text = res.body?.string().orEmpty()
+                if (!res.isSuccessful) {
+                    val msg = runCatching {
+                        json.parseToJsonElement(text).jsonObject["error"]?.jsonPrimitive?.contentOrNull
+                    }.getOrNull() ?: "HTTP ${res.code}"
+                    return@use AutomationSaveResult.Error(msg)
+                }
+                AutomationSaveResult.Ok(json.decodeFromString<AutomationInfo>(text))
+            }
+        }.getOrElse { AutomationSaveResult.Error(it.message ?: "Could not reach the server.") }
+
+    /**
+     * Fire an automation's stored intent right now — the exact turn n8n would
+     * start when its schedule comes due, not a mock. Never touches n8n's own
+     * "already fired today" latch, so it cannot cause or be mistaken for a
+     * duplicate real firing.
+     */
+    suspend fun testAutomation(config: AppConfig, id: Int): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            postEmpty(config, "/automations/$id/test")?.let {
+                json.parseToJsonElement(it).jsonObject["error"] == null
+            } ?: false
+        }.getOrDefault(false)
+    }
+
     suspend fun telegramConnect(config: AppConfig): String? = withContext(Dispatchers.IO) {
         runCatching {
             postEmpty(config, "/automations/telegram/connect")?.let {
@@ -1075,7 +1137,76 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
+    /* ── Voices (GET /voice/agents, /voice/voices, PUT /voice/agents/{id}) ───
+     * Per-agent voice pin + ElevenLabs tuning. Two things clear independently:
+     * the PIN (falls back to the profile's own default) and the TUNING (falls
+     * back to that voice's own ElevenLabs dashboard settings). [clearVoiceAgent]
+     * clears both at once for a clean slate.
+     */
+
+    suspend fun fetchVoiceAgents(config: AppConfig): List<VoiceAgentInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/voice/agents")?.let {
+                json.parseToJsonElement(it).jsonObject["agents"]
+                    ?.let { agents -> json.decodeFromJsonElement<List<VoiceAgentInfo>>(agents) }
+            }
+        }.getOrNull() ?: emptyList()
+    }
+
+    /** Spans every configured engine — Azure, OpenAI, and the owner's own
+     *  ElevenLabs voice library. */
+    suspend fun fetchVoiceOptions(config: AppConfig): List<VoiceOption> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/voice/voices")?.let {
+                json.parseToJsonElement(it).jsonObject["voices"]
+                    ?.let { voices -> json.decodeFromJsonElement<List<VoiceOption>>(voices) }
+            }
+        }.getOrNull() ?: emptyList()
+    }
+
+    /** Save a pin and/or tuning. Pass null for [voiceId] to clear the pin back
+     *  to the profile default; only the tuning keys that actually changed need
+     *  sending — omitted ones are left as they were. */
+    suspend fun saveVoiceAgent(
+        config: AppConfig,
+        agentId: String,
+        voiceId: String?,
+        stability: Float,
+        similarityBoost: Float,
+        style: Float,
+        speed: Float,
+        useSpeakerBoost: Boolean,
+    ): List<VoiceAgentInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = buildJsonObject {
+                put("voice_id", voiceId)
+                put("stability", stability)
+                put("similarity_boost", similarityBoost)
+                put("style", style)
+                put("speed", speed)
+                put("use_speaker_boost", useSpeakerBoost)
+            }
+            putJson(config, "/voice/agents/${encodePath(agentId)}", body)?.let {
+                json.parseToJsonElement(it).jsonObject["agents"]
+                    ?.let { agents -> json.decodeFromJsonElement<List<VoiceAgentInfo>>(agents) }
+            }
+        }.getOrNull() ?: emptyList()
+    }
+
+    /** Clear every override for this agent in one call — back to the profile
+     *  default, an empty patch same as the desktop sends. */
+    suspend fun clearVoiceAgent(config: AppConfig, agentId: String): List<VoiceAgentInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            putJson(config, "/voice/agents/${encodePath(agentId)}", buildJsonObject { })?.let {
+                json.parseToJsonElement(it).jsonObject["agents"]
+                    ?.let { agents -> json.decodeFromJsonElement<List<VoiceAgentInfo>>(agents) }
+            }
+        }.getOrNull() ?: emptyList()
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
+
+    private fun encodePath(s: String): String = java.net.URLEncoder.encode(s, "UTF-8")
 
     private fun getString(config: AppConfig, path: String): String? {
         val request = Request.Builder()
