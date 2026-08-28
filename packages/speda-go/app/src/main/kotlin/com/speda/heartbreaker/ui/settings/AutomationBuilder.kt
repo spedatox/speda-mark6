@@ -494,6 +494,7 @@ private fun PickerField(label: String) {
  *  dialog. Forced 24-hour: the backend's AutomationSchedule.at is 'HH:MM' with
  *  no AM/PM concept, and letting the picker default to the locale's 12-hour
  *  face would round-trip through an ambiguous hour on some devices. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun TimeField(value: String, onChange: (String) -> Unit) {
     val palette = LocalHbPalette.current
@@ -538,6 +539,7 @@ private fun TimeField(value: String, onChange: (String) -> Unit) {
  * carries `min={todayISO()}`: a date already gone compiles to a workflow that
  * is live, green, and can never fire.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun DateField(value: String, onChange: (String) -> Unit) {
     val palette = LocalHbPalette.current
