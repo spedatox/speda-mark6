@@ -124,20 +124,24 @@ def _prompt(spec: dict, agent_name: str) -> str:
     if spec.get("voice"):
         voice_block = (
             "\n\nTHIS AUTOMATION IS SPOKEN, NOT READ — its reply is converted to "
-            "audio and sent as a voice message, never shown as text. Write for "
-            "the ear, not the eye:\n"
-            "- State the OUTPUT phase's target as 80–120 words, not the usual "
-            "150–300 — a spoken briefing must be noticeably shorter than a read "
-            "one; nobody wants a two-minute monologue over coffee.\n"
+            "audio through ElevenLabs and sent as a voice message, never shown "
+            "as text. Two real constraints follow from that, not just style:\n"
+            "- ElevenLabs bills PER CHARACTER — every word is a real cost against "
+            "a finite quota, every firing, forever. State the OUTPUT phase's "
+            "target as 80–120 words, not the usual 150–300, and do not pad to "
+            "reach even that: say the thing once, stop. Shorter than the target "
+            "is a better outcome than hitting it with filler.\n"
             "- Never read a reference number, ticket code, PNR, or long ID "
             "aloud verbatim unless the owner must act on that EXACT string "
             "right now. Name the thing plainly instead (\"the bus ticket "
             "reminder\", \"the exemption application\") rather than spelling "
             "out a code — if he needs the code itself, say it is in the app, "
             "don't recite it.\n"
-            "- Short sentences, one idea each. No parenthetical asides, no "
-            "stacked clauses — those read fine on a screen and ramble out "
-            "loud."
+            "- Plain, simple language, whatever the target language is: common "
+            "words over rare ones, short sentences, one idea each. No "
+            "parenthetical asides, no stacked clauses, no idioms that only "
+            "land in writing — this is followed BY EAR, in real time, with no "
+            "way to re-read a sentence that ran too long."
         )
 
     return (
