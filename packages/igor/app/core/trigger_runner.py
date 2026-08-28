@@ -412,7 +412,7 @@ async def start_trigger_turn(
             payload=payload,
             telegram_bots=telegram_bots,
             status=status,
-            voice_id=profile.voice_id,
+            profile=profile,
         )
 
     # Engine selection, identical to chat: an agent whose real backend is a
@@ -449,7 +449,7 @@ async def _deliver(
     payload: dict,
     telegram_bots,
     status: str,
-    voice_id: str = "",
+    profile=None,
 ) -> None:
     """Post-run delivery: stamp the automation, then push if asked.
 
@@ -482,7 +482,7 @@ async def _deliver(
         # persist a Notification row so nothing is lost.
         if payload.get("voice"):
             delivered = await _deliver_voice(
-                agent_id=agent_id, text=text, voice_id=voice_id,
+                agent_id=agent_id, text=text, profile=profile,
                 title=str(payload.get("automation") or ""), telegram_bots=telegram_bots,
                 request_id=request_id,
             )
@@ -497,22 +497,27 @@ async def _deliver(
 
 
 async def _deliver_voice(
-    *, agent_id: str, text: str, voice_id: str, title: str, telegram_bots, request_id: str,
+    *, agent_id: str, text: str, profile, title: str, telegram_bots, request_id: str,
 ) -> bool:
     """Speak `text` and send it as a Telegram audio message instead of plain
     text — the point of an automation's "reply as voice" checkbox
     (composer.py bakes `voice: true` into the trigger payload; see
     automations/templates.py).
 
-    Falls back to plain text on ANY synthesis or delivery failure: a
-    misconfigured or rate-limited TTS key must never mean the owner gets
-    nothing instead of the briefing he actually asked to hear, only in a
-    format he didn't ask for.
+    Resolves voice + tuning through the SAME precedence /voice/speak uses
+    (tts.resolve_voice/resolve_voice_settings): the owner's pin from
+    Settings → Voices outranks the profile's own default. Falls back to
+    plain text on ANY synthesis or delivery failure — a misconfigured or
+    rate-limited TTS key must never mean the owner gets nothing instead of
+    the briefing he actually asked to hear, only in a format he didn't ask
+    for.
     """
     from app.services import tts
 
+    voice_ref = tts.resolve_voice(None, agent_id, profile=profile)
+    voice_settings = tts.resolve_voice_settings(agent_id)
     try:
-        audio = await tts.synthesize(text, voice_id or None)
+        audio = await tts.synthesize(text, voice_ref, voice_settings=voice_settings)
     except tts.TTSError as exc:
         logger.warning(
             "automation_voice_synthesis_failed",

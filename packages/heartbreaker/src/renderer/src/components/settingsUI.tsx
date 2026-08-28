@@ -192,6 +192,40 @@ export function LiveDot({ label = 'Connected' }: { label?: string }) {
   )
 }
 
+/** A labelled 0–1-ish slider with the live value and two end labels — the
+ *  exact shape the "Creativity" temperature control already used inline in
+ *  SettingsModal, pulled out so a second per-voice tuning panel does not
+ *  reinvent it with a slightly different layout. */
+export function SliderField({ label, value, min, max, step, onChange, low, high, format }: {
+  label: string
+  value: number
+  min: number; max: number; step: number
+  onChange: (v: number) => void
+  low: string; high: string
+  /** How to render the live value — defaults to one decimal place. */
+  format?: (v: number) => string
+}) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)' }}>{label}</span>
+        <span style={{ fontSize: '0.845rem', color: 'var(--hb-cyan)', fontVariantNumeric: 'tabular-nums' }}>
+          {format ? format(value) : value.toFixed(1)}
+        </span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step} value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        style={{ width: '100%' }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+        <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>{low}</span>
+        <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>{high}</span>
+      </div>
+    </div>
+  )
+}
+
 /** Shared look for a text input / textarea inside the settings pane. */
 export const fieldStyle: React.CSSProperties = {
   width: '100%',

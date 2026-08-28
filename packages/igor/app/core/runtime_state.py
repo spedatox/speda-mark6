@@ -224,6 +224,36 @@ def set_agent_model(agent_id: str, model: str | None) -> None:
     logger.info("agent_model_set", extra={"agent_id": agent_id, "model": model or "(default)"})
 
 
+# ── Per-agent voice overrides ────────────────────────────────────────────────
+# The owner can pin any agent to a specific voice ref AND tune ElevenLabs'
+# per-voice knobs (stability/similarity_boost/style/speed/use_speaker_boost)
+# from Settings → Voices. Same shape as agent_models above: `voice_id` here
+# overrides AgentProfile.voice_id (Rule 10's code-level default); the tuning
+# keys have no profile-level default at all — an absent key means "let
+# ElevenLabs use that voice's own dashboard settings", which is the right
+# behaviour for a knob nobody has touched from here yet.
+
+def get_voice_overrides() -> dict[str, dict]:
+    return dict(_load().get("voice_overrides", {}))
+
+
+def set_voice_override(agent_id: str, override: dict | None) -> None:
+    """`override` is the full per-agent record (voice_id + whichever tuning
+    keys are set) or None to clear it back to the profile default entirely."""
+    state = _load()
+    overrides = dict(state.get("voice_overrides", {}))
+    if override:
+        overrides[agent_id] = dict(override)
+    else:
+        overrides.pop(agent_id, None)
+    state["voice_overrides"] = overrides
+    _save()
+    logger.info(
+        "voice_override_set",
+        extra={"agent_id": agent_id, "has_override": bool(override)},
+    )
+
+
 # ── Per-legionnaire model overrides ─────────────────────────────────────────
 # The owner can pin any Legion worker type (scout, researcher, analyst, judge,
 # general) to a specific model ref. An empty/absent entry leaves that worker on

@@ -1618,6 +1618,93 @@ export async function pinAgentModel(
   }
 }
 
+/* ── Voices — per-agent TTS voice + ElevenLabs tuning (Settings → Voices) ── */
+
+/** ElevenLabs' per-voice tuning knobs. Any key omitted/undefined means "leave
+ *  that voice's own dashboard default alone" — never send a zeroed default in
+ *  its place, on either side of this API. */
+export interface VoiceSettings {
+  stability?: number
+  similarity_boost?: number
+  style?: number
+  speed?: number
+  use_speaker_boost?: boolean
+}
+
+export interface VoiceAgentInfo {
+  agent_id: string
+  name: string
+  domain: string
+  /** The profile's own default (or the engine default if the profile has none). */
+  default_voice: string
+  /** The owner's pin, or null if this agent still uses the profile default. */
+  voice_id: string | null
+  /** What will actually speak right now — voice_id if set, else default_voice. */
+  effective_voice: string
+  voice_settings: VoiceSettings | null
+}
+
+/** One voice from GET /voice/voices — spans every configured engine. */
+export interface VoiceOption {
+  id: string // full "provider:model:voice" ref
+  name: string
+  provider: 'azure' | 'openai' | 'elevenlabs' | string
+  model: string
+  locale: string
+  gender: string
+  display: string
+}
+
+export async function fetchVoiceAgents(config: AppConfig): Promise<VoiceAgentInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/voice/agents`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return (await res.json()).agents ?? []
+  } catch { return [] }
+}
+
+export async function fetchVoiceOptions(config: AppConfig): Promise<VoiceOption[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/voice/voices`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return (await res.json()).voices ?? []
+  } catch { return [] }
+}
+
+/**
+ * Save an agent's voice pin and/or tuning. Pass `null` for `voiceId` to clear
+ * the pin back to the profile default; pass `null` for a tuning value to clear
+ * that ONE knob back to ElevenLabs' own default (undefined leaves it as is —
+ * only send the keys that actually changed).
+ */
+export async function saveVoiceAgent(
+  config: AppConfig, agentId: string,
+  patch: { voice_id?: string | null } & VoiceSettings,
+): Promise<VoiceAgentInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/voice/agents/${agentId}`, {
+      method: 'PUT',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(patch),
+    })
+    if (!res.ok) return []
+    return (await res.json()).agents ?? []
+  } catch { return [] }
+}
+
+/** Clear every override for this agent in one call — back to the profile default. */
+export async function clearVoiceAgent(config: AppConfig, agentId: string): Promise<VoiceAgentInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/voice/agents/${agentId}`, {
+      method: 'PUT',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({}),
+    })
+    if (!res.ok) return []
+    return (await res.json()).agents ?? []
+  } catch { return [] }
+}
+
 /** Pin an agent to a Telegram-specific model; null clears (falls back to desktop model). */
 export async function pinTelegramModel(
   config: AppConfig,

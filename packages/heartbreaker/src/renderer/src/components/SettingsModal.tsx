@@ -4,6 +4,7 @@ import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
 import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, microsoftLoginUrl, microsoftStatus, microsoftDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationAgents, createAutomation, updateAutomation, testAutomation, telegramConnect, telegramStatus } from '../lib/api'
 import { AutomationBuilder, describeHook, describeSchedule } from './AutomationBuilder'
+import VoicesTab from './VoicesTab'
 import { memoryStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus, AutomationAgent, AutomationDraft, MemoryStatus } from '../lib/api'
 import RemindersTab from './RemindersTab'
@@ -33,7 +34,7 @@ interface Props {
   onEngageLockdown: () => void
 }
 
-type Tab = 'general' | 'config' | 'connections' | 'automations' | 'reminders' | 'protocols' | 'interface' | 'data' | 'account'
+type Tab = 'general' | 'config' | 'connections' | 'automations' | 'voices' | 'reminders' | 'protocols' | 'interface' | 'data' | 'account'
 
 /* ── Rail glyphs ─────────────────────────────────────────────────────────── */
 const ico = { width: 17, height: 17, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 } as const
@@ -46,6 +47,7 @@ const IcoMonitor = () => <svg {...ico}><rect x="2" y="3" width="20" height="14" 
 const IcoDatabase = () => <svg {...ico}><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5" /><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3" /></svg>
 const IcoUser = () => <svg {...ico}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
 const IcoShield = () => <svg {...ico}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" /></svg>
+const IcoMic = () => <svg {...ico} strokeLinecap="round"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0" /><line x1="12" y1="17" x2="12" y2="22" /><line x1="8" y1="22" x2="16" y2="22" /></svg>
 
 /** Never show the whole key in a settings pane — just enough to recognize it. */
 function maskApiKey(key: string): string {
@@ -382,6 +384,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
     { id: 'config', ...t.settings.tabs.config, icon: <IcoSliders /> },
     { id: 'connections', ...t.settings.tabs.connections, icon: <IcoLink /> },
     { id: 'automations', ...t.settings.tabs.automations, icon: <IcoBolt /> },
+    { id: 'voices', ...t.settings.tabs.voices, icon: <IcoMic /> },
     { id: 'reminders', ...t.settings.tabs.reminders, icon: <IcoCalendar /> },
     { id: 'protocols', ...t.settings.tabs.protocols, icon: <IcoShield /> },
     { id: 'interface', ...t.settings.tabs.interface, icon: <IcoMonitor /> },
@@ -744,6 +747,8 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
             )}
 
             {/* Reminders tab — standing questions that nag until answered */}
+            {tab === 'voices' && <VoicesTab config={config} />}
+
             {tab === 'reminders' && <RemindersTab config={config} />}
             {tab === 'protocols' && <ProtocolsTab config={config} onEngageLockdown={onEngageLockdown} />}
 

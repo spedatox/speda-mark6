@@ -60,12 +60,78 @@ async def voices():
     return {"voices": await tts.list_voices()}
 
 
+@router.get("/agents")
+async def voice_agents(request: Request):
+    """Every dispatch-target agent's voice config, for Settings → Voices: the
+    profile's own default, the owner's pin (if any), the effective voice
+    actually in use, and the tuning override. Session-scope aliases (warroom)
+    are excluded the same way the model matrix excludes them — they mirror
+    their parent's brain and are not something that should have its own
+    voice."""
+    from app.core.runtime_state import get_voice_overrides
+
+    overrides = get_voice_overrides()
+    out = []
+    for p in request.app.state.profiles.roster():
+        if not p.dispatch_target:
+            continue
+        override = overrides.get(p.agent_id, {})
+        out.append({
+            "agent_id": p.agent_id,
+            "name": p.name,
+            "domain": p.domain,
+            "default_voice": p.voice_id or settings.tts_default_voice,
+            "voice_id": override.get("voice_id") or None,
+            "effective_voice": tts.resolve_voice(None, p.agent_id, profile=p),
+            "voice_settings": {k: override[k] for k in tts.VOICE_SETTINGS_KEYS if k in override} or None,
+        })
+    return {"agents": out}
+
+
+@router.put("/agents/{agent_id}")
+async def set_voice_agent(agent_id: str, request: Request, body: dict):
+    """Pin an agent's voice and/or tune its ElevenLabs settings from Settings
+    → Voices. Body: any of voice_id, stability, similarity_boost, style,
+    speed, use_speaker_boost — send `null`/omit a key to leave it as is, or
+    send the WHOLE body empty to clear every override for this agent back to
+    the profile default. Fields outside VOICE_SETTINGS_KEYS are ignored, not
+    rejected — a stray key must not fail the whole save.
+    """
+    from app.core.runtime_state import get_voice_overrides, set_voice_override
+
+    if request.app.state.profiles.get(agent_id) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown agent '{agent_id}'")
+
+    current = dict(get_voice_overrides().get(agent_id, {}))
+    if not body:
+        set_voice_override(agent_id, None)
+    else:
+        if "voice_id" in body:
+            if body["voice_id"]:
+                current["voice_id"] = str(body["voice_id"])
+            else:
+                current.pop("voice_id", None)
+        for key in tts.VOICE_SETTINGS_KEYS:
+            if key not in body:
+                continue
+            if body[key] is None:
+                current.pop(key, None)
+            else:
+                current[key] = body[key]
+        set_voice_override(agent_id, current or None)
+    return await voice_agents(request)
+
+
 @router.post("/speak")
 async def speak(request: Request, body: SpeakRequest):
     """Synthesize one utterance and return the audio bytes."""
     voice = _resolve_voice(request, body.agent_id, body.voice)
+    # Same tuning the owner set in Settings → Voices applies here too — voice
+    # mode and an automation's "reply as voice" speak with the same identity,
+    # not two configurations of the same agent.
+    voice_settings = tts.resolve_voice_settings(body.agent_id)
     try:
-        audio = await tts.synthesize(body.text, voice, body.locale)
+        audio = await tts.synthesize(body.text, voice, body.locale, voice_settings)
     except tts.TTSError as exc:
         # 503, not 500: the turn itself is fine, only the voice is unavailable,
         # and the client is expected to fall back to a silent reply.

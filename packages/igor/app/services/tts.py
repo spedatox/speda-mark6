@@ -212,20 +212,58 @@ def providers() -> list[str]:
     return out
 
 
-def resolve_voice(profiles, agent_id: str | None, explicit: str | None = None) -> str:
-    """Explicit request wins, then the agent's profile, then the engine
-    default. Shared by /voice/speak (routers/voice.py) and automation voice
-    delivery (core/trigger_runner.py) so the two paths can never resolve a
-    different voice for the same agent — a per-agent identity, not a
-    per-caller preference, and it belongs here rather than duplicated in each
-    caller."""
+def resolve_voice(
+    profiles, agent_id: str | None, explicit: str | None = None, profile=None,
+) -> str:
+    """Explicit request wins, then the owner's own pin (Settings → Voices),
+    then the agent's profile, then the engine default. Shared by /voice/speak
+    (routers/voice.py) and automation voice delivery (core/trigger_runner.py)
+    so the two paths can never resolve a different voice for the same agent —
+    a per-agent identity, not a per-caller preference, and it belongs here
+    rather than duplicated in each caller.
+
+    `profile`, if given, is used INSTEAD of looking `agent_id` up in
+    `profiles` — for a caller (trigger_runner, mid-turn) that already holds
+    the resolved profile object and has no registry to hand over. Pass
+    `profiles=None` in that case; it is never consulted when `profile` is set.
+
+    Same precedence as the model-pin system (CLAUDE.md's routing matrix): the
+    owner's live pin outranks the profile's own default, which is what an
+    UNPINNED agent falls back to.
+    """
     if explicit:
         return explicit
-    if agent_id and profiles is not None:
-        profile = profiles.get(agent_id)
-        if profile is not None and profile.voice_id:
-            return profile.voice_id
+    if agent_id:
+        from app.core.runtime_state import get_voice_overrides
+
+        pinned = get_voice_overrides().get(agent_id, {}).get("voice_id")
+        if pinned:
+            return pinned
+        p = profile if profile is not None else (profiles.get(agent_id) if profiles is not None else None)
+        if p is not None and p.voice_id:
+            return p.voice_id
     return settings.tts_default_voice
+
+
+# The ElevenLabs voice_settings this module knows how to tune from Settings →
+# Voices. Anything else in their API (language_code, output_format, …) is
+# either not applicable to the pinned multilingual model or already fixed
+# elsewhere (composer/trigger_runner always want MP3 for sendAudio).
+VOICE_SETTINGS_KEYS = ("stability", "similarity_boost", "style", "speed", "use_speaker_boost")
+
+
+def resolve_voice_settings(agent_id: str | None) -> dict | None:
+    """The owner's tuning override for this agent's voice, or None to leave
+    ElevenLabs on that voice's own dashboard defaults — the correct behaviour
+    for a knob nobody has touched from here. Only meaningful for the
+    ElevenLabs provider; Azure/OpenAI ignore it (see synthesize())."""
+    if not agent_id:
+        return None
+    from app.core.runtime_state import get_voice_overrides
+
+    override = get_voice_overrides().get(agent_id, {})
+    out = {k: override[k] for k in VOICE_SETTINGS_KEYS if k in override}
+    return out or None
 
 
 # ── Synthesis ───────────────────────────────────────────────────────────────
@@ -234,13 +272,22 @@ class TTSError(RuntimeError):
     """Synthesis failed. Carries a message safe to show the owner."""
 
 
-async def synthesize(text: str, voice: str | None = None, locale: str | None = None) -> bytes:
+async def synthesize(
+    text: str, voice: str | None = None, locale: str | None = None,
+    voice_settings: dict | None = None,
+) -> bytes:
     """Synthesize `text` and return encoded audio (MP3 by default).
 
     `locale` is the language the TEXT is in, which is NOT the voice's own
     locale: a multilingual voice is named `en-US-…` precisely so it can speak
     something else. Defaults to settings.tts_locale; only when that is empty
     does build_ssml fall back to guessing from the voice name.
+
+    `voice_settings` (resolve_voice_settings()) tunes ElevenLabs'
+    stability/similarity_boost/style/speed/use_speaker_boost for THIS call.
+    Azure and OpenAI ignore it silently — they have no equivalent knob, and a
+    caller resolving settings once for whichever provider is active should
+    not have to branch on provider itself.
 
     Raises TTSError with a readable message on any failure — an unconfigured
     key, an empty utterance, or an upstream error. Callers in a streaming path
@@ -262,7 +309,7 @@ async def synthesize(text: str, voice: str | None = None, locale: str | None = N
     if provider == "openai":
         return await _openai_synthesize(spoken, model, name, spoken_locale)
     if provider == "elevenlabs":
-        return await _elevenlabs_synthesize(spoken, model, name)
+        return await _elevenlabs_synthesize(spoken, model, name, voice_settings)
     return await _azure_synthesize(spoken, name, spoken_locale)
 
 
@@ -326,7 +373,9 @@ async def _openai_synthesize(
     return audio
 
 
-async def _elevenlabs_synthesize(spoken: str, model: str, voice_id: str) -> bytes:
+async def _elevenlabs_synthesize(
+    spoken: str, model: str, voice_id: str, voice_settings: dict | None = None,
+) -> bytes:
     """ElevenLabs' speech endpoint. Plain text in a JSON field, same reasoning
     as OpenAI's path for why nothing here needs escaping: there is no document
     for model-authored text to break out of, only a string value.
@@ -334,16 +383,24 @@ async def _elevenlabs_synthesize(spoken: str, model: str, voice_id: str) -> byte
     No `locale` parameter — ElevenLabs' multilingual models detect the
     language from the text itself and have no per-request language hint to
     give them, unlike OpenAI's `instructions` field.
+
+    `voice_settings` is omitted from the body entirely when None/empty — NOT
+    sent as `{}` or as zeroed defaults. ElevenLabs falls back to the voice's
+    own dashboard settings only when the key is absent; sending an empty
+    object would override a carefully tuned voice with library defaults the
+    owner never asked for.
     """
     headers = {
         "xi-api-key": settings.elevenlabs_api_key,
         "Content-Type": "application/json",
         "Accept": "audio/mpeg",
     }
-    body = {
+    body: dict = {
         "text": spoken,
         "model_id": model or ELEVENLABS_DEFAULT_MODEL,
     }
+    if voice_settings:
+        body["voice_settings"] = voice_settings
     url = _ELEVENLABS_TTS_URL.format(voice_id=voice_id)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
@@ -354,7 +411,7 @@ async def _elevenlabs_synthesize(spoken: str, model: str, voice_id: str) -> byte
         detail = {
             401: "rejected the key",
             404: "has no voice with that id — check it against the owner's ElevenLabs voice library",
-            422: "rejected the request (check the model supports this voice)",
+            422: "rejected the request (check the model supports this voice, and that voice_settings are in range)",
             429: "rate-limited the request (quota or concurrency)",
         }.get(status, f"returned HTTP {status}")
         logger.warning(
