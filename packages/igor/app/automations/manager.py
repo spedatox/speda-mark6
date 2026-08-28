@@ -438,6 +438,11 @@ async def test_fire(
             "event": "automation_test",
             "automation": row.name,
             "intent": row.intent,
+            # Must match what composer._callback_body bakes in for a REAL
+            # firing, or a test of a "reply as voice" automation silently
+            # tests the WRONG delivery path — exactly the bug this fixes:
+            # push-only, same as composer.py's own `mode == "push"` gate.
+            "voice": bool(spec.get("voice")) and output_mode == "push",
         },
         output_mode=output_mode,
         request_id=request_id,
