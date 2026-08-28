@@ -66,6 +66,7 @@ data class AppStrings(
         val connected: String,
         val show: String,
         val hide: String,
+        val ok: String,
     )
 
     data class Uplink(
@@ -495,6 +496,13 @@ data class AppStrings(
         val acceptingNormally: String,
         val standDown: String,
         val containmentStoodDown: String,
+        val engage: String,
+        val engagePassphraseHint: String,
+        val passphrasePlaceholder: String,
+        val authorize: String,
+        val authorizing: String,
+        val authorizationFailed: String,
+        val containmentEngaged: String,
         val firewallRules: String,
         val sealedLabel: String,
         val openLabel: String,

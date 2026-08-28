@@ -87,6 +87,12 @@ fun ProtocolsTab(
     var projects by remember { mutableStateOf<List<SkyfallProject>?>(null) }
     var busy by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
+    // Lockdown engage — inline, never a nested modal (same rule as the rest of
+    // this pane). The passphrase never touches the transcript or a log line.
+    var engaging by remember { mutableStateOf(false) }
+    var passphrase by remember { mutableStateOf("") }
+    var authBusy by remember { mutableStateOf(false) }
+    var authError by remember { mutableStateOf<String?>(null) }
 
     suspend fun refresh() {
         lockdown = graph.api.fetchLockdown(config)
@@ -142,6 +148,13 @@ fun ProtocolsTab(
                     enabled = !busy,
                     tint = palette.red,
                 )
+            } else if (lock != null && lock.reachable && lock.enabled) {
+                SettingsButton(
+                    p.engage,
+                    onClick = { engaging = true; authError = null; passphrase = "" },
+                    enabled = !engaging,
+                    tint = palette.red,
+                )
             }
         }
         if (lock != null && lock.rules.isNotEmpty()) {
@@ -150,6 +163,50 @@ fun ProtocolsTab(
                 lock.rules.forEach { (label, on) ->
                     ReadoutLine(label, if (on) p.sealedLabel else p.openLabel,
                         if (on) Color(0xFFE5897C) else palette.textFaint)
+                }
+            }
+        }
+        if (engaging) {
+            Spacer(Modifier.height(10.dp))
+            Panel {
+                HbText(p.engagePassphraseHint, style = HbType.readout.copy(fontSize = 11.5.sp), color = palette.textFaint)
+                Spacer(Modifier.height(10.dp))
+                GlassField(
+                    passphrase,
+                    { passphrase = it; authError = null },
+                    placeholder = p.passphrasePlaceholder,
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                )
+                authError?.let {
+                    Spacer(Modifier.height(8.dp))
+                    HbText(it, style = HbType.readout.copy(fontSize = 11.sp), color = palette.red)
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SettingsButton(
+                        if (authBusy) p.authorizing else p.authorize,
+                        enabled = !authBusy && passphrase.isNotBlank(),
+                        tint = palette.red,
+                        onClick = {
+                            authBusy = true
+                            authError = null
+                            scope.launch {
+                                val ok = graph.api.engageLockdown(config, passphrase.trim())
+                                authBusy = false
+                                if (ok) {
+                                    engaging = false
+                                    passphrase = ""
+                                    note = p.containmentEngaged
+                                    refresh()
+                                } else {
+                                    authError = p.authorizationFailed
+                                    passphrase = ""
+                                }
+                            }
+                        },
+                    )
+                    SettingsButton(t.common.cancel, onClick = { engaging = false; passphrase = "" }, tint = palette.textDim)
                 }
             }
         }

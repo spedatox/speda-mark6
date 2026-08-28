@@ -24,11 +24,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.speda.heartbreaker.data.AutomationAgent
 import com.speda.heartbreaker.data.AutomationDayFlag
 import com.speda.heartbreaker.data.AutomationDraft
 import com.speda.heartbreaker.data.AutomationDraftSchedule
 import com.speda.heartbreaker.data.AutomationInfo
+import com.speda.heartbreaker.designsystem.glass.HbGlassShape
+import com.speda.heartbreaker.designsystem.glass.hbGlass
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.i18n.AppStrings
@@ -52,10 +55,11 @@ import kotlinx.coroutines.launch
  * reason as the desktop: a second overlay above the settings sheet fights it
  * for the back gesture.
  *
- * Deliberate mobile simplification: `at` and `date` are plain text fields
- * (HH:MM / YYYY-MM-DD) rather than native picker dialogs — a scope trim, not
- * a design decision; a future pass can wire Material3's TimePicker/DatePicker
- * in without touching the draft logic below.
+ * `at` and `date` use Material3's TimePicker/DatePicker (see [TimeField] and
+ * [DateField] below) rather than the desktop's native `<input type=time/date>`
+ * — the mobile-native equivalent, not a scope trim. Both operate in 24-hour /
+ * UTC-midnight terms and hand back the exact 'HH:MM' / 'YYYY-MM-DD' strings
+ * the backend expects, so nothing downstream of [submit] needed to change.
  */
 
 private val SCHEDULE_TEMPLATES = listOf("briefing", "reminder", "proactive_ask")
@@ -270,7 +274,7 @@ fun AutomationBuilder(
                 Spacer(Modifier.height(12.dp))
                 FieldLabel(a.time)
                 Spacer(Modifier.height(8.dp))
-                GlassField(at, { at = it }, placeholder = "HH:MM", singleLine = true, mono = true)
+                TimeField(at) { at = it }
 
                 if (frequency == "weekly") {
                     Spacer(Modifier.height(12.dp))
@@ -289,7 +293,7 @@ fun AutomationBuilder(
                     Spacer(Modifier.height(12.dp))
                     FieldLabel(a.date)
                     Spacer(Modifier.height(8.dp))
-                    GlassField(date, { date = it }, placeholder = "YYYY-MM-DD", singleLine = true, mono = true)
+                    DateField(date) { date = it }
                 }
             }
 
@@ -467,4 +471,116 @@ private fun NumberField(value: Int, minValue: Int = 0, maxValue: Int = Int.MAX_V
         singleLine = true,
         mono = true,
     )
+}
+
+/** A GlassField-shaped tappable row — same visual weight as the text fields
+ *  around it, but opens a picker instead of a keyboard. */
+@Composable
+private fun PickerField(label: String) {
+    val palette = LocalHbPalette.current
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(palette.text.copy(alpha = 0.03f))
+            .border(1.dp, palette.text.copy(alpha = 0.09f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        HbText(label, style = HbType.read.copy(fontSize = 15.sp), color = if (label.isEmpty()) palette.textFaint else palette.text)
+    }
+}
+
+/** `at` — a 24-hour time, picked with Material3's TimePicker in a small glass
+ *  dialog. Forced 24-hour: the backend's AutomationSchedule.at is 'HH:MM' with
+ *  no AM/PM concept, and letting the picker default to the locale's 12-hour
+ *  face would round-trip through an ambiguous hour on some devices. */
+@Composable
+private fun TimeField(value: String, onChange: (String) -> Unit) {
+    val palette = LocalHbPalette.current
+    val t = LocalStrings.current
+    var open by remember { mutableStateOf(false) }
+
+    Box(Modifier.clickable { open = true }) { PickerField(value.ifBlank { "HH:MM" }) }
+
+    if (open) {
+        val parts = remember(value) { value.split(":") }
+        val initHour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 9
+        val initMinute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+        val state = androidx.compose.material3.rememberTimePickerState(
+            initialHour = initHour, initialMinute = initMinute, is24Hour = true,
+        )
+        Dialog(onDismissRequest = { open = false }) {
+            Column(
+                Modifier.hbGlass(shape = HbGlassShape.Card).padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                androidx.compose.material3.TimePicker(state = state)
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SettingsButton(t.common.cancel, onClick = { open = false }, tint = palette.textDim)
+                    SettingsButton(
+                        t.common.ok,
+                        onClick = {
+                            onChange("%02d:%02d".format(state.hour, state.minute))
+                            open = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * `date` — a calendar day for the "once" frequency, picked with Material3's
+ * DatePicker. [SelectableDates] floors selection at today (UTC midnight,
+ * matching DatePicker's own convention) for the same reason the desktop input
+ * carries `min={todayISO()}`: a date already gone compiles to a workflow that
+ * is live, green, and can never fire.
+ */
+@Composable
+private fun DateField(value: String, onChange: (String) -> Unit) {
+    val palette = LocalHbPalette.current
+    val t = LocalStrings.current
+    var open by remember { mutableStateOf(false) }
+
+    Box(Modifier.clickable { open = true }) { PickerField(value.ifBlank { "YYYY-MM-DD" }) }
+
+    if (open) {
+        val todayMillis = remember {
+            java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+                .atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        }
+        val initMillis = remember(value) {
+            runCatching {
+                java.time.LocalDate.parse(value)
+                    .atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+            }.getOrNull()
+        }
+        val state = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = initMillis,
+            selectableDates = object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= todayMillis
+            },
+        )
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                SettingsButton(
+                    t.common.ok,
+                    onClick = {
+                        state.selectedDateMillis?.let { millis ->
+                            onChange(
+                                java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString(),
+                            )
+                        }
+                        open = false
+                    },
+                )
+            },
+            dismissButton = { SettingsButton(t.common.cancel, onClick = { open = false }, tint = palette.textDim) },
+        ) {
+            androidx.compose.material3.DatePicker(state = state)
+        }
+    }
 }
