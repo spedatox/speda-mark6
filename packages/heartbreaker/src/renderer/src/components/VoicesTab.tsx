@@ -110,6 +110,15 @@ function VoiceEditor({ agent, voiceOptions, onCancel, onSave, onClearAll }: {
   const t = useT()
   const a = t.settingsVoices
   const [voiceId, setVoiceId] = useState(agent.voice_id ?? '')
+  // The bare ElevenLabs voice id for manual entry — a fallback for when the
+  // catalog can't be listed (e.g. the API key lacks the voices_read
+  // permission) but synthesis itself still works fine on text_to_speech
+  // alone. Only meaningful while voiceId is an elevenlabs ref; derived from
+  // it on open so editing an already-pinned custom voice shows its id here
+  // too, not just in the (possibly voice-less) dropdown above.
+  const [manualId, setManualId] = useState(
+    agent.voice_id?.startsWith('elevenlabs:') ? agent.voice_id.split(':').slice(2).join(':') : '',
+  )
   const [stability, setStability] = useState(agent.voice_settings?.stability ?? DEFAULTS.stability)
   const [similarity, setSimilarity] = useState(agent.voice_settings?.similarity_boost ?? DEFAULTS.similarity_boost)
   const [style, setStyle] = useState(agent.voice_settings?.style ?? DEFAULTS.style)
@@ -122,6 +131,15 @@ function VoiceEditor({ agent, voiceOptions, onCancel, onSave, onClearAll }: {
   // interleaved.
   const byProvider: Record<string, VoiceOption[]> = {}
   for (const v of voiceOptions) (byProvider[v.provider] ??= []).push(v)
+
+  function pickFromCatalog(fullRef: string) {
+    setVoiceId(fullRef)
+    setManualId(fullRef.startsWith('elevenlabs:') ? fullRef.split(':').slice(2).join(':') : '')
+  }
+  function typeManualId(raw: string) {
+    setManualId(raw)
+    setVoiceId(raw.trim() ? `elevenlabs:eleven_multilingual_v2:${raw.trim()}` : '')
+  }
 
   async function submit() {
     setBusy(true)
@@ -137,7 +155,11 @@ function VoiceEditor({ agent, voiceOptions, onCancel, onSave, onClearAll }: {
       <SettingsSection title={agent.name} first />
 
       <SettingsField label={a.voicePick} hint={a.voicePickHint}>
-        <select value={voiceId} onChange={e => setVoiceId(e.target.value)} style={fieldStyle}>
+        <select
+          value={voiceOptions.some(o => o.id === voiceId) ? voiceId : ''}
+          onChange={e => { if (e.target.value) pickFromCatalog(e.target.value) }}
+          style={{ ...fieldStyle, marginBottom: 10 }}
+        >
           <option value="">{`${a.useDefault} — ${agent.default_voice}`}</option>
           {Object.entries(byProvider).map(([provider, opts]) => (
             <optgroup key={provider} label={provider}>
@@ -145,6 +167,20 @@ function VoiceEditor({ agent, voiceOptions, onCancel, onSave, onClearAll }: {
             </optgroup>
           ))}
         </select>
+      </SettingsField>
+
+      {/* The catalog needs the ElevenLabs key's voices_read permission —
+          text_to_speech (the permission synthesis itself needs) is a
+          SEPARATE scope, so a key that can speak may still list nothing
+          here. This box works regardless: paste the id straight from the
+          ElevenLabs dashboard. */}
+      <SettingsField label={a.manualVoiceId} hint={a.manualVoiceIdHint}>
+        <input
+          value={manualId}
+          onChange={e => typeManualId(e.target.value)}
+          placeholder={a.manualVoiceIdPlaceholder}
+          style={fieldStyle}
+        />
       </SettingsField>
 
       <SettingsSection title={a.tuning} />
