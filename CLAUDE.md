@@ -14,6 +14,7 @@ exists — those are the detail, this is the law.
 | `packages/striker` | `STRIKER.md` | **Striker** ("Speda Mark VI Core") — the single-agent public build. Same backend, Speda only, calm theme |
 | `packages/speda-go` | `README.md` | **Speda GO** — the mobile client. Never "Heartbreaker mobile"; the Kotlin id `com.speda.heartbreaker` stays as-is on purpose (renaming it orphans every installed app's Keystore data) |
 | `packages/browser` | [`docs/BROWSER.md`](docs/BROWSER.md) | Playwright in its own container — the render fallback and the owner's portal logins |
+| `packages/playwright-mcp` | [`docs/BROWSER.md`](docs/BROWSER.md) | The official `@playwright/mcp`, in its own container — full tool parity for the open public web only, never the owner's logins |
 | `packages/sandbox` | — | Command execution sidecar |
 
 Deployment target: Contabo Cloud, via GitOps — **push to main rewrites the
@@ -543,6 +544,14 @@ Playwright in its own container (`packages/browser`), reached through
   owner as a file card rather than a path they cannot open.
 - All three are `deferred`; registration is skipped entirely when `BROWSER_URL`
   is unset.
+- **A second, separate path exists for the open public web only:**
+  `packages/playwright-mcp` runs the official `@playwright/mcp` server, giving
+  full upstream tool parity (drag, evaluate, tabs, dialogs, uploads,
+  network/console inspection, resize…) registered as a Tier 2 MCP server when
+  `playwright_mcp_url` is set. It is never a route to one of the owner's
+  saved logins — that stays the three tools above, permanently, for the exact
+  reason `packages/browser/server.py`'s module docstring gives: a login
+  through an MCP server means the model types the password.
 
 ---
 
@@ -566,7 +575,16 @@ Playwright in its own container (`packages/browser`), reached through
   and never ask the owner for one in chat.**
 - **MCP transport:** STDIO for local servers. HTTP/SSE only for officially
   managed remote servers (Google Workspace, Notion, Microsoft Graph) with
-  OAuth 2.1. No community servers on public ports.
+  OAuth 2.1. No community servers on public ports. **One documented
+  exception:** `packages/playwright-mcp` (the official `@playwright/mcp`,
+  for the open public web only — never the owner's saved logins, which stay
+  on the browser sidecar) is a self-hosted third-party server reached over
+  HTTP, neither local STDIO nor one of the officially-managed SaaS servers
+  above. It is isolated the same way `packages/sandbox` and `packages/browser`
+  already are instead — its own container, internal Docker network only,
+  never a published port, no host mounts. `@playwright/mcp` has no built-in
+  request auth of its own, so that network boundary IS the entire boundary,
+  same as `sandbox`'s already is.
 - **Adding an OAuth provider means adding its callback to two places**, not one:
   the unauthenticated-paths list in Rule 12, and `_derived()` in
   `app/services/doormat.py`. A redirect URI the Doormat Protocol does not know

@@ -186,6 +186,41 @@ rotate it deliberately, delete the line and re-run `deploy.sh`. Igor reads `BROW
 Locally there is no autostart — Chromium is a 400 MB install, not a subprocess.
 Run `packages/browser/server.py` yourself and point `BROWSER_URL` at it.
 
+---
+
+## The other path: the open public web (`packages/playwright-mcp`)
+
+Everything above is one design, built around one constraint: a login must
+never make the model type a password. That constraint has a cost — the step
+vocabulary is ours to build, one action at a time, and reaching full parity
+with the official `@playwright/mcp` (drag, evaluate, tabs, dialogs, uploads,
+network/console inspection, resize…) means writing every one of those by hand.
+
+For a page that needs no login at all, that cost buys nothing. So there's a
+**second, separate** container — `packages/playwright-mcp`, the official
+Microsoft server — registered as an ordinary Tier 2 MCP server
+(`app/mcp/servers.py`) whenever `playwright_mcp_url` is set. It gives literal
+1:1 tool parity with the upstream server: `browser_click`, `browser_evaluate`,
+`browser_drag`, `browser_tabs`, and the rest, maintained by Microsoft, not us.
+
+**The rule is absolute and it never inverts:** this path is for the open
+public web ONLY. The three tools above — `browse_page` / `browser_act` /
+`portal_login` — stay the ONLY way into one of the owner's saved logins,
+forever, because signing in through this server means the model itself types
+the password (see `packages/browser/server.py`'s module docstring for why that
+is the one thing this whole design refuses to do). The steering note in
+`app/prompts/core/03_capabilities.md` tells the model exactly this.
+
+It is isolated the same way as the sidecar above — its own container,
+`expose:` never `ports:`, no host mounts, resource-limited, `--isolated` (every
+session's browser profile lives in memory only, never touches disk). The one
+difference: `@playwright/mcp` has no built-in request authentication of its
+own, so the network boundary — never published, never behind Caddy — IS the
+entire boundary, the same as `packages/sandbox` already relies on. See
+`packages/playwright-mcp/Dockerfile` for the version pin (CVE-2025-9611, a DNS
+rebinding bug via missing Origin/Host validation, is fixed in `@playwright/mcp`
+0.0.40+ — pinned well above that, deliberately, never `@latest`).
+
 ## Costs
 
 A render is roughly 2–6 seconds and ~200 MB of container memory while it runs,

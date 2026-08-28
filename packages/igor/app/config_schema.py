@@ -265,6 +265,12 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                              "Costs a render instead of a GET on those polls."),
             ConfigField("browser_max_chars", "Browser Page Text Cap", "int", requires_restart=_LIVE,
                         help="How much rendered page text one browse_page call may return."),
+            ConfigField("playwright_mcp_url", "Public-Web Browser (playwright-mcp) URL", "url",
+                        help="A SEPARATE, isolated container running the official "
+                             "@playwright/mcp server — full click/drag/evaluate/tabs/"
+                             "dialogs/upload tool parity, for the OPEN PUBLIC WEB ONLY. "
+                             "Never a route to one of your saved logins — that stays "
+                             "Browser URL above, on purpose. Empty disables it."),
             ConfigField("gpt_researcher_url", "GPT-Researcher URL", "url"),
             ConfigField("shannon_url", "Shannon URL", "url"),
             ConfigField("temp_outputs_dir", "Temp Outputs Dir", "text",

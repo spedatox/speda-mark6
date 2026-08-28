@@ -17,11 +17,12 @@ Startup registration order (Entry 005 priority):
   9. Filesystem      — Optimus local file ops
   10. arXiv          — Ultron + NightCrawler academic
   11. CVE Intelligence — Unicron security intelligence
-  12. Playwright     — NightCrawler browser automation (MUST run in isolated container)
+  12. Playwright     — open-public-web browser automation, full upstream tool
+                       parity (MUST run in isolated container; never for the
+                       owner's saved logins — that's the browser sidecar)
 """
 
 import logging
-import os
 from typing import TYPE_CHECKING
 
 from app.config import settings, _DATA_DIR
@@ -199,24 +200,28 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
     else:
         logger.warning("mcp_skip", extra={"server": "alpha_vantage", "reason": "ALPHA_VANTAGE_API_KEY not set"})
 
-    # Playwright — SUPERSEDED by the browser sidecar (packages/browser, reached
+    # Playwright — the SECOND, separate browser path, for the OPEN PUBLIC WEB
+    # ONLY (packages/playwright-mcp, its own isolated container, never a
+    # published port — see docker-compose.yml and docs/BROWSER.md). This is
+    # NOT a replacement for the browser sidecar (packages/browser, reached
     # through app/services/browser.py as browse_page / browser_act /
-    # portal_login). This registration stays as an escape hatch for an operator
-    # who wants upstream @playwright/mcp's full tool surface, and is off unless
-    # PLAYWRIGHT_MCP_URL is deliberately set — docker-compose no longer sets it.
-    #
-    # The sidecar is preferred for one reason above all: a login through the MCP
-    # server means the MODEL types the owner's password, which puts it in the
-    # transcript, the message table and the embedding index. See the module
-    # docstring of packages/browser/server.py.
-    if os.environ.get("PLAYWRIGHT_MCP_URL"):
+    # portal_login) — that stays the ONLY path for anything touching one of
+    # the owner's saved logins, for one reason above all: a login through this
+    # MCP server means the MODEL types the owner's password, which puts it in
+    # the transcript, the message table and the embedding index. See the
+    # module docstring of packages/browser/server.py, and the steering note in
+    # app/prompts/core/03_capabilities.md that tells the model which path is
+    # for what. Off entirely when playwright_mcp_url is unset (the default).
+    if settings.playwright_mcp_url:
         servers.append(
             MCPClient(
                 server_name="playwright",
                 transport="http",
-                url=os.environ["PLAYWRIGHT_MCP_URL"],
+                url=settings.playwright_mcp_url,
             )
         )
+    else:
+        logger.info("mcp_skip", extra={"server": "playwright", "reason": "playwright_mcp_url not set"})
 
     # ── Tier 2: stdio servers (auth via subprocess env) ──────────────────────
 

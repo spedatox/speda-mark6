@@ -26,13 +26,19 @@ services:
       # the real one" became a question worth an afternoon.
       DATABASE_URL: sqlite+aiosqlite:////root/.speda/speda.db
       # The browser sidecar (packages/browser) — Playwright behind a small HTTP
-      # surface. This supersedes the PLAYWRIGHT_MCP_URL that used to sit here
-      # pointing at a `playwright-mcp` service that was never in this file: the
-      # variable was set, the host did not resolve, and the registration in
-      # app/mcp/servers.py degraded on every boot. BROWSER_TOKEN comes from
-      # packages/igor/.env — the sidecar holds the owner's portal cookies, so
-      # "on the internal network" is not by itself authorization.
+      # surface, for anything touching one of the owner's saved logins.
+      # BROWSER_TOKEN comes from packages/igor/.env — the sidecar holds the
+      # owner's portal cookies, so "on the internal network" is not by itself
+      # authorization.
       BROWSER_URL: http://browser:9200
+      # The SECOND, separate browser path: the official @playwright/mcp
+      # server (packages/playwright-mcp), full upstream tool parity for the
+      # OPEN PUBLIC WEB ONLY — never a saved login, see docs/BROWSER.md. This
+      # used to point here without the service existing below (the variable
+      # was set, the host did not resolve, and the registration in
+      # app/mcp/servers.py degraded on every boot) — the service now actually
+      # exists, so the URL resolves.
+      PLAYWRIGHT_MCP_URL: http://playwright-mcp:8931/mcp
       SANDBOX_URL: http://sandbox:9000
       # Hisar over the container network, never the public hostname — this is
       # an internal call and should not leave the box. HISAR_MACHINE_TOKEN is
@@ -152,6 +158,30 @@ services:
     # as the belt to that suspenders.
     ipc: host
     init: true
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 512
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # The official @playwright/mcp server (packages/playwright-mcp) — full
+  # upstream tool parity (click, drag, evaluate, tabs, dialogs, uploads,
+  # network/console, resize, snapshot…) for the OPEN PUBLIC WEB ONLY. See
+  # docs/BROWSER.md. Isolated exactly like `browser` above: no published
+  # port, no host mounts, resource-limited. Unlike `browser` it holds no
+  # secret at all — @playwright/mcp has no built-in request auth, so this
+  # network boundary (never `ports:`, never Caddy) IS the whole boundary,
+  # the same way `sandbox` above already relies on network isolation alone.
+  # `--isolated` (packages/playwright-mcp/Dockerfile's CMD) additionally
+  # keeps every session's profile in memory only — it must never accumulate
+  # cookies for anything, which is also why it gets no state volume.
+  playwright-mcp:
+    build: ./packages/playwright-mcp
+    expose:
+      - "8931"
     mem_limit: 2g
     cpus: 2.0
     pids_limit: 512

@@ -570,6 +570,20 @@ class Settings(BaseSettings):
     # probe into a browser render, so it stays a deliberate switch.
     browser_fallback_enabled: bool = True
 
+    # ── The public-web browser (packages/playwright-mcp) ───────────────────────
+    # The official @playwright/mcp server, in its own container, registered as a
+    # Tier 2 MCP server (app/mcp/servers.py) — full upstream tool parity (click,
+    # drag, evaluate, tabs, dialogs, uploads, network/console, resize…) for the
+    # OPEN PUBLIC WEB ONLY. This is a SEPARATE path from browser_url above and
+    # must stay that way: browser_url is the ONLY route to one of the owner's
+    # saved logins, because a login through this server means the model types
+    # the password. Empty disables the registration entirely (see
+    # app/mcp/servers.py's "mcp_skip" log line), same pattern as every other
+    # keyed capability. No token field — @playwright/mcp has no built-in auth,
+    # so the container never being published (docker-compose.yml: `expose`, not
+    # `ports`) is the entire boundary.
+    playwright_mcp_url: str = ""
+
     # ── The Forge peer (app/services/forge_peer.py) ────────────────────────────
     # The Forge (Mark II) is the standalone execution engine. Speda owns its
     # lifecycle: the lifespan handler launches ONE child process per agent in
