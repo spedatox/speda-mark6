@@ -49,6 +49,7 @@ shared Docker network "reachable" is not the same as "authorized".
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import io
 import json
@@ -87,6 +88,7 @@ MAX_TEXT = 30_000          # readable text handed back per call
 MAX_ARIA = 14_000          # aria snapshot — the clickable surface
 MAX_LINKS = 80
 MAX_STEPS = 25             # per /act call; a longer flow is several calls
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024   # per file, an upload_file step attaches
 NAV_TIMEOUT = 45_000       # ms — a navigation, which is allowed to be slow
 # An element interaction is not. A selector that does not match waits out the
 # whole timeout before saying so, and 45 seconds of that is 45 seconds the model
@@ -234,21 +236,52 @@ class Engine:
             return session_id, sess
         context = await self.new_context(profile, locale)
         page = await context.new_page()
-        page.set_default_timeout(ACT_TIMEOUT)
         # A fresh id even when the caller named a dead one. Handing back the id
         # it asked for would say "still on your tab" about a blank page nine
         # menus back from where the model thinks it is; a changed id is the
         # signal that the thread was lost.
         sid = uuid.uuid4().hex[:12]
         sess = {
-            "context": context, "page": page, "profile": profile or "",
-            "seen": time.time(), "downloads": [], "errors": [],
+            "context": context, "pages": [], "active": 0, "profile": profile or "",
+            "seen": time.time(), "downloads": [], "errors": [], "console": [],
+            "network": [], "dialogs": [], "dialog_policy": "dismiss", "dialog_text": "",
+            "uploads": {},
         }
-        page.on("console", lambda m: sess["errors"].append(m.text[:200])
-                if m.type == "error" and len(sess["errors"]) < 10 else None)
-        page.on("download", lambda d: asyncio.create_task(self._keep(sess, d)))
+        self._wire_page(sess, page)
+        sess["pages"].append(page)
         self.sessions[sid] = sess
         return sid, sess
+
+    def _wire_page(self, sess: dict, page: Page) -> None:
+        """Attach the listeners every page in a session needs — the first one
+        AND every tab `new_tab` opens later. State lives on the SESSION, not
+        the page, so two tabs share one rolling console/network log instead of
+        each starting from zero the moment a flow opens a second window.
+        """
+        page.set_default_timeout(ACT_TIMEOUT)
+
+        def _on_console(msg) -> None:
+            if len(sess["console"]) < 15:
+                sess["console"].append(f"[{msg.type}] {msg.text[:200]}")
+            if msg.type == "error" and len(sess["errors"]) < 10:
+                sess["errors"].append(msg.text[:200])
+
+        def _on_response(resp) -> None:
+            try:
+                req = resp.request
+                rec = {"method": req.method, "url": resp.url[:200],
+                       "resource_type": req.resource_type, "status": resp.status,
+                       "ok": resp.ok}
+            except Exception:  # noqa: BLE001
+                return
+            sess["network"].append(rec)
+            if len(sess["network"]) > 50:
+                sess["network"].pop(0)
+
+        page.on("console", _on_console)
+        page.on("response", _on_response)
+        page.on("dialog", lambda d: asyncio.create_task(_handle_dialog(sess, d)))
+        page.on("download", lambda d: asyncio.create_task(self._keep(sess, d)))
 
     async def _keep(self, sess: dict, download) -> None:
         """A file the page handed us. Parked as an artifact so Igor can fetch it
@@ -298,6 +331,33 @@ engine = Engine()
 
 def _safe(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", name)[:120] or "file"
+
+
+def active_page(sess: dict) -> Page:
+    """The tab a step actually runs against. `new_tab`/`switch_tab` move this;
+    everything else in run_step reads it fresh at the top of the function, so
+    a switch mid-flow is honored by the very next step."""
+    return sess["pages"][sess["active"]]
+
+
+async def _handle_dialog(sess: dict, dialog) -> None:
+    """Every dialog — alert/confirm/prompt — on any tab in the session lands
+    here. Default is DISMISS: a needless dismiss costs nothing on a page that
+    retries, while wrongly accepting a "permanently delete?" confirm cannot be
+    undone. `sess["dialog_policy"]` is set per /act call (default stays
+    "dismiss" when the caller doesn't say otherwise) — it is a session-level
+    switch, not a step, because the dialog can fire mid-step, asynchronously,
+    from whatever action the caller just triggered.
+    """
+    try:
+        if len(sess["dialogs"]) < 5:
+            sess["dialogs"].append({"type": dialog.type, "message": dialog.message[:300]})
+        if sess.get("dialog_policy") == "accept":
+            await dialog.accept(sess.get("dialog_text") or "")
+        else:
+            await dialog.dismiss()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # ── Reading a page ───────────────────────────────────────────────────────────
@@ -407,19 +467,26 @@ async def settle(page: Page, wait_for: str | None, wait_ms: int) -> None:
 # ── Steps — the vocabulary /act speaks ───────────────────────────────────────
 
 
-async def run_step(page: Page, step: dict, sess: dict | None = None) -> str:
-    """Execute one step, return a one-line account of it.
+async def run_step(step: dict, sess: dict) -> str:
+    """Execute one step against the session's ACTIVE tab, return a one-line
+    account of it.
 
     `target` is any Playwright selector, and the ones worth reaching for are the
     semantic ones the aria snapshot already named: `role=button[name="Giriş"]`,
     `text=Not Listesi`. A CSS selector works too, and is the right answer when
     the page has ids.
+
+    Reads `active_page(sess)` fresh rather than taking a `page` argument, so a
+    `switch_tab`/`new_tab` step earlier in the same call is honored by every
+    step after it — the caller only ever thinks in terms of "the session",
+    never "which Page object".
     """
     if not isinstance(step, dict):
         raise ValueError(f"a step must be an object, got {type(step).__name__}")
     action = (step.get("action") or "").strip().lower()
     target = step.get("target") or ""
     value = step.get("value")
+    page = active_page(sess)
 
     if action == "goto":
         resp = await page.goto(target or value or "", wait_until="domcontentloaded",
@@ -438,6 +505,17 @@ async def run_step(page: Page, step: dict, sess: dict | None = None) -> str:
             pass
         await loc.fill(str(value or ""), timeout=ACT_TIMEOUT)
         return f"fill {target}"
+    if action == "type":
+        # Real per-keystroke events, unlike fill()'s direct value-set — the
+        # right tool for a field whose JS listens to keydown rather than the
+        # value changing (autocomplete, a date picker, a masked input).
+        loc = page.locator(target).first
+        try:
+            await loc.click(timeout=ACT_TIMEOUT)
+        except Exception:  # noqa: BLE001
+            pass
+        await loc.press_sequentially(str(value or ""), timeout=ACT_TIMEOUT)
+        return f"type {target}"
     if action == "select":
         await page.locator(target).first.select_option(str(value or ""), timeout=ACT_TIMEOUT)
         return f"select {target} = {value}"
@@ -453,9 +531,18 @@ async def run_step(page: Page, step: dict, sess: dict | None = None) -> str:
     if action == "hover":
         await page.locator(target).first.hover(timeout=ACT_TIMEOUT)
         return f"hover {target}"
+    if action == "drag":
+        await page.drag_and_drop(target, str(value or ""), timeout=ACT_TIMEOUT)
+        return f"drag {target} → {value}"
     if action == "scroll":
         await page.mouse.wheel(0, int(value or 900))
         return f"scroll {value or 900}"
+    if action == "resize":
+        dims = str(value or "").lower().split("x")
+        if len(dims) != 2 or not all(d.isdigit() for d in dims):
+            raise ValueError("resize needs value like '390x844' (widthxheight)")
+        await page.set_viewport_size({"width": int(dims[0]), "height": int(dims[1])})
+        return f"resize {value}"
     if action == "wait_for":
         await page.wait_for_selector(target, timeout=NAV_TIMEOUT)
         return f"wait_for {target}"
@@ -478,9 +565,80 @@ async def run_step(page: Page, step: dict, sess: dict | None = None) -> str:
                 "size": path.stat().st_size, "url": page.url,
             })
         return f"screenshot of {page.url}"
+    if action == "evaluate":
+        # Full power, matching upstream @playwright/mcp's browser_evaluate — no
+        # sandboxing of what the JS can read (cookies, filled field values,
+        # anything the page's own script could see). That is a deliberate,
+        # accepted trade-off: it is the only way to reach a value nothing else
+        # here exposes. What it must never be used for is reading a password
+        # back out of a field — the whole point of do_login() is that a
+        # credential never becomes text a model produced, and an evaluate step
+        # that does `input[type=password]`.value would defeat that from the
+        # other direction. When `target` is set the expression runs scoped to
+        # that element and MUST be a one-argument function (`el => el.value`),
+        # matching Playwright's own Locator.evaluate contract; unscoped it runs
+        # at the page level and can be a plain expression (`document.title`).
+        js = str(value or "")
+        if not js:
+            raise ValueError("evaluate needs a JS expression in 'value'")
+        if target:
+            result = await page.locator(target).first.evaluate(js, timeout=ACT_TIMEOUT)
+        else:
+            result = await page.evaluate(js)
+        text = "null" if result is None else json.dumps(result, default=str)[:2000]
+        return f"evaluate → {text}"
+    if action == "upload_file":
+        # `value` names a file the /act CALL already attached via its top-level
+        # `files` map (base64, decoded to a scratch path before steps run) —
+        # never a raw filesystem path the model made up. See the /act handler.
+        path = (sess.get("uploads") or {}).get(str(value or ""))
+        if not path:
+            raise ValueError(
+                f"no uploaded file named '{value}' — pass it in this call's "
+                f"top-level 'files' map, e.g. {{\"files\": {{\"{value}\": \"<base64>\"}}}}"
+            )
+        await page.locator(target).first.set_input_files(path, timeout=ACT_TIMEOUT)
+        return f"upload_file {target} ← {value}"
+    if action == "new_tab":
+        new_page = await sess["context"].new_page()
+        engine._wire_page(sess, new_page)
+        sess["pages"].append(new_page)
+        sess["active"] = len(sess["pages"]) - 1
+        dest = str(target or value or "")
+        if dest:
+            await new_page.goto(dest, wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+        return f"new_tab → tab {sess['active']}" + (f" ({dest})" if dest else "")
+    if action == "switch_tab":
+        idx_raw = value if value is not None else target
+        try:
+            idx = int(idx_raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"switch_tab needs a tab index, got {idx_raw!r}")
+        if idx < 0 or idx >= len(sess["pages"]):
+            raise ValueError(f"no tab {idx} — {len(sess['pages'])} open (0-indexed)")
+        sess["active"] = idx
+        return f"switch_tab → tab {idx}"
+    if action == "close_tab":
+        idx_raw = value if value is not None else target
+        try:
+            idx = int(idx_raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"close_tab needs a tab index, got {idx_raw!r}")
+        if len(sess["pages"]) == 1:
+            raise ValueError("cannot close the only remaining tab — end the session instead (close=true)")
+        if idx < 0 or idx >= len(sess["pages"]):
+            raise ValueError(f"no tab {idx} — {len(sess['pages'])} open (0-indexed)")
+        closing = sess["pages"].pop(idx)
+        await closing.close()
+        if sess["active"] >= len(sess["pages"]):
+            sess["active"] = len(sess["pages"]) - 1
+        elif sess["active"] > idx:
+            sess["active"] -= 1
+        return f"close_tab {idx}"
     raise ValueError(
-        f"unknown action '{action}' — use goto, click, fill, select, check, press, "
-        f"hover, scroll, wait, wait_for, back, screenshot"
+        f"unknown action '{action}' — use goto, click, fill, type, select, check, "
+        f"press, hover, drag, scroll, resize, wait, wait_for, back, screenshot, "
+        f"evaluate, upload_file, new_tab, switch_tab, close_tab"
     )
 
 
@@ -1023,44 +1181,100 @@ async def read(body: dict, x_browser_token: str | None = Header(default=None)):
 
 @app.post("/act")
 async def act(body: dict, x_browser_token: str | None = Header(default=None)):
-    """Run steps against a live session and report where they landed."""
+    """Run steps against a live session and report where they landed.
+
+    `files` (optional) is a `{name: base64}` map decoded to scratch paths
+    before any step runs, so an `upload_file` step can attach one by name —
+    the caller never passes a raw filesystem path in. `dialog_policy` /
+    `dialog_text` arm the session's dialog handler for THIS call's steps
+    (default policy stays "dismiss" when omitted). `close=true` closes the
+    session after the steps run — valid on its own with an empty `steps` list,
+    as a plain "I'm done with this tab" call.
+    """
     check(x_browser_token)
     profile = check_profile(body.get("profile"))
     steps = body.get("steps") or []
-    if not isinstance(steps, list) or not steps:
-        raise HTTPException(status_code=400, detail="steps must be a non-empty list")
+    close_after = bool(body.get("close"))
+    if not isinstance(steps, list):
+        raise HTTPException(status_code=400, detail="steps must be a list")
+    if not steps and not close_after:
+        raise HTTPException(status_code=400,
+                            detail="steps must be a non-empty list (or set close=true "
+                                   "to just end the session)")
     if len(steps) > MAX_STEPS:
         raise HTTPException(status_code=400, detail=f"at most {MAX_STEPS} steps per call")
 
     sid, sess = await engine.get_session(body.get("session_id"), profile or None,
                                          body.get("locale") or "tr-TR")
-    page: Page = sess["page"]
     sess["downloads"] = []
     sess["errors"] = []
+    sess["console"] = []
+    sess["dialogs"] = []
+    sess["dialog_policy"] = (body.get("dialog_policy") or "dismiss").strip().lower()
+    sess["dialog_text"] = body.get("dialog_text") or ""
+
+    upload_paths: list[Path] = []
+    sess["uploads"] = {}
+    for name, b64 in (body.get("files") or {}).items():
+        try:
+            data = base64.b64decode(b64)
+        except Exception:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"file '{name}' is not valid base64")
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=400,
+                                detail=f"file '{name}' exceeds the "
+                                       f"{MAX_UPLOAD_BYTES // (1024*1024)}MB upload cap")
+        path = ARTIFACT_DIR / f"upload_{uuid.uuid4().hex}__{_safe(name)}"
+        path.write_bytes(data)
+        sess["uploads"][name] = str(path)
+        upload_paths.append(path)
 
     log: list[str] = []
     failed = None
-    for step in steps:
-        try:
-            log.append(await run_step(page, step, sess))
-        except Exception as e:  # noqa: BLE001
-            failed = f"{step} → {type(e).__name__}: {str(e)[:300]}"
-            break
+    try:
+        for step in steps:
+            try:
+                log.append(await run_step(step, sess))
+            except Exception as e:  # noqa: BLE001
+                failed = f"{step} → {type(e).__name__}: {str(e)[:300]}"
+                break
 
-    await settle(page, body.get("wait_for"), int(body.get("wait_ms") or 0))
-    # A download lands through an event handler that may still be writing when
-    # the last step returns. Only worth waiting for after something that could
-    # have started one.
-    if any(isinstance(s, dict) and (s.get("action") or "").lower() in ("click", "press")
-           for s in steps):
-        await page.wait_for_timeout(600)
-    snap = await snapshot(page)
-    await engine.save_profile(sess["context"], sess["profile"])
-    return {
+        page = active_page(sess)
+        await settle(page, body.get("wait_for"), int(body.get("wait_ms") or 0))
+        # A download lands through an event handler that may still be writing when
+        # the last step returns. Only worth waiting for after something that could
+        # have started one.
+        if any(isinstance(s, dict) and (s.get("action") or "").lower() in ("click", "press")
+               for s in steps):
+            await page.wait_for_timeout(600)
+        snap = await snapshot(page)
+        await engine.save_profile(sess["context"], sess["profile"])
+    finally:
+        for p in upload_paths:
+            with contextlib.suppress(OSError):
+                p.unlink()
+        sess["uploads"] = {}
+
+    tabs = []
+    for i, p in enumerate(sess["pages"]):
+        try:
+            title = (await p.title())[:120]
+        except Exception:  # noqa: BLE001
+            title = ""
+        tabs.append({"index": i, "url": p.url, "title": title})
+
+    out = {
         "session_id": sid, "performed": log, "failed": failed,
         "downloads": sess["downloads"], "console_errors": sess["errors"][:5],
+        "console": sess["console"], "dialogs": sess["dialogs"],
+        "tabs": tabs, "active_tab": sess["active"],
         **snap,
     }
+    if body.get("include_network"):
+        out["network"] = sess["network"][-20:]
+    if close_after:
+        await engine.close_session(sid)
+    return out
 
 
 @app.post("/login")
@@ -1081,7 +1295,7 @@ async def login(body: dict, x_browser_token: str | None = Header(default=None)):
     # skip_navigate contract.
     continuing = wants_sid is not None and sid == wants_sid
     try:
-        result = await do_login(sess["page"], body, skip_navigate=continuing)
+        result = await do_login(active_page(sess), body, skip_navigate=continuing)
         if result.get("ok"):
             await engine.save_profile(sess["context"], profile)
         logger.info("login profile=%s ok=%s", profile, result.get("ok"))

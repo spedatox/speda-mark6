@@ -55,6 +55,17 @@ All three are `deferred` — their Rule 11 descriptions are long and they overla
 with `fetch`, so they load through `tool_search` when a task needs them rather
 than riding in every prompt prefix.
 
+`browser_act`'s step vocabulary now goes well past click/fill/select: it also
+speaks `drag`, `type` (real keystrokes), `resize`, `evaluate` (full JS,
+matching upstream `@playwright/mcp`'s `browser_evaluate` — see the warning in
+`packages/browser/README.md`), `upload_file` (a file Igor already has, never a
+raw path), and `new_tab`/`switch_tab`/`close_tab` for sessions that open a
+second window. It also takes `dialog_policy`/`dialog_text` (default: dismiss
+any alert/confirm/prompt), `include_network` (recent requests, for when a
+click silently didn't fire one), and `close` (end the session deliberately
+instead of waiting out the idle timeout). See
+`packages/browser/README.md#the-act-step-vocabulary` for the full list.
+
 ### Selectors
 
 `browser_act` speaks Playwright selectors. Prefer the semantic ones, because

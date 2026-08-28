@@ -130,54 +130,43 @@ function shortPath(p: string): string {
   return parts.length <= 2 ? p : '…/' + parts.slice(-2).join('/')
 }
 
-// One-line "what it did", Claude-Code style: a verb + a target.
-function toolSummary(tool: ToolBadge, t: Dict): { verb: string; target?: string } {
+// One-line "what it did", Claude-Code style: a verb + a target. `running`
+// picks the present-tense form ("Running") over the past tense ("Ran") so the
+// label itself carries the state, instead of leaving the raw tool identifier
+// (e.g. `system_ops`) on screen for the owner to decode.
+function toolSummary(tool: ToolBadge, t: Dict, running: boolean): { verb: string; target?: string } {
   const inp = (tool.input && typeof tool.input === 'object')
     ? tool.input as Record<string, unknown> : {}
   const str = (k: string) => (typeof inp[k] === 'string' ? inp[k] as string : undefined)
   const path = str('path')
   switch (tool.name) {
-    case 'edit_file':   return { verb: t.message.verbEdited, target: path && shortPath(path) }
-    case 'write_file':  return { verb: t.message.verbWrote, target: path && shortPath(path) }
-    case 'read_file':   return { verb: t.message.verbRead, target: path && shortPath(path) }
-    case 'run_command': return { verb: t.message.verbRan, target: str('command') }
+    case 'edit_file':   return { verb: running ? t.message.verbEditing : t.message.verbEdited, target: path && shortPath(path) }
+    case 'write_file':  return { verb: running ? t.message.verbWriting : t.message.verbWrote, target: path && shortPath(path) }
+    case 'read_file':   return { verb: running ? t.message.verbReading : t.message.verbRead, target: path && shortPath(path) }
+    case 'run_command': return { verb: running ? t.message.verbRunning : t.message.verbRan, target: str('command') }
     case 'system_ops': {
       const action = str('action')
-      if (action === 'read_file')  return { verb: t.message.verbRead, target: path && shortPath(path) }
-      if (action === 'write_file') return { verb: t.message.verbWrote, target: path && shortPath(path) }
-      return { verb: t.message.verbRan, target: str('command') }   // exec (default)
+      if (action === 'read_file')  return { verb: running ? t.message.verbReading : t.message.verbRead, target: path && shortPath(path) }
+      if (action === 'write_file') return { verb: running ? t.message.verbWriting : t.message.verbWrote, target: path && shortPath(path) }
+      return { verb: running ? t.message.verbRunning : t.message.verbRan, target: str('command') }   // exec (default)
     }
-    case 'graph_query':    return { verb: t.message.verbSearchedGraph, target: str('question') }
-    case 'graph_path':     return { verb: t.message.verbTracedGraph }
-    case 'graph_overview': return { verb: t.message.verbMappedGraph }
-    default:
-      if (isSearchTool(tool.name)) return { verb: t.message.verbSearched, target: str('query') || str('question') }
-      return { verb: tool.name.replace(/_/g, ' ').replace(/-/g, ' ') }
+    case 'graph_query':    return { verb: running ? t.message.verbSearchingGraph : t.message.verbSearchedGraph, target: str('question') }
+    case 'graph_path':     return { verb: running ? t.message.verbTracingGraph : t.message.verbTracedGraph }
+    case 'graph_overview': return { verb: running ? t.message.verbMappingGraph : t.message.verbMappedGraph }
+    default: {
+      const friendly = tool.name.replace(/_/g, ' ').replace(/-/g, ' ')
+      if (isSearchTool(tool.name)) return { verb: running ? t.message.verbSearching : t.message.verbSearched, target: str('query') || str('question') }
+      return { verb: friendly.charAt(0).toUpperCase() + friendly.slice(1) }
+    }
   }
 }
 
 /* ── Chain-row helpers ──────────────────────────────────────────────────────
- * The chain shows what the machine actually did: the tool's own name, the one
- * argument that identifies the call, and what came back. Not a prose paraphrase
- * — when a step goes wrong you want the real name to search for. */
-
-/** The single most identifying argument, rendered as `(key: value)`. */
-function primaryArg(tool: ToolBadge): string | null {
-  const inp = (tool.input && typeof tool.input === 'object')
-    ? tool.input as Record<string, unknown> : {}
-  const keys = Object.keys(inp)
-  if (!keys.length) return null
-  // Preference order: the arg a human would recognise the call by.
-  const preferred = ['path', 'file_path', 'command', 'query', 'question', 'url',
-                     'name', 'action', 'agent_id', 'prompt']
-  const key = preferred.find(k => inp[k] != null && inp[k] !== '') ?? keys[0]
-  const raw = inp[key]
-  let val = typeof raw === 'string' ? raw : JSON.stringify(raw)
-  if (val == null) return null
-  if (key === 'path' || key === 'file_path') val = shortPath(val)
-  if (val.length > 44) val = val.slice(0, 44) + '…'
-  return `(${key}: ${val})`
-}
+ * The chain shows what the machine actually did in plain language — a verb
+ * plus the one target that identifies the call (toolSummary) — not the raw
+ * tool identifier (`system_ops`, `run_command`) or an unformatted `key: value`
+ * dump of its arguments. The real name is still one hover away (see the
+ * `title` attrs in ToolRow) for when a step fails and needs searching. */
 
 /** A short right-aligned "what came back", taken from the real result text. */
 function resultSummary(tool: ToolBadge): string | null {
@@ -261,7 +250,6 @@ function CommandBlock({ command, result }: { command?: string; result?: string }
 function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
   const t = useT()
   const [open, setOpen] = useState(false)
-  const { verb, target } = toolSummary(tool, t)
   const inp = (tool.input && typeof tool.input === 'object')
     ? tool.input as Record<string, unknown> : {}
   const action = typeof inp.action === 'string' ? inp.action : undefined
@@ -272,7 +260,8 @@ function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
   const hasDetail = isEdit || isWrite || isCmd || !!tool.result || Object.keys(inp).length > 0
 
   const state = stepState(tool, live)
-  const arg = primaryArg(tool)
+  const { verb, target } = toolSummary(tool, t, state === 'running')
+  const shortTarget = target && (target.length > 44 ? target.slice(0, 44) + '…' : target)
   const summary = resultSummary(tool)
 
   return (
@@ -307,20 +296,21 @@ function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
           </svg>
         )}
 
-        {/* The tool's real name — searchable when something goes wrong. */}
-        <span style={{ color: 'var(--hb-text)', flexShrink: 0 }}>{tool.name}</span>
-        {arg && (
+        {/* Humanized verb, not the raw tool identifier — hover still surfaces
+            the real name for when something goes wrong and needs searching. */}
+        <span style={{ color: 'var(--hb-text)', flexShrink: 0 }} title={tool.name}>{verb}</span>
+        {shortTarget && (
           <span style={{
             color: 'var(--hb-text-faint)', overflow: 'hidden', textOverflow: 'ellipsis',
             whiteSpace: 'nowrap', minWidth: 0,
-          }}>{arg}</span>
+          }}>{shortTarget}</span>
         )}
 
         <span style={{ flex: 1, minWidth: 8 }} />
 
         {summary && (
           <span
-            title={verb + (target ? ` — ${target}` : '')}
+            title={tool.name}
             style={{
               color: 'var(--hb-text-faint)', flexShrink: 0, maxWidth: '38%',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',

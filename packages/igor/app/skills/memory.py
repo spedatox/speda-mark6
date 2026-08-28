@@ -942,16 +942,17 @@ class MemorySkill(Skill):
         if file is None:
             return f"Error: The path {path} does not exist."
 
-        # The canonical set is closed in BOTH directions: nothing may be added to
-        # it and none of its members may be removed from it. Deleting one would
-        # not lose the content — it is versioned — but it would leave the routing
-        # tree pointing at a file that no longer exists, and the next agent with a
-        # fact for it has nowhere legal to put it. `delete` exists for the tail of
-        # a demotion: fold a STRAY file's content into the canonical file that
-        # should have held it, then remove the stray.
-        from app.services.memory_schema import is_canonical
+        # The fixed set and a CLOSED collection's declared members are closed in
+        # BOTH directions: nothing may be added and none of it may be removed.
+        # Deleting one would not lose the content — it is versioned — but it
+        # would leave the routing tree pointing at a file that no longer exists,
+        # and the next agent with a fact for it has nowhere legal to put it. An
+        # OPEN entity collection (`projects/`, `social/`) is not part of that
+        # set — its members are meant to be added AND removed, which is what
+        # lets Orion delete the stray half of a duplicate project or person file.
+        from app.services.memory_schema import is_removable
 
-        if is_canonical(path):
+        if not is_removable(path):
             return (
                 f"Error: `{path}` is one of the canonical memory files and cannot be "
                 f"deleted — the taxonomy is closed in both directions. To empty it, "

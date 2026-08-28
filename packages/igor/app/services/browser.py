@@ -117,11 +117,25 @@ async def act(
     session_id: str | None = None,
     profile: str | None = None,
     wait_for: str | None = None,
+    dialog_policy: str | None = None,
+    dialog_text: str | None = None,
+    files: dict[str, str] | None = None,
+    include_network: bool = False,
+    close: bool = False,
 ) -> dict:
-    """Run a short flow against a live session and report where it landed."""
+    """Run a short flow against a live session and report where it landed.
+
+    `files` is `{filename: base64 bytes}` — the skill resolves the filename
+    against Igor's own output directory before this is ever called, so what
+    crosses the wire here is already-verified bytes, never a path the model
+    invented. `close` ends the session after the steps run (valid with an
+    empty `steps` list too, as a deliberate "done with this tab" call).
+    """
     return await _post("/act", {
         "steps": steps, "session_id": session_id or None,
         "profile": profile or "", "wait_for": wait_for,
+        "dialog_policy": dialog_policy or None, "dialog_text": dialog_text or None,
+        "files": files or None, "include_network": include_network, "close": close,
     })
 
 

@@ -23,6 +23,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import com.speda.heartbreaker.data.PendingAsk
 import com.speda.heartbreaker.data.SkyfallArm
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,6 +70,32 @@ class ChatViewModel(
     val skyfallArm: StateFlow<SkyfallArm?> = _skyfallArm.asStateFlow()
 
     fun clearSkyfall() { _skyfallArm.value = null }
+
+    /**
+     * A peer's safety gate stopped an irreversible operation and is waiting on
+     * the owner — the SSE-fast path. It sits beside [state] for the same reason
+     * [skyfallArm] does: the card is answered by a button, not by scrolling to a
+     * message, and it must survive the reduce cycle rather than live inside it.
+     *
+     * This is the FAST path only. The guaranteed path is
+     * [IgorApi.fetchPendingAsks], polled by the global tray mounted at the shell
+     * root — a peer raises this event only when the ask carries a chat_id, and a
+     * dispatched or background job's ask never carries one.
+     */
+    private val _pendingAsk = MutableStateFlow<PendingAsk?>(null)
+    val pendingAsk: StateFlow<PendingAsk?> = _pendingAsk.asStateFlow()
+
+    fun clearPendingAsk() { _pendingAsk.value = null }
+
+    /** Send the owner's decision down to the peer, then drop the card either way
+     *  — a failed answer means the ask is already gone (see [IgorApi.answerAsk]),
+     *  not a state worth holding onto and retrying. */
+    fun resolveAsk(config: AppConfig, askId: String, approved: Boolean, remember: Boolean) {
+        viewModelScope.launch {
+            api.answerAsk(config, askId, approved, remember)
+            if (_pendingAsk.value?.askId == askId) _pendingAsk.value = null
+        }
+    }
 
     /**
      * Supplies the ambient client/platform/location context for a turn, resolved

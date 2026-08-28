@@ -673,6 +673,41 @@ class IgorApi(
      * rather than this client.
      */
 
+    /* ── Pending owner approvals (GET /agents/asks, POST /agents/asks/{id}) ──
+     * Irreversible operations an external peer's safety gate has stopped.
+     *
+     * fetchPendingAsks is the GUARANTEED path to an open ask. A chat job's ask
+     * also arrives inline on its own stream as a `permission_request` SSE frame,
+     * but a peer raises that only when the ask carries a chat_id — the Forge's
+     * peer oracle attaches none, so a dispatched or background job's ask never
+     * reaches the stream at all, and an app that was closed when the ask was
+     * raised never saw one either. This endpoint is agent-agnostic: every open
+     * ask carries its own agent_id, so one poll covers the whole external roster.
+     */
+
+    suspend fun fetchPendingAsks(config: AppConfig): List<PendingAsk> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/agents/asks")?.let { json.decodeFromString<List<PendingAsk>>(it) }
+        }.getOrNull() ?: emptyList()
+    }
+
+    /** Send the owner's decision down to the peer. A 404 means the ask is
+     *  gone — expired, already answered, or its agent disconnected — and is NOT
+     *  a retry condition: the peer runs its own countdown and has already denied
+     *  locally, so the operation did not happen either way. */
+    suspend fun answerAsk(
+        config: AppConfig,
+        askId: String,
+        approved: Boolean,
+        remember: Boolean = false,
+        note: String = "",
+    ): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = buildJsonObject { put("approved", approved); put("remember", remember); put("note", note) }
+            postJson(config, "/agents/asks/${java.net.URLEncoder.encode(askId, "UTF-8")}", body) != null
+        }.getOrDefault(false)
+    }
+
     // ── Online external peers (the Forge link) ───────────────────────────────────
 
     suspend fun fetchOnlineAgents(config: AppConfig): List<OnlineAgent> = withContext(Dispatchers.IO) {
@@ -696,6 +731,21 @@ class IgorApi(
             postJson(config, "/agents/models", body)?.let { json.decodeFromString<List<AgentModelInfo>>(it) }
         }.getOrNull() ?: emptyList()
     }
+
+    /** A SECOND pin per agent, for turns that arrive over Telegram (POST
+     *  /agents/telegram-models). Separate from the app pin on purpose: a phone
+     *  reply is short and usually cheap, and pinning the interactive core for it
+     *  would spend the interactive rate on every "ok". Read side is the same
+     *  [fetchAgentModels] list — [AgentModelInfo.telegramOverride] carries it. */
+    suspend fun pinTelegramModel(config: AppConfig, agentId: String, model: String?): List<AgentModelInfo> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body = buildJsonObject { put("agent_id", agentId); put("model", model) }
+                postJson(config, "/agents/telegram-models", body)?.let {
+                    json.decodeFromString<List<AgentModelInfo>>(it)
+                }
+            }.getOrNull() ?: emptyList()
+        }
 
     // ── Legion worker model routing (GET/POST /agents/legion-models) ─────────────
 
@@ -888,6 +938,141 @@ class IgorApi(
             json.parseToJsonElement(body).jsonObject["outstanding"]
                 ?.jsonPrimitive?.booleanOrNull ?: false
         }.getOrDefault(false)
+    }
+
+    /* ── Custom MCP servers (GET/POST/DELETE /connections/mcp) ──────────────
+     * A Tier-2 capability the owner wires up without a code change: a server is
+     * a command or a URL plus credentials, so adding one needs no build here.
+     */
+
+    suspend fun getCustomMcpServers(config: AppConfig): CustomMcpResult = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/connections/mcp")?.let { json.decodeFromString<CustomMcpResult>(it) }
+        }.getOrNull() ?: CustomMcpResult()
+    }
+
+    /** Register or update one server. A masked credential value sent back
+     *  UNCHANGED means "keep the stored secret" — that is what lets the owner
+     *  fix a note or a header without retyping a token they can no longer read. */
+    suspend fun saveCustomMcpServer(
+        config: AppConfig,
+        name: String,
+        transport: String,
+        command: String,
+        url: String,
+        env: Map<String, String>,
+        headers: Map<String, String>,
+        enabled: Boolean,
+        note: String,
+    ): McpSaveResult = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = buildJsonObject {
+                put("name", name)
+                put("transport", transport)
+                put("command", command)
+                put("url", url)
+                put("env", buildJsonObject { env.forEach { (k, v) -> put(k, v) } })
+                put("headers", buildJsonObject { headers.forEach { (k, v) -> put(k, v) } })
+                put("enabled", enabled)
+                put("note", note)
+            }
+            postJson(config, "/connections/mcp", body)?.let { json.decodeFromString<McpSaveResult>(it) }
+        }.getOrNull() ?: McpSaveResult(error = "request failed")
+    }
+
+    suspend fun deleteCustomMcpServer(config: AppConfig, name: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { deleteRequest(config, "/connections/mcp/${java.net.URLEncoder.encode(name, "UTF-8")}") != null }
+            .getOrDefault(false)
+    }
+
+    /* ── Web portals (GET/POST/DELETE /connections/portals) ─────────────────
+     * A portal is an ACCOUNT, not a scraping target. The browser container
+     * keeps the cookies, this side keeps the credentials, and the two never
+     * swap jobs.
+     */
+
+    suspend fun getPortals(config: AppConfig): PortalsResult = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/connections/portals")?.let { json.decodeFromString<PortalsResult>(it) }
+        }.getOrNull() ?: PortalsResult(browser = BrowserStatus(status = "down", reason = "unreachable"))
+    }
+
+    /** Store a portal, optionally testing the login while doing it. [password]
+     *  travels app to backend to container to page and stops there — it is never
+     *  put in a tool argument and nothing here may ever hand it to a model
+     *  (CLAUDE.md, Security). Send the MASKED value back untouched to keep the
+     *  stored one. */
+    suspend fun savePortal(
+        config: AppConfig,
+        name: String,
+        label: String,
+        loginUrl: String,
+        homeUrl: String,
+        username: String,
+        password: String,
+        note: String,
+        enabled: Boolean,
+        allowedAgents: List<String>,
+        test: Boolean,
+    ): PortalActionResult = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = buildJsonObject {
+                put("name", name)
+                put("label", label)
+                put("login_url", loginUrl)
+                put("home_url", homeUrl)
+                put("username", username)
+                put("password", password)
+                put("note", note)
+                put("enabled", enabled)
+                put("allowed_agents", buildJsonArray { allowedAgents.forEach { add(it) } })
+                put("test", test)
+            }
+            postJson(config, "/connections/portals", body)?.let { json.decodeFromString<PortalActionResult>(it) }
+        }.getOrNull() ?: PortalActionResult(error = "request failed")
+    }
+
+    /** Sign in now, by portal NAME. Minutes are possible — the container renders
+     *  a real page — so the caller holds its button disabled throughout. */
+    suspend fun portalLogin(config: AppConfig, name: String): PortalActionResult = withContext(Dispatchers.IO) {
+        runCatching {
+            postEmpty(config, "/connections/portals/${java.net.URLEncoder.encode(name, "UTF-8")}/login")?.let {
+                json.decodeFromString<PortalActionResult>(it)
+            }
+        }.getOrNull() ?: PortalActionResult(error = "request failed")
+    }
+
+    /** Drop the container's cookies for this portal, keeping the account: the
+     *  credentials stay, only the session goes. */
+    suspend fun portalForget(config: AppConfig, name: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            postEmpty(config, "/connections/portals/${java.net.URLEncoder.encode(name, "UTF-8")}/forget") != null
+        }.getOrDefault(false)
+    }
+
+    suspend fun deletePortal(config: AppConfig, name: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { deleteRequest(config, "/connections/portals/${java.net.URLEncoder.encode(name, "UTF-8")}") != null }
+            .getOrDefault(false)
+    }
+
+    /* ── Memory record health (GET /admin/memory/status, /memory/folders) ──── */
+
+    /** Where the observation record stands. No model call, so it is cheap
+     *  enough to read whenever the screen showing it is open. */
+    suspend fun memoryStatus(config: AppConfig): MemoryStatus? = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/admin/memory/status")?.let { json.decodeFromString<MemoryStatus>(it) }
+        }.getOrNull()
+    }
+
+    /** Folders the store DECLARES, including ones holding no file yet — a folder
+     *  with no files does not exist in the files table at all, so without this
+     *  the knowledge bank cannot show where a thing WILL go before something has
+     *  gone there. */
+    suspend fun fetchMemoryFolders(config: AppConfig): List<MemoryFolderInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/memory/folders")?.let { json.decodeFromString<List<MemoryFolderInfo>>(it) }
+        }.getOrNull() ?: emptyList()
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────

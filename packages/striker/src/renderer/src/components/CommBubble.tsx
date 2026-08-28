@@ -35,7 +35,7 @@ export function Avatar({ id, size = 26 }: { id: string; size?: number }) {
   const c = agentColor(id)
   // The agent's own mark, bare — it fills the box with no ring or plate around
   // it. Below ~28px the glass finish's bloom swallows the geometry, so small
-  // chips get the flat cut. Agents with no art yet (orion, warroom, all) fall
+  // chips get the flat cut. Agents with no art yet (warroom, all) fall
   // back to the initial, which does need a ring to read as an avatar.
   if (hasMark(id)) {
     return (

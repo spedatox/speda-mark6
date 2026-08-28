@@ -34,33 +34,24 @@ function LiveElapsed({ since }: { since: string }) {
 
 
 /**
- * Stand-in geometry for the two ids with no wordmark art: Orion (an orbit —
- * the custodian circling the system) and the war room / all-hands channel (the
- * roster converging on a point, the same figure the deck's rail uses).
+ * Stand-in geometry for the war room / all-hands channel — the only id left
+ * with no wordmark art (the roster converging on a point, the same figure
+ * the deck's rail uses).
  *
- * These are MARKS, not letters. Two-letter placeholder tiles were tried and
+ * This is a MARK, not a letter. Two-letter placeholder tiles were tried and
  * rejected by the owner: a roster of "SP / CT / AT / NC" reads like a spreadsheet
  * of initials, and the whole point of the agent identities is that you know them
  * by their sigil.
  */
-function FallbackGlyph({ id, size }: { id: string; size: number }) {
+function FallbackGlyph({ size }: { size: number }) {
   const s = Math.round(size * 0.62)
-  if (id === 'warroom' || id === 'all') {
-    return (
-      <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-        <circle cx="12" cy="12" r="3" />
-        <circle cx="12" cy="3.5" r="1.6" /><circle cx="19.5" cy="16.5" r="1.6" /><circle cx="4.5" cy="16.5" r="1.6" />
-        <line x1="12" y1="5.1" x2="12" y2="9" />
-        <line x1="18.1" y1="15.6" x2="14.6" y2="13.5" />
-        <line x1="5.9" y1="15.6" x2="9.4" y2="13.5" />
-      </svg>
-    )
-  }
-  // Orion — an orbit around a core.
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" />
-      <ellipse cx="12" cy="12" rx="9.5" ry="5" transform="rotate(-28 12 12)" />
+      <circle cx="12" cy="12" r="3" />
+      <circle cx="12" cy="3.5" r="1.6" /><circle cx="19.5" cy="16.5" r="1.6" /><circle cx="4.5" cy="16.5" r="1.6" />
+      <line x1="12" y1="5.1" x2="12" y2="9" />
+      <line x1="18.1" y1="15.6" x2="14.6" y2="13.5" />
+      <line x1="5.9" y1="15.6" x2="9.4" y2="13.5" />
     </svg>
   )
 }
@@ -84,7 +75,7 @@ export function Avatar({ id, size = 26 }: { id: string; size?: number }) {
       border: `1px solid ${c}52`,
       color: c,
     }}>
-      <FallbackGlyph id={id} size={size} />
+      <FallbackGlyph size={size} />
     </span>
   )
 }

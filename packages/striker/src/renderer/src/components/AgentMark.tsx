@@ -10,7 +10,7 @@
  *            specular bloom, lit rim, accent glow. Use at 24px and up.
  *   etched — hairline outline only. Use on top of an already-lit surface.
  *
- * Agents with no art (orion, warroom) fall back to a monogram in the same box,
+ * Agents with no art (warroom) fall back to a monogram in the same box,
  * so callers never have to branch on which marks exist.
  */
 import { useId } from 'react'
@@ -39,6 +39,9 @@ export default function AgentMark({
   const uid = useId().replace(/[:]/g, '')
   const d = AGENT_MARKS[agentId]
   const accent = color ?? agentColor(agentId)
+  // Optimus's mark is the real Autobot-shield vector art, exported with
+  // fill-rule="evenodd" — its subpaths aren't wound for the nonzero default.
+  const fillRule = agentId === 'optimus' ? 'evenodd' as const : undefined
   const a11y = title
     ? { role: 'img' as const, 'aria-label': title }
     : { 'aria-hidden': true as const, focusable: 'false' as const }
@@ -64,7 +67,7 @@ export default function AgentMark({
       <svg viewBox="0 0 100 100" width={size} height={size} fill="currentColor"
            className={className} style={style} {...a11y}>
         {title && <title>{title}</title>}
-        <path d={d} />
+        <path d={d} fillRule={fillRule} />
       </svg>
     )
   }
@@ -85,7 +88,7 @@ export default function AgentMark({
          className={className} style={style} {...a11y}>
       {title && <title>{title}</title>}
       <defs>
-        <clipPath id={`${uid}-clip`}><path d={d} /></clipPath>
+        <clipPath id={`${uid}-clip`}><path d={d} fillRule={fillRule} /></clipPath>
         <linearGradient id={`${uid}-sheen`} x1="0.08" y1="0" x2="0.62" y2="1">
           <stop offset="0" stopColor="#fff" stopOpacity={0.62} />
           <stop offset="0.42" stopColor="#fff" stopOpacity={0.1} />
@@ -103,13 +106,17 @@ export default function AgentMark({
         </filter>
       </defs>
       <g filter={`url(#${uid}-lift)`}>
-        <path d={d} fill={accent} fillOpacity={0.92} />
+        <path d={d} fill={accent} fillOpacity={0.92} fillRule={fillRule} />
         <g clipPath={`url(#${uid}-clip)`}>
           <rect width="100" height="100" fill={`url(#${uid}-sheen)`} />
           <rect width="100" height="100" fill={`url(#${uid}-bloom)`} />
         </g>
-        <path d={d} fill="none" stroke="#fff" strokeOpacity={0.38}
-              strokeWidth={0.9} strokeLinejoin="round" />
+        {/* Optimus's trace carries far more subpaths than the abstract marks —
+            stroking every one of them turns the lit rim into contour clutter. */}
+        {agentId !== 'optimus' && (
+          <path d={d} fill="none" stroke="#fff" strokeOpacity={0.38}
+                strokeWidth={0.9} strokeLinejoin="round" />
+        )}
       </g>
     </svg>
   )

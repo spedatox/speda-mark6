@@ -99,6 +99,33 @@ def is_canonical(path: str) -> bool:
     return collection_for(path) is not None
 
 
+def is_removable(path: str) -> bool:
+    """Whether `delete` may remove this path.
+
+    Not the inverse of `is_canonical` — that function answers "is this a
+    legitimate place to WRITE", and for an open entity collection the answer is
+    yes for both a brand-new member and every existing one, which is exactly
+    why `is_canonical` can't also gate deletion.
+
+    The fixed set (`CANONICAL_FILES`) and a CLOSED collection's declared
+    members are closed in both directions, per `is_canonical`'s own docstring:
+    remove one and the routing tree points at a file that no longer exists.
+    An OPEN entity collection (`projects/`, `social/`) is the opposite case —
+    its members are slugged from whatever the owner called the thing this
+    week, so two spellings of one project or one person genuinely produce two
+    files for the same entity. Merging those and deleting the stray is the
+    tail of Orion's dedup pass, and the whole reason `delete` exists.
+    """
+    if path in CANONICAL_FILES:
+        return False
+    from app.services.memory_spec import collection_for
+
+    coll = collection_for(path)
+    if coll is None:
+        return True
+    return not coll.closed
+
+
 def is_system_path(path: str) -> bool:
     return path.startswith(AUDIT_ROOT) or "/." in path
 

@@ -97,11 +97,11 @@ class AgentMarksTest {
         }
     }
 
-    /** Orion has no art yet — has() must say so rather than throwing. */
+    /** Warroom has no art yet — has() must say so rather than throwing. */
     @Test
     fun agentsWithoutArtReportFalse() {
-        assertFalse(AgentMarks.has("orion"))
         assertFalse(AgentMarks.has("warroom"))
         assertTrue(AgentMarks.has("speda"))
+        assertTrue(AgentMarks.has("orion"))
     }
 }

@@ -85,6 +85,27 @@ object MessageJson {
         )
     }
 
+    /**
+     * A `permission_request` SSE payload — a peer's safety gate stopped an
+     * irreversible operation and is waiting on the owner. Returns null on
+     * anything with no ask_id: a card with nothing to answer for is not a card.
+     */
+    fun permissionAskFrom(e: JsonElement): PendingAsk? {
+        val o = e as? JsonObject ?: return null
+        val askId = o["ask_id"].asStringOrNull().orEmpty()
+        if (askId.isEmpty()) return null
+        return PendingAsk(
+            askId = askId,
+            agentId = o["agent_id"].asStringOrNull().orEmpty(),
+            tool = o["tool"].asStringOrNull().orEmpty(),
+            actionKey = o["action_key"].asStringOrNull().orEmpty(),
+            reason = o["reason"].asStringOrNull().orEmpty(),
+            jobId = o["job_id"].asStringOrNull().orEmpty(),
+            chatId = o["chat_id"].asStringOrNull(),
+            secondsLeft = (o["seconds_left"] as? JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.0,
+        )
+    }
+
     /** Parse a single tool/file from an SSE `data` element (tool / file events). */
     fun toolFrom(e: JsonElement): ToolBadge? = (e as? JsonObject)?.let(::parseTool)
     fun fileFrom(e: JsonElement): FileMeta? = (e as? JsonObject)?.let(::parseFile)
