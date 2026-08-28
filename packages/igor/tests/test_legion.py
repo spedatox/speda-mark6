@@ -361,6 +361,71 @@ def test_report_seed_forbids_redoing_the_work():
     assert trigger_meta(payload, "push")["source"] == "legion"
 
 
+# ── Live progress events (the Legion panel) ──────────────────────────────────
+#
+# _loop must emit started → tool* → tool_result* → finished, all keyed by the
+# same run id, so the frontend's SUBAGENT reducer (or a background ticket's
+# LegionRunRegistry) can fold them into one live SubagentRun.
+
+async def test_inline_worker_emits_progress_events(registry, monkeypatch):
+    from app.core import runtime_state
+    monkeypatch.setattr(runtime_state, "get_budget_mode", lambda: False)
+
+    calls = {"n": 0}
+
+    class _Client:
+        async def create_message(self, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return SimpleNamespace(
+                    content=[SimpleNamespace(type="tool_use", id="tu1", name="search_thing", input={"q": "x"})],
+                    stop_reason="tool_use", usage=None,
+                )
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="done")],
+                stop_reason="end_turn", usage=None,
+            )
+
+    runner = LegionRunner(_Client(), registry, None)
+    events: list[dict] = []
+    out = await runner.run_worker(
+        {"description": "d", "prompt": "p"}, _ctx(),
+        tool_call_id="blockA", emit=events.append,
+    )
+
+    assert out == "done"
+    phases = [e["phase"] for e in events]
+    assert phases == ["started", "tool", "tool_result", "finished"]
+    assert all(e["id"] == "blockA" for e in events)
+    assert all(e["source"] == "legion" for e in events)
+    assert events[0]["prompt"] == "p"
+    assert events[1]["tool"] == "search_thing"
+    assert events[-1]["ok"] is True
+    assert events[-1]["report"] == "done"
+
+
+async def test_emit_failure_never_breaks_the_worker(registry, monkeypatch):
+    """A UI-progress callback is best-effort telemetry — a bug in it must not
+    take down the worker it's merely watching."""
+    from app.core import runtime_state
+    monkeypatch.setattr(runtime_state, "get_budget_mode", lambda: False)
+
+    class _Client:
+        async def create_message(self, **kw):
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="fine")],
+                stop_reason="end_turn", usage=None,
+            )
+
+    runner = LegionRunner(_Client(), registry, None)
+
+    def _boom(_event):
+        raise RuntimeError("frontend callback bug")
+
+    out = await runner.run_worker({"description": "d", "prompt": "p"}, _ctx(), emit=_boom)
+    assert out == "fine"
+
+
 def test_failed_report_seed_forbids_inventing_a_result():
     from app.core.trigger_runner import build_seed
 

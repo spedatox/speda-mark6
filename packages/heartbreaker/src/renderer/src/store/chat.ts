@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { ChatMessage, Session, AppConfig } from '../lib/types'
+import { foldLegionEvent } from '../lib/subagentFold'
 
 export interface TokenUsage {
   input: number
@@ -169,12 +170,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SUBAGENT': {
       // One reducer case for every phase, because they all fold into the same
       // run keyed by id — several delegations can be in flight at once and
-      // their frames interleave.
-      const e = action.payload.event as {
-        id: string; agent?: string; label?: string; phase?: string
-        prompt?: string; text?: string; tool?: string; input?: unknown
-        result?: string; report?: string; ok?: boolean
-      }
+      // their frames interleave. The actual fold is shared with the Legion
+      // tray's standalone (message-less) background-run tracking — see
+      // lib/subagentFold.ts.
+      const e = action.payload.event as { id?: string }
       if (!e?.id) return state
       return {
         ...state,
@@ -182,34 +181,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (m.id !== action.payload.id) return m
           const runs = m.subagents ?? []
           const i = runs.findIndex(r => r.id === e.id)
-          const run: import('../lib/types').SubagentRun = i >= 0
-            ? { ...runs[i], steps: [...runs[i].steps] }
-            : { id: e.id, agent: e.agent ?? '', label: e.label ?? '',
-                running: true, steps: [] }
-
-          if (e.phase === 'started') {
-            run.prompt = e.prompt
-            run.running = true
-          } else if (e.phase === 'text' && e.text) {
-            const last = run.steps[run.steps.length - 1]
-            // Coalesce streamed deltas into one step rather than one per token.
-            if (last?.kind === 'text') last.text = (last.text ?? '') + e.text
-            else run.steps.push({ kind: 'text', text: e.text })
-          } else if (e.phase === 'tool') {
-            run.steps.push({ kind: 'tool', tool: e.tool, input: e.input })
-          } else if (e.phase === 'tool_result') {
-            for (let k = run.steps.length - 1; k >= 0; k--) {
-              if (run.steps[k].kind === 'tool' && run.steps[k].result === undefined) {
-                run.steps[k] = { ...run.steps[k], result: e.result }
-                break
-              }
-            }
-          } else if (e.phase === 'finished') {
-            run.running = false
-            run.ok = e.ok !== false
-            run.report = e.report
-          }
-
+          const run = foldLegionEvent(i >= 0 ? runs[i] : null, action.payload.event)
           const next = i >= 0 ? runs.map((r, k) => (k === i ? run : r)) : [...runs, run]
           return { ...m, subagents: next }
         }),

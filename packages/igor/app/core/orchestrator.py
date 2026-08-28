@@ -36,12 +36,18 @@ def _carries_image(history: list[dict]) -> bool:
     return False
 
 
-async def _timed(tool_name: str, args: dict, context: AgentContext, registry: CapabilityRegistry):
+async def _timed(
+    tool_name: str, args: dict, context: AgentContext, registry: CapabilityRegistry,
+    *, tool_call_id: str | None = None, emit=None,
+):
     """Run one tool call and report how long it took, for the tool_calls audit
     row — `asyncio.gather` alone loses this once several calls run concurrently
-    and finish at different times."""
+    and finish at different times.
+
+    `tool_call_id`/`emit` are Legion-only passthroughs (see
+    `CapabilityRegistry.execute`) — inert for every other tool."""
     start = time.monotonic()
-    result = await registry.execute(tool_name, args, context)
+    result = await registry.execute(tool_name, args, context, tool_call_id=tool_call_id, emit=emit)
     return result, int((time.monotonic() - start) * 1000)
 
 
@@ -608,12 +614,45 @@ class AgentOrchestrator:
                     )
 
                 # 2. Execute all tools in parallel, each timed individually for
-                #    the tool_calls audit row persisted below.
+                #    the tool_calls audit row persisted below. A Legion (`Task`)
+                #    call among them can run for minutes; `emit_queue` lets it
+                #    push live progress out as SUBAGENT events WHILE the batch
+                #    is still in flight, instead of the whole generator sitting
+                #    silent until every tool in the batch has returned.
+                emit_queue: asyncio.Queue = asyncio.Queue()
                 exec_tasks = [
-                    _timed(block.name, block.input, context, self._registry)
+                    asyncio.create_task(_timed(
+                        block.name, block.input, context, self._registry,
+                        tool_call_id=block.id, emit=emit_queue.put_nowait,
+                    ))
                     for block in tool_use_blocks
                 ]
-                timed_results = await asyncio.gather(*exec_tasks)
+                gather_fut = asyncio.gather(*exec_tasks)
+                while not gather_fut.done():
+                    get_fut = asyncio.ensure_future(emit_queue.get())
+                    done, _pending = await asyncio.wait(
+                        {gather_fut, get_fut}, return_when=asyncio.FIRST_COMPLETED
+                    )
+                    if get_fut in done:
+                        yield SSEEvent(
+                            type=SSEEventType.SUBAGENT,
+                            data=get_fut.result(),
+                            session_id=context.session_id,
+                            request_id=context.request_id,
+                        )
+                    else:
+                        get_fut.cancel()
+                # Drain anything a legionnaire pushed after the batch settled
+                # but before this loop got a chance to pick it up (e.g. its
+                # own "finished" event, emitted right as it returns).
+                while not emit_queue.empty():
+                    yield SSEEvent(
+                        type=SSEEventType.SUBAGENT,
+                        data=emit_queue.get_nowait(),
+                        session_id=context.session_id,
+                        request_id=context.request_id,
+                    )
+                timed_results = gather_fut.result()
                 results = [r for r, _ in timed_results]
 
                 # 2b. Emit each tool's RESULT (truncated) so the UI can show what

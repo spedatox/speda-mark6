@@ -17,9 +17,11 @@ request context, never the request-scoped db session.
 import asyncio
 import logging
 import time
+import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from app.legion.run_registry import LegionRunRegistry
 from app.legion.roster import (
     DEFAULT_LEGIONNAIRE,
     LEGION_ROSTER,
@@ -55,6 +57,9 @@ class LegionRunner:
         # Set late in the lifespan (see set_report_hook): the orchestrator and
         # turn registry it closes over do not exist yet at Tier-0 registration.
         self._report_hook = None
+        # Live progress for BACKGROUND legionnaires only — inline runs ride
+        # the parent turn's own SSE stream and TurnRegistry buffer for free.
+        self.runs = LegionRunRegistry()
 
     def set_report_hook(self, hook) -> None:
         """Install the callback a finished BACKGROUND worker fires to report in.
@@ -68,7 +73,10 @@ class LegionRunner:
 
     # ── Entry point (called by registry.execute for tool "Task") ─────────────
 
-    async def run_worker(self, args: dict, context: "AgentContext") -> str:
+    async def run_worker(
+        self, args: dict, context: "AgentContext", *,
+        tool_call_id: str | None = None, emit=None,
+    ) -> str:
         if self._client is None:
             logger.error("legion_no_client", extra={"request_id": context.request_id})
             return "The Legion is unavailable: LLMClient was not injected into the registry."
@@ -98,10 +106,17 @@ class LegionRunner:
                 description=description, prompt=prompt, context=context,
             )
 
+        # The run id a live panel keys on is the tool_use block's own id when
+        # available (the orchestrator always has one) — that makes the
+        # frontend's ToolBadge → SubagentRun correlation a plain lookup with
+        # no separate id scheme. Only synthetic callers without one (tests,
+        # a worker's own nested tool calls never reach here) need the fallback.
+        run_id = tool_call_id or f"legion-{uuid.uuid4().hex[:10]}"
         return await self._loop(
             worker=worker, model=model, tools=tools,
             description=description, prompt=prompt,
             request_id=context.request_id, context=context,
+            run_id=run_id, emit=emit,
         )
 
     def _resolve_profile(self, agent_id: str):
@@ -181,6 +196,17 @@ class LegionRunner:
 
     # ── The worker loop ───────────────────────────────────────────────────────
 
+    @staticmethod
+    def _safe_emit(emit, event: dict) -> None:
+        """Push one progress event to the live panel. Best-effort: a UI-side
+        callback must never break a worker over telemetry it doesn't need."""
+        if emit is None:
+            return
+        try:
+            emit(event)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("legion_emit_failed", extra={"error": str(e)})
+
     async def _loop(
         self,
         *,
@@ -191,10 +217,16 @@ class LegionRunner:
         prompt: str,
         request_id: str,
         context: "AgentContext",
+        run_id: str | None = None,
+        emit=None,
     ) -> str:
         from app.services.llm_client import blocks_to_dicts
 
         started = time.monotonic()
+        self._safe_emit(emit, {
+            "id": run_id, "agent": worker.worker_id, "label": description,
+            "phase": "started", "prompt": prompt, "source": "legion",
+        })
         logger.info(
             "legion_worker_start",
             extra={
@@ -237,14 +269,20 @@ class LegionRunner:
                 )
                 partial = "\n".join(s for s in salvage if s.strip())
                 if partial:
-                    return (
+                    guard_result = (
                         f"[PARTIAL — iteration cap ({worker.max_iterations}) reached; "
                         f"findings gathered so far:]\n{partial}"[:MAX_WORKER_RESULT_CHARS]
                     )
-                return (
-                    f"Legion safety guard triggered after {iterations} tool iterations "
-                    "with no salvageable output. Task incomplete."
-                )
+                else:
+                    guard_result = (
+                        f"Legion safety guard triggered after {iterations} tool iterations "
+                        "with no salvageable output. Task incomplete."
+                    )
+                self._safe_emit(emit, {
+                    "id": run_id, "phase": "finished", "ok": bool(partial),
+                    "report": guard_result, "source": "legion",
+                })
+                return guard_result
 
             response = await self._client.create_message(
                 model=model,
@@ -299,6 +337,10 @@ class LegionRunner:
                         "output": spend["output"],
                     },
                 )
+                self._safe_emit(emit, {
+                    "id": run_id, "phase": "finished", "ok": True,
+                    "report": result, "source": "legion",
+                })
                 return result
 
             if stop_reason == "tool_use":
@@ -315,6 +357,10 @@ class LegionRunner:
                             "tool_id": block.id,
                         },
                     )
+                    self._safe_emit(emit, {
+                        "id": run_id, "phase": "tool", "tool": block.name,
+                        "input": block.input, "source": "legion",
+                    })
 
                 # Execute all tools in parallel (research skills are read-only
                 # annotated — Rule 9 makes this safe).
@@ -323,6 +369,12 @@ class LegionRunner:
                     for block in tool_use_blocks
                 ]
                 results = await asyncio.gather(*exec_tasks)
+                for res in results:
+                    preview = res if isinstance(res, str) else str(res)
+                    self._safe_emit(emit, {
+                        "id": run_id, "phase": "tool_result",
+                        "result": preview[:1500], "source": "legion",
+                    })
 
                 tool_results = [
                     {
@@ -348,7 +400,12 @@ class LegionRunner:
                         "stop_reason": stop_reason,
                     },
                 )
-                return f"Worker stopped unexpectedly (reason: {stop_reason})."
+                unknown_result = f"Worker stopped unexpectedly (reason: {stop_reason})."
+                self._safe_emit(emit, {
+                    "id": run_id, "phase": "finished", "ok": False,
+                    "report": unknown_result, "source": "legion",
+                })
+                return unknown_result
 
     # ── Background mode ───────────────────────────────────────────────────────
 
@@ -385,6 +442,12 @@ class LegionRunner:
             origin_session_id=room_session_id,
         )
         bg_context = _detached_context(context)
+        if msg_id is not None:
+            self.runs.register(
+                msg_id, agent=worker.worker_id, label=description,
+                room_session_id=room_session_id,
+            )
+        bg_emit = (lambda ev: self.runs.emit(msg_id, ev)) if msg_id is not None else None
 
         async def _run_and_finish() -> None:
             started = time.monotonic()
@@ -393,6 +456,7 @@ class LegionRunner:
                     worker=worker, model=model, tools=tools,
                     description=description, prompt=prompt,
                     request_id=context.request_id, context=bg_context,
+                    run_id=f"legion-bg-{msg_id}", emit=bg_emit,
                 )
                 status = "ok"
             except asyncio.CancelledError:
@@ -404,6 +468,8 @@ class LegionRunner:
                     result="Cancelled — the backend shut down while this worker was running.",
                     duration_ms=int((time.monotonic() - started) * 1000),
                 )
+                if msg_id is not None:
+                    self.runs.finish(msg_id, ok=False)
                 raise
             except Exception as e:  # noqa: BLE001
                 result = f"Background worker failed: {e}"
@@ -430,6 +496,8 @@ class LegionRunner:
                 msg_id, status=status, result=result,
                 duration_ms=int((time.monotonic() - started) * 1000),
             )
+            if msg_id is not None:
+                self.runs.finish(msg_id, ok=(status == "ok"))
 
             # Report in. The ticket is written FIRST so the result is durable
             # even if the reporting turn cannot start (registry at capacity,

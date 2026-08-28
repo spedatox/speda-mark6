@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchAgentComms, getHouseParty, setHouseParty } from '../lib/api'
-import type { AgentCommEntry } from '../lib/api'
-import type { AppConfig } from '../lib/types'
+import { fetchAgentComms, getHouseParty, setHouseParty, fetchActiveLegionRuns, attachLegionStream } from '../lib/api'
+import type { AgentCommEntry, ActiveLegionRun } from '../lib/api'
+import type { AppConfig, SubagentRun } from '../lib/types'
+import { foldLegionEvent } from '../lib/subagentFold'
 import { useIsMobile } from '../lib/useIsMobile'
 import { CommFeed, AvatarStack } from './CommBubble'
+import SubagentDetailView from './SubagentDetailView'
 import { SkeletonList } from './Skeleton'
 import { useT } from '../lib/i18n'
 
@@ -28,9 +30,12 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
   const [wide, setWide] = useState(false)
   const [party, setParty] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [legionRuns, setLegionRuns] = useState<ActiveLegionRun[]>([])
+  const [openRun, setOpenRun] = useState<SubagentRun | null>(null)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const feedRef = useRef<HTMLDivElement>(null)
   const pinnedToEnd = useRef(true)  // follow the newest bubble unless the user scrolled up
+  const attachAbort = useRef<AbortController | null>(null)
 
   useEffect(() => {
     const load = () => {
@@ -39,12 +44,38 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
         .then(rows => setEntries(rows.slice().reverse()))
         // Always clear — an unreachable backend must not skeleton this forever.
         .finally(() => setLoaded(true))
+      fetchActiveLegionRuns(config).then(setLegionRuns)
     }
     load()
     getHouseParty(config).then(setParty)
     timer.current = setInterval(load, POLL_MS)
-    return () => { if (timer.current) clearInterval(timer.current) }
+    return () => {
+      if (timer.current) clearInterval(timer.current)
+      attachAbort.current?.abort()
+    }
   }, [config])
+
+  // A background legionnaire has no message of its own to hang its live
+  // transcript on (it outlives the turn that deployed it) — so clicking its
+  // row here opens the same SubagentDetailView fed by its own independent
+  // SSE connection instead of message.subagents.
+  const openLegionRun = (run: ActiveLegionRun) => {
+    attachAbort.current?.abort()
+    const ctrl = new AbortController()
+    attachAbort.current = ctrl
+    setOpenRun({ id: `legion-bg-${run.ticket}`, agent: run.agent, label: run.label, running: true, steps: [], source: 'legion' })
+    ;(async () => {
+      for await (const event of attachLegionStream(config, run.ticket, ctrl.signal)) {
+        setOpenRun(prev => foldLegionEvent(prev, event))
+      }
+    })().catch(() => { /* aborted or dropped connection — the tray row still reflects /legion/active */ })
+  }
+
+  const closeLegionRun = () => {
+    attachAbort.current?.abort()
+    attachAbort.current = null
+    setOpenRun(null)
+  }
 
   useEffect(() => {
     // Esc retracts the extended tray first; a second Esc closes it.
@@ -133,6 +164,50 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
           </svg>
         </button>
       </header>
+
+      {/* Background legionnaires currently deployed — none of these own a
+          message of their own (they outlive the turn that dispatched them),
+          so this row is their only entry point into the live detail view. */}
+      {legionRuns.length > 0 && (
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: 4,
+          padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          <span style={{
+            fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase',
+            color: 'var(--hb-cyan)',
+          }}>
+            {t.commsTray.legionRunning(legionRuns.length)}
+          </span>
+          {legionRuns.map(run => (
+            <button
+              key={run.ticket}
+              onClick={() => openLegionRun(run)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                background: 'transparent', border: 'none', padding: '2px 0',
+                cursor: 'pointer', textAlign: 'left', fontSize: '0.8125rem',
+                color: 'var(--hb-text-dim)',
+              }}
+            >
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                background: 'var(--hb-cyan)', boxShadow: '0 0 6px var(--hb-cyan)',
+                animation: 'pulse 1.2s ease infinite',
+              }} />
+              <span style={{ color: 'var(--hb-text)', flexShrink: 0 }}>{run.agent}</span>
+              <span style={{
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+              }}>{run.label}</span>
+              <span style={{ marginLeft: 'auto', color: 'var(--hb-text-faint)', flexShrink: 0 }}>
+                #{run.ticket}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {openRun && <SubagentDetailView run={openRun} onClose={closeLegionRun} />}
 
       <div
         ref={feedRef}

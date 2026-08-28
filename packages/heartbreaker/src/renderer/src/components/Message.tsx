@@ -153,6 +153,7 @@ function toolSummary(tool: ToolBadge, t: Dict, running: boolean): { verb: string
     case 'graph_query':    return { verb: running ? t.message.verbSearchingGraph : t.message.verbSearchedGraph, target: str('question') }
     case 'graph_path':     return { verb: running ? t.message.verbTracingGraph : t.message.verbTracedGraph }
     case 'graph_overview': return { verb: running ? t.message.verbMappingGraph : t.message.verbMappedGraph }
+    case 'Task':           return { verb: running ? t.message.verbDeploying : t.message.verbDeployed, target: str('description') || str('legionnaire') }
     default: {
       const friendly = tool.name.replace(/_/g, ' ').replace(/-/g, ' ')
       if (isSearchTool(tool.name)) return { verb: running ? t.message.verbSearching : t.message.verbSearched, target: str('query') || str('question') }
@@ -247,7 +248,14 @@ function CommandBlock({ command, result }: { command?: string; result?: string }
 }
 
 // One row in the feed: always-visible summary; click to expand diff/output/detail.
-function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
+// A `Task` (Legion) row is the one exception: instead of toggling an inline
+// expand, it opens the same live SubagentDetailView a coding peer's own
+// delegation uses — the run's `id` IS the tool_use block's own id, so the
+// correlation is a plain lookup (see app/legion/runner.py's `run_id`).
+function ToolRow({ tool, live, subagents, onSelectSubagent }: {
+  tool: ToolBadge; live: boolean
+  subagents?: SubagentRun[]; onSelectSubagent?: (run: SubagentRun) => void
+}) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const inp = (tool.input && typeof tool.input === 'object')
@@ -259,6 +267,11 @@ function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
     || (tool.name === 'system_ops' && action !== 'read_file' && action !== 'write_file')
   const hasDetail = isEdit || isWrite || isCmd || !!tool.result || Object.keys(inp).length > 0
 
+  const legionRun = tool.name === 'Task' ? subagents?.find(r => r.id === tool.id) : undefined
+  const handleClick = legionRun && onSelectSubagent
+    ? () => onSelectSubagent(legionRun)
+    : () => hasDetail && setOpen(v => !v)
+
   const state = stepState(tool, live)
   const { verb, target } = toolSummary(tool, t, state === 'running')
   const shortTarget = target && (target.length > 44 ? target.slice(0, 44) + '…' : target)
@@ -267,7 +280,7 @@ function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       <button
-        onClick={() => hasDetail && setOpen(v => !v)}
+        onClick={handleClick}
         style={{
           display: 'flex', alignItems: 'center', gap: 11, width: '100%',
           background: 'transparent', border: 'none', padding: '8px 0',
@@ -364,7 +377,10 @@ function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
  * reference deck shows one ("5 adım · 14.2 sn") — ToolBadge carries no
  * timestamps, so a duration here would be invented.
  */
-function ToolFeed({ tools, streaming }: { tools: ToolBadge[]; streaming: boolean }) {
+function ToolFeed({ tools, streaming, subagents, onSelectSubagent }: {
+  tools: ToolBadge[]; streaming: boolean
+  subagents?: SubagentRun[]; onSelectSubagent?: (run: SubagentRun) => void
+}) {
   const [open, setOpen] = useState(true)
   if (!tools.length) return null
 
@@ -422,7 +438,7 @@ function ToolFeed({ tools, streaming }: { tools: ToolBadge[]; streaming: boolean
             <div key={t.id} style={{
               borderBottom: i === tools.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.04)',
             }}>
-              <ToolRow tool={t} live={i === liveIdx} />
+              <ToolRow tool={t} live={i === liveIdx} subagents={subagents} onSelectSubagent={onSelectSubagent} />
             </div>
           ))}
         </div>
@@ -1342,7 +1358,8 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
             {segments.map((seg, i) => {
               const isLast = i === segments.length - 1
               if (seg.kind === 'tools') {
-                return <ToolFeed key={`t${i}`} tools={seg.tools} streaming={!!message.isStreaming} />
+                return <ToolFeed key={`t${i}`} tools={seg.tools} streaming={!!message.isStreaming}
+                  subagents={message.subagents} onSelectSubagent={setSelectedSubagent} />
               }
               return (
                 <Fragment key={`x${i}`}>

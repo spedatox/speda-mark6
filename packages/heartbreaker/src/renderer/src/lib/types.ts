@@ -41,6 +41,11 @@ export interface SubagentRun {
   ok?: boolean
   report?: string
   steps: SubagentStep[]
+  /** Which mechanism produced this run — a coding peer's own delegation
+   *  (Optimus/Centurion, forwarded 1:1 from its chat_event frames) or an
+   *  in-process Legion (Task) dispatch. Absent = 'peer', for events emitted
+   *  before this field existed. */
+  source?: 'legion' | 'peer'
 }
 
 export interface ImageBlock {

@@ -121,6 +121,13 @@ class CapabilityRegistry:
         if self._legion is not None:
             self._legion.set_report_hook(hook)
 
+    @property
+    def legion_runs(self):
+        """The Legion's live-run registry (buffer + subscriber queues, keyed
+        by ticket id) — routers read this to list/attach to in-flight
+        background legionnaires. `None` if the Legion was never registered."""
+        return self._legion.runs if self._legion is not None else None
+
     async def legion_shutdown(self) -> None:
         """Cancel in-flight background legionnaires (lifespan teardown)."""
         if self._legion is not None:
@@ -549,7 +556,10 @@ class CapabilityRegistry:
             out.append(s)
         return sorted(out, key=lambda x: x["server"])
 
-    async def execute(self, tool_name: str, args: dict, context: "AgentContext") -> str:
+    async def execute(
+        self, tool_name: str, args: dict, context: "AgentContext", *,
+        tool_call_id: str | None = None, emit=None,
+    ) -> str:
         """Route a tool call to the correct tier handler.
 
         Identical READ-ONLY calls are answered from a per-turn memo. Models
@@ -561,6 +571,11 @@ class CapabilityRegistry:
         (Rule 9's annotation is what makes replay safe), scoped to one turn, and
         dropped wholesale the moment any mutating tool runs, because a write can
         change what a subsequent read should return.
+
+        `tool_call_id`/`emit` are Legion-only passthroughs: the orchestrator's
+        own `block.id` becomes the run id a live legionnaire panel keys on,
+        and `emit` is a synchronous callback for mid-run progress. Both are
+        `None` and inert for every other tool.
         """
         # `extra` is absent on the light stand-in contexts some callers build,
         # so the memo degrades to off rather than making tool execution depend
@@ -586,7 +601,7 @@ class CapabilityRegistry:
             # legionnaire runs in its own context and cannot mutate this one's.
             extra.pop("tool_memo", None)
 
-        result = await self._dispatch(tool_name, args, context)
+        result = await self._dispatch(tool_name, args, context, tool_call_id=tool_call_id, emit=emit)
         # Never memoize a failure: a transient error must not be replayed as
         # this tool's answer for the rest of the turn.
         if memo_key is not None and extra is not None and not result.startswith("Error"):
@@ -616,13 +631,16 @@ class CapabilityRegistry:
         commands = getattr(skill, "memoizable_commands", None)
         return bool(commands) and args.get("command") in commands
 
-    async def _dispatch(self, tool_name: str, args: dict, context: "AgentContext") -> str:
+    async def _dispatch(
+        self, tool_name: str, args: dict, context: "AgentContext", *,
+        tool_call_id: str | None = None, emit=None,
+    ) -> str:
         """Tier routing proper. execute() wraps this with the per-turn memo."""
         try:
             if tool_name == "Task":
                 if self._legion is None:
                     return "The Legion is not registered on this deployment."
-                return await self._legion.run_worker(args, context)
+                return await self._legion.run_worker(args, context, tool_call_id=tool_call_id, emit=emit)
 
             if tool_name in self._skills:
                 skill = self._skills[tool_name]

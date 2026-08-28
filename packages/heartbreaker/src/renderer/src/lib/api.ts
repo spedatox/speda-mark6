@@ -205,6 +205,62 @@ export interface ActiveRun {
   idle_s: number
 }
 
+export interface ActiveLegionRun {
+  ticket: number
+  agent: string
+  label: string
+  room_session_id: number
+  running_s: number
+}
+
+/** Background legionnaires currently running for a session — the ambient
+ *  "N legionnaires running" indicator polls this the same way the reattach
+ *  loop polls fetchActiveRuns for detached chat turns. */
+export async function fetchActiveLegionRuns(config: AppConfig, sessionId?: number): Promise<ActiveLegionRun[]> {
+  try {
+    const q = sessionId != null ? `?session_id=${sessionId}` : ''
+    const res = await fetch(`${config.apiBase}/legion/active${q}`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return res.json()
+  } catch { return [] }
+}
+
+/** Attach to a background legionnaire's live progress: replays whatever it
+ *  has already reported, then tails until it finishes. Each item is the raw
+ *  SUBAGENT-phase event dict (see app/legion/run_registry.py), NOT a full
+ *  SSEEvent — the backend already unwraps it the same way it would for a
+ *  `subagent`-typed streamChat/attachStream event's `.data`. */
+export async function* attachLegionStream(
+  config: AppConfig,
+  ticket: number,
+  signal: AbortSignal,
+): AsyncGenerator<Record<string, unknown>> {
+  const res = await fetch(`${config.apiBase}/legion/attach/${ticket}`, {
+    headers: authHeaders(config),
+    signal,
+  })
+  if (!res.ok || !res.body) return
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const raw = line.slice(6).trim()
+      if (!raw) continue
+      try {
+        const event = JSON.parse(raw) as SSEEvent
+        yield event.data as Record<string, unknown>
+      } catch { /* malformed */ }
+    }
+  }
+}
+
 export interface MemoryFolderInfo {
   path: string
   summary: string
