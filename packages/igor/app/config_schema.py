@@ -289,8 +289,19 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         "Azure Speech powers both halves of voice mode — spoken replies and dictation — "
         "from ONE key. Synthesis bills per character with 0.5M free per month, and markup "
         "is stripped first so only spoken words are billed; recognition bills per audio hour "
-        "with 5 free per month. Leave the key empty to disable voice entirely.",
+        "with 5 free per month. ElevenLabs is a THIRD synthesis engine, spoken-replies-only "
+        "(no dictation) — it is what gives each agent a distinct, non-Azure voice and is what "
+        "an automation's \"reply as voice\" checkbox and Settings → Voices actually speak "
+        "through when an agent is pinned to one of its voices. Leave a key empty to disable "
+        "that engine; the others keep working.",
         [
+            ConfigField("elevenlabs_api_key", "ElevenLabs API Key", "password", secret=True,
+                        requires_restart=_LIVE,
+                        help="From elevenlabs.io → Settings → API Keys. Enables elevenlabs:* "
+                             "voice refs, the real per-account voice catalog in Settings → "
+                             "Voices, and automation voice replies for any agent pinned to an "
+                             "ElevenLabs voice there. Per-agent voice + tuning live in "
+                             "Settings → Voices, not here — this is only the credential."),
             ConfigField("azure_speech_key", "Azure Speech Key", "password", secret=True,
                         requires_restart=_LIVE,
                         help="From the Azure Speech resource. Must match the region below."),
