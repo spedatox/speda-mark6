@@ -677,6 +677,8 @@ const tr: Dict = {
     checkEvery: 'Kontrol sıklığı (dakika)',
     checkEveryHint: 'Ne sıklıkla kontrol edildiği — ne sıklıkla tetiklendiği değil; sessiz bir izleyici iki kontrol arasında hiçbir şeye mal olmaz.',
     everyMinutesShort: (n: number) => n >= 60 && n % 60 === 0 ? `${n / 60} saatte bir` : `${n} dk'da bir`,
+    voiceReply: 'Yanıt sesli olsun',
+    voiceReplyHint: 'Metin yerine bu agentın sesiyle konuşulmuş bir Telegram ses mesajı olarak gönderilir.',
   },
   telemetryColumn: {
     telemetry: 'Telemetri',

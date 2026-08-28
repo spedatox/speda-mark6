@@ -358,6 +358,12 @@ class Settings(BaseSettings):
     # unaffected.
     azure_speech_key: str = ""
     azure_speech_region: str = "westeurope"
+    # A third TTS engine, alongside Azure and OpenAI — same voice-ref shape
+    # ("elevenlabs:eleven_multilingual_v2:<voice_id>"), same degrade-on-empty
+    # contract as the other two (see services/tts.py). Picked for automation
+    # voice replies over Azure/OpenAI where a distinctive per-agent voice
+    # matters more than raw cost.
+    elevenlabs_api_key: str = ""
     # Fallback voice for any agent whose profile does not name one. The per-agent
     # voice is IDENTITY and lives in app/profiles/*.py (Rule 10); this is only the
     # engine default for profiles that stay silent about it.

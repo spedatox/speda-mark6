@@ -76,16 +76,21 @@ class AgentProfile(ABC):
     sonnet_model: str = "claude-sonnet-4-6"
     haiku_model: str = "claude-haiku-4-5-20251001"
 
-    # Azure Speech voice this agent speaks with in voice mode. Identity, so it
-    # lives here and never in core (Rule 10) — the TTS service only resolves it.
-    # Empty = fall back to settings.tts_default_voice.
+    # The voice this agent speaks with — in voice mode, and in a "reply as
+    # voice" automation delivered over Telegram (core/trigger_runner.py).
+    # Identity, so it lives here and never in core (Rule 10) — services/tts.py
+    # only resolves it. Empty = fall back to settings.tts_default_voice.
     #
-    # Prefer a MULTILINGUAL voice. Azure has exactly two native Turkish voices
-    # and both are the ones every CapCut video uses, so they make the assistant
-    # sound like stock filler; the ~57 multilingual voices speak Turkish just as
-    # well, cost the same, and give the roster room to sound like individuals.
-    # Their names are en-US-…/de-DE-… while speaking Turkish, which is why the
-    # spoken language is configured separately (settings.tts_locale).
+    # "provider:model:name" (services/tts.py parse_voice_ref) — a bare name
+    # means Azure, for refs written before multi-provider support existed.
+    # ElevenLabs ("elevenlabs:eleven_multilingual_v2:<voice_id>") is what gives
+    # the roster genuinely distinct voices rather than picking from Azure's
+    # ~57-voice multilingual set; prefer a multilingual model over an
+    # English-only one regardless of provider — Azure's two native Turkish
+    # voices are the same ones every CapCut video uses, and a multilingual
+    # voice speaks Turkish just as well while still sounding like an
+    # individual. The spoken LANGUAGE is configured separately
+    # (settings.tts_locale) — the voice name does not have to match it.
     voice_id: str = ""
 
     # Document branding for generate_document output. Neutral by default; each

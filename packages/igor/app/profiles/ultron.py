@@ -31,6 +31,11 @@ class UltronProfile(AgentProfile):
     agent_id = "ultron"
     name = "Ultron"
     domain = "academic life & university/work balance — study, planning, coursework"
+
+    # ElevenLabs "Josh" (younger, direct) — verify this id exists in the
+    # owner's ElevenLabs voice library (GET /voice/voices) and swap it
+    # if not; premade voice ids can vary by plan/account.
+    voice_id = "elevenlabs:eleven_multilingual_v2:TxGEqnHWrfWFTfGW9XjX"
     doc_theme = DocTheme(accent="#8a93a6")   # signature slate — matches the UI brand
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow

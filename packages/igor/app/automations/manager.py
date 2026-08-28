@@ -83,6 +83,10 @@ def _as_dict(a: Automation) -> dict:
         "domain": spec.get("domain"),
         "recipient": spec.get("recipient"),
         "interval_minutes": spec.get("interval_minutes"),
+        # Push automations only (composer.compose() ignores it otherwise) —
+        # whether the reply is spoken through the firing agent's TTS voice
+        # and sent as a Telegram audio message instead of plain text.
+        "voice": bool(spec.get("voice")),
     }
     if a.kind == "webhook":
         d["webhook_url"] = _webhook_url(spec)
@@ -288,7 +292,7 @@ async def update_automation(
 
     `changes` may carry any of: name, agent_id, schedule, instruction, options,
     every_minutes, max_asks, day_flags, url, look_for, domain, recipient,
-    interval_minutes. Anything absent keeps its current value.
+    interval_minutes, voice. Anything absent keeps its current value.
     """
     row = await db.get(Automation, automation_id)
     if row is None:
@@ -299,7 +303,7 @@ async def update_automation(
 
     for field in ("name", "schedule", "instruction", "options", "every_minutes",
                   "max_asks", "day_flags", "url", "look_for", "domain",
-                  "recipient", "interval_minutes"):
+                  "recipient", "interval_minutes", "voice"):
         if field in changes and changes[field] is not None:
             spec[field] = changes[field]
 

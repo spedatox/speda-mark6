@@ -72,7 +72,11 @@ class SPEDAProfile(AgentProfile):
     name = AGENT_NAME   # derived from 01_identity.md — never hardcode here
     sonnet_model = "claude-sonnet-4-6"
     haiku_model = "claude-haiku-4-5-20251001"
-    voice_id = "en-US-BrianMultilingualNeural"
+    # ElevenLabs "Adam" (deep, steady — the default assistant voice) — verify this id exists in the
+    # owner's ElevenLabs voice library (GET /voice/voices) and swap it
+    # if not; premade voice ids can vary by plan/account.
+    # Was Azure "en-US-BrianMultilingualNeural" before the ElevenLabs move.
+    voice_id = "elevenlabs:eleven_multilingual_v2:pNInz6obpgDQGcFmaJgB"
 
     # Cheapest sensible model per non-Anthropic provider, used for background
     # tasks when the user is chatting on that provider (see base.background_model).

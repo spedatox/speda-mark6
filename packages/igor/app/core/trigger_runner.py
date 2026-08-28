@@ -412,6 +412,7 @@ async def start_trigger_turn(
             payload=payload,
             telegram_bots=telegram_bots,
             status=status,
+            voice_id=profile.voice_id,
         )
 
     # Engine selection, identical to chat: an agent whose real backend is a
@@ -448,6 +449,7 @@ async def _deliver(
     payload: dict,
     telegram_bots,
     status: str,
+    voice_id: str = "",
 ) -> None:
     """Post-run delivery: stamp the automation, then push if asked.
 
@@ -478,13 +480,56 @@ async def _deliver(
         # The sender bot is derived from the agent, never passed by n8n — a
         # Sentinel push speaks from Sentinel's bot. If every bot is unreachable,
         # persist a Notification row so nothing is lost.
-        delivered = await telegram_bots.deliver_message(agent_id, text)
+        if payload.get("voice"):
+            delivered = await _deliver_voice(
+                agent_id=agent_id, text=text, voice_id=voice_id,
+                title=str(payload.get("automation") or ""), telegram_bots=telegram_bots,
+                request_id=request_id,
+            )
+        else:
+            delivered = await telegram_bots.deliver_message(agent_id, text)
         if not delivered:
             await _store_notification(db, agent_id, user_id, request_id, text, payload)
         logger.info(
             "trigger_push_delivered" if delivered else "trigger_push_stored",
             extra={"request_id": request_id, "chars": len(text), "status": status},
         )
+
+
+async def _deliver_voice(
+    *, agent_id: str, text: str, voice_id: str, title: str, telegram_bots, request_id: str,
+) -> bool:
+    """Speak `text` and send it as a Telegram audio message instead of plain
+    text — the point of an automation's "reply as voice" checkbox
+    (composer.py bakes `voice: true` into the trigger payload; see
+    automations/templates.py).
+
+    Falls back to plain text on ANY synthesis or delivery failure: a
+    misconfigured or rate-limited TTS key must never mean the owner gets
+    nothing instead of the briefing he actually asked to hear, only in a
+    format he didn't ask for.
+    """
+    from app.services import tts
+
+    try:
+        audio = await tts.synthesize(text, voice_id or None)
+    except tts.TTSError as exc:
+        logger.warning(
+            "automation_voice_synthesis_failed",
+            extra={"request_id": request_id, "agent_id": agent_id, "error": str(exc)},
+        )
+        return await telegram_bots.deliver_message(agent_id, text)
+
+    # Truncate the NAME first, then append the extension — slicing the whole
+    # "name.mp3" string can land mid-extension for a long title and hand
+    # Telegram a file with no recognizable type.
+    short_title = (title or agent_id)[:60]
+    ok = await telegram_bots.deliver_voice(
+        agent_id, audio, f"{short_title}.mp3", title=short_title,
+    )
+    if not ok:
+        return await telegram_bots.deliver_message(agent_id, text)
+    return True
 
 
 async def _last_assistant_text(db: AsyncSession, session_id: int) -> str:

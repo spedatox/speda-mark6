@@ -23,6 +23,11 @@ class NightCrawlerProfile(AgentProfile):
     agent_id = "nightcrawler"
     name = "NightCrawler"
     domain = "OSINT, web surveillance & research"
+
+    # ElevenLabs "Arnold" (crisp, alert) — verify this id exists in the
+    # owner's ElevenLabs voice library (GET /voice/voices) and swap it
+    # if not; premade voice ids can vary by plan/account.
+    voice_id = "elevenlabs:eleven_multilingual_v2:VR6AewLTigWG4xSOukaG"
     doc_theme = DocTheme(accent="#9165e6")   # signature violet — matches the UI brand
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow

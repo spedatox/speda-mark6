@@ -705,6 +705,10 @@ export interface AutomationInfo {
   domain: string | null
   recipient: string | null
   interval_minutes: number | null
+  /** Push automations only — reply spoken in the firing agent's TTS voice and
+   *  sent as a Telegram audio message instead of text. Always false for
+   *  proactive_ask, which already delivers through the reminders tool. */
+  voice: boolean
 }
 
 /** The form's payload. Mirrors the composer spec; the backend validates it. */
@@ -732,6 +736,8 @@ export interface AutomationDraft {
   domain?: string
   recipient?: string
   interval_minutes?: number
+  /** Any push template except proactive_ask. */
+  voice?: boolean
 }
 
 export interface AutomationsStatus {

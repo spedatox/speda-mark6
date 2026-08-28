@@ -22,6 +22,11 @@ class SentinelProfile(AgentProfile):
     agent_id = "sentinel"
     name = "Sentinel"
     domain = "finance & budget intelligence"
+
+    # ElevenLabs "Antoni" (even, professional) — verify this id exists in the
+    # owner's ElevenLabs voice library (GET /voice/voices) and swap it
+    # if not; premade voice ids can vary by plan/account.
+    voice_id = "elevenlabs:eleven_multilingual_v2:ErXwobaYiN019PkySvjV"
     doc_theme = DocTheme(accent="#d99c44")   # signature gold — matches the UI brand
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow

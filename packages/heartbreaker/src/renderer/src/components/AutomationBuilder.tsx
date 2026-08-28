@@ -26,7 +26,7 @@
 import { useMemo, useState } from 'react'
 import { useT } from '../lib/i18n'
 import type { Dict } from '../lib/i18n/en'
-import { PillBtn, SettingsField, SettingsSection, fieldStyle } from './settingsUI'
+import { PillBtn, SettingsField, SettingsRow, SettingsSection, Switch, fieldStyle } from './settingsUI'
 import type {
   AutomationAgent, AutomationDayFlag, AutomationDraft, AutomationFrequency,
   AutomationHook, AutomationInfo, AutomationSchedule, AutomationTemplate,
@@ -214,6 +214,7 @@ export function AutomationBuilder({ existing, agents, onCancel, onSave }: {
   const [everyMinutes, setEveryMinutes] = useState(existing?.every_minutes ?? 5)
   const [maxAsks, setMaxAsks] = useState(existing?.max_asks ?? 10)
   const [dayFlags, setDayFlags] = useState<AutomationDayFlag[]>(existing?.day_flags ?? [])
+  const [voice, setVoice] = useState(existing?.voice ?? false)
   // Hook fields.
   const [url, setUrl] = useState(existing?.url ?? '')
   const [lookFor, setLookFor] = useState(existing?.look_for ?? '')
@@ -276,6 +277,11 @@ export function AutomationBuilder({ existing, agents, onCancel, onSave }: {
     const draft: AutomationDraft = {
       agent_id: agentId, template, name: name.trim(),
       instruction: instruction.trim(),
+      // Meaningless for proactive_ask (composer.py forces it false there
+      // regardless — its reply already goes out through the reminders tool),
+      // so never sent for one: a checkbox nobody can see must not carry a
+      // value into the spec either.
+      voice: template === 'proactive_ask' ? false : voice,
     }
     if (isHook(template)) {
       draft.interval_minutes = intervalMinutes
@@ -489,6 +495,15 @@ export function AutomationBuilder({ existing, agents, onCancel, onSave }: {
                 {existing.instruction}
               </div>
             </SettingsField>
+          )}
+
+          {/* Meaningless for proactive_ask — its reply already goes out
+              through the reminders tool with buttons, not a Telegram audio
+              message, so composer.py forces voice=false there regardless. */}
+          {template !== 'proactive_ask' && (
+            <SettingsRow title={a.voiceReply} desc={a.voiceReplyHint}>
+              <Switch on={voice} onChange={setVoice} />
+            </SettingsRow>
           )}
 
           {template === 'proactive_ask' && (

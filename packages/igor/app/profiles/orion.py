@@ -39,6 +39,11 @@ class OrionProfile(AgentProfile):
     agent_id = "orion"
     name = "Orion"
     domain = "Mark VI maintenance — memory custodian & host ops"
+
+    # ElevenLabs "Elli" (calm, thoughtful) — verify this id exists in the
+    # owner's ElevenLabs voice library (GET /voice/voices) and swap it
+    # if not; premade voice ids can vary by plan/account.
+    voice_id = "elevenlabs:eleven_multilingual_v2:MF3mGyEYCl7XYWbV9V6O"
     doc_theme = DocTheme(accent="#8a7fd6")   # signature indigo
 
     tool_allowlist = None

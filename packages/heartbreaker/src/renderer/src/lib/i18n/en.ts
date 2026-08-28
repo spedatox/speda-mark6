@@ -685,6 +685,8 @@ const en = {
     checkEvery: 'Check every (minutes)',
     checkEveryHint: 'How often it polls — not how often it fires; a quiet watch costs nothing between hits.',
     everyMinutesShort: (n: number) => n >= 60 && n % 60 === 0 ? `every ${n / 60}h` : `every ${n}m`,
+    voiceReply: 'Reply as voice',
+    voiceReplyHint: 'Sent as a Telegram audio message, spoken in this agent’s voice, instead of text.',
   },
   telemetryColumn: {
     telemetry: 'Telemetry',

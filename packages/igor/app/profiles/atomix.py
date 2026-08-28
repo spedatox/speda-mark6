@@ -31,6 +31,11 @@ class AtomixProfile(AgentProfile):
     agent_id = "atomix"
     name = "Atomix"
     domain = "personal health & wellness (the owner's health)"
+
+    # ElevenLabs "Bella" (warm, soft) — verify this id exists in the
+    # owner's ElevenLabs voice library (GET /voice/voices) and swap it
+    # if not; premade voice ids can vary by plan/account.
+    voice_id = "elevenlabs:eleven_multilingual_v2:EXAVITQu4vr4xnSDxMaL"
     doc_theme = DocTheme(accent="#3fae74")   # signature green — matches the UI brand
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow

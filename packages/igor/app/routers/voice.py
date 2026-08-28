@@ -32,14 +32,7 @@ router = APIRouter(prefix="/voice", tags=["voice"])
 
 
 def _resolve_voice(request: Request, agent_id: str | None, explicit: str | None) -> str:
-    """Explicit request wins, then the agent's profile, then the engine default."""
-    if explicit:
-        return explicit
-    if agent_id:
-        profile = request.app.state.profiles.get(agent_id)
-        if profile is not None and profile.voice_id:
-            return profile.voice_id
-    return settings.tts_default_voice
+    return tts.resolve_voice(request.app.state.profiles, agent_id, explicit)
 
 
 @router.get("/status")

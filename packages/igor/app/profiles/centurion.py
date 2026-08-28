@@ -22,6 +22,11 @@ class CenturionProfile(AgentProfile):
     agent_id = "centurion"
     name = "Centurion"
     domain = "cyber security"
+
+    # ElevenLabs "Sam" (raspy, serious) — verify this id exists in the
+    # owner's ElevenLabs voice library (GET /voice/voices) and swap it
+    # if not; premade voice ids can vary by plan/account.
+    voice_id = "elevenlabs:eleven_multilingual_v2:yoZ06aMxZJJ28mfd3POQ"
     doc_theme = DocTheme(accent="#d8483c")   # signature red — matches the UI brand
     # Like Optimus, Centurion can be backed by a Forge peer (its own Cell, with
     # outbound network for authorized scans). While a peer is connected on

@@ -30,6 +30,11 @@ class OptimusProfile(AgentProfile):
     agent_id = "optimus"
     name = "Optimus"
     domain = "systems, code & infrastructure"
+
+    # ElevenLabs "Domi" (confident, strong) — verify this id exists in the
+    # owner's ElevenLabs voice library (GET /voice/voices) and swap it
+    # if not; premade voice ids can vary by plan/account.
+    voice_id = "elevenlabs:eleven_multilingual_v2:AZnzlk1XvdvUeBnXmlld"
     doc_theme = DocTheme(accent="#2eb6ac")   # signature teal — matches the UI brand
     external_backend = True
 

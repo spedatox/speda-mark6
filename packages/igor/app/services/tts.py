@@ -50,7 +50,9 @@ def configured(provider: str | None = None) -> bool:
         return bool(settings.azure_speech_key)
     if provider == "openai":
         return bool(settings.openai_api_key)
-    return bool(settings.azure_speech_key or settings.openai_api_key)
+    if provider == "elevenlabs":
+        return bool(settings.elevenlabs_api_key)
+    return bool(settings.azure_speech_key or settings.openai_api_key or settings.elevenlabs_api_key)
 
 
 def _endpoint() -> str:
@@ -146,11 +148,20 @@ def build_ssml(text: str, voice: str, locale: str | None = None) -> str:
 #
 #     azure:neural:en-US-BrianMultilingualNeural
 #     openai:gpt-4o-mini-tts:nova
+#     elevenlabs:eleven_multilingual_v2:21m00Tcm4TlvDq8ikWAM
 #
 # A BARE name means Azure, so every ref written before OpenAI existed — the
 # profiles' voice_id, tts_default_voice — keeps working untouched.
 
 _OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech"
+_ELEVENLABS_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+_ELEVENLABS_VOICES_URL = "https://api.elevenlabs.io/v1/voices"
+
+# ElevenLabs' current multilingual model — the only one worth defaulting to
+# here, since a per-agent voice speaking Turkish (tts_locale) needs one model
+# that actually supports it rather than an English-only model silently
+# mangling the pronunciation.
+ELEVENLABS_DEFAULT_MODEL = "eleven_multilingual_v2"
 
 # OpenAI's TTS models. gpt-4o-mini-tts is the current one and the only one that
 # accepts `instructions`; tts-1 is faster and cheaper, tts-1-hd cleaner.
@@ -180,6 +191,8 @@ def parse_voice_ref(ref: str) -> tuple[str, str, str]:
     parts = (ref or "").split(":")
     if len(parts) >= 3 and parts[0] == "openai":
         return "openai", parts[1], ":".join(parts[2:])
+    if len(parts) >= 3 and parts[0] == "elevenlabs":
+        return "elevenlabs", parts[1], ":".join(parts[2:])
     if len(parts) >= 2 and parts[0] == "azure":
         return "azure", "neural", ":".join(parts[1:])
     return "azure", "neural", ref
@@ -194,7 +207,25 @@ def providers() -> list[str]:
         out.append("azure")
     if settings.openai_api_key:
         out.append("openai")
+    if settings.elevenlabs_api_key:
+        out.append("elevenlabs")
     return out
+
+
+def resolve_voice(profiles, agent_id: str | None, explicit: str | None = None) -> str:
+    """Explicit request wins, then the agent's profile, then the engine
+    default. Shared by /voice/speak (routers/voice.py) and automation voice
+    delivery (core/trigger_runner.py) so the two paths can never resolve a
+    different voice for the same agent — a per-agent identity, not a
+    per-caller preference, and it belongs here rather than duplicated in each
+    caller."""
+    if explicit:
+        return explicit
+    if agent_id and profiles is not None:
+        profile = profiles.get(agent_id)
+        if profile is not None and profile.voice_id:
+            return profile.voice_id
+    return settings.tts_default_voice
 
 
 # ── Synthesis ───────────────────────────────────────────────────────────────
@@ -224,13 +255,14 @@ async def synthesize(text: str, voice: str | None = None, locale: str | None = N
 
     provider, model, name = parse_voice_ref(voice or settings.tts_default_voice)
     if not configured(provider):
-        raise TTSError(
-            "Voice output is not configured — set AZURE_SPEECH_KEY."
-            if provider == "azure"
-            else "OpenAI voices need OPENAI_API_KEY."
-        )
+        raise TTSError({
+            "openai": "OpenAI voices need OPENAI_API_KEY.",
+            "elevenlabs": "ElevenLabs voices need ELEVENLABS_API_KEY.",
+        }.get(provider, "Voice output is not configured — set AZURE_SPEECH_KEY."))
     if provider == "openai":
         return await _openai_synthesize(spoken, model, name, spoken_locale)
+    if provider == "elevenlabs":
+        return await _elevenlabs_synthesize(spoken, model, name)
     return await _azure_synthesize(spoken, name, spoken_locale)
 
 
@@ -289,6 +321,58 @@ async def _openai_synthesize(
     logger.info(
         "tts_synthesized",
         extra={"provider": "openai", "model": model, "voice": voice,
+               "chars": len(spoken), "bytes": len(audio)},
+    )
+    return audio
+
+
+async def _elevenlabs_synthesize(spoken: str, model: str, voice_id: str) -> bytes:
+    """ElevenLabs' speech endpoint. Plain text in a JSON field, same reasoning
+    as OpenAI's path for why nothing here needs escaping: there is no document
+    for model-authored text to break out of, only a string value.
+
+    No `locale` parameter — ElevenLabs' multilingual models detect the
+    language from the text itself and have no per-request language hint to
+    give them, unlike OpenAI's `instructions` field.
+    """
+    headers = {
+        "xi-api-key": settings.elevenlabs_api_key,
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg",
+    }
+    body = {
+        "text": spoken,
+        "model_id": model or ELEVENLABS_DEFAULT_MODEL,
+    }
+    url = _ELEVENLABS_TTS_URL.format(voice_id=voice_id)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.post(url, headers=headers, json=body)
+            resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        detail = {
+            401: "rejected the key",
+            404: "has no voice with that id — check it against the owner's ElevenLabs voice library",
+            422: "rejected the request (check the model supports this voice)",
+            429: "rate-limited the request (quota or concurrency)",
+        }.get(status, f"returned HTTP {status}")
+        logger.warning(
+            "tts_elevenlabs_error",
+            extra={"status": status, "model": model, "voice": voice_id,
+                   "body": exc.response.text[:300]},
+        )
+        raise TTSError(f"ElevenLabs speech {detail}.") from exc
+    except httpx.HTTPError as exc:
+        logger.warning("tts_transport_error", extra={"error": str(exc), "voice": voice_id})
+        raise TTSError("Could not reach ElevenLabs speech.") from exc
+
+    audio = resp.content
+    if not audio:
+        raise TTSError("ElevenLabs speech returned no audio.")
+    logger.info(
+        "tts_synthesized",
+        extra={"provider": "elevenlabs", "model": model, "voice": voice_id,
                "chars": len(spoken), "bytes": len(audio)},
     )
     return audio
@@ -366,8 +450,43 @@ async def list_voices() -> list[dict]:
                     "display": f"{name} · {model}",
                 })
 
+    out.extend(await _elevenlabs_voices())
     out.extend(await _azure_voices())
     return out
+
+
+async def _elevenlabs_voices() -> list[dict]:
+    """The owner's OWN ElevenLabs voice library — a real network call, unlike
+    OpenAI's static roster, because ElevenLabs voices are per-account (premade
+    ones plus anything cloned or added from the marketplace) rather than a
+    fixed public list. Returns [] when unconfigured or unreachable, same
+    contract as `_azure_voices`."""
+    if not configured("elevenlabs"):
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.get(
+                _ELEVENLABS_VOICES_URL,
+                headers={"xi-api-key": settings.elevenlabs_api_key},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.HTTPError as exc:
+        logger.warning("tts_voice_list_failed", extra={"provider": "elevenlabs", "error": str(exc)})
+        return []
+    return [
+        {
+            "id": f"elevenlabs:{ELEVENLABS_DEFAULT_MODEL}:{v.get('voice_id')}",
+            "name": v.get("name") or v.get("voice_id"),
+            "provider": "elevenlabs",
+            "model": ELEVENLABS_DEFAULT_MODEL,
+            "locale": "",
+            "gender": (v.get("labels") or {}).get("gender", ""),
+            "display": v.get("name") or v.get("voice_id"),
+        }
+        for v in (data.get("voices") or [])
+        if v.get("voice_id")
+    ]
 
 
 async def _azure_voices() -> list[dict]:

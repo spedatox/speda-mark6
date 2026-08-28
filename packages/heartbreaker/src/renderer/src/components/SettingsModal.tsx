@@ -878,6 +878,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                           {a.schedule ? describeSchedule(a.schedule, t)
                             : a.hook ? describeHook(a.hook, t)
                             : a.summary}
+                          {a.voice && ' · 🔊'}
                           {a.last_fired_at && t.settingsAutomations.lastFired(new Date(a.last_fired_at).toLocaleString())}
                           {a.expires_at && t.settingsAutomations.until(new Date(a.expires_at).toLocaleDateString())}
                         </div>

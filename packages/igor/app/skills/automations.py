@@ -102,7 +102,10 @@ class AutomationsSkill(Skill):
         "`web_watch`/`schedule` also still work raw (url/look_for or cron) for a "
         "one-off case a template doesn't cover, but prefer the template when it fits."
         "\n\nBOTH ways accept `duration_days` for time-boxed tracking ('for a month' → "
-        "30) — an auto-expiry on top of whatever else ends it. "
+        "30) — an auto-expiry on top of whatever else ends it. On any PUSH automation "
+        "(everything except proactive_ask), `voice: true` speaks the reply in your own "
+        "TTS voice and sends it as a Telegram audio message instead of text — only when "
+        "the owner asked for that, not by default. "
         "IDEMPOTENCY: before creating anything scheduled, action='list' first and "
         "REUSE or delete+replace an existing one for the same job — never stack "
         "duplicates. "
@@ -184,6 +187,16 @@ class AutomationsSkill(Skill):
                     "cron": {"type": "string", "description": "raw schedule only, e.g. '0 8 * * *' for 8am daily."},
                     "webhook_path": {"type": "string", "description": "raw webhook only, optional."},
                     "duration_days": {"type": "number", "description": "Either path — auto-expiry, e.g. 30 for 'a month'."},
+                    "voice": {
+                        "type": "boolean",
+                        "description": (
+                            "Any PUSH automation (not proactive_ask, which already delivers "
+                            "through the reminders tool). When true, the reply is spoken in the "
+                            "firing agent's own TTS voice and sent as a Telegram audio message "
+                            "instead of text — set it only when the owner actually asked for a "
+                            "voice reply, e.g. 'sesli gönder', 'bunu dinlemek istiyorum'."
+                        ),
+                    },
                 },
             },
         },

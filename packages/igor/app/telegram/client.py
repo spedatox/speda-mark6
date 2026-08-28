@@ -239,6 +239,45 @@ class TelegramBot:
             )
             return False
 
+    async def send_audio(
+        self, audio: bytes, filename: str, *, caption: str = "",
+        title: str = "", chat_id: str | None = None,
+    ) -> bool:
+        """Upload IN-MEMORY audio bytes as a Telegram audio message — a
+        music-player card with a title and duration, not the compact
+        voice-note bubble. `sendVoice` requires an OGG file encoded with
+        OPUS, which none of the three TTS engines (Azure, OpenAI,
+        ElevenLabs) produce; `sendAudio` accepts the MP3 every one of them
+        already returns, so this needs no transcoding step. Bytes rather than
+        a path, unlike send_document: synthesized speech never touches disk.
+        """
+        chat = chat_id or get_telegram_owner_id()
+        if not chat:
+            logger.warning("telegram_no_owner", extra={"agent_id": self.agent_id})
+            return False
+        if len(audio) > _MAX_FILE_BYTES:
+            logger.error(
+                "telegram_audio_too_large",
+                extra={"agent_id": self.agent_id, "size": len(audio)},
+            )
+            return False
+        data: dict = {"chat_id": chat}
+        if caption:
+            data["caption"] = caption[:1024]
+        if title:
+            data["title"] = title[:64]
+        try:
+            files = {"audio": (filename, audio, "audio/mpeg")}
+            resp = await self._http().post(self._url("sendAudio"), data=data, files=files)
+            resp.raise_for_status()
+            return bool(resp.json().get("ok"))
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "telegram_audio_failed",
+                extra={"agent_id": self.agent_id, "error": str(exc)},
+            )
+            return False
+
     async def download_file(self, file_id: str, dest_dir: str) -> str | None:
         """Resolve a Telegram file_id to a temp path on disk (inbound voice/photo/
         document). Returns the local path, or None on failure."""
