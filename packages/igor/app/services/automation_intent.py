@@ -113,9 +113,37 @@ def _prompt(spec: dict, agent_name: str) -> str:
         ),
     }.get(template, "a scheduled automation")
 
+    # A voice automation's reply is CONVERTED TO AUDIO and sent as a Telegram
+    # voice message (composer.py's `voice: true`, core/trigger_runner.py's
+    # _deliver_voice) — never shown as text. Reading tolerates the density a
+    # text briefing already uses; listening does not, and a reference number
+    # read aloud is actively unpleasant regardless of length. This is why the
+    # instruction gets a SEPARATE, stricter brief instead of relying on the
+    # general "say how long" guidance in _SYSTEM's OUTPUT phase to catch it.
+    voice_block = ""
+    if spec.get("voice"):
+        voice_block = (
+            "\n\nTHIS AUTOMATION IS SPOKEN, NOT READ — its reply is converted to "
+            "audio and sent as a voice message, never shown as text. Write for "
+            "the ear, not the eye:\n"
+            "- State the OUTPUT phase's target as 80–120 words, not the usual "
+            "150–300 — a spoken briefing must be noticeably shorter than a read "
+            "one; nobody wants a two-minute monologue over coffee.\n"
+            "- Never read a reference number, ticket code, PNR, or long ID "
+            "aloud verbatim unless the owner must act on that EXACT string "
+            "right now. Name the thing plainly instead (\"the bus ticket "
+            "reminder\", \"the exemption application\") rather than spelling "
+            "out a code — if he needs the code itself, say it is in the app, "
+            "don't recite it.\n"
+            "- Short sentences, one idea each. No parenthetical asides, no "
+            "stacked clauses — those read fine on a screen and ramble out "
+            "loud."
+        )
+
     return (
         f"The agent is {agent_name}. This automation is {kind}.\n"
-        f"It runs: {spec.get('_when', 'on a schedule')}.\n\n"
+        f"It runs: {spec.get('_when', 'on a schedule')}."
+        f"{voice_block}\n\n"
         f"The owner asked for:\n{spec.get('instruction_raw') or spec.get('instruction')}\n\n"
         "Write the instruction."
     )
