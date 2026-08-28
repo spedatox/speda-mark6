@@ -166,6 +166,10 @@ async def lifespan(app: FastAPI):
     # keyless). Read-only + network-gated. Clients render the ```aircraft fence.
     from app.skills.aircraft import TrackAircraftSkill
     await registry.register_skill(TrackAircraftSkill())
+    # Weather desk — current conditions + forecast (Open-Meteo, keyless).
+    # Read-only + network-gated.
+    from app.skills.weather import WeatherSkill
+    await registry.register_skill(WeatherSkill())
     # Health desk — the owner's biometrics, synced from the phone via Health
     # Connect. Read-only; unrestricted so Speda can relay without a dispatch.
     from app.skills.health_data import HealthDataSkill
