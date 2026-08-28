@@ -230,6 +230,28 @@ data class AppStrings(
         val needs: (String) -> String,
         val toolsAlwaysOn: (Int) -> String,
         val toolsOnDemand: (Int) -> String,
+        val microsoftConnected: String,
+        val microsoftDisconnected: String,
+        /** Header for the owner-registered MCP servers (GET/POST /connections/mcp)
+         *  — a DIFFERENT list from [toolsets] above, which is the engine's own
+         *  managed toolset toggles (GET /connections). */
+        val customServers: String,
+        val noCustomServers: String,
+        val addServer: String,
+        val serverSaveFailed: (String) -> String,
+        /** Header for the owner's saved logins (GET/POST /connections/portals). */
+        val portalsSection: String,
+        val noPortals: String,
+        val addPortal: String,
+        /** The Playwright container never configured on this deployment
+         *  (BROWSER_URL unset) — distinct from `down`, which is configured but
+         *  unreachable right now. */
+        val browserContainerOff: String,
+        val browserContainerDown: (String) -> String,
+        val signIn: String,
+        val forgetSession: String,
+        val hasSession: String,
+        val noSession: String,
     )
 
     data class SettingsAutomations(
@@ -641,6 +663,11 @@ data class AppStrings(
         val emptyFile: String,
         val noRevisionsYet: String,
         val restore: String,
+        /** GET /admin/memory/status — where the observation record stands. */
+        val observations: (Int) -> String,
+        val atRiskFacts: (Int) -> String,
+        val rebuildingMemory: String,
+        val lastRebuildFailed: String,
     )
 
     data class RoutingMatrix(

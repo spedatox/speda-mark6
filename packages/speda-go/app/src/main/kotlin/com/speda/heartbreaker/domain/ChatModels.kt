@@ -29,6 +29,39 @@ data class ToolBadge(
     val afterChars: Int? = null,
 )
 
+/** One step a delegated agent took, for the subagent panel (mirror of
+ *  SubagentStep in lib/types.ts). */
+@Immutable
+data class SubagentStep(
+    val kind: String,           // "tool" | "text"
+    val tool: String? = null,
+    val input: JsonElement? = null,
+    val result: String? = null,
+    val text: String? = null,
+)
+
+/**
+ * One delegation a coding peer (Optimus, Centurion) made during a turn.
+ *
+ * It lives BESIDE the message, never inside `content`: a subagent's work is
+ * not the answer. Streaming its report as prose is what made a delegate's
+ * write-up read as the parent's own reply, and forwarding its completion as
+ * the turn's `done` closed the stream while the peer was still working. This
+ * is the channel that lets the work be SHOWN — foldable, ignorable — without
+ * ever being mistaken for the response (mirror of SubagentRun in lib/types.ts).
+ */
+@Immutable
+data class SubagentRun(
+    val id: String,
+    val agent: String = "",     // explore | review | general
+    val label: String = "",     // what the delegation is FOR, not which specialist ran it
+    val prompt: String? = null,
+    val running: Boolean = true,
+    val ok: Boolean? = null,
+    val report: String? = null,
+    val steps: PersistentList<SubagentStep> = persistentListOf(),
+)
+
 @Immutable
 data class FileMeta(
     val name: String,
@@ -55,6 +88,9 @@ data class ChatMessage(
     val images: PersistentList<String>? = null,
     val files: PersistentList<FileMeta>? = null,
     val uploads: PersistentList<UploadedFile>? = null,
+    /** What a coding peer delegated during this turn — see [SubagentRun]. Kept
+     *  apart from `content`/`tools` for the same reason: never the answer. */
+    val subagents: PersistentList<SubagentRun>? = null,
     /** Live status line while streaming (real phase, not looped filler). */
     val status: String? = null,
     /** Which session a STREAMING bubble belongs to — lets SELECT_SESSION preserve

@@ -119,17 +119,25 @@ are stale. What is worth reading is the **remaining** gap against the desktop.
 | Surface | Where | Source of truth |
 |---|---|---|
 | ```html widgets (sealed WebView + injected base styles/resize bridge) | `ui/prose/HtmlBlock.kt` | `WidgetFrame.tsx` |
-| ```hpp-warning salvage banner + alias/content detection | `ui/prose/Prose.kt`, `ui/party/HouseParty.kt` | `Message.tsx`, `HousePartyWarning.tsx` |
-| House Party passphrase modal (`house_party_auth` SSE + banner tap) | `ui/party/HouseParty.kt`, `ui/chat/ChatViewModel.kt` | `HousePartyModal.tsx`, `ChatMain.tsx` |
-| War room 3-state (off/standby/engaged) + 4s backend flag poll | `ui/HeartbreakerRoot.kt` | `App.tsx` |
-| Activation cinematic (engage/standby entrance, stand-down wink-out, ignite-under-cover swap) | `ui/party/PartyActivation.kt` | `PartyActivation.tsx` |
-| Roster strip — per-agent live jewels, done counts, CORES, EXIT/STAND DOWN | `ui/party/PartyRosterStrip.kt` | `PartyRosterStrip.tsx` |
+| ```hpp-warning salvage banner + alias/content detection | `ui/prose/Prose.kt` | `Message.tsx` |
 | Composer budget mode + dictation | `ui/chat/Composer.kt`, `ui/chat/ChatScreen.kt` | `InputBar.tsx` |
+| Protocols — Lockdown (engage/stand-down), Lifeboat/Doormat/Octavius (read-only + backup-now), Skyfall countdown, House Party (read-only status) | `ui/settings/ProtocolsTab.kt`, `ui/skyfall/SkyfallCountdown.kt` | `ProtocolsTab.tsx` |
+| Pending permission asks — global tray + inline `permission_request` SSE card | `ui/chat/AsksTray.kt`, `ui/chat/ChatViewModel.kt` | `PendingAsksTray.tsx`, `InteractionPrompt.tsx` |
+| Custom MCP servers + web portals (add/edit/delete, sign-in, forget session) + Microsoft Graph connection | `ui/settings/ConnectionsTab.kt` | `McpServersPanel.tsx`, `PortalsPanel.tsx` |
+| Subagent delegation panel — per-turn runs, foldable steps | `ui/chat/SubagentPanel.kt`, `domain/ChatState.kt` | `SubagentPanel.tsx`, `SubagentDetailView.tsx` |
+| Telegram model pins (second per-agent override, separate from the app pin) | `ui/systems/RoutingMatrix.kt` | `RosterModelWindow.tsx` |
+| Memory record status (observations/at-risk/verdict) + declared-but-empty folders in the knowledge bank tree | `ui/systems/KnowledgeBank.kt` | `SystemsBoard.tsx` |
 
-**Deliberate delta:** the strip's CORES button opens the **systems board** rather
-than a separate ROSTER CORES window. The board already owns AGENT CORES; a second
-phone-sized modal would give the per-agent pins two places to be edited from.
-Telegram model pins are still board-only.
+**House Party stays desktop-only, on purpose.** No engage path exists here —
+`HeartbreakerRoot.kt` documents why (the war room needs a stage a phone does not
+build, and the backend refuses to ENGAGE from a non-desktop client). The
+Protocols tab shows the flag read-only, greyed, with the reason, rather than
+omitting it — see `ProtocolsTab.kt`'s own doc comment.
+
+**Deliberate delta:** the Protocols tab's CORES-equivalent stays on the systems
+board rather than a second window — the board already owns AGENT CORES and
+Telegram pins, and a phone-sized modal would give them two places to be edited
+from.
 
 ### Still missing against the desktop
 
@@ -137,9 +145,12 @@ Telegram model pins are still board-only.
   (`VoiceMode.tsx`, `VoiceOrb.tsx`, `VoiceCanvas.tsx`). Postdates the port plan
   entirely; the orb is Three.js and needs a real Compose/OpenGL port, not a
   transliteration.
-- **Pending permission asks** — `PendingAsksTray.tsx` / the `permission_request`
-  SSE event. Igor relays a peer's gate to the client; the phone currently ignores
-  the event, so a gated Optimus operation can only be answered from the desktop.
+- **Subagent panel** has no chat-like full-detail thread view yet (the desktop's
+  `SubagentDetailView.tsx`) — steps expand inline in the run card instead of
+  opening their own screen.
+- **Portal advanced fields** — CSS selectors, extra form fields, success-URL
+  matching, per-agent access scoping. The add-portal form covers login/home
+  URL, username, password and a note; the rest stays desktop-only for now.
 
 ## Shipping — the downstream mirror and APK releases
 

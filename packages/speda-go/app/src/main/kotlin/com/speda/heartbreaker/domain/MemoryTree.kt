@@ -47,11 +47,20 @@ object MemoryTree {
      *
      * Generic in the item so the tests can drive it with plain strings and the
      * screen can pass its DTOs; [pathOf] is how an item names itself.
+     *
+     * [extraFolders] guarantees a group exists (possibly empty) for a folder
+     * path even when no item lives there yet — a folder the store DECLARES but
+     * holds no file for does not exist in the files table at all, so without
+     * this the tree cannot show the owner where a thing WILL go before
+     * something has gone there.
      */
-    fun <T> group(items: List<T>, pathOf: (T) -> String): List<Pair<String, List<T>>> {
+    fun <T> group(items: List<T>, extraFolders: List<String> = emptyList(), pathOf: (T) -> String): List<Pair<String, List<T>>> {
         val groups = LinkedHashMap<String, MutableList<T>>()
         for (item in items) {
             groups.getOrPut(folderOf(pathOf(item))) { mutableListOf() }.add(item)
+        }
+        for (dir in extraFolders) {
+            groups.getOrPut(dir) { mutableListOf() }
         }
         return groups.entries
             .sortedWith(compareBy({ rank(it.key) }, { it.key }))

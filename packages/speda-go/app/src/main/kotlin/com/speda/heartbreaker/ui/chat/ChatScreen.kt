@@ -242,6 +242,18 @@ fun ChatScreen(
                 }
             }
 
+            // A peer's safety gate is waiting on an irreversible operation.
+            // Above the composer, never inside the transcript — the same reason
+            // Skyfall gets its own screen: the decision is answered by a button,
+            // not by scrolling to find it.
+            val fastArrivalAsk by vm.pendingAsk.collectAsStateWithLifecycle()
+            PendingAsksTray(
+                config = config,
+                api = graph.api,
+                fastArrival = fastArrivalAsk,
+                onFastArrivalConsumed = { vm.clearPendingAsk() },
+            )
+
             Composer(
                 isStreaming = state.isStreaming,
                 agentName = brand.name,

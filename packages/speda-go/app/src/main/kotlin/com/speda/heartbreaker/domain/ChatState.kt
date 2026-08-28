@@ -4,6 +4,9 @@ import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 /** The backend connection + which agent this session targets (lib/types AppConfig). */
 @Immutable
@@ -35,6 +38,12 @@ sealed interface ChatAction {
     data class AddTool(val id: String, val tool: ToolBadge) : ChatAction
     data class SetToolResult(val id: String, val toolId: String, val result: String) : ChatAction
     data class AddFile(val id: String, val file: FileMeta) : ChatAction
+    /** One `subagent` SSE frame — any phase (started/text/tool/tool_result/
+     *  finished). [event] stays a raw [JsonObject], same looseness as the TS
+     *  reducer's `Record<string, unknown>`: several delegations can be in
+     *  flight at once and their frames interleave, so the shape is read inside
+     *  the reducer case rather than pinned to one payload type here. */
+    data class Subagent(val id: String, val event: JsonObject) : ChatAction
     data class FinishMessage(val id: String, val sessionId: Int) : ChatAction
     data class ErrorMessage(val id: String, val error: String) : ChatAction
     data class UpdateSessionTitle(val sessionId: Int, val title: String) : ChatAction
@@ -123,6 +132,80 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
             }
         }.toPersistentList(),
     )
+
+    is ChatAction.Subagent -> {
+        val e = action.event
+        val runId = e["id"]?.jsonPrimitive?.contentOrNull
+        if (runId == null) {
+            state
+        } else {
+            state.copy(
+                messages = state.messages.map { m ->
+                    if (m.id != action.id) return@map m
+                    val runs = m.subagents ?: persistentListOf()
+                    val idx = runs.indexOfFirst { it.id == runId }
+                    var run = if (idx >= 0) {
+                        runs[idx]
+                    } else {
+                        SubagentRun(
+                            id = runId,
+                            agent = e["agent"]?.jsonPrimitive?.contentOrNull ?: "",
+                            label = e["label"]?.jsonPrimitive?.contentOrNull ?: "",
+                        )
+                    }
+                    when (e["phase"]?.jsonPrimitive?.contentOrNull) {
+                        "started" -> run = run.copy(
+                            prompt = e["prompt"]?.jsonPrimitive?.contentOrNull,
+                            running = true,
+                        )
+                        "text" -> {
+                            val delta = e["text"]?.jsonPrimitive?.contentOrNull
+                            if (!delta.isNullOrEmpty()) {
+                                val last = run.steps.lastOrNull()
+                                run = if (last?.kind == "text") {
+                                    run.copy(
+                                        steps = run.steps.set(
+                                            run.steps.lastIndex,
+                                            last.copy(text = (last.text ?: "") + delta),
+                                        ),
+                                    )
+                                } else {
+                                    run.copy(steps = (run.steps + SubagentStep(kind = "text", text = delta)).toPersistentList())
+                                }
+                            }
+                        }
+                        "tool" -> run = run.copy(
+                            steps = (
+                                run.steps + SubagentStep(
+                                    kind = "tool",
+                                    tool = e["tool"]?.jsonPrimitive?.contentOrNull,
+                                    input = e["input"],
+                                )
+                                ).toPersistentList(),
+                        )
+                        "tool_result" -> {
+                            val i = run.steps.indexOfLast { it.kind == "tool" && it.result == null }
+                            if (i >= 0) {
+                                run = run.copy(
+                                    steps = run.steps.set(
+                                        i,
+                                        run.steps[i].copy(result = e["result"]?.jsonPrimitive?.contentOrNull),
+                                    ),
+                                )
+                            }
+                        }
+                        "finished" -> run = run.copy(
+                            running = false,
+                            ok = e["ok"]?.jsonPrimitive?.contentOrNull != "false",
+                            report = e["report"]?.jsonPrimitive?.contentOrNull,
+                        )
+                    }
+                    val nextRuns = if (idx >= 0) runs.set(idx, run) else (runs + run).toPersistentList()
+                    m.copy(subagents = nextRuns)
+                }.toPersistentList(),
+            )
+        }
+    }
 
     is ChatAction.FinishMessage -> {
         // If the streaming message is no longer in view, the user switched away

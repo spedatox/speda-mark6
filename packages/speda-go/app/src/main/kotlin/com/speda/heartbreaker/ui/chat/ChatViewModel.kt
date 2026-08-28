@@ -463,6 +463,11 @@ class ChatViewModel(
                             }
                         }
                         "file" -> MessageJson.fileFrom(event.data)?.let { dispatch(ChatAction.AddFile(assistantId, it)) }
+                        // A coding peer (Optimus, Centurion) delegated part of
+                        // this turn. Goes to its own panel, never into `content`
+                        // — see ChatAction.Subagent's doc for why.
+                        "subagent" ->
+                            (event.data as? JsonObject)?.let { dispatch(ChatAction.Subagent(assistantId, it)) }
                         // Speda armed a launch project. Unlike `house_party_auth`
                         // below, this one IS handled here: the phone draws the
                         // countdown, so the backend permits arming from it
@@ -471,6 +476,11 @@ class ChatViewModel(
                         // decides whether anything is.
                         "skyfall_arm" ->
                             MessageJson.skyfallArmFrom(event.data)?.let { _skyfallArm.value = it }
+                        // A peer's gate stopped an irreversible operation and is
+                        // waiting. This is the fast path only — see [pendingAsk]'s
+                        // doc for why the global tray's poll is the guaranteed one.
+                        "permission_request" ->
+                            MessageJson.permissionAskFrom(event.data)?.let { _pendingAsk.value = it }
                         // `house_party_auth` is deliberately unhandled: the
                         // protocol is a desktop surface, and the backend refuses
                         // to engage it from here before any authorization window

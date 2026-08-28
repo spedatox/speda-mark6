@@ -297,6 +297,12 @@ private fun AssistantRow(
                 WorkingStatus(lastToolName = message.tools.lastOrNull()?.name, status = message.status)
             }
 
+            // What a coding peer delegated this turn — see SubagentPanel's doc.
+            val subagents = message.subagents
+            if (!subagents.isNullOrEmpty()) {
+                SubagentPanel(subagents, modifier = Modifier.padding(top = 8.dp))
+            }
+
             // Downloadable files the agent produced this turn.
             val files = message.files
             if (!files.isNullOrEmpty() && config != null && downloader != null) {

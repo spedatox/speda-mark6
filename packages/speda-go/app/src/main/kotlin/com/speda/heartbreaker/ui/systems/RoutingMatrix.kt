@@ -60,6 +60,11 @@ fun RoutingMatrix(
     onToggleServer: (ConnectionInfo) -> Unit,
     agentInfos: List<AgentModelInfo>,
     onPinAgentModel: (String, String?) -> Unit,
+    /** A SECOND pin per agent, for turns that arrive over Telegram — separate
+     *  from [onPinAgentModel] because a phone reply is usually cheap, and
+     *  pinning the interactive core for it would spend the interactive rate on
+     *  every "ok" (POST /agents/telegram-models). */
+    onPinTelegramModel: (String, String?) -> Unit,
     legionInfos: List<LegionModelInfo>,
     onPinLegionModel: (String, String?) -> Unit,
 ) {
@@ -118,7 +123,12 @@ fun RoutingMatrix(
                 color = palette.accentBright,
             ) {
                 agentInfos.forEach { info ->
-                    AgentCoreRow(info, models) { model -> onPinAgentModel(info.agentId, model) }
+                    AgentCoreRow(
+                        info,
+                        models,
+                        onPin = { model -> onPinAgentModel(info.agentId, model) },
+                        onPinTelegram = { model -> onPinTelegramModel(info.agentId, model) },
+                    )
                 }
             }
         }
@@ -248,12 +258,19 @@ private fun ServerToggleRow(c: ConnectionInfo, onToggle: () -> Unit) {
 }
 
 @Composable
-private fun AgentCoreRow(info: AgentModelInfo, models: List<ModelInfo>, onPin: (String?) -> Unit) {
+private fun AgentCoreRow(
+    info: AgentModelInfo,
+    models: List<ModelInfo>,
+    onPin: (String?) -> Unit,
+    onPinTelegram: (String?) -> Unit,
+) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
     var expanded by remember { mutableStateOf(false) }
+    var tgExpanded by remember { mutableStateOf(false) }
     val color = hexColor(Brands.agentColor(info.agentId))
     val pinned = info.override != null
+    val tgPinned = info.telegramOverride != null
     val profileLabel = t.routingMatrix.profileLabel(info.defaultMain.substringAfterLast(':'))
 
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -277,6 +294,22 @@ private fun AgentCoreRow(info: AgentModelInfo, models: List<ModelInfo>, onPin: (
                     maxLines = 1,
                 )
             }
+            // The Telegram pin — a SECOND, separate override for turns arriving
+            // over the bot. Its own tappable pill so it never collides with the
+            // app pin above; tapping it opens its own option list below.
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .background(if (tgPinned) palette.accent.copy(alpha = 0.14f) else palette.text.copy(alpha = 0.04f))
+                    .clickable { tgExpanded = !tgExpanded; if (tgExpanded) expanded = false }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                HbText(
+                    "TG",
+                    style = HbType.readout.copy(fontSize = 8.5.sp),
+                    color = if (tgPinned) palette.accentBright else palette.textFaint,
+                )
+            }
             if (expanded) HbGlyphs.ChevronUp(palette.icon, size = 9.dp) else HbGlyphs.ChevronDown(palette.icon, size = 9.dp)
         }
         if (expanded) {
@@ -285,6 +318,22 @@ private fun AgentCoreRow(info: AgentModelInfo, models: List<ModelInfo>, onPin: (
                 models.forEach { m ->
                     OptionRow(m.name.ifEmpty { m.id }.uppercase(Locale.ENGLISH), selected = info.override == m.id) {
                         onPin(m.id); expanded = false
+                    }
+                }
+            }
+        }
+        if (tgExpanded) {
+            Column(Modifier.fillMaxWidth().padding(start = 34.dp, top = 4.dp)) {
+                HbText(
+                    if (tgPinned) t.routingMatrix.pinnedTo(info.telegramOverride.orEmpty()) else profileLabel,
+                    style = HbType.readout.copy(fontSize = 9.sp),
+                    color = if (tgPinned) palette.amber else palette.textFaint,
+                )
+                Spacer(Modifier.height(4.dp))
+                OptionRow(profileLabel, selected = !tgPinned) { onPinTelegram(null); tgExpanded = false }
+                models.forEach { m ->
+                    OptionRow(m.name.ifEmpty { m.id }.uppercase(Locale.ENGLISH), selected = info.telegramOverride == m.id) {
+                        onPinTelegram(m.id); tgExpanded = false
                     }
                 }
             }

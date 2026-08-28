@@ -34,7 +34,9 @@ import androidx.compose.ui.window.DialogProperties
 import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.data.MemoryCommitResult
 import com.speda.heartbreaker.data.MemoryFileInfo
+import com.speda.heartbreaker.data.MemoryFolderInfo
 import com.speda.heartbreaker.data.MemoryRevisionInfo
+import com.speda.heartbreaker.data.MemoryStatus
 import com.speda.heartbreaker.designsystem.glass.HbGlassShape
 import com.speda.heartbreaker.designsystem.glass.HbGlassState
 import com.speda.heartbreaker.designsystem.glass.hbGlass
@@ -78,17 +80,29 @@ fun KnowledgeBank(config: AppConfig, api: IgorApi) {
     val t = LocalStrings.current
 
     var files by remember { mutableStateOf<List<MemoryFileInfo>>(emptyList()) }
+    var folders by remember { mutableStateOf<List<MemoryFolderInfo>>(emptyList()) }
+    var status by remember { mutableStateOf<MemoryStatus?>(null) }
     var openPath by remember { mutableStateOf<String?>(null) }
     /** Folders start OPEN: a collapsed tree hides the thing the panel exists
      *  to show, and the owner opened it to look at his memory. */
     var folded by remember { mutableStateOf<Set<String>>(emptySet()) }
 
-    LaunchedEffect(config) { files = api.fetchMemoryFiles(config) }
+    LaunchedEffect(config) {
+        files = api.fetchMemoryFiles(config)
+        folders = api.fetchMemoryFolders(config)
+        status = api.memoryStatus(config)
+    }
 
-    val tree = remember(files) { MemoryTree.group(files) { it.path } }
+    // Folders the store DECLARES but holds no file for yet — merged in so the
+    // tree shows where a thing WILL go, not only where something already went.
+    val tree = remember(files, folders) {
+        MemoryTree.group(files, extraFolders = folders.map { it.path }) { it.path }
+    }
 
     Panel {
-        if (files.isEmpty()) {
+        status?.let { MemoryStatusStrip(it) }
+
+        if (files.isEmpty() && folders.isEmpty()) {
             HbText(t.knowledgeBank.noRecords, style = HbType.read.copy(fontSize = 14.sp), color = palette.textFaint)
             return@Panel
         }
@@ -131,6 +145,35 @@ fun KnowledgeBank(config: AppConfig, api: IgorApi) {
             onClose = { openPath = null },
             onFileChanged = { fresh -> files = files.map { if (it.path == fresh.path) fresh else it } },
         )
+    }
+}
+
+/**
+ * Where the observation record stands (GET /admin/memory/status) — no model
+ * call, so it is cheap enough to read whenever this panel is open. A running
+ * rebuild job takes priority over the steady-state numbers: while it is in
+ * flight the counts below are mid-change and would read as noise.
+ */
+@Composable
+private fun MemoryStatusStrip(status: MemoryStatus) {
+    val palette = LocalHbPalette.current
+    val t = LocalStrings.current
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+        val job = status.job
+        if (job != null && job.status == "running") {
+            HbText(t.knowledgeBank.rebuildingMemory, style = HbType.readout.copy(fontSize = 10.5.sp), color = palette.accentBright)
+        } else if (job != null && job.status == "failed") {
+            HbText(t.knowledgeBank.lastRebuildFailed, style = HbType.readout.copy(fontSize = 10.5.sp), color = palette.red)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            HbText(t.knowledgeBank.observations(status.observations), style = HbType.readout.copy(fontSize = 10.5.sp), color = palette.textFaint)
+            if (status.atRiskFacts > 0) {
+                HbText(t.knowledgeBank.atRiskFacts(status.atRiskFacts), style = HbType.readout.copy(fontSize = 10.5.sp), color = palette.amber)
+            }
+        }
+        if (status.verdict.isNotBlank()) {
+            HbText(status.verdict, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint)
+        }
     }
 }
 

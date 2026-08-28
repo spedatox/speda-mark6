@@ -209,6 +209,12 @@ fun SystemsBoardScreen(
                         if (infos.isNotEmpty()) agentInfos = infos
                     }
                 },
+                onPinTelegramModel = { agentId, model ->
+                    scope.launch {
+                        val infos = api.pinTelegramModel(config, agentId, model)
+                        if (infos.isNotEmpty()) agentInfos = infos
+                    }
+                },
                 legionInfos = legionInfos,
                 onPinLegionModel = { workerId, model ->
                     scope.launch {
