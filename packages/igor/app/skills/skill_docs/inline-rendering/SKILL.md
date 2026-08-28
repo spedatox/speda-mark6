@@ -1,6 +1,6 @@
 ---
 name: inline-rendering
-description: Renders SVG and HTML as live previews directly inside the chat. Use when the user requests charts, graphs, diagrams, flowcharts, data visualisations, UI mockups, or any visual output.
+description: Renders chart blocks, SVG, and HTML as live previews directly inside the chat. Use when the user requests charts, graphs, diagrams, flowcharts, data visualisations, UI mockups, or any visual output.
 ---
 
 # Inline Rendering
@@ -9,13 +9,68 @@ Output a fenced code block — the frontend renders it flush inside the message,
 UI element. There is NO surrounding card, white background, or border drawn by you. The render
 must look like it belongs in a sleek dark chat app.
 
-## Rule 1 — Prefer SVG for diagrams, charts, and graphs
+## Rule 0 — Data charts (line/area/bar/pie) → use a ```chart``` block, never SVG or HTML
 
-SVG renders inline, scales perfectly, needs no libraries, and looks native. Use it for almost
-everything: line/bar/scatter charts, economic diagrams, flowcharts, supply-demand graphs,
-network diagrams, illustrations.
+Anything with series and data points — line, area, bar, or pie/donut — has a dedicated fenced
+block type: **```chart**. It renders as a native Stark FUI panel (teal axes, hairline grid,
+corner-bracketed header) and is the ONLY correct output for this category. Do not hand-draw a
+pie chart in SVG and do not reach for Chart.js in an HTML block — both are wrong when this
+block covers the case.
 
-Hand-draw the SVG. Compute the coordinates yourself. Example — a clean dark-theme line chart:
+```
+{
+  "type": "line",
+  "title": "PANEL_TITLE",
+  "xKey": "month",
+  "series": [
+    { "key": "value", "label": "SERIES NAME", "color": "#36abca" }
+  ],
+  "data": [
+    { "month": "JAN", "value": 120 },
+    { "month": "FEB", "value": 180 }
+  ],
+  "unit": "K",
+  "yDomain": [0, 300]
+}
+```
+
+- `type`: `"line"` | `"area"` | `"bar"` | `"pie"`
+- `title`: optional panel header — `"WORD_SUB"` splits into white + cyan
+- `xKey`: which data field maps to the X axis (line/area/bar only)
+- `series`: one entry per line/bar. Omit `color` to cycle the palette
+- `unit`: appended to tooltip values (e.g. `"%"`, `"ms"`, `" KB"`)
+- `yDomain`: optional `[min, max]` — use `"auto"` for either end
+- `height`: optional chart height in px (default 210)
+
+**Pie / Donut** — flat `data` array, no `series`/`xKey`:
+```
+{
+  "type": "pie",
+  "title": "DISTRIBUTION_STATUS",
+  "data": [
+    { "label": "BACKEND",  "value": 40 },
+    { "label": "FRONTEND", "value": 30 },
+    { "label": "ML",       "value": 20 },
+    { "label": "OPS",      "value": 10 }
+  ]
+}
+```
+
+Multiple series (grouped bar / multi-line):
+```
+"series": [
+  { "key": "income",  "label": "INCOME" },
+  { "key": "expense", "label": "EXPENSE", "color": "#d39a3a" }
+]
+```
+
+## Rule 1 — Prefer SVG for diagrams, flowcharts, and anything that isn't a data chart
+
+SVG renders inline, scales perfectly, needs no libraries, and looks native. Use it for
+everything that is NOT a line/bar/area/pie chart: economic diagrams, flowcharts, supply-demand
+graphs, network diagrams, timelines, illustrations.
+
+Hand-draw the SVG. Compute the coordinates yourself. Example — a clean dark-theme diagram:
 
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" font-family="Inter, sans-serif">
@@ -40,10 +95,11 @@ Hand-draw the SVG. Compute the coordinates yourself. Example — a clean dark-th
 - Always set a `viewBox` (e.g. `0 0 720 420`) and DO NOT set width/height — it scales to fit.
 - Use `font-family="Inter, sans-serif"`.
 
-## Rule 2 — Use HTML + JS ONLY for genuine interactivity
+## Rule 2 — Use HTML + JS ONLY for interactivity a ```chart``` block can't do
 
-Reach for HTML only when the user needs sliders, live recalculation, hover tooltips, or
-animation that SVG can't do. Then follow these rules exactly:
+Reach for HTML only when the user needs sliders, live recalculation, or animation — something
+neither the ```chart``` block nor SVG can do. A hover tooltip on a chart is NOT a reason to use
+this; the ```chart``` block already has tooltips built in. Then follow these rules exactly:
 
 ```html
 <!DOCTYPE html>
@@ -93,10 +149,10 @@ animation that SVG can't do. Then follow these rules exactly:
 
 | Want | Use |
 |------|-----|
-| A static chart, graph, or diagram | **SVG** |
+| Line / area / bar / pie / donut chart | **```chart``` block** |
 | An economic / conceptual diagram | **SVG** |
-| A flowchart or illustration | **SVG** |
-| Sliders / live recalculation / hover tooltips | HTML + JS |
+| A flowchart, network graph, or illustration | **SVG** |
+| Sliders / live recalculation / animation | HTML + JS |
 | A downloadable file | `generate_document` (only if explicitly asked) |
 
-When unsure: choose SVG. It always looks native.
+When unsure and it has series or data points: ```chart```. When unsure and it doesn't: SVG.
