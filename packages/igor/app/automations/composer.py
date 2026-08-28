@@ -64,8 +64,20 @@ def _interval_rule(minutes: int) -> dict:
     return {"interval": [{"field": "minutes", "minutesInterval": minutes}]}
 
 
+def _secret_headers() -> dict:
+    """The two secrets every internal HTTP call back into Igor must carry —
+    n8n's own shared secret plus the service API key. One place, because three
+    node builders (callback, mail scan, mail ack) all need it identically and a
+    header set that drifted between them would 401 silently on whichever one
+    was edited alone."""
+    return {"parameters": [
+        {"name": "X-API-Key", "value": settings.speda_api_key},
+        {"name": "X-N8N-Secret", "value": settings.n8n_secret},
+    ]}
+
+
 def _callback_body(kind: str, name: str, intent: str, output_mode: str = "push",
-                   with_facts: bool = False) -> str:
+                   with_facts: bool = False, allow_override: bool = False) -> str:
     """n8n expression building the /trigger/speda body. Static strings are
     JSON-escaped (valid JS literals); `$json` carries the upstream item so Speda
     sees what actually fired (the new email, the changed page, the feed item).
@@ -74,12 +86,20 @@ def _callback_body(kind: str, name: str, intent: str, output_mode: str = "push",
     automation MUST fire silent — the `reminders` tool does its delivering, with
     the answer buttons attached, and a push would send the same checklist a
     second time in a form nobody can answer (app/automations/templates.py).
+
+    `allow_override` lets the upstream gate replace the stored intent for ONE
+    firing — the mail-watch gate's health alert ("Gmail is unreachable") must
+    override the owner's polished per-domain intent rather than compete with
+    it, and $json.intent_override is how it says so without this function
+    knowing anything about mail.
     """
     # With a day-flags node upstream, the computed facts are APPENDED to the
     # intent here rather than baked into it — they are only knowable at fire
     # time, and a workflow that stored "today is a gym day" would be wrong by
     # the next morning.
     intent_expr = json.dumps(intent) + (" + ($json.facts || '')" if with_facts else "")
+    if allow_override:
+        intent_expr = f"($json.intent_override || ({intent_expr}))"
     return (
         "={{ ({ \"payload\": { "
         f"\"type\": {json.dumps(kind)}, "
@@ -92,7 +112,8 @@ def _callback_body(kind: str, name: str, intent: str, output_mode: str = "push",
 
 
 def _callback_node(kind: str, name: str, intent: str, x: int, agent_id: str = "speda",
-                   output_mode: str = "push", with_facts: bool = False) -> dict:
+                   output_mode: str = "push", with_facts: bool = False,
+                   allow_override: bool = False) -> dict:
     """The terminal HTTP Request → the owning agent. Carries both required
     secrets and fires /trigger/{agent_id} so the push is composed in that
     agent's voice."""
@@ -100,13 +121,10 @@ def _callback_node(kind: str, name: str, intent: str, x: int, agent_id: str = "s
         "method": "POST",
         "url": f"{settings.speda_callback_url.rstrip('/')}/trigger/{agent_id}",
         "sendHeaders": True,
-        "headerParameters": {"parameters": [
-            {"name": "X-API-Key", "value": settings.speda_api_key},
-            {"name": "X-N8N-Secret", "value": settings.n8n_secret},
-        ]},
+        "headerParameters": _secret_headers(),
         "sendBody": True,
         "specifyBody": "json",
-        "jsonBody": _callback_body(kind, name, intent, output_mode, with_facts),
+        "jsonBody": _callback_body(kind, name, intent, output_mode, with_facts, allow_override),
         "options": {},
     })
 
@@ -190,6 +208,57 @@ def _day_flags_code(flags: list[dict]) -> str:
         "(days.includes(tomorrow) ? 'EVET' : 'HAYIR') + '.';\n"
         "}\n"
         "return [{ json: { facts: out } }];"
+    )
+
+
+def _mail_gate_code(label: str) -> str:
+    """JS for a mail-watch gate: fires only on a real, unread hit, and alerts
+    once — edge-triggered — if the Gmail connection goes bad, then stays quiet
+    until it recovers.
+
+    Mirrors `scripts/n8n/mail_watch.json`'s shared-pipeline Gate node exactly,
+    field for field, so a per-domain automation behaves identically to the
+    hand-edited file it complements rather than introducing a second contract
+    for the same thing. That file's Gate has been correct in production; this
+    is not a redesign, only a per-automation instantiation of it.
+
+    `label` is baked in here rather than read off the scan response, because
+    `MailScanResponse` never echoes it back (app/schemas/mail.py) — it is this
+    automation's own fixed configuration, known at compose time, and the
+    downstream Ack call needs it from wherever this gate publishes it.
+    """
+    lbl = json.dumps(label)
+    alert_prefix = json.dumps(
+        "Bu mail izleyicisi Gmail'e ulaşamıyor. Owner'a TEK cümlede söyle: "
+        "izleme kör, Google bağlantısını Ayarlar > Bağlantılar'dan yeniden "
+        "kurması gerekebilir. Hiçbir araç çağırma, mail içeriği uydurma. Hata: "
+    )
+    return (
+        "const store = $getWorkflowStaticData('global');\n"
+        "const res = $input.first().json;\n"
+        "const status = res.status || 'error';\n"
+        "\n"
+        "if (status !== 'ok') {\n"
+        "  // Edge-triggered: alert once when the connection breaks, then stay\n"
+        "  // quiet on every poll after that — a broken watch nagging every 15\n"
+        "  // minutes is worse than one that goes silent until it recovers.\n"
+        "  if (store.broken) { return []; }\n"
+        "  store.broken = true;\n"
+        "  return [{ json: {\n"
+        f"    intent_override: {alert_prefix} + (res.detail || status),\n"
+        f"    message_ids: [], label: {lbl}\n"
+        "  } }];\n"
+        "}\n"
+        "store.broken = false;\n"
+        "\n"
+        "// The normal path: nothing arrived. No items = branch stops = no\n"
+        "// turn, no tokens spent — the entire point of this being a gate.\n"
+        "if (!res.count) { return []; }\n"
+        "\n"
+        "return [{ json: {\n"
+        "  count: res.count, message_ids: res.message_ids || [],\n"
+        f"  messages: res.messages || [], label: {lbl}\n"
+        "} }];"
     )
 
 
@@ -299,6 +368,53 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
         cb = _callback_node(kind, name, intent, 220, agent_id)
         nodes, chain = [trigger, cb], ("RSS", "Notify Speda")
 
+    elif kind == "mail_watch":
+        domain = (spec.get("domain") or "").strip()
+        recipient = (spec.get("recipient") or "").strip()
+        if not (domain or recipient):
+            raise ValueError("mail_watch automations need a 'domain' or a 'recipient'")
+        every = int(spec.get("interval_minutes", 15))
+        label = spec.get("label") or "SPEDA-Seen"
+        trigger = _node("Schedule", _T_SCHEDULE, 0, {"rule": _interval_rule(every)})
+        # Same tolerance as web_watch's fetch: Gmail/the token endpoint having a
+        # bad moment is expected background noise, not a reason to skip a poll.
+        scan = _node("Scan mail", _T_HTTP, 220, {
+            "method": "POST",
+            "url": f"{settings.speda_callback_url.rstrip('/')}/mail/watch/scan",
+            "sendHeaders": True,
+            "headerParameters": _secret_headers(),
+            "sendBody": True,
+            "specifyBody": "json",
+            "jsonBody": json.dumps({
+                "domain": domain, "recipient": recipient,
+                "max_results": 10, "newer_than_days": 2,
+                "include_body": True, "body_chars": 2000, "label": label,
+            }),
+            "options": {},
+        }, retryOnFail=True, maxTries=3, waitBetweenTries=5000)
+        gate = _node("Gate", _T_CODE, 440, {"jsCode": _mail_gate_code(label)})
+        cb = _callback_node(kind, name, intent, 660, agent_id, mode, allow_override=True)
+        # Exactly-once, same contract as scripts/n8n/mail_watch.json: this call
+        # commits LAST, after the trigger already succeeded, so a failed ack
+        # leaves the mail unlabelled and it is simply re-scanned next poll —
+        # recoverable — rather than labelling first and losing a notification
+        # to a mid-flight crash, which is not.
+        ack = _node("Mark seen", _T_HTTP, 880, {
+            "method": "POST",
+            "url": f"{settings.speda_callback_url.rstrip('/')}/mail/watch/seen",
+            "sendHeaders": True,
+            "headerParameters": _secret_headers(),
+            "sendBody": True,
+            "specifyBody": "json",
+            "jsonBody": (
+                "={{ ({ \"message_ids\": $('Gate').item.json.message_ids, "
+                "\"label\": $('Gate').item.json.label }) }}"
+            ),
+            "options": {},
+        }, retryOnFail=True, maxTries=2, waitBetweenTries=3000)
+        nodes = [trigger, scan, gate, cb, ack]
+        chain = ("Schedule", "Scan mail", "Gate", "Notify Speda", "Mark seen")
+
     elif kind == "webhook":
         path = spec.get("webhook_path") or uuid.uuid4().hex[:16]
         spec["webhook_path"] = path  # echo back so the caller can store/show the URL
@@ -341,6 +457,32 @@ def display(spec: dict) -> dict | None:
     return sched.describe(spec["schedule"])
 
 
+def hook_display(spec: dict) -> dict | None:
+    """The STRUCTURED watcher config for the owner's screen — url/domain and
+    polling interval, never a sentence, for the same reason `display()` above
+    is structural. None for anything that isn't one of the three Hook
+    templates (app/automations/templates.py).
+    """
+    template = spec.get("template")
+    if template not in ("hook_keyword", "hook_address", "hook_mail"):
+        return None
+    if template == "hook_mail":
+        every = int(spec.get("interval_minutes") or 15)
+        return {
+            "type": "mail",
+            "domain": spec.get("domain") or "",
+            "recipient": spec.get("recipient") or "",
+            "interval_minutes": every,
+        }
+    every = int(spec.get("interval_minutes") or 360)
+    return {
+        "type": "keyword" if template == "hook_keyword" else "address",
+        "url": spec.get("url") or "",
+        "look_for": spec.get("look_for") or "",
+        "interval_minutes": every,
+    }
+
+
 def describe(spec: dict) -> str:
     """One-line ENGLISH summary for logs, confirmations and the agent-facing
     tool. Never the owner-facing rendering — that is `display()`."""
@@ -355,6 +497,9 @@ def describe(spec: dict) -> str:
         return f"Watching {spec.get('url')} {what} every {spec.get('interval_minutes', 360)}m"
     if kind == "rss_watch":
         return f"Watching feed {spec.get('feed_url')} for new items"
+    if kind == "mail_watch":
+        who = spec.get("domain") or spec.get("recipient")
+        return f"Watching mail from/to {who} every {spec.get('interval_minutes', 15)}m"
     if kind == "webhook":
         return f"Inbound webhook → {spec.get('intent')}"
     return spec.get("intent", "automation")

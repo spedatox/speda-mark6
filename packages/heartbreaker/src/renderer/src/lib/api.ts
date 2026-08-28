@@ -614,8 +614,11 @@ export async function setConnection(config: AppConfig, server: string, active: b
 
 /* ── Automations — Speda's proactive n8n watchers ─────────────────────────── */
 
-/** Which of the three things the owner can build from Settings. */
-export type AutomationTemplate = 'briefing' | 'reminder' | 'proactive_ask'
+/** The six things the owner can build from Settings — three fire on a clock,
+ *  three ("hook_*") fire on an event instead. See templates.py. */
+export type AutomationTemplate =
+  | 'briefing' | 'reminder' | 'proactive_ask'
+  | 'hook_keyword' | 'hook_address' | 'hook_mail'
 
 export type AutomationFrequency = 'once' | 'daily' | 'weekly' | 'monthly'
 
@@ -649,6 +652,20 @@ export interface AutomationDayFlag {
   days: number[]   // 1=Mon … 7=Sun
 }
 
+/**
+ * A Hook's structured watcher config — url/domain and polling interval, never
+ * a sentence, same reason `AutomationSchedule` is structural. See
+ * `composer.hook_display()`.
+ */
+export interface AutomationHook {
+  type: 'keyword' | 'address' | 'mail'
+  url?: string
+  look_for?: string
+  domain?: string
+  recipient?: string
+  interval_minutes: number
+}
+
 /** One agent that can own an automation, for the form's picker. */
 export interface AutomationAgent {
   agent_id: string
@@ -668,9 +685,12 @@ export interface AutomationInfo {
   expires_at: string | null
   last_fired_at: string | null
   summary: string
-  /** Null for a watcher created by an agent — it has no clock and no template. */
+  /** Null for a raw agent-authored watcher — it has no template at all. */
   template: AutomationTemplate | null
+  /** Null for a Hook or a raw watcher — neither has a clock. */
   schedule: AutomationSchedule | null
+  /** Null for anything that isn't a Hook. */
+  hook: AutomationHook | null
   /** The editable content half: what the owner asked for, possibly rewritten. */
   instruction: string | null
   /** His original wording, kept even after a polish so the editor can show it. */
@@ -680,6 +700,11 @@ export interface AutomationInfo {
   every_minutes: number | null
   max_asks: number | null
   day_flags: AutomationDayFlag[] | null
+  url: string | null
+  look_for: string | null
+  domain: string | null
+  recipient: string | null
+  interval_minutes: number | null
 }
 
 /** The form's payload. Mirrors the composer spec; the backend validates it. */
@@ -687,18 +712,26 @@ export interface AutomationDraft {
   agent_id: string
   template: AutomationTemplate
   name: string
-  schedule: {
+  instruction: string
+  /** Required for the three schedule templates; absent for the three Hooks. */
+  schedule?: {
     frequency: AutomationFrequency
     at: string
     days?: number[]
     dom?: number
     date?: string
   }
-  instruction: string
   options?: string[]
   every_minutes?: number
   max_asks?: number
   day_flags?: AutomationDayFlag[]
+  /** Hook fields — hook_keyword/hook_address use url(+look_for); hook_mail
+   *  uses domain(+recipient). interval_minutes applies to all three. */
+  url?: string
+  look_for?: string
+  domain?: string
+  recipient?: string
+  interval_minutes?: number
 }
 
 export interface AutomationsStatus {

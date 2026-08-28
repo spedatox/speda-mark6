@@ -92,6 +92,25 @@ def _prompt(spec: dict, agent_name: str) -> str:
             "content and what it should say — the sending mechanism is added "
             "separately, so do not describe it"
         ),
+        "hook_keyword": (
+            "a watcher that fires the FIRST time a specific word or phrase "
+            "appears on a web page. The page's text is already in the payload "
+            "when this runs — write what to do with it; do not describe "
+            "fetching or re-checking the page, that already happened"
+        ),
+        "hook_address": (
+            "a watcher that fires whenever a specific web page changes AT "
+            "ALL, not for any particular word. The changed page's text is "
+            "already in the payload when this runs — write what to do with "
+            "it; do not describe fetching the page"
+        ),
+        "hook_mail": (
+            "a watcher that fires when mail arrives from a specific sender "
+            "domain or to a specific address. The sender, subject and body of "
+            "the mail are already in the payload when this runs — do NOT call "
+            "Gmail or load a toolset, the mail is already there; read it and "
+            "act on it"
+        ),
     }.get(template, "a scheduled automation")
 
     return (
@@ -130,7 +149,14 @@ async def polish_pending(request_id: str = "", model: str = "") -> int:
 
         client = LLMClient()
         for row, spec in pending:
-            spec["_when"] = sched.summarize(spec.get("schedule") or {})
+            # A Hook has no clock — it fires on an event, not "at" a time — so
+            # sched.summarize() would just say "on a schedule" and confuse a
+            # model already told exactly what event triggers it above.
+            spec["_when"] = (
+                "whenever the watched event happens (see above)"
+                if spec.get("template") in templates.HOOK_TEMPLATES
+                else sched.summarize(spec.get("schedule") or {})
+            )
             try:
                 response = await client.create_message(
                     model=model,

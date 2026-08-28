@@ -11,6 +11,7 @@ metadata for display and delivery context only.
 
 import json
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -74,6 +75,14 @@ def _as_dict(a: Automation) -> dict:
         "every_minutes": spec.get("every_minutes"),
         "max_asks": spec.get("max_asks"),
         "day_flags": spec.get("day_flags"),
+        # The Hook half — structured watcher config, same "never a sentence"
+        # rule as `schedule` above. None for anything that isn't a Hook.
+        "hook": composer.hook_display(spec),
+        "url": spec.get("url"),
+        "look_for": spec.get("look_for"),
+        "domain": spec.get("domain"),
+        "recipient": spec.get("recipient"),
+        "interval_minutes": spec.get("interval_minutes"),
     }
     if a.kind == "webhook":
         d["webhook_url"] = _webhook_url(spec)
@@ -82,15 +91,35 @@ def _as_dict(a: Automation) -> dict:
 
 def _prepare(spec: dict) -> dict:
     """Validate and canonicalise a TEMPLATED spec, in place-ish, before anything
-    reaches n8n. Untemplated specs (the agent tool's watcher kinds) pass through
-    untouched — they have no schedule block and no transport mechanics to bolt on.
+    reaches n8n. Untemplated specs (the agent tool's raw watcher kinds) pass
+    through untouched — they have no schedule/hook block and no transport
+    mechanics to bolt on.
+
+    Branches on which of the two template FAMILIES the spec belongs to
+    (templates.py): a schedule template gets the structured frequency/at/days
+    machinery; a Hook fires on an event instead and gets a plain polling
+    interval with no clock at all — forcing it through schedule.normalize()
+    would demand an 'at' time that means nothing for "wake me when this page
+    changes".
 
     Raises ValueError with an owner-readable message naming the field and fix.
     """
-    if not spec.get("template"):
+    template = spec.get("template")
+    if not template:
         return spec
-    spec["kind"] = "schedule"
-    spec["schedule"] = sched.normalize(spec.get("schedule") or {})
+
+    if template in templates.SCHEDULE_TEMPLATES:
+        spec["kind"] = "schedule"
+        spec["schedule"] = sched.normalize(spec.get("schedule") or {})
+    elif template in templates.HOOK_TEMPLATES:
+        spec["kind"] = "mail_watch" if template == "hook_mail" else "web_watch"
+        if template == "hook_address":
+            # An address watch fires on ANY change — a stray look_for left over
+            # from switching templates would silently turn it into a keyword
+            # watch instead, which is exactly the distinction the owner picked
+            # between when he chose this template.
+            spec.pop("look_for", None)
+        spec.setdefault("interval_minutes", 15 if template == "hook_mail" else 360)
     templates.validate(spec)
 
     # The owner's own words are kept for good, separately from `instruction`:
@@ -101,10 +130,13 @@ def _prepare(spec: dict) -> dict:
     spec.setdefault("intent_status", "raw")
 
     # A one-off's expiry is what makes it a one-off — cron alone would bring it
-    # back next year (app/automations/schedule.py).
-    implied = sched.expiry_for(spec["schedule"])
-    if implied:
-        spec["expires_at"] = implied
+    # back next year (app/automations/schedule.py). Hooks have no schedule and
+    # so never imply one here — duration_days (create_automation) is still how
+    # a Hook gets time-boxed.
+    if template in templates.SCHEDULE_TEMPLATES:
+        implied = sched.expiry_for(spec["schedule"])
+        if implied:
+            spec["expires_at"] = implied
     return spec
 
 
@@ -255,7 +287,8 @@ async def update_automation(
     recreated workflow forgets it already ran and fires a second time.
 
     `changes` may carry any of: name, agent_id, schedule, instruction, options,
-    every_minutes, max_asks. Anything absent keeps its current value.
+    every_minutes, max_asks, day_flags, url, look_for, domain, recipient,
+    interval_minutes. Anything absent keeps its current value.
     """
     row = await db.get(Automation, automation_id)
     if row is None:
@@ -265,7 +298,8 @@ async def update_automation(
     agent_id = str(changes.get("agent_id") or row.agent_id)
 
     for field in ("name", "schedule", "instruction", "options", "every_minutes",
-                  "max_asks", "day_flags"):
+                  "max_asks", "day_flags", "url", "look_for", "domain",
+                  "recipient", "interval_minutes"):
         if field in changes and changes[field] is not None:
             spec[field] = changes[field]
 
@@ -348,6 +382,76 @@ async def delete_automation(automation_id: int, db: AsyncSession) -> dict:
     await db.commit()
     logger.info("automation_deleted", extra={"automation_id": automation_id})
     return snapshot
+
+
+async def test_fire(
+    automation_id: int, db: AsyncSession, *, profiles,
+    orchestrator, turns, session_manager, telegram_bots,
+    agent_proxy=None, ws_manager=None,
+) -> dict:
+    """Fire an automation's stored intent RIGHT NOW — the exact turn n8n would
+    start when its schedule comes due (core.trigger_runner.start_trigger_turn),
+    never a mock: a push automation really pushes to Telegram, a proactive ask
+    really nags with real buttons. Bypasses n8n entirely, so a test never
+    touches the workflow's own "already fired today" latch and can never
+    cause — or be mistaken for — a duplicate real firing.
+
+    Shared by the Settings "Test" button (routers/automations.py) and the
+    agent tool's action='test' (skills/automations.py) so the two paths can
+    never drift. `profiles`/`orchestrator`/`turns`/… are late-bound engine
+    refs the caller holds (app.state for the router; a `wire()` call for the
+    skill, since Tier-1 skills register before the engine exists) — this
+    module owns none of them (Rule 6).
+
+    Raises ValueError on a bad id, an unregistered agent, or a full turn
+    registry — the same convention every other function here uses, so every
+    caller catches ValueError alike.
+    """
+    row = await db.get(Automation, automation_id)
+    if row is None:
+        raise ValueError(f"No automation with id {automation_id}.")
+    profile = profiles.get(row.agent_id) if profiles else None
+    if profile is None:
+        raise ValueError(f"Agent '{row.agent_id}' is not registered.")
+
+    from app.core.trigger_runner import start_trigger_turn
+
+    try:
+        spec = json.loads(row.spec or "{}")
+    except ValueError:
+        spec = {}
+    output_mode = templates.output_mode(spec.get("template") or "")
+
+    request_id = str(uuid.uuid4())
+    started, session_id = await start_trigger_turn(
+        db=db,
+        profile=profile,
+        payload={
+            "type": row.kind,
+            # Distinct from the real "automation_fired" n8n sends, so a log or
+            # a support conversation can tell a manual test from a real firing
+            # at a glance — nothing downstream branches on this value.
+            "event": "automation_test",
+            "automation": row.name,
+            "intent": row.intent,
+        },
+        output_mode=output_mode,
+        request_id=request_id,
+        orchestrator=orchestrator,
+        turns=turns,
+        session_manager=session_manager,
+        telegram_bots=telegram_bots,
+        agent_proxy=agent_proxy,
+        ws_manager=ws_manager,
+        triggered_by="n8n",
+    )
+    if started is None:
+        raise ValueError("Too many turns are running at once — retry shortly.")
+    logger.info(
+        "automation_test_fired",
+        extra={"automation_id": automation_id, "agent_id": row.agent_id, "request_id": request_id},
+    )
+    return {"started": True, "request_id": request_id, "session_id": session_id, "agent_id": row.agent_id}
 
 
 async def mark_fired(automation_name: str, db: AsyncSession) -> None:

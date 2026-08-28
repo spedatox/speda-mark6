@@ -1,6 +1,15 @@
 """
-The three automation templates the owner picks from in Heartbreaker, and the
+The automation templates the owner picks from in Heartbreaker, and the
 deterministic half of the instruction each one fires with.
+
+Two families. SCHEDULE_TEMPLATES fire on a clock (briefing/reminder/
+proactive_ask) — their `spec.schedule` block is the structured frequency/at/
+days machinery in `schedule.py`. HOOK_TEMPLATES fire on an EVENT — a keyword
+appearing, a page changing, mail arriving — and poll on a plain
+`interval_minutes` cadence instead; they carry no `schedule` block at all, and
+`manager._prepare()` branches on which family a spec belongs to before either
+validating or composing it. A Hook's `describe()`/`display()` half is
+`composer.hook_display()`, the watcher counterpart of `schedule.describe()`.
 
 `reminder` is deliberately schedule-agnostic — it started as a one-off-only
 template ("reminder_once") and was generalized because the owner's actual need
@@ -41,7 +50,14 @@ import re
 
 from app.automations import schedule as sched
 
-TEMPLATES = ("briefing", "reminder", "proactive_ask")
+SCHEDULE_TEMPLATES = ("briefing", "reminder", "proactive_ask")
+# hook_keyword and hook_address are BOTH a web_watch — the only difference is
+# whether 'look_for' is set (wait for a specific word) or absent (fire on any
+# change at all). Kept as two template names rather than one "web watch" pick
+# with a checkbox because the owner picking between them IS the wizard's first
+# question, the same shape as picking briefing/reminder/proactive_ask.
+HOOK_TEMPLATES = ("hook_keyword", "hook_address", "hook_mail")
+TEMPLATES = SCHEDULE_TEMPLATES + HOOK_TEMPLATES
 
 # What every push-mode automation must be told, once, at the end. Kept here
 # rather than in the polisher's prompt because it is a fact about the transport,
@@ -111,6 +127,25 @@ def validate(spec: dict) -> None:
         asks = int(spec.get("max_asks") or 10)
         if asks < 1:
             raise TemplateError("'max_asks' must be at least 1.")
+
+    if template == "hook_keyword":
+        if not str(spec.get("url") or "").strip():
+            raise TemplateError("A keyword watch needs a 'url' — the page to watch.")
+        if not str(spec.get("look_for") or "").strip():
+            raise TemplateError(
+                "A keyword watch needs 'look_for' — the word or phrase to wait "
+                "for. Watching for ANY change instead? Pick the address-watch "
+                "template."
+            )
+    elif template == "hook_address":
+        if not str(spec.get("url") or "").strip():
+            raise TemplateError("An address watch needs a 'url' — the page to watch.")
+    elif template == "hook_mail":
+        if not (str(spec.get("domain") or "").strip() or str(spec.get("recipient") or "").strip()):
+            raise TemplateError(
+                "A mail watch needs a 'domain' (e.g. 'tdv.org') or a "
+                "'recipient' address for a forwarded mailbox."
+            )
 
     for flag in spec.get("day_flags") or []:
         if not isinstance(flag, dict) or not str(flag.get("label") or "").strip():
@@ -196,8 +231,16 @@ def _ask_intent(spec: dict, body: str) -> str:
 
 def summarize(spec: dict) -> str:
     """One-line English summary for logs and the agent-facing tool. The owner's
-    screen renders `describe()` structurally instead (see schedule.py)."""
+    screen renders `describe()`/`hook_display()` structurally instead (see
+    schedule.py and composer.py)."""
     template = spec.get("template") or spec.get("kind") or "automation"
-    when = sched.summarize(spec.get("schedule") or {})
     name = spec.get("name") or "automation"
+    if template in HOOK_TEMPLATES:
+        every = spec.get("interval_minutes") or (15 if template == "hook_mail" else 360)
+        target = (
+            (spec.get("domain") or spec.get("recipient"))
+            if template == "hook_mail" else spec.get("url")
+        )
+        return f"{template} '{name}' — watching {target} every {every}m"
+    when = sched.summarize(spec.get("schedule") or {})
     return f"{template} '{name}' — {when}"

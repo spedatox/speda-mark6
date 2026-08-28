@@ -3,7 +3,7 @@ import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
 import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, microsoftLoginUrl, microsoftStatus, microsoftDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationAgents, createAutomation, updateAutomation, testAutomation, telegramConnect, telegramStatus } from '../lib/api'
-import { AutomationBuilder, describeSchedule } from './AutomationBuilder'
+import { AutomationBuilder, describeHook, describeSchedule } from './AutomationBuilder'
 import { memoryStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus, AutomationAgent, AutomationDraft, MemoryStatus } from '../lib/api'
 import RemindersTab from './RemindersTab'
@@ -850,9 +850,14 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                             never "cron", which is what this module exists to
                             stop putting in front of the owner. */}
                         {a.template
-                          ? { briefing: t.settingsAutomations.tplBriefing,
+                          ? {
+                              briefing: t.settingsAutomations.tplBriefing,
                               reminder: t.settingsAutomations.tplOnce,
-                              proactive_ask: t.settingsAutomations.tplAsk }[a.template]
+                              proactive_ask: t.settingsAutomations.tplAsk,
+                              hook_keyword: t.settingsAutomations.tplHookKeyword,
+                              hook_address: t.settingsAutomations.tplHookAddress,
+                              hook_mail: t.settingsAutomations.tplHookMail,
+                            }[a.template]
                           : ({ web_watch: 'web', rss_watch: 'rss', schedule: t.settingsAutomations.scheduled, webhook: 'hook' } as Record<string, string>)[a.kind] ?? a.kind}
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -870,7 +875,9 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
                           {/* "Günde bir · 09:00", never "0 9 * * *". */}
-                          {a.schedule ? describeSchedule(a.schedule, t) : a.summary}
+                          {a.schedule ? describeSchedule(a.schedule, t)
+                            : a.hook ? describeHook(a.hook, t)
+                            : a.summary}
                           {a.last_fired_at && t.settingsAutomations.lastFired(new Date(a.last_fired_at).toLocaleString())}
                           {a.expires_at && t.settingsAutomations.until(new Date(a.expires_at).toLocaleDateString())}
                         </div>

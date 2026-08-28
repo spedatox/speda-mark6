@@ -209,7 +209,11 @@ async def lifespan(app: FastAPI):
     # in the prompt's "Additional tools" index have no way to become callable.
     from app.skills.tool_search import ToolSearchSkill
     await registry.register_skill(ToolSearchSkill())
-    await registry.register_skill(AutomationsSkill())
+    # Kept in a local var (not thrown away like most Tier-1 skills) — its
+    # action='test' needs engine refs that do not exist yet at this point in
+    # startup, wired in later at the same spot the trigger reporters are.
+    automations_skill = AutomationsSkill()
+    await registry.register_skill(automations_skill)
     await registry.register_skill(DispatchAgentSkill(
         dispatcher,
         # Session-scope aliases (warroom) are not dispatch targets — keep them
@@ -392,6 +396,10 @@ async def lifespan(app: FastAPI):
         "ws_manager": ws_manager,
     }
     registry.set_legion_report_hook(make_legion_reporter(**reporter_deps))
+    # Same dependency set, same reason: action='test' on manage_automations
+    # needs to start a real trigger turn, and this is the first point in
+    # startup where everything it needs actually exists.
+    automations_skill.wire(**reporter_deps)
     # And the same for a BACKGROUND dispatch to another agent: when it lands, the
     # agent that sent it is woken with the answer and delivers it, instead of the
     # owner having to ask whether it finished.
