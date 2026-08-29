@@ -436,12 +436,16 @@ class PortalLoginSkill(Skill):
         "the session so later browse_page and browser_act calls on that portal arrive "
         "already logged in. Use it when a portal page turns out to be a login wall, when a "
         "browse_page against a portal reports the session expired, or when the owner asks "
-        "you to check something on an account you have not opened this session. You never "
-        "see or supply the password: name the portal and the backend hands the credential "
-        "straight to the browser, so nothing sensitive passes through this conversation — "
-        "never ask the owner to type a password to you, and if a portal is not configured, "
-        "tell them to add it in Settings → Connections → Web portals. Returns whether the "
-        "sign-in landed, and what the page said if it did not."
+        "you to check something on an account you have not opened this session. It checks "
+        "the stored session FIRST and only submits the actual login form if that check says "
+        "you're not already in — so it is safe and cheap to call again if you're unsure, "
+        "unlike hammering the real sign-in form, which some portals (OBS among them) will "
+        "rate-limit or lock out after a few rapid submissions from the same browser. You "
+        "never see or supply the password: name the portal and the backend hands the "
+        "credential straight to the browser, so nothing sensitive passes through this "
+        "conversation — never ask the owner to type a password to you, and if a portal is "
+        "not configured, tell them to add it in Settings → Connections → Web portals. "
+        "Returns whether the sign-in landed, and what the page said if it did not."
         + _portal_hint()
     )
     input_schema = {
@@ -473,17 +477,29 @@ class PortalLoginSkill(Skill):
                     f"Settings → Connections → Web portals — do not ask them for it here.")
 
         try:
-            result = await browser_svc.login_portal(name)
+            # ensure_logged_in probes with the profile's existing cookies FIRST
+            # and only falls through to an actual login-form submission
+            # (login_portal → do_login) when that probe says we're not in.
+            # Calling login_portal directly here — as this used to — meant
+            # every portal_login call, however close together, re-submitted
+            # real credentials to the real site: three of those in quick
+            # succession is exactly what tripped OBS's own "too many logins
+            # from this browser" lockout, which then read as "the username
+            # field is missing" (true in the moment, but caused by the retry
+            # itself, not by anything actually wrong with the portal or the
+            # password).
+            result = await browser_svc.ensure_logged_in(name)
         except browser_svc.BrowserUnavailable as e:
             return _unavailable(e)
 
         label = record.get("label") or name
-        if result.get("already"):
+        page = result.get("page") or {}
+        if result.get("logged_in") and not result.get("fresh"):
             return (f"Already signed in to {label} — the stored session is still live. "
-                    f"Currently on: {result.get('title') or result.get('url')}")
-        if result.get("ok"):
-            home = record.get("home_url") or result.get("url")
-            return (f"Signed in to {label}. Landed on {result.get('title') or home}. "
+                    f"Currently on: {page.get('title') or page.get('url')}")
+        if result.get("logged_in"):
+            home = record.get("home_url") or page.get("url")
+            return (f"Signed in to {label}. Landed on {page.get('title') or home}. "
                     f"Use browse_page with portal='{name}' to read pages there, or "
                     f"browser_act with portal='{name}' to work through it.")
         login_url = record.get("login_url") or ""

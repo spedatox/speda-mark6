@@ -142,6 +142,18 @@ and otherwise reads the page in both languages the owner's portals are written
 in. It accepts false positives: a needless re-login costs six seconds, while a
 missed one makes an agent report a login form's contents as the owner's grades.
 
+**`portal_login` goes through this check too, not straight to the login form.**
+It didn't used to — the tool called `login_portal()` directly, which always
+submits real credentials to the real site. Called twice in quick succession
+(a "regenerate" is enough), that's two real login POSTs seconds apart, and OBS
+in particular answers that pattern with its own "too many logins from this
+browser" lockout page — which then has no username field, and reads exactly
+like a broken selector when it is actually the portal defending itself against
+what looks like automation abuse. Routing `portal_login` through
+`ensure_logged_in()` means a repeat call is a cheap authenticated page load
+when the session is still good, and only touches the real form when it
+actually needs to.
+
 ---
 
 ## The probe fallback
