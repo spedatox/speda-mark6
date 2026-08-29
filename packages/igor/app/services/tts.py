@@ -15,6 +15,11 @@ Two things here are load-bearing and easy to get wrong:
 2. Markdown read aloud is unbearable — a voice that pronounces asterisks and
    pipe characters, or recites a forty-cell table. `strip_for_speech` reduces a
    reply to what a person would actually say, and drops what nobody wants read.
+   The same pass expands number/symbol shorthand a model writes without
+   thinking — a time RANGE like "08:00–13:00" (the dash reads as subtraction
+   or a dead pause), "26.5°C", "~44%" — into the words a person would say,
+   since that shorthand comes straight out of tool output (weather, calendar)
+   with no model in the loop to catch it.
 
 Azure bills per character INCLUDING markup, so stripping before synthesis is
 also what keeps the bill down.
@@ -87,6 +92,47 @@ def _markers(locale: str | None) -> tuple[str, str]:
     return _MARKERS.get(lang, _MARKERS["en"])
 
 
+# Symbols and shorthand that read as noise or as flat-out wrong once spoken:
+# a dash between two clock times is heard as subtraction or a dead pause, "°C"
+# and "%" are voiced inconsistently across engines (sometimes skipped
+# entirely), and "~" is either dropped or read as a stray character. These are
+# universal across ElevenLabs/OpenAI/Azure because the fix happens BEFORE the
+# text reaches any of them. Same per-locale-with-English-fallback shape as
+# _MARKERS — unknown languages get the English wording rather than a symbol.
+_TIME_RANGE_RE = re.compile(r"(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})")
+_TEMP_C_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*°\s*[Cc]\b")
+_DEGREE_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*°")
+_PERCENT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
+_TILDE_RE = re.compile(r"~\s*(?=\d)")
+
+_UNIT_WORDS: dict[str, dict[str, str]] = {
+    "en": {"range_sep": " to ", "celsius": " degrees Celsius", "degree": " degrees",
+           "percent_before": "", "percent_after": " percent", "approx": "approximately "},
+    "tr": {"range_sep": " ile ", "celsius": " derece", "degree": " derece",
+           "percent_before": "yüzde ", "percent_after": "", "approx": "yaklaşık "},
+}
+
+
+def _unit_words(locale: str | None) -> dict[str, str]:
+    lang = (locale or "en").split("-")[0].lower()
+    return _UNIT_WORDS.get(lang, _UNIT_WORDS["en"])
+
+
+def _normalize_units_for_speech(text: str, locale: str | None) -> str:
+    """Expand number/symbol shorthand into the words a person would actually
+    say. Order matters: the tilde check needs a digit still directly after it
+    (so it must run before the percent sign is turned into a word), and °C
+    must be consumed as one unit before the bare-degree pattern would also
+    match its ° and strand a lone "C"."""
+    w = _unit_words(locale)
+    out = _TIME_RANGE_RE.sub(lambda m: f"{m.group(1)}{w['range_sep']}{m.group(2)}", text)
+    out = _TEMP_C_RE.sub(lambda m: f"{m.group(1)}{w['celsius']}", out)
+    out = _DEGREE_RE.sub(lambda m: f"{m.group(1)}{w['degree']}", out)
+    out = _TILDE_RE.sub(w["approx"], out)
+    out = _PERCENT_RE.sub(lambda m: f"{w['percent_before']}{m.group(1)}{w['percent_after']}", out)
+    return out
+
+
 def strip_for_speech(text: str, locale: str | None = None) -> str:
     """Reduce markdown to plain spoken prose.
 
@@ -101,8 +147,9 @@ def strip_for_speech(text: str, locale: str | None = None) -> str:
     if not text:
         return ""
 
+    out = _normalize_units_for_speech(text, locale)
     code_marker, table_marker = _markers(locale)
-    out = _FENCE_RE.sub(f" {code_marker} ", text)
+    out = _FENCE_RE.sub(f" {code_marker} ", out)
     # Reading a grid cell-by-cell is noise; say a table was here and move on.
     out = _TABLE_BLOCK_RE.sub(f" {table_marker} ", out)
 

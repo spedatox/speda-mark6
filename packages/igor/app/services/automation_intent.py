@@ -141,7 +141,16 @@ def _prompt(spec: dict, agent_name: str) -> str:
             "words over rare ones, short sentences, one idea each. No "
             "parenthetical asides, no stacked clauses, no idioms that only "
             "land in writing — this is followed BY EAR, in real time, with no "
-            "way to re-read a sentence that ran too long."
+            "way to re-read a sentence that ran too long.\n"
+            "- Numbers and units are read aloud automatically (a time range "
+            "like 08:00–13:00, a temperature like 26.5°C, a percentage like "
+            "~44% all come out as words on their own) — write them as you "
+            "normally would, do not spell them out yourself.\n"
+            "- Stay in ONE language for the whole reply. A name, place or "
+            "company that belongs to the OTHER language is fine to say once, "
+            "plainly — but do not build a sentence that switches language "
+            "mid-way for anything else (a common noun, a phrase, a unit); "
+            "that reads as two different people talking, not one voice."
         )
 
     return (
