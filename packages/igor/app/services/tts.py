@@ -140,24 +140,35 @@ _SPEECH_SANITIZE_SYSTEM = (
     "You rewrite text so a text-to-speech engine reads it the way a person "
     "actually talks. You do not summarize, shorten, or change what it says — "
     "only how the words sound out loud.\n\n"
+    "YOU ARE NOT A TRANSLATOR AND THIS IS NOT A TRANSLATION TASK. Read the "
+    "text and work out what language it is ACTUALLY written in — do not "
+    "assume, do not default to English, look at the actual words. Whatever "
+    "that language is, your entire output is in that SAME language, "
+    "unchanged, every single time. Turning a Turkish message into English, "
+    "an English one into Turkish, or either into any other language, is not "
+    "a stylistic choice you get to make — it is a failure of the one job "
+    "you have, full stop, with no exception for 'it sounded more natural' "
+    "or any other reason.\n\n"
     "Rewrite whatever would read badly:\n"
     "- Time ranges ('08:00-13:00'), temperatures ('26.5°C'), percentages "
     "('~44%'), sizes ('79.4 GB'), speeds ('12.2 km/h') and any other "
     "symbol-and-digit shorthand — spell them out the way someone would "
-    "actually say them, in the SAME language as the surrounding sentence. "
-    "This applies to ANY such shorthand, not just these examples.\n"
-    "- A sentence that switches language partway through for no reason (a "
-    "stray word or phrase in another language). Rewrite it in ONE language — "
-    "a proper name that genuinely belongs to another language may stay as-is, "
-    "said once, plainly.\n"
+    "actually say them, IN THE TEXT'S OWN LANGUAGE. This applies to ANY "
+    "such shorthand, not just these examples.\n"
+    "- A STRAY word or phrase written in a DIFFERENT language than the rest "
+    "of the sentence — rewrite that one stray bit into the text's own "
+    "language. Never the reverse, and never touch a sentence that was "
+    "already consistent. A genuine proper name (a person, a place, a "
+    "company) may stay exactly as it is, said once, plainly — that is a "
+    "name, not a language switch, and is not what this rule is for.\n"
     "- Any leftover 'thinking out loud' line that is not part of the actual "
     "message itself (\"Let me compose the briefing\", \"Here's the "
     "summary:\") — delete it. The output IS the message, not a description "
     "of writing one.\n\n"
-    "Keep everything else exactly as it is: same facts, same length, same "
-    "tone, same order. Do not add commentary, caveats, or anything of your "
-    "own. Output ONLY the rewritten text — no preamble, no quotes, no "
-    "markdown fence."
+    "Everything else — facts, length, tone, order, word choice, and above "
+    "all the LANGUAGE — stays exactly as it is. Do not add commentary, "
+    "caveats, or anything of your own. Output ONLY the rewritten text — no "
+    "preamble, no quotes, no markdown fence."
 )
 
 
@@ -181,14 +192,23 @@ def _sanitize_response_text(response) -> str:
     return ""
 
 
-async def _llm_sanitize_for_speech(text: str, locale: str | None, model: str) -> str:
+async def _llm_sanitize_for_speech(text: str, model: str) -> str:
     """Rewrite `text` for natural speech via an actual model pass.
 
     Deliberately not a pattern-matcher: a fixed list of rules only ever fixes
-    the shorthand someone already thought to write a rule for. Reading the
-    actual sentence catches an unusual unit, a stray switch of language, or a
+    the shorthand someone already thought to look for. Reading the actual
+    sentence catches an unusual unit, a stray switch of language, or a
     leftover "let me compose this" line, none of which any fixed list would
     have known to look for.
+
+    Takes NO locale hint — the caller's `settings.tts_locale` is a per-
+    deployment default (one automation can legitimately run in a different
+    language than another; Speda's morning briefing is pinned to English
+    while everything else here defaults Turkish), so handing the sanitizer a
+    blanket assumption would tell it the wrong language exactly when it
+    matters. The model reads the actual words and works out what language
+    they are in — far more reliable than a static default that has no idea
+    which automation this text came from.
 
     Best-effort and silent on failure: returns `text` UNCHANGED on any error,
     an empty reply, or a reply that grew implausibly — a sanitize hiccup (a
@@ -424,7 +444,7 @@ async def prepare_speech_text(text: str, locale: str | None = None, sanitize_mod
     spoken = strip_for_speech(text, spoken_locale)
     if not spoken:
         raise TTSError("Nothing to speak after stripping markup.")
-    spoken = await _llm_sanitize_for_speech(spoken, spoken_locale, sanitize_model)
+    spoken = await _llm_sanitize_for_speech(spoken, sanitize_model)
     if len(spoken) > MAX_CHARS:
         spoken = spoken[:MAX_CHARS]
     return spoken
