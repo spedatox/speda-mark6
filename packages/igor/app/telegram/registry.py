@@ -124,17 +124,20 @@ class TelegramBotRegistry:
         return await bot.send_document(path, caption=cap)
 
     async def deliver_voice(
-        self, agent_id: str, audio: bytes, filename: str, title: str = "",
+        self, agent_id: str, audio: bytes, filename: str, title: str = "", caption: str = "",
     ) -> bool:
         """Send synthesized speech on behalf of `agent_id`. Same fallback
         chain as deliver_message — a voice automation degrades to Speda's bot
         (never to plain text; the caller decides that, see
-        core/trigger_runner._deliver_voice)."""
+        core/trigger_runner._deliver_voice). `caption` is the transcript — the
+        owner gets it under the player, not just the audio, so a message he
+        can't play right now (loud room, no headphones) is still readable."""
         bot, prefix = self.resolve(agent_id)
         if bot is None:
             logger.warning("telegram_no_bot_for_voice", extra={"agent_id": agent_id})
             return False
-        return await bot.send_audio(audio, filename, caption=prefix.strip(), title=title)
+        cap = f"{prefix}{caption}" if prefix else caption
+        return await bot.send_audio(audio, filename, caption=cap, title=title)
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 

@@ -530,10 +530,17 @@ async def _deliver_voice(
     # Telegram a file with no recognizable type.
     short_title = (title or agent_id)[:60]
     ok = await telegram_bots.deliver_voice(
-        agent_id, audio, f"{short_title}.mp3", title=short_title,
+        agent_id, audio, f"{short_title}.mp3", title=short_title, caption=text,
     )
     if not ok:
         return await telegram_bots.deliver_message(agent_id, text)
+    # Telegram caps a caption at 1024 chars — send_audio truncates silently to
+    # respect that. A voice briefing stays well under it (the polisher's own
+    # 80-120 word budget), but the transcript itself must never be the thing
+    # that gets cut, so anything that could overflow the cap also goes out as
+    # its own message, in full.
+    if len(text) > 1000:
+        await telegram_bots.deliver_message(agent_id, text)
     return True
 
 
