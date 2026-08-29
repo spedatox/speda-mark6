@@ -15,11 +15,20 @@ Two things here are load-bearing and easy to get wrong:
 2. Markdown read aloud is unbearable — a voice that pronounces asterisks and
    pipe characters, or recites a forty-cell table. `strip_for_speech` reduces a
    reply to what a person would actually say, and drops what nobody wants read.
-   The same pass expands number/symbol shorthand a model writes without
-   thinking — a time RANGE like "08:00–13:00" (the dash reads as subtraction
-   or a dead pause), "26.5°C", "~44%" — into the words a person would say,
-   since that shorthand comes straight out of tool output (weather, calendar)
-   with no model in the loop to catch it.
+   It also expands the handful of number/symbol patterns a regex CAN catch
+   reliably (a time range, "°C", "%", a "GB") — free, instant, no round trip.
+
+   That regex pass is necessarily a fixed list, so it cannot fix an unusual
+   unit nobody wrote a rule for, a sentence that switches language mid-way, or
+   a leftover "let me compose the briefing" line the model wrote about its own
+   process rather than as the message. `synthesize`'s optional `model` runs a
+   SECOND pass through that actual model — a cheap background tier, resolved
+   by the caller (Rule 10) — that rewrites whatever the regex pass could not
+   have known to look for. It is skipped entirely when `model` is empty, which
+   is deliberate for live voice-mode `/speak`: that path streams sentence by
+   sentence and an extra round trip there would cost the very latency the
+   overlap design exists to avoid. Automation pushes and the text_to_speech
+   skill have no such constraint and pass a model.
 
 Azure bills per character INCLUDING markup, so stripping before synthesis is
 also what keeps the bill down.
@@ -102,8 +111,18 @@ def _markers(locale: str | None) -> tuple[str, str]:
 _TIME_RANGE_RE = re.compile(r"(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})")
 _TEMP_C_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*°\s*[Cc]\b")
 _DEGREE_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*°")
-_PERCENT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
+# Trailing ("15%") and leading ("%15", the Turkish written convention) both
+# occur — a model that thinks in Turkish can write the leading form even
+# inside an otherwise-English sentence, and TTS reads a bare leading "%" as
+# nothing at all rather than as a word, which is how a percentage silently
+# disappears instead of coming out wrong.
+_PERCENT_TRAILING_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
+_PERCENT_LEADING_RE = re.compile(r"%\s*(\d+(?:[.,]\d+)?)")
 _TILDE_RE = re.compile(r"~\s*(?=\d)")
+# Storage-size shorthand — read letter-by-letter by every engine tried
+# (ElevenLabs turns "GB" into something like "gi bi"), because it is an
+# abbreviation invented for a screen, not a word anyone says.
+_BYTE_UNIT_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*([KMGT])i?B\b")
 
 _UNIT_WORDS: dict[str, dict[str, str]] = {
     "en": {"range_sep": " to ", "celsius": " degrees Celsius", "degree": " degrees",
@@ -112,10 +131,20 @@ _UNIT_WORDS: dict[str, dict[str, str]] = {
            "percent_before": "yüzde ", "percent_after": "", "approx": "yaklaşık "},
 }
 
+_BYTE_UNIT_WORDS: dict[str, dict[str, str]] = {
+    "en": {"K": "kilobytes", "M": "megabytes", "G": "gigabytes", "T": "terabytes"},
+    "tr": {"K": "kilobayt", "M": "megabayt", "G": "gigabayt", "T": "terabayt"},
+}
+
 
 def _unit_words(locale: str | None) -> dict[str, str]:
     lang = (locale or "en").split("-")[0].lower()
     return _UNIT_WORDS.get(lang, _UNIT_WORDS["en"])
+
+
+def _byte_words(locale: str | None) -> dict[str, str]:
+    lang = (locale or "en").split("-")[0].lower()
+    return _BYTE_UNIT_WORDS.get(lang, _BYTE_UNIT_WORDS["en"])
 
 
 def _normalize_units_for_speech(text: str, locale: str | None) -> str:
@@ -125,11 +154,14 @@ def _normalize_units_for_speech(text: str, locale: str | None) -> str:
     must be consumed as one unit before the bare-degree pattern would also
     match its ° and strand a lone "C"."""
     w = _unit_words(locale)
+    bw = _byte_words(locale)
     out = _TIME_RANGE_RE.sub(lambda m: f"{m.group(1)}{w['range_sep']}{m.group(2)}", text)
     out = _TEMP_C_RE.sub(lambda m: f"{m.group(1)}{w['celsius']}", out)
     out = _DEGREE_RE.sub(lambda m: f"{m.group(1)}{w['degree']}", out)
+    out = _BYTE_UNIT_RE.sub(lambda m: f"{m.group(1)} {bw[m.group(2).upper()]}", out)
     out = _TILDE_RE.sub(w["approx"], out)
-    out = _PERCENT_RE.sub(lambda m: f"{w['percent_before']}{m.group(1)}{w['percent_after']}", out)
+    out = _PERCENT_LEADING_RE.sub(lambda m: f"{w['percent_before']}{m.group(1)}{w['percent_after']}", out)
+    out = _PERCENT_TRAILING_RE.sub(lambda m: f"{w['percent_before']}{m.group(1)}{w['percent_after']}", out)
     return out
 
 
@@ -164,6 +196,94 @@ def strip_for_speech(text: str, locale: str | None = None) -> str:
     out = re.sub(r"[ \t]{2,}", " ", out)
     out = re.sub(r"\n{3,}", "\n\n", out)
     return out.strip()
+
+
+_SPEECH_SANITIZE_SYSTEM = (
+    "You rewrite text so a text-to-speech engine reads it the way a person "
+    "actually talks. You do not summarize, shorten, or change what it says — "
+    "only how the words sound out loud.\n\n"
+    "Rewrite whatever would read badly:\n"
+    "- Time ranges ('08:00-13:00'), temperatures ('26.5°C'), percentages "
+    "('~44%'), sizes ('79.4 GB'), speeds ('12.2 km/h') and any other "
+    "symbol-and-digit shorthand — spell them out the way someone would "
+    "actually say them, in the SAME language as the surrounding sentence. "
+    "This applies to ANY such shorthand, not just these examples.\n"
+    "- A sentence that switches language partway through for no reason (a "
+    "stray word or phrase in another language). Rewrite it in ONE language — "
+    "a proper name that genuinely belongs to another language may stay as-is, "
+    "said once, plainly.\n"
+    "- Any leftover 'thinking out loud' line that is not part of the actual "
+    "message itself (\"Let me compose the briefing\", \"Here's the "
+    "summary:\") — delete it. The output IS the message, not a description "
+    "of writing one.\n\n"
+    "Keep everything else exactly as it is: same facts, same length, same "
+    "tone, same order. Do not add commentary, caveats, or anything of your "
+    "own. Output ONLY the rewritten text — no preamble, no quotes, no "
+    "markdown fence."
+)
+
+
+def _sanitize_response_text(response) -> str:
+    """Shape-tolerant text extraction — same pattern as the automation
+    polisher's own reader, kept local rather than imported so this module
+    does not reach into automations/ for three lines (Rule: layering is
+    one-way, services do not depend on a sibling service's internals)."""
+    content = getattr(response, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            text = getattr(block, "text", None)
+            if text is None and isinstance(block, dict):
+                text = block.get("text")
+            if text:
+                parts.append(str(text))
+        return "".join(parts)
+    return ""
+
+
+async def _llm_sanitize_for_speech(text: str, locale: str | None, model: str) -> str:
+    """Rewrite `text` for natural speech via an actual model pass.
+
+    The regex pass in `strip_for_speech` is necessarily a fixed list of
+    patterns someone thought to write a rule for; this catches whatever that
+    missed — an unusual unit, a stray switch of language, a leftover
+    "let me compose this" line — because it is reading the sentence rather
+    than pattern-matching it.
+
+    Best-effort and silent on failure: returns `text` UNCHANGED on any error,
+    an empty reply, or a reply that grew implausibly — the regex-normalized
+    text is always a safe fallback, and a sanitize hiccup (a rate limit, a
+    provider outage, the account being out of credit) must degrade to that,
+    never to a broken or missing voice message. `model` empty skips the call
+    entirely with no cost at all — see the module docstring for why
+    `/voice/speak` never passes one.
+    """
+    if not model or not text:
+        return text
+    from app.services.llm_client import LLMClient
+
+    try:
+        client = LLMClient()
+        response = await client.create_message(
+            model=model,
+            system=_SPEECH_SANITIZE_SYSTEM,
+            messages=[{"role": "user", "content": text}],
+            max_tokens=1000,
+            reasoning_effort="minimal",
+        )
+    except Exception as exc:  # noqa: BLE001 — a sanitize failure must not break the voice message
+        logger.warning("tts_llm_sanitize_failed", extra={"error": str(exc)})
+        return text
+
+    out = _sanitize_response_text(response).strip()
+    if not out or len(out) > len(text) * 2 + 200:
+        # Empty (a reasoning model on a tight budget) or a runaway rewrite —
+        # the regex-normalized input is safer than trusting either.
+        logger.warning("tts_llm_sanitize_unusable", extra={"chars": len(out)})
+        return text
+    return out
 
 
 def build_ssml(text: str, voice: str, locale: str | None = None) -> str:
@@ -321,7 +441,7 @@ class TTSError(RuntimeError):
 
 async def synthesize(
     text: str, voice: str | None = None, locale: str | None = None,
-    voice_settings: dict | None = None,
+    voice_settings: dict | None = None, sanitize_model: str = "",
 ) -> bytes:
     """Synthesize `text` and return encoded audio (MP3 by default).
 
@@ -336,17 +456,53 @@ async def synthesize(
     caller resolving settings once for whichever provider is active should
     not have to branch on provider itself.
 
+    `sanitize_model` runs the text through `_llm_sanitize_for_speech` — a
+    second, model-driven cleanup pass after the free regex one, resolved and
+    named by the CALLER (Rule 10; this module names no model). Leave it empty
+    to skip that pass entirely, which every caller on the live voice-mode path
+    does deliberately — see the module docstring.
+
     Raises TTSError with a readable message on any failure — an unconfigured
     key, an empty utterance, or an upstream error. Callers in a streaming path
     should treat a failure as "this sentence stays silent", not as a dead turn.
+    """
+    spoken = await prepare_speech_text(text, locale, sanitize_model)
+    return await synthesize_prepared(spoken, voice, locale, voice_settings)
+
+
+async def prepare_speech_text(text: str, locale: str | None = None, sanitize_model: str = "") -> str:
+    """Run the full text-preparation pipeline (regex normalize → LLM sanitize
+    → length cap) and return the final spoken string, with NO synthesis call.
+
+    Split out from `synthesize` so a caller that also needs to SHOW the
+    transcript somewhere (a voice automation's Telegram caption) can display
+    exactly what was actually spoken, rather than the pre-sanitized original —
+    showing the raw text there while the audio says something else (units
+    expanded, a stray language switch fixed) would make the transcript a
+    second, contradicting draft instead of a record of the first one.
     """
     spoken_locale = locale or settings.tts_locale or None
     spoken = strip_for_speech(text, spoken_locale)
     if not spoken:
         raise TTSError("Nothing to speak after stripping markup.")
+    spoken = await _llm_sanitize_for_speech(spoken, spoken_locale, sanitize_model)
     if len(spoken) > MAX_CHARS:
         spoken = spoken[:MAX_CHARS]
+    return spoken
 
+
+async def synthesize_prepared(
+    spoken: str, voice: str | None = None, locale: str | None = None,
+    voice_settings: dict | None = None,
+) -> bytes:
+    """Synthesize TEXT THAT IS ALREADY SPEECH-READY (see `prepare_speech_text`)
+    — no stripping, no unit normalization, no LLM pass. Callers that only want
+    audio back from raw text should call `synthesize` instead; this exists so
+    a caller that already ran `prepare_speech_text` (to get the spoken string
+    for display) never pays for that pipeline twice."""
+    if not spoken:
+        raise TTSError("Nothing to speak after stripping markup.")
+    spoken_locale = locale or settings.tts_locale or None
     provider, model, name = parse_voice_ref(voice or settings.tts_default_voice)
     if not configured(provider):
         raise TTSError({

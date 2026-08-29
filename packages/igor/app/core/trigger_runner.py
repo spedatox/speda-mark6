@@ -118,6 +118,11 @@ def build_seed(payload: dict, output_mode: str) -> str:
         "'no new important mail', 'calendar unavailable'. Never invent mail, "
         "events, headlines, or numbers. Fabricated data is a failure, not a "
         "fallback.\n"
+        "- Your reply IS the message, start to finish — no transition sentence "
+        "about writing it first ('I have everything I need, let me compose "
+        "the briefing', 'here's the summary:'). The owner never sees that "
+        "line as a separate step; it just reads as the opening of the report, "
+        "which makes no sense there.\n"
         f"- {delivery}\n\n"
         f"intent: {intent}\n\n"
         f"full payload: {payload}"
@@ -413,6 +418,7 @@ async def start_trigger_turn(
             telegram_bots=telegram_bots,
             status=status,
             profile=profile,
+            sanitize_model=bg_model,
         )
 
     # Engine selection, identical to chat: an agent whose real backend is a
@@ -450,6 +456,7 @@ async def _deliver(
     telegram_bots,
     status: str,
     profile=None,
+    sanitize_model: str = "",
 ) -> None:
     """Post-run delivery: stamp the automation, then push if asked.
 
@@ -484,7 +491,7 @@ async def _deliver(
             delivered = await _deliver_voice(
                 agent_id=agent_id, text=text, profile=profile,
                 title=str(payload.get("automation") or ""), telegram_bots=telegram_bots,
-                request_id=request_id,
+                request_id=request_id, sanitize_model=sanitize_model,
             )
         else:
             delivered = await telegram_bots.deliver_message(agent_id, text)
@@ -498,6 +505,7 @@ async def _deliver(
 
 async def _deliver_voice(
     *, agent_id: str, text: str, profile, title: str, telegram_bots, request_id: str,
+    sanitize_model: str = "",
 ) -> bool:
     """Speak `text` and send it as a Telegram audio message instead of plain
     text — the point of an automation's "reply as voice" checkbox
@@ -511,13 +519,22 @@ async def _deliver_voice(
     rate-limited TTS key must never mean the owner gets nothing instead of
     the briefing he actually asked to hear, only in a format he didn't ask
     for.
+
+    `sanitize_model` is the caller's already-resolved background-tier model
+    (Rule 10 — this module names none itself); passed to
+    `tts.prepare_speech_text` so a stray unit or leftover "let me compose
+    this" line gets a real model's read on it, not just the fixed regex list.
+    Text is prepared ONCE and the same spoken string is used for both the
+    audio and its caption/fallback — the owner must never see a transcript
+    that says something different from what the clip actually says.
     """
     from app.services import tts
 
     voice_ref = tts.resolve_voice(None, agent_id, profile=profile)
     voice_settings = tts.resolve_voice_settings(agent_id)
     try:
-        audio = await tts.synthesize(text, voice_ref, voice_settings=voice_settings)
+        spoken = await tts.prepare_speech_text(text, sanitize_model=sanitize_model)
+        audio = await tts.synthesize_prepared(spoken, voice_ref, voice_settings=voice_settings)
     except tts.TTSError as exc:
         logger.warning(
             "automation_voice_synthesis_failed",
@@ -530,17 +547,17 @@ async def _deliver_voice(
     # Telegram a file with no recognizable type.
     short_title = (title or agent_id)[:60]
     ok = await telegram_bots.deliver_voice(
-        agent_id, audio, f"{short_title}.mp3", title=short_title, caption=text,
+        agent_id, audio, f"{short_title}.mp3", title=short_title, caption=spoken,
     )
     if not ok:
-        return await telegram_bots.deliver_message(agent_id, text)
+        return await telegram_bots.deliver_message(agent_id, spoken)
     # Telegram caps a caption at 1024 chars — send_audio truncates silently to
     # respect that. A voice briefing stays well under it (the polisher's own
     # 80-120 word budget), but the transcript itself must never be the thing
     # that gets cut, so anything that could overflow the cap also goes out as
     # its own message, in full.
-    if len(text) > 1000:
-        await telegram_bots.deliver_message(agent_id, text)
+    if len(spoken) > 1000:
+        await telegram_bots.deliver_message(agent_id, spoken)
     return True
 
 

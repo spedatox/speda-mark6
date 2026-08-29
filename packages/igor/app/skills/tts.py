@@ -51,7 +51,12 @@ class TTSSkill(Skill):
 
         voice = args.get("voice") or context.extra.get("voice_id") or None
         try:
-            audio = await tts.synthesize(text, voice)
+            # Not a live streaming path — one file, generated once — so the
+            # extra LLM sanitize pass in tts.synthesize costs a second or two
+            # of latency the owner is already waiting through, not a per-
+            # sentence tax. Uses the turn's own model (Rule 10: resolved by
+            # the caller, never hardcoded here).
+            audio = await tts.synthesize(text, voice, sanitize_model=context.model)
         except tts.TTSError as exc:
             logger.warning(
                 "tts_skill_failed",
