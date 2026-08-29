@@ -15,20 +15,23 @@ Two things here are load-bearing and easy to get wrong:
 2. Markdown read aloud is unbearable — a voice that pronounces asterisks and
    pipe characters, or recites a forty-cell table. `strip_for_speech` reduces a
    reply to what a person would actually say, and drops what nobody wants read.
-   It also expands the handful of number/symbol patterns a regex CAN catch
-   reliably (a time range, "°C", "%", a "GB") — free, instant, no round trip.
 
-   That regex pass is necessarily a fixed list, so it cannot fix an unusual
-   unit nobody wrote a rule for, a sentence that switches language mid-way, or
-   a leftover "let me compose the briefing" line the model wrote about its own
-   process rather than as the message. `synthesize`'s optional `model` runs a
-   SECOND pass through that actual model — a cheap background tier, resolved
-   by the caller (Rule 10) — that rewrites whatever the regex pass could not
-   have known to look for. It is skipped entirely when `model` is empty, which
-   is deliberate for live voice-mode `/speak`: that path streams sentence by
+   Numbers, units and stray language-switching are a DIFFERENT problem and
+   deliberately NOT handled here with pattern matching — a fixed list of
+   regexes only ever fixes the shorthand someone already thought to write a
+   rule for ("GB" but not "GiB", "°C" but not some format nobody anticipated),
+   and a sentence that switches language mid-way has no pattern to match at
+   all. `synthesize`'s optional `model` runs that whole class of fix through an
+   actual model instead — a cheap background tier, resolved by the CALLER
+   (Rule 10) — because reading the sentence catches what pattern-matching it
+   never will. It is skipped entirely when `model` is empty, which is
+   deliberate for live voice-mode `/speak`: that path streams sentence by
    sentence and an extra round trip there would cost the very latency the
    overlap design exists to avoid. Automation pushes and the text_to_speech
-   skill have no such constraint and pass a model.
+   skill have no such constraint and pass a model. When no model is given (or
+   the call fails), the text goes out exactly as `strip_for_speech` left it —
+   markdown-clean, but with units and symbols unchanged; that degradation is
+   accepted rather than papered over with a regex safety net.
 
 Azure bills per character INCLUDING markup, so stripping before synthesis is
 also what keeps the bill down.
@@ -101,70 +104,6 @@ def _markers(locale: str | None) -> tuple[str, str]:
     return _MARKERS.get(lang, _MARKERS["en"])
 
 
-# Symbols and shorthand that read as noise or as flat-out wrong once spoken:
-# a dash between two clock times is heard as subtraction or a dead pause, "°C"
-# and "%" are voiced inconsistently across engines (sometimes skipped
-# entirely), and "~" is either dropped or read as a stray character. These are
-# universal across ElevenLabs/OpenAI/Azure because the fix happens BEFORE the
-# text reaches any of them. Same per-locale-with-English-fallback shape as
-# _MARKERS — unknown languages get the English wording rather than a symbol.
-_TIME_RANGE_RE = re.compile(r"(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})")
-_TEMP_C_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*°\s*[Cc]\b")
-_DEGREE_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*°")
-# Trailing ("15%") and leading ("%15", the Turkish written convention) both
-# occur — a model that thinks in Turkish can write the leading form even
-# inside an otherwise-English sentence, and TTS reads a bare leading "%" as
-# nothing at all rather than as a word, which is how a percentage silently
-# disappears instead of coming out wrong.
-_PERCENT_TRAILING_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
-_PERCENT_LEADING_RE = re.compile(r"%\s*(\d+(?:[.,]\d+)?)")
-_TILDE_RE = re.compile(r"~\s*(?=\d)")
-# Storage-size shorthand — read letter-by-letter by every engine tried
-# (ElevenLabs turns "GB" into something like "gi bi"), because it is an
-# abbreviation invented for a screen, not a word anyone says.
-_BYTE_UNIT_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*([KMGT])i?B\b")
-
-_UNIT_WORDS: dict[str, dict[str, str]] = {
-    "en": {"range_sep": " to ", "celsius": " degrees Celsius", "degree": " degrees",
-           "percent_before": "", "percent_after": " percent", "approx": "approximately "},
-    "tr": {"range_sep": " ile ", "celsius": " derece", "degree": " derece",
-           "percent_before": "yüzde ", "percent_after": "", "approx": "yaklaşık "},
-}
-
-_BYTE_UNIT_WORDS: dict[str, dict[str, str]] = {
-    "en": {"K": "kilobytes", "M": "megabytes", "G": "gigabytes", "T": "terabytes"},
-    "tr": {"K": "kilobayt", "M": "megabayt", "G": "gigabayt", "T": "terabayt"},
-}
-
-
-def _unit_words(locale: str | None) -> dict[str, str]:
-    lang = (locale or "en").split("-")[0].lower()
-    return _UNIT_WORDS.get(lang, _UNIT_WORDS["en"])
-
-
-def _byte_words(locale: str | None) -> dict[str, str]:
-    lang = (locale or "en").split("-")[0].lower()
-    return _BYTE_UNIT_WORDS.get(lang, _BYTE_UNIT_WORDS["en"])
-
-
-def _normalize_units_for_speech(text: str, locale: str | None) -> str:
-    """Expand number/symbol shorthand into the words a person would actually
-    say. Order matters: the tilde check needs a digit still directly after it
-    (so it must run before the percent sign is turned into a word), and °C
-    must be consumed as one unit before the bare-degree pattern would also
-    match its ° and strand a lone "C"."""
-    w = _unit_words(locale)
-    bw = _byte_words(locale)
-    out = _TIME_RANGE_RE.sub(lambda m: f"{m.group(1)}{w['range_sep']}{m.group(2)}", text)
-    out = _TEMP_C_RE.sub(lambda m: f"{m.group(1)}{w['celsius']}", out)
-    out = _DEGREE_RE.sub(lambda m: f"{m.group(1)}{w['degree']}", out)
-    out = _BYTE_UNIT_RE.sub(lambda m: f"{m.group(1)} {bw[m.group(2).upper()]}", out)
-    out = _TILDE_RE.sub(w["approx"], out)
-    out = _PERCENT_LEADING_RE.sub(lambda m: f"{w['percent_before']}{m.group(1)}{w['percent_after']}", out)
-    out = _PERCENT_TRAILING_RE.sub(lambda m: f"{w['percent_before']}{m.group(1)}{w['percent_after']}", out)
-    return out
-
-
 def strip_for_speech(text: str, locale: str | None = None) -> str:
     """Reduce markdown to plain spoken prose.
 
@@ -179,9 +118,8 @@ def strip_for_speech(text: str, locale: str | None = None) -> str:
     if not text:
         return ""
 
-    out = _normalize_units_for_speech(text, locale)
     code_marker, table_marker = _markers(locale)
-    out = _FENCE_RE.sub(f" {code_marker} ", out)
+    out = _FENCE_RE.sub(f" {code_marker} ", text)
     # Reading a grid cell-by-cell is noise; say a table was here and move on.
     out = _TABLE_BLOCK_RE.sub(f" {table_marker} ", out)
 
@@ -246,19 +184,19 @@ def _sanitize_response_text(response) -> str:
 async def _llm_sanitize_for_speech(text: str, locale: str | None, model: str) -> str:
     """Rewrite `text` for natural speech via an actual model pass.
 
-    The regex pass in `strip_for_speech` is necessarily a fixed list of
-    patterns someone thought to write a rule for; this catches whatever that
-    missed — an unusual unit, a stray switch of language, a leftover
-    "let me compose this" line — because it is reading the sentence rather
-    than pattern-matching it.
+    Deliberately not a pattern-matcher: a fixed list of rules only ever fixes
+    the shorthand someone already thought to write a rule for. Reading the
+    actual sentence catches an unusual unit, a stray switch of language, or a
+    leftover "let me compose this" line, none of which any fixed list would
+    have known to look for.
 
     Best-effort and silent on failure: returns `text` UNCHANGED on any error,
-    an empty reply, or a reply that grew implausibly — the regex-normalized
-    text is always a safe fallback, and a sanitize hiccup (a rate limit, a
-    provider outage, the account being out of credit) must degrade to that,
-    never to a broken or missing voice message. `model` empty skips the call
-    entirely with no cost at all — see the module docstring for why
-    `/voice/speak` never passes one.
+    an empty reply, or a reply that grew implausibly — a sanitize hiccup (a
+    rate limit, a provider outage, the account being out of credit) must
+    degrade to markdown-stripped-but-otherwise-untouched text, never to a
+    broken or missing voice message. `model` empty skips the call entirely
+    with no cost at all — see the module docstring for why `/voice/speak`
+    never passes one.
     """
     if not model or not text:
         return text
@@ -280,7 +218,7 @@ async def _llm_sanitize_for_speech(text: str, locale: str | None, model: str) ->
     out = _sanitize_response_text(response).strip()
     if not out or len(out) > len(text) * 2 + 200:
         # Empty (a reasoning model on a tight budget) or a runaway rewrite —
-        # the regex-normalized input is safer than trusting either.
+        # the untouched input is safer than trusting either.
         logger.warning("tts_llm_sanitize_unusable", extra={"chars": len(out)})
         return text
     return out
@@ -456,11 +394,12 @@ async def synthesize(
     caller resolving settings once for whichever provider is active should
     not have to branch on provider itself.
 
-    `sanitize_model` runs the text through `_llm_sanitize_for_speech` — a
-    second, model-driven cleanup pass after the free regex one, resolved and
-    named by the CALLER (Rule 10; this module names no model). Leave it empty
-    to skip that pass entirely, which every caller on the live voice-mode path
-    does deliberately — see the module docstring.
+    `sanitize_model` runs the text through `_llm_sanitize_for_speech` — the
+    model-driven cleanup pass that expands units/symbols and fixes stray
+    language-switching, resolved and named by the CALLER (Rule 10; this
+    module names no model). Leave it empty to skip that pass entirely, which
+    every caller on the live voice-mode path does deliberately — see the
+    module docstring.
 
     Raises TTSError with a readable message on any failure — an unconfigured
     key, an empty utterance, or an upstream error. Callers in a streaming path
@@ -471,7 +410,7 @@ async def synthesize(
 
 
 async def prepare_speech_text(text: str, locale: str | None = None, sanitize_model: str = "") -> str:
-    """Run the full text-preparation pipeline (regex normalize → LLM sanitize
+    """Run the full text-preparation pipeline (markdown strip → LLM sanitize
     → length cap) and return the final spoken string, with NO synthesis call.
 
     Split out from `synthesize` so a caller that also needs to SHOW the
@@ -496,10 +435,10 @@ async def synthesize_prepared(
     voice_settings: dict | None = None,
 ) -> bytes:
     """Synthesize TEXT THAT IS ALREADY SPEECH-READY (see `prepare_speech_text`)
-    — no stripping, no unit normalization, no LLM pass. Callers that only want
-    audio back from raw text should call `synthesize` instead; this exists so
-    a caller that already ran `prepare_speech_text` (to get the spoken string
-    for display) never pays for that pipeline twice."""
+    — no stripping, no LLM pass. Callers that only want audio back from raw
+    text should call `synthesize` instead; this exists so a caller that
+    already ran `prepare_speech_text` (to get the spoken string for display)
+    never pays for that pipeline twice."""
     if not spoken:
         raise TTSError("Nothing to speak after stripping markup.")
     spoken_locale = locale or settings.tts_locale or None

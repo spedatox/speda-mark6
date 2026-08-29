@@ -523,10 +523,10 @@ async def _deliver_voice(
     `sanitize_model` is the caller's already-resolved background-tier model
     (Rule 10 — this module names none itself); passed to
     `tts.prepare_speech_text` so a stray unit or leftover "let me compose
-    this" line gets a real model's read on it, not just the fixed regex list.
-    Text is prepared ONCE and the same spoken string is used for both the
-    audio and its caption/fallback — the owner must never see a transcript
-    that says something different from what the clip actually says.
+    this" line gets a real model's read on it. Text is prepared ONCE and the
+    same spoken string is used for both the audio and its caption/fallback —
+    the owner must never see a transcript that says something different from
+    what the clip actually says.
     """
     from app.services import tts
 
