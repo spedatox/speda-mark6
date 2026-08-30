@@ -464,6 +464,16 @@ _EXTRACT_JS = """
 async def snapshot(page: Page, want_aria: bool = True) -> dict:
     """What the model gets back: where it is, what it can read, what it can click.
 
+    **Reads every frame, not just the top document.** An enormous share of the
+    web a person actually logs into — every ASP.NET WebForms portal, most
+    embedded dashboards, report viewers, payment steps — renders its real
+    content inside an `<iframe>`, leaving the top document holding nothing but
+    chrome and a menu. `document.body.innerText` never crosses that boundary,
+    so reading only the top document meant an agent could click precisely the
+    right menu item, get the menu back verbatim, and reasonably conclude the
+    click had failed. It had not; the content was one frame down. (OSTİM's OBS
+    is exactly this shape: `main` is a single iframe.)
+
     `has_password` is the one field here that is a FACT rather than a rendering.
     Whether a page is a login wall is the question the whole portal flow turns
     on, and everything else available to answer it is a guess: the URL says
@@ -478,18 +488,51 @@ async def snapshot(page: Page, want_aria: bool = True) -> dict:
     except Exception:  # noqa: BLE001
         pass
     out["has_password"] = await find_login_frame(page) is not None
+
+    text, links = "", []
     try:
         data = await page.evaluate(_EXTRACT_JS)
-        out["text"] = (data.get("text") or "")[:MAX_TEXT]
-        out["links"] = (data.get("links") or [])[:MAX_LINKS]
+        text = data.get("text") or ""
+        links = data.get("links") or []
     except Exception as e:  # noqa: BLE001
-        out["text"], out["links"] = "", []
         out["extract_error"] = str(e)[:200]
-    if want_aria:
+
+    # Child frames, in document order. Labelled rather than concatenated
+    # silently, so the model can tell "this came from the embedded view" and
+    # target it deliberately — and so two frames' text never reads as one
+    # continuous page.
+    for frame in page.frames:
+        if frame is page.main_frame:
+            continue
         try:
-            out["aria"] = (await page.locator("body").aria_snapshot())[:MAX_ARIA]
+            fdata = await frame.evaluate(_EXTRACT_JS)
         except Exception:  # noqa: BLE001
-            out["aria"] = ""
+            continue  # cross-origin or torn down mid-read; not worth failing over
+        ftext = (fdata.get("text") or "").strip()
+        if len(ftext) < 20:
+            continue
+        text += f"\n\n--- embedded frame ({frame.url[:120]}) ---\n{ftext}"
+        links.extend(fdata.get("links") or [])
+
+    out["text"] = text[:MAX_TEXT]
+    out["links"] = links[:MAX_LINKS]
+
+    if want_aria:
+        aria = ""
+        try:
+            aria = await page.locator("body").aria_snapshot()
+        except Exception:  # noqa: BLE001
+            pass
+        for frame in page.frames:
+            if frame is page.main_frame or len(aria) >= MAX_ARIA:
+                continue
+            try:
+                faria = await frame.locator("body").aria_snapshot()
+            except Exception:  # noqa: BLE001
+                continue
+            if faria.strip():
+                aria += f"\n\n# embedded frame ({frame.url[:120]})\n{faria}"
+        out["aria"] = aria[:MAX_ARIA]
     return out
 
 
@@ -515,6 +558,43 @@ async def settle(page: Page, wait_for: str | None, wait_ms: int) -> None:
 
 
 # ── Steps — the vocabulary /act speaks ───────────────────────────────────────
+
+
+async def locate(page: Page, selector: str):
+    """A locator for `selector`, searched for in the top document AND in every
+    child frame.
+
+    `page.locator()` deliberately does not pierce iframes — upstream Playwright
+    makes you say `frame_locator(...)` explicitly. That is the right default for
+    a test suite, where you know the page's structure. It is the wrong one here,
+    where a model is handed an ARIA listing and told to click what it sees: the
+    content of a portal is routinely one frame down (see snapshot's docstring),
+    and requiring the model to first deduce that, then name the frame, turns a
+    click into a research project it usually gets wrong.
+
+    A person clicking a button does not know or care which document it lives in.
+    This makes the tool behave the same way.
+
+    Falls back to the top-document locator when nothing matches anywhere, so a
+    genuinely-absent element still gets Playwright's own auto-waiting and its
+    much better error message rather than a bare "not found" from us.
+    """
+    try:
+        loc = page.locator(selector).first
+        if await loc.count():
+            return loc
+    except Exception:  # noqa: BLE001
+        pass
+    for frame in page.frames:
+        if frame is page.main_frame:
+            continue
+        try:
+            loc = frame.locator(selector).first
+            if await loc.count():
+                return loc
+        except Exception:  # noqa: BLE001
+            continue
+    return page.locator(selector).first
 
 
 async def run_step(step: dict, sess: dict) -> str:
@@ -543,10 +623,10 @@ async def run_step(step: dict, sess: dict) -> str:
                                timeout=NAV_TIMEOUT)
         return f"goto {page.url} → {resp.status if resp else '?'}"
     if action == "click":
-        await page.locator(target).first.click(timeout=ACT_TIMEOUT)
+        await (await locate(page, target)).click(timeout=ACT_TIMEOUT)
         return f"click {target}"
     if action == "fill":
-        loc = page.locator(target).first
+        loc = await locate(page, target)
         # Same readonly-until-focus trick do_login guards against — a click
         # first costs nothing on a normal field and unblocks a gated one.
         try:
@@ -559,7 +639,7 @@ async def run_step(step: dict, sess: dict) -> str:
         # Real per-keystroke events, unlike fill()'s direct value-set — the
         # right tool for a field whose JS listens to keydown rather than the
         # value changing (autocomplete, a date picker, a masked input).
-        loc = page.locator(target).first
+        loc = await locate(page, target)
         try:
             await loc.click(timeout=ACT_TIMEOUT)
         except Exception:  # noqa: BLE001
@@ -567,19 +647,19 @@ async def run_step(step: dict, sess: dict) -> str:
         await loc.press_sequentially(str(value or ""), timeout=ACT_TIMEOUT)
         return f"type {target}"
     if action == "select":
-        await page.locator(target).first.select_option(str(value or ""), timeout=ACT_TIMEOUT)
+        await (await locate(page, target)).select_option(str(value or ""), timeout=ACT_TIMEOUT)
         return f"select {target} = {value}"
     if action == "check":
-        await page.locator(target).first.check(timeout=ACT_TIMEOUT)
+        await (await locate(page, target)).check(timeout=ACT_TIMEOUT)
         return f"check {target}"
     if action == "press":
         if target:
-            await page.locator(target).first.press(str(value or "Enter"))
+            await (await locate(page, target)).press(str(value or "Enter"))
         else:
             await page.keyboard.press(str(value or "Enter"))
         return f"press {value or 'Enter'}"
     if action == "hover":
-        await page.locator(target).first.hover(timeout=ACT_TIMEOUT)
+        await (await locate(page, target)).hover(timeout=ACT_TIMEOUT)
         return f"hover {target}"
     if action == "drag":
         await page.drag_and_drop(target, str(value or ""), timeout=ACT_TIMEOUT)
@@ -594,7 +674,23 @@ async def run_step(step: dict, sess: dict) -> str:
         await page.set_viewport_size({"width": int(dims[0]), "height": int(dims[1])})
         return f"resize {value}"
     if action == "wait_for":
-        await page.wait_for_selector(target, timeout=NAV_TIMEOUT)
+        # Frame-aware for the same reason every other target is (see locate):
+        # page.wait_for_selector never looks inside an iframe, so waiting for
+        # the thing a click was supposed to produce would time out on exactly
+        # the portals where waiting matters most. Polls instead of one long
+        # wait, because the element may not merely be late — it may be arriving
+        # in a frame that does not exist yet.
+        deadline = time.time() + NAV_TIMEOUT / 1000
+        while True:
+            try:
+                if await (await locate(page, target)).is_visible():
+                    break
+            except Exception:  # noqa: BLE001
+                pass
+            if time.time() >= deadline:
+                raise TimeoutError(f"wait_for: {target} never appeared "
+                                   f"(searched the page and every frame)")
+            await page.wait_for_timeout(250)
         return f"wait_for {target}"
     if action == "wait":
         await page.wait_for_timeout(min(int(value or 1000), 15_000))
@@ -632,7 +728,7 @@ async def run_step(step: dict, sess: dict) -> str:
         if not js:
             raise ValueError("evaluate needs a JS expression in 'value'")
         if target:
-            result = await page.locator(target).first.evaluate(js, timeout=ACT_TIMEOUT)
+            result = await (await locate(page, target)).evaluate(js, timeout=ACT_TIMEOUT)
         else:
             result = await page.evaluate(js)
         text = "null" if result is None else json.dumps(result, default=str)[:2000]
@@ -647,7 +743,7 @@ async def run_step(step: dict, sess: dict) -> str:
                 f"no uploaded file named '{value}' — pass it in this call's "
                 f"top-level 'files' map, e.g. {{\"files\": {{\"{value}\": \"<base64>\"}}}}"
             )
-        await page.locator(target).first.set_input_files(path, timeout=ACT_TIMEOUT)
+        await (await locate(page, target)).set_input_files(path, timeout=ACT_TIMEOUT)
         return f"upload_file {target} ← {value}"
     if action == "new_tab":
         new_page = await sess["context"].new_page()
