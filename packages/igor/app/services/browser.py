@@ -221,7 +221,8 @@ async def login_portal(name: str) -> dict:
         "success_url_contains": portal.get("success_url_contains") or "",
     }, timeout=_LOGIN_TIMEOUT)
 
-    record_portal_login(name, bool(result.get("ok")), result.get("message", ""))
+    record_portal_login(name, bool(result.get("ok")), result.get("message", ""),
+                        landed_url=result.get("url") or "")
     logger.info("portal_login", extra={"portal": name, "ok": bool(result.get("ok"))})
     return result
 

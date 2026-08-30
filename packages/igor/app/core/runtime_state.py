@@ -634,12 +634,20 @@ def delete_portal(name: str) -> bool:
     return existed
 
 
-def record_portal_login(name: str, ok: bool, message: str) -> None:
+def record_portal_login(name: str, ok: bool, message: str, landed_url: str = "") -> None:
     """Stamp the outcome of the last sign-in attempt onto the record.
 
     This is what makes a silently-expired portal visible: the Settings row can
     say "last signed in 3 weeks ago, then stopped working" instead of the owner
     finding out when an agent reports it cannot read their grades.
+
+    It also LEARNS `home_url` the first time a login lands somewhere, if the
+    owner never set one. `ensure_logged_in()` needs a page that actually
+    requires a session to probe "am I still in" — the raw login URL doesn't
+    count, because plenty of portals (OBS among them) render the full login
+    form there unconditionally, session or not, which made every check look
+    like a fresh sign-in was needed and defeated the whole point of checking
+    first. This never overwrites a home_url the owner configured by hand.
     """
     from datetime import datetime, timezone
 
@@ -651,6 +659,8 @@ def record_portal_login(name: str, ok: bool, message: str) -> None:
             portal["last_status"] = ("ok: " if ok else "failed: ") + message[:200]
             if ok:
                 portal["last_login"] = stamp
+                if landed_url and not portal.get("home_url"):
+                    portal["home_url"] = landed_url
             portal["last_attempt"] = stamp
             break
     state["portals"] = portals
