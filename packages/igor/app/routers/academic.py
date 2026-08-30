@@ -67,7 +67,8 @@ async def get_schedule(db: AsyncSession = Depends(get_db)) -> ScheduleOut:
 async def put_schedule(
     body: ScheduleUpsertRequest, db: AsyncSession = Depends(get_db)
 ) -> dict:
-    """Replace the whole timetable and term configuration."""
+    """Replace the whole timetable and term configuration, then push every
+    registered watch to resync now rather than on its own six-hour heartbeat."""
     await academic_service.upsert_term(
         db,
         start_date=date_cls.fromisoformat(body.term.start_date),
@@ -78,7 +79,20 @@ async def put_schedule(
     count = await academic_service.replace_schedule(
         db, [c.model_dump() for c in body.courses]
     )
-    return {"status": "ok", "courses": count}
+
+    # Same device loop as ask-pending, below — just a different payload type.
+    devices = await academic_service.active_devices(db, platform="wear")
+    delivered = 0
+    for device in devices:
+        ok, detail = await fcm.send_data_message(
+            fid=device.fid, data={"type": "sync_request"}, priority="high",
+        )
+        if ok:
+            delivered += 1
+        elif detail == "unregistered":
+            await academic_service.deactivate_device(db, device.fid)
+
+    return {"status": "ok", "courses": count, "devices_notified": delivered}
 
 
 @router.post("/academic/attendance", response_model=AttendanceSyncResponse)
