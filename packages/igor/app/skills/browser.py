@@ -57,7 +57,9 @@ class BrowsePageSkill(Skill):
     search_keywords = (
         "browse open page website url render javascript headless chrome playwright "
         "scrape fetch read site portal login logged in blocked 403 empty page spa "
-        "web sayfa aç tarayıcı giriş"
+        "tavily exa search failed insufficient couldn't access cannot read paywall "
+        "cookie wall challenge captcha page bot blocked truncated stub pdf document "
+        "web sayfa aç tarayıcı giriş erişemedim okuyamadım engellendi"
     )
     read_only = True          # Rule 9 — a render is a read; parallel is safe
     requires_network = True
@@ -72,7 +74,13 @@ class BrowsePageSkill(Skill):
         "in the tab that portal is already signed into rather than opening a fresh one. Do "
         "NOT use it as your first move for ordinary articles or APIs: `fetch` and the search "
         "tools are far faster and cheaper, and this is the fallback for when they come up "
-        "short. One thing to know before you plan a portal task around URLs: many portals — "
+        "short — but it IS that fallback, so reach for it rather than telling the owner a "
+        "page can't be accessed. Two things it will not do for you: a `.pdf` URL renders "
+        "into Chromium's PDF viewer and comes back with no readable text (download and "
+        "extract it with `run_command` + pypdf instead), and a site needing an account it "
+        "doesn't have stays locked — `portal_login` if the owner saved that portal, "
+        "otherwise say plainly that it needs a login. One thing to know before you plan a "
+        "portal task around URLs: many portals — "
         "most Turkish university systems, and anything else built on ASP.NET WebForms — give "
         "every menu entry `href=\"#\"` and navigate by running a script instead, so their "
         "inner pages HAVE no address you can open. On those, changing the URL just re-renders "
