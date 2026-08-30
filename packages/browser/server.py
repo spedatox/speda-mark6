@@ -156,11 +156,41 @@ class Engine:
     def __init__(self) -> None:
         self._pw = None
         self.browser: Browser | None = None
-        # No lock guarding this. Every mutation is a dict pop or assign between
-        # awaits, and the concurrent case that exists — two read calls, which
-        # browse_page allows because it is read-only — never touches it: a read
-        # builds its own context and closes it in a finally.
         self.sessions: dict[str, dict] = {}
+        # profile name → the session_id of ITS open tab.
+        #
+        # This is the thing that makes a portal behave the way a person expects:
+        # you sign in once, you are left sitting on the portal's home page, and
+        # every later "check my X" keeps working in that same tab. Before this
+        # existed, /login closed its tab the moment it finished and every /read
+        # built a throwaway context that replayed cookies from disk and
+        # re-navigated from nothing — so the browser had to re-prove who it was
+        # on every single request, which is what kept walking back into OBS's
+        # login form and tripping its one-login-per-browser guard.
+        #
+        # Cookies on disk stay the DURABLE half (they survive a restart, and a
+        # portal signed into in September still works in November). This is the
+        # LIVE half: while a tab is open, use the tab.
+        self.profile_sessions: dict[str, str] = {}
+
+    def live_for_profile(self, profile: str | None) -> tuple[str, dict] | None:
+        """The open tab for this profile, if there still is one.
+
+        Checked against `sessions` rather than trusted, because a session can be
+        reaped for idleness or closed by the caller while the mapping still
+        names it.
+        """
+        if not profile:
+            return None
+        sid = self.profile_sessions.get(profile)
+        if not sid:
+            return None
+        sess = self.sessions.get(sid)
+        if sess is None:
+            self.profile_sessions.pop(profile, None)
+            return None
+        sess["seen"] = time.time()
+        return sid, sess
 
     async def start(self) -> None:
         self._pw = await async_playwright().start()
@@ -234,6 +264,14 @@ class Engine:
             sess = self.sessions[session_id]
             sess["seen"] = time.time()
             return session_id, sess
+        # No id named (or a dead one) but this profile still has a tab open:
+        # continue in it rather than opening a second browser onto the same
+        # account. A portal that allows one session at a time treats the second
+        # context as a competing login and throws the first one out.
+        if not session_id:
+            live = self.live_for_profile(profile)
+            if live:
+                return live
         context = await self.new_context(profile, locale)
         page = await context.new_page()
         # A fresh id even when the caller named a dead one. Handing back the id
@@ -246,10 +284,18 @@ class Engine:
             "seen": time.time(), "downloads": [], "errors": [], "console": [],
             "network": [], "dialogs": [], "dialog_policy": "dismiss", "dialog_text": "",
             "uploads": {},
+            # Serialises use of this tab. browse_page is annotated read-only so
+            # the orchestrator may fire several at once (Rule 9) — harmless when
+            # every call had its own throwaway context, a race now that they
+            # share one. Two reads of the same portal queue instead of steering
+            # one tab to two URLs at the same time.
+            "lock": asyncio.Lock(),
         }
         self._wire_page(sess, page)
         sess["pages"].append(page)
         self.sessions[sid] = sess
+        if profile:
+            self.profile_sessions[profile] = sid
         return sid, sess
 
     def _wire_page(self, sess: dict, page: Page) -> None:
@@ -304,6 +350,10 @@ class Engine:
         sess = self.sessions.pop(session_id, None)
         if not sess:
             return False
+        # Drop the profile→tab mapping too, or live_for_profile hands the next
+        # caller a session whose context is closed underneath it.
+        if self.profile_sessions.get(sess.get("profile") or "") == session_id:
+            self.profile_sessions.pop(sess["profile"], None)
         try:
             await self.save_profile(sess["context"], sess["profile"])
             await sess["context"].close()
@@ -1143,10 +1193,21 @@ async def health(x_browser_token: str | None = Header(default=None)):
 
 @app.post("/read")
 async def read(body: dict, x_browser_token: str | None = Header(default=None)):
-    """Render one URL and hand back what it says. No session survives the call.
+    """Render one URL and hand back what it says.
 
-    This is the endpoint the research fallback uses: a single page, fully
-    rendered, with the cookies of a profile if one is named.
+    Two modes, and which one runs is decided by whether a signed-in tab is
+    already open:
+
+    **In the profile's live tab**, when one is open (the normal case right after
+    `/login`). It navigates the tab the owner is already signed into, exactly
+    like typing a new address in a browser you are logged into, and the tab
+    stays open afterwards. This is what makes "sign in… now check my grades…
+    now check my attendance" one continuous visit instead of three strangers
+    knocking.
+
+    **In a throwaway context** otherwise — the public web, or a profile with no
+    tab open yet. Cookies are loaded from disk, the page is read, the context is
+    closed. Right for a one-shot render fallback with nothing to keep.
     """
     check(x_browser_token)
     url = (body.get("url") or "").strip()
@@ -1154,6 +1215,30 @@ async def read(body: dict, x_browser_token: str | None = Header(default=None)):
         raise HTTPException(status_code=400, detail="url is required")
     profile = check_profile(body.get("profile"))
     locale = body.get("locale") or "tr-TR"
+
+    live = engine.live_for_profile(profile or None)
+    if live:
+        sid, sess = live
+        async with sess["lock"]:
+            page = active_page(sess)
+            status = None
+            try:
+                resp = await page.goto(url, wait_until="domcontentloaded",
+                                       timeout=NAV_TIMEOUT)
+                status = resp.status if resp else None
+            except Exception as e:  # noqa: BLE001
+                return JSONResponse({"error": f"could not load {url}: {e}"}, status_code=200)
+            await settle(page, body.get("wait_for"), int(body.get("wait_ms") or 0))
+            snap = await snapshot(page, want_aria=bool(body.get("aria", False)))
+            snap["status"] = status
+            snap["session_id"] = sid
+            if body.get("screenshot"):
+                token = uuid.uuid4().hex
+                await page.screenshot(path=str(ARTIFACT_DIR / f"{token}__screen.png"),
+                                      full_page=False)
+                snap["screenshot"] = token
+            await engine.save_profile(sess["context"], profile)
+            return snap
 
     context = await engine.new_context(profile or None, locale)
     try:
@@ -1206,62 +1291,64 @@ async def act(body: dict, x_browser_token: str | None = Header(default=None)):
 
     sid, sess = await engine.get_session(body.get("session_id"), profile or None,
                                          body.get("locale") or "tr-TR")
-    sess["downloads"] = []
-    sess["errors"] = []
-    sess["console"] = []
-    sess["dialogs"] = []
-    sess["dialog_policy"] = (body.get("dialog_policy") or "dismiss").strip().lower()
-    sess["dialog_text"] = body.get("dialog_text") or ""
 
-    upload_paths: list[Path] = []
-    sess["uploads"] = {}
-    for name, b64 in (body.get("files") or {}).items():
-        try:
-            data = base64.b64decode(b64)
-        except Exception:  # noqa: BLE001
-            raise HTTPException(status_code=400, detail=f"file '{name}' is not valid base64")
-        if len(data) > MAX_UPLOAD_BYTES:
-            raise HTTPException(status_code=400,
-                                detail=f"file '{name}' exceeds the "
-                                       f"{MAX_UPLOAD_BYTES // (1024*1024)}MB upload cap")
-        path = ARTIFACT_DIR / f"upload_{uuid.uuid4().hex}__{_safe(name)}"
-        path.write_bytes(data)
-        sess["uploads"][name] = str(path)
-        upload_paths.append(path)
+    async with sess["lock"]:
+        sess["downloads"] = []
+        sess["errors"] = []
+        sess["console"] = []
+        sess["dialogs"] = []
+        sess["dialog_policy"] = (body.get("dialog_policy") or "dismiss").strip().lower()
+        sess["dialog_text"] = body.get("dialog_text") or ""
 
-    log: list[str] = []
-    failed = None
-    try:
-        for step in steps:
-            try:
-                log.append(await run_step(step, sess))
-            except Exception as e:  # noqa: BLE001
-                failed = f"{step} → {type(e).__name__}: {str(e)[:300]}"
-                break
-
-        page = active_page(sess)
-        await settle(page, body.get("wait_for"), int(body.get("wait_ms") or 0))
-        # A download lands through an event handler that may still be writing when
-        # the last step returns. Only worth waiting for after something that could
-        # have started one.
-        if any(isinstance(s, dict) and (s.get("action") or "").lower() in ("click", "press")
-               for s in steps):
-            await page.wait_for_timeout(600)
-        snap = await snapshot(page)
-        await engine.save_profile(sess["context"], sess["profile"])
-    finally:
-        for p in upload_paths:
-            with contextlib.suppress(OSError):
-                p.unlink()
+        upload_paths: list[Path] = []
         sess["uploads"] = {}
+        for name, b64 in (body.get("files") or {}).items():
+            try:
+                data = base64.b64decode(b64)
+            except Exception:  # noqa: BLE001
+                raise HTTPException(status_code=400, detail=f"file '{name}' is not valid base64")
+            if len(data) > MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=400,
+                                    detail=f"file '{name}' exceeds the "
+                                           f"{MAX_UPLOAD_BYTES // (1024*1024)}MB upload cap")
+            path = ARTIFACT_DIR / f"upload_{uuid.uuid4().hex}__{_safe(name)}"
+            path.write_bytes(data)
+            sess["uploads"][name] = str(path)
+            upload_paths.append(path)
 
-    tabs = []
-    for i, p in enumerate(sess["pages"]):
+        log: list[str] = []
+        failed = None
         try:
-            title = (await p.title())[:120]
-        except Exception:  # noqa: BLE001
-            title = ""
-        tabs.append({"index": i, "url": p.url, "title": title})
+            for step in steps:
+                try:
+                    log.append(await run_step(step, sess))
+                except Exception as e:  # noqa: BLE001
+                    failed = f"{step} → {type(e).__name__}: {str(e)[:300]}"
+                    break
+
+            page = active_page(sess)
+            await settle(page, body.get("wait_for"), int(body.get("wait_ms") or 0))
+            # A download lands through an event handler that may still be writing when
+            # the last step returns. Only worth waiting for after something that could
+            # have started one.
+            if any(isinstance(s, dict) and (s.get("action") or "").lower() in ("click", "press")
+                   for s in steps):
+                await page.wait_for_timeout(600)
+            snap = await snapshot(page)
+            await engine.save_profile(sess["context"], sess["profile"])
+        finally:
+            for p in upload_paths:
+                with contextlib.suppress(OSError):
+                    p.unlink()
+            sess["uploads"] = {}
+
+        tabs = []
+        for i, p in enumerate(sess["pages"]):
+            try:
+                title = (await p.title())[:120]
+            except Exception:  # noqa: BLE001
+                title = ""
+            tabs.append({"index": i, "url": p.url, "title": title})
 
     out = {
         "session_id": sid, "performed": log, "failed": failed,
@@ -1279,8 +1366,33 @@ async def act(body: dict, x_browser_token: str | None = Header(default=None)):
 
 @app.post("/login")
 async def login(body: dict, x_browser_token: str | None = Header(default=None)):
-    """Sign a profile in. The only endpoint that takes a password, and it is
-    never written to a log, a response, or the profile's state file."""
+    """Sign a profile in, and STAY signed in on the tab it used.
+
+    The tab is kept open (and registered as this profile's live tab) on
+    success, so the very next /read or /act continues in the browser that is
+    already sitting on the portal's home page — the way a person works, rather
+    than signing in and immediately shutting the window.
+
+    It used to close that tab unconditionally, on the theory that cookies on
+    disk were enough for the next call to rebuild the session. They are not, on
+    a portal that allows one session at a time: each rebuild reads as another
+    login attempt, which is how OBS ended up serving its "you cannot log in
+    more than once from the same browser" page — a page with no username field,
+    which then looked like a broken selector rather than the self-inflicted
+    lockout it was.
+
+    Pass `keep_session: false` for the old close-on-finish behaviour. Nothing
+    does today: a repeat call with a tab already open is harmless — it lands on
+    a page with no password box and returns `already: true` without touching
+    the form — so even the Settings panel's "Test" button is better off
+    reusing the tab than tearing it down.
+
+    A FAILED login never keeps its tab: there is no session to continue, and
+    holding a context open on a login wall only strands the next caller on it.
+
+    Still the only endpoint that takes a password, and it is never written to a
+    log, a response, or the profile's state file.
+    """
     check(x_browser_token)
     profile = check_profile(body.get("profile"))
     if not profile:
@@ -1294,17 +1406,18 @@ async def login(body: dict, x_browser_token: str | None = Header(default=None)):
     # under the same id — only then is a re-navigate skippable, per do_login's
     # skip_navigate contract.
     continuing = wants_sid is not None and sid == wants_sid
+    keep = True
     try:
-        result = await do_login(active_page(sess), body, skip_navigate=continuing)
-        if result.get("ok"):
-            await engine.save_profile(sess["context"], profile)
-        logger.info("login profile=%s ok=%s", profile, result.get("ok"))
+        async with sess["lock"]:
+            result = await do_login(active_page(sess), body, skip_navigate=continuing)
+            if result.get("ok"):
+                await engine.save_profile(sess["context"], profile)
+        keep = bool(result.get("ok")) and body.get("keep_session") is not False
+        logger.info("login profile=%s ok=%s kept=%s", profile, result.get("ok"), keep)
         result["session_id"] = sid
         return result
     finally:
-        # A login session is not a working session — the caller continues with
-        # /act, which opens its own with the cookies we just saved.
-        if body.get("keep_session") is not True:
+        if not keep:
             await engine.close_session(sid)
 
 
