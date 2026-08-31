@@ -592,6 +592,11 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           // the tool would appear to fire slightly too early (before text still
           // sitting in the rAF-coalesced buffer).
           finalizeFlush()
+          // The reply is about to pause for as long as this tool takes. Tell
+          // the voice session so the part-sentence it is holding gets spoken
+          // now, instead of speech falling behind the visible text and then
+          // catching up in a rush when the answer resumes.
+          voiceRef.current?.pause()
           const tool = { ...(event.data as import('../lib/types').ToolBadge), afterChars: charsSoFar }
           dispatch({ type: 'ADD_TOOL', payload: { id: assistantId, tool } })
         } else if (event.type === 'tool_result') {

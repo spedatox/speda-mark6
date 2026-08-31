@@ -4,20 +4,35 @@
 /**
  * Spoken playback for voice mode.
  *
- * The reply arrives as a token stream, but synthesis is per-utterance, so the
- * whole design turns on one thing: cut the stream into sentences and start
- * speaking the first one while the rest is still being written. Waiting for the
- * turn to finish before speaking adds the entire generation time to the silence
- * before the first word, which is what makes a voice assistant feel dead.
+ * The reply arrives as a token stream. There are two ways to turn that into
+ * speech, and the difference between them is the difference between an
+ * assistant that sounds like a person and one that sounds like a list.
  *
- * Three stages run concurrently and independently:
+ * ── STREAMING (preferred) ───────────────────────────────────────────────────
+ * The text is fed continuously into ElevenLabs' stream-input socket (proxied by
+ * the backend, which holds the key) and PCM comes back as it is generated. The
+ * engine keeps ONE prosodic context for the whole turn, so a sentence that ends
+ * mid-thought gets the rising contour a person would give it instead of a full
+ * stop. Samples are scheduled back-to-back on the audio clock, so consecutive
+ * chunks splice with no seam at all.
+ *
+ * ── PER-SENTENCE (fallback) ─────────────────────────────────────────────────
+ * Azure and OpenAI synthesize whole utterances only, so for those the stream is
+ * cut into sentences and each is converted on its own:
  *   feed()      — accumulates deltas, emits complete sentences
  *   synthesis   — up to MAX_INFLIGHT sentences convert at once
  *   playback    — strictly in order, one at a time
- *
  * Order is preserved even though synthesis is not: sentence 3 finishing before
  * sentence 2 must not let it speak first, so playback awaits each job's promise
- * in sequence rather than racing them.
+ * in sequence rather than racing them. It starts quickly, but every sentence is
+ * a standalone utterance with its own terminal contour — audibly a list of
+ * sentences rather than a paragraph. That is the cost of the fallback, and the
+ * only reason the streaming path is worth a second transport.
+ *
+ * WHICH ONE a turn gets is decided by the SERVER, on the resolved voice — the
+ * client cannot know which engine an agent's profile voice lands on. The
+ * session opens the socket optimistically and switches to the per-sentence path
+ * if it is refused, so text spoken before the answer arrives is never lost.
  */
 
 import type { AppConfig, ModelInfo } from './types'
@@ -212,9 +227,109 @@ export async function voiceStatus(config: AppConfig): Promise<boolean> {
   }
 }
 
+/* ── Gapless PCM playback ─────────────────────────────────────────────────── */
+
+/**
+ * How far ahead of the audio clock the next chunk is scheduled.
+ *
+ * Scheduling at exactly `currentTime` loses whatever the main thread spends
+ * before the audio thread next runs, and that shows up as a click. A lead of a
+ * few tens of milliseconds is inaudible as latency and is the whole difference
+ * between "continuous" and "nearly continuous".
+ */
+const PCM_LEAD_S = 0.08
+
+/**
+ * Plays a sequence of raw PCM chunks as one continuous sound.
+ *
+ * The reason this exists rather than `decodeAudioData` per chunk: an MP3 chunk
+ * off a stream is a fragment, not a file, and decoding fragments independently
+ * gives every one its own encoder padding — the seams the streaming path exists
+ * to remove. Raw samples have no framing, so consecutive chunks abut exactly.
+ *
+ * Each chunk is scheduled at the instant the previous one ends, on the
+ * AudioContext's own clock, which is sample-accurate and immune to main-thread
+ * jitter. `next` only jumps forward if the network actually starved us.
+ */
+class PcmPlayer {
+  /** Where on the audio clock the next chunk starts. 0 until the first push. */
+  private next = 0
+  /** A trailing odd byte: a chunk can split a 16-bit sample down the middle. */
+  private carry: Uint8Array | null = null
+  private live = new Set<AudioBufferSourceNode>()
+
+  constructor(
+    private ctx: AudioContext,
+    private dest: AudioNode,
+    private rate: number,
+  ) {}
+
+  /** True once anything has been scheduled and not yet finished playing. */
+  get busy(): boolean {
+    return this.next > this.ctx.currentTime
+  }
+
+  /** Seconds until everything scheduled so far has played out. */
+  get remaining(): number {
+    return Math.max(0, this.next - this.ctx.currentTime)
+  }
+
+  push(bytes: ArrayBuffer): void {
+    let raw = new Uint8Array(bytes)
+    if (this.carry) {
+      const joined = new Uint8Array(this.carry.length + raw.length)
+      joined.set(this.carry)
+      joined.set(raw, this.carry.length)
+      raw = joined
+      this.carry = null
+    }
+    // Keep a dangling byte back rather than dropping it: dropping one byte
+    // shifts every following sample by half a word and turns the rest of the
+    // turn into noise.
+    const usable = raw.length - (raw.length % 2)
+    if (usable < raw.length) this.carry = raw.slice(usable)
+    if (usable === 0) return
+
+    const samples = usable / 2
+    const buffer = this.ctx.createBuffer(1, samples, this.rate)
+    const channel = buffer.getChannelData(0)
+    // Read explicitly little-endian rather than through an Int16Array view:
+    // the view would take the platform's endianness, which is only correct by
+    // coincidence, and the copy has to happen anyway to convert to float.
+    const view = new DataView(raw.buffer, raw.byteOffset, usable)
+    for (let i = 0; i < samples; i++) channel[i] = view.getInt16(i * 2, true) / 32768
+
+    const src = this.ctx.createBufferSource()
+    src.buffer = buffer
+    src.connect(this.dest)
+    src.onended = () => { this.live.delete(src) }
+
+    // Behind the clock means the stream starved — the gap already happened, and
+    // scheduling in the past would only make the browser drop the chunk.
+    const floor = this.ctx.currentTime + PCM_LEAD_S
+    if (this.next < floor) this.next = floor
+    src.start(this.next)
+    this.next += buffer.duration
+    this.live.add(src)
+  }
+
+  stop(): void {
+    for (const src of this.live) {
+      try { src.stop() } catch { /* already ended */ }
+    }
+    this.live.clear()
+    this.carry = null
+    this.next = 0
+  }
+}
+
 /* ── Session ──────────────────────────────────────────────────────────────── */
 
 export type VoiceState = 'idle' | 'thinking' | 'speaking'
+
+/** How the session ended up delivering speech. `pending` while the socket is
+ *  still being negotiated — text is held, never dropped, until it resolves. */
+type Delivery = 'pending' | 'stream' | 'http'
 
 interface Job {
   text: string
@@ -249,6 +364,22 @@ export class VoiceSession {
   private samples: Uint8Array<ArrayBuffer>
   private freq: Uint8Array<ArrayBuffer>
 
+  /* ── Streaming ──────────────────────────────────────────────────────────
+   * `delivery` starts 'pending': the socket takes a round trip to negotiate,
+   * and the model can easily produce its first line before that finishes. Text
+   * written in the meantime is held in `held` and replayed once the answer
+   * arrives, down whichever path won — so nothing is ever spoken twice or lost
+   * because the negotiation was slower than the model. */
+  private delivery: Delivery = 'pending'
+  private ws: WebSocket | null = null
+  private pcm: PcmPlayer | null = null
+  private held = ''
+  /** finish() arrived while still negotiating — end the input once we know how. */
+  private endPending = false
+  /** The engine sent every sample it owed — a close after this is not a failure. */
+  private streamComplete = false
+  private idleTimer: number | null = null
+
   /** Notified on every state change so the orb can react. */
   onState: (s: VoiceState) => void = () => {}
 
@@ -270,6 +401,152 @@ export class VoiceSession {
     this.gain.connect(this.ctx.destination)
     this.samples = new Uint8Array(new ArrayBuffer(this.analyser.fftSize))
     this.freq = new Uint8Array(new ArrayBuffer(this.analyser.frequencyBinCount))
+    this.openStream()
+  }
+
+  /* ── Negotiating the streaming path ───────────────────────────────────────
+   * Opened eagerly in the constructor rather than on the first delta, because
+   * the round trip is dead time either way and a turn's first line should not
+   * have to wait behind it.
+   *
+   * Every failure lands in the same place: `settle('http')`, the per-sentence
+   * path, which works with any engine. A refusal is the NORMAL case for an
+   * Azure or OpenAI voice, so nothing here is reported as an error. */
+  private openStream(): void {
+    // Concatenated exactly like every other call in this file, not resolved as
+    // a URL: an apiBase carrying a path prefix ("…/api") would lose it to a
+    // root-relative resolve, and every request here would 404 for that owner.
+    const url = `${this.config.apiBase}/voice/stream`.replace(/^http/, 'ws')
+
+    let ws: WebSocket
+    try {
+      ws = new WebSocket(url)
+    } catch {
+      this.settle('http')
+      return
+    }
+    this.ws = ws
+    ws.binaryType = 'arraybuffer'
+
+    ws.onopen = () => {
+      // The key travels in the first frame, not a header or a query parameter:
+      // no browser WebSocket can set a handshake header, and a query string
+      // would put the key in every access log between here and the server.
+      ws.send(JSON.stringify({
+        type: 'auth',
+        key: this.config.apiKey,
+        agent_id: this.opts.agentId ?? this.config.agentId,
+        ...(this.opts.voice ? { voice: this.opts.voice } : {}),
+        ...(this.opts.locale ? { locale: this.opts.locale } : {}),
+      }))
+    }
+
+    ws.onmessage = ev => {
+      if (this.stopped) return
+      if (ev.data instanceof ArrayBuffer) { this.onPcm(ev.data); return }
+      let msg: { type?: string; sample_rate?: number }
+      try { msg = JSON.parse(ev.data as string) } catch { return }
+      if (msg.type === 'ready') {
+        this.pcm = new PcmPlayer(this.ctx, this.analyser, msg.sample_rate || 24000)
+        this.settle('stream')
+      } else if (msg.type === 'done') {
+        this.streamComplete = true
+        this.finishStreamAudio()
+      } else {
+        // `unsupported` (wrong engine) and `error` (the engine died) are the
+        // same decision from here: speak it the other way.
+        this.degrade()
+      }
+    }
+
+    ws.onerror = () => this.degrade()
+    ws.onclose = () => this.degrade()
+  }
+
+  /**
+   * Fall back to the per-sentence path.
+   *
+   * Before `ready` this is the ordinary outcome — an Azure or OpenAI voice
+   * cannot stream and never could. AFTER `ready` it means the engine dropped
+   * mid-reply, and the rest of the turn is switched over rather than lost:
+   * whatever was already sent has been spoken (or is still playing out), and
+   * the remaining lines take the slower path. The seam is audible, which is
+   * still a better answer than the reply stopping halfway through.
+   */
+  private degrade(): void {
+    if (this.stopped) return
+    if (this.delivery === 'pending') { this.settle('http'); return }
+    if (this.delivery !== 'stream') return
+    // A socket closing after the turn's audio is complete is just the server
+    // hanging up, not a failure.
+    if (this.streamComplete || this.ended) { this.finishStreamAudio(); return }
+    this.delivery = 'http'
+    this.closeSocket()
+  }
+
+  /** Commit to a delivery path and replay whatever was written while waiting. */
+  private settle(mode: 'stream' | 'http'): void {
+    if (this.delivery !== 'pending' || this.stopped) return
+    this.delivery = mode
+    if (mode === 'http') this.closeSocket()
+
+    const pending = this.held
+    this.held = ''
+    if (pending) this.absorb(pending)
+    if (this.endPending) {
+      this.endPending = false
+      this.endInput()
+    }
+  }
+
+  private onPcm(bytes: ArrayBuffer): void {
+    if (!this.pcm || bytes.byteLength === 0) return
+    this.pcm.push(bytes)
+    this.onState('speaking')
+    this.armIdle()
+  }
+
+  /** No more audio is coming: go idle exactly when the last sample has played.
+   *  Timed off the audio clock rather than a source's `onended` because the
+   *  final chunk may still be queued behind several others. */
+  private finishStreamAudio(): void {
+    if (this.delivery !== 'stream' || this.stopped) return
+    this.armIdle()
+  }
+
+  private armIdle(): void {
+    if (this.idleTimer !== null) window.clearTimeout(this.idleTimer)
+    const wait = this.pcm ? this.pcm.remaining : 0
+    this.idleTimer = window.setTimeout(() => {
+      this.idleTimer = null
+      if (this.stopped) return
+      if (this.pcm?.busy) { this.armIdle(); return }
+      this.onState(this.ended ? 'idle' : 'thinking')
+    }, Math.max(50, wait * 1000))
+  }
+
+  private closeSocket(): void {
+    const ws = this.ws
+    this.ws = null
+    if (!ws) return
+    ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null
+    try { ws.close() } catch { /* already closing */ }
+  }
+
+  /** Tell whichever path is live that the reply is complete. */
+  private endInput(): void {
+    if (this.delivery === 'stream') {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'end' }))
+      }
+      // The tail is still generating; `done` (or the close that follows it)
+      // decides when this actually goes idle.
+      return
+    }
+    const tail = this.buf.trim()
+    this.buf = ''
+    if (tail) this.enqueue(tail)
+    if (!this.jobs.length) this.onState('idle')
   }
 
   /** Current loudness, 0..1 — drives the orb. Reads the live analyser rather
@@ -338,10 +615,29 @@ export class VoiceSession {
       this.absorb(this.speakable(this.raw + '\n'))
       this.raw = ''
     }
-    const tail = this.buf.trim()
-    this.buf = ''
-    if (tail) this.enqueue(tail)
-    if (!this.jobs.length) this.onState('idle')
+    // Still negotiating: `settle` will end the input once it knows which path
+    // to end. Ending here would close a socket that has not been told anything.
+    if (this.delivery === 'pending') { this.endPending = true; return }
+    this.endInput()
+  }
+
+  /**
+   * The reply is about to pause — a tool is running.
+   *
+   * The engine holds text back until it has enough characters to commit to a
+   * contour, so without this the last part-sentence before a tool call sits
+   * unspoken for as long as the tool takes. Speech would fall silently behind
+   * the text on screen, then catch up in a rush when the answer resumed.
+   *
+   * Only for a genuine pause. Flushing routinely would close off a prosodic
+   * unit every time, which is the per-sentence behaviour this path exists to
+   * stop doing.
+   */
+  pause(): void {
+    if (this.stopped || this.ended) return
+    if (this.delivery === 'stream' && this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'flush' }))
+    }
   }
 
   /** Drop everything that belongs on the canvas rather than in the ear. */
@@ -370,9 +666,25 @@ export class VoiceSession {
     return out
   }
 
-  /** Hand prose to the sentence splitter and queue whatever completed. */
+  /**
+   * Route speakable prose down whichever path this session settled on.
+   *
+   * Streaming hands it straight over: the engine does its own chunking, and
+   * cutting at sentence boundaries first would hand back exactly the isolated
+   * utterances the socket exists to avoid. The fallback splits into sentences
+   * because its transport has no other unit.
+   */
   private absorb(text: string): void {
     if (!text) return
+    if (this.delivery === 'pending') { this.held += text; return }
+    if (this.delivery === 'stream') {
+      // No state change here: audio already in flight is still playing, and
+      // announcing 'thinking' on every line would flicker the orb mid-sentence.
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'text', text }))
+      }
+      return
+    }
     this.buf += text
     const { sentences, rest } = splitSentences(this.buf)
     this.buf = rest
@@ -459,9 +771,14 @@ export class VoiceSession {
     this.abort.abort()
     try { this.source?.stop() } catch { /* already ended */ }
     this.source = null
+    if (this.idleTimer !== null) { window.clearTimeout(this.idleTimer); this.idleTimer = null }
+    this.pcm?.stop()
+    this.pcm = null
+    this.closeSocket()
     this.jobs = []
     this.buf = ''
     this.raw = ''
+    this.held = ''
     this.onState('idle')
     void this.ctx.close().catch(() => {})
   }
