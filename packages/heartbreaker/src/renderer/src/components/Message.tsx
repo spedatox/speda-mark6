@@ -25,6 +25,14 @@ import type { Dict } from '../lib/i18n/en'
 
 const RENDERABLE_LANGS = new Set(['html', 'svg'])
 
+// Fence tags whose body is a payload parsed as a whole by a block renderer
+// below (ChartBlock/CalendarBlock/MapBlock/…/WidgetFrame). The typewriter holds
+// its reveal at the opening of one of these while it is still unclosed — half a
+// JSON object is not a chart. Every OTHER fence streams; see safeTarget.
+const HOLD_WHILE_OPEN = new Set([
+  'chart', 'calendar', 'map', 'aircraft', 'bus', ...RENDERABLE_LANGS,
+])
+
 // House Party authorization is a real SSE event (`house_party_auth`) now, not a
 // marker in the text — see ChatMain. This stays as a SALVAGE path only: an older
 // transcript, or a model that writes the fence out of habit, must never leave a
@@ -1087,20 +1095,35 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
   const streamingRef = useRef(message.isStreaming)
   streamingRef.current = message.isStreaming
 
-  // How far it is SAFE to reveal. Never slice INTO an unclosed ``` fence — that
-  // yields malformed markdown mid-stream. (The old code dumped the ENTIRE message
-  // the instant any ``` appeared, killing the typewriter for the prose too.) While
-  // streaming, hold the reveal at the start of an open fence; prose before/after and
-  // any CLOSED block still stream. Once the turn is done, reveal everything.
+  // How far it is SAFE to reveal. Only ONE thing is genuinely unsafe to slice
+  // into: an open fence whose body is a PAYLOAD the block renderer parses whole
+  // (```chart / ```calendar / ```map / … — half a JSON object is not a chart).
+  // Those hold at the fence start; everything after it lands when the fence closes.
+  //
+  // An ordinary code fence does NOT hold. Holding it froze the reveal for the
+  // entire time the model spent writing the block — measured at 4.5s of dead
+  // screen followed by ~900 characters arriving in one flash, which is the exact
+  // "wait… wait… paragraph" this file is supposed to prevent. Slicing one is
+  // already safe: TextSegment runs sanitizePartialMarkdown, which closes an odd
+  // fence before ReactMarkdown ever sees it, so a partial block renders as a
+  // growing CodeBlock — which is what streaming code should look like.
   const safeTarget = useCallback((text: string): number => {
     if (!streamingRef.current) return text.length
-    let idx = -1
-    let count = 0
+    // Walk the fences; remember where the last UNCLOSED one opened and what it
+    // was tagged, since only the tag decides whether it has to be held.
+    let openAt = -1
+    let openTag = ''
     for (let i = text.indexOf('```'); i !== -1; i = text.indexOf('```', i + 3)) {
-      count++
-      idx = i
+      if (openAt === -1) {
+        const nl = text.indexOf('\n', i + 3)
+        openAt = i
+        openTag = (nl === -1 ? text.slice(i + 3) : text.slice(i + 3, nl)).trim().toLowerCase()
+      } else {
+        openAt = -1
+        openTag = ''
+      }
     }
-    return count % 2 === 1 ? idx : text.length
+    return openAt !== -1 && HOLD_WHILE_OPEN.has(openTag) ? openAt : text.length
   }, [])
 
   const revealedRef = useRef<number>(
@@ -1112,7 +1135,13 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
 
   const tick = useCallback((ts: number) => {
     const target = safeTarget(targetRef.current)
-    const dt = lastTsRef.current ? Math.min((ts - lastTsRef.current) / 1000, 0.05) : 0
+    // Clamped so returning from a backgrounded window doesn't credit the reveal
+    // with the whole time it was away. 0.25s, not the 0.05s it was: at 0.05 the
+    // reveal rate was effectively tied to the FRAME rate (speed × 0.05 = at most
+    // ~35 chars per frame), so any dip below 60fps starved the typewriter with no
+    // way to catch back up — a window that dropped to 10fps revealed at a third
+    // of the rate text was arriving, and never recovered.
+    const dt = lastTsRef.current ? Math.min((ts - lastTsRef.current) / 1000, 0.25) : 0
     lastTsRef.current = ts
 
     const remaining = target - revealedRef.current
@@ -1159,16 +1188,36 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
   const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (!isRevealing) {
-      if (renderTimer.current) clearTimeout(renderTimer.current)
+      // MUST null the ref, not just clear the timer. `renderTimer.current` IS
+      // the "a flush is already pending" flag for the branch below, and the
+      // typewriter catches up to the stream (isRevealing false) within the first
+      // few hundred ms of practically every turn — a tiny opening delta, then a
+      // 30ms+ gap before the next one. Leaving a cleared-but-truthy id here
+      // meant the guard below returned forever after: renderLen froze at the 3
+      // or 4 characters revealed before that first catch-up, the whole answer
+      // streamed into `content` behind a stalled `revealedLen`, and the text
+      // only appeared when the turn ended and revealedLen fell back to fullLen —
+      // the entire reply in one flash. Measured against a recorded 3108-char
+      // turn: 3 characters on screen, 16.6 seconds frozen, then all of it.
+      if (renderTimer.current != null) {
+        clearTimeout(renderTimer.current)
+        renderTimer.current = null
+      }
       setRenderLen(displayLen)
       return
     }
-    if (renderTimer.current) return
+    if (renderTimer.current != null) return
     renderTimer.current = setTimeout(() => {
       renderTimer.current = null
       setRenderLen(revealedRef.current)
     }, 80)
   }, [displayLen, isRevealing])
+
+  // Drop a pending flush on unmount (switching sessions mid-stream) so it can't
+  // fire against a gone component.
+  useEffect(() => () => {
+    if (renderTimer.current != null) clearTimeout(renderTimer.current)
+  }, [])
 
   // How far the typewriter has revealed — same debounced cadence the markdown
   // parse always used, now also gating which tools have "unlocked" into the
