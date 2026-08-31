@@ -17,11 +17,20 @@ callers already consume (.content blocks, .stop_reason, .usage). Anthropic
 calls pass through the existing AnthropicClient untouched, including prompt
 caching — zero degradation on the primary path.
 
-OpenAI, Gemini, z.ai (GLM), DeepSeek and Ollama all share one adapter: OpenAI's
-own API, Gemini's official OpenAI-compatibility endpoint, z.ai's paas/v4
-endpoint, DeepSeek's api.deepseek.com endpoint, and Ollama's /v1 endpoint all
-speak the same chat-completions dialect, so a single translation layer covers
-them. GLM and DeepSeek-V4 both default to "thinking" mode on and both disable it
+OpenAI, Gemini, Vertex, z.ai (GLM), DeepSeek and Ollama all share one adapter:
+OpenAI's own API, Gemini's official OpenAI-compatibility endpoint, Vertex AI's
+endpoints/openapi route, z.ai's paas/v4 endpoint, DeepSeek's api.deepseek.com
+endpoint, and Ollama's /v1 endpoint all speak the same chat-completions dialect,
+so a single translation layer covers them.
+
+"gemini:" and "vertex:" reach the SAME models by different doors, and BOTH stay
+available because the door is a billing choice, not a model choice: AI Studio
+bills to its own prepay balance, Vertex (renamed Gemini Enterprise Agent
+Platform, though the endpoint is still aiplatform.googleapis.com) bills as
+Google Cloud usage, and only that second route can be paid for with Google
+Cloud credits. See the VERTEX_* block in config.py.
+
+GLM and DeepSeek-V4 both default to "thinking" mode on and both disable it
 via the same extra_body toggle; DeepSeek additionally forces non-thinking
 whenever tools are present, because V4 thinking mode is incompatible with the
 tool loop (see _to_openai_params).
@@ -37,10 +46,12 @@ streaming, fallback applies while opening the stream — once tokens are
 flowing the response cannot be restarted on another provider.
 """
 
+import asyncio
 import json
 import logging
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from app.config import settings
@@ -56,6 +67,10 @@ _OPENAI_COMPAT = {
         "api_key": settings.gemini_api_key,
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
     },
+    # Same models as "gemini", different door — and the door is the whole point:
+    # this one bills through Google Cloud, so Cloud credits can pay for it.
+    # See _vertex_client_kwargs below and the VERTEX_* block in config.py.
+    "vertex": lambda: _vertex_client_kwargs(),
     "zai": lambda: {
         "api_key": settings.zai_api_key,
         "base_url": "https://api.z.ai/api/paas/v4/",
@@ -71,6 +86,129 @@ _OPENAI_COMPAT = {
     "ollama": lambda: {"api_key": "ollama", "base_url": settings.ollama_base_url},
 }
 _PROVIDERS = {"anthropic", *_OPENAI_COMPAT}
+
+
+# ── Vertex auth (Gemini Enterprise Agent Platform) ──────────────────────────
+# OAuth only, and not by preference. Google's console hands you ONE API key that
+# covers AI Studio and Agent Platform, and the Agent Platform quickstart does
+# document key auth (?key=…) — but not for the route this adapter needs. The
+# Chat Completions method rejects keys in every form (?key=, x-goog-api-key, v1
+# and v1beta1, project in the path or not):
+#
+#   401 UNAUTHENTICATED · CREDENTIALS_MISSING
+#   "API keys are not supported by this API. Expected OAuth2 access token or
+#    other authentication credentials that assert a principal."
+#   method: google.cloud.aiplatform.v1.PredictionService.ChatCompletions
+#
+# So an API key here is not a setting we left out, it is a door that does not
+# open. Auth is ADC or a service account, both via google-auth (already a
+# dependency for FCM push).
+#
+# The token cannot be baked into the client. LLMClient._compat_client caches the
+# AsyncOpenAI instance for the life of the process and a Google access token
+# dies in about an hour, so a baked token means every call after the first hour
+# 401s — on a long-running igor that reads as "Vertex broke overnight". The
+# token is therefore stamped on per REQUEST by an httpx event hook, which leaves
+# the cached client and its connection pool intact.
+
+_VERTEX_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+_vertex_credentials = None
+_vertex_cred_lock = asyncio.Lock()
+
+
+class VertexNotConfigured(RuntimeError):
+    """No usable Vertex credentials. Raised at CALL time, never at import, so a
+    machine with no Google auth set up simply has an unusable vertex:* provider
+    rather than a backend that won't start."""
+
+
+def _vertex_base_url() -> str:
+    """Vertex's OpenAI-compatible Chat Completions route for the configured
+    project (the SDK appends /chat/completions).
+
+    Location "global" is both the default and the cheaper one: since 2026-07-01
+    regional endpoints carry roughly a 10% uplift over global."""
+    project = settings.vertex_project_id.strip()
+    if not project:
+        raise VertexNotConfigured("VERTEX_PROJECT_ID is not set")
+    loc = settings.vertex_location.strip() or "global"
+    host = "aiplatform.googleapis.com" if loc == "global" else f"{loc}-aiplatform.googleapis.com"
+    return f"https://{host}/v1/projects/{project}/locations/{loc}/endpoints/openapi"
+
+
+def _load_vertex_credentials():
+    """Service-account credentials from VERTEX_CREDENTIALS_FILE, else whatever
+    Application Default Credentials resolves to (gcloud login, metadata server,
+    GOOGLE_APPLICATION_CREDENTIALS)."""
+    try:
+        import google.auth
+        from google.oauth2 import service_account
+    except ImportError as e:  # pragma: no cover - dependency is declared
+        raise VertexNotConfigured("google-auth is not installed") from e
+
+    path = settings.vertex_credentials_file.strip()
+    if path:
+        f = Path(path)
+        if not f.exists():
+            raise VertexNotConfigured(f"Vertex credentials file not found: {f}")
+        return service_account.Credentials.from_service_account_file(
+            str(f), scopes=[_VERTEX_SCOPE]
+        )
+    try:
+        creds, _ = google.auth.default(scopes=[_VERTEX_SCOPE])
+    except Exception as e:  # noqa: BLE001 - any ADC failure means "not configured"
+        raise VertexNotConfigured(
+            "no Application Default Credentials — run `gcloud auth "
+            "application-default login`, or set VERTEX_CREDENTIALS_FILE to a "
+            "service-account JSON with roles/aiplatform.user"
+        ) from e
+    return creds
+
+
+async def _vertex_bearer_token() -> str:
+    """A valid cloud-platform access token, refreshed on demand.
+
+    Same shape as services/fcm.py, for the same reason: google-auth's refresh is
+    blocking (an RSA sign plus an HTTPS token call), so it runs in a thread
+    instead of stalling the event loop, and google-auth caches internally — the
+    network is only touched when the current token is near expiry."""
+    global _vertex_credentials
+    async with _vertex_cred_lock:
+        if _vertex_credentials is None:
+            _vertex_credentials = await asyncio.to_thread(_load_vertex_credentials)
+        creds = _vertex_credentials
+        if not creds.valid:
+            from google.auth.transport.requests import Request
+
+            await asyncio.to_thread(creds.refresh, Request())
+        return creds.token
+
+
+async def _vertex_auth_hook(request) -> None:
+    """httpx request hook — a live bearer token on every Vertex call."""
+    request.headers["Authorization"] = f"Bearer {await _vertex_bearer_token()}"
+
+
+def _vertex_client_kwargs() -> dict:
+    """AsyncOpenAI kwargs for Vertex. Built once per process (the client is
+    cached), so nothing time-varying may be captured here — the bearer token
+    arrives per request via _vertex_auth_hook.
+
+    `api_key` is a placeholder the SDK insists on but never uses; the hook
+    overwrites Authorization on every request. The explicit timeout matters:
+    supplying our own http_client drops the SDK's generous default in favour of
+    httpx's 5s one, which would guillotine every streamed reply."""
+    import httpx
+
+    return {
+        "api_key": "adc",
+        "base_url": _vertex_base_url(),
+        "http_client": httpx.AsyncClient(
+            timeout=httpx.Timeout(600.0, connect=10.0),
+            event_hooks={"request": [_vertex_auth_hook]},
+        ),
+    }
+
 
 # OpenAI finish_reason → Anthropic stop_reason. There is no chat-completions
 # analogue of pause_turn (that is Anthropic server-tools only).
@@ -96,7 +234,7 @@ def parse_model_ref(ref: str) -> tuple[str, str]:
 # by name: every Claude model since 3.0 and every Gemini since 1.5 is
 # multimodal, and the non-chat ids (embeddings, imagen/veo) are filtered out of
 # the catalog before they can reach here.
-_VISION_PROVIDERS = {"anthropic", "gemini"}
+_VISION_PROVIDERS = {"anthropic", "gemini", "vertex"}
 
 # Substrings that mark a vision model on a provider whose line is otherwise
 # text-only. DeepSeek serves images on exactly ONE id
@@ -399,6 +537,24 @@ _CATALOG = {
             "tags": ["fast"],
         },
     ],
+    # Vertex ids carry their publisher prefix — the openapi route wants
+    # "google/gemini-…", not the bare id AI Studio takes. No live listing here:
+    # the OpenAI-compatible route serves chat completions only, so a /models
+    # call would fail on every picker load just to fall back to this list.
+    "vertex": [
+        {
+            "id": "vertex:google/gemini-3.6-flash",
+            "name": "Gemini 3.6 Flash (Vertex)",
+            "description": "Same model as gemini:*, billed through Google Cloud credits",
+            "tags": ["powerful"],
+        },
+        {
+            "id": "vertex:google/gemini-3.5-flash-lite",
+            "name": "Gemini 3.5 Flash-Lite (Vertex)",
+            "description": "Cheapest Gemini tier, billed through Google Cloud credits",
+            "tags": ["fast"],
+        },
+    ],
     "zai": [
         {
             "id": "zai:glm-5.2",
@@ -677,6 +833,10 @@ async def available_models() -> list[dict]:
             out += [{**m, "provider": "openai"} for m in _CATALOG["openai"]]
     if settings.gemini_api_key:
         out += await _live_or_static("gemini", _GEMINI_FAMILY)
+    # Vertex needs no key of its own on the OAuth path, so the project id is
+    # what says "this is configured"; without it _vertex_base_url can't be built.
+    if settings.vertex_project_id:
+        out += [{**m, "provider": "vertex"} for m in _CATALOG["vertex"]]
     if settings.zai_api_key:
         out += await _live_or_static("zai", _ZAI_FAMILY)
     if settings.deepseek_api_key:
@@ -798,6 +958,14 @@ def _to_openai_params(provider: str, model: str, kwargs: dict) -> dict:
             effort = reasoning_effort
         if effort:
             params.setdefault("extra_body", {})["reasoning_effort"] = effort
+    elif provider == "vertex" and reasoning_effort:
+        # Vertex's Chat Completions accepts low/medium/high only (they map to
+        # 1024/8192/24576 thinking tokens). Background callers ask for "minimal",
+        # which AI Studio takes and this endpoint does not, so it lands on the
+        # nearest real tier rather than risking a 400 on every title generation.
+        tier = {"minimal": "low", "none": "low"}.get(reasoning_effort, reasoning_effort)
+        if tier in ("low", "medium", "high"):
+            params.setdefault("extra_body", {})["reasoning_effort"] = tier
     elif provider == "gemini" and reasoning_effort:
         params.setdefault("extra_body", {})["reasoning_effort"] = reasoning_effort
 

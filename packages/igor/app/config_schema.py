@@ -56,7 +56,24 @@ CONFIG_GROUPS: list[ConfigGroup] = [
             ConfigField("openai_api_key", "OpenAI API Key", "password", secret=True,
                         help="Enables openai:* refs and embeddings (semantic recall)."),
             ConfigField("gemini_api_key", "Google Gemini API Key", "password", secret=True,
-                        help="Enables gemini:* model refs."),
+                        help="Enables gemini:* model refs (AI Studio — billed to its own "
+                             "prepay balance, NOT to Google Cloud credits)."),
+            ConfigField("vertex_project_id", "Vertex AI Project ID", "text",
+                        help="Google Cloud project linked to the billing account holding your "
+                             "credits. Setting it enables vertex:* refs — the same Gemini "
+                             "models as gemini:*, but billed as Cloud usage, which is the only "
+                             "route Developer Program / AI Pro credits can pay for.",
+                        placeholder="e.g. speda-mark6"),
+            ConfigField("vertex_credentials_file", "Vertex Service-Account JSON", "text",
+                        help="Path to a service-account key with roles/aiplatform.user. Leave "
+                             "empty to use ADC (`gcloud auth application-default login`). "
+                             "There is no API-key option: Vertex's chat endpoint accepts OAuth "
+                             "only, whatever key the console shows you.",
+                        placeholder="/path/to/service-account.json"),
+            ConfigField("vertex_location", "Vertex AI Location", "text",
+                        help="'global' is the default and the cheapest — regional endpoints "
+                             "carry a ~10% uplift.",
+                        placeholder="global"),
             ConfigField("zai_api_key", "z.ai (GLM) API Key", "password", secret=True,
                         help="OpenAI-compatible. Enables zai:* refs."),
             ConfigField("deepseek_api_key", "DeepSeek API Key", "password", secret=True,

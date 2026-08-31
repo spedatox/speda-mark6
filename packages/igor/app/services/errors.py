@@ -6,8 +6,8 @@ Provider error translation — turns a raw LLM-provider exception into a short,
 actionable message for the UI.
 
 Why this exists as its own service (not inline in the chat router, per
-CLAUDE.md Rule 1): the backend talks to six providers (Anthropic, OpenAI,
-Gemini, NVIDIA, z.ai/DeepSeek, Ollama), each with its own failure shapes for
+CLAUDE.md Rule 1): the backend talks to seven providers (Anthropic, OpenAI,
+Gemini, Vertex, NVIDIA, z.ai/DeepSeek, Ollama), each with its own failure shapes for
 the same underlying problem (bad key, no credit, rate limit, no uplink). This
 module owns that provider-specific string matching so routers stay thin
 dispatch layers and the classification logic has one place to grow as new
@@ -32,6 +32,17 @@ def friendly_provider_error(model: str, exc: Exception) -> str:
             "key problem). Fix it at build.nvidia.com / email help@build.nvidia.com, or just "
             "use another provider (OpenAI, Gemini, z.ai, DeepSeek, Anthropic)."
         )
+    # Vertex's signature failure: a STANDARD Google Cloud project refuses API
+    # keys outright, and the raw text names neither the setting nor the fix.
+    # Reads as "bad key" otherwise, which sends the owner rotating a key that
+    # was never the problem — the AUTH METHOD is.
+    if provider == "vertex" and "api keys are not supported" in text:
+        return (
+            "Vertex needs OAuth, not an API key — its chat endpoint rejects keys outright. "
+            "Run `gcloud auth application-default login`, or point VERTEX_CREDENTIALS_FILE "
+            "at a service-account JSON with roles/aiplatform.user. (Use gemini:* instead if "
+            "you want the key-based route — it bills to AI Studio, not Cloud credits.)"
+        )
     # A tool-call rejection is NOT an auth failure, but OpenAI's 5.6 family
     # reports one as a 401 "insufficient permissions" — which used to surface as
     # "check your key" and sent the owner hunting a perfectly good key. Match the
@@ -43,7 +54,11 @@ def friendly_provider_error(model: str, exc: Exception) -> str:
             "Responses API; pick another model if it persists."
         )
     if "401" in text or "unauthorized" in text or "api key" in text or "authentication" in text:
-        key = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}.get(provider, "ANTHROPIC_API_KEY")
+        key = {
+            "openai": "OPENAI_API_KEY",
+            "gemini": "GEMINI_API_KEY",
+            "vertex": "VERTEX_API_KEY (or your ADC / VERTEX_CREDENTIALS_FILE)",
+        }.get(provider, "ANTHROPIC_API_KEY")
         return f"{provider.title()} rejected the request — check that {key} is set and valid."
     if "credit" in text or "billing" in text or "quota" in text or "insufficient" in text:
         return f"{provider.title()} reports no available credit/quota for this account."

@@ -50,6 +50,7 @@ class UltronProfile(AgentProfile):
     background_models = {
         "openai": "openai:gpt-5-mini",
         "gemini": "gemini:gemini-3.5-flash-lite",
+        "vertex": "vertex:google/gemini-3.5-flash-lite",
         "zai": "zai:glm-4.5-air",
         "deepseek": "deepseek:deepseek-v4-flash",
     }

@@ -177,6 +177,33 @@ class Settings(BaseSettings):
     # refs keep working. Routing lives in app/services/llm_client.py.
     openai_api_key: str = ""
     gemini_api_key: str = ""
+    # Vertex AI — the SAME Gemini models as "gemini:", reached through Google
+    # Cloud instead of AI Studio. Added ALONGSIDE gemini:*, never replacing it:
+    # both can be configured at once and both appear in the model picker, so a
+    # ref is a deliberate choice of BILLING ROUTE, not just of model.
+    #
+    # Why the second route exists: AI Studio (generativelanguage.googleapis.com)
+    # runs on its own prepay balance, and Google Cloud credits — the Developer
+    # Program / AI Pro monthly grants — categorically cannot pay for it. The same
+    # token on Vertex bills as ordinary Cloud usage, which those credits DO cover.
+    # Per-token list price is the same on both; "global" location avoids the
+    # regional-endpoint uplift.
+    #
+    # Auth is OAuth, and ONLY OAuth. There is deliberately no VERTEX_API_KEY:
+    # aiplatform.googleapis.com refuses API keys on the Chat Completions method
+    # in every form — ?key=, x-goog-api-key, v1 and v1beta1, with or without the
+    # project in the path — with 401 CREDENTIALS_MISSING, "API keys are not
+    # supported by this API. Expected OAuth2 access token…". The console showing
+    # one key for both AI Studio and Agent Platform is real, but that key opens
+    # the AI Studio door, not this one. So: Application Default Credentials
+    # (`gcloud auth application-default login`) or the service-account JSON at
+    # VERTEX_CREDENTIALS_FILE, which needs roles/aiplatform.user.
+    #
+    # The project must be linked to the billing account holding the credits, or
+    # they are not what gets drawn down.
+    vertex_project_id: str = ""
+    vertex_location: str = "global"
+    vertex_credentials_file: str = ""
     # Embedding model for semantic recall (app/skills/semantic_search.py). Always
     # OpenAI regardless of llm_main_model/llm_background_model — reuses openai_api_key.
     embedding_model: str = "text-embedding-3-small"

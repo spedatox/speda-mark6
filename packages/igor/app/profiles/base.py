@@ -103,7 +103,7 @@ class AgentProfile(ABC):
     # Per-provider cheap models for background tasks (title generation, session
     # log, daily maintenance). Populated by the concrete profile — Rule 10:
     # model IDs live in the profile file, never in core. Keys are provider
-    # names ("openai", "gemini", "zai", "deepseek"); Anthropic uses haiku_model,
+    # names ("openai", "gemini", "vertex", "zai", "deepseek"); Anthropic uses haiku_model,
     # Ollama reuses the active local model (it's the only one in a dead zone).
     background_models: dict[str, str] = {}
 
