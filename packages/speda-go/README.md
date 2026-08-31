@@ -1,180 +1,88 @@
 # Speda GO
 
-Native Android (Kotlin + Jetpack Compose) port of the Heartbreaker desktop client,
-targeting a 1:1 visual/UX parity with the sub-768px web layout. See
-[`docs/ANDROID_PORT_PLAN.md`](../../docs/ANDROID_PORT_PLAN.md) for the full plan
-and the parity contract.
+The native Android client. Kotlin, Jetpack Compose. Package id `com.speda.heartbreaker` — intentional, matching the desktop client's Electron app identity rather than the "Speda GO" branding; it doesn't get renamed.
 
-This package is **inert to the GitOps prod deploy** — the server never runs
-Gradle, so nothing here is built or shipped by the backend.
+---
 
-## Status — M0 (Foundation) + M1 (Chat core)
+## Contents
 
-### M1 — Chat core
+- [Directory structure](#directory-structure)
+- [Build setup](#build-setup)
+- [Networking](#networking)
+- [Key screens](#key-screens)
+- [Health sync](#health-sync)
+- [Push notifications](#push-notifications)
+- [Signing and release](#signing-and-release)
 
-| Area | Where | Source of truth |
-|---|---|---|
-| Chat models + 19-action reducer | `app/.../domain/ChatModels.kt`, `ChatState.kt` | `store/chat.ts` |
-| Segment interleaving (buildSegments) | `app/.../domain/Segmenter.kt` | `Message.tsx` |
-| Tool status / summary / typewriter / watchdog | `app/.../domain/{ToolStatus,Watchdog}.kt` | `Message.tsx`, `ChatMain.tsx` |
-| SSE client + endpoints | `app/.../data/IgorApi.kt`, `SseEvent.kt` | `lib/api.ts` |
-| Offline transcript cache | `app/.../data/MessageCache.kt`, `MessageJson.kt` | `store/messageCache.ts` |
-| Streaming engine (coalesce / watchdog / reattach / abort-on-switch / title poll) | `app/.../ui/chat/ChatViewModel.kt` | `ChatMain.tsx` |
-| Chat UI (list, typewriter, tool feed, working status, composer, sessions) | `app/.../ui/chat/*` | `Message.tsx`, `InputBar.tsx` |
+---
 
-M1 renders text as plain prose; the full markdown/prose renderer, rich fences,
-files/images and the real sidebar/header land in M2/M3. The token gallery
-(`ui/gallery`) remains as the design-system reference surface.
+## Directory structure
 
-**Parity verification done here:** `buildSegments` fixtures generated from a
-verbatim copy (`scripts/gen-chat-fixtures.ts` → `segments.json`), asserted by
-`SegmenterTest`; the 19-action reducer's subtle rules covered by `ReducerTest`.
+Under `app/src/main/kotlin/com/speda/heartbreaker/`:
 
-## Status — M0 (Foundation)
+| Path | Contents |
+|---|---|
+| `data/` | `IgorApi.kt` (the backend client), config storage, offline message cache, Android Keystore-backed credential encryption |
+| `domain/` | Pure Kotlin chat models and state, ported from the web client — markdown prep, streaming segmenters, spec parsers for the map/bus/chart/calendar/aircraft rich-content blocks |
+| `health/` | Health Connect integration |
+| `i18n/` | English and Turkish locale strings |
+| `push/` | Firebase Cloud Messaging service and device registration |
+| `ui/chat/` | The chat screen and its view model |
+| `ui/comms/` | Inter-agent traffic viewer |
+| `ui/prose/` | Rich-content renderers — SVG, map, chart, calendar, bus, aircraft, code, and math blocks |
+| `ui/settings/` | One tab per settings area — account, automations, connections, protocols, reminders, voices, health, interface |
+| `ui/shell/` | App chrome — header, sidebar, welcome view |
+| `ui/skyfall/` | The Skyfall protocol's full-screen countdown |
+| `ui/switcher/` | The agent switcher overlay |
 
-Implemented, grounded value-for-value in `packages/heartbreaker/src/renderer/src`
-(the parity source of truth):
+---
 
-| Area | Where | Source of truth |
-|---|---|---|
-| Colour math + theme engine | `designsystem/.../color`, `.../theme` | `profile/theme.ts` |
-| Base token tables | `designsystem/.../theme/BaseTokens.kt` | `profile/theme.ts`, `theme/heartbreaker.css` |
-| Brands / roster / party colours | `designsystem/.../brand/Brands.kt` | `profile/brands.ts`, `warroom.ts`, `lib/agents.ts` |
-| Accent morph + House Party parade | `designsystem/.../theme/HbTheme.kt` | `theme.ts` `morphTheme` / `startPartyCycle` |
-| The ONE glass material + seams | `designsystem/.../glass` | `.glass` / `.hb-seam-*` in `heartbreaker.css` |
-| Ambient background | `designsystem/.../background/AmbientBackground.kt` | `components/NeuralBackground.tsx` |
-| Typography ramp | `designsystem/.../type/HbType.kt` | `heartbreaker.css` |
-| Motion tokens | `designsystem/.../motion/Motion.kt` | `theme.ts` + CSS |
-| Uplink setup (Keystore) | `app/.../data`, `app/.../ui/UplinkSetupScreen.kt` | replaces Electron env config |
-| `/health` poller + bare HUD strip | `app/.../data/HealthPoller.kt`, `ui/HudStrip.kt` | `lib/useHealth.ts`, `HudFrame.tsx` |
-| Token-gallery reference screen | `app/.../ui/gallery/TokenGalleryScreen.kt` | plan M0 acceptance surface |
+## Build setup
 
-### Parity verification already done here
-
-- **Theme fixtures generated from the shipping TS**:
-  `node --experimental-strip-types packages/heartbreaker/scripts/gen-theme-fixtures.ts`
-  → `designsystem/src/test/resources/fixtures/theme_vars.json` (9 agents).
-- **`ThemeEngineTest`** asserts the Kotlin engine reproduces `buildThemeVars` /
-  `deriveAccents` byte-for-byte (runs on the JVM, no device).
-- The engine algorithm was cross-checked independently (369 assertions across 9
-  agents, all matching) — see the port notes. Rounding uses `floor(x+0.5)` to
-  match JS `Math.round`, **not** Kotlin's banker's `round`.
-
-## Build status
-
-**Green.** The whole project compiles, the unit tests pass, and `assembleDebug`
-produces an installable APK. Verified on this box with Android Studio's bundled
-JBR (JDK 21) + Gradle 8.11.1 + AGP 8.9.0:
-
-| Module | Test | Tests | Failures |
-|---|---|---|---|
-| designsystem | `ThemeEngineTest` (theme parity, 9 agents) | 3 | 0 |
-| app | `SegmenterTest` (buildSegments fixtures) | 1 | 0 |
-| app | `ReducerTest` (the 19-action store) | 8 | 0 |
-
-Android Studio syncs straight from `gradle/wrapper/gradle-wrapper.properties`
-(Gradle 8.11.1). To build from this shell without the IDE:
+Kotlin 2.1.0, AGP 8.9.0, Compose BOM 2025.01.00. `compileSdk`/`targetSdk` 35, `minSdk` 31, Java 17 target. Networking is plain OkHttp — no Retrofit, no Ktor.
 
 ```bash
-export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
-export ANDROID_HOME="$LOCALAPPDATA/Android/Sdk"
-GRADLE=~/.gradle/wrapper/dists/gradle-8.11.1-bin/*/gradle-8.11.1/bin/gradle
-$GRADLE :designsystem:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
+./gradlew :app:assembleDebug     # debug APK
+./gradlew :app:assembleRelease    # release APK — needs signing env vars, see below
+./gradlew :designsystem:testDebugUnitTest :app:testDebugUnitTest   # unit tests
 ```
 
-Note: `gradlew`/`gradle-wrapper.jar` are **not** committed (only the
-`.properties`), so there is no `./gradlew`. Android Studio doesn't need it; run
-`gradle wrapper` once if you want the CLI script.
+---
 
-### Gotcha that already bit once
+## Networking
 
-A batch of jars in `~/.gradle/caches/modules-2` downloaded **corrupt**
-(right byte-count, zero-padded tail, no ZIP end header). Symptom was a very
-misleading `Could not apply requested plugin [id: 'com.android.application'] …
-does not provide a plugin with id` — nothing to do with the AGP/Gradle versions.
-Gradle names each cache folder after the artifact's SHA-1, so the cache is
-self-verifying; compare `sha1sum <jar>` to its parent folder name (Gradle strips
-leading zeros), delete the mismatching module dirs, and re-resolve. Afterwards
-clear the stale script caches (`.gradle/`, `~/.gradle/caches/8.11.1/kotlin-dsl`),
-or the build scripts stay compiled against the missing `android {}` DSL.
+`data/IgorApi.kt` builds every request against a configured base URL and sends `X-API-Key`. Server-sent events are read line-by-line over a client with no read/call timeout — a watchdog owns liveness instead, matching how the desktop client handles long-running streams.
 
-### Still open
+It covers the full backend surface: chat streaming and cancellation, sessions, budget mode, OAuth connections, automations, inter-agent comms, the named host protocols, pending owner approvals, per-agent and per-worker model routing, memory files with conflict detection, chat history import, Atomix health sync, custom MCP servers, web portals, and voice tuning.
 
-- **Not run on a device**, and the §7 **visual-parity ritual has not been done** —
-  no screenshot diff against the web yet. Correctness is asserted only by the
-  unit tests above.
-- ~~Fonts~~ — **done**: Rajdhani + Inter + JetBrains Mono are bundled in
-  `designsystem/src/main/res/font` and wired in `HbFonts`. See `docs/FONTS.md`.
-- **Cleartext** — `res/xml/network_security_config.xml`: add the prod host only if
-  its `apiBase` is plain `http://`.
+---
 
-## Status — M2/M3 shipped, M4 in progress
+## Key screens
 
-The two milestone tables above are historical: M2 (rich content) and M3 (shell,
-settings, systems board) landed, and the sections describing them as future work
-are stale. What is worth reading is the **remaining** gap against the desktop.
+- **Chat** — the primary surface; a Kotlin port of the same send/stop/reattach pipeline the desktop client uses, including a pending-asks tray for owner approvals surfaced directly to the phone.
+- **Agent comms** — inter-agent dispatch traffic.
+- **Settings** — one tab per area, mirroring the desktop settings modal.
+- **Skyfall** — the full-screen arm/fire/abort countdown.
 
-### Landed since (M4 — multi-agent theatre)
+---
 
-| Surface | Where | Source of truth |
-|---|---|---|
-| ```html widgets (sealed WebView + injected base styles/resize bridge) | `ui/prose/HtmlBlock.kt` | `WidgetFrame.tsx` |
-| ```hpp-warning salvage banner + alias/content detection | `ui/prose/Prose.kt` | `Message.tsx` |
-| Composer budget mode + dictation | `ui/chat/Composer.kt`, `ui/chat/ChatScreen.kt` | `InputBar.tsx` |
-| Protocols — Lockdown (engage/stand-down), Lifeboat/Doormat/Octavius (read-only + backup-now), Skyfall countdown, House Party (read-only status) | `ui/settings/ProtocolsTab.kt`, `ui/skyfall/SkyfallCountdown.kt` | `ProtocolsTab.tsx` |
-| Pending permission asks — global tray + inline `permission_request` SSE card | `ui/chat/AsksTray.kt`, `ui/chat/ChatViewModel.kt` | `PendingAsksTray.tsx`, `InteractionPrompt.tsx` |
-| Custom MCP servers + web portals (add/edit/delete, sign-in, forget session) + Microsoft Graph connection | `ui/settings/ConnectionsTab.kt` | `McpServersPanel.tsx`, `PortalsPanel.tsx` |
-| Subagent delegation panel — per-turn runs, foldable steps | `ui/chat/SubagentPanel.kt`, `domain/ChatState.kt` | `SubagentPanel.tsx`, `SubagentDetailView.tsx` |
-| Telegram model pins (second per-agent override, separate from the app pin) | `ui/systems/RoutingMatrix.kt` | `RosterModelWindow.tsx` |
-| Memory record status (observations/at-risk/verdict) + declared-but-empty folders in the knowledge bank tree | `ui/systems/KnowledgeBank.kt` | `SystemsBoard.tsx` |
+## Health sync
 
-**House Party stays desktop-only, on purpose.** No engage path exists here —
-`HeartbreakerRoot.kt` documents why (the war room needs a stage a phone does not
-build, and the backend refuses to ENGAGE from a non-desktop client). The
-Protocols tab shows the flag read-only, greyed, with the reason, rather than
-omitting it — see `ProtocolsTab.kt`'s own doc comment.
+Two independent WorkManager schedules:
 
-**Deliberate delta:** the Protocols tab's CORES-equivalent stays on the systems
-board rather than a second window — the board already owns AGENT CORES and
-Telegram pins, and a phone-sized modal would give them two places to be edited
-from.
+- A **trickle sync** every four hours, network-connected and battery-not-low, reading steps, distance, sleep (with stage breakdown), heart rate, exercise sessions, weight, body fat, and oxygen saturation from Health Connect.
+- A **demand poll** every fifteen minutes (WorkManager's floor) that checks whether the backend is waiting on fresher data and syncs immediately if so.
 
-### Still missing against the desktop
+The first sync backfills 243 days; every sync after that is differential, using Health Connect's Changes API. It never writes to Health Connect — read-only.
 
-- **Voice mode** — VOX, the 3D orb, spoken replies and the canvas HUD
-  (`VoiceMode.tsx`, `VoiceOrb.tsx`, `VoiceCanvas.tsx`). Postdates the port plan
-  entirely; the orb is Three.js and needs a real Compose/OpenGL port, not a
-  transliteration.
-- **Subagent panel** has no chat-like full-detail thread view yet (the desktop's
-  `SubagentDetailView.tsx`) — steps expand inline in the run card instead of
-  opening their own screen.
-- **Portal advanced fields** — CSS selectors, extra form fields, success-URL
-  matching, per-agent access scoping. The add-portal form covers login/home
-  URL, username, password and a note; the rest stays desktop-only for now.
+---
 
-## Shipping — the downstream mirror and APK releases
+## Push notifications
 
-This package is the **source of truth**. It is also published on its own as
-[`spedatox/speda-go`](https://github.com/spedatox/speda-go), and that repo is a
-**mirror** — never hand-edit it, the next sync overwrites whatever you change.
+Firebase Cloud Messaging, data-only payloads (never notification payloads). The one handled message type triggers an immediate health sync when the backend needs current biometrics and none are fresh enough. Devices register by Firebase Installation ID. Push is opt-in at build time — if the Firebase config isn't present, the app falls back to the fifteen-minute demand poll instead.
 
-`.github/workflows/speda-go.yml` (in the monorepo root, since only the root
-`.github` is live for Actions) runs on every push to `main` that touches
-`packages/speda-go/**`:
+---
 
-1. unit tests, then `:app:assembleRelease` signed with the personal keystore
-   from repo secrets — the run fails rather than shipping an unsigned APK;
-2. `git archive` of this directory is rsynced over the standalone repo
-   (`--delete`, so the mirror is exact) and pushed as one `sync:` commit;
-3. the APK is attached to a GitHub Release there, tagged
-   `v<spedaGoVersion>-b<run number>`.
+## Signing and release
 
-The **only** file exempt from the mirror is the standalone repo's `README.md`,
-which keeps its own product front page. Everything else must stay identical.
-
-Versioning: `spedaGoVersion` in `gradle.properties` is the marketing version;
-CI sets `versionCode` to the workflow run number and `versionName` to
-`<spedaGoVersion>-b<run>`, so every build upgrade-installs over the last one.
-Bump `spedaGoVersion` by hand when the milestone changes. A local
-`assembleRelease` with no signing env set produces an **unsigned** APK at
-`versionCode 1` — that is deliberate, not a misconfiguration.
+The release workflow decodes a keystore from a repository secret, runs the unit tests, builds a signed release APK, verifies the signature, and publishes it as a GitHub Release. Signing requires `SPEDA_GO_KEYSTORE_BASE64` plus the corresponding password and alias secrets — without them, `assembleRelease` produces an unsigned APK.

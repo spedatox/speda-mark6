@@ -1,74 +1,66 @@
-# Striker — Speda Mark VI Core
+# Striker
 
-**Codename: Striker. Product name: "Speda Mark VI Core".** This is the
-single-agent, public/"lite" build of Speda — the client you hand to people who
-want to try Speda without exposing the owner's private roster (the Superior Six).
-
-It is the sibling of [`packages/heartbreaker`](../heartbreaker/HEARTBREAKER.md):
-**same app, same backend (Igor), same features on the chat surface** — but a
-**single agent (Speda)** and a **calmer, simplistic theme** instead of the full
-Stark fluid-glass command deck.
-
-> **Lineage.** Striker began as `packages/desktop` (the old neutral template).
-> It was brought up to Heartbreaker's feature generation and re-themed. It is no
-> longer a "never-themed base" — it is a real product with its own look.
+The single-agent public build — Speda only, no roster, no switcher, no House Party. A calmer, consumer-facing surface over the same backend.
 
 ---
 
-## What's the same as Heartbreaker
+## Contents
 
-The whole chat surface is a near-identical port: streaming answers, tool-call
-disclosure, rich blocks (code, charts, calendars, maps, files), image/document
-attachments, the JARVIS welcome remark, offline transcript cache, session
-survivability (re-attach/cancel), the Systems Board telemetry, Settings
-(configuration, connections, automations, model routing), and the mobile drawer
-layout. It talks to Igor over the same HTTP+SSE surface and owns **zero** business
-logic.
-
-Fonts and the **frosted-glass material** are kept. So is the ambient
-`NeuralBackground` (retoned neutral).
-
-## What's different (single-agent + simplistic)
-
-- **One agent: Speda.** No agent switcher, no roster, no war room / House Party
-  Protocol, no inter-agent comms tray, no Forge link. `config.agentId` is fixed
-  to `"speda"`, so every call targets `/chat/speda`.
-- **Simplistic theme** (`src/renderer/src/theme/striker.css`): the Stark
-  *theatrics* are stripped — HUD frame, corner brackets / ruler ticks / scanlines
-  / etched seams, and the neon bloom. Corners are **rounded**. The palette is
-  **neutral dark with cyan `#36abca` as an accent only** (no petrol-cyan wash
-  through the backgrounds). The frosted glass and fonts remain.
+- [What it is](#what-it-is)
+- [Directory structure](#directory-structure)
+- [Dev workflow](#dev-workflow)
+- [Profile system](#profile-system)
+- [Known dead code](#known-dead-code)
+- [Configuration](#configuration)
 
 ---
 
-## Running
+## What it is
+
+Striker was produced by manually copying Heartbreaker's source tree and stripping it down. There is no scripted fork process, and there isn't going to be one — if a third variant is ever needed, it'll be another manual copy, same as this one. Don't go looking for fork tooling; it doesn't exist.
+
+---
+
+## Directory structure
+
+Same `electron-vite` layout as Heartbreaker (`main/`, `preload/`, `renderer/src/{components,lib,profile,store,theme}`), no `teaser/` build. `profile/` carries the same four files as Heartbreaker, but `index.ts` hardcodes a single profile instead of selecting from a roster (see below).
+
+---
+
+## Dev workflow
 
 ```bash
-npm run striker:dev       # Electron app
-npm run striker:web:dev   # browser-only dev build
+# from packages/striker
+npm run dev
+npm run build
+npm run typecheck    # single tsconfig, unlike Heartbreaker's split node/web configs
+npm run web:dev
+npm run dist          # electron-vite build + electron-builder --win
 ```
 
-Config (API base + key) comes from the Electron main process (`get-config` IPC)
-with a `http://localhost:8000` / `dev-key` default, so local dev needs no setup.
-`MAIN_VITE_SPEDA_API_BASE` / `MAIN_VITE_SPEDA_API_KEY` bake a server URL + key
-into a packaged build (`npm run dist`).
-
-`speda.ps1` and `build-app.ps1` at the repo root still drive **Heartbreaker** —
-that remains the owner's primary client. Striker is built/run on demand.
+From the repo root: `npm run striker:dev`, `:build`, `:typecheck`, `:web:dev`, `:web:build`, `:dist` — unlike Heartbreaker, `striker:dist` is exposed at the root. There's no `build-app.ps1` equivalent for Striker; baking a server URL and key into a packaged build means setting `MAIN_VITE_SPEDA_API_BASE`/`MAIN_VITE_SPEDA_API_KEY` manually before running `dist`.
 
 ---
 
-## Architecture at a glance
+## Profile system
 
-```
-src/
-├── main/        Electron main — window, IPC (get-config, window controls, open-external)
-├── preload/     the contextBridge api surface
-└── renderer/    the React app — components, lib (api client, hooks), store
-                 (chat + settings reducers), profile (single Speda profile), theme (striker.css)
-```
+`profile/index.ts` hardcodes a single `AppProfile` — Speda, with its own accent color and product name — directly in the file, with no environment-variable selection. There is no roster and no switcher by design.
 
-The renderer never reaches Igor from components — everything goes through
-`src/renderer/src/lib/api.ts`. State is two reducers in
-`src/renderer/src/store` (chat, settings), with a per-session transcript mirror
-in `store/messageCache.ts`.
+---
+
+## Known dead code
+
+Striker was diverged by hand rather than generated, and it shows: several components and modules from Heartbreaker are still present in the source tree but unreachable from any UI path.
+
+- `CommsTray.tsx` and `profile/warroom.ts`'s war-room profile — present, compile, never imported by anything that renders.
+- `profile/brands.ts` — still carries the full eight-persona map from Heartbreaker; nothing in Striker reads it.
+- `ConnectionSetupModal.tsx` and `lib/connection.ts` — copied over, but Striker's `App.tsx` reads config directly from `window.api.getConfig()` and never calls into either of them. Note also that Striker's main/preload process doesn't expose `setConfig` at all, so even if this path were wired up it wouldn't persist anything.
+- `theme/heartbreaker.css`, `theme/speda.css`, `theme/base.css` — unused; only `theme/striker.css` is actually imported.
+
+None of this is load-bearing. It's cleanup, not a bug — safe to delete in a future pass, but harmless as-is since it's never reached.
+
+---
+
+## Configuration
+
+There's no `connection.json` persistence and no in-app way to change the server URL or key after packaging. `App.tsx` resolves the connection once at boot — from `window.api.getConfig()` on Electron, or `VITE_API_BASE`/`VITE_API_KEY` with a local fallback on the web build — and that's final for the session. Same `X-API-Key` auth scheme as every other client.

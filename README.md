@@ -1,318 +1,242 @@
-<div align="center">
-
-
 # S.P.E.D.A. Mark VI
 
-### Specialized Personal Executive Digital Assistant Mark VI
+**S**pecialized · **P**ersonal · **E**xecutive · **D**igital · **A**ssistant
 
-<img width="1920" height="1014" alt="Speda Mark VI running in Heartbreaker, the holographic fluid-glass desktop command deck, showing a live agent conversation" src="https://github.com/user-attachments/assets/3691eed2-f8a2-4922-b188-2fe3c24b3402" />
+A self-hosted, single-owner AI assistant platform. One backend process serves eight specialized agents over a shared memory store, tool registry, and event loop, exposed through a desktop app, an Android app, and Telegram.
 
-
-**Speda Mark VI is a private, proactive, self-hosted multi-agent AI assistant** —
-a suite of eight domain specialists that watch the world for you, act while you
-sleep, remember who you are, and answer through a holographic command deck
-straight out of a Stark lab — on your desktop, in your pocket, or over Telegram.
-
-**[speda mark vi · the site →](https://spedatox.github.io/speda-mark6/)**
-
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
-![Electron](https://img.shields.io/badge/Heartbreaker-Electron%20%2B%20React-47848F?logo=electron&logoColor=white)
-![Android](https://img.shields.io/badge/Heartbreaker%20Core-Kotlin%20%2B%20Compose-3DDC84?logo=android&logoColor=white)
-![Agents](https://img.shields.io/badge/agents-8-2eb6ac)
-![Providers](https://img.shields.io/badge/LLM%20providers-7-8a7fd6)
-
-
-</div>
+It keeps persistent memory across sessions, runs scheduled and event-driven work without anyone present, and acts directly on the owner's own accounts and devices. Anything with a real-world consequence — a payment, a message, a deployment, a destructive command — goes through an explicit approval or safety gate, covered below.
 
 ---
 
-## What makes it different
+## Contents
 
-Most "AI assistants" wake up, answer a question, and forget you exist. Speda is
-built on the opposite premise — a **single owner** it knows deeply, a **standing
-staff** of specialists, and **senses of its own** that fire without being asked.
-
-- 🧠 **It knows you.** Persistent, structured memory of who you are, what you're
-  working on, and how you like things — carried across every conversation.
-- 📡 **It acts on its own.** Watchers monitor pages, feeds, markets and schedules
-  and ping your Telegram the moment something matters — no prompt required.
-- 👥 **It's a team, not a bot.** Eight agents with distinct domains, voices and
-  colours, dispatching work to each other behind the scenes.
-- 🎛️ **It looks incredible.** *Heartbreaker*, the client, is a fluid-glass
-  holographic HUD — a genuine command deck, not a chat window — on desktop and
-  now natively on Android.
-- 📍 **It knows where you are.** It can tell the phone from the desktop from
-  Telegram, and answers "how do I get home from here?" with a live,
-  traffic-aware map rendered right in the conversation.
-- 🔒 **It's private.** Self-hosted, single-key, no accounts, no tenancy. Your
-  data stays on your server.
+- [Architecture](#architecture)
+- [Agent roster](#agent-roster)
+- [Capabilities](#capabilities)
+- [Multi-agent coordination](#multi-agent-coordination)
+- [Integrations](#integrations)
+- [Ecosystem](#ecosystem)
+- [Safety and operations protocols](#safety-and-operations-protocols)
+- [Clients](#clients)
+- [Tech stack](#tech-stack)
+- [Repository layout](#repository-layout)
+- [Deployment](#deployment)
+- [License](#license)
 
 ---
 
-## Meet the roster
+## Architecture
 
-Eight agents share one brain, one memory of you, and one event loop — but each
-carries its own identity, model policy, toolset and signature colour. Address
-any of them directly; they quietly hand work to each other when a task belongs
-to someone else's domain.
+Everything runs through one FastAPI process (`packages/igor`). Every agent persona, the memory system, the tool registry, and the background job queue share that process, one database, and one event loop — there is no per-agent server or per-agent database.
 
+A single API key authenticates every request. Two channels reach the backend: an HTTP/SSE endpoint for interactive chat, and a WebSocket channel reserved for the one agent (Optimus) that can hand work off to an external peer machine. A third-party workflow engine (n8n) owns all scheduling — the backend itself never runs a clock; it exposes trigger and probe endpoints that n8n calls on a timer.
 
-<img width="1918" height="1016" alt="The Speda Mark VI agent switcher showing all eight agents, each with its own signature accent colour and domain" src="https://github.com/user-attachments/assets/c7c889c1-fe57-497b-bfc8-f59246764b14" />
+Tool capabilities are organized in tiers, all exposed to the model through one registry:
 
-
-
-| Agent | Mark | Domain | What they do |
-|---|---|---|---|
-|  **Speda** | Mark VI | Chief of Staff | Your main assistant — plans, routes, runs automations, commands the others. |
-|  **Sentinel** | Mark II | Finance & Budget | Markets, portfolios, spending, cost discipline. |
-|  **NightCrawler** | Mark III | OSINT & Surveillance | Lawful web recon, threat intel, the **News Desk**, watchers. |
-|  **Ultron** | Mark III | Academy & Work | Research synthesis, literature, deep analytical work. |
-|  **Centurion** | Mark I | Cyber Security | Vulnerability & CVE analysis, scanning, threat intelligence. |
-|  **Atomix** | Mark I | Health & Wellness | Personal health, fitness, nutrition, recovery. |
-|  **Optimus** | Mark II | Systems, Code & Infra | Real coding on real machines via **The Forge**. |
-|  **Orion** | Mark I | Maintenance & Memory | The system's own custodian — keeps Speda's memory and house in order. |
-
-> **Rebrandable to the core.** Identity lives entirely in prompt + profile files;
-> the engine holds zero identity strings. The same codebase ships as any agent —
-> a fully branded standalone app — by flipping one build flag.
-
----
-
-<img width="1920" height="994" alt="The Speda Mark VI Systems Board showing the live model-routing matrix, active toolset shards, token budget and memory data banks" src="https://github.com/user-attachments/assets/fbfbfdd7-dba2-4af5-8f0a-db49e80751d1" />
-
-
-## The features
-
-### 🎛️ Heartbreaker — a command deck, not a chat box
-
-The desktop client is a Stark-tech, holographic *fluid-glass* interface — the
-product's primary face, and unlike anything else in the assistant space. Its
-sub-768px layout doubles as the spec for the Android app, so the two are one
-design, not two.
-
-- **Agent switcher** — `Alt+A` to switch agents; the UI recolours to the
-  selected agent and shows its current model and domain.
-- **Systems Board** — a live telemetry deck: model-routing matrix, active
-  toolset shards, token budget, response-time trace, your memory data-banks, and
-  the Forge-link status — all real data, nothing decorative.
-- **Comms tray** — watch your agents talk to each other in real time, with live
-  "working…" timers on background jobs.
-- **JARVIS welcome** — every home screen opens with a contextual, memory-aware
-  one-liner in the current agent's voice ("Friday's workout complete, ready for
-  weekend recharge") — generated fresh, cached so it's instant.
-- **Live session indicator** — a job keeps streaming even if you switch away, and
-  a marker shows which conversations are still running.
-
-### 📱 Speda GO — the deck in your pocket
-
-<img width="738" height="1600" alt="Speda GO, the native Android client for Speda Mark VI, showing the AMOLED-black fluid-glass conversation view" src="https://github.com/user-attachments/assets/704053d8-74b8-4a44-8d75-138c55dde3f9" />
-
-
-A **native Android client** (Kotlin + Jetpack Compose), not a wrapped web view.
-The Stark glass, the palette morph on agent switch, the ambient background and
-the House Party colour parade are all re-implemented natively — the theme engine
-is verified against the desktop one by fixture tests, agent for agent. It carries
-the full chat core (SSE streaming, the tool feed, typewriter, reattach), the
-markdown prose renderer with inline chart, calendar and map fences, attachments
-and image upload, download cards that file everything Igor makes under
-*Documents/Speda Mark VI*, an offline transcript cache and session list, the
-agent switcher, a Configuration tab, and rename/delete on any chat. AMOLED-black,
-fullscreen, built for one thumb.
-
-### 🗺️ Maps & navigation — Stark cartography, inline
-
-<img width="738" height="1600" alt="Speda GO rendering a live traffic-aware route map inline inside an Android conversation" src="https://github.com/user-attachments/assets/f0b092e3-eb41-4ef8-bbdd-2fe3da8e1cde" />
-
-
-Ask for directions and you get a **live map in the conversation**, not a wall of
-coordinates. Traffic-aware routing over the Google Routes API with alternatives
-and real geometry, place search for "where can I go near here", pan/zoom
-gestures, a coordinate + address footer, and a one-tap handoff to Google Maps
-when you actually leave. Because Speda knows the surface you're on and — if you
-allow it — your live position, *"how do I get home?"* just works from the phone
-without it asking where "here" is. Your location is stamped onto the live turn
-only; it is never written into stored history.
-
-### 🛡️ The Legion — disposable workers on any model
-
-When a job genuinely needs deep research — six searches across six subtopics —
-an agent deploys **The Legion**: anonymous, single-purpose worker agents
-(*scout* pre-filters sources, *researchers* deep-dive one subtopic each in
-parallel, an *analyst* synthesises, a *judge* verifies the draft). Workers are
-provider-agnostic: they run on the cheap tier of **whatever model you're
-chatting on** — Claude, GPT, GLM, Gemini, even local Ollama — never locked to
-one vendor. Fire-and-forget background workers return a ticket and land their
-findings in the comms tray. Legionnaires have no identity and no memory; they
-are not the Superior Six — they're the grunts.
-
-### ⚒️ The Forge — Optimus codes on real machines
-
-Optimus isn't a chatbot pretending to write code. When **The Forge** is online,
-Optimus runs on a standalone execution engine with privileged shell and code
-execution, isolated in its own sandboxed *Cell*, understanding your codebase
-through a graph index. It reads, writes, runs, tests and iterates — full agentic
-coding — then reports back. The header shows a live **FORGE LINK** jewel and a
-workspace picker; when the Forge is offline, Optimus gracefully falls back to
-its in-process self. No hard dependency, ever.
-
-### 📡 Proactive automations — it works while you're away
-
-n8n is Speda's nervous system. Just *tell* it what to watch:
-
-> *"Track this page for a month and tell me when the results are up."*
-
-Speda composes the watcher itself, arms it, and — when it fires — writes you a
-proper message and delivers it to **Telegram**, unprompted. Watch web pages for
-changes or keywords, follow RSS feeds, schedule morning briefings, or open
-inbound webhooks. Time-boxed watchers self-expire. Manage them in chat or in the
-Settings panel. Every agent even has its **own Telegram bot**, so a Sentinel
-alert speaks in Sentinel's voice.
-
-### 📰 The News Desk — a two-tier intelligence operation
-
-A professional news desk built into the assistant. **Tier 1** is an always-on,
-zero-cost RSS watcher over Turkish + international outlets — deduplicated
-headlines, breaking-news keyword alerts ("flag anything about OSTİM"), and a
-daily briefing. **Tier 2** is the analyst layer (NewsData.io) for corroboration,
-story timelines and historical search — quota-budgeted so it's never wasteful.
-It reads full articles for free when it can, and only spends the paid tier when
-the free one can't answer.
-
-### 🧠 Memory that actually lasts
-
-Speda keeps a structured, Markdown-based memory of you — who you are, what's
-current, a behavioural dossier, your projects, a rolling log — readable and
-editable by the agents themselves and refreshed by background tasks after every
-exchange. **Orion** is the dedicated custodian that keeps it clean.
-
-On top of that sits a tiered recall stack, so agents genuinely pick up where you
-left off. Every session grows a short **episodic recap** (subject, decisions,
-open threads) in the background; when you open a *new* chat, the last few recaps
-for that agent are already in context — ask "what were we discussing?" and it
-answers without a search. Semantic recall over every past conversation covers
-the deep cuts, and it's all scoped per agent (Ultron remembers Ultron's threads;
-Speda, the orchestrator, sees across all of them). The result: an assistant that
-remembers your last conversation, your ongoing work, and your preferences
-without you repeating yourself.
-
-### ♾️ Nothing gets lost — survivable turns & background work
-
-Turns run **detached from your connection**. Reload the app, switch agents, close
-the window mid-answer — the work keeps running server-side, saves itself, and
-re-attaches live when you come back. Hand a long job to another agent in the
-**background** and keep chatting while it works; check on it any time. A running
-answer is never a hostage to your network.
-
-### 🚨 House Party Protocol — all hands on deck
-
-For genuinely high-stakes moments, Speda becomes mission commander and summons
-the **entire roster in parallel** at full model grade with domain boundaries
-relaxed. It's deliberately heavy and passphrase-gated: a secure authorization
-window (masked passphrase field, validated server-side) unlocks it, and the
-whole client transforms into a **War Room** dashboard until you stand down.
-
-### 🧩 One assistant, many brains
-
-Every model call flows through one router that speaks fluent **Anthropic,
-OpenAI, Gemini, z.ai (GLM), DeepSeek, NVIDIA NIM and local Ollama**. Pick a model
-per agent, set a fallback chain, or run entirely local. Switching providers
-changes nothing about how the system behaves — the whole engine speaks one
-internal format and normalizes the rest at the edge.
-
-### 🛠️ A deep capability arsenal
-
-Under the hood, a unified four-tier tool system the agents draw on seamlessly:
-
-- **Research & web** — Tavily, Exa, Brave, Fetch, arXiv, and a full GPT-Researcher
-  deep-research engine.
-- **OSINT & security** — IP geolocation & reputation, URLhaus / ThreatFox /
-  MalwareBazaar, HaveIBeenPwned, Shodan, OTX, dark-web search, CVE intelligence,
-  blockchain tracing, breach discovery, and automated scanning.
-- **Productivity** — Notion, Gmail & Google Calendar (self-refreshing OAuth),
-  GitHub.
-- **Creation** — branded PDF / DOCX / PPTX generation (Turkish-ready fonts),
-  code & file authoring, an isolated Linux **sandbox** for running real commands.
-- **Voice** — Whisper speech-to-text and Kokoro text-to-speech.
-- **Recall** — literal history search and semantic vector recall over your past
-  conversations.
-
-Only what's needed sits in context; the rest loads on demand, with prompt
-caching so the cost of a huge toolset rounds to nothing. A one-switch **budget
-mode** clamps everything down when you want it lean.
-
----
-
-## See it running
-
-```bash
-# 1. Configure
-cp .env.example packages/igor/.env      # set ANTHROPIC_API_KEY + Speda_API_KEY
-
-# 2. Igor, the backend (SQLite by default — no services needed)
-cd packages/igor && uv sync && uv run uvicorn app.main:app --port 8000 --reload
-
-# 3. The command deck (repo root, new terminal)
-npm install && npm run heartbreaker:dev
-```
-
-On Windows, **`speda.ps1`** boots the whole system — backend, sandbox, the Forge
-link, and the app — with a single command. **Speda GO** opens straight
-in Android Studio from `packages/speda-go` (Gradle 8.11 + JDK 21);
-point it at your backend on first launch and the key is kept in the Android
-Keystore.
-
-**Full stack** (`docker compose up -d`) brings up the app, the sandbox, the
-browser and n8n together — the database is a SQLite file, not a service. **`./deploy.sh`** is the one-shot production runbook (server,
-domain + TLS, memory import, app packaging). Ship a branded desktop installer for
-any agent with **`build-app.ps1 -Agent <name> -ApiBase <url> -ApiKey <key>`**.
-
----
-
-## Under the hood
-
-**Igor** is the backend — a FastAPI agentic core with a strict architectural
-spine: routers hold zero business logic, one orchestrator owns the system prompt
-and the agentic loop, everything is provider-agnostic behind one LLM client, and
-n8n is the only scheduler. Heartbreaker is the face; Igor is the brain and
-hands. The full contract is codified in **[`CLAUDE.md`](CLAUDE.md)**.
-
-**Deeper docs** live in [`docs/`](docs/) — start at the
-**[documentation index](docs/README.md)**, which maps everything below and the
-per-package component docs ([IGOR.md](packages/igor/IGOR.md),
-[HEARTBREAKER.md](packages/heartbreaker/HEARTBREAKER.md),
-[STRIKER.md](packages/striker/STRIKER.md)).
-
-| Doc | What |
+| Tier | What it is |
 |---|---|
-| **[spedatox.github.io/speda-mark6](https://spedatox.github.io/speda-mark6/)** | **The project site** — the overview, [the roster](https://spedatox.github.io/speda-mark6/agents/), [Heartbreaker](https://spedatox.github.io/speda-mark6/heartbreaker/), [Speda GO](https://spedatox.github.io/speda-mark6/speda-go/), [Igor](https://spedatox.github.io/speda-mark6/igor/) and the [FAQ](https://spedatox.github.io/speda-mark6/faq/) |
-| [docs/README.md](docs/README.md) | **The documentation index** — the map to every doc below and the component docs |
-| [REFERENCE.md](docs/REFERENCE.md) | Full capability catalog, HTTP API, and configuration reference |
-| [SETUP.md](docs/SETUP.md) · [DEPLOY.md](DEPLOY.md) | Install & production runbook |
-| [MEMORY_ARCHITECTURE.md](docs/MEMORY_ARCHITECTURE.md) · [MEMORY_REVISION_R1.md](docs/MEMORY_REVISION_R1.md) | How memory works |
-| [TELEGRAM_ARCHITECTURE.md](docs/TELEGRAM_ARCHITECTURE.md) | The bot fleet |
-| [ANDROID_PORT_PLAN.md](docs/ANDROID_PORT_PLAN.md) | Speda GO — the parity contract with the desktop client |
-| [FORGE_INTEGRATION_PLAN.md](docs/FORGE_INTEGRATION_PLAN.md) · [NEWS_BRIEFING_PLAN.md](docs/NEWS_BRIEFING_PLAN.md) · [BACKGROUND_OPS_PLAN.md](docs/BACKGROUND_OPS_PLAN.md) · [STARK_MAPS_PLAN.md](docs/STARK_MAPS_PLAN.md) · [ATOMIX_HEALTH_SYNC.md](docs/ATOMIX_HEALTH_SYNC.md) | Design notes for the newest systems |
-
-**Monorepo:** `packages/igor` (**Igor** — the backend) · `packages/heartbreaker`
-(the desktop/web app) · `packages/speda-go` (**Speda GO**)
-· `packages/striker` (**Speda Mark VI Core** — the single-agent "lite" build) ·
-`packages/sandbox` (the isolated computer). The Forge is a separate deployment
-that connects back as a peer.
+| Legion | Parallel multi-agent research workers, deployed for anything needing independent, isolated sub-tasks |
+| Skills | In-process Python capabilities — the bulk of what's listed below |
+| MCP servers | Third-party integrations reached over the Model Context Protocol |
+| Adapters & sidecars | Full external applications wrapped over HTTP, running in their own containers |
 
 ---
 
-<div align="center">
+## Agent roster
 
-**S.P.E.D.A.** — Specialized Personal Executive Digital Assistant · Mark VI
+Eight agents, each owning a distinct domain, all built on the same underlying contract and sharing the same memory and tools.
 
-The sixth generation. Predecessors: [Mark V](https://github.com/spedatox/speda-mark5)
-· [Mark IV](https://github.com/spedatox/speda-mark4)
-· [Mark III](https://github.com/spedatox/speda-mark3)
-· [Mark II](https://github.com/spedatox/speda-mark2)
-· [Mark I](https://github.com/spedatox/speda-mark1)
+| Agent | Domain |
+|---|---|
+| **Speda** | Orchestrator and primary point of contact. Plans, delegates across the roster, and holds cross-agent context specialists don't have. |
+| **Sentinel** | Finance and budgeting — markets, holdings, and spending turned into numbers behind a decision. Not licensed financial advice. |
+| **Orion** | The system's own custodian — memory hygiene, nightly audits, and host maintenance. |
+| **Optimus** | Systems, code, and infrastructure. Hands off agentic coding work to a dedicated coding-engine peer when one is connected, falling back to its own engine otherwise. |
+| **Centurion** | Security for the owner's own assets — threat intelligence, exposure assessment, hardening. Supports an optional dedicated scanning peer for authorized network work. |
+| **Atomix** | Health and wellness coaching — fitness, nutrition, sleep, habits. Not a medical provider. |
+| **Ultron** | Academic and work-life planning — coursework, exams, study schedules. |
+| **NightCrawler** | OSINT and web research from open sources only. |
 
-Built by **Ahmet Erol Bayrak** ([@spedatox](https://github.com/spedatox))
-· Private project — not licensed for redistribution.
+Model allocation follows one policy across the roster: the owner's manual per-agent pin always wins; failing that, a deployment default; interactive turns run on a frontier model, automated background turns drop to a cheaper tier from the same provider. Tool access is unrestricted by default — the boundary sits on individual high-consequence skills (restricted to specific agents), not on the agent as a whole.
 
-</div>
+---
+
+## Capabilities
+
+### Communication & messaging
+
+- Push messages, files, and generated documents directly to the owner's Telegram from any agent's own bot.
+- Device push notifications, including to a connected smartwatch.
+- Persistent, self-repeating reminders that keep re-asking until answered, with a history of what was taken or missed.
+
+### Calendar, scheduling & automation
+
+- Full control over recurring briefings, reminders, and proactive watchers — page-change hooks, keyword hooks, inbound-mail hooks, RSS watches, webhooks — backed by an n8n workflow engine.
+- On-demand loading of additional integrations and skills, so the active prompt only carries what a given task needs.
+
+### Memory, recall & knowledge management
+
+- A durable, schema-enforced memory store: topic-organized documents (who the owner is, ongoing projects, people, running history) that agents read and rewrite over time, not a chat log.
+- Shape-aware writers that append to the correct ledger period, create or update a person's or project's own file, or revise one chapter of a biography — without corrupting neighboring entries.
+- A sourced, addressable layer of individual facts beneath the memory documents, each traceable to its evidence, ranked by relevance and reinforcement, and softly demoted when it turns out wrong.
+- Exact keyword and date search across the full raw conversation history.
+- Meaning-based (hybrid vector + keyword) recall across every past conversation, for "did we discuss this" queries that can't be phrased as an exact search term.
+- Pattern detection: a fact or behavior observed enough times graduates into a recorded pattern that agents check *before* planning or promising anything, rather than noting it only after the fact.
+
+### Files, storage & documents
+
+- Generate downloadable PPTX, DOCX, and PDF files from Markdown, auto-branded per agent.
+- Render a locked, branded training-program PDF from a planned workout.
+- Write arbitrary generated text or code to a real downloadable file.
+- Browse and file documents in the owner's own cloud vault — read anywhere, write only to designated folders, no delete or rename.
+- Pull files produced inside the code sandbox out to the user as a download.
+
+### Code execution & web automation
+
+- Run shell commands in an isolated Linux sandbox with a persistent workspace — Python, pip, git, and data tooling available for real computation, not just text generation.
+- Render JavaScript-heavy or blocked pages, drive multi-step browser interactions (click, fill, upload, download, tabs, dialogs), and sign into the owner's own saved web portals without the password ever passing through the model.
+
+### Research, news & OSINT
+
+- Two-tier news system: a free, always-on RSS store with keyword watchlists that flag and push breaking terms, a quota-budgeted deep-analyst tier for cross-outlet corroboration, and full-text article extraction.
+- A dozen read-only OSINT and threat-intelligence lookups for authorized security research: IP geolocation and reputation, malicious-URL and malware-IOC feeds, breached-password checking (k-anonymity, password never transmitted), dark-web and leak-metadata search, internet-wide device exposure, domain-based email discovery, and cryptocurrency wallet tracing.
+
+### Health & wellness
+
+- Query synced biometrics — steps, sleep stages, heart rate, exercise sessions, body composition — with trend comparisons and a freshness gate that refuses to answer present-tense questions with stale data.
+
+### Academic
+
+- Read the owner's class attendance ledger and report remaining absence budget per course against the official attendance rule.
+- Push a one-tap "did you attend?" prompt to the owner's watch right after class, to keep the ledger accurate without manual entry.
+
+### Navigation, transit & weather
+
+- Live-traffic-aware turn-by-turn directions across drive, walk, transit, and bike modes, with congestion breakdown and an interactive map card.
+- Nearby place search, rankable by distance or rating, rendered as tappable map markers.
+- Live flight tracking by tail number, flight number, or callsign.
+- Live city-bus arrival board for a given stop.
+- Current conditions and multi-day forecast for any named place or the owner's home location.
+
+### Voice
+
+- Transcribe uploaded audio to text.
+- Convert text to a downloadable spoken response in each agent's own neural voice.
+
+---
+
+## Multi-agent coordination
+
+- **Dispatch** — any agent can hand a task to another specialist, synchronously or as a trackable background job, and read the shared inter-agent conversation log.
+- **Legion** — a parallel research swarm, deployed for anything needing three or more independent sources. Each worker is a fully isolated agent loop with no memory of the parent conversation:
+  - **Scout** — fast, cheap pre-filter that returns a ranked shortlist of leads before deeper digging.
+  - **Researcher** — deep-dives one assigned subtopic across many searches and returns cited findings.
+  - **Analyst** — synthesizes gathered findings into the finished briefing or report.
+  - **Judge** — audits a drafted report by checking each claim against its source, never writes one.
+  - **Archivist** — runs multi-hop searches across the owner's own conversation history.
+  - **General** — a catch-all worker with the deploying agent's full toolset.
+- **House Party** — an all-hands mode that mobilizes the entire roster in parallel at full model grade. Owner-only, desktop-only, and gated behind a passphrase entered directly by the owner in a window the model never sees. Runs in War Room, a dedicated command channel kept separate from day-to-day agent chats.
+
+---
+
+## Integrations
+
+Reached over the Model Context Protocol, each optional and skipped at startup if unconfigured:
+
+- **Notion** — read, search, create, and edit pages and databases.
+- **Google Workspace** — Gmail, Calendar, Tasks, Drive, and Contacts.
+- **Microsoft Graph** — Outlook mail.
+- **Brave Search, Tavily, Exa** — general and research-grade web search.
+- **Fetch** — turns a URL into readable Markdown.
+- **GitHub** — repository, issue, and code operations.
+- **Alpha Vantage** — financial market data.
+- **arXiv** — academic paper search.
+- **CVE intelligence** — security vulnerability lookups.
+- **Filesystem** — read/write scoped to the assistant's own output directory.
+- **Playwright MCP** — full browser automation for the open public web, in its own container, never used for the owner's saved logins.
+- Owners can register their own custom MCP servers by command or URL.
+
+**Adapters & sidecars** — full external applications, each isolated in its own container:
+
+- **Deep research** — a wrapped open-source research engine for comprehensive, multi-source reports too broad for individual tool calls.
+- **Security analysis** — a wrapped security toolkit for vulnerability scans, CVE lookups, and network reconnaissance against a named target.
+- **Sandbox** — a no-secrets container that executes arbitrary shell commands with a hard timeout, giving the assistant a real, stateful command line without touching the API container or its credentials.
+- **Browser** — the assistant's eyes on the web: renders pages, returns readable text and an accessibility snapshot of what's clickable, and holds the owner's portal sessions in a persisted per-profile cookie jar so a password never becomes text the model produces.
+
+---
+
+## Ecosystem
+
+Two companion products extend the platform beyond this repository. Neither ships as a package here — each is a separate, owner-run service that the backend connects to as a client, sitting in its own repository.
+
+**Hisar** — the owner's own self-hosted cloud filesystem and web desktop: a real vault of folders (Documents, Media, Projects, Desktop) that agents work inside as guests, not as the backend's storage layer. Any agent with the Hisar skill enabled can read anywhere in the vault; writes are confined to a dedicated folder, never overwrite an existing file, and deleting or renaming isn't reachable from an agent at all — those stay owner-only, inside Hisar itself. It runs as an optional companion service alongside the backend.
+
+**Forge** — a standalone execution engine that runs coding-agent work on a dedicated machine, on behalf of Optimus and Centurion. It holds its own model credentials and makes its own inference calls — the backend hands it jobs, never proxies inference through it. While a Forge peer is connected, that agent's turns route to it; the moment it disconnects, the corresponding agent falls back to its own in-process profile, with one function owning that decision so a turn never lands on the wrong machine. Once a night, the memory custodian pushes a fresh summary of the owner's memory to any connected peer, keeping Forge's picture of the owner no more than a day stale.
+
+---
+
+## Safety and operations protocols
+
+Explicit, high-consequence capabilities, most restricted to a small set of trusted agents and gated to refuse unless triggered directly by the owner in conversation:
+
+- **Skyfall** — a countdown-gated remote trigger. The tool can only arm the countdown; only the owner's own client can fire it, and letting the clock run out or aborting are the only two outcomes. Nothing fires that the owner didn't personally watch happen.
+- **Octavius** — automated off-site backups of the entire system (chat history, memory, background jobs) to the owner's own Drive, taken as a consistent snapshot, integrity-checked, and confirmed against what was actually stored before old copies are pruned. Credentials are never included in a backup.
+- **Doormat** — a staged, reversible way to move the deployment to a new domain: the old address stays live until the new one is proven, and retirement is a deliberate final step, not an automatic one.
+- **Lockdown** — an emergency network containment switch that seals inbound SSH and the raw app port from the outside world in one action, while keeping the web app and the owner's own remote-control channel alive.
+- **Lifeboat** — tiered disk-space monitoring and cleanup: reversible cache cleanup can run autonomously when disk is critically full; anything destructive requires explicit owner approval.
+- **System operations** — direct host-machine access for the ops-custodian agents: shell execution behind a hard deny-list, file access jailed to an ops root, and safe container restarts.
+- **Budget mode** — a cost-saving toggle that shortens answers, limits search, and disables expensive sub-agent workers.
+
+---
+
+## Clients
+
+| Client | Platform | Description |
+|---|---|---|
+| **Heartbreaker** | Electron desktop (React, TypeScript) | Full-roster command deck — switch between every agent persona, see the whole system. |
+| **Striker** | Electron desktop (React, TypeScript) | Single-agent public build, forked from Heartbreaker. No roster, no switcher, Speda only. |
+| **Speda GO** | Android (Kotlin, Jetpack Compose) | Native mobile client with Health Connect sync for Atomix and push-driven interactions. |
+| **Telegram** | Any device | Each agent runs its own bot; a running response can be steered mid-generation instead of starting a competing reply. |
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.11+, FastAPI, uvicorn, SQLAlchemy (async), Alembic |
+| Database | SQLite (production), Postgres-compatible |
+| LLM / AI | Anthropic SDK, OpenAI SDK, Model Context Protocol |
+| Embeddings & search | OpenAI embeddings, brute-force vector search + full-text keyword search, fused |
+| Background work | Database-backed job queue with durable drain; n8n for all scheduling |
+| Desktop | Electron, React, TypeScript, electron-vite |
+| Mobile | Kotlin, Jetpack Compose, Health Connect, WorkManager, Firebase Cloud Messaging |
+| Browser automation | Playwright (owner-login sidecar) and the official Playwright MCP server (open web), each containerized separately |
+| Code execution | Isolated Python/shell sandbox container |
+| Infrastructure | Docker Compose, Caddy (reverse proxy, automatic HTTPS), n8n, GitHub Actions |
+
+---
+
+## Repository layout
+
+| Package | Description |
+|---|---|
+| `packages/igor` | The backend — every agent, the memory system, the tool registry, the orchestrator |
+| `packages/heartbreaker` | Full-roster desktop client |
+| `packages/striker` | Single-agent public desktop client |
+| `packages/speda-go` | Android client |
+| `packages/browser` | Playwright sidecar for rendering pages and the owner's portal logins |
+| `packages/playwright-mcp` | Official Playwright MCP server, open web only |
+| `packages/sandbox` | Isolated code-execution sidecar |
+
+---
+
+## Deployment
+
+The stack runs as a set of Docker Compose services on one internal network — the backend, n8n, the sandbox, the browser sidecar, and Playwright MCP — with only the backend and an optional Caddy reverse proxy exposed. A GitHub Actions pipeline deploys the backend over SSH on every push to `main` that touches backend code; the desktop and Android clients build and publish as signed releases on their own triggers.
+
+---
+
+## License
+
+AGPL-3.0. See [LICENSE](LICENSE). Running a modified version of this software as a network service requires making that modified source available to its users under the same license.
