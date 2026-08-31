@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Where a setting's value comes from when several sources disagree.
 
 The bug these guard against was silent and production-only: the managed override

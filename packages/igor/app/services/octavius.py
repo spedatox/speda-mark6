@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 OCTAVIUS PROTOCOL — Igor copies his own brain somewhere the server cannot take
 it with him.

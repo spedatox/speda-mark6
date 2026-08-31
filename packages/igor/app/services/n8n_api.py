@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 n8n REST API client — Speda's control plane over the automation engine.
 

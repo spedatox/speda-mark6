@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 DEPRECATED — the single-bot TelegramClient has been ABSORBED into the per-agent
 Telegram package (docs/TELEGRAM_ARCHITECTURE.md, TG-10). There is now one client

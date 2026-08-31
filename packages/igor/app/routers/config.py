@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Configuration — read/write every configurable setting from the desktop
 Settings → Configuration tab. Zero business logic beyond persisting to the

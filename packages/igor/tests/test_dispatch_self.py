@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """`allow_self` — the one caller allowed to dispatch an agent to itself.
 
 `_precheck` has always refused `to_agent == from_agent`: a model deciding to

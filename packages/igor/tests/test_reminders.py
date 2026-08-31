@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """The persistent-reminder cycle: ask, nag, answer, give up.
 
 These are the rules the owner actually feels — it must not go quiet early, must

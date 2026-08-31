@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """POST /chat/steer/{request_id} — the desktop counterpart of the Telegram
 gateway's steering. Tested directly against the route function: it only reads
 request.app.state.agent_proxy, so a minimal fake stands in for the real

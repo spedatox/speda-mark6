@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Unit tests for the web watch's pure extraction/diff logic.
 
 This decides whether a page publication reaches the owner and whether an

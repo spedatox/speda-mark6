@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """The Octavius Protocol: a copy nobody verified is not a backup.
 
 The failure this module exists to prevent is not "the backup did not run". It is

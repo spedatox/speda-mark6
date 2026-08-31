@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TextSegment } from './Message'
 import { FRAMED, GAP, pack, type Placed, type VoicePanel } from '../lib/voicePanels'

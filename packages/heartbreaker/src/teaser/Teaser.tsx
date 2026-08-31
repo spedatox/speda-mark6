@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import NeuralBackground from '@renderer/components/NeuralBackground'
 import { BRANDS } from '@renderer/profile/brands'

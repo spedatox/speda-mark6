@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 ExternalAgentProxy — streams an interactive chat turn through an external
 WebSocket peer (Optimus standalone) and re-emits its events as SSEEvents.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Wire schemas for the Skyfall Protocol. See services/skyfall.py."""
 
 from pydantic import BaseModel, Field

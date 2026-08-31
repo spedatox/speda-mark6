@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Produced-file helpers — the bridge from a skill that creates a file to a
 downloadable card in the chat.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Ankara bus desk (Tier 1) — live EGO "Otobüs Nerede?" arrivals by stop number.
 

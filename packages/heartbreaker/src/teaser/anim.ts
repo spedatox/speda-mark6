@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /** Tiny animation helpers shared across teaser scenes. */
 
 export const clamp01 = (x: number): number => Math.max(0, Math.min(1, x))

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """The Skyfall Protocol: the screen is the protocol.
 
 Everything here defends one property — **nothing fires without a countdown the

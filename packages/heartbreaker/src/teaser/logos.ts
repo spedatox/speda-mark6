@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Real brand logos for the MCP showcase — fetched from simple-icons and bundled
  * locally. Only integrations the project actually supports AND that have a real

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """The vault, as an agent sees it.
 
 Hisar is the owner's own cloud filesystem and his agents share it. The skill is

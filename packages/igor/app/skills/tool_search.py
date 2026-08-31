@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Progressive tool disclosure — the client-side half of Anthropic's pattern.
 
 Anthropic's API does this natively: mark a tool `defer_loading: true`, add the

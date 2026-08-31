@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * ════════════════════════════════════════════════════════════════════════════
  *  THE colour system. One accent in → the ENTIRE palette out, re-hued.

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { app, BrowserWindow, ipcMain, shell, dialog, net, protocol } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join, normalize, sep } from 'path'

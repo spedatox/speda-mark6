@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Peer memory — running one memory command on behalf of an external agent.
 
 Optimus is the one agent that does not run in this process (CLAUDE.md), and the

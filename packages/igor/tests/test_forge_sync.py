@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """sync_owner_memory_to_forge — Orion's push of the composed owner memory out
 to a connected Forge peer (Pass 6 of the nightly audit, app/prompts/agents/
 orion/02_audit.md). Restricted to Orion; reuses recall_for_context() and

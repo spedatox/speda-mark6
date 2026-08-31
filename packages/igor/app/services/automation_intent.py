@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 The intent polisher — turns the owner's one-line wish into the executable
 instruction the agent will actually run when the automation fires.

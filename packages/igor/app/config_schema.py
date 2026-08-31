@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Configuration schema — the single catalog of everything the owner can configure
 from the desktop Settings → Configuration tab.

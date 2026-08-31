@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Split a monolithic memory document into a directory
 (docs/MEMORY_ARCHITECTURE_V4.md §2.2, extended by memory_spec.COLLECTIONS).

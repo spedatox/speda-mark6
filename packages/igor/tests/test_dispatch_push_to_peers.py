@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """AgentDispatcher.push_to_peers — the fire-and-forget half used to reach a
 connected Forge peer (see app/skills/forge_sync.py). Unlike dispatch(), there
 is no reply to correlate: this exists to answer "did anything receive this",

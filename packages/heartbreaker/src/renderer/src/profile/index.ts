@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { BRANDS, DEFAULT_AGENT } from './brands'
 import { deriveAccents } from './theme'
 import type { AppProfile } from './types'

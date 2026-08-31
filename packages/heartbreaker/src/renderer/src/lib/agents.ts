@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /** Shared agent identity bits for comms UI — colors mirror each backend
  *  profile's DocTheme accent (app/profiles/*.py). */
 

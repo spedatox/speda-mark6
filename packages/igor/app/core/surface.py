@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Surface awareness — which channel the owner is speaking from (phone, desktop,
 Telegram, voice, …) and, opt-in, from where. Rendered into a compact one-liner

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useEffect, useRef, useState } from 'react'
 import { fetchAgentModels, fetchModels, pinAgentModel, pinTelegramModel } from '../lib/api'
 import type { AgentModelInfo } from '../lib/api'

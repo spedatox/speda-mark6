@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Automation manager — the one place automations are created, listed, toggled and
 deleted. Both Speda's tool (skills/automations.py) and the Settings UI router

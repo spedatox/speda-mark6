@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Striker (Speda Mark VI Core) is single-agent, so there is no runtime hue-morph
  * or House Party colour parade — the palette is static (theme/striker.css). All

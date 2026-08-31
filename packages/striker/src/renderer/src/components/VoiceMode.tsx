@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import VoiceOrb, { type OrbState } from './VoiceOrb'
 import VoiceCanvas from './VoiceCanvas'

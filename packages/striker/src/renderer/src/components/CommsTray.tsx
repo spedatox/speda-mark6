@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useEffect, useRef, useState } from 'react'
 import { fetchAgentComms, getHouseParty, setHouseParty } from '../lib/api'
 import type { AgentCommEntry } from '../lib/api'

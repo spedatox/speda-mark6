@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { createContext, useContext, useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { BRANDS } from '../profile/brands'
 import type { AppProfile } from '../profile/types'

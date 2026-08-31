@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package com.speda.heartbreaker.i18n
 
 /** English dictionary — the secondary locale, kept for the owner's own English

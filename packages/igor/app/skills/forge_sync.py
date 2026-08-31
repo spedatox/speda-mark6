@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 sync_owner_memory_to_forge — Orion's half of the Forge owner-memory bridge.
 

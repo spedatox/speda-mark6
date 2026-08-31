@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """The Doormat Protocol: the old door stays open until the new one is proven.
 
 Changing the domain is the operation where a failure takes away the thing you

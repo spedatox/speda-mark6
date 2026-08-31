@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Connections — view/toggle MCP servers from the Settings UI.
 
 Toggling a server hides/shows its tools live (no restart), which shrinks or

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Wire schemas for the n8n-facing reminder tick. See services/reminders.py."""
 
 from pydantic import BaseModel, Field

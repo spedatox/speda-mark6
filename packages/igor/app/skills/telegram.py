@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Telegram delivery skill (Tier 1) — an agent deliberately pushing a message or a
 generated file to the owner's Telegram, mid-turn, from ITS OWN bot.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Live ADS-B lookup by tail number or callsign — adsb.lol's `/v2/reg/{reg}` and
 `/v2/callsign/{callsign}` endpoints (ADSBExchange v2 response schema; keyless,

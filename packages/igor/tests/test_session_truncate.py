@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """SessionManager.truncate against the rows that point AT messages.
 
 Editing or regenerating a turn deletes stored messages. Semantic recall holds a

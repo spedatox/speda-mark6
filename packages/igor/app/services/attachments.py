@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Attachment text extraction — turns an uploaded non-image file into plain text
 that can be embedded in the user turn.

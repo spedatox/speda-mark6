@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 export interface Brand {
   /** Backend agent this fork talks to — POST /chat/{agentId}, sessions scoped to it. */
   agentId: string

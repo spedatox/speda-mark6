@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { ChatContext, chatReducer, initialState } from './store/chat'
 import { saveMessages } from './store/messageCache'

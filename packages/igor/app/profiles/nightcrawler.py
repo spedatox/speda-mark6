@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 from app.profiles.base import AgentProfile, DocTheme
 from app.prompts.loader import assemble, build_skills_manifest
 

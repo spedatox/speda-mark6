@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'

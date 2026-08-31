@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """The peer's half of the memory tool — the other end of the socket.
 
 `test_peer_memory.py` covers the block Igor SENDS the peer every turn. This is

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """The Lockdown Protocol's one load-bearing invariant, and the bug it comes from.
 
 The first implementation sealed the host in steps: insert the DROP on the SSH

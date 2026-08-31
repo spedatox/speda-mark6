@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Telegram channel — first-class conversation surface and primary notification
 transport for Mark VI. One bot per agent; the orchestrator is untouched (a

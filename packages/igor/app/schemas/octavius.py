@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Wire schemas for the Octavius Protocol. See services/octavius.py."""
 
 from pydantic import BaseModel, Field

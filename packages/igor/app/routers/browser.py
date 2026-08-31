@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Web portals — the owner's saved logins, and the browser that uses them.
 
 Sits under /connections/… because that is what it is: a connection, the same

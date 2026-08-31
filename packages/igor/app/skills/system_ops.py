@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 system_ops — the host operation skill (docs/MEMORY_ARCHITECTURE.md §3.5).
 

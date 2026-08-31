@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 The shape-aware memory write tools (docs/MEMORY_ARCHITECTURE_V4.md §3.2).
 

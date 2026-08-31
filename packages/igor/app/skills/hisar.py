@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Hisar — the owner's cloud filesystem, reachable by their agents.
 
 Hisar is a system the owner designed and runs: a web desktop at

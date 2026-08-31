@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Pending permission asks — the relay between a peer's gate and the owner.
 
 The Forge's safety gate stops irreversible operations (force-push, recursive

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """The permission relay between an external peer's safety gate and the owner.
 
 Igor decides nothing here — it stores, forwards and correlates. What these

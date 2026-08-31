@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * BusBlock — EGO "Otobüs Nerede?" arrivals board (desktop parity with the
  * Android ui/prose/BusBlock.kt).

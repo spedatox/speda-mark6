@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /** Agent wordmark geometry, traced from the source art in `logos/*.png`.
  *  One closed path per agent on a centred 100x100 viewBox, wound so that
  *  fill-rule nonzero cuts the counters. Render it through <AgentMark>. */

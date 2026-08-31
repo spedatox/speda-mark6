@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Work must run on the machine the owner meant.
 
 The regression, 2026-08-04: the owner picked a folder in the desktop file

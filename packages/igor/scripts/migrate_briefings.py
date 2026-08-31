@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 One-shot: move the scheduled briefings out of the `Scheduled briefings` n8n
 workflow and into the automation module, where the owner can edit them from

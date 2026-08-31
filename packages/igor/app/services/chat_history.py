@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 Chat history shaping — turns stored ORM Message rows into the plain dicts the
 Heartbreaker UI renders.

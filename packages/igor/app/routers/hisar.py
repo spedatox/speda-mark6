@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Hisar directory browser — lets the Heartbreaker UI browse the owner's vault
 so they can pick a workspace directory for Optimus/Forge jobs.
 

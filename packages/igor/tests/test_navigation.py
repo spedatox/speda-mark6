@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Unit tests for the navigation skills (get_route / find_places).
 
 Network is mocked — these assert the request shaping, origin defaulting, and the

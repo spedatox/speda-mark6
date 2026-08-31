@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Resolves and persists the client's own server URL + API key — the connection
  * to Igor itself, not anything Igor is configured with (that's ConfigTab, and it

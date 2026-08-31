@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Teaser scenes — one component per beat. Visuals are driven entirely by the
  * theme CSS variables (so every scene re-hues during an agent morph) plus the

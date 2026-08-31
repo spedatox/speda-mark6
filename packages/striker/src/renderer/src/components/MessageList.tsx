@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useEffect, useRef, useCallback, memo } from 'react'
 import { useChatContext } from '../store/chat'
 import Message from './Message'

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { createContext, useContext, useState } from 'react'
 
 const STORAGE_KEY = 'app_settings_v1'

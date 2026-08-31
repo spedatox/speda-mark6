@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * A streamed ```chart / ```calendar code fence is valid JSON only once the
  * model finishes emitting it — every partial reveal in between is, by

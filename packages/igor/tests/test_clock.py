@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """The clock policy: instants in UTC, wall clocks in the owner's zone.
 
 These exist because the failure they guard against is invisible — nothing

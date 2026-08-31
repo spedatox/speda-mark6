@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Which machine does this work belong on?
 
 Optimus is ONE agent. Its identity, memory, prompts and session history live in

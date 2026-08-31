@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Wire schemas for the n8n-facing mail watch. See services/mail_watch.py."""
 
 from pydantic import BaseModel, Field, model_validator

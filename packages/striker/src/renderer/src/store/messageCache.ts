@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Local message cache — a per-session mirror of the transcript in localStorage.
 //
 // The backend is the source of truth, but two situations leave the owner staring

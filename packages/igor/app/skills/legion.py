@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Legion status skill — retrieve background legionnaire results.
 
 The Legion's background mode (Task tool with run_in_background=true) returns a

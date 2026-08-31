@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Automations — view/manage Speda's proactive n8n watchers from Settings,
 plus the one-time Telegram connect flow. Zero business logic beyond delegation
 to automations.manager (Rule 1)."""

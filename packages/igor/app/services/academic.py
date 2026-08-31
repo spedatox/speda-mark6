@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """
 The academic domain — schedule storage, the attendance ledger, and the 14-week /
 70% arithmetic.
