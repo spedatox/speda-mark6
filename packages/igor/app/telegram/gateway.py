@@ -23,6 +23,7 @@ from app.core.dispatch import BG_COMMAND, bg_ack
 from app.core.runtime_state import get_telegram_owner_id
 from app.core.surface import annotate_last_user, telegram_context
 from app.database import AsyncSessionLocal
+from app.services.compaction import COMPACT_COMMAND, compact_ack, compact_now
 from app.telegram import linking
 from app.telegram.renderer import render_stream
 
@@ -163,6 +164,32 @@ class TelegramGateway:
                 origin_session_id=session_id, allow_self=True,
             )
             await bot.send_message(bg_ack(outcome), chat_id=chat_id)
+            return
+
+        # 4b2. /compact — fold older turns into a rolling summary right now,
+        # ignoring the token threshold, and reply with a visible confirmation.
+        # Shared with the web chat router via app.services.compaction.
+        if text.strip() == COMPACT_COMMAND:
+            profile = self._profiles.get(agent_id)
+            async with AsyncSessionLocal() as db:
+                session = await self._sessions.get_or_create(
+                    db=db, user_id=_OWNER_USER_ID, triggered_by="user",
+                    model_used=profile.allocate_telegram_model() if profile else "",
+                    agent_id=agent_id, channel="telegram",
+                )
+                await self._sessions.save_message(
+                    db, session.id, "user", [{"type": "text", "text": text}])
+                session_id = session.id
+            bg_model = (
+                profile.background_model(profile.allocate_telegram_model())
+                if profile else ""
+            )
+            outcome = await compact_now(session_id, str(uuid.uuid4()), bg_model)
+            reply = compact_ack(outcome)
+            async with AsyncSessionLocal() as db:
+                await self._sessions.save_message(
+                    db, session_id, "assistant", [{"type": "text", "text": reply}])
+            await bot.send_message(reply, chat_id=chat_id)
             return
 
         profile = self._profiles.get(agent_id)

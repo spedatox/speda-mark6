@@ -17,6 +17,7 @@ from app.core.dispatch import BG_COMMAND, bg_ack
 from app.database import AsyncSessionLocal, get_db
 from app.schemas.chat import ChatRequest, SteerRequest
 from app.core.surface import annotate_last_user
+from app.services.compaction import COMPACT_COMMAND, compact_ack, compact_now
 from app.services.errors import friendly_provider_error
 
 logger = logging.getLogger(__name__)
@@ -287,6 +288,35 @@ async def _run_chat(
             yield SSEEvent(type=SSEEventType.DONE, data={},
                           session_id=session.id, request_id=request_id).to_sse()
         return StreamingResponse(_ack(), media_type="text/event-stream")
+
+    # /compact — fold older turns into a rolling summary right now, ignoring
+    # the token threshold, and reply with a visible confirmation instead of
+    # the silent post-turn background pass (maybe_compact_session). Shared
+    # with the Telegram gateway via app.services.compaction so the two
+    # surfaces cannot drift.
+    if body.message.strip() == COMPACT_COMMAND:
+        from app.schemas.sse import SSEEvent, SSEEventType
+
+        session = await session_manager.get_or_create(
+            db=db, user_id=user_id, triggered_by="user",
+            model_used=body.model or profile.allocate_model("user"),
+            agent_id=profile.agent_id, session_id=body.session_id,
+        )
+        await session_manager.save_message(db, session.id, "user", body.message)
+
+        bg_model = profile.background_model(body.model or profile.allocate_model("user"))
+        outcome = await compact_now(session.id, request_id, bg_model)
+        reply = compact_ack(outcome)
+
+        await session_manager.save_message(
+            db, session.id, "assistant", [{"type": "text", "text": reply}])
+
+        async def _compact_ack():
+            yield SSEEvent(type=SSEEventType.CHUNK, data=reply,
+                          session_id=session.id, request_id=request_id).to_sse()
+            yield SSEEvent(type=SSEEventType.DONE, data={},
+                          session_id=session.id, request_id=request_id).to_sse()
+        return StreamingResponse(_compact_ack(), media_type="text/event-stream")
 
     model = body.model or profile.allocate_model("user")
     system_prompt = body.system_prompt or ""
