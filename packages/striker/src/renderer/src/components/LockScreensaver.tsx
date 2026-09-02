@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import AgentMark from './AgentMark'
 
 /**
@@ -65,10 +65,6 @@ const KEYFRAMES = `
 @keyframes ssLine   { from { opacity: 0; transform: translateY(7px); filter: blur(4px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
 @keyframes ssWash   { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ssOut    { to { opacity: 0; filter: blur(7px); transform: scale(0.99); } }
-@keyframes ssDriftX { 0%,100% { transform: translateX(-4.2vw); } 50% { transform: translateX(4.2vw); } }
-@keyframes ssDriftY { 0%,100% { transform: translateY(3.4vh); } 50% { transform: translateY(-3.4vh); } }
-@keyframes ssClockX { 0%,100% { transform: translateX(3.6vw); } 50% { transform: translateX(-3.6vw); } }
-@keyframes ssClockY { 0%,100% { transform: translateY(-2.6vh); } 50% { transform: translateY(2.6vh); } }
 `
 
 export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
@@ -83,10 +79,6 @@ export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
   const [leaving, setLeaving] = useState(false)
   const [clock, setClock] = useState(() => new Date())
 
-  const calm = useMemo(
-    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-    [],
-  )
 
   const agent = agents[beat % agents.length]
   /** When the last letter has finished arriving — everything after the name is
@@ -133,17 +125,19 @@ export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
         }}
       />
 
-      {/* Drift lives on two nested wrappers so the card's own entrance and exit
-          animations stay free — one element cannot run both transforms. */}
+      {/* The card sits centred and STAYS there. An earlier pass drifted it on
+          two slow sines against panel burn-in; watching it, a wandering
+          wordmark reads as drift in the design rather than care about the
+          hardware, and the beat already repaints the whole area every few
+          seconds. Centred wins. */}
       <div style={{
-        flex: 1, minHeight: 0, display: 'flex', alignItems: 'center',
-        animation: calm ? undefined : 'ssDriftX 71s ease-in-out infinite',
+        flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <div style={{ animation: calm ? undefined : 'ssDriftY 97s ease-in-out infinite' }}>
+        <div>
           <div
             key={beat}
             style={{
-              display: 'flex', alignItems: 'center', gap: 'clamp(1.4rem, 3vw, 2.6rem)',
+              display: 'flex', alignItems: 'center', gap: 'clamp(1.6rem, 3.4vw, 3.2rem)',
               animation: leaving ? `ssOut ${FADE_MS}ms ease-in-out both` : undefined,
             }}
           >
@@ -155,21 +149,30 @@ export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
                 the mark's own (AgentMark's glass finish), not a CSS shadow. */}
             <span style={{
               display: 'flex', flexShrink: 0,
+              // Sized off the viewport rather than a fixed box — this plays on
+              // whatever panel the deck is open on, and 110px was a thumbnail.
+              width: 'clamp(120px, 14vw, 240px)',
               animation: 'ssMark 1.15s cubic-bezier(0.16,0.84,0.3,1) backwards',
             }}>
-              <AgentMark agentId={agent.agentId} size={110} finish="glass" color={accent} />
+              <AgentMark
+                agentId={agent.agentId}
+                size={240}
+                finish="glass"
+                color={accent}
+                style={{ width: '100%', height: 'auto', display: 'block' }}
+              />
             </span>
 
             <div style={{
               display: 'flex', flexDirection: 'column', justifyContent: 'center',
-              gap: '0.55rem', minWidth: 0, minHeight: 128,
+              gap: '0.7rem', minWidth: 0, minHeight: 'clamp(120px, 14vw, 240px)',
             }}>
               {/* lang="en" — the marks are English brand names, and Turkish's
                   dotless-i casing rules would render ATOMİX / SENTİNEL. */}
               <span lang="en" style={{
                 display: 'flex', alignItems: 'baseline', gap: '0.7rem',
                 fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, lineHeight: 1,
-                fontSize: 'clamp(2.2rem, 6vw, 4.2rem)',
+                fontSize: 'clamp(2.6rem, 7.6vw, 6.2rem)',
                 letterSpacing: '0.14em', textTransform: 'uppercase',
                 color: '#fff', textShadow: `0 0 34px ${accent}aa`,
                 whiteSpace: 'nowrap',
@@ -208,7 +211,7 @@ export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
               }} />
 
               <span lang="en" style={{
-                fontFamily: 'var(--font-mono)', fontSize: '0.68rem',
+                fontFamily: 'var(--font-mono)', fontSize: 'clamp(0.68rem, 1.05vw, 0.95rem)',
                 letterSpacing: '0.3em', textTransform: 'uppercase',
                 color: 'var(--hb-text-dim)',
                 animation: `ssLine ${LINE_MS}ms ease ${typeEnd + TAGLINE_GAP_MS}ms backwards`,
@@ -220,19 +223,14 @@ export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
         </div>
       </div>
 
-      {/* The clock keeps its own drift — slower, and out of phase with the
-          card's, so the two never settle into one moving block. */}
-      <div style={{
-        paddingBottom: '10vh', flexShrink: 0,
-        animation: calm ? undefined : 'ssClockX 113s ease-in-out infinite',
-      }}>
+      {/* The clock, parked in its own band clear of the card. */}
+      <div style={{ paddingBottom: '10vh', flexShrink: 0 }}>
         <div style={{
-          animation: calm ? undefined : 'ssClockY 149s ease-in-out infinite',
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem',
         }}>
           <span style={{
             fontFamily: "'Rajdhani', sans-serif", fontWeight: 300, lineHeight: 1,
-            fontSize: 'clamp(2.6rem, 7vw, 4.6rem)',
+            fontSize: 'clamp(2.8rem, 7.4vw, 5.4rem)',
             letterSpacing: '0.16em', paddingLeft: '0.16em',
             color: 'rgba(219, 230, 236, 0.82)',
           }}>
