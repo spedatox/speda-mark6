@@ -651,7 +651,14 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               borderRight: '1px solid rgba(var(--hb-accent-rgb),0.14)',
             }}>
               {memFiles.map(f => {
-                const name = (f.path.split('/').pop() || f.path).replace(/\.md$/, '').toUpperCase()
+                // A nested file is named by its folder AND its leaf. Striker's
+                // rail is flat by design — no tree, no folds — and a bare leaf
+                // stopped identifying anything once memory grew folders whose
+                // filenames are index keys: `2026-09` alone says nothing about
+                // whose 2026-09 it is. Two segments is the whole fix.
+                const rel = f.path.replace(/^\/memories\//, '').replace(/\.md$/, '')
+                const parts = rel.split('/')
+                const name = (parts.length > 2 ? parts.slice(-2).join('/') : parts[parts.length - 1]).toUpperCase()
                 const sel = f.path === memPath
                 return (
                   <button
@@ -669,7 +676,9 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                     }}
                   >
                     <span style={{ color: sel ? 'var(--hb-amber)' : 'var(--hb-icon-dim)' }}>▸</span>
-                    {name}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {name}
+                    </span>
                   </button>
                 )
               })}

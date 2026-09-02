@@ -10,9 +10,11 @@ Two shapes, one operation:
   - a REGISTRY splits by ENTITY — one person, one project, one file — and the
     member set is open, because a new person is a new file;
   - a domain document splits by TOPIC into the closed, named member set its
-    CollectionSpec declares — `wellness/sessions.md`, `finance/ledger.md` — so
+    CollectionSpec declares — `wellness/sessions.md`, `finance/ledger/` — so
     the destination of every section is decided in the spec rather than derived
-    from its heading text.
+    from its heading text. A member declared `shard=True` is a DIRECTORY: each
+    of its index keys becomes its own file (`finance/ledger/2026-09.md`), which
+    is the same cut one storey down and carries the same guarantee.
 
 The operation is a CUT, never a regeneration. Every byte of an entity's prose
 moves into its own file unchanged; the only edit is heading level, because a
@@ -41,7 +43,13 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from app.services.memory_spec import CollectionSpec, member_path, slugify
+from app.services.memory_spec import (
+    CollectionSpec,
+    MemberSpec,
+    member_path,
+    shard_path,
+    slugify,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -176,8 +184,14 @@ def _plan_sections(text: str, coll: CollectionSpec) -> SplitPlan:
     # section title → the member taking it, in declared order.
     bodies: dict[str, list[str]] = {m.stem: [] for m in coll.members}
     seen: dict[str, list[str]] = {m.stem: [] for m in coll.members}
+    # For a SHARDED member the section title is also a filename, so its bodies
+    # are kept per key rather than pooled: stem → {key → lines}.
+    shards: dict[str, dict[str, list[str]]] = {
+        m.stem: {} for m in coll.members if m.shard
+    }
 
     current: str | None = None       # stem currently being filled
+    target: list[str] | None = None  # the exact list being appended to
     promote: bool = False            # this section is a member on its own
     heading_line: str = ""
     first_section = 0
@@ -203,25 +217,36 @@ def _plan_sections(text: str, coll: CollectionSpec) -> SplitPlan:
                     f"(members are: {', '.join(m.stem for m in coll.members)}) "
                     f"and re-run, or fold it into a section that exists.",
                 ))
-                current, promote = None, False
+                current, target, promote = None, None, False
                 continue
             current = member.stem
-            promote = not member.gathered
+            # A SHARDED member drops the heading like a single-section member
+            # does — the difference is only how many files come out the other
+            # end, because there the heading becomes ONE file's title and here
+            # it becomes THIS key's.
+            promote = member.shard or not member.gathered
             seen[current].append(heading)
             plan.sections_seen[heading] = plan.sections_seen.get(heading, 0) + 1
+            if member.shard:
+                target = shards[current].setdefault(heading, [])
+                continue
+            target = bodies[current]
             # A gathered member keeps the source heading — the months ARE the
-            # index of finance/ledger.md. A member that is one section drops it,
+            # index of a monthly ledger. A member that is one section drops it,
             # because that heading becomes the file's own title.
             heading_line = "" if promote else line
             if heading_line:
-                bodies[current].append(heading_line)
+                target.append(heading_line)
             continue
-        if current is not None:
-            bodies[current].append(line)
+        if target is not None:
+            target.append(line)
         elif not first_section:
             plan.preamble_lines += 1
 
     for m in coll.members:
+        if m.shard:
+            _emit_shards(plan, coll, m, shards[m.stem])
+            continue
         raw = bodies[m.stem]
         lines = _promote(raw, 1) if not m.gathered else raw
         body = "\n".join(lines).strip()
@@ -253,6 +278,57 @@ def _plan_sections(text: str, coll: CollectionSpec) -> SplitPlan:
         plan.members.append(member)
 
     return plan
+
+
+def _emit_shards(
+    plan: SplitPlan,
+    coll: CollectionSpec,
+    member: MemberSpec,
+    bodies: dict[str, list[str]],
+) -> None:
+    """One file per index key of a sharded member.
+
+    The key is the file's name AND its title, so nothing downstream has to
+    remember how a month is spelled: `## 2026-09` becomes `# 2026-09` at the top
+    of `finance/ledger/2026-09.md`, and everything under it comes up one level
+    with it. That is the same promotion a single-section member gets — the only
+    difference is that it happens N times.
+    """
+    if not bodies:
+        plan.problems.append(Problem(
+            "empty", member.stem, 0,
+            f"Nothing in {plan.source} matches {member.takes_pattern or member.index_pattern}, "
+            f"so `{coll.root}/{member.stem}/` would be an empty directory. Either "
+            f"the index keys are written differently in the document than in the "
+            f"spec, or this ledger has no entries yet.",
+        ))
+        return
+
+    cap = member.shard_max_bytes or member.max_bytes or coll.max_bytes
+    for key, raw in bodies.items():
+        body = "\n".join(_promote(raw, 1)).strip()
+        if not body:
+            plan.problems.append(Problem(
+                "empty", key, 0,
+                f"`{key}` is a heading with nothing under it, so no file is "
+                f"written for it. A key with no entries is usually a leftover.",
+            ))
+            continue
+        shard = Member(
+            path=shard_path(coll, member, key),
+            title=key,
+            group=member.stem,
+            content=f"# {key}\n\n{body}\n",
+            source_line=0,
+        )
+        if shard.bytes > cap:
+            plan.problems.append(Problem(
+                "oversize", key, 0,
+                f"{shard.bytes / 1024:.1f}K exceeds the {cap / 1024:.0f}K per-key "
+                f"cap. It is still written — the cap is a growth check, not a "
+                f"reason to drop the owner's data — but it wants compressing.",
+            ))
+        plan.members.append(shard)
 
 
 def _plan_entities(text: str, coll: CollectionSpec) -> SplitPlan:
@@ -474,6 +550,240 @@ async def apply_split(
             + (f" {probs} entity(ies) were skipped — see problems." if probs else "")
         )
     return report
+
+
+# ── Sharding a member that is already its own file ────────────────────────────
+#
+# `plan_split` shards straight out of the monolith, which is right for a store
+# that has not been split yet. The owner's has: `finance/ledger.md` was written
+# by the first migration and is the live document. Sharding it is the same cut
+# again, one storey down — `## 2026-09` and everything under it becomes
+# `finance/ledger/2026-09.md` — and it carries the same guarantees: every byte
+# moves unchanged, nothing is regenerated, and a heading the spec cannot place
+# is reported and left alone rather than filed somewhere plausible.
+#
+# The one difference from `apply_split` is the tail. A split is purely additive
+# because the monolith stays as a readable original; here the source and its
+# shards are the SAME document at the same address, and leaving both would give
+# the store two authoritative copies of the ledger — the exact failure the
+# taxonomy exists to prevent. So a successful apply archives the flat file to
+# `.archive/` and removes it, which is reversible twice over: the archive copy
+# is readable by path, and the delete's `before` holds every byte in the trail.
+
+
+def plan_shard(text: str, coll: CollectionSpec, member: MemberSpec) -> SplitPlan:
+    """Every file sharding one member's flat file would write. Pure."""
+    source = f"{coll.root}/{member.stem}.md"
+    plan = SplitPlan(source=source, root=f"{coll.root}/{member.stem}")
+    if not member.shard:
+        plan.problems.append(Problem(
+            "unmapped", member.stem, 0,
+            f"`{member.stem}` is not declared `shard=True` in memory_spec — it is "
+            f"one file by design. Nothing to shard.",
+        ))
+        return plan
+
+    pat = re.compile(member.index_pattern) if member.index_pattern else None
+    bodies: dict[str, list[str]] = {}
+    target: list[str] | None = None
+    first_key = 0
+    dropped = False                       # inside a heading the plan cannot place
+    strays: list[tuple[int, str]] = []
+
+    for n, line, level, heading in _walk(text):
+        if level == 1:
+            # The member's own title. It described the whole index; the folder
+            # carries that name now and each file is titled by its key.
+            target, dropped = None, False
+            continue
+        if level == 2:
+            m = pat.match(heading) if pat else None
+            if m is None:
+                plan.problems.append(Problem(
+                    "unmapped", heading, n,
+                    f"`{heading}` is not an index key of {source} (keys match "
+                    f"{member.index_pattern}), so no shard would carry it and it "
+                    f"would be lost. Move it to the member that owns it — "
+                    f"{', '.join(x.stem for x in coll.members if not x.shard)} — "
+                    f"and re-run.",
+                ))
+                target, dropped = None, True
+                continue
+            key = m.group(0)
+            first_key = first_key or n
+            target, dropped = bodies.setdefault(key, []), False
+            plan.sections_seen[heading] = plan.sections_seen.get(heading, 0) + 1
+            continue
+        if target is not None:
+            target.append(line)
+        elif dropped:
+            # The body of a heading already reported as unmapped. Reporting it a
+            # second time as stray would tell the owner two things about one
+            # mistake and make the clean-up look twice as large as it is.
+            continue
+        elif not first_key:
+            plan.preamble_lines += 1
+        elif line.strip():
+            strays.append((n, line))
+
+    if strays:
+        preview = " ".join(l.strip() for _, l in strays)[:120]
+        plan.problems.append(Problem(
+            "stray", source, strays[0][0],
+            f"{len(strays)} line(s) sit between index keys and belong to none of "
+            f"them, so no shard would carry them: “{preview}”. File them under "
+            f"a key, or move them to the member that owns them, before sharding.",
+        ))
+
+    _emit_shards(plan, coll, member, bodies)
+    return plan
+
+
+async def apply_shard(
+    db,
+    user_id: int,
+    coll: CollectionSpec,
+    member: MemberSpec,
+    *,
+    dry_run: bool = True,
+    retire: bool = True,
+    request_id: str = "",
+) -> dict:
+    """Shard one member's flat file into its directory, and retire the flat file.
+
+    Writes go through `commit_file`, so every created file lands in the revision
+    trail. The source is archived and removed only when the plan is clean and
+    every shard is on disk — a partial shard leaves the original exactly where
+    it was, because half a ledger in two places is worse than one in the old one.
+    """
+    from sqlalchemy import delete as sql_delete
+    from sqlalchemy import select
+
+    from app.models.memory_file import MemoryFile
+    from app.services.memory_store import ARCHIVE_ROOT, commit_file, record_revision
+
+    source = f"{coll.root}/{member.stem}.md"
+    root = f"{coll.root}/{member.stem}"
+
+    row = (
+        await db.execute(
+            select(MemoryFile).where(
+                MemoryFile.user_id == user_id, MemoryFile.path == source
+            )
+        )
+    ).scalar_one_or_none()
+
+    existing = {
+        p for (p,) in await db.execute(
+            select(MemoryFile.path).where(
+                MemoryFile.user_id == user_id,
+                MemoryFile.path.startswith(root + "/"),
+            )
+        )
+    }
+
+    if row is None:
+        return {
+            "source": source, "root": root,
+            "status": "done" if existing else "absent",
+            "shards": sorted(existing),
+            "verdict": (
+                f"{source} is gone and {len(existing)} shard(s) are in place — "
+                f"already sharded, nothing to do."
+                if existing else
+                f"{source} does not exist — nothing to shard."
+            ),
+        }
+
+    plan = plan_shard(row.content or "", coll, member)
+    report = plan.as_dict()
+    report["dry_run"] = dry_run
+    report["source_bytes"] = len((row.content or "").encode("utf-8"))
+    already = sorted(p for p in existing if p in {m.path for m in plan.members})
+    report["already_present"] = already
+
+    # Anything the plan could not place stays in the source, so the source must
+    # stay too — retiring it would delete content no shard is carrying.
+    unplaced = [p for p in plan.problems if p.kind in ("unmapped", "stray")]
+    written: list[str] = []
+    retired = False
+
+    if not dry_run:
+        for m in plan.members:
+            if m.path in existing:
+                continue
+            await commit_file(
+                db, user_id=user_id, path=m.path, content=m.content,
+                expected_updated_at=None,
+                request_id=request_id or "memory-shard",
+            )
+            written.append(m.path)
+
+        placed = {m.path for m in plan.members} <= (existing | set(written))
+        if retire and placed and not unplaced and plan.members:
+            archive = f"{ARCHIVE_ROOT}/{coll.root.rsplit('/', 1)[-1]}-{member.stem}.md"
+            await commit_file(
+                db, user_id=user_id, path=archive, content=row.content or "",
+                expected_updated_at=None,
+                request_id=request_id or "memory-shard",
+            )
+            await db.execute(
+                sql_delete(MemoryFile).where(
+                    MemoryFile.user_id == user_id, MemoryFile.path == source
+                )
+            )
+            await record_revision(
+                db, user_id=user_id, path=source, author="owner", action="delete",
+                before=row.content or "", after="",
+                request_id=request_id or "memory-shard",
+            )
+            await db.commit()
+            retired = True
+            report["archived_to"] = archive
+
+        logger.info(
+            "memory_shard_applied",
+            extra={"user_id": user_id, "source": source, "written": len(written),
+                   "retired": retired, "problems": len(plan.problems)},
+        )
+
+    report["written"] = written
+    report["retired"] = retired
+    report["status"] = "planned" if dry_run else "applied"
+
+    n, probs = len(plan.members), len(plan.problems)
+    skipped = f", {len(already)} already present" if already else ""
+    if dry_run:
+        report["verdict"] = (
+            f"Would write {n - len(already)} file(s) under {root}/ from "
+            f"{report['source_bytes'] / 1024:.1f}K{skipped}"
+            + (f"; {probs} problem(s) need a decision first."
+               if probs else f", then retire {source}.")
+        )
+    else:
+        report["verdict"] = (
+            f"Wrote {len(written)} file(s) under {root}/{skipped}. "
+            + (f"{source} is archived and removed."
+               if retired else
+               f"{source} is UNCHANGED — {len(unplaced)} heading(s) could not be "
+               f"placed, so retiring it would lose them.")
+        )
+    return report
+
+
+async def shard_all(db, user_id: int, *, dry_run: bool = True, request_id: str = "") -> dict:
+    """Every member declared `shard=True`, in declaration order."""
+    from app.services.memory_spec import COLLECTIONS
+
+    reports = [
+        await apply_shard(db, user_id, c, m, dry_run=dry_run, request_id=request_id)
+        for c in COLLECTIONS for m in c.members if m.shard
+    ]
+    return {
+        "dry_run": dry_run,
+        "members": reports,
+        "verdict": " ".join(r["verdict"] for r in reports),
+    }
 
 
 async def split_all(db, user_id: int, *, dry_run: bool = True, request_id: str = "") -> dict:

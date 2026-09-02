@@ -267,6 +267,44 @@ async def memory_split(request: Request) -> JSONResponse:
     return JSONResponse(report)
 
 
+@router.post("/memory/shard")
+async def memory_shard(request: Request) -> JSONResponse:
+    """
+    Shard every member declared `shard=True` into its directory: the finance
+    ledger's `## 2026-09` and everything under it becomes
+    `/memories/finance/ledger/2026-09.md`.
+
+    **Dry run by default.** Pass `{"apply": true}` to write. The dry run lists
+    every file that would be created with its size, and every heading the plan
+    could not place — a heading that is not an index key belongs to another
+    member, and no shard would carry it.
+
+    Unlike the registry split this one RETIRES its source: the flat file and its
+    shards are the same document at the same address, and leaving both would
+    give the store two authoritative ledgers. The flat file is copied to
+    `.archive/` and removed, and both halves of that are reversible — the copy
+    is readable by path, and the delete's `before` holds every byte in the
+    revision trail. It is retired only when the plan is clean; if anything could
+    not be placed, the source stays exactly where it is.
+    """
+    from app.database import AsyncSessionLocal
+    from app.services.memory_split import shard_all
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 — an empty body means a dry run
+        pass
+
+    apply = bool(body.get("apply"))
+    request_id = getattr(request.state, "request_id", "") or "admin-shard"
+    async with AsyncSessionLocal() as db:
+        report = await shard_all(
+            db, _USER_ID, dry_run=not apply, request_id=request_id
+        )
+    return JSONResponse(report)
+
+
 @router.post("/memory/render")
 async def memory_render(request: Request) -> JSONResponse:
     """

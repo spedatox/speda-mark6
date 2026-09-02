@@ -509,11 +509,20 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
             # Name the log explicitly. It is the one file NOT in the prompt, so
             # an agent that is not told it exists will either answer without it
             # or re-read the whole domain looking for it.
+            # A sharded log is a FOLDER of keys, and naming it as a file would
+            # send the agent to a path that does not exist — the one thing this
+            # line exists to prevent.
+            where = (
+                f"`{coll.root}/{dated.stem}/` — one file per "
+                f"{dated.key_shape or dated.index_pattern}"
+                if dated and dated.shard
+                else f"`{coll.root}/{dated.stem}.md`" if dated else ""
+            )
             log_line = (
-                f" The dated log `{coll.root}/{dated.stem}.md` is deliberately NOT "
-                f"preloaded — it grows without bound. Open it with `view` when you "
-                f"need past entries, and add to it with `ledger_append` (give the "
-                f"date; it finds the file)."
+                f" The dated log {where} is deliberately NOT preloaded — it grows "
+                f"without bound. Open the one you need with `view` when you need "
+                f"past entries, and add to it with `ledger_append` (give the "
+                f"key; it finds the file, and creates it if the key is new)."
                 if dated else ""
             )
             source_directive = (

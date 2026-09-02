@@ -24,7 +24,7 @@ import logging
 import re
 from datetime import date
 
-from app.services.memory_spec import DocumentSpec, spec_for
+from app.services.memory_spec import DocumentSpec, shard_member, spec_for
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +157,24 @@ def ledger_append(
             f"match {spec.index_pattern}. A finance month is `2026-08`; a session "
             f"date is `2026-08-09`."
         )
+
+    # A SHARDED ledger keeps one key per file, so the key and the filename are
+    # the same fact written twice and they must agree — `route_ledger` derives
+    # the path FROM the key, so a disagreement here means the caller went round
+    # it and is about to file September under August's H1.
+    if shard_member(path) is not None:
+        stem = path.rsplit("/", 1)[-1][:-3]
+        if key != stem:
+            raise WriteRejected(
+                f"`{path}` is the file for `{stem}`, but this entry is keyed "
+                f"`{key}`. One key per file: pass the folder or the domain and "
+                f"let the key pick the file."
+            )
+        if not text.strip():
+            # The month's first entry creates the month. Seeding the title here
+            # rather than letting `_insert_index_key` do it is what keeps the key
+            # as the H1 instead of an `##` heading under an empty document.
+            text = f"# {key}\n"
 
     lines = text.splitlines()
 

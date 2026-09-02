@@ -33,7 +33,7 @@ task is about and pay for nothing else.
 
 | Directory | Files | Owner |
 |---|---|---|
-| `finance/` | `ledger` (every month), `scholarships-and-loans`, `blackwalnut`, `monthly-structure`, `notes` | **Sentinel** |
+| `finance/` | `ledger/<YYYY-MM>.md` (ONE FILE PER MONTH), `scholarships-and-loans`, `blackwalnut`, `monthly-structure`, `notes` | **Sentinel** |
 | `wellness/` | `sessions` (the log), `profile`, `program`, `gym`, `directives` | **Atomix** |
 | `academic/` | `kpss-2026`, `akademik-takvim`, `mufredat`, `ders-materyalleri`, `erasmus`, `akademik-durum`, `session-durumu` | **Ultron** |
 | `cybersec/` | `curriculum`, `progress-log`, `structure`, `resources`, `certifications` | **Centurion** |
@@ -116,6 +116,11 @@ dated `**Events:**`, newest first. Reference data that is true every month
 (a repayment schedule, a scholarship's terms) does NOT go under a month — it
 goes in the file that is about it.
 
+In `finance/ledger/` the month IS the file: `2026-09.md` is titled `# 2026-09`
+and carries `## Incomes`, `## Expenses` and `## Debts` under it. One month per
+file — so read the month you were asked about, not the whole folder, and never
+open twelve files to answer a question about one.
+
 The old combined documents (`projects.md`, `social.md`, `wellness.md`, …) still
 exist and are still readable, but they are **read-only**. Writes go to the file,
 and `ledger_append` / `registry_upsert` work the path out from the key or the
@@ -130,7 +135,7 @@ file, which is why the content cannot land in the wrong section.
 
 | Verb | Use it for | You supply |
 |---|---|---|
-| `ledger_append` | anything dated or periodic — a transaction, a training session, an operational action | the **domain** (`wellness`, `finance`, `ops`) and the **key** (`2026-08` or `2026-08-09`), then the row or bullets. The key picks the file. |
+| `ledger_append` | anything dated or periodic — a transaction, a training session, an operational action | the **domain** (`wellness`, `finance`, `ops`) and the **key** (`2026-08` or `2026-08-09`), then the row or bullets. The key picks the file — and in `finance/ledger/` it picks the MONTH's file, creating it if that month is new. |
 | `registry_upsert` | a person or a project | the **kind** (`person`/`project`), the **entity**'s name, a person's category (`professional` or `personal`), a `who` and/or a dated `event` — never a path |
 | `narrative_revise` | correcting a chapter of `owner.md` | the **chapter** and its full new body |
 | `memory` (`create`) | a new topic in YOUR OWN domain, or a `life/` document no domain owns | the whole new document. It REPLACES what was there; the old version stays in the revision trail |

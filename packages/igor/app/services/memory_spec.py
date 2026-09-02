@@ -102,15 +102,23 @@ class DocumentSpec:
 # v5 extends this to every on-demand document, and the rule that survived is
 # WHERE the cut goes, not which kind is allowed to be cut:
 #
-#   Split by TOPIC — never by index key.
+#   Split by TOPIC first — never INSTEAD of by topic.
 #
-# `wellness/sessions.md`, `academic/kpss-2026.md`, `finance/ledger.md` are
-# topics: stable, named, and each answering a different question. A file per
-# MONTH would be an index key, and it turns "compare July with August" into N
-# reads and cuts a repayment schedule in half — the same mistake v3 made by
-# shredding that ledger into sentences (v4 §2.3), one storey down. So a ledger
-# splits away from its reference material and keeps its whole index in one
-# member (see finance's `ledger`, which gathers every `## YYYY-MM`).
+# `wellness/sessions.md`, `academic/kpss-2026.md`, `finance/ledger` are topics:
+# stable, named, and each answering a different question. Cutting a domain
+# straight into index keys instead — a folder of months with the repayment
+# schedule and the monthly-structure note scattered through them — is the v3
+# mistake one storey down (v4 §2.3).
+#
+# A topic whose index grows without bound may THEN be SHARDED by that key: the
+# member stays one topic and becomes a directory, one file per key
+# (`finance/ledger/2026-09.md`). The owner asked for this on the ledger, and it
+# is his ledger. What it buys is that a month is opened as a month — Sentinel
+# reads 700 bytes to answer "what came in in September" instead of every month
+# ever recorded. What it costs is that "compare July with August" is two reads
+# instead of one. Nothing is cut in half by it: a repayment schedule was never
+# in the months, it is `scholarships-and-loans` — which is what splitting by
+# topic FIRST is for.
 #
 # The saving is on the read path. A domain document is opened to answer one
 # question about one topic, and the agent paid for all of it: 26 KB of wellness
@@ -141,6 +149,13 @@ class MemberSpec:
         `## 2026-07`, `## 2026-08` … in one file, where "compare July with
         August" is still one read. Promoting those would make every month an H1
         and produce a file with twelve titles.
+      - SHARDED (`shard=True`, alongside `takes_pattern`) → the member is a
+        DIRECTORY and each matched section becomes its own file at
+        `<root>/<stem>/<key>.md`, promoted exactly as a single section is: `##
+        2026-09` becomes `# 2026-09` at the top of `finance/ledger/2026-09.md`.
+        The key is both the filename and the title, which is what lets a write
+        route to a month without anything having to remember how a month is
+        spelled — and it is why a sharded member declares `index_level=1`.
     """
 
     stem: str                                   # filename, without .md
@@ -155,12 +170,25 @@ class MemberSpec:
     sections: tuple[str, ...] = ()
     required: tuple[str, ...] = ()
     index_pattern: str | None = None
+    # How to WRITE a key, for the humans and the models that read tool
+    # descriptions: `^\d{4}-\d{2}$` says what a key must be, `YYYY-MM` says what
+    # to type. Only the regex is enforced; this is the half that gets it right
+    # first time.
+    key_shape: str = ""
     index_level: int = 2
     entry_style: str = "bullets"
     entry_sections: tuple[str, ...] = ()
     columns: dict[str, tuple[str, ...]] = field(default_factory=dict)
     markers: tuple[str, ...] = ()
     max_bytes: int = 0                          # 0 = the collection's default
+    # This member is a DIRECTORY of one file per index key, not a single file.
+    # Only meaningful with `index_pattern` (which says what a key looks like)
+    # and `takes_pattern` (which says which source sections become the shards).
+    shard: bool = False
+    # Cap for ONE shard. `max_bytes` still describes the member as a whole — it
+    # is what the pre-shard file was allowed to weigh — but a single month has
+    # no business being the size of the whole ledger.
+    shard_max_bytes: int = 0                    # 0 = fall back to max_bytes
     notes: str = ""
 
     @property
@@ -410,15 +438,24 @@ SECTION_COLLECTIONS: tuple[CollectionSpec, ...] = (
         entity_level=2,
         members=(
             MemberSpec(
-                # GATHERED, not one-per-month. Splitting a ledger by its index
-                # key is the v3 mistake one storey down: it turns "compare July
-                # with August" into N reads and cuts a repayment schedule in
-                # half (v4 §2.3). Every month stays in one file, at `##`.
+                # SHARDED by month, on the owner's instruction: the member is a
+                # DIRECTORY and every `## YYYY-MM` is its own file. It is still
+                # ONE topic — the months are the same document, indexed — so the
+                # split-by-topic rule above holds; what moved is where the index
+                # lives. It is on the filesystem now, which means a month costs
+                # a month to read instead of costing the whole ledger, and a
+                # cross-month comparison costs one read per month.
                 stem="ledger", title="Aylık Defter",
                 takes_pattern=r"^\d{4}-\d{2}$",
-                summary="Every month — incomes, expenses, debts",
+                shard=True,
+                summary="Every month — incomes, expenses, debts (one file per month)",
                 index_pattern=r"^\d{4}-\d{2}$",
-                index_level=2,
+                key_shape="YYYY-MM",
+                # In a shard the KEY is the H1, so everything the month carries
+                # sits one level above where it sat inside the gathered file:
+                # `### Incomes` under `## 2026-09` becomes `## Incomes` under
+                # `# 2026-09`.
+                index_level=1,
                 entry_style="table",
                 entry_sections=("Incomes", "Expenses", "Debts"),
                 columns={
@@ -427,6 +464,7 @@ SECTION_COLLECTIONS: tuple[CollectionSpec, ...] = (
                     "Debts": ("Debt", "Amount (TL)", "Status", "Notes"),
                 },
                 max_bytes=48_000,
+                shard_max_bytes=12_000,
             ),
             MemberSpec(stem="monthly-structure", title="Monthly Structure",
                        takes=("Monthly structure",),
@@ -577,6 +615,15 @@ def collection_for(path: str) -> CollectionSpec | None:
         if not path.startswith(prefix) or not path.endswith(".md"):
             continue
         rest = path[len(prefix):]
+        if rest.count("/") == coll.depth and coll.depth == 1:
+            # A SHARDED member sits one level deeper than its siblings, because
+            # it is a folder rather than a file: `finance/ledger/2026-09.md`
+            # beside `finance/notes.md`.
+            stem = rest.split("/", 1)[0]
+            m = coll.member(stem)
+            if m is not None and m.shard:
+                return coll
+            continue
         if rest.count("/") != coll.depth - 1:
             continue
         if coll.closed and not coll.extensible:
@@ -587,6 +634,53 @@ def collection_for(path: str) -> CollectionSpec | None:
                 return None
         return coll
     return None
+
+
+def shard_member(path: str) -> tuple[CollectionSpec, MemberSpec] | None:
+    """The collection and member for ONE shard file — `finance/ledger/2026-09.md`.
+
+    Does not check the key against the member's `index_pattern`: a badly named
+    shard still has to resolve to a spec, or the verifier could not say what is
+    wrong with it.
+    """
+    for coll in COLLECTIONS:
+        prefix = coll.root + "/"
+        if coll.depth != 1 or not path.startswith(prefix) or not path.endswith(".md"):
+            continue
+        rest = path[len(prefix):]
+        if rest.count("/") != 1:
+            continue
+        member = coll.member(rest.split("/", 1)[0])
+        if member is not None and member.shard:
+            return coll, member
+    return None
+
+
+def shard_root(path: str) -> tuple[CollectionSpec, MemberSpec] | None:
+    """The collection and member for a sharded member's DIRECTORY.
+
+    Accepts it with or without `.md`, deliberately: `finance/ledger.md` is what
+    the member was before it became a folder, and every agent that learned the
+    store before the shard names it that way. Resolving both is what turns that
+    into a redirect instead of a refusal.
+    """
+    p = path.rstrip("/").removesuffix(".md")
+    for coll in COLLECTIONS:
+        prefix = coll.root + "/"
+        if coll.depth != 1 or not p.startswith(prefix):
+            continue
+        stem = p[len(prefix):]
+        if "/" in stem:
+            continue
+        member = coll.member(stem)
+        if member is not None and member.shard:
+            return coll, member
+    return None
+
+
+def shard_path(coll: CollectionSpec, member: MemberSpec, key: str) -> str:
+    """Where one key's file lives. The one function that decides this."""
+    return f"{coll.root}/{member.stem}/{key}.md"
 
 
 def member_for(path: str) -> tuple[CollectionSpec, MemberSpec] | None:
@@ -625,6 +719,15 @@ def member_path(coll: CollectionSpec, title: str, group: str | None = None) -> s
         want = slugify(title)
         for m in coll.members:
             if want in (m.stem, slugify(m.title)):
+                if m.shard:
+                    # A sharded member has no single file to name — asking for
+                    # one is a caller that does not know it is a folder, and
+                    # handing back `finance/ledger.md` would be handing back a
+                    # path that no longer exists.
+                    raise ValueError(
+                        f"{m.stem!r} is sharded by index key — it is a directory. "
+                        f"Route by the key (`route_ledger`), not by the name."
+                    )
                 return f"{coll.root}/{m.stem}.md"
         raise ValueError(
             f"{title!r} is not a topic of {coll.root} "
@@ -655,6 +758,32 @@ def _member_spec(coll: CollectionSpec, path: str) -> DocumentSpec:
     the "all entities sit at one heading level" check does not apply and
     `check_member_title` checks the H1 against the filename instead.
     """
+    shard = shard_member(path)
+    if shard is not None:
+        # One key of a sharded member. It carries the member's grammar — same
+        # tables, same columns, same owner — with the key as its H1 and its own
+        # cap, because the member's cap describes the whole index and this is
+        # one month of it.
+        _, member = shard
+        key = path.rsplit("/", 1)[-1][:-3]
+        return DocumentSpec(
+            path=path,
+            kind=coll.kind,
+            summary=f"{member.title} — {key}",
+            owner_agent=coll.owner_agent,
+            injected=False,
+            sections=member.sections,
+            required=member.required,
+            entity_level=None,
+            index_pattern=member.index_pattern,
+            index_level=member.index_level,
+            entry_style=member.entry_style,
+            entry_sections=member.entry_sections,
+            columns=member.columns,
+            max_bytes=member.shard_max_bytes or member.max_bytes or coll.max_bytes,
+            notes=member.notes or coll.notes,
+        )
+
     member = coll.member(path.rsplit("/", 1)[-1][:-3]) if coll.closed else None
     if member is not None:
         # A declared topic carries its own grammar — the log is a dated index,
@@ -942,7 +1071,7 @@ def normalize(name: str) -> str:
         return ""
     if not p.startswith("/memories/"):
         p = "/memories/" + p.lstrip("/")
-    if not p.endswith(".md") and not is_collection_root(p):
+    if not p.endswith(".md") and not is_collection_root(p) and not shard_root(p):
         p += ".md"
     return p
 
@@ -962,7 +1091,24 @@ def route_ledger(path: str, key: str) -> tuple[str, str]:
     naming the members, because filing August's rent under `gym` would be worse
     than not filing it.
     """
+    import re as _re
+
     p = normalize(path)
+
+    # A sharded member is a folder of keys, so the KEY is the file. This catches
+    # every way the caller can name it: the folder, one month directly, or
+    # `finance/ledger.md` — the file it was before the shard, which is what an
+    # agent that learned the store earlier will say.
+    shard = shard_member(p) or shard_root(p)
+    if shard is not None:
+        coll, member = shard
+        if member.index_pattern and not _re.match(member.index_pattern, key):
+            return "", (
+                f"`{key}` is not an index key of {coll.root}/{member.stem} — a key "
+                f"there must match {member.index_pattern}. Nothing was written."
+            )
+        return shard_path(coll, member, key), ""
+
     coll = collection_by_root(p.removesuffix(".md")) or collection_by_root(p)
     if coll is None:
         spec = SPECS.get(p)
@@ -981,6 +1127,8 @@ def route_ledger(path: str, key: str) -> tuple[str, str]:
             + "Name the member file directly if this is not a dated entry — "
               f"{', '.join(m.stem for m in coll.members)}."
         )
+    if member.shard:
+        return shard_path(coll, member, key), ""
     return f"{coll.root}/{member.stem}.md", ""
 
 

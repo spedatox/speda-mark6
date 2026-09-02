@@ -136,13 +136,21 @@ def is_system_path(path: str) -> bool:
 def max_bytes_for(path: str) -> int:
     """The cap for one path. Injected files are billed on every request by every
     agent, so theirs is tightest; a collection member is one entity and has no
-    business being large, which is the point of splitting the registry at all."""
+    business being large, which is the point of splitting the registry at all.
+
+    The number comes from the path's own spec, not from its collection's
+    default. Reading the default was wrong on every member that declares its
+    own: `wellness/sessions.md` is allowed 48K by the spec the verifier and the
+    splitter both use, and this function was capping it — and the whole finance
+    ledger — at the collection's 8K, so the write that crossed 8K would have
+    been refused with a number nothing else in the system agreed with.
+    """
     if path in _INJECTED_PATHS:
         return INJECTED_FILE_MAX_BYTES
-    from app.services.memory_spec import collection_for
+    from app.services.memory_spec import spec_for
 
-    coll = collection_for(path)
-    return coll.max_bytes if coll else ONDEMAND_FILE_MAX_BYTES
+    spec = spec_for(path)
+    return spec.max_bytes if spec else ONDEMAND_FILE_MAX_BYTES
 
 
 # ── Per-file structural checks ────────────────────────────────────────────────
@@ -420,6 +428,28 @@ def check_write(
             f"of the taxonomy, so a new {superseded.entity_noun} there is expected, "
             f"not a new file type. Reading `{path}` still works while the "
             f"migration finishes."
+        )
+
+    # ── A sharded member is written by key, not as one file ──────────────────
+    #
+    # Same reasoning as the monolith rule above, one storey down: the code
+    # reaches prod before the shard has been run, so `finance/ledger.md` and
+    # `finance/ledger/2026-09.md` would both be writable for as long as the
+    # migration takes, and both would look authoritative. Freezing the flat file
+    # on deploy means new rows only ever have one home. Reads keep working.
+    from app.services.memory_spec import shard_member, shard_root
+
+    flat = shard_root(path) if shard_member(path) is None else None
+    if flat is not None and author not in ("owner", "orion"):
+        coll, member = flat
+        raise MemorySchemaViolation(
+            f"Write rejected — `{coll.root}/{member.stem}` is a DIRECTORY now, one "
+            f"file per index key ({member.index_pattern}), and `{path}` is the "
+            f"single file it used to be. Nothing was saved.\n\n"
+            f"Use `ledger_append` with the domain and the key — it works out "
+            f"`{coll.root}/{member.stem}/<key>.md` for you and creates it if that "
+            f"key is new. Reading the old path still works while the migration "
+            f"finishes."
         )
 
     # ── The verifier (app/services/memory_verify.py) ─────────────────────────

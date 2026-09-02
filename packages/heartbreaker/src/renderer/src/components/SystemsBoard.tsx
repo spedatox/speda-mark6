@@ -367,9 +367,13 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
    *  folder, alphabetical — there is no meaningful order among topics and a
    *  stable one is easier to scan than a clever one. */
   const memTree = useMemo(() => {
+    // `finance/ledger` is a folder INSIDE a domain — the monthly ledger, one
+    // file per month. Listing it here keeps it next to the domain that owns it;
+    // an unlisted folder sorts into the anonymous 500 block, which would put
+    // the owner's ledger below `ops` and away from the rest of his money.
     const ORDER = ['', 'dossier', 'social/professional', 'social/personal',
                    'projects', 'life', 'wellness', 'academic', 'finance',
-                   'cybersec', 'ops']
+                   'finance/ledger', 'cybersec', 'ops']
     const groups = new Map<string, MemoryFileInfo[]>()
     for (const f of memFolders) {
       groups.set(f.path.replace(/^\/memories\//, ''), [])

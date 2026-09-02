@@ -27,7 +27,13 @@ from sqlalchemy import select
 from app.core.context import AgentContext
 from app.models.memory_file import MemoryFile
 from app.services.memory_schema import MemorySchemaViolation, check_write
-from app.services.memory_spec import COLLECTIONS, SPECS, route_ledger, spec_for
+from app.services.memory_spec import (
+    COLLECTIONS,
+    SPECS,
+    route_ledger,
+    shard_member,
+    spec_for,
+)
 from app.services.memory_store import record_revision
 from app.services.memory_write import (
     WriteRejected,
@@ -91,6 +97,10 @@ def _ledger_paths() -> str:
     exactly what the tool will accept.
     """
     out = [
+        # A sharded member is a folder of keys, so what the agent needs to see is
+        # the SHAPE of the path, not a file that no longer exists.
+        f"{c.root.split('/')[-1]}/{m.stem}/<{m.key_shape or m.index_pattern}>.md"
+        if m.shard else
         f"{c.root.split('/')[-1]}/{m.stem}.md ({m.index_pattern})"
         for c in COLLECTIONS if c.closed
         for m in c.members if m.index_pattern
@@ -123,10 +133,12 @@ class LedgerAppendSkill(Skill):
             "path": {
                 "type": "string",
                 "description": (
-                    "The ledger file, e.g. /memories/wellness/sessions.md or "
-                    "/memories/finance/ledger.md. Naming the domain alone "
-                    "(`wellness`) also works for a dated entry — the key says "
-                    "which file it belongs in."
+                    "The ledger, e.g. /memories/wellness/sessions.md or "
+                    "/memories/finance/ledger. Naming the domain alone "
+                    "(`wellness`, `finance`) also works — the key says which "
+                    "file it belongs in, and for the finance ledger it says "
+                    "which MONTH file: one file per month, created if the month "
+                    "is new. Never build that path yourself."
                 ),
             },
             "key": {
@@ -176,17 +188,22 @@ class LedgerAppendSkill(Skill):
         if spec is None:
             return f"`{path}` is not a known memory document."
         file = await _load(context, path)
-        if file is None:
+        # A sharded ledger creates the key's file on its first entry — a month
+        # that has had no transactions yet has no file, and refusing the first
+        # one because the file is missing would make the folder impossible to
+        # start. Everywhere else a missing ledger is still an error.
+        if file is None and shard_member(path) is None:
             return f"`{path}` does not exist."
+        before = file.content if file else ""
         try:
             after = ledger_append(
-                file.content, path=path, key=key,
+                before, path=path, key=key,
                 section=(args.get("section") or None),
                 row=args.get("row"), lines_in=args.get("lines"),
             )
         except WriteRejected as e:
             return str(e)
-        return await _commit(context, path, file.content, after, "ledger_append")
+        return await _commit(context, path, before, after, "ledger_append")
 
 
 class RegistryUpsertSkill(Skill):
