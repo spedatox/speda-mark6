@@ -79,3 +79,6 @@ packages/igor/scripts/tts_samples/
 
 # Forge scratch — run_command output spills, never source
 .forge_spill/
+
+# Firebase service-account JSON (FCM sending key). Never commit.
+secrets/

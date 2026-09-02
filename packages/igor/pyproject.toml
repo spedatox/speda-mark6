@@ -30,7 +30,13 @@ dependencies = [
     # need is a service-account OAuth2 token, and httpx (already here) posts the
     # message. firebase-admin would pull the whole Firebase surface and a
     # synchronous messaging client into an async process.
-    "google-auth>=2.35.0",
+    # The [requests] extra is load-bearing, not cosmetic: google-auth's
+    # Credentials.refresh() needs a transport, and google.auth.transport.requests
+    # imports `requests`. Without it every FCM send dies at token refresh with
+    # "The requests library is not installed" — which reads like a credentials
+    # problem and is not. The urllib3 transport is not a free alternative; it
+    # additionally wants `packaging`.
+    "google-auth[requests]>=2.35.0",
 ]
 
 [project.optional-dependencies]
