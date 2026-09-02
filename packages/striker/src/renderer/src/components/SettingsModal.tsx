@@ -9,6 +9,7 @@ import { importChats, fetchSessions, indexHistory, getConnections, setConnection
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import ConfigTab from './ConfigTab'
+import ScreenLockSettings from './ScreenLockSettings'
 
 interface Props {
   config: AppConfig
@@ -763,6 +764,8 @@ export default function SettingsModal({ config, onClose }: Props) {
                     Drag the sidebar edge to resize.
                   </p>
                 </div>
+
+                <ScreenLockSettings />
               </div>
             )}
 

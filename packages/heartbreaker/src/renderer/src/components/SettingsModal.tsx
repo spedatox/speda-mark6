@@ -17,6 +17,7 @@ import ConfigTab from './ConfigTab'
 import McpServersPanel from './McpServersPanel'
 import PortalsPanel from './PortalsPanel'
 import GlassSelect from './GlassSelect'
+import ScreenLockSettings from './ScreenLockSettings'
 import { SkeletonList, SkeletonText } from './Skeleton'
 import { useT, LOCALES } from '../lib/i18n'
 import {
@@ -1032,6 +1033,8 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                     onChange={v => update({ sidebarOpen: v })}
                   />
                 </SettingsRow>
+
+                <ScreenLockSettings />
               </div>
             )}
 

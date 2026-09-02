@@ -48,6 +48,12 @@ From the repo root: `npm run striker:dev`, `:build`, `:typecheck`, `:web:dev`, `
 
 ---
 
+## Screen lock
+
+Same as Heartbreaker, from the same source: `LockScreen` + `LockScreensaver` driven by `lib/useScreenLock.ts`, configured under Settings → Interface. `Ctrl+L` locks, the lock can be raised on launch, and an idle stretch raises it by itself; the passcode lives as a SHA-256 in `localStorage`. Speda GO is deliberately excluded — this is a desktop-client feature.
+
+---
+
 ## Known dead code
 
 Striker was diverged by hand rather than generated, and it shows: several components and modules from Heartbreaker are still present in the source tree but unreachable from any UI path.

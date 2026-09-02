@@ -4,13 +4,15 @@
 import { useEffect, useReducer, useState } from 'react'
 import { ChatContext, chatReducer, initialState } from './store/chat'
 import { saveMessages } from './store/messageCache'
-import { SettingsContext, useSettingsProvider } from './store/settings'
+import { SettingsContext, useSettingsProvider, useSettings } from './store/settings'
 import { ProfileContext } from './components/Sidebar'
 import PROFILE from './profile'
 import Layout from './components/Layout'
 import NeuralBackground from './components/NeuralBackground'
+import LockScreen from './components/LockScreen'
 import type { AppConfig } from './lib/types'
 import { fetchSessions } from './lib/api'
+import { useScreenLock } from './lib/useScreenLock'
 import 'katex/dist/katex.min.css'
 import './theme/striker.css'
 
@@ -23,6 +25,12 @@ import './theme/striker.css'
 function AppInner() {
   const [state, dispatch] = useReducer(chatReducer, initialState)
   const [config, setConfig] = useState<AppConfig | null>(null)
+  const { settings } = useSettings()
+
+  // Screen lock — Ctrl+L at any moment, on launch when the owner asked for it,
+  // and after an idle stretch. Rendered last and over everything: a lock a
+  // modal can sit on top of is not a lock.
+  const screenLock = useScreenLock()
 
   // Mirror each session's transcript to local storage as turns SETTLE (not on
   // every streamed chunk). A finished OR errored turn flips isStreaming off, so
@@ -58,6 +66,19 @@ function AppInner() {
     load()
   }, [])
 
+  // Built once and rendered in BOTH returns: the app spends its first moments
+  // on the loading screen, and a lock that only appears after the connection
+  // resolves is a lock with a window in it.
+  const lockOverlay = screenLock.locked ? (
+    <LockScreen
+      agentName={PROFILE.name}
+      modelNumber={PROFILE.modelNumber}
+      hasPasscode={screenLock.hasPasscode}
+      screensaverSeconds={settings.lockScreensaverSeconds}
+      onUnlock={screenLock.unlock}
+    />
+  ) : null
+
   if (!config) {
     return (
       <div style={{
@@ -65,6 +86,7 @@ function AppInner() {
         background: 'var(--bg-primary)', color: 'var(--text-muted)', fontSize: '0.9rem',
       }}>
         Loading…
+        {lockOverlay}
       </div>
     )
   }
@@ -74,6 +96,7 @@ function AppInner() {
       <ProfileContext.Provider value={PROFILE}>
         <NeuralBackground />
         <Layout profile={PROFILE} config={config} />
+        {lockOverlay}
       </ProfileContext.Provider>
     </ChatContext.Provider>
   )

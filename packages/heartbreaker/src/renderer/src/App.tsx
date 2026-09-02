@@ -18,6 +18,7 @@ import Layout from './components/Layout'
 import NeuralBackground from './components/NeuralBackground'
 import PartyActivation from './components/PartyActivation'
 import LockdownActivation from './components/LockdownActivation'
+import LockScreen from './components/LockScreen'
 import PendingAsksTray from './components/PendingAsksTray'
 import ConnectionSetupModal from './components/ConnectionSetupModal'
 import { Skeleton } from './components/Skeleton'
@@ -25,6 +26,7 @@ import type { AppConfig } from './lib/types'
 import { fetchSessions, getHouseParty, setHouseParty, getLockdown } from './lib/api'
 import { resolveConnection } from './lib/connection'
 import { useT } from './lib/i18n'
+import { useScreenLock } from './lib/useScreenLock'
 import 'katex/dist/katex.min.css'
 import './theme/heartbreaker.css'
 
@@ -80,6 +82,11 @@ function AppInner() {
   // ATOMİX and Sentinel SENTİNEL. Every element carrying brand text declares
   // lang="en" of its own; see ChatMain, Sidebar and AgentSwitcherOverlay.
   const { settings: rootSettings } = useSettings()
+
+  // Screen lock — Ctrl+L at any moment, on launch when the owner asked for it,
+  // and after an idle stretch. It renders LAST and over everything: a lock that
+  // a modal or a cinematic can sit on top of is not a lock.
+  const screenLock = useScreenLock()
   useEffect(() => {
     document.documentElement.lang = rootSettings.locale
   }, [rootSettings.locale])
@@ -341,6 +348,19 @@ function AppInner() {
     }
   }, [config, profile.accent, exitWarRoom])
 
+  // Built once and rendered in BOTH returns: the deck spends its first moments
+  // on the boot skeleton, and a lock that only appears after the connection
+  // resolves is a lock with a window in it.
+  const lockOverlay = screenLock.locked ? (
+    <LockScreen
+      agentName={profile.name}
+      modelNumber={profile.modelNumber}
+      hasPasscode={screenLock.hasPasscode}
+      screensaverSeconds={rootSettings.lockScreensaverSeconds}
+      onUnlock={screenLock.unlock}
+    />
+  ) : null
+
   if (!config) {
     return (
       <div style={{
@@ -351,6 +371,7 @@ function AppInner() {
           <Skeleton height={16} width="70%" />
           <Skeleton height={10} width="45%" />
         </div>
+        {lockOverlay}
       </div>
     )
   }
@@ -391,6 +412,7 @@ function AppInner() {
         {lockCine && (
           <LockdownActivation mode={lockCine} onIgnite={lockIgnite} onDone={() => setLockCine(null)} />
         )}
+        {lockOverlay}
       </ProfileContext.Provider>
     </ChatContext.Provider>
   )

@@ -66,10 +66,19 @@ From the repo root, the same commands are exposed workspace-scoped: `npm run hea
 | Rich content | `MapBlock`, `ChartBlock`, `CalendarBlock` — inline widgets rendered from fenced code blocks in a message |
 | Roster & coordination | `AgentSwitcherOverlay`, `CommsTray`, `HousePartyModal`, `HousePartyWarning`, `PartyActivation`, `PartyRosterStrip`, `PartyStream` |
 | Safety protocols | `LockdownModal`, `LockdownActivation`, `SkyfallCountdown`, `SkyfallProjects` |
+| Screen lock | `LockScreen`, `LockScreensaver`, `ScreenLockSettings` (Interface tab), `lib/useScreenLock`, `lib/lock` |
 | Status & telemetry | `HudFrame`, `SystemsBoard`, `TelemetryColumn` |
 | Settings | `SettingsModal` (tabbed shell), `AutomationBuilder`, `McpServersPanel`, `PortalsPanel`, `PendingAsksTray`, `RosterModelWindow` |
 | Delegation | `SubagentPanel`, `SubagentDetailView` |
 | Ecosystem | `HisarBrowser` — the Hisar vault directory picker used for the Forge workspace |
+
+---
+
+## Screen lock
+
+`Ctrl+L` covers the deck with `LockScreen` at any moment; it also comes up on launch when *Interface → Screen lock → Ask when the app opens* is on, and after `lockIdleMinutes` of no input. The passcode is stored only as a SHA-256 (`lib/lock.ts`) in the same `localStorage` blob as the rest of the settings — a privacy lock against whoever walks past the desk, not a vault against someone holding the machine. With no passcode set the screen still raises, and any key lifts it.
+
+After `lockScreensaverSeconds` idle on the lock screen, `LockScreensaver` takes over: a canvas gyroscope, its rings depth-shaded by alpha, drifting on two slow sines so nothing static burns into a panel. Any input brings the keypad straight back. All four values are settings, and the state machine (what raises the lock, what lowers it) lives in `lib/useScreenLock.ts` so both desktop clients mount it identically.
 
 ---
 

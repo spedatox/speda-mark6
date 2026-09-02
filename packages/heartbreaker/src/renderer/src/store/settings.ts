@@ -32,6 +32,17 @@ export interface AppSettings {
    *  with an OpenAI voice. Empty means "whatever the agent's profile or the
    *  backend default says", which is the behaviour that predates this setting. */
   voiceModel: string
+  /** Raise the screen lock when the app opens. Off by default — the deck is a
+   *  personal desktop app, and a passcode nobody asked for is a daily tax. */
+  lockOnLaunch: boolean
+  /** SHA-256 of the lock passcode (see lib/lock.ts). Empty = none set, which
+   *  makes the lock a privacy veil rather than a barrier. */
+  lockPasscodeHash: string
+  /** Minutes of no input before the deck locks itself. 0 = never. */
+  lockIdleMinutes: number
+  /** Seconds idle ON the lock screen before the screensaver takes over.
+   *  0 = never — the keypad just stays up. */
+  lockScreensaverSeconds: number
   /** Where the docked orb sits and how big it is, as the owner put it.
    *
    *  `dx`/`dy` are an offset in px from the computed corner (negative moves it
@@ -58,6 +69,10 @@ const DEFAULT: AppSettings = {
   voiceLocale: 'en-US',
   voiceModel: '',
   voiceOrbDock: { dx: 0, dy: 0, scale: 1 },
+  lockOnLaunch: false,
+  lockPasscodeHash: '',
+  lockIdleMinutes: 0,
+  lockScreensaverSeconds: 45,
 }
 
 function load(): AppSettings {
