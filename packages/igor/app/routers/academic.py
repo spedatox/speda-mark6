@@ -89,6 +89,7 @@ async def put_schedule(
     for device in devices:
         ok, detail = await fcm.send_data_message(
             fid=device.fid, data={"type": "sync_request"}, priority="high",
+            token=device.token,
         )
         if ok:
             delivered += 1
@@ -171,7 +172,7 @@ async def ask_pending(
 
     delivered, failures = 0, []
     for device in devices:
-        ok, detail = await fcm.send_attendance_ask(device.fid, occurrence)
+        ok, detail = await fcm.send_attendance_ask(device.fid, occurrence, device.token)
         if ok:
             delivered += 1
         elif detail == "unregistered":
@@ -198,5 +199,7 @@ async def register_device(
     body: DeviceRegisterRequest, db: AsyncSession = Depends(get_db)
 ) -> dict:
     """Store the device's Firebase Installation ID so Igor can push to it."""
-    await academic_service.register_device(db, body.device, body.platform, body.fid)
+    await academic_service.register_device(
+        db, body.device, body.platform, body.fid, body.token
+    )
     return {"status": "ok"}

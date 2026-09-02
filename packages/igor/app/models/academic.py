@@ -139,6 +139,12 @@ class Device(Base):
     device_id: Mapped[str] = mapped_column(String(64))
     platform: Mapped[str] = mapped_column(String(16), default="wear")
     fid: Mapped[str] = mapped_column(String(255))
+    # The classic FCM registration token, carried alongside the fid because
+    # fid-targeting proved unreliable in practice: a freshly installed watch
+    # registered fine and then every send to its fid came back UNREGISTERED.
+    # Nullable, because a client that cannot obtain a token still deserves a
+    # device row — and an empty token here is itself the diagnosis.
+    token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_seen: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)

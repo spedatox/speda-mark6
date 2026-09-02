@@ -83,6 +83,9 @@ class DeviceRegisterRequest(BaseModel):
     platform: str = Field(default="wear", max_length=16)
     # Firebase Installation ID — see the note on models.academic.Device.
     fid: str = Field(max_length=255)
+    # Classic FCM registration token. Optional so an older client that does not
+    # send one still registers; Igor then falls back to fid-targeting.
+    token: str | None = Field(default=None, max_length=255)
 
 
 # ── Schedule upsert (owner → Igor) ──────────────────────────────────────────

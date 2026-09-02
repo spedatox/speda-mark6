@@ -108,6 +108,7 @@ async def send_data_message(
     data: dict[str, str],
     priority: str = "high",
     ttl_seconds: int = 3600,
+    token: str | None = None,
 ) -> tuple[bool, str]:
     """
     Deliver a data-only message to one installation.
@@ -118,6 +119,18 @@ async def send_data_message(
 
     A 404/`UNREGISTERED` means the app was uninstalled or its data cleared; the
     caller should deactivate that device rather than retrying forever.
+
+    ── Why two target fields are tried ─────────────────────────────────────
+    `fid` is a real FCM v1 target — probing the live endpoint confirms it, since
+    an genuinely unknown field is rejected with 400 and `fid` is not. But an
+    installation is only reachable by fid once it holds an FCM registration,
+    and a watch that registered correctly still came back UNREGISTERED on every
+    fid send. `token` is the decade-old path and does not depend on that.
+
+    So the token is tried first when present, and fid is the fallback. A device
+    is only reported `unregistered` when the identifier that was actually tried
+    is rejected — reporting it on a fid failure while a working token sat unused
+    would deactivate a perfectly live watch.
     """
     try:
         token = await _bearer_token()
@@ -128,9 +141,12 @@ async def send_data_message(
         logger.error("fcm_credentials_error", extra={"error": str(e)})
         return False, f"FCM credentials unusable: {e}"
 
+    # Token first; fid only when there is no token to try.
+    target_field, target_value = ("token", token) if token else ("fid", fid)
+
     payload = {
         "message": {
-            "fid": fid,
+            target_field: target_value,
             # Every value must be a string — FCM rejects non-string data values.
             "data": {k: str(v) for k, v in data.items()},
             "android": {
@@ -161,14 +177,16 @@ async def send_data_message(
     body = resp.text[:400]
     logger.warning(
         "fcm_send_failed",
-        extra={"status": resp.status_code, "body": body},
+        extra={"status": resp.status_code, "body": body, "target": target_field},
     )
     if resp.status_code == 404 or "UNREGISTERED" in body:
         return False, "unregistered"
     return False, f"FCM {resp.status_code}: {body}"
 
 
-async def send_attendance_ask(fid: str, occurrence: dict) -> tuple[bool, str]:
+async def send_attendance_ask(
+    fid: str, occurrence: dict, token: str | None = None
+) -> tuple[bool, str]:
     """
     Push one "derse girdin mi?" question.
 
@@ -191,4 +209,5 @@ async def send_attendance_ask(fid: str, occurrence: dict) -> tuple[bool, str]:
         # One hour: past that the question is stale and the watch's local
         # fallback will already have asked.
         ttl_seconds=3600,
+        token=token,
     )

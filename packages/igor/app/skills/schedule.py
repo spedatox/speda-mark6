@@ -160,6 +160,7 @@ class SaveScheduleSkill(Skill):
             for device in devices:
                 ok, detail = await fcm.send_data_message(
                     fid=device.fid, data={"type": "sync_request"}, priority="high",
+                    token=device.token,
                 )
                 if ok:
                     delivered += 1

@@ -84,6 +84,14 @@ def _apply_additive_migrations(sync_conn) -> None:
             text("CREATE INDEX IF NOT EXISTS ix_automations_agent_id ON automations (agent_id)")
         )
 
+    # The FCM registration token, added beside the pre-existing fid. See the
+    # note on models.academic.Device for why both are stored.
+    if "devices" in tables:
+        dcols = {c["name"] for c in insp.get_columns("devices")}
+        if "token" not in dcols:
+            sync_conn.execute(text("ALTER TABLE devices ADD COLUMN token VARCHAR(255)"))
+            logger.info("schema_migrated", extra={"change": "devices.token"})
+
     # Agent-scoped session listing + conversation-compaction columns.
     if "sessions" in tables:
         scols = {c["name"] for c in insp.get_columns("sessions")}

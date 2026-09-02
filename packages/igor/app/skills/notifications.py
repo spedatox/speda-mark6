@@ -68,6 +68,7 @@ class NotificationsSkill(Skill):
                     fid=device.fid,
                     data={"type": "notification", "title": title, "body": body},
                     priority=priority,
+                    token=device.token,
                 )
                 if ok:
                     delivered += 1

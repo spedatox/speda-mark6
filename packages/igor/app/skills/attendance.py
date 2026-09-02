@@ -155,7 +155,9 @@ class AskAttendanceSkill(Skill):
             delivered = 0
             failures: list[str] = []
             for device in devices:
-                ok, detail = await fcm.send_attendance_ask(device.fid, occurrence)
+                ok, detail = await fcm.send_attendance_ask(
+                    device.fid, occurrence, device.token
+                )
                 if ok:
                     delivered += 1
                 elif detail == "unregistered":

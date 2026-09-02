@@ -169,6 +169,7 @@ async def demand_sync(db: AsyncSession, reason: str = "") -> dict:
                 # Pointless after the waiting turn has given up, and a wake that
                 # lands hours later would sync against a demand already served.
                 ttl_seconds=300,
+                token=device.token,
             )
         except Exception as exc:  # noqa: BLE001 — push must not break the turn
             logger.warning("health_wake_failed", extra={"error": str(exc)})

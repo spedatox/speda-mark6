@@ -292,7 +292,7 @@ async def summarise(db: AsyncSession, now: datetime | None = None) -> list[dict]
 # ── Devices ─────────────────────────────────────────────────────────────────
 
 async def register_device(
-    db: AsyncSession, device_id: str, platform: str, fid: str
+    db: AsyncSession, device_id: str, platform: str, fid: str, token: str | None = None
 ) -> Device:
     result = await db.execute(select(Device).where(Device.device_id == device_id))
     device = result.scalars().first()
@@ -301,6 +301,11 @@ async def register_device(
         db.add(device)
     device.platform = platform
     device.fid = fid
+    # Never overwrite a good token with None: an older client build, or one that
+    # momentarily could not reach FCM, would otherwise wipe the only identifier
+    # that actually delivers.
+    if token:
+        device.token = token
     device.active = True
     device.last_seen = datetime.utcnow()
     device.updated_at = datetime.utcnow()
