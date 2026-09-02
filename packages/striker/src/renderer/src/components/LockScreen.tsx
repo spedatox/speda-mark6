@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import AgentMark from './AgentMark'
 import LockScreensaver from './LockScreensaver'
 import type { SaverAgent } from './LockScreensaver'
 import { useT } from '../lib/i18n'
@@ -112,6 +113,10 @@ export default function LockScreen({ agentName, modelNumber, agents, dwellMs, ha
 
   const two = (n: number) => String(n).padStart(2, '0')
 
+  /** Speda is the house mark. Striker's roster of one resolves to it too; the
+   *  fallback only matters if a fork ever ships without a Speda entry. */
+  const house = agents.find(a => a.agentId === 'speda') ?? agents[0]
+
   return (
     <div
       onMouseMove={stir}
@@ -156,7 +161,18 @@ export default function LockScreen({ agentName, modelNumber, agents, dwellMs, ha
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             gap: '1.6rem', animation: 'lsRise 0.4s ease 0.05s both',
           }}>
-            {/* Clock first: the thing actually wanted at a glance. */}
+            {/* The house mark — always Speda, whichever agent the deck was on
+                when it locked: this is the machine identifying itself, not the
+                agent you happened to be talking to. Same size it takes on the
+                screensaver, so the two states read as one screen. */}
+            <AgentMark
+              agentId={house.agentId}
+              size={240}
+              finish="glass"
+              color={house.accent}
+              style={{ width: 'clamp(120px, 14vw, 240px)', height: 'auto', display: 'block' }}
+            />
+
             <span style={{
               fontFamily: UI, fontWeight: 300, lineHeight: 1,
               fontSize: 'clamp(3.2rem, 11vw, 7rem)',
