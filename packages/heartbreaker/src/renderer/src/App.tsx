@@ -54,6 +54,13 @@ function LockdownStrip() {
   )
 }
 
+/** The roster the lock screensaver parades, in BRANDS order. The war room is
+ *  not in it — it is a mode, not an agent, and has no mark of its own. */
+const SAVER_ROSTER = Object.values(BRANDS).map(b => ({
+  agentId: b.agentId, name: b.name, modelNumber: b.modelNumber,
+  tagline: b.tagline, accent: b.accent,
+}))
+
 function buildProfile(agentId: string): AppProfile {
   // The war room is a real profile, not an overlay — switching to it is a
   // takeover exactly like any agent. It just never appears in BRANDS (so it
@@ -355,6 +362,8 @@ function AppInner() {
     <LockScreen
       agentName={profile.name}
       modelNumber={profile.modelNumber}
+      agents={SAVER_ROSTER}
+      dwellMs={rootSettings.lockSaverDwellMs}
       hasPasscode={screenLock.hasPasscode}
       screensaverSeconds={rootSettings.lockScreensaverSeconds}
       onUnlock={screenLock.unlock}

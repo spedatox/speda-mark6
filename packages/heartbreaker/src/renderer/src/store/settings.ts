@@ -43,6 +43,9 @@ export interface AppSettings {
   /** Seconds idle ON the lock screen before the screensaver takes over.
    *  0 = never — the keypad just stays up. */
   lockScreensaverSeconds: number
+  /** How long each agent holds on the screensaver before dissolving into the
+   *  next, in milliseconds. */
+  lockSaverDwellMs: number
   /** Where the docked orb sits and how big it is, as the owner put it.
    *
    *  `dx`/`dy` are an offset in px from the computed corner (negative moves it
@@ -73,6 +76,7 @@ const DEFAULT: AppSettings = {
   lockPasscodeHash: '',
   lockIdleMinutes: 0,
   lockScreensaverSeconds: 45,
+  lockSaverDwellMs: 2200,
 }
 
 function load(): AppSettings {

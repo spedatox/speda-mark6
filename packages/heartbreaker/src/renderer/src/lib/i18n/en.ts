@@ -200,6 +200,8 @@ const en = {
     screensaver: 'Screensaver',
     screensaverDesc: 'How long the lock screen waits before the gyroscope takes the screen.',
     never: 'Never',
+    saverPace: 'Screensaver pace',
+    saverPaceDesc: 'How long each agent holds before the next one takes the screen.',
     minutesUnit: 'min',
     secondsUnit: 's',
   },

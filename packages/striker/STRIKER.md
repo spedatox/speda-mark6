@@ -50,7 +50,7 @@ From the repo root: `npm run striker:dev`, `:build`, `:typecheck`, `:web:dev`, `
 
 ## Screen lock
 
-Same as Heartbreaker, from the same source: `LockScreen` + `LockScreensaver` driven by `lib/useScreenLock.ts`, configured under Settings → Interface. `Ctrl+L` locks, the lock can be raised on launch, and an idle stretch raises it by itself; the passcode lives as a SHA-256 in `localStorage`. Speda GO is deliberately excluded — this is a desktop-client feature.
+Same as Heartbreaker, from the same source: `LockScreen` + `LockScreensaver` driven by `lib/useScreenLock.ts`, configured under Settings → Interface. `Ctrl+L` locks, the lock can be raised on launch, and an idle stretch raises it by itself; the passcode lives as a SHA-256 in `localStorage`. The screensaver parades agent cards the same way Heartbreaker's does — Core just has one agent, so it is a roster of one. Speda GO is deliberately excluded — this is a desktop-client feature.
 
 ---
 

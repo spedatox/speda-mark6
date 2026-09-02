@@ -16,6 +16,13 @@ import { useScreenLock } from './lib/useScreenLock'
 import 'katex/dist/katex.min.css'
 import './theme/striker.css'
 
+/** Core has one agent, so the lock screensaver parades exactly one card —
+ *  same component, same beat, a roster of one. */
+const SAVER_ROSTER = [{
+  agentId: PROFILE.agentId, name: PROFILE.name, modelNumber: PROFILE.modelNumber,
+  tagline: PROFILE.tagline, accent: PROFILE.accent,
+}]
+
 /**
  * Speda Mark VI Core — the single-agent shell. Unlike Heartbreaker there is no
  * roster, no agent switcher, no war room / House Party takeover and no runtime
@@ -73,6 +80,8 @@ function AppInner() {
     <LockScreen
       agentName={PROFILE.name}
       modelNumber={PROFILE.modelNumber}
+      agents={SAVER_ROSTER}
+      dwellMs={settings.lockSaverDwellMs}
       hasPasscode={screenLock.hasPasscode}
       screensaverSeconds={settings.lockScreensaverSeconds}
       onUnlock={screenLock.unlock}

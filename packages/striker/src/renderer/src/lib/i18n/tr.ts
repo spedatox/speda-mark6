@@ -192,6 +192,8 @@ const tr: Dict = {
     screensaver: 'Ekran koruyucu',
     screensaverDesc: 'Kilit ekranı, jiroskop ekranı devralmadan önce ne kadar bekler.',
     never: 'Asla',
+    saverPace: 'Ekran koruyucu temposu',
+    saverPaceDesc: 'Her ajan, sırayı bir sonrakine bırakmadan önce ne kadar durur.',
     minutesUnit: 'dk',
     secondsUnit: 'sn',
   },

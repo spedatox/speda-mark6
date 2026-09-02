@@ -12,6 +12,8 @@ import { hashPasscode } from '../lib/lock'
 const IDLE_MINUTES = [0, 1, 5, 10, 15, 30, 60]
 /** Idle-on-the-lock-screen choices before the screensaver, in seconds. */
 const SAVER_SECONDS = [0, 15, 30, 45, 60, 120, 300]
+/** How long one agent holds on the screensaver, in milliseconds. */
+const DWELL_MS = [1200, 1800, 2200, 3000, 4500, 6000]
 
 /**
  * Screen lock, in the Interface tab: whether the deck asks on launch, the
@@ -131,6 +133,23 @@ export default function ScreenLockSettings() {
             value={String(settings.lockScreensaverSeconds)}
             options={SAVER_SECONDS.map(n => ({ value: String(n), label: label(n, 'sec') }))}
             onChange={v => update({ lockScreensaverSeconds: Number(v) })}
+            tint="var(--hb-cyan-bright)"
+          />
+        </div>
+      </SettingsRow>
+
+      <SettingsRow
+        title={t.settingsInterface.saverPace}
+        desc={t.settingsInterface.saverPaceDesc}
+      >
+        <div style={{ minWidth: 130 }}>
+          <GlassSelect
+            value={String(settings.lockSaverDwellMs)}
+            options={DWELL_MS.map(ms => ({
+              value: String(ms),
+              label: `${(ms / 1000).toFixed(1)} ${t.settingsInterface.secondsUnit}`,
+            }))}
+            onChange={v => update({ lockSaverDwellMs: Number(v) })}
             tint="var(--hb-cyan-bright)"
           />
         </div>

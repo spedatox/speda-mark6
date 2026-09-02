@@ -78,7 +78,11 @@ From the repo root, the same commands are exposed workspace-scoped: `npm run hea
 
 `Ctrl+L` covers the deck with `LockScreen` at any moment; it also comes up on launch when *Interface → Screen lock → Ask when the app opens* is on, and after `lockIdleMinutes` of no input. The passcode is stored only as a SHA-256 (`lib/lock.ts`) in the same `localStorage` blob as the rest of the settings — a privacy lock against whoever walks past the desk, not a vault against someone holding the machine. With no passcode set the screen still raises, and any key lifts it.
 
-After `lockScreensaverSeconds` idle on the lock screen, `LockScreensaver` takes over: a canvas gyroscope, its rings depth-shaded by alpha, drifting on two slow sines so nothing static burns into a panel. Any input brings the keypad straight back. All four values are settings, and the state machine (what raises the lock, what lowers it) lives in `lib/useScreenLock.ts` so both desktop clients mount it identically.
+After `lockScreensaverSeconds` idle on the lock screen, `LockScreensaver` takes over and parades the roster: per agent, the real wordmark (`AgentMark`) arrives, the name types itself out, the model number and tagline land, it holds for `lockSaverDwellMs`, and the card dissolves into the next — each beat lit in that agent's own brand accent. The card and clock drift on long out-of-phase sines so nothing bright sits still on a panel. Any input brings the keypad straight back.
+
+One trap worth knowing: the mark's entrance fills `backwards`, never `both`. An animation left holding a transform + filter keeps the SVG on a composited layer rasterised at the entrance scale, and the mark stays visibly soft for the rest of the beat.
+
+All five values are settings, and the state machine (what raises the lock, what lowers it) lives in `lib/useScreenLock.ts` so both desktop clients mount it identically.
 
 ---
 

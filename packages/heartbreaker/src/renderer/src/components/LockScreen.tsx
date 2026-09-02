@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import LockScreensaver from './LockScreensaver'
+import type { SaverAgent } from './LockScreensaver'
 import { useT } from '../lib/i18n'
 
 /**
@@ -40,9 +41,13 @@ const KEYFRAMES = `
 @keyframes lsFadeIn { from { opacity: 0; } to { opacity: 1; } }
 `
 
-export default function LockScreen({ agentName, modelNumber, hasPasscode, screensaverSeconds, onUnlock }: {
+export default function LockScreen({ agentName, modelNumber, agents, dwellMs, hasPasscode, screensaverSeconds, onUnlock }: {
   agentName: string
   modelNumber: string
+  /** The roster the screensaver parades. Striker passes its single agent. */
+  agents: SaverAgent[]
+  /** How long each agent holds before dissolving into the next. */
+  dwellMs: number
   /** False when no passcode was ever set — the screen is then a privacy veil
    *  that any keypress lifts, and it says so rather than pretending. */
   hasPasscode: boolean
@@ -126,8 +131,8 @@ export default function LockScreen({ agentName, modelNumber, hasPasscode, screen
       {saver && (
         <div style={{ position: 'absolute', inset: 0, animation: 'lsFadeIn 0.9s ease both' }}>
           <LockScreensaver
-            agentName={agentName}
-            modelNumber={modelNumber}
+            agents={agents}
+            dwellMs={dwellMs}
             lockedLabel={t.lockScreen.locked}
           />
         </div>
