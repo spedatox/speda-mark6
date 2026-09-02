@@ -360,8 +360,10 @@ function AppInner() {
   // resolves is a lock with a window in it.
   const lockOverlay = screenLock.locked ? (
     <LockScreen
-      agentName={profile.name}
-      modelNumber={profile.modelNumber}
+      agent={{
+        agentId: profile.agentId, name: profile.name, modelNumber: profile.modelNumber,
+        tagline: profile.tagline, accent: profile.accent,
+      }}
       agents={SAVER_ROSTER}
       dwellMs={rootSettings.lockSaverDwellMs}
       hasPasscode={screenLock.hasPasscode}

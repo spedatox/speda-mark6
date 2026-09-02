@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import AgentMark from './AgentMark'
-import LockScreensaver from './LockScreensaver'
+import LockScreensaver, { AgentCard, CARD_KEYFRAMES } from './LockScreensaver'
 import type { SaverAgent } from './LockScreensaver'
 import { useT } from '../lib/i18n'
 
@@ -13,6 +12,9 @@ import { useT } from '../lib/i18n'
  * Covers everything, takes every key, and is not closable: the only ways out
  * are the right passcode or quitting the app. Ctrl+L raises it, and (when the
  * owner asks for it) so does opening the app and going idle.
+ *
+ * The time is deliberately NOT here — the screensaver carries it, and a lock
+ * screen you are looking at is one you are about to answer, not consult.
  *
  * After `screensaverSeconds` of nothing, the keypad fades and the screensaver
  * takes the screen. Any input brings the keypad straight back — the screensaver
@@ -25,7 +27,6 @@ import { useT } from '../lib/i18n'
  */
 
 const MONO = 'var(--font-mono)'
-const UI = "'Rajdhani', sans-serif"
 
 const KEYFRAMES = `
 @keyframes lsIn     { from { opacity: 0; } to { opacity: 1; } }
@@ -42,9 +43,11 @@ const KEYFRAMES = `
 @keyframes lsFadeIn { from { opacity: 0; } to { opacity: 1; } }
 `
 
-export default function LockScreen({ agentName, modelNumber, agents, dwellMs, hasPasscode, screensaverSeconds, onUnlock }: {
-  agentName: string
-  modelNumber: string
+export default function LockScreen({ agent, agents, dwellMs, hasPasscode, screensaverSeconds, onUnlock }: {
+  /** Whoever the deck was on when it locked — the keypad states that agent.
+   *  Not the house brand: locking mid-conversation with Centurion and coming
+   *  back to a Speda screen loses your place. */
+  agent: SaverAgent
   /** The roster the screensaver parades. Striker passes its single agent. */
   agents: SaverAgent[]
   /** How long each agent holds before dissolving into the next. */
@@ -61,14 +64,8 @@ export default function LockScreen({ agentName, modelNumber, agents, dwellMs, ha
   const [entry, setEntry] = useState('')
   const [wrong, setWrong] = useState(false)
   const [saver, setSaver] = useState(false)
-  const [clock, setClock] = useState(() => new Date())
   const inputRef = useRef<HTMLInputElement | null>(null)
   const idleRef = useRef<number | undefined>(undefined)
-
-  useEffect(() => {
-    const id = setInterval(() => setClock(new Date()), 1000)
-    return () => clearInterval(id)
-  }, [])
 
   /** Restart the idle countdown; leave the screensaver if it had started. */
   const stir = useCallback(() => {
@@ -111,11 +108,7 @@ export default function LockScreen({ agentName, modelNumber, agents, dwellMs, ha
     window.setTimeout(() => setWrong(false), 520)
   }
 
-  const two = (n: number) => String(n).padStart(2, '0')
 
-  /** Speda is the house mark. Striker's roster of one resolves to it too; the
-   *  fallback only matters if a fork ever ships without a Speda entry. */
-  const house = agents.find(a => a.agentId === 'speda') ?? agents[0]
 
   return (
     <div
@@ -132,6 +125,13 @@ export default function LockScreen({ agentName, modelNumber, agents, dwellMs, ha
       }}
     >
       <style>{KEYFRAMES}</style>
+      <style>{CARD_KEYFRAMES}</style>
+
+      {/* Lit by the agent it is holding, the way the screensaver's beats are. */}
+      <div aria-hidden style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: `radial-gradient(ellipse 70% 55% at 50% 42%, ${agent.accent}1c, transparent 70%)`,
+      }} />
 
       {saver && (
         <div style={{ position: 'absolute', inset: 0, animation: 'lsFadeIn 0.9s ease both' }}>
@@ -161,32 +161,15 @@ export default function LockScreen({ agentName, modelNumber, agents, dwellMs, ha
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             gap: '1.6rem', animation: 'lsRise 0.4s ease 0.05s both',
           }}>
-            {/* The house mark — always Speda, whichever agent the deck was on
-                when it locked: this is the machine identifying itself, not the
-                agent you happened to be talking to. Same size it takes on the
-                screensaver, so the two states read as one screen. */}
-            <AgentMark
-              agentId={house.agentId}
-              size={240}
-              finish="glass"
-              color={house.accent}
-              style={{ width: 'clamp(120px, 14vw, 240px)', height: 'auto', display: 'block' }}
-            />
+            {/* The same card the screensaver parades, at rest — the deck says
+                which agent it is holding before it asks who you are. */}
+            <AgentCard agent={agent} animate={false} />
 
             <span style={{
-              fontFamily: UI, fontWeight: 300, lineHeight: 1,
-              fontSize: 'clamp(3.2rem, 11vw, 7rem)',
-              letterSpacing: '0.1em', paddingLeft: '0.1em',
-              color: 'var(--hb-text)',
-            }}>
-              {two(clock.getHours())}:{two(clock.getMinutes())}
-            </span>
-
-            <span lang="en" style={{
               fontFamily: MONO, fontSize: '0.62rem', letterSpacing: '0.34em',
               textTransform: 'uppercase', color: 'var(--hb-text-faint)',
             }}>
-              {agentName} {modelNumber} — {t.lockScreen.locked}
+              {t.lockScreen.locked}
             </span>
 
             {/* The passcode line. A hairline, dots, nothing else. */}

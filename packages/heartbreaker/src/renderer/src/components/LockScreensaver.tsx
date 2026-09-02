@@ -51,7 +51,7 @@ const LINE_MS = 520
  *  two agents, and a fast cut is what makes a parade feel like a slideshow. */
 const FADE_MS = 900
 
-const KEYFRAMES = `
+export const CARD_KEYFRAMES = `
 @keyframes ssMark {
   0%   { opacity: 0; transform: scale(1.28) rotate(-5deg); filter: blur(10px); }
   60%  { opacity: 1; filter: blur(0); }
@@ -67,6 +67,110 @@ const KEYFRAMES = `
 @keyframes ssOut    { to { opacity: 0; filter: blur(7px); transform: scale(0.99); } }
 `
 
+/**
+ * One agent stated in full: the mark, the name, the model number, the rule and
+ * the tagline, lit in that agent's accent.
+ *
+ * Shared by both lock states on purpose. The screensaver plays it with the
+ * staggered reveal; the keypad shows the SAME card already settled, for
+ * whichever agent the deck was on when it locked. Two screens drawing one
+ * card is what makes locked and idle read as one screen.
+ */
+export function AgentCard({ agent, animate = true }: {
+  agent: SaverAgent
+  /** False renders the card at rest — every element in its finished state. */
+  animate?: boolean
+}) {
+  const accent = agent.accent
+  const typeEnd = MARK_LEAD_MS + (agent.name.length - 1) * TYPE_MS + CHAR_MS
+  /** An animation string, or nothing at all when the card is at rest. */
+  const anim = (s: string) => (animate ? s : undefined)
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 'clamp(1.6rem, 3.4vw, 3.2rem)',
+    }}>
+      {/* The entrance rides a WRAPPER and fills `backwards`, never
+          `both`: an animation left holding a transform+filter on the SVG
+          keeps it on a composited layer rasterised at the entrance scale,
+          and the mark stays visibly soft for the rest of the beat. Ending
+          the animation clean is what makes it razor sharp. Its glow is
+          the mark's own (AgentMark's glass finish), not a CSS shadow. */}
+      <span style={{
+        display: 'flex', flexShrink: 0,
+        // Sized off the viewport rather than a fixed box — this plays on
+        // whatever panel the deck is open on, and 110px was a thumbnail.
+        width: 'clamp(120px, 14vw, 240px)',
+        animation: anim('ssMark 1.15s cubic-bezier(0.16,0.84,0.3,1) backwards'),
+      }}>
+        <AgentMark
+          agentId={agent.agentId}
+          size={240}
+          finish="glass"
+          color={accent}
+          style={{ width: '100%', height: 'auto', display: 'block' }}
+        />
+      </span>
+
+      <div style={{
+        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        gap: '0.7rem', minWidth: 0, minHeight: 'clamp(120px, 14vw, 240px)',
+      }}>
+        {/* lang="en" — the marks are English brand names, and Turkish's
+            dotless-i casing rules would render ATOMİX / SENTİNEL. */}
+        <span lang="en" style={{
+          display: 'flex', alignItems: 'baseline', gap: '0.7rem',
+          fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, lineHeight: 1,
+          fontSize: 'clamp(2.6rem, 7.6vw, 6.2rem)',
+          letterSpacing: '0.14em', textTransform: 'uppercase',
+          color: '#fff', textShadow: `0 0 34px ${accent}aa`,
+          whiteSpace: 'nowrap',
+        }}>
+          {/* Every letter is in the DOM from the first frame and arrives
+              on its own staggered CSS delay. The name is on the wrapper
+              for a screen reader; the letters themselves are hidden from
+              it so it reads a word, not a column of characters. */}
+          <span aria-label={agent.name}>
+            {agent.name.split('').map((ch, i) => (
+              <span
+                key={i}
+                aria-hidden
+                style={{
+                  display: 'inline-block',
+                  animation: anim(`ssChar ${CHAR_MS}ms cubic-bezier(0.2,0.8,0.2,1) ${MARK_LEAD_MS + i * TYPE_MS}ms backwards`),
+                }}
+              >
+                {ch}
+              </span>
+            ))}
+          </span>
+          <span style={{
+            fontSize: '0.34em', fontWeight: 600, letterSpacing: '0.3em',
+            color: accent,
+            animation: anim(`ssLine ${LINE_MS}ms ease ${typeEnd + MODEL_GAP_MS}ms backwards`),
+          }}>
+            {agent.modelNumber}
+          </span>
+        </span>
+
+        <div aria-hidden style={{
+          height: 1, width: '100%', transformOrigin: 'left',
+          background: `linear-gradient(90deg, ${accent}, ${accent}00)`,
+          animation: anim(`ssRule 0.85s cubic-bezier(0.4,0,0.2,1) ${typeEnd + RULE_GAP_MS}ms backwards`),
+        }} />
+
+        <span lang="en" style={{
+          fontFamily: 'var(--font-mono)', fontSize: 'clamp(0.68rem, 1.05vw, 0.95rem)',
+          letterSpacing: '0.3em', textTransform: 'uppercase',
+          color: 'var(--hb-text-dim)',
+          animation: anim(`ssLine ${LINE_MS}ms ease ${typeEnd + TAGLINE_GAP_MS}ms backwards`),
+        }}>
+          {agent.tagline}
+        </span>
+      </div>
+    </div>
+  )
+}
 export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
   /** The roster to parade. One entry is legal — Striker has exactly one. */
   agents: SaverAgent[]
@@ -112,7 +216,7 @@ export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
     }}>
-      <style>{KEYFRAMES}</style>
+      <style>{CARD_KEYFRAMES}</style>
 
       {/* The agent's colour, washed in behind everything it lights. */}
       <div
@@ -136,89 +240,9 @@ export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
         <div>
           <div
             key={beat}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 'clamp(1.6rem, 3.4vw, 3.2rem)',
-              animation: leaving ? `ssOut ${FADE_MS}ms ease-in-out both` : undefined,
-            }}
+            style={{ animation: leaving ? `ssOut ${FADE_MS}ms ease-in-out both` : undefined }}
           >
-            {/* The entrance rides a WRAPPER and fills `backwards`, never
-                `both`: an animation left holding a transform+filter on the SVG
-                keeps it on a composited layer rasterised at the entrance scale,
-                and the mark stays visibly soft for the rest of the beat. Ending
-                the animation clean is what makes it razor sharp. Its glow is
-                the mark's own (AgentMark's glass finish), not a CSS shadow. */}
-            <span style={{
-              display: 'flex', flexShrink: 0,
-              // Sized off the viewport rather than a fixed box — this plays on
-              // whatever panel the deck is open on, and 110px was a thumbnail.
-              width: 'clamp(120px, 14vw, 240px)',
-              animation: 'ssMark 1.15s cubic-bezier(0.16,0.84,0.3,1) backwards',
-            }}>
-              <AgentMark
-                agentId={agent.agentId}
-                size={240}
-                finish="glass"
-                color={accent}
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-            </span>
-
-            <div style={{
-              display: 'flex', flexDirection: 'column', justifyContent: 'center',
-              gap: '0.7rem', minWidth: 0, minHeight: 'clamp(120px, 14vw, 240px)',
-            }}>
-              {/* lang="en" — the marks are English brand names, and Turkish's
-                  dotless-i casing rules would render ATOMİX / SENTİNEL. */}
-              <span lang="en" style={{
-                display: 'flex', alignItems: 'baseline', gap: '0.7rem',
-                fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, lineHeight: 1,
-                fontSize: 'clamp(2.6rem, 7.6vw, 6.2rem)',
-                letterSpacing: '0.14em', textTransform: 'uppercase',
-                color: '#fff', textShadow: `0 0 34px ${accent}aa`,
-                whiteSpace: 'nowrap',
-              }}>
-                {/* Every letter is in the DOM from the first frame and arrives
-                    on its own staggered CSS delay. The name is on the wrapper
-                    for a screen reader; the letters themselves are hidden from
-                    it so it reads a word, not a column of characters. */}
-                <span aria-label={agent.name}>
-                  {agent.name.split('').map((ch, i) => (
-                    <span
-                      key={i}
-                      aria-hidden
-                      style={{
-                        display: 'inline-block',
-                        animation: `ssChar ${CHAR_MS}ms cubic-bezier(0.2,0.8,0.2,1) ${MARK_LEAD_MS + i * TYPE_MS}ms backwards`,
-                      }}
-                    >
-                      {ch}
-                    </span>
-                  ))}
-                </span>
-                <span style={{
-                  fontSize: '0.34em', fontWeight: 600, letterSpacing: '0.3em',
-                  color: accent,
-                  animation: `ssLine ${LINE_MS}ms ease ${typeEnd + MODEL_GAP_MS}ms backwards`,
-                }}>
-                  {agent.modelNumber}
-                </span>
-              </span>
-
-              <div aria-hidden style={{
-                height: 1, width: '100%', transformOrigin: 'left',
-                background: `linear-gradient(90deg, ${accent}, ${accent}00)`,
-                animation: `ssRule 0.85s cubic-bezier(0.4,0,0.2,1) ${typeEnd + RULE_GAP_MS}ms backwards`,
-              }} />
-
-              <span lang="en" style={{
-                fontFamily: 'var(--font-mono)', fontSize: 'clamp(0.68rem, 1.05vw, 0.95rem)',
-                letterSpacing: '0.3em', textTransform: 'uppercase',
-                color: 'var(--hb-text-dim)',
-                animation: `ssLine ${LINE_MS}ms ease ${typeEnd + TAGLINE_GAP_MS}ms backwards`,
-              }}>
-                {agent.tagline}
-              </span>
-            </div>
+            <AgentCard agent={agent} />
           </div>
         </div>
       </div>
