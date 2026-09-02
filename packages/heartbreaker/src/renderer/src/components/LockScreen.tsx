@@ -81,23 +81,6 @@ export default function LockScreen({ agent, agents, dwellMs, hasPasscode, screen
     return () => window.clearTimeout(idleRef.current)
   }, [stir])
 
-  // The lock owns the keyboard while it is up. Everything underneath — the
-  // composer, the switcher's arrow keys, Ctrl+L itself — must not see a thing.
-  useEffect(() => {
-    const swallow = (e: KeyboardEvent) => {
-      stir()
-      if (e.key === 'Escape' || (e.ctrlKey && e.key.toLowerCase() === 'l')) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
-      inputRef.current?.focus()
-    }
-    window.addEventListener('keydown', swallow, true)
-    return () => window.removeEventListener('keydown', swallow, true)
-  }, [stir])
-
-  useEffect(() => { if (!saver) inputRef.current?.focus() }, [saver])
-
   const submit = async () => {
     if (!hasPasscode) { await onUnlock(''); return }
     if (!entry) return
@@ -107,6 +90,40 @@ export default function LockScreen({ agent, agents, dwellMs, hasPasscode, screen
     setEntry('')
     window.setTimeout(() => setWrong(false), 520)
   }
+  // The window listener below is armed once, so it would otherwise close over
+  // the first render's `submit` and forever compare an empty passcode.
+  const submitRef = useRef(submit)
+  submitRef.current = submit
+
+  // The lock owns the keyboard while it is up. Everything underneath — the
+  // composer, the switcher's arrow keys, Ctrl+L itself — must not see a thing.
+  //
+  // Enter is answered HERE rather than on the input's own onKeyDown. The field
+  // is read-only when no passcode is set, and a screen whose whole instruction
+  // is "press Enter" cannot afford for Enter to depend on which element the
+  // focus happens to be sitting on.
+  useEffect(() => {
+    const swallow = (e: KeyboardEvent) => {
+      stir()
+      if (e.key === 'Escape' || (e.ctrlKey && e.key.toLowerCase() === 'l')) {
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        e.stopPropagation()
+        void submitRef.current()
+        return
+      }
+      inputRef.current?.focus()
+    }
+    window.addEventListener('keydown', swallow, true)
+    return () => window.removeEventListener('keydown', swallow, true)
+  }, [stir])
+
+  useEffect(() => { if (!saver) inputRef.current?.focus() }, [saver])
+
 
 
 
@@ -182,9 +199,8 @@ export default function LockScreen({ agent, agents, dwellMs, hasPasscode, screen
                 type="password"
                 autoFocus
                 value={entry}
-                disabled={!hasPasscode}
+                readOnly={!hasPasscode}
                 onChange={e => { setEntry(e.target.value); stir() }}
-                onKeyDown={e => { if (e.key === 'Enter') void submit() }}
                 placeholder={hasPasscode ? t.lockScreen.enterPasscode : t.lockScreen.pressEnter}
                 aria-label={t.lockScreen.enterPasscode}
                 style={{
