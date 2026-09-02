@@ -464,6 +464,13 @@ class HousePartySkill(Skill):
             # Telegram has no authorization window to open, so there the owner
             # does have to speak the phrase — say so instead of promising a
             # window that will never appear.
+            #
+            # Unreachable for Telegram as things stand: the desktop-surface check
+            # above refuses that client before this runs, and refusing is the
+            # stricter answer of the two. It is kept because it is the correct
+            # answer for any authorization-window-less surface the gate is ever
+            # widened to admit — a promise of a window that never appears is
+            # exactly the failure this whole skill's tests exist to catch.
             if context.trigger_payload.get("channel") == "telegram":
                 return (
                     "House Party Protocol not engaged: this channel has no "

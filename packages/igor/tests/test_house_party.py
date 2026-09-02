@@ -161,7 +161,35 @@ async def test_explicit_stand_down_still_works():
     assert "stood down" in result.lower()
 
 
-# ── The authorization gate (unchanged, but previously untested) ─────────────
+# ── The authorization gate ─────────────────────────────────────────────────
+#
+# Engaging is desktop-only, and that check runs BEFORE the passphrase — the war
+# room is built by the desktop client and nowhere else, so a phone request must
+# never even open the authorization window. Every test below that expects to
+# reach the passphrase logic therefore has to say which client it is speaking
+# from; one that does not is testing the surface gate instead, which is what
+# these three were accidentally doing.
+
+
+def _desktop(**overrides) -> AgentContext:
+    return _context(extra={"client_platform": "desktop"}, **overrides)
+
+
+@pytest.mark.asyncio
+async def test_engaging_from_a_client_that_is_not_the_desktop_is_refused():
+    """A surface with no war room to show refuses rather than running invisibly."""
+    from app.core.runtime_state import get_house_party, set_house_party
+
+    for platform in (None, "android", "telegram"):
+        set_house_party(False)
+        context = _context(extra={"client_platform": platform} if platform else {})
+        result = await HousePartySkill().execute({"engaged": True}, context)
+
+        assert get_house_party() is False
+        assert "REFUSED" in result
+        assert "desktop" in result.lower()
+        # The window must not open either — it is the desktop's window.
+        assert "house_party_auth" not in context.extra
 
 
 @pytest.mark.asyncio
@@ -170,7 +198,7 @@ async def test_engage_without_passphrase_opens_the_auth_window():
     from app.core.runtime_state import get_house_party, set_house_party
 
     set_house_party(False)
-    context = _context()
+    context = _desktop()
     result = await HousePartySkill().execute(
         {"engaged": True, "objective": "market crash"}, context
     )
@@ -185,7 +213,7 @@ async def test_engage_with_wrong_passphrase_is_refused():
     from app.core.runtime_state import get_house_party, set_house_party
 
     set_house_party(False)
-    context = _context()
+    context = _desktop()
     result = await HousePartySkill().execute(
         {"engaged": True, "passphrase": "not-the-phrase"}, context
     )
@@ -202,7 +230,7 @@ async def test_engage_with_correct_passphrase_engages():
 
     set_house_party(False)
     result = await HousePartySkill().execute(
-        {"engaged": True, "passphrase": settings.house_party_passphrase}, _context()
+        {"engaged": True, "passphrase": settings.house_party_passphrase}, _desktop()
     )
 
     assert get_house_party() is True
@@ -210,13 +238,19 @@ async def test_engage_with_correct_passphrase_engages():
 
 
 @pytest.mark.asyncio
-async def test_telegram_engage_asks_for_the_spoken_passphrase():
-    """Telegram has no authorization window, so it must not promise one."""
-    context = _context(trigger_payload={"channel": "telegram"})
+async def test_telegram_is_refused_and_never_promised_a_window():
+    """Telegram has no authorization window — and no war room either, so the
+    surface gate refuses it before the passphrase logic is reached. What matters
+    either way is that no window is promised and nothing engages."""
+    from app.core.runtime_state import get_house_party
+
+    context = _context(trigger_payload={"channel": "telegram"},
+                       extra={"client_platform": "telegram"})
     result = await HousePartySkill().execute({"engaged": True}, context)
 
+    assert get_house_party() is False
     assert "house_party_auth" not in context.extra
-    assert "passphrase" in result.lower()
+    assert "uthorization window" not in result
 
 
 @pytest.mark.asyncio
