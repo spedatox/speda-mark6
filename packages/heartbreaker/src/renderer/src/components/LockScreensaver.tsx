@@ -31,11 +31,22 @@ export interface SaverAgent {
   accent: string
 }
 
-/** Milliseconds per revealed character of the name. Slow enough to watch the
- *  letters land rather than see a name flicker into existence. */
-const TYPE_MS = 88
+/** Milliseconds between one letter of the name starting and the next. */
+const TYPE_MS = 62
+/** How long ONE letter takes to arrive. Deliberately several times TYPE_MS, so
+ *  letters overlap and the name flows on rather than ticking over — a reveal
+ *  where each letter is fully in before the next begins reads as a slideshow of
+ *  frames no matter how fine the interval. */
+const CHAR_MS = 430
 /** How long the mark leads the name by — it settles before the typing starts. */
 const MARK_LEAD_MS = 700
+/** After the last letter: the rule draws, then the model number, then the
+ *  tagline. Strictly in that order, and never two at once. */
+const RULE_GAP_MS = 60
+const MODEL_GAP_MS = 260
+const TAGLINE_GAP_MS = 500
+/** How long the trailing lines take to arrive. */
+const LINE_MS = 520
 /** The dissolve at the end of a beat. Long on purpose: this is the seam between
  *  two agents, and a fast cut is what makes a parade feel like a slideshow. */
 const FADE_MS = 900
@@ -47,10 +58,13 @@ const KEYFRAMES = `
   100% { opacity: 1; transform: scale(1) rotate(0deg); filter: blur(0); }
 }
 @keyframes ssRule   { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-@keyframes ssLine   { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ssChar   {
+  0%   { opacity: 0; transform: translateY(0.2em); filter: blur(7px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+@keyframes ssLine   { from { opacity: 0; transform: translateY(7px); filter: blur(4px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
 @keyframes ssWash   { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ssOut    { to { opacity: 0; filter: blur(7px); transform: scale(0.99); } }
-@keyframes ssCaret  { 0%,45% { opacity: 1; } 55%,100% { opacity: 0; } }
 @keyframes ssDriftX { 0%,100% { transform: translateX(-4.2vw); } 50% { transform: translateX(4.2vw); } }
 @keyframes ssDriftY { 0%,100% { transform: translateY(3.4vh); } 50% { transform: translateY(-3.4vh); } }
 @keyframes ssClockX { 0%,100% { transform: translateX(3.6vw); } 50% { transform: translateX(-3.6vw); } }
@@ -66,7 +80,6 @@ export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
   lockedLabel: string
 }) {
   const [beat, setBeat] = useState(0)
-  const [typed, setTyped] = useState(0)
   const [leaving, setLeaving] = useState(false)
   const [clock, setClock] = useState(() => new Date())
 
@@ -76,29 +89,26 @@ export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
   )
 
   const agent = agents[beat % agents.length]
-  const done = typed >= agent.name.length
+  /** When the last letter has finished arriving — everything after the name is
+   *  timed off this, so the order never depends on render timing. */
+  const typeEnd = MARK_LEAD_MS + (agent.name.length - 1) * TYPE_MS + CHAR_MS
 
   useEffect(() => {
     const id = setInterval(() => setClock(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
 
-  // One beat, scheduled end to end: type the name out, hold it, dissolve, next.
+  // One beat, and only two timers in it. The reveal itself is CSS with staggered
+  // delays — driving a letter-by-letter reveal from React state re-renders the
+  // whole card once per letter, and what that looks like on screen is a reveal
+  // running at the interval's frame rate instead of the display's.
   useEffect(() => {
-    setTyped(0)
     setLeaving(false)
-    const timers: number[] = []
-    const name = agent.name
-
-    for (let i = 1; i <= name.length; i++) {
-      timers.push(window.setTimeout(() => setTyped(i), MARK_LEAD_MS + i * TYPE_MS))
-    }
-    const settled = MARK_LEAD_MS + name.length * TYPE_MS
-    timers.push(window.setTimeout(() => setLeaving(true), settled + dwellMs))
-    timers.push(window.setTimeout(() => setBeat(b => b + 1), settled + dwellMs + FADE_MS))
-
-    return () => timers.forEach(clearTimeout)
-  }, [beat, agent.name, dwellMs])
+    const settled = typeEnd + TAGLINE_GAP_MS + LINE_MS
+    const a = window.setTimeout(() => setLeaving(true), settled + dwellMs)
+    const b = window.setTimeout(() => setBeat(n => n + 1), settled + dwellMs + FADE_MS)
+    return () => { clearTimeout(a); clearTimeout(b) }
+  }, [beat, typeEnd, dwellMs])
 
   const two = (n: number) => String(n).padStart(2, '0')
   const accent = agent.accent
@@ -164,39 +174,47 @@ export default function LockScreensaver({ agents, dwellMs, lockedLabel }: {
                 color: '#fff', textShadow: `0 0 34px ${accent}aa`,
                 whiteSpace: 'nowrap',
               }}>
-                {agent.name.slice(0, typed) || ' '}
-                {!done && (
-                  <span aria-hidden style={{
-                    display: 'inline-block', width: '0.42em', height: '0.78em',
-                    background: accent, animation: 'ssCaret 1s step-end infinite',
-                  }} />
-                )}
-                {done && (
-                  <span style={{
-                    fontSize: '0.34em', fontWeight: 600, letterSpacing: '0.3em',
-                    color: accent, animation: 'ssLine 0.7s ease both',
-                  }}>
-                    {agent.modelNumber}
-                  </span>
-                )}
+                {/* Every letter is in the DOM from the first frame and arrives
+                    on its own staggered CSS delay. The name is on the wrapper
+                    for a screen reader; the letters themselves are hidden from
+                    it so it reads a word, not a column of characters. */}
+                <span aria-label={agent.name}>
+                  {agent.name.split('').map((ch, i) => (
+                    <span
+                      key={i}
+                      aria-hidden
+                      style={{
+                        display: 'inline-block',
+                        animation: `ssChar ${CHAR_MS}ms cubic-bezier(0.2,0.8,0.2,1) ${MARK_LEAD_MS + i * TYPE_MS}ms backwards`,
+                      }}
+                    >
+                      {ch}
+                    </span>
+                  ))}
+                </span>
+                <span style={{
+                  fontSize: '0.34em', fontWeight: 600, letterSpacing: '0.3em',
+                  color: accent,
+                  animation: `ssLine ${LINE_MS}ms ease ${typeEnd + MODEL_GAP_MS}ms backwards`,
+                }}>
+                  {agent.modelNumber}
+                </span>
               </span>
 
               <div aria-hidden style={{
                 height: 1, width: '100%', transformOrigin: 'left',
                 background: `linear-gradient(90deg, ${accent}, ${accent}00)`,
-                animation: `ssRule 1.05s cubic-bezier(0.4,0,0.2,1) ${MARK_LEAD_MS}ms both`,
+                animation: `ssRule 0.85s cubic-bezier(0.4,0,0.2,1) ${typeEnd + RULE_GAP_MS}ms backwards`,
               }} />
 
-              {done && (
-                <span lang="en" style={{
-                  fontFamily: 'var(--font-mono)', fontSize: '0.68rem',
-                  letterSpacing: '0.3em', textTransform: 'uppercase',
-                  color: 'var(--hb-text-dim)',
-                  animation: 'ssLine 0.75s ease 0.12s both',
-                }}>
-                  {agent.tagline}
-                </span>
-              )}
+              <span lang="en" style={{
+                fontFamily: 'var(--font-mono)', fontSize: '0.68rem',
+                letterSpacing: '0.3em', textTransform: 'uppercase',
+                color: 'var(--hb-text-dim)',
+                animation: `ssLine ${LINE_MS}ms ease ${typeEnd + TAGLINE_GAP_MS}ms backwards`,
+              }}>
+                {agent.tagline}
+              </span>
             </div>
           </div>
         </div>
