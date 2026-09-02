@@ -304,6 +304,22 @@ async def register_device(
     device.active = True
     device.last_seen = datetime.utcnow()
     device.updated_at = datetime.utcnow()
+
+    # Retire any OTHER row claiming this same installation.
+    #
+    # The client derives device_id from ANDROID_ID, which is stable across
+    # reinstall but DOES change when the app's signing key changes (e.g. the
+    # debug -> release cutover). When that happens the same physical watch
+    # arrives under a new device_id, and without this the old row lingers
+    # active forever, so every push fans out to a ghost. An fid belongs to
+    # exactly one installation, so a match here is proof of the same device.
+    dupes = await db.execute(
+        select(Device).where(Device.fid == fid, Device.device_id != device_id)
+    )
+    for other in dupes.scalars().all():
+        other.active = False
+        other.updated_at = datetime.utcnow()
+
     await db.commit()
     return device
 
