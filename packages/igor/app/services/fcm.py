@@ -133,7 +133,11 @@ async def send_data_message(
     would deactivate a perfectly live watch.
     """
     try:
-        token = await _bearer_token()
+        # NOT named `token`: that is this function's registration-token
+        # parameter, and assigning to it here silently overwrote the device's
+        # token with Google's OAuth access token — which then went out as the
+        # message target and came back "not a valid FCM registration token".
+        access_token = await _bearer_token()
         project = _project_id()
     except FcmNotConfigured as e:
         return False, str(e)
@@ -162,7 +166,7 @@ async def send_data_message(
             resp = await client.post(
                 url,
                 headers={
-                    "Authorization": f"Bearer {token}",
+                    "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json; charset=utf-8",
                 },
                 json=payload,
@@ -174,7 +178,10 @@ async def send_data_message(
     if resp.status_code == 200:
         return True, "delivered"
 
-    body = resp.text[:400]
+    # 900, not 400: FCM puts the useful part — the `fieldViolations` array
+    # naming which field it rejected — at the END of the error body, and 400
+    # characters cut it off mid-array on exactly the failure worth reading.
+    body = resp.text[:900]
     logger.warning(
         "fcm_send_failed",
         extra={"status": resp.status_code, "body": body, "target": target_field},
