@@ -53,6 +53,12 @@ class OrionProfile(AgentProfile):
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:MF3mGyEYCl7XYWbV9V6O"
+    canvas_brief = (
+        "Presenting maintenance: host, memory and service state are stat tiles, "
+        "anything with a history is a timeline, and logs or configuration go in "
+        "code windows. Speak the verdict — healthy, degraded, needs a decision — "
+        "and let the board hold the numbers"
+    )
     doc_theme = DocTheme(accent="#8a7fd6")   # signature indigo
 
     tool_allowlist = None

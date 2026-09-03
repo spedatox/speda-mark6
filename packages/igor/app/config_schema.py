@@ -432,6 +432,62 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         ],
     ),
     ConfigGroup(
+        "canvas", "Canvas",
+        "Voice mode is a PRESENTATION surface, not a chatbot that talks. The agent "
+        "narrates while the screen carries the evidence — every figure a chart or a "
+        "stat, every source its own window, the transcript demoted to a subtitle "
+        "under the orb. These settings tune that. The word budgets are rendered into "
+        "the agent's instructions and change how it WRITES; the rest is read by the "
+        "clients and only changes how the board looks. Nothing here truncates a "
+        "reply: a sentence cut off mid-word costs the same to synthesize as a "
+        "finished one.",
+        [
+            ConfigField("canvas_enabled", "Canvas", "bool", requires_restart=_LIVE,
+                        help="Off, voice mode falls back to the orb and a caption — still "
+                             "spoken, no board, and the agent is no longer asked to present."),
+            ConfigField("canvas_spoken_words", "Spoken Budget (words)", "int",
+                        requires_restart=_LIVE,
+                        help="Soft target for a normal spoken answer. A target, not a limit — "
+                             "the agent is told to write to it, never cut off at it.",
+                        placeholder="90"),
+            ConfigField("canvas_briefing_words", "Briefing Budget (words)", "int",
+                        requires_restart=_LIVE,
+                        help="The same target for a full briefing or research readout, which "
+                             "legitimately needs longer to walk a board of a dozen windows.",
+                        placeholder="200"),
+            ConfigField("canvas_max_panels", "Max Windows Per Turn", "int",
+                        requires_restart=_LIVE,
+                        help="A board past roughly ten windows is unreadable at any scale the "
+                             "layout can find.",
+                        placeholder="10"),
+            ConfigField("canvas_reveal_stagger_ms", "Window Entrance Stagger (ms)", "int",
+                        requires_restart=_LIVE,
+                        help="Delay between one window arriving and the next. A board that "
+                             "appears at once reads as a page load; one that assembles reads "
+                             "as an instrument coming up. 0 lands them together.",
+                        placeholder="160"),
+            ConfigField("canvas_caption_lines", "Caption Lines", "int", requires_restart=_LIVE,
+                        help="How many lines of live subtitle stay under the orb.",
+                        placeholder="3"),
+            ConfigField("canvas_image_proxy", "Proxy Board Images", "bool", requires_restart=_LIVE,
+                        help="Photos on the board are fetched by the SERVER and handed to the "
+                             "client as bytes. Keep this on: the clients block remote images "
+                             "outright, and loading one directly would tell its host that you "
+                             "are looking — which on a research board is the whole problem. "
+                             "Off, windows render without their pictures."),
+            ConfigField("canvas_image_max_bytes", "Max Image Size (bytes)", "int",
+                        requires_restart=_LIVE,
+                        help="Ceiling on one proxied picture. A board image is a thumbnail; "
+                             "past this it is something else and is refused.",
+                        placeholder="8388608"),
+            ConfigField("canvas_image_timeout_s", "Image Fetch Timeout (s)", "float",
+                        requires_restart=_LIVE,
+                        help="How long the server waits on a slow image host before giving up "
+                             "and letting the window render without its picture.",
+                        placeholder="12"),
+        ],
+    ),
+    ConfigGroup(
         "security", "Security & Server",
         "Service credential, CORS, and diagnostics. Change the API key with care — "
         "the desktop app must use the same value.",

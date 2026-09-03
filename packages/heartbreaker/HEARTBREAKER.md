@@ -63,6 +63,7 @@ From the repo root, the same commands are exposed workspace-scoped: `npm run hea
 | Group | Components |
 |---|---|
 | Chat core | `ChatMain`, `MessageList`, `Message`, `InputBar`, `VoiceMode` |
+| Voice canvas | `VoiceCanvas` (the board), `VoicePanelBody` (what a window looks like), `VoiceOrb`, `lib/voicePanels` (splitting + layout) |
 | Rich content | `MapBlock`, `ChartBlock`, `CalendarBlock` — inline widgets rendered from fenced code blocks in a message |
 | Roster & coordination | `AgentSwitcherOverlay`, `CommsTray`, `HousePartyModal`, `HousePartyWarning`, `PartyActivation`, `PartyRosterStrip`, `PartyStream` |
 | Safety protocols | `LockdownModal`, `LockdownActivation`, `SkyfallCountdown`, `SkyfallProjects` |
@@ -71,6 +72,72 @@ From the repo root, the same commands are exposed workspace-scoped: `npm run hea
 | Settings | `SettingsModal` (tabbed shell), `AutomationBuilder`, `McpServersPanel`, `PortalsPanel`, `PendingAsksTray`, `RosterModelWindow` |
 | Delegation | `SubagentPanel`, `SubagentDetailView` |
 | Ecosystem | `HisarBrowser` — the Hisar vault directory picker used for the Forge workspace |
+
+---
+
+## Voice mode is a presentation, not a talking chat window
+
+Voice mode does not read a reply aloud. The agent **presents**: it narrates while
+the screen carries the evidence it is narrating about — a figure as a stat tile,
+a source as a cutting with its photo and its excerpt, a person as a file, a
+sequence as a timeline — each in its own window on the board.
+
+**The agent stages the board itself.** It authors each window, titles it, and
+places it in its reply at the point its narration reaches it. Because the reply
+already streams token by token, a window written between two spoken sentences
+appears between those two sentences being heard — *writing order is the cue
+track*, so the board assembles in step with the voice with no audio timestamps
+to sync and nothing to drift. The brief that asks for this lives in Igor
+(`core/surface.py` `_VOICE_BRIEF`), on the per-turn context line rather than in
+the system prompt, because voice mode is toggled mid-conversation and a system
+prefix that changes mid-session invalidates the prompt cache. Each agent adds
+its own note on top (`Profile.canvas_brief`) — Sentinel turns every figure into
+a tile or a chart, NightCrawler gives every source its own window.
+
+This is the inverse of what it used to be. The canvas was once a *parser* of
+chat output: the model wrote its usual markdown answer and `voicePanels` scraped
+out whatever fenced blocks happened to be in it. If the model did not reach for
+a chart unprompted, there was no chart — nothing had ever asked it to present.
+
+**A window** is a fenced block whose info line is `kind | SCREEN TITLE`. Beyond
+the renderer kinds already shared with chat (`chart`, `map`, `calendar`, `svg`,
+`html`, `code`, `table`, `math`) there is a presentation vocabulary that exists
+so a fact can be *shown* rather than said: `stat`, `image`, `article`, `card`,
+`timeline`, `quote`. Their bodies are small forgiving formats parsed in
+`VoicePanelBody` — written by a model mid-sentence under a word budget, so a
+missing field degrades to a plainer window, never an empty one.
+
+**Pictures never load from their origin.** A photo on a card or an article's
+lead image is fetched by Igor (`GET /media/proxy`) with the client's normal
+X-API-Key and handed to the tag as a `blob:` URL. Two reasons, both structural:
+the renderer ships `img-src 'self' data: blob:`, so a remote `<img src>` is
+refused before a request leaves — and on a research board, loading a picture
+straight from its host would tell that host the owner is looking, which is the
+one thing an OSINT board must not do. Anything that fails renders no picture at
+all; a broken-image icon on a dossier is worse than a dossier without one.
+
+**The transcript is a subtitle.** Narration runs along the bottom as a live
+caption a few lines deep, tracking what is being said now. Prose is never a
+window: anything worth reading twice was supposed to become one.
+
+**Nothing staged, nothing shown.** A yes, a no, a thank-you, the time — the orb
+keeps the screen and the words run underneath. The board opens on the first
+staged window.
+
+**The owner owns the board.** Windows glide as the layout packs them, and can be
+dragged by the grip or resized from the bottom-right corner; either gesture pins
+a window until `REFLOW` hands the board back. `EXTEND_` blows one up to fill the
+board.
+
+Everything tunable lives in **Settings → Canvas** (backend `canvas_*` settings):
+the spoken word budgets that shape what the agent *writes*, and the window
+ceiling, entrance stagger and caption depth that shape what the board *draws*.
+Both halves come from one place so they cannot disagree — the client reads them
+off `/voice/status` rather than holding constants of its own.
+
+`canvasharness/` is a throwaway dev server (`canvas-harness` in
+`.claude/launch.json`) that renders a staged presentation against the real
+splitter, so the board can be worked on without a backend or a spoken turn.
 
 ---
 

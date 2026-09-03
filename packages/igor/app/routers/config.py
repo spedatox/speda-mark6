@@ -77,6 +77,14 @@ def _coerce_for_settings(f: ConfigField, raw):
             return int(str(raw).strip())
         except (TypeError, ValueError):
             return getattr(settings, f.key)
+    # A float field fell through to str() here, so saving one from Settings
+    # replaced the number with its text — every later comparison against it
+    # ("0.62" > 0.5) then raised or, worse, compared as strings.
+    if f.type == "float":
+        try:
+            return float(str(raw).strip())
+        except (TypeError, ValueError):
+            return getattr(settings, f.key)
     return str(raw)
 
 

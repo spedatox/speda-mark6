@@ -36,6 +36,12 @@ class CenturionProfile(AgentProfile):
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:yoZ06aMxZJJ28mfd3POQ"
+    canvas_brief = (
+        "Presenting security: every incident, exposure or finding is its own card "
+        "with its severity, its affected surface and its status, and anything "
+        "with a sequence of events is a timeline. Speak the risk and the next "
+        "action, not the log lines"
+    )
     doc_theme = DocTheme(accent="#d8483c")   # signature red — matches the UI brand
     # Like Optimus, Centurion can be backed by a Forge peer (its own Cell, with
     # outbound network for authorized scans). While a peer is connected on

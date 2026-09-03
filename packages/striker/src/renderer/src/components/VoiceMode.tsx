@@ -4,8 +4,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import VoiceOrb, { type OrbState } from './VoiceOrb'
 import VoiceCanvas from './VoiceCanvas'
-import { splitPanels, hasArtifacts } from '../lib/voicePanels'
-import { TextSegment } from './Message'
+import { splitPanels, hasArtifacts, captionOf } from '../lib/voicePanels'
+import type { CanvasSettings } from '../lib/voice'
 import type { MicState } from '../lib/mic'
 import { useT, LOCALES, type Locale } from '../lib/i18n'
 
@@ -23,11 +23,20 @@ import { useT, LOCALES, type Locale } from '../lib/i18n'
  * orb NEVER shrinks to make room for prose — it lifts clear of it — because a
  * talking orb that shrinks reads as the agent backing away mid-sentence.
  *
- * THE CANVAS: the moment the answer carries something to SHOW — a chart, a map,
- * a worked equation, a widget — the mode becomes a workspace. The orb docks
- * into the corner and the answer is taken apart into windows (VoiceCanvas).
+ * THE CANVAS: the moment the agent stages something to SHOW — a chart, a stat
+ * tile, a source, a file on a person — the mode becomes a presentation. The orb
+ * docks into the corner and the staged windows assemble beside it (VoiceCanvas).
  * That is a different gesture from shrinking: the orb steps aside for something
  * it is presenting.
+ *
+ * ── The transcript is a SUBTITLE ───────────────────────────────────────────
+ * In both layouts the words run along the bottom as a live caption a few lines
+ * deep, tracking what is being said now. It used to be the whole reply rendered
+ * through the markdown pipeline, which is what made the mode read as a chat
+ * window that happened to talk: everything worth reading was in the prose, and
+ * the board was whatever fell out of it. Now the board carries the content and
+ * the caption carries only the narration — deliberately short-lived, because
+ * anything worth reading twice was supposed to become a window.
  */
 
 /* The chips at the top of voice mode used to set the SYNTHESIS locale and
@@ -97,6 +106,8 @@ interface Props {
    *  rather than silently never speaking. */
   configured: boolean
   agentName: string
+  /** Board settings from the backend — see lib/voice.ts CanvasSettings. */
+  canvas: CanvasSettings
   /** The owner's own placement for the docked orb — see AppSettings.voiceOrbDock. */
   dock: { dx: number; dy: number; scale: number }
   onDock: (dock: { dx: number; dy: number; scale: number }) => void
@@ -104,22 +115,34 @@ interface Props {
 
 export default function VoiceMode({
   state, amplitude, spectrum, inputLevel, reply, streaming, prompt, language, onLanguage,
-  onClose, onStopSpeaking, micState, configured, agentName, dock, onDock,
+  onClose, onStopSpeaking, micState, configured, agentName, canvas, dock, onDock,
 }: Props) {
   const t = useT()
   const visible = useMemo(() => renderable(reply, streaming), [reply, streaming])
   const hasText = visible.trim().length > 0
-  const panels = useMemo(() => splitPanels(visible), [visible])
+  // The staged windows, capped at the same ceiling the agent was briefed with —
+  // a model that overruns its budget must not be able to overrun the board too.
+  const panels = useMemo(
+    () => (canvas.enabled ? splitPanels(visible).slice(0, canvas.maxPanels) : []),
+    [visible, canvas.enabled, canvas.maxPanels],
+  )
   const hasCanvas = useMemo(() => hasArtifacts(panels), [panels])
+  /** The narration alone — what is being SAID, with every staged window cut out.
+   *  This is the caption's text, and it is the same cut the speech path makes. */
+  const caption = useMemo(() => captionOf(visible), [visible])
   // Bumped by REFLOW — hands every window the owner dragged back to the layout.
   const [reflow, setReflow] = useState(0)
 
-  // Show the tail of the reply, not the head: while it is being spoken the
-  // interesting part is what is being said now.
+  /** Whether there is narration to caption. Distinct from `hasText`: a turn can
+   *  have staged a window before it has said a word about it. */
+  const hasCaption = caption.length > 0
+
+  // Show the tail of the caption, not its head. A subtitle is only ever the last
+  // few lines — what is being said NOW — and the rest has already been heard.
   const tailRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     tailRef.current?.scrollTo({ top: tailRef.current.scrollHeight, behavior: 'smooth' })
-  }, [visible])
+  }, [caption])
 
   /* ── Size ────────────────────────────────────────────────────────────────
    * The orb owns the screen. Driven off the pane's measured height rather than
@@ -172,7 +195,9 @@ export default function VoiceMode({
   // The only concession the centred orb makes to the text: rise by a fraction of
   // the pane so the bottom overlay is not sitting on its face. Small enough that
   // the ~8% of empty margin the assembly carries absorbs it.
-  const lift = hasCanvas || !hasText ? 0 : -Math.round(Math.min(96, room * 0.07))
+  // Keyed on the CAPTION, not on the raw reply: a turn that has staged a window
+  // but not yet said anything about it has nothing along the bottom to rise off.
+  const lift = hasCanvas || !hasCaption ? 0 : -Math.round(Math.min(96, room * 0.07))
   /* Arm the transition only after the real geometry has been PAINTED once.
    *
    * The first render has no box (the ResizeObserver hasn't fired), so the orb's
@@ -365,6 +390,7 @@ export default function VoiceMode({
             reserveX={orbLeft}
             reserveY={orbTop - CANVAS_TOP}
             reflow={reflow}
+            stagger={canvas.revealStaggerMs}
           />
         </div>
       )}
@@ -420,24 +446,39 @@ export default function VoiceMode({
           ? `0.4rem ${orbSize}px 0.55rem 1.2rem`
           : '3rem 1.5rem 1.1rem',
         // A wash under the text, so prose stays legible over the orb's glow.
-        background: hasText && !hasCanvas
+        background: hasCaption && !hasCanvas
           ? 'linear-gradient(to top, rgba(4,8,10,0.92) 42%, rgba(4,8,10,0.72) 68%, rgba(4,8,10,0))'
           : 'none',
       }}>
-        {/* The reply, as it is spoken. Rendered through the transcript's own
-            markdown pipeline — headings, lists, tables and code all read the
-            way they do in chat. */}
-        {!hasCanvas && hasText && (
+        {/* ── The caption ────────────────────────────────────────────────
+            What is being said, as it is said. Plain text on purpose: this is
+            speech, and speech has no headings or bullets — anything that WAS
+            markdown was staged as a window instead, and rendering the leftovers
+            through the markdown pipeline is what used to make this a chat log.
+
+            It is clamped to a few lines rather than allowed to grow, and rides
+            its own tail, so it behaves like a subtitle track and not like a
+            scrollback the owner is expected to read. Height comes from the line
+            count so the block is exactly as tall as the lines it shows. */}
+        {hasCaption && (
           <div
             ref={tailRef}
-            className="prose"
             style={{
-              maxWidth: 640, maxHeight: '11rem', overflowY: 'auto',
-              pointerEvents: 'auto', fontSize: '1.02rem',
-              overflowWrap: 'anywhere', minWidth: 0,
+              maxWidth: hasCanvas ? 560 : 640,
+              maxHeight: `${canvas.captionLines * 1.55}em`,
+              overflowY: 'auto', overflowWrap: 'anywhere', minWidth: 0,
+              pointerEvents: 'auto',
+              fontSize: hasCanvas ? '0.86rem' : '1.02rem',
+              lineHeight: 1.55,
+              color: 'var(--hb-text)',
+              whiteSpace: 'pre-wrap',
+              textAlign: hasCanvas ? 'left' : 'center',
+              // No scrollbar: it is a caption, and a scrollbar on one invites
+              // reading back through it, which is what the board is for.
+              scrollbarWidth: 'none',
             }}
           >
-            <TextSegment text={visible} />
+            {caption}
           </div>
         )}
 

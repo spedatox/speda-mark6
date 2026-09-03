@@ -130,6 +130,46 @@ async def save_message(db, session_id, role, content) -> Message
 
 ---
 
+## Voice mode is a presentation brief
+
+A spoken turn is not "the reply, read aloud". `app/core/surface.py` stamps a
+**presentation brief** onto the live turn's newest user message whenever
+`ClientContext.voice` is set: the agent narrates, and the client's canvas
+carries the evidence — a figure as a stat tile, a source as a cutting, a person
+as a file — each authored by the agent as a fenced `kind | SCREEN TITLE` block
+and placed in the reply at the point its narration reaches it. Position in the
+stream is the cue track: the reply already streams token by token, so a window
+written between two spoken sentences appears between those two being heard.
+
+It rides the per-turn context line rather than the system prompt because voice
+mode is toggled mid-conversation, and a system prefix that changed mid-session
+would invalidate the cached prompt for every turn after it — the same discipline
+the timestamp and the surface phrase follow.
+
+Two things shape the brief, both read at call time so Settings edits land
+without a restart:
+
+| Input | What it decides |
+|---|---|
+| `settings.canvas_*` | Whether there is a board at all, how many windows a turn may open, and the spoken word budgets (`canvas_spoken_words`, `canvas_briefing_words`). Budgets are **targets, never truncation** — a reply cut off mid-sentence costs the same to synthesize as a finished one and is worth less. |
+| `Profile.canvas_brief` | What presenting looks like for THIS agent, appended to the generic brief. Identity, so it lives in `app/profiles/` (Rule 10): Sentinel turns every figure into a tile or a chart, NightCrawler gives every source its own window with the photo it came with. |
+
+Board pictures go through `app/routers/media.py` rather than being loaded by the
+client: the clients' CSP forbids remote images, and a client that fetched one
+directly would announce the owner's IP to the very server a research board is
+about. The proxy is `canvas_image_*`-gated, refuses anything that is not an
+image, streams against a byte cap, follows no redirects, and resolves the target
+host to confirm every address it maps to is publicly routable — without that
+last check an authenticated caller could point it at the Docker network or a
+cloud metadata endpoint.
+
+With `canvas_enabled` off the brief degrades to the old one — still written for
+the ear, no longer asked to present, because there is nowhere to present it.
+The client-side half of the same settings is served on `GET /voice/status`, so
+what the agent is asked to write and what the board draws come from one place.
+
+---
+
 ## Language
 
 One setting, `settings.agent_language` (`"tr"` / `"en"`), decides what the whole

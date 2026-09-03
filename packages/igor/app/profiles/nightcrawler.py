@@ -37,6 +37,15 @@ class NightCrawlerProfile(AgentProfile):
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:VR6AewLTigWG4xSOukaG"
+    canvas_brief = (
+        "Presenting research: one window per source, never one summary of all of "
+        "them. Each finding is an article window with its outlet, its date, its "
+        "link and the excerpt that actually mattered; every person, company or "
+        "place you name gets a card with its photo; anything with dates gets a "
+        "timeline; a source's own damaging words go up as a quote rather than "
+        "being paraphrased. Speak the assessment — what this adds up to and how "
+        "far it can be trusted — and put the evidence on the wall"
+    )
     doc_theme = DocTheme(accent="#9165e6")   # signature violet — matches the UI brand
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow

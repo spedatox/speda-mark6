@@ -573,7 +573,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar, lifeboat as lifeboat_router, doormat as doormat_router, octavius as octavius_router, skyfall as skyfall_router, legion as legion_router
+    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, media, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar, lifeboat as lifeboat_router, doormat as doormat_router, octavius as octavius_router, skyfall as skyfall_router, legion as legion_router
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -583,6 +583,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(import_chats.router)
     app.include_router(files.router)
+    app.include_router(media.router)
     app.include_router(connections.router)
     # Web portals live under /connections/portals — same family as the OAuth
     # connections above, different enough to keep in its own module.

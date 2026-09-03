@@ -453,6 +453,53 @@ class Settings(BaseSettings):
     # confident nonsense rather than degrading.
     stt_locale: str = ""
 
+    # ── Canvas (voice mode's presentation surface) ───────────────────────────
+    # Voice mode is not "the reply, read aloud". It is a PRESENTATION: the agent
+    # narrates while the screen carries the evidence, each artefact in its own
+    # window. These settings tune that contract — the first three are rendered
+    # into the per-turn voice directive (core/surface.py) and so change how the
+    # model WRITES; the last three are read by the clients off /voice/status and
+    # only change how the board LOOKS.
+    #
+    # Off, voice mode degrades to the orb and a caption: still spoken, just no
+    # board. That is the honest fallback for a surface too small to present on.
+    canvas_enabled: bool = True
+    # Soft target for a normal spoken answer, in words. NOT a truncation limit —
+    # nothing is ever cut mid-sentence, because a clipped answer costs the same
+    # credits as a finished one and is worth less. It is a budget the model is
+    # told to write to: enough to be understood, short enough that a per-character
+    # engine is not being billed for prose the canvas is already showing better.
+    canvas_spoken_words: int = 90
+    # The same target when the turn is a full briefing or a research readout —
+    # the cases that legitimately need a longer narration to walk a board of a
+    # dozen windows. Still a target, still never enforced by truncation.
+    canvas_briefing_words: int = 200
+    # How many windows one turn may open. The ceiling exists because a board
+    # past roughly this many is unreadable at any scale the packer can find, not
+    # because rendering them is expensive.
+    canvas_max_panels: int = 10
+    # Delay between one window's entrance and the next, in ms. Windows arrive one
+    # at a time even when the reply lands in a single burst — a board that simply
+    # appears reads as a page load, one that assembles reads as an instrument
+    # coming up. Zero to have them all land together.
+    canvas_reveal_stagger_ms: int = 160
+    # How many lines of the live caption stay on screen under the orb. The
+    # transcript in voice mode is a SUBTITLE, not a document: it tracks what is
+    # being said now and scrolls, and the board carries everything worth reading
+    # twice.
+    canvas_caption_lines: int = 3
+    # Pictures on the board — a photo on a dossier card, an article's lead image —
+    # are fetched by the SERVER and handed to the client as bytes, never loaded
+    # from the third-party origin by the client itself (routers/media.py explains
+    # why: the clients' CSP forbids remote images, and a research board must not
+    # tell its subject's server that the owner is looking). Off, every window
+    # simply renders without its picture.
+    canvas_image_proxy: bool = True
+    # Ceiling on one proxied image, in bytes. A board picture is a thumbnail, not
+    # a print master; past this it is something else and is refused.
+    canvas_image_max_bytes: int = 8 * 1024 * 1024
+    canvas_image_timeout_s: float = 12.0
+
     # ── Conversation compaction ──────────────────────────────────────────────
     # On a long chat, older turns are summarized (background, Haiku) so the model
     # sees [summary] + recent window instead of the whole growing transcript —

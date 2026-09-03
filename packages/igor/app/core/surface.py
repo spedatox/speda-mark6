@@ -9,9 +9,10 @@ same discipline the timestamp uses (SessionManager.stamp_user_content), so the
 cached prompt prefix and the stored history both stay byte-stable.
 
 Mostly this is ambient fact. Voice is the exception: a spoken channel changes how
-the answer must be WRITTEN, so that one carries a directive as well as a fact.
+the answer must be WRITTEN — and, with the canvas on, what it must be written AS —
+so that one carries a presentation brief as well as a fact.
 It belongs here rather than in the system prompt because it is a property of the
-turn, not of the session — see _VOICE_DIRECTIVE.
+turn, not of the session — see _VOICE_BRIEF.
 
 Every ingestion path (HTTP chat, Telegram gateway) funnels through here so Speda
 learns the surface uniformly, no matter how the turn arrived.
@@ -37,34 +38,116 @@ def telegram_context() -> ClientContext:
 
 
 # Voice mode is not a fact about the device, it is a fact about the CHANNEL: the
-# reply is going to a speech engine, sentence by sentence, while a canvas beside
-# it renders whatever the reply draws. Without this the model writes for a
-# reader — LaTeX, JSON chart specs, tables — and the owner hears a machine
-# reciting `\frac{-b \pm \sqrt{b^2-4ac}}{2a}` out loud.
+# reply is going to a speech engine while a canvas beside it assembles into a
+# BOARD. Without this the model writes for a reader — LaTeX, JSON chart specs,
+# tables — and the owner hears a machine reciting
+# `\frac{-b \pm \sqrt{b^2-4ac}}{2a}` out loud.
 #
 # It lives on the per-turn context line rather than in the system prompt for one
 # reason: voice mode is toggled mid-conversation, and a system prefix that
 # changes mid-session invalidates the cached prompt for every turn after it.
-_VOICE_DIRECTIVE = (
-    "in VOICE MODE — this reply is being spoken aloud and rendered on a canvas "
-    "at the same time. Write what you SAY as plain spoken prose: no markdown "
-    "syntax, no LaTeX, no tables, no bullet symbols, and never read out an "
-    "identifier, a URL or raw data. Anything visual — a formula, a chart, a map, "
-    "a table, a diagram — goes in its own fenced block, and each block becomes "
-    "its own window on the canvas. Do not narrate the blocks' contents "
-    "line by line; say what they MEAN and what the owner should notice, the way "
-    "you would if you were standing next to them pointing at a screen"
+#
+# ── Why this is a presentation brief and not a formatting rule ────────────────
+# The canvas used to be a PARSER of chat output: the agent wrote its usual
+# markdown answer and the client scavenged whatever fenced blocks happened to be
+# in it. That produced a talking transcript — if the model did not happen to
+# reach for a chart, there was no chart, because nothing had ever asked it to
+# present. The mode is now the other way round. The agent DIRECTS the show: it
+# decides what deserves a window, authors that window, and narrates around it.
+#
+# Position in the reply is the cue track. The stream already arrives token by
+# token, so a window block written between two spoken sentences materialises
+# between those two sentences being heard — "say this, open the chart, say
+# this" falls out of writing order for free, with no audio timestamps to sync
+# and therefore nothing to drift.
+_VOICE_BRIEF = (
+    "in VOICE MODE — you are not answering in a chat window, you are PRESENTING. "
+    "You speak; the screen carries the evidence. Everything you say is plain "
+    "spoken prose: no markdown, no LaTeX, no tables, no bullet symbols, and never "
+    "read out an identifier, a URL, a filename or raw data. "
+    "Every fact that can be SHOWN gets its own window instead of being spoken — "
+    "figures become charts or stat tiles, findings become one window per source, "
+    "people and places become cards with their photo, sequences become timelines. "
+    "Do not summarise what is in a window and do not read it out line by line: "
+    "name it, say what it MEANS and what to notice, the way you would standing "
+    "next to someone pointing at a screen. Write a window the moment your "
+    "narration reaches it — where it sits in your reply is when it appears on "
+    "screen, so put it between the sentence that introduces it and the sentence "
+    "that follows on. "
+    "A window is a fenced block whose info line is the kind, then ` | `, then a "
+    "short SCREEN TITLE you choose (not a sentence — a label, like "
+    "`ARREST RECORD` or `REVENUE / MONTHLY`). The kinds:\n"
+    "  chart, map, calendar, svg, html — as you already write them\n"
+    "  table — pipe rows\n"
+    "  math — one display formula\n"
+    "  code — source\n"
+    "  stat — line 1 the value, line 2 the change, line 3 an optional caption\n"
+    "  image — an image URL on line 1, an optional caption after it\n"
+    "  article — `title:`, `source:`, `date:`, `url:`, `image:` lines, then a "
+    "blank line, then the excerpt that matters\n"
+    "  card — a name on line 1, then optional `image:` and `Field: value` lines\n"
+    "  timeline — one `date — what happened` per line\n"
+    "  quote — the quote, then a line starting `— ` with who said it\n"
+    "A picture only ever goes in a window if you SAW its URL in a tool result — a "
+    "search hit, a page you read, a file the owner gave you. Never write an image "
+    "address you have not seen; an invented one is a window with a hole in it, and "
+    "a window with no picture at all reads better. Leave the image line out when "
+    "you have none. "
+    "Use at most {max_panels} windows. Open none at all when there is nothing to "
+    "show — a yes, a no, a thank-you, the time — and just speak; a window holding "
+    "one sentence is worse than no window. "
+    "Keep the spoken part to about {words} words, and about {briefing_words} when "
+    "you are genuinely walking a full briefing or research readout. Speech is "
+    "billed per character and the board is not: anything you would repeat twice "
+    "belongs on the screen, said once."
+)
+
+# What the mode degrades to with the canvas switched off: still spoken, still
+# written for the ear, but nothing is asked to be presented because there is
+# nowhere to present it.
+_VOICE_DIRECTIVE_PLAIN = (
+    "in VOICE MODE — this reply is being spoken aloud. Write it as plain spoken "
+    "prose: no markdown syntax, no LaTeX, no tables, no bullet symbols, and never "
+    "read out an identifier, a URL or raw data. Say what things MEAN rather than "
+    "reciting them, and keep it to about {words} words"
 )
 
 
-def render_client_context(cc: ClientContext) -> str:
+def _voice_directive() -> str:
+    """The voice brief, with the owner's budgets rendered in.
+
+    Read at call time rather than baked at import: every canvas_* setting is
+    live-editable from Settings, and a budget that needed a restart to take
+    effect is a budget nobody tunes.
+    """
+    from app.config import settings
+
+    if not settings.canvas_enabled:
+        return _VOICE_DIRECTIVE_PLAIN.format(words=settings.canvas_spoken_words)
+    return _VOICE_BRIEF.format(
+        max_panels=settings.canvas_max_panels,
+        words=settings.canvas_spoken_words,
+        briefing_words=settings.canvas_briefing_words,
+    )
+
+
+def render_client_context(cc: ClientContext, canvas_brief: str = "") -> str:
     """Compact, self-labelled description of the channel the owner is speaking
     from. Leads with voice (which changes how to answer) then the surface; only
-    the fields the caller actually set appear."""
+    the fields the caller actually set appear.
+
+    `canvas_brief` is the speaking agent's own presentation note (Profile.
+    canvas_brief) and is appended to the voice brief, so the generic "how to
+    present" is followed by this agent's "what presenting looks like for me".
+    Ignored off a voice turn — there is no board to brief anyone about.
+    """
     bits: list[str] = []
     # First, because it changes how the whole answer should be written.
     if cc.voice:
-        bits.append(_VOICE_DIRECTIVE)
+        brief = _voice_directive()
+        if canvas_brief.strip() and settings_canvas_enabled():
+            brief = f"{brief}. {canvas_brief.strip().rstrip('.')}"
+        bits.append(brief)
     if cc.platform:
         bits.append(_SURFACE_PHRASE.get(cc.platform.lower(), f"on {cc.platform}"))
     device = " ".join(x for x in [cc.os_version, cc.device] if x)
@@ -149,14 +232,23 @@ DESKTOP_ONLY_NOTICE = (
 )
 
 
-def annotate_last_user(history: list[dict], cc: ClientContext | None) -> None:
+def settings_canvas_enabled() -> bool:
+    """Whether the board is on, read live — see _voice_directive."""
+    from app.config import settings
+
+    return bool(settings.canvas_enabled)
+
+
+def annotate_last_user(
+    history: list[dict], cc: ClientContext | None, canvas_brief: str = "",
+) -> None:
     """Stamp the client-context line onto the newest user message, in place. No-op
     when there's no context or the tail isn't a user turn. Never persisted — it
     decorates the uncached tail only, so history reconstructed next turn is
     byte-identical to what was cached this turn."""
     if cc is None or not history or history[-1].get("role") != "user":
         return
-    line = render_client_context(cc)
+    line = render_client_context(cc, canvas_brief)
     if not line:
         return
     c = history[-1]["content"]

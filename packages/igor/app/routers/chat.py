@@ -360,7 +360,9 @@ async def _run_chat(
     # the live turn's newest user message ONLY, never persisted. Mirrors how the
     # timestamp reaches the model (stamp_user_content): it decorates the uncached
     # tail, so the stored+reloaded history stays byte-stable and the cache holds.
-    annotate_last_user(history, body.client_context)
+    # The agent's own presentation note rides along, so the voice brief ends with
+    # what presenting looks like for THIS agent rather than only the generic how.
+    annotate_last_user(history, body.client_context, getattr(profile, "canvas_brief", ""))
 
     context = AgentContext(
         agent_id=profile.agent_id,

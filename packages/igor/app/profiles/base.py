@@ -104,6 +104,16 @@ class AgentProfile(ABC):
     # (settings.tts_locale) — the voice name does not have to match it.
     voice_id: str = ""
 
+    # What this agent PRESENTS when it is speaking — one or two sentences naming
+    # the windows its domain lives in, appended to the voice brief
+    # (core/surface.py). Identity, like the voice, so it lives here (Rule 10):
+    # the brief teaches every agent HOW to present, and this says what presenting
+    # looks like for THIS one. A finance agent turns every figure into a stat
+    # tile or a chart; a research agent gives every source its own window with
+    # the photo it came with. Empty = the generic brief, which is already enough
+    # to present with.
+    canvas_brief: str = ""
+
     @property
     def signed_name(self) -> str:
         """

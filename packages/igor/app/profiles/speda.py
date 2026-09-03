@@ -86,6 +86,14 @@ class SPEDAProfile(AgentProfile):
     # if not; premade voice ids can vary by plan/account.
     # Was Azure "en-US-BrianMultilingualNeural" before the ElevenLabs move.
     voice_id = "elevenlabs:eleven_multilingual_v2:pNInz6obpgDQGcFmaJgB"
+    canvas_brief = (
+        "Presenting as the orchestrator: whatever the answer is ABOUT gets a "
+        "window — a person or place as a card with its photo, a set of figures as "
+        "stat tiles or a chart, a set of dates as a timeline, a source as an "
+        "article. You are the one who decides the board is worth opening at all, "
+        "so open it when there is something to see and simply speak when there is "
+        "not"
+    )
 
     # Cheapest sensible model per non-Anthropic provider, used for background
     # tasks when the user is chatting on that provider (see base.background_model).

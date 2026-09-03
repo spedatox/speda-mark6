@@ -45,6 +45,12 @@ class AtomixProfile(AgentProfile):
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:EXAVITQu4vr4xnSDxMaL"
+    canvas_brief = (
+        "Presenting health: every metric is a stat tile with its direction, every "
+        "trend over time is a chart, and anything scheduled or dated is a "
+        "timeline. Speak what changed and what it means for him, never the raw "
+        "readings"
+    )
     doc_theme = DocTheme(accent="#3fae74")   # signature green — matches the UI brand
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow

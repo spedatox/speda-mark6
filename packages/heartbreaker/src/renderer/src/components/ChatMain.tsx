@@ -16,7 +16,7 @@ import { Skeleton } from './Skeleton'
 import { useT } from '../lib/i18n'
 import { useLanguage } from '../lib/language'
 import { hasMark } from '../lib/agentMarks'
-import { VoiceSession, voiceStatus } from '../lib/voice'
+import { VoiceSession, voiceStatus, CANVAS_FALLBACK, type CanvasSettings } from '../lib/voice'
 import type { MicState } from '../lib/mic'
 import type { OrbState } from './VoiceOrb'
 import type { AppConfig, ImageBlock, DocBlock, UploadedFile, PendingAsk } from '../lib/types'
@@ -319,6 +319,10 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   const spokenIdRef = useRef<string | null>(null)
   const [orbState, setOrbState] = useState<OrbState>('idle')
   const [voiceReady, setVoiceReady] = useState(true)
+  // How the board behaves, owned by the backend (Settings -> Canvas) rather than
+  // by this client, so the agent's brief and the board it draws onto cannot
+  // disagree about how many windows a turn may open.
+  const [canvas, setCanvas] = useState<CanvasSettings>(CANVAS_FALLBACK)
   // Mic state is tracked separately from the orb's, not folded into it: the two
   // are genuinely concurrent during barge-in, where the agent is still speaking
   // at the instant the owner starts. Collapsing them into one enum would make
@@ -339,7 +343,11 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   useEffect(() => {
     if (!voiceOpen) return
     let alive = true
-    voiceStatus(config).then(ok => { if (alive) setVoiceReady(ok) })
+    voiceStatus(config).then(s => {
+      if (!alive) return
+      setVoiceReady(s.configured)
+      setCanvas(s.canvas)
+    })
     return () => { alive = false }
   }, [voiceOpen, config])
 
@@ -1021,6 +1029,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           onStopSpeaking={stopSpeaking}
           micState={micState}
           configured={voiceReady}
+          canvas={canvas}
           agentName={profile?.name ?? 'Speda'}
           dock={settings.voiceOrbDock}
           onDock={d => update({ voiceOrbDock: d })}

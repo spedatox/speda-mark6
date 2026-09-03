@@ -217,13 +217,74 @@ export async function fetchVoices(config: AppConfig): Promise<ModelInfo[]> {
   }
 }
 
-export async function voiceStatus(config: AppConfig): Promise<boolean> {
+/** How the board behaves, from Settings -> Canvas. The client holds no defaults
+ *  of its own beyond the ones below, which exist only for the window between the
+ *  mode opening and the status call landing — the owner tunes these in ONE place
+ *  and both halves of voice mode (what the agent is asked to WRITE, and what the
+ *  board DRAWS) move together. */
+export interface CanvasSettings {
+  enabled: boolean
+  maxPanels: number
+  revealStaggerMs: number
+  captionLines: number
+}
+
+export const CANVAS_FALLBACK: CanvasSettings = {
+  enabled: true, maxPanels: 10, revealStaggerMs: 160, captionLines: 3,
+}
+
+/**
+ * Fetch one board picture through Igor and hand back a `blob:` URL for an <img>.
+ *
+ * Not a plain remote `src` for two reasons, both structural. The renderer's CSP
+ * is `img-src 'self' data: blob:`, so a third-party URL is refused before a
+ * request leaves — and widening that would mean the machine hitting an OSINT
+ * subject's server directly, announcing the owner's IP and the moment he looked.
+ * The proxy (igor routers/media.py) does the fetch server-side under the normal
+ * X-API-Key, and `blob:` is already allowed, so nothing about the policy has to
+ * be relaxed.
+ *
+ * Returns null on anything that goes wrong — a dead link, a host that refuses,
+ * a file that is not an image. A window without its photo is the intended
+ * degradation; a broken-image icon on a dossier is not.
+ */
+export async function loadBoardImage(
+  config: AppConfig, url: string, signal?: AbortSignal,
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${config.apiBase}/media/proxy?url=${encodeURIComponent(url)}`,
+      { headers: authHeaders(config), signal },
+    )
+    if (!res.ok) return null
+    return URL.createObjectURL(await res.blob())
+  } catch {
+    return null
+  }
+}
+
+export interface VoiceStatus {
+  configured: boolean
+  canvas: CanvasSettings
+}
+
+export async function voiceStatus(config: AppConfig): Promise<VoiceStatus> {
   try {
     const res = await fetch(`${config.apiBase}/voice/status`, { headers: authHeaders(config) })
-    if (!res.ok) return false
-    return !!(await res.json()).configured
+    if (!res.ok) return { configured: false, canvas: CANVAS_FALLBACK }
+    const body = await res.json()
+    const c = body.canvas ?? {}
+    return {
+      configured: !!body.configured,
+      canvas: {
+        enabled: c.enabled ?? CANVAS_FALLBACK.enabled,
+        maxPanels: c.max_panels ?? CANVAS_FALLBACK.maxPanels,
+        revealStaggerMs: c.reveal_stagger_ms ?? CANVAS_FALLBACK.revealStaggerMs,
+        captionLines: c.caption_lines ?? CANVAS_FALLBACK.captionLines,
+      },
+    }
   } catch {
-    return false
+    return { configured: false, canvas: CANVAS_FALLBACK }
   }
 }
 

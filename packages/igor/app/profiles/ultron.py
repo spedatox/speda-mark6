@@ -45,6 +45,12 @@ class UltronProfile(AgentProfile):
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:TxGEqnHWrfWFTfGW9XjX"
+    canvas_brief = (
+        "Presenting academic work: deadlines and schedules are calendar or "
+        "timeline windows, grades and workload are stat tiles or charts, and a "
+        "source or paper worth citing is an article window. Speak the plan and "
+        "the trade-off, not the syllabus"
+    )
     doc_theme = DocTheme(accent="#8a93a6")   # signature slate — matches the UI brand
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow

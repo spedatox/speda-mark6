@@ -73,6 +73,17 @@ async def voice_status():
         # (that depends on the resolved engine), but a deployment with no
         # ElevenLabs key can skip the attempt entirely.
         "streaming": tts_stream.streaming_available(),
+        # The canvas half of voice mode. The client reads its board settings from
+        # here rather than from its own constants so the owner tunes them in one
+        # place (Settings -> Canvas) — the same values that shape what the agent
+        # WRITES also shape how the board renders it, and the two drifting apart
+        # is how you get a ten-window reply on a board that only draws six.
+        "canvas": {
+            "enabled": settings.canvas_enabled,
+            "max_panels": settings.canvas_max_panels,
+            "reveal_stagger_ms": settings.canvas_reveal_stagger_ms,
+            "caption_lines": settings.canvas_caption_lines,
+        },
     }
 
 

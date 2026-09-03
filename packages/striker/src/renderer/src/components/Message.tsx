@@ -566,7 +566,7 @@ function sanitizePartialMarkdown(text: string): string {
  *  the typewriter advances. Applies the same partial-markdown-safe pipeline
  *  each individual segment gets (sanitize → normalize fences → math) that the
  *  whole message used to get once, since a tool can in principle fire mid-fence. */
-function TextSegment({ text }: { text: string }) {
+export function TextSegment({ text }: { text: string }) {
   const visible = useMemo(
     () => prepareMath(normalizeCodeFences(sanitizePartialMarkdown(text))),
     [text],

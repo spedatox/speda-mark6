@@ -2,58 +2,49 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { TextSegment } from './Message'
-import { FRAMED, GAP, pack, type Placed, type VoicePanel } from '../lib/voicePanels'
+import VoicePanelBody from './VoicePanelBody'
+import { GAP, pack, type Placed, type VoicePanel } from '../lib/voicePanels'
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
- *  THE CANVAS — voice mode's heads-up workspace.
+ *  THE CANVAS — voice mode's presentation board.
  *
- *  Voice mode does not show a document. It shows a WORKSPACE: the answer is
- *  taken apart and each piece is given its own window, floating over the void
- *  with the orb docked in the corner. Ask for the solution to an equation and
- *  three windows materialise — what Speda is saying, the worked solution, the
- *  plot — instead of one column you have to read top to bottom.
+ *  Voice mode does not show a document and it does not show a conversation. The
+ *  agent PRESENTS: it narrates, and the board carries the evidence it is
+ *  narrating about — a figure as a tile, a source as a cutting with its photo,
+ *  a person as a file, each in its own window. What is being said runs as a
+ *  subtitle under the orb (VoiceMode's caption strip), because a window holding
+ *  the sentences the owner is currently hearing is a transcript with a bigger
+ *  font, which is the thing this mode exists not to be.
  *
- *  That is the whole point of the mode being a different mode. A transcript
- *  rendered a bit larger is still a transcript; this is an instrument panel.
+ *  The agent stages these windows itself and places each one in its reply at
+ *  the moment its narration reaches it (igor core/surface.py _VOICE_BRIEF), so
+ *  the board assembles in step with the voice without anything having to sync
+ *  against audio timestamps. Writing order is the cue track.
  *
- *  Two things own a window's position:
- *    - the LAYOUT, which packs windows as they materialise (Speda managing the
- *      board), and re-packs whenever a new one arrives; and
- *    - the OWNER, who can drag any window anywhere. A dragged window is pinned
- *      — the layout stops moving it — until REFLOW hands the board back.
+ *  Three things own a window's geometry:
+ *    - the LAYOUT, which packs windows as they materialise (the agent managing
+ *      the board), and re-packs whenever a new one arrives;
+ *    - the OWNER, who can drag any window anywhere and resize it from its
+ *      bottom-right corner. Either gesture PINS the window — the layout stops
+ *      touching it — until REFLOW hands the board back; and
+ *    - EXTEND, which blows one window up to fill the board and is the only
+ *      state that overrides the other two.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
-/** A window's contents, rendered by the transcript's own markdown pipeline. The
- *  narrative window rides its own tail while the answer is still being spoken —
- *  what is being said NOW is the part worth having on screen. */
-function PanelBody({ panel }: { panel: VoicePanel }) {
-  const framed = FRAMED.has(panel.kind)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (panel.kind !== 'text' || !ref.current) return
-    ref.current.scrollTo({ top: ref.current.scrollHeight, behavior: 'smooth' })
-  }, [panel.kind, panel.source])
+/** Floor for a hand-resized window. Smaller than this and the grip, the title
+ *  and the EXTEND button no longer fit on one row, which loses the only handle
+ *  the window can be recovered by. */
+const MIN_W = 200
+const MIN_H = 90
 
-  return (
-    <div
-      ref={ref}
-      className={framed ? 'hb-holo' : undefined}
-      style={{
-        flex: 1, minHeight: 0, overflow: 'auto',
-        padding: framed ? '0.7rem 0.85rem' : 0,
-      }}
-    >
-      <div className="prose" style={{ overflowWrap: 'anywhere', minWidth: 0 }}>
-        <TextSegment text={panel.source} />
-      </div>
-    </div>
-  )
-}
+/** A window's own geometry once the owner has touched it. Position and size are
+ *  one record because either gesture pins the window — a window the owner has
+ *  resized must not then be slid across the board by the next repack. */
+interface Pin { x: number; y: number; w?: number; h?: number }
 
 interface Props {
   panels: VoicePanel[]
@@ -64,13 +55,19 @@ interface Props {
   reserveY: number
   /** Bumped by the owner's REFLOW — hands every pinned window back to the layout. */
   reflow: number
+  /** Delay between one window's entrance and the next, from Settings → Canvas. */
+  stagger: number
 }
 
-export default function VoiceCanvas({ panels, width, height, reserveX, reserveY, reflow }: Props) {
-  /** Windows the owner has dragged. Absolute, and immune to the layout. */
-  const [pinned, setPinned] = useState<Record<string, { x: number; y: number }>>({})
+export default function VoiceCanvas({
+  panels, width, height, reserveX, reserveY, reflow, stagger,
+}: Props) {
+  /** Windows the owner has moved or resized. Absolute, and immune to the layout. */
+  const [pinned, setPinned] = useState<Record<string, Pin>>({})
   const [z, setZ] = useState<Record<string, number>>({})
-  const [dragging, setDragging] = useState<string | null>(null)
+  /** The window currently under a pointer gesture — its transition is killed for
+   *  the duration, because easing a window that is following the cursor is lag. */
+  const [held, setHeld] = useState<string | null>(null)
   /** One window blown up to fill the board — a chart on a laptop needs it. */
   const [full, setFull] = useState<string | null>(null)
   const topZ = useRef(10)
@@ -96,8 +93,8 @@ export default function VoiceCanvas({ panels, width, height, reserveX, reserveY,
    *
    * Each window's entrance is delayed by its position among the ones that
    * arrived together, and the delay is remembered per id: a re-render (a drag, a
-   * repack, more text landing in the narrative) must never replay an entrance
-   * that has already happened. */
+   * repack, more text landing in a window) must never replay an entrance that
+   * has already happened. */
   const arrival = useRef<Map<string, number>>(new Map())
   const seenCount = useRef(0)
   {
@@ -112,32 +109,31 @@ export default function VoiceCanvas({ panels, width, height, reserveX, reserveY,
     seenCount.current = panels.length
   }
 
-  const startDrag = useCallback((e: React.PointerEvent, p: Placed) => {
+  /** One pointer gesture, for both the grip and the resize corner. They differ
+   *  only in what the delta is applied to, which is not worth two listeners'
+   *  worth of duplicated setup and teardown. */
+  const gesture = useCallback((
+    e: React.PointerEvent, p: Placed, box: { x: number; y: number; w: number; h: number },
+    apply: (dx: number, dy: number, from: typeof box) => Pin,
+  ) => {
     if (full) return
     e.preventDefault()
+    e.stopPropagation()
     raise(p.id)
-    setDragging(p.id)
+    setHeld(p.id)
     const originX = e.clientX, originY = e.clientY
-    const from = { x: p.x, y: p.y }
+    const from = { ...box }
     const move = (ev: PointerEvent) => {
-      setPinned(prev => ({
-        ...prev,
-        [p.id]: {
-          // Never let a window be dragged fully off the board — the grip has to
-          // stay reachable or it is gone for good.
-          x: clamp(from.x + ev.clientX - originX, 90 - p.w, width - 90),
-          y: clamp(from.y + ev.clientY - originY, 0, height - 34),
-        },
-      }))
+      setPinned(prev => ({ ...prev, [p.id]: apply(ev.clientX - originX, ev.clientY - originY, from) }))
     }
     const up = () => {
-      setDragging(null)
+      setHeld(null)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
-  }, [full, height, width, raise])
+  }, [full, raise])
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 2, overflow: 'hidden' }}>
@@ -146,7 +142,7 @@ export default function VoiceCanvas({ panels, width, height, reserveX, reserveY,
         const isFull = full === p.id
         const box = isFull
           ? { x: GAP, y: GAP, w: width - GAP * 2, h: height - GAP * 2 }
-          : { x: pin?.x ?? p.x, y: pin?.y ?? p.y, w: p.w, h: p.h }
+          : { x: pin?.x ?? p.x, y: pin?.y ?? p.y, w: pin?.w ?? p.w, h: pin?.h ?? p.h }
         const [main, sub] = [p.title.slice(0, p.title.indexOf('_')), p.title.slice(p.title.indexOf('_'))]
 
         return (
@@ -160,20 +156,26 @@ export default function VoiceCanvas({ panels, width, height, reserveX, reserveY,
               display: 'flex', flexDirection: 'column',
               // Windows GLIDE when the layout moves them — that motion is what
               // reads as the board being managed rather than redrawn. Killed
-              // while dragging, where any easing is just lag.
-              transition: dragging === p.id
+              // while the owner is dragging or resizing, where easing is lag.
+              transition: held === p.id
                 ? 'none'
                 : 'left 0.45s cubic-bezier(0.4,0,0.2,1), top 0.45s cubic-bezier(0.4,0,0.2,1), width 0.45s cubic-bezier(0.4,0,0.2,1), height 0.45s cubic-bezier(0.4,0,0.2,1)',
               // `both` matters: the window is held invisible through its delay,
               // so a staggered arrival cannot flash the whole board first.
               animation: 'widgetEntrance 0.42s ease both',
-              animationDelay: `${(arrival.current.get(p.id) ?? 0) * 160}ms`,
+              animationDelay: `${(arrival.current.get(p.id) ?? 0) * stagger}ms`,
             }}
           >
             {/* Grip — the title, and the only place a drag starts. Deliberately
                 not the body: a drag that begins on a chart fights its tooltip. */}
             <div
-              onPointerDown={e => startDrag(e, p)}
+              onPointerDown={e => gesture(e, p, box, (dx, dy, from) => ({
+                // Never let a window be dragged fully off the board — the grip
+                // has to stay reachable or it is gone for good.
+                x: clamp(from.x + dx, 90 - from.w, width - 90),
+                y: clamp(from.y + dy, 0, height - 34),
+                w: from.w, h: from.h,
+              }))}
               style={{
                 height: 22, flexShrink: 0,
                 display: 'flex', alignItems: 'center', gap: '0.5rem',
@@ -199,7 +201,35 @@ export default function VoiceCanvas({ panels, width, height, reserveX, reserveY,
               </button>
             </div>
 
-            <PanelBody panel={p} />
+            <VoicePanelBody panel={p} />
+
+            {/* Resize corner. Hidden while a window fills the board, where the
+                board's edge is the size and there is nothing to drag against. */}
+            {!isFull && (
+              <div
+                onPointerDown={e => gesture(e, p, box, (dx, dy, from) => ({
+                  x: from.x, y: from.y,
+                  // Clamped against the board's far edge as well as the floor, so
+                  // a window cannot be grown out past where its own corner can be
+                  // reached to shrink it again.
+                  w: clamp(from.w + dx, MIN_W, Math.max(MIN_W, width - from.x - 4)),
+                  h: clamp(from.h + dy, MIN_H, Math.max(MIN_H, height - from.y - 4)),
+                }))}
+                title="Resize"
+                style={{
+                  position: 'absolute', right: 0, bottom: 0,
+                  width: 16, height: 16, cursor: 'nwse-resize',
+                  touchAction: 'none',
+                  // The corner mark, drawn rather than iconised: two hairlines
+                  // meeting, which reads as a grip at this size where a glyph
+                  // would just be a smudge.
+                  borderRight: '2px solid var(--hb-icon-dim)',
+                  borderBottom: '2px solid var(--hb-icon-dim)',
+                  borderBottomRightRadius: 4,
+                  opacity: 0.75,
+                }}
+              />
+            )}
           </div>
         )
       })}

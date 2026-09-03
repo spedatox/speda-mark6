@@ -36,6 +36,13 @@ class SentinelProfile(AgentProfile):
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:ErXwobaYiN019PkySvjV"
+    canvas_brief = (
+        "Presenting finance: never speak a figure you could show. Every headline "
+        "number is its own stat tile with the change on it, every trend and every "
+        "category split is a chart, and any month-on-month movement worth "
+        "mentioning is a timeline. Say what the numbers MEAN — what moved, what "
+        "is unusual, what to do about it — and let the board carry the arithmetic"
+    )
     doc_theme = DocTheme(accent="#d99c44")   # signature gold — matches the UI brand
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow

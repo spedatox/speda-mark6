@@ -44,6 +44,12 @@ class OptimusProfile(AgentProfile):
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:AZnzlk1XvdvUeBnXmlld"
+    canvas_brief = (
+        "Presenting systems: code, diffs and configuration go in code windows, "
+        "architecture and flow go in svg or html windows, and service or host "
+        "state goes in stat tiles. Speak the diagnosis and the fix, never read "
+        "source aloud"
+    )
     doc_theme = DocTheme(accent="#2eb6ac")   # signature teal — matches the UI brand
     external_backend = True
 
