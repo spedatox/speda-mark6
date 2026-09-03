@@ -161,6 +161,21 @@ words of the wrong language. Whether a leak can be *fixed* depends on the path:
 Repair is one cheap-model pass, gated on `settings.language_repair`, and
 degrades to the untouched text on any failure.
 
+**Automations are the exception the system prompt cannot win on its own.** A
+stored `intent` sits immediately above the reply the model is about to write,
+and a concrete `ÇIKTI: …` section beats an abstract rule twenty thousand tokens
+earlier — which is why briefings kept firing in the wrong language. Two fixes,
+both needed:
+
+- `automation_intent._SYSTEM` composes new instructions in `agent_language`, not
+  in the language of the owner's wish. What it writes is stored and re-read on
+  every future firing, so composing in the wish's language pinned that
+  automation to that language for good.
+- `trigger_runner._language_clause()` restates the contract at the END of every
+  automated seed, where recency is on its side, and says explicitly that the
+  intent's own language is not a signal. This is what makes automations stored
+  before the fix fire correctly without a migration.
+
 ---
 
 ## Authentication

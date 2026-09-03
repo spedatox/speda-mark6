@@ -41,6 +41,7 @@ from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
 from app.models.automation import Automation
+from app.services import language
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +57,11 @@ _SYSTEM = """You turn a short wish into an EXECUTABLE instruction that an AI age
 
 The agent reading your output is the same agent that will run it. Write in the second person, as an instruction to itself.
 
-LANGUAGE — read this twice. The owner's wish below is written in one language. EVERY word you write — section labels, rules, the instruction itself — must be in that SAME language. Do not write section headers like "COLLECTION" or "OUTPUT" in English when the wish is in Turkish or any other language: translate them too ("TOPLAMA", "ÇIKTI", or whatever that language would naturally use). A bilingual instruction, half in English and half in the owner's language, is a wrong answer even if every sentence in it is individually correct.
+LANGUAGE — read this twice. You will be told below which language the system speaks. EVERY word you write — section labels, rules, the instruction itself — must be in THAT language, whatever language the owner's wish happens to be written in. The wish is what he wants; it is not a vote on the language. A bilingual instruction, half in one language and half in another, is a wrong answer even if every sentence in it is individually correct.
 
-GENDER — never assume the owner's gender. Refer to "the owner" (or that word's exact equivalent in the wish's language) rather than a gendered pronoun. If the wish's language has no grammatical gender (Turkish, for instance — "o" covers everyone), this is automatic and needs no extra care; if you are writing in a language that does (English "he/she"), do not guess — write "the owner" or a neutral form instead.
+This used to follow the WISH's language instead, and it was wrong for a reason worth stating: what you write is stored and prepended to every future firing of this automation, forever. An instruction whose OUTPUT section is headed "ÇIKTI" is a standing order to answer in Turkish, sitting inches from the reply, and it beat the system-wide language contract every time — which is exactly how briefings kept arriving in the wrong language long after the owner had switched.
+
+GENDER — never assume the owner's gender. Refer to "the owner" (or that word's exact equivalent in the language you are writing in) rather than a gendered pronoun. If that language has no grammatical gender (Turkish, for instance — "o" covers everyone), this is automatic and needs no extra care; if it does (English "he/she"), do not guess — write "the owner" or a neutral form instead.
 
 Your output must have two phases:
 
@@ -160,6 +163,13 @@ def _prompt(spec: dict, agent_name: str) -> str:
         f"The agent is {agent_name}. This automation is {kind}.\n"
         f"It runs: {spec.get('_when', 'on a schedule')}."
         f"{voice_block}\n\n"
+        # The system's one language (services/language.py), not the wish's. See
+        # the LANGUAGE rule in _SYSTEM for why this is read off the switch: what
+        # is written here is stored and re-read on every future firing, so
+        # composing it in the wish's language pins that automation to that
+        # language for good.
+        f"The system speaks {language.name_of()}. Write everything in "
+        f"{language.name_of()}.\n\n"
         f"The owner asked for:\n{spec.get('instruction_raw') or spec.get('instruction')}\n\n"
         "Write the instruction."
     )

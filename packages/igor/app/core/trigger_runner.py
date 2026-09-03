@@ -67,6 +67,34 @@ def format_trigger_context(payload: dict) -> dict:
     }
 
 
+def _language_clause() -> str:
+    """The language contract, restated at the END of an automated seed.
+
+    It is already in the system prompt, and for a chat turn that is enough. An
+    automation is the case where it is not: the stored `intent` was composed in
+    whatever language the owner's original wish happened to be written in, it
+    sits immediately above the reply the model is about to write, and a concrete
+    "ÇIKTI: …" section beats an abstract rule twenty thousand tokens earlier.
+    That is why briefings kept arriving in Turkish however firmly the contract
+    was worded — the instruction the agent was actually reading contradicted it.
+
+    So it is repeated here, last, where recency is on its side, and it says
+    explicitly that the intent's own language is not a signal. New intents are
+    composed in the chosen language now (services/automation_intent.py), but
+    every automation stored before that still carries the old one, and this is
+    what makes those fire correctly without a migration.
+    """
+    name = language.name_of()
+    return (
+        f"\n\nLANGUAGE — the message you are about to write goes to the owner in "
+        f"{name}, every word of it. The intent above may be written in another "
+        f"language; that is an artifact of when it was composed and is NOT an "
+        f"instruction about which language to answer in. Read it in whatever "
+        f"language it is in, and write the message itself in {name} — section "
+        f"labels, day names, dates and units included."
+    )
+
+
 def build_seed(payload: dict, output_mode: str) -> str:
     """The single user turn that kicks off an automated run.
 
@@ -130,6 +158,7 @@ def build_seed(payload: dict, output_mode: str) -> str:
         f"- {delivery}\n\n"
         f"intent: {intent}\n\n"
         f"full payload: {payload}"
+        + _language_clause()
     )
 
 
@@ -195,6 +224,10 @@ def _completion_seed(payload: dict, delivery: str) -> str:
         f"ticket: {payload.get('ticket') or '(untracked)'}\n\n"
         "findings:\n"
         f"{payload.get('result') or empty}"
+        # Same reason as a briefing: the findings below were written by another
+        # agent or a legionnaire and can be in any language, and they are the
+        # last thing the model reads before it writes.
+        + _language_clause()
     )
 
 
