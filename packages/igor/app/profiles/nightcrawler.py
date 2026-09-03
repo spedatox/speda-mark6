@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 from app.profiles.base import AgentProfile, DocTheme
-from app.prompts.loader import assemble, build_skills_manifest
+from app.prompts.loader import assemble, build_skills_manifest, derive_iteration
 
 PROMPT_SECTIONS = [
     "agents/nightcrawler/01_identity.md",
@@ -16,6 +16,9 @@ PROMPT_SECTIONS = [
     "core/09_agent_network.md",
     "core/10_environment.md",   # Mark VI ecosystem glossary (Forge/Heartbreaker/sandbox/n8n)
     "core/11_patterns.md",   # the pattern loop: induce a repeat, pre-empt it next time
+    "core/13_signature.md",   # sign every artifact you leave outside the chat
+    "core/14_calendar.md",   # all time-related work: read the calendar, then write it properly
+    "core/15_language.md",   # the one language the owner picked — every word, every surface
 ]
 
 
@@ -25,6 +28,9 @@ class NightCrawlerProfile(AgentProfile):
 
     agent_id = "nightcrawler"
     name = "NightCrawler"
+    # The agent's own iteration, read off PROMPT_SECTIONS[0] (its identity
+    # prompt). Bump the `Iteration:` line there and the signature follows.
+    mark = derive_iteration(PROMPT_SECTIONS[0])
     domain = "OSINT, web surveillance & research"
 
     # ElevenLabs "Arnold" (crisp, alert) — verify this id exists in the

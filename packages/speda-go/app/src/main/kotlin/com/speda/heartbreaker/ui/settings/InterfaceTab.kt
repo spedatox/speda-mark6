@@ -36,6 +36,7 @@ import com.speda.heartbreaker.i18n.AppLocale
 import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonPrimitive
 
 @Composable
 fun InterfaceTab(config: AppConfig, graph: AppGraph) {
@@ -56,7 +57,18 @@ fun InterfaceTab(config: AppConfig, graph: AppGraph) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppLocale.entries.forEach { locale ->
                     ThemeChip(locale.label, active = settings.locale == locale.wire) {
-                        scope.launch { graph.settings.setLocale(locale.wire) }
+                        scope.launch {
+                            graph.settings.setLocale(locale.wire)
+                            // Not just these strings. `agent_language` is what
+                            // stamps the language contract into every agent's
+                            // system prompt and what the speech locales are
+                            // derived from — the same master switch the composer
+                            // carries, reached from the other end.
+                            graph.api.saveConfig(
+                                config,
+                                mapOf("agent_language" to JsonPrimitive(locale.wire)),
+                            )
+                        }
                     }
                 }
             }

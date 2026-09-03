@@ -60,7 +60,9 @@ import com.speda.heartbreaker.designsystem.glass.hbGlass
 import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.i18n.AppLocale
 import com.speda.heartbreaker.i18n.LocalStrings
+import com.speda.heartbreaker.i18n.localeFromWire
 import com.speda.heartbreaker.ui.HbText
 import java.util.Locale
 
@@ -85,6 +87,13 @@ fun Composer(
      *  "full power", so the owner is never told the wrong spend state. */
     budgetMode: Boolean?,
     onBudgetToggle: () -> Unit,
+    /** The master language, as a wire code ("tr"/"en"). Dictation is launched in
+     *  it, and the "+" menu offers the switch — see [onLanguageChange]. */
+    language: String,
+    /** Throws the master switch: the interface strings, the language every agent
+     *  WRITES in, and the locales speech is synthesized and recognized in, all
+     *  from one tap. Mirrors lib/language.ts on the desktop clients. */
+    onLanguageChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
@@ -342,7 +351,18 @@ fun Composer(
                     // same): speaking a second clause must not wipe the first.
                     AttachItem(t.composer.voiceInput) {
                         plusOpen = false
-                        runCatching { dictate.launch(speechIntent()) }
+                        runCatching { dictate.launch(speechIntent(language)) }
+                    }
+                    // Language. In the overflow rather than out on the toolbar
+                    // for the same reason everything else here is — there is no
+                    // room on a phone — but it is the same one master switch the
+                    // desktop composer carries, not a UI-strings preference.
+                    AttachItem(
+                        label = t.composer.language(otherLocale(language).label),
+                        tint = palette.accentBright,
+                    ) {
+                        plusOpen = false
+                        onLanguageChange(otherLocale(language).wire)
                     }
                     // Budget mode. Optimistic in the UI and re-synced after each
                     // turn by the caller, because Speda can flip it itself.
@@ -381,15 +401,33 @@ fun Composer(
     }
 }
 
+/** The language the switch would move TO — there are two, so "the other one"
+ *  is the whole of the toggle's logic. */
+private fun otherLocale(current: String): AppLocale =
+    AppLocale.entries.firstOrNull { it.wire != localeFromWire(current).wire } ?: AppLocale.EN
+
+/** The BCP-47 tag each language dictates in. Same pair as the backend derives
+ *  from `agent_language` (app/services/language.py) — the phone's recognizer
+ *  has to be told the same thing Azure is. */
+private fun speechTag(wire: String): String = if (localeFromWire(wire) == AppLocale.EN) "en-US" else "tr-TR"
+
 /**
  * The dictation intent. `FREE_FORM` because the owner is talking to an
- * assistant, not filling a field, and the locale follows the device — the same
- * "speak in whatever you speak" rule the desktop's recognizer uses.
+ * assistant, not filling a field.
+ *
+ * The locale used to follow the DEVICE, which was wrong the moment the language
+ * became a deliberate choice rather than an ambient fact: a phone set to Turkish
+ * would decode an English sentence as Turkish nonsense and send that, and the
+ * owner would be answered — correctly, in the chosen language — about something
+ * he never said. It follows the switch now, as synthesis and the backend's own
+ * recognizer do.
  */
-private fun speechIntent(): Intent =
+private fun speechIntent(language: String): Intent =
     Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, speechTag(language))
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, speechTag(language))
     }
 
 /** One row of the "+" attach menu. */

@@ -31,6 +31,7 @@ want?" answerable — repetition becomes a ranking signal rather than noise.
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 
 import numpy as np
@@ -114,6 +115,73 @@ _MIN_SOURCES: dict[str, int] = {
 
 MAX_SEARCH_CANDIDATES = 20_000  # perf guard on the brute-force scan
 
+# ── The fragment guard ────────────────────────────────────────────────────────
+# A store built by splitting memory files line-by-line fills with orphan bullets:
+# "a table of incomes", "**Started:** 2026-08-01", "Keep entries dated by month."
+# They are not facts. They mean nothing outside the file they were lifted from,
+# they cannot answer a question, and — the reason this is a retrieval bug and not
+# a tidiness one — a sentence with no subject embeds to a generic centroid, which
+# is close to EVERY query. 60% of the store was fragments when this was measured,
+# and they occupied the top of the ranking for questions they had no bearing on.
+#
+# So the write path now insists on a fact that stands alone. The checks are
+# deliberately shallow and mechanical: whether the claim is TRUE is the prompt's
+# problem (see validate_observation's docstring), whether it is a self-contained
+# SENTENCE is something we can actually decide here.
+
+# A markdown field label with no sentence around it: "**Version:** 5.0.0".
+_FIELD_LABEL = re.compile(r"^\*{0,2}[\w \-/]{1,40}:\*{0,2}\s*\S{0,60}$")
+
+# Something that names who or what the fact is about. Third-person pronouns
+# count: "He has never flown" is self-contained in a store whose default subject
+# is the owner. A bare noun phrase ("a table of incomes") is not.
+_NAMES_SUBJECT = re.compile(
+    r"\b(ahmet|erol|bayrak|owner|he|his|him|they|their|it|its|the\s+\w+)\b",
+    re.IGNORECASE,
+)
+
+# NOTE: there is deliberately NO "does it contain a verb" check here. The obvious
+# implementation is a whitelist of finite verbs, and measuring one against the
+# real store showed why that is a trap: it rejected "Became engaged to İlayda
+# Bayrak.", "Vertical pull other than the cable pulldown: never." and dozens of
+# other perfectly good facts, because the set of verbs a fact can be built around
+# is open and a whitelist is always a sample of it. Subject, length and shape are
+# decidable; grammaticality is not, and a guard that guesses wrong on the write
+# path silently loses facts.
+
+
+def fragment_reason(text: str) -> str | None:
+    """Why this content is a fragment rather than a fact, or None if it is fine.
+
+    Returns the reason as a sentence written FOR THE MODEL, same contract as
+    ObservationRejected: it is shown as the tool result, so it has to say what
+    to do instead.
+    """
+    from app.config import settings
+
+    body = (text or "").strip()
+    if len(body) < settings.observation_min_content_length:
+        return (
+            f"it is {len(body)} characters — under the "
+            f"{settings.observation_min_content_length}-character floor for a fact "
+            f"that has to stand on its own six months from now"
+        )
+    if _FIELD_LABEL.match(body):
+        return (
+            "it is a field label lifted out of a document, not a sentence. "
+            "'**Started:** 2026-08-01' answers nothing on its own; "
+            "'The FORGE rebuild started on 2026-08-01' does"
+        )
+    if not settings.observation_require_subject:
+        return None
+    if not _NAMES_SUBJECT.search(body):
+        return (
+            "it never says who or what it is about. A fact whose subject lives "
+            "in the file it was copied out of is unfindable once retrieved on "
+            "its own — name him, the person, or the project explicitly"
+        )
+    return None
+
 
 class ObservationRejected(Exception):
     """A proposed observation violated the evidence ladder.
@@ -183,6 +251,15 @@ def validate_observation(
             f"Rejected: `content` is {len(text)} characters, over the "
             f"{MAX_CONTENT_LENGTH} cap. One observation is ONE fact — split it, "
             f"or record the durable part and drop the narration."
+        )
+    reason = fragment_reason(text)
+    if reason is not None:
+        raise ObservationRejected(
+            f"Rejected: {reason}. Rewrite it as one self-contained English "
+            f"sentence that names its subject and states what is true of it — "
+            f"something that still answers a question when it is retrieved "
+            f"alone, months from now, with none of this conversation around it. "
+            f"Got: {text[:120]!r}"
         )
 
     lvl = (level or "explicit").strip().lower()
@@ -592,14 +669,38 @@ async def search_observations(
     list. So this degrades to whichever retriever is available rather than
     failing.
 
+    **The relevance floor.** RRF keeps order and discards magnitude, and that is
+    a real hole: the rank-1 row of a list of pure noise fuses to the same 1.0 as
+    a perfect match, so recall could not distinguish "here is the fact" from
+    "here is the closest of 638 things, none of which is it". Measured against
+    evals/recall, 71% of probes came back with a wrong rank-1 at score ≥ 0.90.
+    So the vector half is now floored BEFORE fusion: a candidate under
+    `settings.recall_min_similarity` never enters the ranking. Nothing above the
+    floor means an empty result, and an empty result is the honest answer — it
+    is what lets the caller say "not in memory, ask him" instead of confidently
+    reporting the nearest unrelated row.
+
+    The lexical half needs no floor: FTS5 only returns rows that actually
+    contain a query term, so its candidate set is already relevance-gated by
+    construction.
+
     Returns (observation, score) pairs, highest first, where the score is the
     normalised RRF agreement between the two rankings (1.0 = ranked first by
     both), NOT a cosine similarity.
     """
-    from app.services import lexical
+    from app.config import settings
+    from app.services import lexical, query_translation
     from app.services.embeddings import embed_texts
 
     from sqlalchemy import or_
+
+    # Cross-lingual step, in front of BOTH retrievers. A Turkish question cannot
+    # reach an English store on its own: the vector half degrades and the
+    # lexical half matches nothing at all. `expand` gives the meaning pass the
+    # English form and the keyword pass both forms, so the Turkish proper nouns
+    # the store legitimately keeps are still matchable. An English query, a
+    # disabled setting or a failed call all return the query untouched.
+    vector_query, lexical_query = await query_translation.expand(query)
 
     stmt = _live(user_id)
     if level:
@@ -637,22 +738,36 @@ async def search_observations(
     # Runs first and unconditionally: it needs no network, so a lexical hit
     # survives an embedding provider that is down, rate-limited or unconfigured.
     lexical_ids = await lexical.search(
-        db, query=query, limit=limit * 4, allowed_ids=set(by_id)
+        db, query=lexical_query, limit=limit * 4, allowed_ids=set(by_id)
     )
 
     # ── Meaning ──────────────────────────────────────────────────────────────
     vector_ids: list[int] = []
     embedded = [o for o in rows if o.embedding]
+    floor = float(settings.recall_min_similarity)
     if embedded:
         try:
-            query_vec = (await embed_texts([query]))[0]
+            query_vec = (await embed_texts([vector_query]))[0]
             matrix = np.stack(
                 [np.frombuffer(o.embedding, dtype=np.float32) for o in embedded]
             )
             scores = matrix @ query_vec
+            # Ordered best-first, then cut at the floor. Cutting AFTER the sort
+            # rather than masking before it keeps this a single pass and leaves
+            # the floor trivially observable in the log line below.
+            ordered = np.argsort(-scores)[: limit * 4]
             vector_ids = [
-                embedded[int(i)].id for i in np.argsort(-scores)[: limit * 4]
+                embedded[int(i)].id for i in ordered if float(scores[i]) >= floor
             ]
+            if not vector_ids and len(ordered):
+                logger.info(
+                    "observation_vector_pass_below_floor",
+                    extra={
+                        "query": query[:120],
+                        "best": round(float(scores[ordered[0]]), 3),
+                        "floor": floor,
+                    },
+                )
         except Exception as e:  # noqa: BLE001
             # A failed embedding call is no longer fatal to recall — there is a
             # second retriever now, and answering from words alone beats
@@ -660,10 +775,13 @@ async def search_observations(
             logger.warning("observation_vector_pass_failed", extra={"error": str(e)})
 
     if not lexical_ids and not vector_ids:
-        # Neither retriever produced anything (no embeddings, no FTS5, and a
-        # query that tokenised to nothing). Newest-first is a poor answer but an
-        # honest one; an empty list would read as "nothing is recorded".
-        return [(o, 0.0) for o in rows[:limit]]
+        # Neither retriever produced anything: no term matched, and nothing
+        # cleared the similarity floor. This used to fall back to newest-first,
+        # which was the single worst behaviour in recall — it answered every
+        # unanswerable question with whatever happened to be recent, and the
+        # caller had no way to tell that from a real hit. Returning nothing is
+        # the honest answer, and the tool layer renders it as "not in memory".
+        return []
 
     fused = lexical.rrf_fuse(vector_ids, lexical_ids, limit=limit)
     return [(by_id[i], score) for i, score in fused if i in by_id]

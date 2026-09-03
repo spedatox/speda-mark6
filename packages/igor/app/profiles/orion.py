@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 from app.profiles.base import AgentProfile, DocTheme
-from app.prompts.loader import assemble, build_skills_manifest
+from app.prompts.loader import assemble, build_skills_manifest, derive_iteration
 
 # Orion assembles his own identity + the audit procedure, then the shared policy
 # sections. He deliberately keeps the same memory + agent-network protocol as the
@@ -21,6 +21,9 @@ PROMPT_SECTIONS = [
     "core/09_agent_network.md",
     "core/10_environment.md",   # Mark VI ecosystem glossary
     "core/11_patterns.md",   # the pattern loop: induce a repeat, pre-empt it next time
+    "core/13_signature.md",   # sign every artifact you leave outside the chat
+    "core/14_calendar.md",   # all time-related work: read the calendar, then write it properly
+    "core/15_language.md",   # the one language the owner picked — every word, every surface
 ]
 
 
@@ -41,6 +44,9 @@ class OrionProfile(AgentProfile):
 
     agent_id = "orion"
     name = "Orion"
+    # The agent's own iteration, read off PROMPT_SECTIONS[0] (its identity
+    # prompt). Bump the `Iteration:` line there and the signature follows.
+    mark = derive_iteration(PROMPT_SECTIONS[0])
     domain = "Mark VI maintenance — memory custodian & host ops"
 
     # ElevenLabs "Elli" (calm, thoughtful) — verify this id exists in the

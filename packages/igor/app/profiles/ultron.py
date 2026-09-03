@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 from app.profiles.base import AgentProfile, DocTheme
-from app.prompts.loader import assemble, build_skills_manifest
+from app.prompts.loader import assemble, build_skills_manifest, derive_iteration
 
 # Ultron-specific identity + shared policy sections. Only the identity differs
 # from Speda; the decision / output / visual / formatting / memory policies are
@@ -18,6 +18,9 @@ PROMPT_SECTIONS = [
     "core/09_agent_network.md",
     "core/10_environment.md",   # Mark VI ecosystem glossary (Forge/Heartbreaker/sandbox/n8n)
     "core/11_patterns.md",   # the pattern loop: induce a repeat, pre-empt it next time
+    "core/13_signature.md",   # sign every artifact you leave outside the chat
+    "core/14_calendar.md",   # all time-related work: read the calendar, then write it properly
+    "core/15_language.md",   # the one language the owner picked — every word, every surface
 ]
 
 
@@ -33,6 +36,9 @@ class UltronProfile(AgentProfile):
 
     agent_id = "ultron"
     name = "Ultron"
+    # The agent's own iteration, read off PROMPT_SECTIONS[0] (its identity
+    # prompt). Bump the `Iteration:` line there and the signature follows.
+    mark = derive_iteration(PROMPT_SECTIONS[0])
     domain = "academic life & university/work balance — study, planning, coursework"
 
     # ElevenLabs "Josh" (younger, direct) — verify this id exists in the

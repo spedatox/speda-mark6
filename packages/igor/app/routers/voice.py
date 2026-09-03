@@ -42,7 +42,7 @@ from fastapi.responses import Response
 
 from app.config import settings
 from app.schemas.voice import ListenResponse, SpeakRequest
-from app.services import stt, tts, tts_stream
+from app.services import language, stt, tts, tts_stream
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/voice", tags=["voice"])
@@ -220,7 +220,7 @@ async def stream(websocket: WebSocket):
         return
 
     agent_id = hello.get("agent_id") or None
-    locale = hello.get("locale") or settings.tts_locale or None
+    locale = language.tts_locale(hello.get("locale"))
     voice_ref = tts.resolve_voice(websocket.app.state.profiles, agent_id, hello.get("voice"))
     provider, model, voice_id = tts.parse_voice_ref(voice_ref)
 
@@ -337,5 +337,5 @@ async def listen(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return ListenResponse(
         text=text,
-        locale=locale or settings.stt_locale or settings.tts_locale or "en-US",
+        locale=language.stt_locale(locale),
     )

@@ -20,15 +20,17 @@ import GlassSelect from './GlassSelect'
 import ScreenLockSettings from './ScreenLockSettings'
 import { SkeletonList, SkeletonText } from './Skeleton'
 import { useT, LOCALES } from '../lib/i18n'
+import { useLanguage } from '../lib/language'
+import type { Locale } from '../lib/i18n'
 import {
   SettingsSection, SettingsField, SettingsRow, Switch, PillBtn, ServiceRow, LiveDot, fieldStyle,
 } from './settingsUI'
 
-/** Languages replies can be spoken in — mirrors VoiceMode's own switcher. */
-const VOICE_LOCALES = [
-  { value: 'en-US', label: 'English' },
-  { value: 'tr-TR', label: 'Türkçe' },
-]
+/* The "language replies are spoken in" selector used to live here, a second
+ * language control that could disagree with the interface one — a Turkish UI
+ * over English speech was a two-click mistake. There is one switch now
+ * (Interface ▸ Language, and the chip in the composer); the speech locale is
+ * derived from it. See lib/language.ts. */
 
 interface Props {
   config: AppConfig
@@ -61,6 +63,11 @@ function maskApiKey(key: string): string {
 
 
 export default function SettingsModal({ config, onClose, onEngageLockdown }: Props) {
+  // The language selector here is the SAME master switch the composer carries:
+  // it moves the agent's written language and the speech locales too, not just
+  // these strings. Routed through useLanguage so there is exactly one code path
+  // that can change it (lib/language.ts).
+  const { setLanguage } = useLanguage(config)
   const t = useT()
   const { settings, update } = useSettings()
   const { dispatch } = useChatContext()
@@ -568,18 +575,6 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                   </div>
                 </div>
 
-                <SettingsRow
-                  title={t.settingsGeneral.voiceModeLanguage}
-                  desc={t.settingsGeneral.voiceModeLanguageDesc}
-                >
-                  <GlassSelect
-                    value={settings.voiceLocale}
-                    options={VOICE_LOCALES}
-                    onChange={v => update({ voiceLocale: v })}
-                    tint="var(--hb-cyan-bright)"
-                    title={t.settingsGeneral.voiceModeLanguageTitle}
-                  />
-                </SettingsRow>
               </div>
             )}
 
@@ -981,7 +976,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                     <GlassSelect
                       value={settings.locale}
                       options={LOCALES}
-                      onChange={v => update({ locale: v as 'tr' | 'en' })}
+                      onChange={v => setLanguage(v as Locale)}
                       tint="var(--hb-cyan-bright)"
                       large
                     />

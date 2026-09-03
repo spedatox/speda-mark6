@@ -88,6 +88,10 @@ data class AppStrings(
         val budgetFrugal: String,
         val budgetFull: String,
         val budgetUnknown: String,
+        /** The master language switch, as it reads in the "+" overflow. Takes the
+         *  language it would switch TO, because the row is an action, not a
+         *  readout — see lib/language.ts on the desktop for what it moves. */
+        val language: (String) -> String,
         val noModelsReported: String,
     )
 

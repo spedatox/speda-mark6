@@ -11,6 +11,7 @@ from app.core.registry import CapabilityRegistry
 from app.models.tool_call import ToolCall
 from app.profiles.registry import ProfileRegistry
 from app.schemas.sse import SSEEvent, SSEEventType
+from app.services import language
 from app.services.llm_client import LLMClient, blocks_to_dicts, supports_vision
 from app.skills.memory import MemoryRecallCache, recall_for_context, recall_sessions_for_context
 
@@ -97,6 +98,13 @@ class AgentOrchestrator:
             {
                 "timezone": context.timezone,
                 "model": context.model,
+                # The one language the whole system speaks (services/language.py).
+                # It belongs in the CACHED prefix, not on the user message: it is
+                # a standing fact that changes only when the owner throws the
+                # switch, and the contract in prompts/core/15_language.md has to
+                # be read before the first token, not remembered from a stamp
+                # halfway down the history.
+                "language": language.name_of(),
             }
         )
 
@@ -172,6 +180,10 @@ class AgentOrchestrator:
         # derives its PDF/DOCX/PPTX palette from. Profile-owned identity (Rule 10),
         # threaded to the skill via the context exactly like the allowlist above.
         context.extra["doc_accent"] = profile.doc_theme.accent
+        # …and the name the generated file is signed with — "Sentinel Mark II",
+        # the agent that actually made it and its own iteration, never the
+        # orchestrator that dispatched it.
+        context.extra["doc_author"] = profile.signed_name
 
         # House Party Protocol — high-stakes all-hands mode (owner-engaged only).
         # Speda becomes mission commander; every other agent becomes an operative
@@ -458,6 +470,11 @@ class AgentOrchestrator:
         )
         iterations = 0
         produced_text = False  # any text streamed yet this turn (for paragraph breaks)
+        # Every text delta of this turn, kept so the finished reply can be checked
+        # against the language contract once it exists. Accumulated rather than
+        # read off `response.content` because a tool-using turn produces text in
+        # several passes and a leak in the first one is still a leak.
+        emitted_text: list[str] = []
 
         # `trigger` rides the START event so a client attaching to a turn it did
         # not send can label it the moment it appears — a background job
@@ -540,6 +557,7 @@ class AgentOrchestrator:
                         request_id=context.request_id,
                     )
                     produced_text = True
+                    emitted_text.append(delta)
                 response = await stream.get_final_message()
 
             # Observability: how much of the input prefix was served from cache.
@@ -827,13 +845,41 @@ class AgentOrchestrator:
             },
         )
 
+        # ── Language contract check ─────────────────────────────────────────
+        # The chat path is the one place a leak CANNOT be repaired: the words
+        # were streamed to his screen token by token, and silently swapping them
+        # afterwards would rewrite something he has already read. So here it is
+        # observed and reported, never fixed — the fix belongs in the prompt
+        # contract (prompts/core/15_language.md), and the log line exists so a
+        # recurring miss can be turned into one. The voice and push paths, where
+        # nothing has been shown yet, do repair (services/language.py enforce).
+        language_leak = language.leaked("".join(emitted_text))
+        if language_leak:
+            log.warning(
+                "language_leak",
+                extra={
+                    "request_id": context.request_id,
+                    "agent_id": context.agent_id,
+                    "language": language.current(),
+                    "fragments": language_leak[:8],
+                    "count": len(language_leak),
+                },
+            )
+
         # DONE carries this turn's token spend so the UI can update its readout
         # immediately. It is a DELTA, not a total: persistence runs after the
         # generator finishes, so a client that refetched the session here would
         # still see the pre-turn total.
         yield SSEEvent(
             type=SSEEventType.DONE,
-            data={"usage": context.extra.get("token_usage", {"input": 0, "output": 0})},
+            data={
+                "usage": context.extra.get("token_usage", {"input": 0, "output": 0}),
+                # Present only when the reply broke the language contract, so the
+                # client can mark that turn rather than the owner having to spot
+                # the stray word himself. Absent on a clean turn — the common
+                # case should not cost a key on every DONE event.
+                **({"language_leak": language_leak} if language_leak else {}),
+            },
             session_id=context.session_id,
             request_id=context.request_id,
         )

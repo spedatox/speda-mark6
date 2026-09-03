@@ -7,7 +7,7 @@ import VoiceCanvas from './VoiceCanvas'
 import { splitPanels, hasArtifacts } from '../lib/voicePanels'
 import { TextSegment } from './Message'
 import type { MicState } from '../lib/mic'
-import { useT } from '../lib/i18n'
+import { useT, LOCALES, type Locale } from '../lib/i18n'
 
 /**
  * Voice mode's surface: the orb, and the reply as it is being spoken.
@@ -30,10 +30,12 @@ import { useT } from '../lib/i18n'
  * it is presenting.
  */
 
-const LOCALES: { id: string; label: string }[] = [
-  { id: 'tr-TR', label: 'TR' },
-  { id: 'en-US', label: 'EN' },
-]
+/* The chips at the top of voice mode used to set the SYNTHESIS locale and
+ * nothing else, which is how you ended up hearing an English sentence read
+ * with Turkish phonetics — or a Turkish reply spoken correctly while the
+ * interface around it stayed English. They are now the same master switch the
+ * composer carries (lib/language.ts): one tap moves what is written, what is
+ * spoken, what is heard, and what this pane's own labels say. */
 
 /** The band the canvas gets: below the top bar + the owner's prompt line, above
  *  the status line. Windows are packed inside it, so it has to be real pixels
@@ -81,8 +83,9 @@ interface Props {
   streaming: boolean
   /** What the owner last said, kept small above the orb for context. */
   prompt: string
-  locale: string
-  onLocale: (locale: string) => void
+  /** The master language, not a speech locale — see lib/language.ts. */
+  language: Locale
+  onLanguage: (next: Locale) => void
   onClose: () => void
   /** Cut playback without leaving the mode. */
   onStopSpeaking: () => void
@@ -100,7 +103,7 @@ interface Props {
 }
 
 export default function VoiceMode({
-  state, amplitude, spectrum, inputLevel, reply, streaming, prompt, locale, onLocale,
+  state, amplitude, spectrum, inputLevel, reply, streaming, prompt, language, onLanguage,
   onClose, onStopSpeaking, micState, configured, agentName, dock, onDock,
 }: Props) {
   const t = useT()
@@ -290,13 +293,13 @@ export default function VoiceMode({
         <div style={{ display: 'flex', gap: 4 }}>
           {LOCALES.map(l => (
             <button
-              key={l.id}
-              className={locale === l.id ? 'hb-btn hb-btn-tint' : 'hb-btn'}
-              onClick={() => onLocale(l.id)}
-              title={t.voiceMode.speakRepliesIn(l.id)}
-              style={{ ...chip, ...(locale === l.id ? { color: 'var(--hb-cyan-bright)' } : {}) }}
+              key={l.value}
+              className={language === l.value ? 'hb-btn hb-btn-tint' : 'hb-btn'}
+              onClick={() => onLanguage(l.value)}
+              title={t.voiceMode.speakRepliesIn(l.label)}
+              style={{ ...chip, ...(language === l.value ? { color: 'var(--hb-cyan-bright)' } : {}) }}
             >
-              {l.label}
+              {l.value.toUpperCase()}
             </button>
           ))}
         </div>

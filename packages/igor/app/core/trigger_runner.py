@@ -42,6 +42,7 @@ from app.core.clock import owner_now
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal
 from app.models.message import Message
+from app.services import language
 from app.services.chat_history import final_answer_text
 
 logger = logging.getLogger(__name__)
@@ -497,6 +498,14 @@ async def _deliver(
                 request_id=request_id, sanitize_model=sanitize_model,
             )
         else:
+            # A push has not been shown to him yet, so unlike a streamed chat
+            # reply a language leak here is still repairable — and a Telegram
+            # notification is exactly the surface where a stray word is most
+            # visible, because there is no conversation around it to explain
+            # itself. The voice branch above does not need this: it runs the
+            # same check inside tts.prepare_speech_text, and paying for two
+            # rewrite passes on one message would be the wrong trade.
+            text = await language.enforce(text, sanitize_model)
             delivered = await telegram_bots.deliver_message(agent_id, text)
         if not delivered:
             await _store_notification(db, agent_id, user_id, request_id, text, payload)

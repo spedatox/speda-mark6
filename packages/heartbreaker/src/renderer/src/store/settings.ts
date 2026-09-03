@@ -9,8 +9,11 @@ export interface AppSettings {
   model: string
   systemPrompt: string
   temperature: number
-  /** The interface language — Turkish by default. Separate from `voiceLocale`:
-   *  the UI you read and the voice you hear are independent choices. */
+  /** THE language. Not just the interface: the switch that writes this
+   *  (lib/language.ts) also sets the synthesis locale, the recognition locale,
+   *  and the backend's `agent_language` — which stamps a hard contract into
+   *  every agent's system prompt. One value, so a Turkish UI can never sit
+   *  over an English reply read in a Turkish accent again. */
   locale: 'tr' | 'en'
   sidebarOpen: boolean
   /** The deck's right telemetry column. Defaults on — it is the glanceable
@@ -21,9 +24,12 @@ export interface AppSettings {
   /** Working directory sent to the Forge for Optimus jobs (Cell workspace +
    *  Graphify root). Empty = the peer's own default workspace. */
   forgeCwd: string
-  /** Language replies are SPOKEN in. Sent as `locale` on every synthesis call.
-   *  Separate from the voice: the roster uses multilingual voices, which are
-   *  named en-US-… whatever language they are actually reading. */
+  /** BCP-47 locale replies are SPOKEN in, sent as `locale` on every synthesis
+   *  call. DERIVED from `locale` — never set on its own any more: the language
+   *  switch (lib/language.ts) moves both together, and `load()` re-derives it
+   *  for a deck saved back when the two could drift apart. Still separate from
+   *  the VOICE, which is a different axis entirely: the roster uses
+   *  multilingual voices, named en-US-… whatever language they are reading. */
   voiceLocale: string
   /** Which voice speaks the replies, as a full ref the backend parses —
    *  "openai:gpt-4o-mini-tts:nova" or "azure:tr-TR-EmelNeural". Deliberately
@@ -82,7 +88,16 @@ const DEFAULT: AppSettings = {
 function load(): AppSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? { ...DEFAULT, ...JSON.parse(raw) } : DEFAULT
+    if (!raw) return DEFAULT
+    const stored = { ...DEFAULT, ...JSON.parse(raw) } as AppSettings
+    // Migration: `locale` and `voiceLocale` were independent, so a deck saved
+    // before the master switch can be holding a Turkish interface and an
+    // en-US voice at the same time — which is the exact disagreement the
+    // switch was built to end. `locale` wins, because it is the one the switch
+    // writes. Derived inline rather than imported from lib/language to keep
+    // the store free of a cycle back through the i18n dictionaries.
+    stored.voiceLocale = stored.locale === 'tr' ? 'tr-TR' : 'en-US'
+    return stored
   } catch {
     return DEFAULT
   }

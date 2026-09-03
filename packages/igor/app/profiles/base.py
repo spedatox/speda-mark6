@@ -76,6 +76,14 @@ class AgentProfile(ABC):
     house_party_commander: bool = False
 
     name: str
+
+    # The agent's own model iteration — "Mark I", "Mark II", … Each agent is
+    # versioned independently of the Mark VI system it belongs to: Sentinel is
+    # on Mark II while Speda is on Mark VI. Derived from the identity prompt's
+    # `Iteration:` line (prompts.loader.derive_iteration), never hardcoded —
+    # identity lives in the prompt, the profile only reads it (Rule 10).
+    mark: str = ""
+
     sonnet_model: str = "claude-sonnet-4-6"
     haiku_model: str = "claude-haiku-4-5-20251001"
 
@@ -95,6 +103,20 @@ class AgentProfile(ABC):
     # individual. The spoken LANGUAGE is configured separately
     # (settings.tts_locale) — the voice name does not have to match it.
     voice_id: str = ""
+
+    @property
+    def signed_name(self) -> str:
+        """
+        How this agent signs the artifacts it leaves behind: "Sentinel Mark II".
+        Speda's display name already carries its iteration ("Speda Mark VI"), so
+        the mark is never appended twice; an agent with no Iteration line signs
+        with its bare name rather than a wrong one.
+        """
+        name = (self.name or "").strip()
+        mark = (self.mark or "").strip()
+        if not mark or name.endswith(mark):
+            return name
+        return f"{name} {mark}"
 
     # Document branding for generate_document output. Neutral by default; each
     # concrete profile overrides with its signature accent (Rule 10).

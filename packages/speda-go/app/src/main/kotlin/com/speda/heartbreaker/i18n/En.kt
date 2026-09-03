@@ -36,6 +36,7 @@ val En = AppStrings(
         budgetFrugal = "Budget mode · FRUGAL",
         budgetFull = "Budget mode · FULL",
         budgetUnknown = "Budget mode · —",
+        language = { other -> "Language · switch to $other" },
         noModelsReported = "// no models reported",
     ),
     fileCard = AppStrings.FileCard(
@@ -518,7 +519,7 @@ val En = AppStrings(
         display = "Display",
         displayHint = "Switch agents from the drawer to recolour the entire interface. The House Party Protocol parades the full roster's colours.",
         language = "Language",
-        languageHint = "The language this interface reads in.",
+        languageHint = "The one language everything is in — what the agents write, what is spoken, what the mic is decoded as, and this interface. Not one word of the other one.",
     ),
     chatMain = AppStrings.ChatMain(
         statusConnecting = "Connecting",

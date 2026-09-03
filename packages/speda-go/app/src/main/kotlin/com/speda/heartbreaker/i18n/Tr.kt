@@ -36,6 +36,7 @@ val Tr = AppStrings(
         budgetFrugal = "Tasarruf modu · TASARRUFLU",
         budgetFull = "Tasarruf modu · TAM",
         budgetUnknown = "Tasarruf modu · —",
+        language = { other -> "Dil · $other diline geç" },
         noModelsReported = "// kullanılabilir model yok",
     ),
     fileCard = AppStrings.FileCard(
@@ -518,7 +519,7 @@ val Tr = AppStrings(
         display = "Görünüm",
         displayHint = "Tüm arayüzü yeniden renklendirmek için çekmeceden ajan değiştirin. House Party Protocol tüm kadronun renklerini sergiler.",
         language = "Dil",
-        languageHint = "Bu arayüzün görüntülendiği dil.",
+        languageHint = "Her şeyin dili: ajanların yazdığı, konuşulan, mikrofonun çözümlendiği ve bu arayüz. Diğer dilden tek kelime yok.",
     ),
     chatMain = AppStrings.ChatMain(
         statusConnecting = "Bağlanıyor",

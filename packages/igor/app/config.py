@@ -378,6 +378,35 @@ class Settings(BaseSettings):
     # Servers whose tools are always in the prefix (no use_toolset needed).
     always_on_servers: str = "tavily,notion"
 
+    # ── Language ─────────────────────────────────────────────────────────────
+    # The ONE language the whole system speaks. Not a hint and not a default the
+    # conversation may drift away from: it is stamped into every agent's system
+    # prompt (prompts/core/15_language.md), it is what the replies are
+    # synthesized in, it is what the mic is decoded as, and it is what the
+    # clients render their own chrome in. The owner flips it on a switch in the
+    # client, which PUTs this key — one value, so the three halves of a spoken
+    # conversation can never disagree about which language they are in.
+    #
+    # Two-letter code. "tr" and "en" are the supported pair; anything else needs
+    # a name in services/language.py LANGUAGES and an i18n dictionary in the
+    # clients, so an unknown code degrades to English rather than half-applying.
+    agent_language: str = "tr"
+    # The finished reply is checked against the chosen language before it is
+    # spoken or pushed, and a leak is logged with the offending fragments. This
+    # is the backstop for the prompt contract, not a replacement for it — off,
+    # the contract still holds, you just stop hearing about the misses.
+    language_enforcement: bool = True
+    # On a detected leak, rewrite the text into the chosen language rather than
+    # only logging it. Costs one cheap-model pass on the affected reply and only
+    # runs on the paths where the text has not already been shown to the owner
+    # (voice synthesis, automation pushes) — a streamed chat reply is on his
+    # screen before the check finishes, so there it is flagged, never rewritten.
+    language_repair: bool = True
+    # How many foreign fragments a reply may contain before it counts as a leak.
+    # 1 is the strict reading the setting is for; raise it only if proper-noun
+    # false positives become a nuisance in a language pair added later.
+    language_leak_tolerance: int = 1
+
     # ── Voice / TTS (Azure Speech) ───────────────────────────────────────────
     # Voice mode speaks EVERY reply, so synthesis is a transport concern, not a
     # tool the model chooses to call (see services/tts.py). Azure Speech is the
@@ -398,25 +427,30 @@ class Settings(BaseSettings):
     # voice is IDENTITY and lives in app/profiles/*.py (Rule 10); this is only the
     # engine default for profiles that stay silent about it.
     tts_default_voice: str = "en-US-BrianMultilingualNeural"
-    # The language Speda SPEAKS — deliberately separate from the voice's own
-    # locale, because for a multilingual voice the two differ on purpose. Azure
-    # has only two native Turkish voices and both are the stock CapCut ones, so
-    # the roster uses multilingual voices instead; those carry an en-US/de-DE
-    # name while speaking Turkish, and the SSML xml:lang must follow the TEXT,
-    # not the voice. Left unset, the locale is guessed from the voice name —
-    # which for a multilingual voice would read Turkish with English phonetics.
-    tts_locale: str = "tr-TR"
+    # OVERRIDE for the language replies are SPOKEN in. Normally EMPTY: the
+    # locale is derived from `agent_language` above, so the switch the owner
+    # throws moves what is written and what is spoken together. Set it only to
+    # pin a regional variant the switch does not offer (en-GB rather than
+    # en-US). Deliberately separate from the voice's own locale, because for a
+    # multilingual voice the two differ on purpose: Azure has only two native
+    # Turkish voices and both are the stock CapCut ones, so the roster uses
+    # multilingual voices instead; those carry an en-US/de-DE name while
+    # speaking Turkish, and the SSML xml:lang must follow the TEXT, not the
+    # voice. With this empty AND no language resolved, build_ssml falls back to
+    # guessing from the voice name — which for a multilingual voice would read
+    # Turkish with English phonetics.
+    tts_locale: str = ""
     # Azure output-format token. MP3 decodes natively in the browser AudioContext
     # and is roughly a tenth the size of PCM over the wire.
     tts_output_format: str = "audio-24khz-48kbitrate-mono-mp3"
-    # The language the OWNER speaks, which is not necessarily the one the agent
-    # speaks back — dictating Turkish and being answered in English is a real
-    # combination, so recognition gets its own setting rather than reusing
-    # tts_locale. Left empty it follows tts_locale, which is the right default
-    # for the common case where both halves of the conversation are one language.
-    # Unlike synthesis there is no multilingual model to fall back on: Azure
-    # decodes the language it is told, and a wrong locale returns confident
-    # nonsense rather than degrading.
+    # OVERRIDE for the language the OWNER speaks, which is not necessarily the
+    # one the agent speaks back — dictating Turkish and being answered in
+    # English is a real combination, so recognition can be pinned separately.
+    # Normally EMPTY, following `agent_language` like synthesis does, which is
+    # right for the common case where both halves of the conversation are one
+    # language. Unlike synthesis there is no multilingual model to fall back on:
+    # Azure decodes the language it is told, and a wrong locale returns
+    # confident nonsense rather than degrading.
     stt_locale: str = ""
 
     # ── Conversation compaction ──────────────────────────────────────────────
@@ -444,6 +478,42 @@ class Settings(BaseSettings):
     episodic_recall_max_chars: int = 6000
     # max_tokens for the per-turn recap generation call.
     episodic_recap_max_tokens: int = 300
+
+    # ── Recall quality ───────────────────────────────────────────────────────
+    # The relevance floor. Reciprocal Rank Fusion keeps ORDER and throws away
+    # SCORE, which means the rank-1 result of a list of pure noise is presented
+    # with the same confidence as a perfect match — measured at a 71% "confident
+    # miss" rate against evals/recall before this existed. A candidate must now
+    # clear this cosine similarity before it is allowed into the vector ranking
+    # at all, so recall can answer "nothing in memory matches" instead of
+    # answering wrongly. Tuned by sweeping evals/recall/run_eval.py; raise it to
+    # trade recall for precision, lower it to trade the other way. 0.0 disables
+    # the floor and restores the old rank-only behaviour.
+    recall_min_similarity: float = 0.30
+    # The same floor for the raw-transcript half (recall_conversations). Message
+    # text is longer and noisier than a distilled fact, so its cosines run lower
+    # for the same degree of relevance and the floor is looser to match.
+    recall_message_min_similarity: float = 0.25
+    # Reject observations that are fragments rather than self-contained facts —
+    # a bare list item ("a table of incomes", "**Started:** 2026-08-01") carries
+    # no meaning on its own, embeds to a generic centroid, and therefore ranks
+    # near the top of EVERY query. 60% of the store was this before the guard.
+    # Minimum characters before content is treated as a fact rather than a
+    # fragment.
+    observation_min_content_length: int = 25
+    # Require an observation to name what it is about (the owner, a person, a
+    # project) rather than leaving the subject implicit in a file it was copied
+    # out of. This is the check that keeps orphan bullets out of the store.
+    observation_require_subject: bool = True
+    # Translate a Turkish recall query into English before searching. The store
+    # is English by policy; his questions often are not, and that asymmetry cost
+    # half of Turkish recall (43% hit@5 against 87% for English on the same
+    # probe set). See app/services/query_translation.py. Off = the old
+    # behaviour: Turkish queries search an English store directly.
+    recall_translate_queries: bool = True
+    # Model for that translation. Empty = the background model. It is a small,
+    # cached, latency-sensitive call, so the cheapest capable model wins.
+    recall_translation_model: str = ""
 
     # The Legion — worker model override. EMPTY by default (the provider-agnostic
     # fix): legionnaire models resolve from the parent chat model's provider —

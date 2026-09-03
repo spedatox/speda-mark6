@@ -1587,7 +1587,10 @@ export async function setMemorySource(
 export interface ConfigFieldInfo {
   key: string
   label: string
-  type: 'text' | 'password' | 'bool' | 'int' | 'select' | 'url'
+  // Mirrors FieldType in app/config_schema.py. 'float' was missing here while
+  // the backend has always declared it, so a float field typed as text and
+  // ConfigTab's step handling had no type it could match.
+  type: 'text' | 'password' | 'bool' | 'int' | 'float' | 'select' | 'url'
   secret: boolean
   requires_restart: boolean
   help: string

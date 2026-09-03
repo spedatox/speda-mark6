@@ -49,6 +49,7 @@ from xml.sax.saxutils import escape, quoteattr
 import httpx
 
 from app.config import settings
+from app.services import language
 
 logger = logging.getLogger(__name__)
 
@@ -408,8 +409,10 @@ async def synthesize(
 
     `locale` is the language the TEXT is in, which is NOT the voice's own
     locale: a multilingual voice is named `en-US-…` precisely so it can speak
-    something else. Defaults to settings.tts_locale; only when that is empty
-    does build_ssml fall back to guessing from the voice name.
+    something else. Defaults to the Language switch (services/language.py),
+    which `settings.tts_locale` overrides for a deployment that wants a
+    regional variant; only when both are empty does build_ssml fall back to
+    guessing from the voice name.
 
     `voice_settings` (resolve_voice_settings()) tunes ElevenLabs'
     stability/similarity_boost/style/speed/use_speaker_boost for THIS call.
@@ -442,12 +445,20 @@ async def prepare_speech_text(text: str, locale: str | None = None, sanitize_mod
     showing the raw text there while the audio says something else (units
     expanded, a stray language switch fixed) would make the transcript a
     second, contradicting draft instead of a record of the first one.
+
+    This is also where the language contract is enforced for the ear rather
+    than the eye. Voice is the one path where a leak can still be caught in
+    time: nothing has been shown to the owner yet, so a reply that slipped a
+    Turkish word into an English answer can be rewritten before it is spoken
+    instead of merely logged after the fact. Off (or with no sanitize model to
+    pay for the pass) it degrades to logging, exactly like the chat path.
     """
-    spoken_locale = locale or settings.tts_locale or None
+    spoken_locale = language.tts_locale(locale)
     spoken = strip_for_speech(text, spoken_locale)
     if not spoken:
         raise TTSError("Nothing to speak after stripping markup.")
     spoken = await _llm_sanitize_for_speech(spoken, sanitize_model)
+    spoken = await language.enforce(spoken, sanitize_model, spoken_locale)
     if len(spoken) > MAX_CHARS:
         spoken = spoken[:MAX_CHARS]
     return spoken
@@ -464,7 +475,7 @@ async def synthesize_prepared(
     never pays for that pipeline twice."""
     if not spoken:
         raise TTSError("Nothing to speak after stripping markup.")
-    spoken_locale = locale or settings.tts_locale or None
+    spoken_locale = language.tts_locale(locale)
     provider, model, name = parse_voice_ref(voice or settings.tts_default_voice)
     if not configured(provider):
         raise TTSError({

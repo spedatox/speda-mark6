@@ -74,6 +74,23 @@ def load_section(relative_path: str, context_vars: dict | None = None) -> str:
     return text
 
 
+def derive_iteration(relative_path: str) -> str:
+    """
+    Pull an agent's model iteration ("Mark II") out of its identity file's
+    `Iteration:` runtime line. Same single-source rule as the display name:
+    re-marking an agent means editing its identity prompt, nothing else.
+    Returns "" when the file has no Iteration line — callers fall back.
+    """
+    path = PROMPTS_DIR / relative_path
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        logger.warning("prompt_section_missing", extra={"section": relative_path})
+        return ""
+    match = re.search(r"^Iteration:\s*(Mark\s+[IVXLCDM]+)\s*$", text, re.MULTILINE)
+    return match.group(1).strip() if match else ""
+
+
 def assemble(sections: list[str], context_vars: dict | None = None) -> str:
     """Load and join multiple prompt sections separated by a blank line."""
     parts = [load_section(s, context_vars) for s in sections]

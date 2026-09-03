@@ -14,6 +14,7 @@ import { PermissionPrompt } from './InteractionPrompt'
 import AgentMark from './AgentMark'
 import { Skeleton } from './Skeleton'
 import { useT } from '../lib/i18n'
+import { useLanguage } from '../lib/language'
 import { hasMark } from '../lib/agentMarks'
 import { VoiceSession, voiceStatus } from '../lib/voice'
 import type { MicState } from '../lib/mic'
@@ -301,6 +302,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   const t = useT()
   const { state, dispatch } = useChatContext()
   const { settings, update } = useSettings()
+  const { language, setLanguage } = useLanguage(config)
   const profile = useProfile()
   // One card at a time: the peer parks the ask inside a single tool dispatch,
   // so a second gated action cannot be raised until this one is answered.
@@ -1013,8 +1015,8 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           reply={voiceReply?.content ?? ''}
           streaming={!!voiceReply?.isStreaming}
           prompt={voicePrompt}
-          locale={settings.voiceLocale}
-          onLocale={locale => update({ voiceLocale: locale })}
+          language={language}
+          onLanguage={setLanguage}
           onClose={() => onCloseVoice?.()}
           onStopSpeaking={stopSpeaking}
           micState={micState}

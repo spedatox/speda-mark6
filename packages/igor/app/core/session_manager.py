@@ -23,29 +23,34 @@ _WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 class SessionManager:
-    # Per-session loaded-toolset memory: once a server is loaded via use_toolset
-    # in a session, it stays in the tool list for every subsequent turn — so the
-    # tool array (and therefore the cached prefix) is stable. Without this,
-    # active_servers resets to empty on each HTTP request, the model re-calls
-    # use_toolset, the tool list changes, and the entire prompt cache is rewritten
-    # at 2x cost. This dict is process-local (not persisted) — a server restart
-    # clears it, which is fine (one cache write to re-establish).
-    _session_servers: dict[int, set[str]] = {}
+    def __init__(self) -> None:
+        # Per-session loaded-toolset memory: once a server is loaded via
+        # use_toolset in a session, it stays in the tool list for every
+        # subsequent turn — so the tool array (and therefore the cached prefix)
+        # is stable. Without this, active_servers resets to empty on each HTTP
+        # request, the model re-calls use_toolset, the tool list changes, and
+        # the entire prompt cache is rewritten at 2x cost. Instance-scoped and
+        # process-local (not persisted) — a server restart clears it, which is
+        # fine (one cache write to re-establish); a second SessionManager
+        # instance (tests, one-off scripts) starts with a clean slate instead
+        # of sharing state with the one on app.state.
+        self._session_servers: dict[int, set[str]] = {}
 
-    # Sticky channel sessions: a non-"app" channel (Telegram) has no session_id
-    # to pass per turn, so we pin one open session per (user, agent, channel) and
-    # reuse it until /new. Process-local; a restart re-pins to the newest open DB
-    # session for that tuple (see get_or_create). Keyed by (user_id, agent_id,
-    # channel) → session_id.
-    _channel_sessions: dict[tuple[int, str, str], int] = {}
+        # Sticky channel sessions: a non-"app" channel (Telegram) has no
+        # session_id to pass per turn, so we pin one open session per (user,
+        # agent, channel) and reuse it until /new. Process-local; a restart
+        # re-pins to the newest open DB session for that tuple (see
+        # get_or_create). Keyed by (user_id, agent_id, channel) → session_id.
+        self._channel_sessions: dict[tuple[int, str, str], int] = {}
 
-    # Per-session resolved-tool memory, the tool_search analogue of the toolset
-    # memory above and load-bearing for the same reason: a tool the model found
-    # on turn 1 must still be in the array on turn 9. Without it the array
-    # shrinks back every turn, the model re-searches for something it already
-    # had, and the tail of the tool list changes on each turn — which is exactly
-    # the prefix churn progressive disclosure exists to prevent.
-    _session_tools: dict[int, set[str]] = {}
+        # Per-session resolved-tool memory, the tool_search analogue of the
+        # toolset memory above and load-bearing for the same reason: a tool
+        # the model found on turn 1 must still be in the array on turn 9.
+        # Without it the array shrinks back every turn, the model re-searches
+        # for something it already had, and the tail of the tool list changes
+        # on each turn — which is exactly the prefix churn progressive
+        # disclosure exists to prevent.
+        self._session_tools: dict[int, set[str]] = {}
 
     def get_loaded_servers(self, session_id: int) -> set[str]:
         return set(self._session_servers.get(session_id, set()))

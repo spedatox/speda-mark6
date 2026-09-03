@@ -56,6 +56,7 @@ import com.speda.heartbreaker.ui.shell.SidebarDrawer
 import com.speda.heartbreaker.ui.shell.WelcomeView
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonPrimitive
 
 /** Scroll offset far past any real message height, so LazyList clamps to the
  *  very bottom of the target item — "show me the END of this message", not its
@@ -269,6 +270,21 @@ fun ChatScreen(
                     scope.launch { budgetMode = graph.api.setBudgetMode(config, next) }  // …then the truth
                 },
                 onModelChange = { scope.launch { graph.settings.setModel(it) } },
+                language = settings.locale,
+                onLanguageChange = { next ->
+                    scope.launch {
+                        // Local half first, so the interface has already changed
+                        // language before the request lands.
+                        graph.settings.setLocale(next)
+                        // Backend half — `agent_language` is what stamps the hard
+                        // contract into every agent's system prompt and what the
+                        // speech locales are derived from. Best-effort on the
+                        // same terms as the desktop: a failed PUT leaves the
+                        // agent writing the previous language until the next
+                        // attempt, which is visible on the very next reply.
+                        graph.api.saveConfig(config, mapOf("agent_language" to JsonPrimitive(next)))
+                    }
+                },
                 onSend = { text, images, docs ->
                     vm.send(
                         text,

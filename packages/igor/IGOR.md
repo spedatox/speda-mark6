@@ -10,6 +10,7 @@ The backend. One FastAPI process: every agent, the memory system, the tool regis
 - [Layering](#layering)
 - [Local development](#local-development)
 - [Core contracts](#core-contracts)
+- [Language](#language)
 - [Authentication](#authentication)
 - [Startup sequence](#startup-sequence)
 - [Database](#database)
@@ -126,6 +127,39 @@ async def save_message(db, session_id, role, content) -> Message
 ```
 
 `agent_id` defaults to `"speda"` — it's optional, not required.
+
+---
+
+## Language
+
+One setting, `settings.agent_language` (`"tr"` / `"en"`), decides what the whole
+system speaks. `app/services/language.py` is the only module that reads it.
+
+| Surface | How it follows |
+|---|---|
+| What every agent WRITES | `prompts/core/15_language.md`, in every profile's `PROMPT_SECTIONS`, built with `language.name_of()` by `AgentOrchestrator.build_system_prompt` |
+| Synthesis | `language.tts_locale()` — `settings.tts_locale` is an override for a regional variant, normally empty |
+| Recognition | `language.stt_locale()` — same shape, `settings.stt_locale` overrides |
+| Client chrome | The clients' own i18n dictionaries, moved by the same switch that PUTs `agent_language` |
+
+The prompt section is the enforcement: not one word of the other language,
+whatever language the owner, a tool result or a web page happens to be in.
+Proper nouns, code, paths, identifiers and quoted material are never translated.
+
+`language.detect_leak()` is the backstop — a lexical scan of finished prose
+(code, URLs, paths, identifiers, numbers and quotes excised first) for function
+words of the wrong language. Whether a leak can be *fixed* depends on the path:
+
+- **Chat** — already streamed to his screen, so it is logged (`language_leak`)
+  and reported on the SSE `DONE` event. Never rewritten; rewriting text he has
+  read is worse than the leak.
+- **Voice** — `tts.prepare_speech_text` calls `language.enforce()` before
+  synthesis, so a leak is repaired before it is ever spoken.
+- **Automation pushes** — `trigger_runner` does the same before the Telegram
+  message goes out.
+
+Repair is one cheap-model pass, gated on `settings.language_repair`, and
+degrades to the untouched text on any failure.
 
 ---
 

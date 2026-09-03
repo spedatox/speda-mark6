@@ -35,6 +35,7 @@ import logging
 import httpx
 
 from app.config import settings
+from app.services import language
 
 logger = logging.getLogger(__name__)
 
@@ -106,9 +107,10 @@ async def transcribe(
     `locale` is the language being SPOKEN, e.g. "tr-TR". Unlike synthesis there
     is no multilingual voice to disambiguate — Azure needs to be told which
     language to decode, and guessing wrong does not degrade gracefully, it
-    returns confident nonsense. Defaults to settings.stt_locale, then to the
-    language the agent itself speaks (settings.tts_locale), so a single TR/EN
-    toggle in the client moves both directions of the conversation at once.
+    returns confident nonsense. Defaults to the Language switch
+    (services/language.py) — one value moves both directions of the
+    conversation at once — with `settings.stt_locale` as the override for
+    dictating in a different language than you are answered in.
 
     `content_type` defaults to the 16 kHz mono WAV the voice client records.
     Pass a sniffed type (see sniff_content_type) when the audio came from
@@ -125,7 +127,7 @@ async def transcribe(
     if len(audio) > MAX_AUDIO_BYTES:
         raise STTError("That recording is too long — Azure recognizes up to 60 seconds at a time.")
 
-    spoken_locale = locale or settings.stt_locale or settings.tts_locale or "en-US"
+    spoken_locale = language.stt_locale(locale)
 
     headers = {
         "Ocp-Apim-Subscription-Key": settings.azure_speech_key,

@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from app.profiles.base import AgentProfile, DocTheme
-from app.prompts.loader import assemble, build_skills_manifest
+from app.prompts.loader import assemble, build_skills_manifest, derive_iteration
 
 _IDENTITY_PATH = Path(__file__).parent.parent / "prompts" / "core" / "01_identity.md"
 
@@ -46,6 +46,9 @@ PROMPT_SECTIONS = [
     "core/10_environment.md",   # Mark VI ecosystem glossary (Igor/Heartbreaker/Legion/Forge/sandbox/n8n)
     "core/11_patterns.md",   # the pattern loop: induce a repeat, pre-empt it next time
     "core/12_skyfall.md",    # the owner's launch rail — arm the countdown, never claim it fired
+    "core/13_signature.md",   # sign every artifact you leave outside the chat
+    "core/14_calendar.md",   # all time-related work: read the calendar, then write it properly
+    "core/15_language.md",   # the one language the owner picked — every word, every surface
 ]
 
 
@@ -73,6 +76,9 @@ class SPEDAProfile(AgentProfile):
     house_party_commander = True
 
     name = AGENT_NAME   # derived from 01_identity.md — never hardcode here
+    # The agent's own iteration, read off PROMPT_SECTIONS[0] (its identity
+    # prompt). Bump the `Iteration:` line there and the signature follows.
+    mark = derive_iteration(PROMPT_SECTIONS[0])
     sonnet_model = "claude-sonnet-4-6"
     haiku_model = "claude-haiku-4-5-20251001"
     # ElevenLabs "Adam" (deep, steady — the default assistant voice) — verify this id exists in the

@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useIsMobile } from '../lib/useIsMobile'
 import { fetchModels, fileToImageBlock, fileToDocBlock, getBudgetMode, setBudgetMode } from '../lib/api'
 import { MicSession, micAvailable, type MicState } from '../lib/mic'
+import { useLanguage } from '../lib/language'
+import { LOCALES, type Locale } from '../lib/i18n'
 import { fetchVoices } from '../lib/voice'
 import type { AppConfig, ModelInfo, ImageBlock, DocBlock, UploadedFile } from '../lib/types'
 import { useT } from '../lib/i18n'
@@ -320,15 +323,48 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'text' | 'voice'>('text')
   const ref = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  /* -- Where the panel goes, in WINDOW coordinates ------------------------
+   * The panel is portalled to <body> instead of hanging off the trigger,
+   * because the composer sets backdrop-filter - which makes it both a
+   * stacking context and the containing block for fixed children. Anchored
+   * inside it, NO z-index could lift the list over voice mode's orb and
+   * transcript (z-index 2..4, painted in the root context), so the list
+   * opened underneath them and read as a transparent smear. Portalled out it
+   * is the topmost layer again - but it has to carry the trigger's geometry
+   * with it, which is what this measures. */
+  const [pos, setPos] = useState<{ right: number; bottom: number; maxHeight: number } | null>(null)
+  const place = useCallback(() => {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (!r) return
+    setPos({
+      // Right-aligned to the trigger and opening upward: the composer lives on
+      // the bottom edge, so there is never room below it.
+      right: Math.max(8, window.innerWidth - r.right),
+      bottom: window.innerHeight - r.top + 6,
+      maxHeight: Math.max(200, r.top - 16),
+    })
+  }, [])
 
   useEffect(() => {
     if (!open) return
     const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      // The panel is no longer a DOM child of the trigger, so closing on
+      // "outside" must spare it explicitly or every click inside dismisses it.
+      const el = e.target as Node
+      if (ref.current?.contains(el) || panelRef.current?.contains(el)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [open])
+    // Re-anchor rather than drift: the copied geometry goes stale on a resize.
+    window.addEventListener('resize', place)
+    return () => {
+      document.removeEventListener('mousedown', h)
+      window.removeEventListener('resize', place)
+    }
+  }, [open, place])
 
   const active = models.find(m => m.id === activeId)
   const label  = active ? shortModelName(active.name) : shortModelName(activeId)
@@ -370,9 +406,10 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
   return (
     <div style={{ position: 'relative' }} ref={ref}>
       <button
+        ref={btnRef}
         className="hb-glass-xs"
         title={t.inputBar.selectModel}
-        onClick={() => setOpen(v => !v)}
+        onClick={() => { if (!open) place(); setOpen(v => !v) }}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         style={{
@@ -401,19 +438,18 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
         </svg>
       </button>
 
-      {open && (
-        <div className="hb-glass" style={{
-          position: 'absolute', bottom: 'calc(100% + 6px)', right: 0,
-          // Dense frost: this dropdown lives inside the composer, which has its
-          // own backdrop-filter. Nested backdrop roots cancel the child's blur
-          // (Chromium), so the fill itself must occlude what's behind it.
-          background: 'var(--glass-menu)',
-          backdropFilter: 'var(--hb-holo-blur)',
-          WebkitBackdropFilter: 'var(--hb-holo-blur)',
-          border: '1px solid var(--hb-edge)',
-          boxShadow: 'var(--hb-holo-shadow)',
+      {open && pos && createPortal(
+        <div ref={panelRef} className="hb-glass" style={{
+          position: 'fixed', right: pos.right, bottom: pos.bottom,
+          // No fill of its own: the dense `--glass-menu` slab this used to
+          // paint existed ONLY because the panel sat inside the composer's
+          // backdrop root, which cancels a child's blur and left the fill to
+          // occlude on its own - a flat dark card wearing a blur that never
+          // ran. Portalled to <body> the blur samples the page for real, so
+          // the panel takes the app's one glass material from .hb-glass and
+          // is actually frosted.
           animation: 'dropDown 0.12s ease',
-          zIndex: 100,
+          zIndex: 9951,
           width: 290,
           overflow: 'hidden',
         }}>
@@ -445,7 +481,7 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
               </button>
             ))}
           </div>
-          <div style={{ padding: '0.2rem 0', maxHeight: 420, overflowY: 'auto' }}>
+          <div style={{ padding: '0.2rem 0', maxHeight: Math.min(420, pos.maxHeight - 24), overflowY: 'auto' }}>
             {groups.length === 0 && (
               <div style={{
                 padding: '0.8rem 0.9rem',
@@ -475,9 +511,55 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
               </div>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
+  )
+}
+
+/* ── Language switch ──────────────────────────────────────────────────────────
+ * The master language control, sitting in the composer rather than buried in
+ * Settings because it is the one setting that is worth changing mid-sentence:
+ * he opens voice mode, realises he needs the answer in English, and the switch
+ * has to be one tap away from where he is already looking.
+ *
+ * It is not a UI-strings toggle. One tap moves the interface language, the
+ * synthesis locale, the recognition locale, and the hard contract in every
+ * agent's system prompt — see lib/language.ts. */
+function LanguageChip({ language, onLanguage }: {
+  language: Locale; onLanguage: (next: Locale) => void
+}) {
+  const t = useT()
+  const other = LOCALES.find(l => l.value !== language)?.value ?? 'en'
+  return (
+    <button
+      className="hb-glass-xs"
+      title={t.inputBar.languageTitle(LOCALES.find(l => l.value === other)?.label ?? other)}
+      onClick={() => onLanguage(other)}
+      style={{
+        height: 30, padding: '0 0.55rem',
+        display: 'flex', alignItems: 'center', gap: '0.35rem',
+        border: '1px solid rgba(var(--hb-accent-rgb),0.35)',
+        background: 'rgba(var(--hb-accent-rgb),0.08)',
+        backdropFilter: 'var(--hb-holo-blur)',
+        WebkitBackdropFilter: 'var(--hb-holo-blur)',
+        boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.12)',
+        color: 'var(--hb-cyan-bright)',
+        cursor: 'pointer',
+        transition: 'all 0.15s',
+        fontFamily: "'Rajdhani',sans-serif",
+        fontSize: '0.7rem', fontWeight: 700,
+        letterSpacing: '0.12em', textTransform: 'uppercase',
+      }}
+    >
+      {/* globe */}
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/>
+      </svg>
+      {language.toUpperCase()}
+    </button>
   )
 }
 
@@ -523,29 +605,51 @@ function MenuRow({ icon, label, value, valueColor, onClick }: {
   )
 }
 
-function MobileToolsMenu({ budget, listening, onAttach, onToggleBudget, onVoice }: {
-  budget: boolean; listening: boolean
+function MobileToolsMenu({ budget, listening, language, onAttach, onToggleBudget, onVoice, onLanguage }: {
+  budget: boolean; listening: boolean; language: Locale
   onAttach: () => void; onToggleBudget: () => void; onVoice: () => void
+  onLanguage: (next: Locale) => void
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // Portalled out of the composer for the same reason the model picker is -
+  // see the note there.
+  const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null)
+  const place = useCallback(() => {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (!r) return
+    setPos({
+      left: Math.max(8, Math.min(r.left, window.innerWidth - 232)),
+      bottom: window.innerHeight - r.top + 6,
+    })
+  }, [])
 
   useEffect(() => {
     if (!open) return
     const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const el = e.target as Node
+      if (ref.current?.contains(el) || panelRef.current?.contains(el)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [open])
+    window.addEventListener('resize', place)
+    return () => {
+      document.removeEventListener('mousedown', h)
+      window.removeEventListener('resize', place)
+    }
+  }, [open, place])
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
+        ref={btnRef}
         className="hb-glass-xs"
         title={t.inputBar.moreTools}
-        onClick={() => setOpen(v => !v)}
+        onClick={() => { if (!open) place(); setOpen(v => !v) }}
         style={{
           width: 30, height: 30,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -567,20 +671,14 @@ function MobileToolsMenu({ budget, listening, onAttach, onToggleBudget, onVoice 
         </svg>
       </button>
 
-      {open && (
-        <div className="hb-glass" style={{
-          position: 'absolute', bottom: 'calc(100% + 6px)', left: 0,
+      {open && pos && createPortal(
+        <div ref={panelRef} className="hb-glass" style={{
+          position: 'fixed', left: pos.left, bottom: pos.bottom,
           width: 224,
-          // Dense frost: the composer's own backdrop-filter creates a nested
-          // backdrop root, which stops this panel's blur from sampling the
-          // textarea beneath it — so the fill itself must do the occluding.
-          background: 'var(--glass-menu)',
-          backdropFilter: 'var(--hb-holo-blur)',
-          WebkitBackdropFilter: 'var(--hb-holo-blur)',
-          border: '1px solid var(--hb-edge)',
-          boxShadow: 'var(--hb-holo-shadow)',
+          // Frosted by .hb-glass, for the reason spelled out on the model
+          // picker's panel: portalled out of the composer, its blur runs.
           animation: 'dropDown 0.12s ease',
-          zIndex: 100,
+          zIndex: 9951,
           overflow: 'hidden',
         }}>
           {/* panel header */}
@@ -609,13 +707,24 @@ function MobileToolsMenu({ budget, listening, onAttach, onToggleBudget, onVoice 
             valueColor={budget ? '#5fc78f' : '#d3a04a'}
             onClick={onToggleBudget}
           />
+          {/* The narrow-screen home of the composer's language switch. Kept in
+              the menu rather than out on the toolbar only because there is no
+              room out there; it is the same one master switch. */}
+          <MenuRow
+            icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></svg>}
+            label={t.inputBar.language}
+            value={language.toUpperCase()}
+            valueColor="var(--hb-cyan-bright)"
+            onClick={() => onLanguage(LOCALES.find(l => l.value !== language)?.value ?? 'en')}
+          />
           {/* Available while streaming too — that is when barge-in happens. */}
           <MenuRow
             icon={<svg width="13" height="13" viewBox="0 0 24 24" fill={listening ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
             label={listening ? t.inputBar.stopListening : t.inputBar.voiceInput}
             onClick={() => { onVoice(); setOpen(false) }}
           />
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
@@ -665,6 +774,7 @@ export default function InputBar({
   const t = useT()
   const { state } = useChatContext()
   const { settings, update } = useSettings()
+  const { language, setLanguage } = useLanguage(config)
   const profile = useProfile()
   const isMobile = useIsMobile()
   const [value, setValue]           = useState('')
@@ -1044,9 +1154,11 @@ export default function InputBar({
                 <MobileToolsMenu
                   budget={budget}
                   listening={listening}
+                  language={language}
                   onAttach={() => fileInputRef.current?.click()}
                   onToggleBudget={toggleBudget}
                   onVoice={handleVoiceInput}
+                  onLanguage={setLanguage}
                 />
               ) : (<>
               {/* Attach */}
@@ -1084,6 +1196,11 @@ export default function InputBar({
                 </svg>
                 {budget ? t.inputBar.budgetShort : t.inputBar.fullShort}
               </button>
+
+              {/* Language — permanently visible, never folded into a menu.
+                  Which language he is being answered in is not a preference
+                  you go looking for, it is state you have to be able to SEE. */}
+              <LanguageChip language={language} onLanguage={setLanguage} />
               </>)}
             </div>
 

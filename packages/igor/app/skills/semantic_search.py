@@ -217,25 +217,46 @@ class SemanticSearchSkill(Skill):
         # message the embedder never got to is not reachable from here at all
         # until the backfill catches it, which is the embedding indexer's job,
         # not this one's.
+        # Same cross-lingual step the fact tier applies, and for the same
+        # reason: a Turkish question cannot reach English text through either
+        # retriever unaided. The transcript is mixed-language rather than
+        # English-only, which is precisely why the ORIGINAL query is kept for
+        # the keyword pass — half the corpus is the language it was typed in.
+        from app.services import query_translation
+
+        vector_query, lexical_query = await query_translation.expand(query)
+
         position = {row.message_id: i for i, (row, _) in enumerate(rows)}
         lexical_ids = await lexical.search(
             db=context.db,
-            query=query,
+            query=lexical_query,
             limit=limit * 4,
             allowed_ids=set(position),
             index=lexical.MESSAGES,
         )
         lexical_ranking = [position[m] for m in lexical_ids if m in position]
 
+        # The relevance floor, for the same reason it exists on the fact tier
+        # (app/services/observations.py): RRF ranks but does not judge, so
+        # without a floor the closest of 20,000 messages is returned as a match
+        # even when nothing in the corpus is about the query at all. Message
+        # text is longer and noisier than a distilled fact, so its cosines sit
+        # lower for equivalent relevance and it gets its own, looser setting.
+        from app.config import settings
+
+        floor = float(settings.recall_message_min_similarity)
         vector_ranking: list[int] = []
         scores = np.zeros(len(rows), dtype=np.float32)
         try:
-            query_vec = (await embed_texts([query]))[0]
+            query_vec = (await embed_texts([vector_query]))[0]
             matrix = np.stack([
                 np.frombuffer(row.embedding, dtype=np.float32) for row, _ in rows
             ])
             scores = matrix @ query_vec
-            vector_ranking = [int(i) for i in np.argsort(-scores)[: limit * 4]]
+            vector_ranking = [
+                int(i) for i in np.argsort(-scores)[: limit * 4]
+                if float(scores[i]) >= floor
+            ]
         except Exception as e:  # noqa: BLE001
             logger.warning("recall_embed_query_failed", extra={"error": str(e)})
             if not lexical_ranking:

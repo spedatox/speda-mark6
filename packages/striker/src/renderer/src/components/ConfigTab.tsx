@@ -21,6 +21,11 @@ import { useT } from '../lib/i18n'
 const MONO = 'var(--font-mono)'
 type EditVal = string | number | boolean
 
+// Both numeric field types render as a number input and coerce on change; they
+// differ only in step, so the branches that care about "is this a number" ask
+// this rather than repeating the pair and drifting when a third type appears.
+const isNumeric = (type: string): boolean => type === 'int' || type === 'float'
+
 export default function ConfigTab({ config }: { config: AppConfig }) {
   const t = useT()
   const [groups, setGroups] = useState<ConfigGroupInfo[]>([])
@@ -323,9 +328,10 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
     const current = String(dirty ? edit : (f.value ?? ''))
     control = (
       <input
-        type={f.type === 'int' ? 'number' : 'text'}
+        type={isNumeric(f.type) ? 'number' : 'text'}
+        step={f.type === 'float' ? '0.01' : undefined}
         value={current}
-        onChange={e => onChange(f.type === 'int' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)}
+        onChange={e => onChange(isNumeric(f.type) ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)}
         placeholder={f.placeholder}
         style={inputStyle}
         spellCheck={false}

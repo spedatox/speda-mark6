@@ -426,6 +426,19 @@ class SearchMemorySkill(Skill):
             )
             return "Memory search failed. Try 'recent' to browse the record instead."
 
+        if not scored:
+            # Distinct from "nothing recorded yet": the store is not empty, this
+            # query simply had no match above the relevance floor. Saying so
+            # plainly is the whole point of the floor — the correct next move is
+            # to ask the owner or search the transcript, NOT to answer from the
+            # nearest unrelated fact, which is what recall used to hand back.
+            return (
+                f"Nothing in the record matches '{query}'. This is a genuine miss, not "
+                f"an empty store — do not answer from a near-miss. Either ask him, or "
+                f"try `recall_conversations` in case it was said but never distilled "
+                f"into a fact. If he tells you, record it."
+            )
+
         logger.info(
             "search_memory",
             extra={

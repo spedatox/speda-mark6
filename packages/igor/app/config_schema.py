@@ -17,7 +17,7 @@ Adding a new setting = add its field to Settings AND a row here. Nothing else.
 from dataclasses import dataclass, field as dc_field
 from typing import Literal
 
-FieldType = Literal["text", "password", "bool", "int", "select", "url"]
+FieldType = Literal["text", "password", "bool", "int", "float", "select", "url"]
 
 
 @dataclass(frozen=True)
@@ -46,6 +46,35 @@ class ConfigGroup:
 _LIVE = False  # requires_restart=False shorthand for readability below
 
 CONFIG_GROUPS: list[ConfigGroup] = [
+    ConfigGroup(
+        "language", "Language",
+        "The one language the system speaks. It sets what every agent WRITES, what "
+        "the replies are spoken in, what the microphone is decoded as, and what the "
+        "clients render their own buttons in — one value, so the three halves of a "
+        "spoken conversation can never disagree. The clients put this on a switch "
+        "next to the message box; this is the same setting.",
+        [
+            ConfigField("agent_language", "Language", "select", requires_restart=_LIVE,
+                        options=["tr", "en"],
+                        help="tr = Türkçe, en = English. Stamped into every agent's system "
+                             "prompt as a hard contract: not one word of the other language, "
+                             "whatever language the owner, a tool result or a web page happens "
+                             "to be in. Proper nouns, code and identifiers are never translated."),
+            ConfigField("language_enforcement", "Check Replies", "bool", requires_restart=_LIVE,
+                        help="Scan finished replies for words in the wrong language and log "
+                             "what leaked. The prompt contract holds either way — turning this "
+                             "off only stops you hearing about the misses."),
+            ConfigField("language_repair", "Repair Leaks", "bool", requires_restart=_LIVE,
+                        help="On a detected leak, rewrite the text into the chosen language "
+                             "with one cheap-model pass. Runs only where the owner has not "
+                             "already seen the text — voice synthesis and automation pushes. A "
+                             "streamed chat reply is on screen before the check finishes, so "
+                             "there it is flagged, never rewritten."),
+            ConfigField("language_leak_tolerance", "Leak Tolerance", "int", requires_restart=_LIVE,
+                        help="How many foreign words a reply may contain before it counts as a "
+                             "leak. 1 is the strict reading this setting exists for."),
+        ],
+    ),
     ConfigGroup(
         "llm", "LLM Providers & Routing",
         "API keys and default model routing across every provider. A bare model "
@@ -242,6 +271,50 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         ],
     ),
     ConfigGroup(
+        "recall", "Memory Recall Quality",
+        "How hard recall has to try before it admits it does not know. The floors "
+        "are the difference between 'not in memory, ask him' and a confident wrong "
+        "answer; the fragment guard is what keeps the store answerable as it grows.",
+        [
+            ConfigField("recall_min_similarity", "Fact Relevance Floor", "float",
+                        requires_restart=_LIVE,
+                        help="Minimum cosine similarity a distilled fact must reach before "
+                             "search_memory will return it at all. Below this, recall answers "
+                             "'nothing matches' instead of handing back the nearest unrelated "
+                             "row. Raise for precision, lower for reach; 0 restores the old "
+                             "rank-only behaviour. Sweep it with evals/recall/run_eval.py.",
+                        placeholder="0.30"),
+            ConfigField("recall_message_min_similarity", "Transcript Relevance Floor", "float",
+                        requires_restart=_LIVE,
+                        help="The same floor for recall_conversations, over raw message text. "
+                             "Looser than the fact floor because long messages score lower "
+                             "cosines for the same relevance.",
+                        placeholder="0.25"),
+            ConfigField("observation_min_content_length", "Minimum Fact Length", "int",
+                        requires_restart=_LIVE,
+                        help="Characters an observation must reach to be recorded. Short "
+                             "entries are almost always bullets lifted out of a file "
+                             "('a table of incomes'), which rank near the top of every query "
+                             "and answer none of them."),
+            ConfigField("recall_translate_queries", "Translate Turkish Queries", "bool",
+                        requires_restart=_LIVE,
+                        help="The memory store is English; his questions often are not. With this "
+                             "off, a Turkish question searches an English store directly and finds "
+                             "roughly half of what the same question in English finds. Translated "
+                             "queries are cached per process, so a repeat costs nothing."),
+            ConfigField("recall_translation_model", "Query Translation Model", "text",
+                        requires_restart=_LIVE,
+                        help="Model used for that translation. Empty = the background model. Small, "
+                             "cached and on the retrieval hot path, so pick the cheapest capable one.",
+                        placeholder="e.g. deepseek:deepseek-v4-flash"),
+            ConfigField("observation_require_subject", "Require a Named Subject", "bool",
+                        requires_restart=_LIVE,
+                        help="Reject observations that never say who or what they are about. "
+                             "On is strongly recommended: a subject-less fact is unfindable "
+                             "once it is retrieved on its own."),
+        ],
+    ),
+    ConfigGroup(
         "osint", "OSINT / Threat Intelligence",
         "Optional keys for NightCrawler/Centurion. Most tools also run keyless.",
         [
@@ -340,19 +413,22 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                              "Multilingual voice — the two native Turkish ones (tr-TR-Emel/Ahmet) "
                              "are the stock CapCut voices and sound like it.",
                         placeholder="en-US-BrianMultilingualNeural"),
-            ConfigField("tts_locale", "Spoken Language", "text", requires_restart=_LIVE,
-                        help="Language the replies are spoken IN, e.g. tr-TR. Separate from the "
-                             "voice on purpose: a multilingual voice is named en-US-… while "
-                             "speaking Turkish, and this is what tells it which language to read.",
-                        placeholder="tr-TR"),
+            ConfigField("tts_locale", "Spoken Locale Override", "text", requires_restart=_LIVE,
+                        help="Normally EMPTY — synthesis follows the Language switch in the "
+                             "client. Set a BCP-47 tag here only to pin a regional variant the "
+                             "switch does not offer (e.g. en-GB). Separate from the voice on "
+                             "purpose: a multilingual voice is named en-US-… while speaking "
+                             "Turkish, and this is what tells it which language to read.",
+                        placeholder="follows the Language switch"),
             ConfigField("tts_output_format", "Audio Format", "text", requires_restart=_LIVE,
                         help="Azure output-format token. MP3 plays natively in the client.",
                         placeholder="audio-24khz-48kbitrate-mono-mp3"),
-            ConfigField("stt_locale", "Heard Language", "text", requires_restart=_LIVE,
-                        help="Language YOU speak into the mic, e.g. tr-TR. Separate from the "
-                             "spoken language above because dictating Turkish and being answered "
-                             "in English is a real combination. Leave empty to follow it.",
-                        placeholder="tr-TR"),
+            ConfigField("stt_locale", "Heard Locale Override", "text", requires_restart=_LIVE,
+                        help="Normally EMPTY — the mic is decoded in the language the Language "
+                             "switch is set to. Set a BCP-47 tag here only to dictate in a "
+                             "different language than you are answered in. Recognition has no "
+                             "multilingual fallback: a wrong tag returns confident nonsense.",
+                        placeholder="follows the Language switch"),
         ],
     ),
     ConfigGroup(
