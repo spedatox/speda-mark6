@@ -105,6 +105,53 @@ never empty and never a crash.
 
 ---
 
+## Spoken replies
+
+*Speak replies* in the composer's "+" overflow turns the agent's side of the
+conversation into speech. It is not a playback preference: a turn sent with it on
+carries `voice: true` in its client context, which swaps the backend's whole
+brief — plain spoken prose, and anything that can be SHOWN staged as a window
+instead of said. So switching it on changes what comes back, not just whether it
+is read out.
+
+| Piece | Where |
+|---|---|
+| What is speakable, and where a sentence ends | `domain/Speakable.kt` |
+| One turn's speech — queue, synthesis, ordered playback | `data/VoiceSpeaker.kt` |
+| The call | `IgorApi.speak` → `POST /voice/speak` |
+
+Three things shape `VoiceSpeaker`, and every decision in it follows from one:
+
+- **Deltas are not lines and lines are not sentences.** Whether a line sits
+  inside a ``` fence cannot be judged until the line is complete, so text is held
+  to the last newline before being filtered. A sentence is not spoken until it is
+  terminated — half an utterance is worse than a whole one a moment later. The
+  splitter carries the Turkish guards the desktop's does: `3.` is an ordinal, not
+  a full stop.
+- **Synthesis must not be serial with playback.** Sentence N+1 is generated while
+  N is still being heard; that overlap is why a spoken reply starts promptly
+  rather than after the last word has been written.
+- **Order survives concurrency.** Sentence 3 finishing first must not let it
+  speak first, so playback awaits each job in sequence.
+
+The speaker lives on `viewModelScope`, not the turn's stream scope: speech
+outlives the stream by design, and parenting it to the stream would have held the
+turn open until the last clip finished.
+
+This is the per-sentence HTTP path, which every engine supports. The desktop also
+has a WebSocket path that keeps one prosodic context across a whole turn, so
+intonation carries across a sentence boundary; here each sentence is a standalone
+utterance with its own terminal contour. That seam is the cost of this path.
+
+**Still missing: the orb and a dedicated voice surface.** Replies are spoken in
+the ordinary chat screen, with the staged windows rendering inline as they always
+do. Two constraints shape whatever comes next: the desktop orb is a Three.js
+WebGL scene with custom shaders rather than a 2D drawing, and this app declares
+no `RECORD_AUDIO` on purpose — Android's `Visualizer` needs it, so there is no
+output amplitude to drive a reactive orb without adding that permission.
+
+---
+
 ## Health sync
 
 Two independent WorkManager schedules:

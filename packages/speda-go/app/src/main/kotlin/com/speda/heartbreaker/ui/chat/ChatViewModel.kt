@@ -28,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import com.speda.heartbreaker.data.PendingAsk
 import com.speda.heartbreaker.data.SkyfallArm
+import com.speda.heartbreaker.data.VoiceSpeaker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,6 +57,40 @@ class ChatViewModel(
 
     private val _state = MutableStateFlow(ChatState())
     val state: StateFlow<ChatState> = _state.asStateFlow()
+
+    /* ── Voice ───────────────────────────────────────────────────────────────
+     * Whether replies are SPOKEN. It rides here rather than in [ChatState]
+     * because it is not part of the transcript and must not be reduced into one:
+     * it is a property of how the owner is using the app right now, and it
+     * survives switching session the way the screen brightness does.
+     *
+     * It changes the turn as well as the playback. A turn sent with this on
+     * carries `voice: true` in its client context, which swaps the backend's
+     * whole brief: plain spoken prose, and anything that can be SHOWN staged as
+     * a window instead of said (igor core/surface.py). */
+    private val _voiceOn = MutableStateFlow(false)
+    val voiceOn: StateFlow<Boolean> = _voiceOn.asStateFlow()
+
+    /** What the voice is doing — for whatever is drawing the orb. */
+    private val _voiceState = MutableStateFlow(VoiceSpeaker.State.IDLE)
+    val voiceState: StateFlow<VoiceSpeaker.State> = _voiceState.asStateFlow()
+
+    /** The speaker for the turn in flight. One per turn: it holds the fence
+     *  state of the reply it is filtering, so it can never be reused. */
+    private var speaker: VoiceSpeaker? = null
+
+    fun setVoice(on: Boolean) {
+        if (_voiceOn.value == on) return
+        _voiceOn.value = on
+        if (!on) stopSpeaking()
+    }
+
+    /** Cut playback without leaving voice mode — the owner has heard enough. */
+    fun stopSpeaking() {
+        speaker?.stop()
+        speaker = null
+        _voiceState.value = VoiceSpeaker.State.IDLE
+    }
 
     /**
      * A Skyfall countdown Speda has armed, waiting for the shell to draw it.
@@ -310,6 +345,16 @@ class ChatViewModel(
         val cfg = state.value.config
         if (rid != null && cfg != null) viewModelScope.launch { api.cancelRun(cfg, rid) }
         sendJob?.cancel()
+        // Stop means stop. The speaker is on viewModelScope precisely so it
+        // survives the stream ending, which also means cancelling the stream
+        // does not silence it — this has to.
+        stopSpeaking()
+    }
+
+    override fun onCleared() {
+        // Nothing keeps talking into a torn-down screen.
+        stopSpeaking()
+        super.onCleared()
     }
 
     // ── Reattach ────────────────────────────────────────────────────────────────
@@ -441,6 +486,25 @@ class ChatViewModel(
                     when (event.type) {
                         "start" -> {
                             gotStart = true
+                            // A fresh speaker per turn: it carries the fence
+                            // state of the reply it filters, so reusing one
+                            // would have it judging turn N+1 against whether
+                            // turn N ended inside a code block.
+                            if (_voiceOn.value) {
+                                val cfg = state.value.config
+                                if (cfg != null) {
+                                    // viewModelScope, NOT this turn's stream
+                                    // scope: speech outlives the stream by
+                                    // design — the last sentence is still
+                                    // playing when the reply finishes arriving.
+                                    // Parented to the stream, `coroutineScope`
+                                    // would wait for playback before the turn
+                                    // could return.
+                                    speaker = VoiceSpeaker(
+                                        api, cfg, cfg.agentId, viewModelScope,
+                                    ) { st -> _voiceState.value = st }
+                                }
+                            }
                             runId = event.requestId
                             if (event.sessionId != 0) {
                                 turnSessionId = event.sessionId
@@ -450,7 +514,14 @@ class ChatViewModel(
                         }
                         "chunk" -> {
                             gotContent = true
-                            strOf(event.data)?.let { pending.append(it) }
+                            strOf(event.data)?.let {
+                                pending.append(it)
+                                // Fed raw. The speaker does its own line-holding
+                                // and fence tracking — it has to, because a
+                                // chunk boundary lands mid-word far more often
+                                // than it lands on a sentence.
+                                speaker?.feed(it)
+                            }
                         }
                         "tool" -> {
                             gotTool = true
@@ -491,11 +562,19 @@ class ChatViewModel(
                         // the correct behaviour, not an omission.
                         "done" -> {
                             flush(); settled = true
+                            // Flush the last part-sentence, then let playback
+                            // drain on its own: the turn is over, the SPEECH is
+                            // not, and cutting it here would clip the last
+                            // sentence of every reply.
+                            speaker?.finish()
+                            speaker = null
                             dispatch(ChatAction.FinishMessage(assistantId, event.sessionId))
                             onDone(event.sessionId)
                         }
                         "error" -> {
                             flush(); settled = true
+                            // Nothing half-spoken survives a failed turn.
+                            stopSpeaking()
                             dispatch(ChatAction.ErrorMessage(assistantId, strOf(event.data) ?: strings.chatMain.turnFailed))
                         }
                     }

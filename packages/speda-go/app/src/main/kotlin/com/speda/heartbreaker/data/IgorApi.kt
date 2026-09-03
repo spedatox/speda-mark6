@@ -135,6 +135,10 @@ class IgorApi(
                         put("os_version", cc.osVersion)
                         put("app_version", cc.appVersion)
                         put("locale", cc.locale)
+                        // Only when true: the backend defaults it to false, and an
+                        // explicit "voice": false on every ordinary turn would be a
+                        // key of noise on the hot path.
+                        if (cc.voice) put("voice", true)
                         cc.location?.let { loc ->
                             put(
                                 "location",
@@ -1159,6 +1163,40 @@ class IgorApi(
                 .url("${config.apiBase}/media/proxy?url=${encodePath(url)}")
                 .header("X-API-Key", config.apiKey)
                 .get()
+                .build()
+            restClient.newCall(request).execute().use { res ->
+                if (!res.isSuccessful) null else res.body?.bytes()
+            }
+        }.getOrNull()
+    }
+
+    /**
+     * Synthesize ONE utterance (POST /voice/speak) and return the MP3 bytes.
+     *
+     * A sentence at a time, not a whole reply: playback of sentence N overlaps
+     * synthesis of N+1, which is what keeps a spoken answer starting promptly
+     * instead of after the last word has been generated.
+     *
+     * Null on failure, deliberately quiet. The backend answers 503 when voice is
+     * unconfigured or the engine refused, and one silent sentence is a far better
+     * outcome than a dead turn — the reply is on screen either way.
+     */
+    suspend fun speak(
+        config: AppConfig,
+        text: String,
+        agentId: String?,
+        locale: String? = null,
+    ): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = buildJsonObject {
+                put("text", text)
+                put("agent_id", agentId)
+                if (locale != null) put("locale", locale)
+            }
+            val request = Request.Builder()
+                .url("${config.apiBase}/voice/speak")
+                .header("X-API-Key", config.apiKey)
+                .post(body.toString().toRequestBody(jsonMedia))
                 .build()
             restClient.newCall(request).execute().use { res ->
                 if (!res.isSuccessful) null else res.body?.bytes()

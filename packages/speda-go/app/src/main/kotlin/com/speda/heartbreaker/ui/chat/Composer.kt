@@ -87,6 +87,10 @@ fun Composer(
      *  "full power", so the owner is never told the wrong spend state. */
     budgetMode: Boolean?,
     onBudgetToggle: () -> Unit,
+    /** Whether replies are spoken. Not just playback: a turn sent with this on
+     *  asks the agent to PRESENT rather than answer — see ClientContext.voice. */
+    voiceOn: Boolean,
+    onVoiceToggle: () -> Unit,
     /** The master language, as a wire code ("tr"/"en"). Dictation is launched in
      *  it, and the "+" menu offers the switch — see [onLanguageChange]. */
     language: String,
@@ -352,6 +356,17 @@ fun Composer(
                     AttachItem(t.composer.voiceInput) {
                         plusOpen = false
                         runCatching { dictate.launch(speechIntent(language)) }
+                    }
+                    // Spoken replies — the other direction from dictation above,
+                    // and a different thing from it: this one changes how the
+                    // agent WRITES, because a spoken turn is briefed to present
+                    // rather than answer.
+                    AttachItem(
+                        label = if (voiceOn) t.composer.voiceRepliesOn else t.composer.voiceRepliesOff,
+                        tint = if (voiceOn) palette.accentBright else null,
+                    ) {
+                        plusOpen = false
+                        onVoiceToggle()
                     }
                     // Language. In the overflow rather than out on the toolbar
                     // for the same reason everything else here is — there is no

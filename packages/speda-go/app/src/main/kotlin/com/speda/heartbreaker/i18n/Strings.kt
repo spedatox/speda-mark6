@@ -85,6 +85,11 @@ data class AppStrings(
         val photos: String,
         val files: String,
         val voiceInput: String,
+        /** Spoken replies, on / off. A different thing from voiceInput: that is
+         *  the mic, this is the agent talking back — and it changes how the agent
+         *  writes, not only whether it is read out. */
+        val voiceRepliesOn: String,
+        val voiceRepliesOff: String,
         val budgetFrugal: String,
         val budgetFull: String,
         val budgetUnknown: String,

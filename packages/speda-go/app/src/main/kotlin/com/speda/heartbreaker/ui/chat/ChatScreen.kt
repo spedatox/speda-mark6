@@ -126,7 +126,13 @@ fun ChatScreen(
     }
     LaunchedEffect(Unit) {
         vm.clientContextProvider = {
-            graph.platform.snapshot(includeLocation = graph.settings.settings.first().locationEnabled)
+            graph.platform.snapshot(
+                includeLocation = graph.settings.settings.first().locationEnabled,
+                // Read at SEND time, not captured: voice is toggled mid-
+                // conversation, and a turn has to carry whichever way the
+                // switch is set at the moment it leaves.
+                voice = vm.voiceOn.value,
+            )
         }
         // Prompt for location once on first launch (the owner's chosen default).
         val s = graph.settings.settings.first()
@@ -138,6 +144,8 @@ fun ChatScreen(
             }
         }
     }
+
+    val voiceOn by vm.voiceOn.collectAsStateWithLifecycle()
 
     var drawerOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
@@ -269,6 +277,8 @@ fun ChatScreen(
                     budgetMode = next                       // optimistic…
                     scope.launch { budgetMode = graph.api.setBudgetMode(config, next) }  // …then the truth
                 },
+                voiceOn = voiceOn,
+                onVoiceToggle = { vm.setVoice(!voiceOn) },
                 onModelChange = { scope.launch { graph.settings.setModel(it) } },
                 language = settings.locale,
                 onLanguageChange = { next ->

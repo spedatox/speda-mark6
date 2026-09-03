@@ -31,6 +31,17 @@ data class ClientContext(
     val appVersion: String,
     val locale: String,
     val location: ClientLocation? = null,
+    /**
+     * Whether this turn is being SPOKEN.
+     *
+     * Not a device fact like the rest of this record — a fact about the channel,
+     * and the one field here that changes how the reply must be WRITTEN. On a
+     * voice turn the backend swaps in a presentation brief (igor
+     * `core/surface.py`): plain spoken prose, and everything that can be SHOWN
+     * staged as a window instead of said. Without it an agent writes for a
+     * reader and the owner hears markdown read out.
+     */
+    val voice: Boolean = false,
 )
 
 @Serializable
@@ -64,13 +75,14 @@ class PlatformContextProvider(context: Context) {
      * fix is available, [ClientContext.location] is null and only platform facts
      * are sent.
      */
-    suspend fun snapshot(includeLocation: Boolean): ClientContext = ClientContext(
+    suspend fun snapshot(includeLocation: Boolean, voice: Boolean = false): ClientContext = ClientContext(
         platform = "android",
         device = staticDevice.ifBlank { "Android device" },
         osVersion = osVersion,
         appVersion = BuildConfig.VERSION_NAME,
         locale = Locale.getDefault().toLanguageTag(),
         location = if (includeLocation && hasLocationPermission()) currentLocation() else null,
+        voice = voice,
     )
 
     fun hasLocationPermission(): Boolean =
