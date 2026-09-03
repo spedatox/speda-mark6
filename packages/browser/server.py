@@ -90,6 +90,13 @@ HEADLESS = os.environ.get("BROWSER_HEADLESS", "1") != "0"
 MAX_TEXT = 30_000          # readable text handed back per call
 MAX_ARIA = 14_000          # aria snapshot — the clickable surface
 MAX_LINKS = 80
+# Pictures handed back per call. Small on purpose: these exist so an agent can
+# put a REAL photo on a presentation board, and a page's tenth-largest image is
+# never the one worth showing.
+MAX_IMAGES = 8
+# Below this, in rendered pixels, an <img> is furniture — an icon, a logo, a
+# tracking pixel, a share button. Content images clear it comfortably.
+MIN_IMAGE_PX = 120
 MAX_STEPS = 25             # per /act call; a longer flow is several calls
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024   # per file, an upload_file step attaches
 NAV_TIMEOUT = 45_000       # ms — a navigation, which is allowed to be slow
@@ -444,6 +451,7 @@ async def _handle_dialog(sess: dict, dialog) -> None:
 _EXTRACT_JS = """
 () => {
   const MIN_LEN = 40;
+  const MIN_IMAGE_PX = __MIN_IMAGE_PX__;
   const landmark = document.querySelector('main, article, [role=main]');
   let text = landmark ? (landmark.innerText || '').trim() : '';
   if (text.length < MIN_LEN) text = (document.body.innerText || '').trim();
@@ -459,9 +467,56 @@ _EXTRACT_JS = """
     seen.add(key);
     links.push({ text: label.slice(0, 120), href });
   }
-  return { text, links };
+  // ── Pictures ───────────────────────────────────────────────────────────
+  // Extracted so an agent can put a REAL photo on a board — a face on a
+  // dossier, the lead image on an article cutting — rather than inventing an
+  // address that renders as a hole. Text extraction alone made that impossible:
+  // the picture is in the DOM, and innerText has never carried it.
+  //
+  // The lead image comes first and is whatever the page nominates for its own
+  // share card (og:image / twitter:image). That is the one a publisher chose to
+  // represent the story, so it beats anything picked by measuring.
+  const images = [];
+  const seenSrc = new Set();
+  const push = (src, alt, w, h) => {
+    if (!src || seenSrc.has(src)) return;
+    // data: URIs are skipped, not proxied: one inlined photo is tens of
+    // kilobytes of base64 through a model's context, and the proxy that
+    // fetches these only speaks http(s) anyway.
+    if (!/^https?:/i.test(src)) return;
+    seenSrc.add(src);
+    images.push({ src, alt: (alt || '').trim().slice(0, 160), w, h });
+  };
+
+  for (const sel of ['meta[property="og:image"]', 'meta[name="twitter:image"]',
+                     'meta[property="og:image:url"]']) {
+    for (const m of document.querySelectorAll(sel)) {
+      const c = m.getAttribute('content');
+      if (!c) continue;
+      // Resolve against the document, so a relative content= still works.
+      try { push(new URL(c, document.baseURI).href, document.title, 0, 0); }
+      catch (e) { /* unparseable meta content — skip it */ }
+    }
+  }
+
+  // Then the content images, largest first: on a page that has a photograph,
+  // the photograph is the biggest thing on it, and the furniture is not.
+  const inline = [];
+  for (const img of document.querySelectorAll('img')) {
+    const r = img.getBoundingClientRect();
+    const w = Math.round(r.width || img.naturalWidth || 0);
+    const h = Math.round(r.height || img.naturalHeight || 0);
+    if (w < MIN_IMAGE_PX || h < MIN_IMAGE_PX) continue;
+    inline.push({ src: img.currentSrc || img.src, alt: img.alt, w, h });
+  }
+  inline.sort((a, b) => (b.w * b.h) - (a.w * a.h));
+  for (const it of inline) push(it.src, it.alt, it.w, it.h);
+
+  return { text, links, images };
 }
 """
+_EXTRACT_JS = _EXTRACT_JS.replace("__MIN_IMAGE_PX__", str(MIN_IMAGE_PX))
+
 
 
 async def snapshot(page: Page, want_aria: bool = True) -> dict:
@@ -492,11 +547,12 @@ async def snapshot(page: Page, want_aria: bool = True) -> dict:
         pass
     out["has_password"] = await find_login_frame(page) is not None
 
-    text, links = "", []
+    text, links, images = "", [], []
     try:
         data = await page.evaluate(_EXTRACT_JS)
         text = data.get("text") or ""
         links = data.get("links") or []
+        images = data.get("images") or []
     except Exception as e:  # noqa: BLE001
         out["extract_error"] = str(e)[:200]
 
@@ -519,6 +575,17 @@ async def snapshot(page: Page, want_aria: bool = True) -> dict:
 
     out["text"] = text[:MAX_TEXT]
     out["links"] = links[:MAX_LINKS]
+    # De-duplicated across frames: an embedded view often re-serves the parent's
+    # hero image, and the same photo twice on a board is worse than once.
+    seen_src: set[str] = set()
+    unique: list[dict] = []
+    for img in images:
+        src = (img or {}).get("src")
+        if not src or src in seen_src:
+            continue
+        seen_src.add(src)
+        unique.append(img)
+    out["images"] = unique[:MAX_IMAGES]
 
     if want_aria:
         aria = ""

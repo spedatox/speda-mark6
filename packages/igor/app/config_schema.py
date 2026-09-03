@@ -358,6 +358,12 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                              "Costs a render instead of a GET on those polls."),
             ConfigField("browser_max_chars", "Browser Page Text Cap", "int", requires_restart=_LIVE,
                         help="How much rendered page text one browse_page call may return."),
+            ConfigField("browser_max_images", "Page Images Returned", "int", requires_restart=_LIVE,
+                        help="How many of a page's pictures come back with it, so an agent can "
+                             "put a real photo on a presentation board instead of inventing a "
+                             "URL. The page's own share image leads, then its largest content "
+                             "images. 0 turns it off.",
+                        placeholder="6"),
             ConfigField("playwright_mcp_url", "Public-Web Browser (playwright-mcp) URL", "url",
                         help="A SEPARATE, isolated container running the official "
                              "@playwright/mcp server — full click/drag/evaluate/tabs/"

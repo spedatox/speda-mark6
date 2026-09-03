@@ -717,6 +717,12 @@ class Settings(BaseSettings):
     # itself too; this is the cap the CONTEXT sees, and it is the one that costs
     # money. Raise it for a research-heavy deployment, not for a phone.
     browser_max_chars: int = 12_000
+    # How many of a page's pictures come back with it. These exist so an agent can
+    # put a REAL photo on a presentation board — a face on a dossier, an article's
+    # lead image — rather than inventing an address that renders as a hole. The
+    # page's own share image (og:image) leads, then its content images largest
+    # first, so a short list is the useful list. 0 turns the extraction off.
+    browser_max_images: int = 6
     # Let a plain-HTTP fetch that came back empty retry through the browser
     # (services/web_watch.py). A JS-rendered exam-results page is invisible to a
     # plain GET, which is the failure this exists to end — but it turns one cheap

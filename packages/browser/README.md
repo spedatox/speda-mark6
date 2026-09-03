@@ -7,6 +7,7 @@ The Playwright sidecar. Renders pages the backend's plain HTTP fetch can't, and 
 ## Contents
 
 - [Endpoints](#endpoints)
+- [What a snapshot carries](#what-a-snapshot-carries)
 - [Session and cookie persistence](#session-and-cookie-persistence)
 - [CAPTCHA handling](#captcha-handling)
 - [Authentication](#authentication)
@@ -26,6 +27,30 @@ The Playwright sidecar. Renders pages the backend's plain HTTP fetch can't, and 
 | `GET /artifact` | Fetches a captured download or screenshot by token. |
 | `POST /forget` | Deletes a profile's saved cookies and closes any live sessions on it. |
 | `DELETE /session/{id}` | Closes one live session. |
+
+---
+
+## What a snapshot carries
+
+Every read returns the page's URL, title, readable text, its links, and its
+**images** — read from every frame, not just the top document.
+
+Images are extracted because text extraction alone cannot produce a picture:
+`innerText` has never carried one, so an agent asked to put a face on a
+presentation window had nothing to work from and either left the window bare or
+invented an address that rendered as a hole. Two rules decide what comes back:
+
+- The page's own share image (`og:image` / `twitter:image`) leads, because a
+  publisher chose it to represent the story — that beats anything picked by
+  measuring.
+- Then content images, **largest first**, above `MIN_IMAGE_PX` in rendered
+  pixels. On a page with a photograph the photograph is the biggest thing on it,
+  and the icons, logos, share buttons and tracking pixels are not.
+
+`data:` URIs are skipped rather than returned: one inlined photo is tens of
+kilobytes of base64 through a model's context, and the proxy that ultimately
+fetches these speaks only http(s). Results are de-duplicated across frames — an
+embedded view often re-serves the parent's hero image.
 
 ---
 

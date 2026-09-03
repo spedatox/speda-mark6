@@ -335,6 +335,35 @@ def format_page(page: dict, *, include_links: bool = True, include_aria: bool = 
                 break
         if rows:
             parts.append("## Links\n" + "\n".join(rows))
+
+    # ── Pictures ────────────────────────────────────────────────────────────
+    # Listed separately for the same reason links are: what the next call needs
+    # is an ADDRESSABLE one, and an image buried in prose is not addressable —
+    # innerText never carried it at all. That was the whole gap: an agent asked
+    # to put a face on a dossier had nothing to work from, so it either left the
+    # card bare or invented a URL that rendered as a hole.
+    #
+    # Order is the sidecar's: the page's own share image (og:image) first,
+    # because a publisher chose it to represent the story, then content images
+    # largest first — on a page with a photograph, the photograph is the biggest
+    # thing on it and the furniture is not.
+    if page.get("images") and settings.browser_max_images > 0:
+        shots = []
+        for img in page["images"][: settings.browser_max_images]:
+            src = (img or {}).get("src")
+            if not src:
+                continue
+            alt = (img.get("alt") or "").strip()
+            w, h = img.get("w") or 0, img.get("h") or 0
+            size = f" [{w}x{h}]" if w and h else ""
+            shots.append(f"- {alt or '(no description)'}{size} → {src}")
+        if shots:
+            parts.append(
+                "## Images\n"
+                "Real addresses from this page, usable in an `image:` line on a "
+                "presentation window. The first is the page's own lead image.\n"
+                + "\n".join(shots)
+            )
     return "\n\n".join(p for p in parts if p)
 
 

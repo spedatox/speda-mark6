@@ -90,8 +90,11 @@ class BrowsePageSkill(Skill):
         "the same shell; the way in is browser_act clicking the menu by its label (often the "
         "category first, then the item under it). If a page's real content sits in an iframe, "
         "it is read too and appears under an 'embedded frame' heading. Returns the page "
-        "title, URL, text (truncated), and a list of links you can pass straight back as the "
-        "next URL."
+        "title, URL, text (truncated), a list of links you can pass straight back as the "
+        "next URL, and — under an 'Images' heading — the real addresses of the pictures on "
+        "the page, the page's own lead image first. Those are the addresses to use when you "
+        "put a photo on a presentation window: they came off the page, so they resolve. "
+        "Never write an image address you have not seen in a result like this one."
     )
     input_schema = {
         "type": "object",

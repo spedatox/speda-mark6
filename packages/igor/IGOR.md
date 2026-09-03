@@ -154,6 +154,12 @@ without a restart:
 | `settings.canvas_*` | Whether there is a board at all, how many windows a turn may open, and the spoken word budgets (`canvas_spoken_words`, `canvas_briefing_words`). Budgets are **targets, never truncation** — a reply cut off mid-sentence costs the same to synthesize as a finished one and is worth less. |
 | `Profile.canvas_brief` | What presenting looks like for THIS agent, appended to the generic brief. Identity, so it lives in `app/profiles/` (Rule 10): Sentinel turns every figure into a tile or a chart, NightCrawler gives every source its own window with the photo it came with. |
 
+A window's picture has to come from somewhere, and the brief forbids inventing
+one: an address the model made up renders as a hole. `browse_page` therefore
+returns an **Images** section alongside its links — real addresses lifted off the
+page, the page's own lead image first, capped by `browser_max_images`. That is
+what an agent quotes into an `image:` line.
+
 Board pictures go through `app/routers/media.py` rather than being loaded by the
 client: the clients' CSP forbids remote images, and a client that fetched one
 directly would announce the owner's IP to the very server a research board is
