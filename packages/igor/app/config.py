@@ -489,7 +489,13 @@ class Settings(BaseSettings):
     # answering wrongly. Tuned by sweeping evals/recall/run_eval.py; raise it to
     # trade recall for precision, lower it to trade the other way. 0.0 disables
     # the floor and restores the old rank-only behaviour.
-    recall_min_similarity: float = 0.30
+    #
+    # 0.25 is measured, not chosen: swept over the probe set after the store was
+    # repaired, it beat every other value on every metric at once (hit@1 57.8%,
+    # hit@5 82.2%, MRR 0.683, confident misses 35.6%). Re-sweep it whenever the
+    # store changes shape — the optimum moved once already, because the first
+    # sweep was run against a store that was 60% fragments.
+    recall_min_similarity: float = 0.25
     # The same floor for the raw-transcript half (recall_conversations). Message
     # text is longer and noisier than a distilled fact, so its cosines run lower
     # for the same degree of relevance and the floor is looser to match.
