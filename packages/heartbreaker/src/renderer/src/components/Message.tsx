@@ -19,6 +19,8 @@ import MapBlock from './MapBlock'
 import AircraftBlock from './AircraftBlock'
 import BusBlock from './BusBlock'
 import ErrorBoundary from './ErrorBoundary'
+import { BoardChatBlock } from './VoicePanelBody'
+import { BOARD_KINDS, type PanelKind } from '../lib/voicePanels'
 import HousePartyWarning from './HousePartyWarning'
 import { useT } from '../lib/i18n'
 import type { Dict } from '../lib/i18n/en'
@@ -784,6 +786,16 @@ const mdComponents: any = {
       }
       if (lang === 'bus') {
         return <ErrorBoundary label="BUS"><BusBlock>{code}</BusBlock></ErrorBoundary>
+      }
+      // The presentation kinds. They exist for voice mode's board, but an agent
+      // can write one in an ordinary reply and before this they fell through to
+      // the code block — a dossier arriving as raw text with colons in it.
+      if (BOARD_KINDS.has(lang as PanelKind)) {
+        return (
+          <ErrorBoundary label={lang.toUpperCase()}>
+            <BoardChatBlock kind={lang as PanelKind} source={code} />
+          </ErrorBoundary>
+        )
       }
       if (HPP_ALIASES.has(lang) || (HPP_AMBIGUOUS.has(lang) && looksLikeHppWarning(code))) {
         return <HousePartyWarning>{code}</HousePartyWarning>

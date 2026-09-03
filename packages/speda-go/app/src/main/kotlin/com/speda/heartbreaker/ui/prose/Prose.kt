@@ -21,6 +21,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import com.speda.heartbreaker.domain.boardKindOf
+import com.speda.heartbreaker.domain.boardTitle
+import com.speda.heartbreaker.domain.parseFenceInfo
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -217,8 +220,19 @@ private fun carriesMath(node: Node): Boolean {
  */
 @Composable
 private fun Fence(language: String, code: String) {
-    val lang = language.lowercase()
+    // A staged window's info line carries its screen title after a bar
+    // ("card | VANKO / FILE"), so the language is whatever precedes it. Parsed
+    // for EVERY fence, not just the board kinds: an agent that titles its chart
+    // must still get a chart rather than a code block.
+    val info = parseFenceInfo(language)
+    val lang = info.lang
+    val board = boardKindOf(lang)
     when {
+        // The presentation kinds — a figure as a tile, a source as a cutting, a
+        // person as a file. On the desktop these float on a board beside the
+        // orb; here they run down the message in the order they were staged,
+        // which is what a board is on a phone.
+        board != null -> BoardBlock(board, boardTitle(info.title, board), code)
         lang == "chart" -> ChartBlock(code)
         lang == "calendar" -> CalendarBlock(code)
         lang == "map" -> MapBlock(code)
@@ -232,7 +246,7 @@ private fun Fence(language: String, code: String) {
         // authorization card that cannot authorize anything, or swallowing the
         // block and leaving the owner watching for a window that never opens.
         isHppWarning(lang, code) -> DesktopOnlyNotice()
-        else -> CodeBlockView(language = language, code = code)
+        else -> CodeBlockView(language = language.substringBefore('|').trim(), code = code)
     }
 }
 

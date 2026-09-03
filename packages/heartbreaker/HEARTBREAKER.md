@@ -107,6 +107,14 @@ so a fact can be *shown* rather than said: `stat`, `image`, `article`, `card`,
 `VoicePanelBody` — written by a model mid-sentence under a word budget, so a
 missing field degrades to a plainer window, never an empty one.
 
+**The presentation kinds work in chat too.** They exist for the board, but
+nothing stops an agent writing one in an ordinary reply — and before this they
+fell through to the code-block renderer, so a dossier arrived as raw text with
+colons in it. `BoardChatBlock` renders them in flow layout, where a window has
+no height to fill and sets its own. The chat markdown pipeline only surfaces
+`language-card`, dropping the title after the bar, so a block in chat carries
+the generic label rather than an authored one.
+
 **Pictures never load from their origin.** A photo on a card or an article's
 lead image is fetched by Igor (`GET /media/proxy`) with the client's normal
 X-API-Key and handed to the tag as a `blob:` URL. Two reasons, both structural:

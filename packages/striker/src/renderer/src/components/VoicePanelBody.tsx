@@ -338,7 +338,7 @@ const RENDERER: Partial<Record<PanelKind, (p: { src: string }) => JSX.Element>> 
  * chart on the board is the same chart it is in chat — one implementation, and
  * no way for the two surfaces to drift apart.
  */
-export default function VoicePanelBody({ panel }: { panel: VoicePanel }) {
+export default function VoicePanelBody({ panel, flow }: { panel: VoicePanel; flow?: boolean }) {
   const framed = FRAMED.has(panel.kind)
   const ref = useRef<HTMLDivElement>(null)
   const Custom = RENDERER[panel.kind]
@@ -368,7 +368,14 @@ export default function VoicePanelBody({ panel }: { panel: VoicePanel }) {
       ref={ref}
       className={framed ? 'hb-holo' : undefined}
       style={{
-        flex: 1, minHeight: 0, overflow: Custom ? 'hidden' : 'auto',
+        // On the BOARD a window has a size and its body fills it, scrolling if
+        // the content overruns. In FLOW — the chat transcript, where the same
+        // block can appear in an ordinary reply — there is no height to fill, so
+        // the body sets its own and nothing is ever clipped out of a document
+        // the owner scrolls as one column.
+        ...(flow
+          ? { height: 'auto' }
+          : { flex: 1, minHeight: 0, overflow: Custom ? 'hidden' : 'auto' }),
         padding: framed ? '0.7rem 0.85rem' : 0,
       }}
     >
@@ -376,3 +383,22 @@ export default function VoicePanelBody({ panel }: { panel: VoicePanel }) {
     </div>
   )
 }
+
+/**
+ * A staged window as it appears in the CHAT transcript rather than on the board.
+ *
+ * The presentation kinds exist for voice mode, but nothing stops an agent
+ * writing one in an ordinary reply — and before this they fell through to the
+ * code-block renderer, so a dossier arrived as raw text with colons in it. The
+ * chat markdown pipeline only hands us `language-card`, dropping the title after
+ * the bar, so these carry the generic label instead of an authored one.
+ */
+export function BoardChatBlock({ kind, source }: { kind: PanelKind; source: string }) {
+  const panel: VoicePanel = { id: `chat-${kind}`, kind, title: '', source }
+  return (
+    <div style={{ margin: '0.6rem 0', maxWidth: 560 }}>
+      <VoicePanelBody panel={panel} flow />
+    </div>
+  )
+}
+

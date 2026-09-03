@@ -58,6 +58,19 @@ const FENCE_KIND: Record<string, PanelKind> = {
   timeline: 'timeline', quote: 'quote',
 }
 
+/** The presentation vocabulary — the kinds that exist so a fact can be SHOWN
+ *  rather than said, as opposed to the renderer kinds the transcript already
+ *  shares with chat. Lives here rather than beside the renderers because it is
+ *  read by Message.tsx, and Message.tsx and VoicePanelBody.tsx already import
+ *  each other: a Set evaluated at module init is exactly the thing in a cycle
+ *  that can be read before it exists.
+ *
+ *  These are the kinds chat has no other renderer for, so it is also the set
+ *  that decides whether a fence becomes a window or a code block. */
+export const BOARD_KINDS = new Set<PanelKind>([
+  'stat', 'image', 'article', 'card', 'timeline', 'quote',
+])
+
 /** Fallback label, for a window the agent left untitled. */
 const LABEL: Record<PanelKind, string> = {
   math: 'SOLUTION', chart: 'CHART', map: 'MAP', calendar: 'SCHEDULE',

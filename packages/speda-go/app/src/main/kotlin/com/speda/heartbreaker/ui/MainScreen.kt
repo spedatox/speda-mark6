@@ -19,6 +19,7 @@ import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.designsystem.glass.rememberHbHazeState
 import com.speda.heartbreaker.ui.chat.ChatScreen
 import com.speda.heartbreaker.ui.prose.LocalAircraftResolver
+import com.speda.heartbreaker.ui.prose.LocalBoardImageResolver
 import com.speda.heartbreaker.ui.prose.LocalPlaceResolver
 import com.speda.heartbreaker.ui.prose.LocalRouteResolver
 import com.speda.heartbreaker.domain.AircraftSpec
@@ -88,8 +89,18 @@ fun MainScreen(
             fn
         }
 
+        // Board pictures — see LocalBoardImageResolver for why the phone never
+        // fetches one from its own origin.
+        val resolveBoardImage = remember(routeConfig) {
+            val fn: suspend (String) -> ByteArray? = { url ->
+                graph.api.fetchBoardImage(routeConfig, url)
+            }
+            fn
+        }
+
         CompositionLocalProvider(
             LocalHazeState provides haze,
+            LocalBoardImageResolver provides resolveBoardImage,
             LocalAmbientHazeState provides ambientHaze,
             LocalRouteResolver provides resolveRoute,
             LocalPlaceResolver provides resolvePlaces,

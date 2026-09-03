@@ -9,6 +9,7 @@ import { createRoot } from 'react-dom/client'
 import VoiceCanvas from '../src/renderer/src/components/VoiceCanvas'
 import { splitPanels, captionOf } from '../src/renderer/src/lib/voicePanels'
 import { ChatContext } from '../src/renderer/src/store/chat'
+import { BoardChatBlock } from '../src/renderer/src/components/VoicePanelBody'
 import '../src/renderer/src/theme/heartbreaker.css'
 
 /* A research readout, written the way the brief asks for it. */
@@ -80,7 +81,13 @@ Growth did not come from where you would expect, though — direct is flat and t
 
 One thing worth a decision this week: partner concentration is now high enough that losing the top account would erase the runway gain.`
 
-const SCRIPTS: Record<string, string> = { 'NIGHTCRAWLER / DOSSIER': DOSSIER, 'SENTINEL / MONTH END': BRIEFING }
+const SCRIPTS: Record<string, string> = {
+  'NIGHTCRAWLER / DOSSIER': DOSSIER,
+  'SENTINEL / MONTH END': BRIEFING,
+  // The same kinds as they appear in the chat transcript, where a window has no
+  // height to fill and has to set its own.
+  'CHAT FLOW': '',
+}
 
 function Harness() {
   const [which, setWhich] = useState('NIGHTCRAWLER / DOSSIER')
@@ -121,6 +128,22 @@ function Harness() {
         </span>
       </div>
 
+      {which === 'CHAT FLOW' ? (
+        <div style={{ position: 'absolute', top: 46, left: 16, right: 16, bottom: 8, overflow: 'auto' }}>
+          <BoardChatBlock kind="stat" source={`€4.24M
++9.1% vs August
+net of refunds`} />
+          <BoardChatBlock kind="card" source={`Ivan Antonovich Vanko
+Born: 1963, Moscow
+Field: Plasma physics
+Status: Whereabouts unknown`} />
+          <BoardChatBlock kind="timeline" source={`1963 — Born in Moscow
+2001 — Convicted of selling weapons-grade plutonium
+2010 — Released; travels to Monaco`} />
+          <BoardChatBlock kind="quote" source={`If you could make God bleed, people would cease to believe in Him.
+— Ivan Vanko, 2010`} />
+        </div>
+      ) : (
       <div style={{ position: 'absolute', top: 40, left: 0, width: W, height: H }}>
         <VoiceCanvas
           panels={panels}
@@ -137,6 +160,8 @@ function Harness() {
           borderRadius: '50%', background: 'radial-gradient(circle, rgba(127,164,196,0.35), transparent 65%)',
         }} />
       </div>
+
+      )}
 
       {/* The caption strip, three lines, riding its tail. */}
       <div style={{

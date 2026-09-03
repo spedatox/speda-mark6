@@ -1140,6 +1140,32 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
+    /**
+     * Fetch one board picture through Igor (GET /media/proxy).
+     *
+     * The URL is a third party's and the fetch deliberately does NOT happen on
+     * the phone: a client that loaded a photo straight from its origin would
+     * tell that origin the owner's IP and the moment he looked, which on a board
+     * about a person is the one thing it must not do. The server is already
+     * making requests of its own, so it makes this one.
+     *
+     * Null on anything that goes wrong — a dead link, a host that refuses, a
+     * file that is not an image. The window then renders without its picture,
+     * which is the intended degradation.
+     */
+    suspend fun fetchBoardImage(config: AppConfig, url: String): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder()
+                .url("${config.apiBase}/media/proxy?url=${encodePath(url)}")
+                .header("X-API-Key", config.apiKey)
+                .get()
+                .build()
+            restClient.newCall(request).execute().use { res ->
+                if (!res.isSuccessful) null else res.body?.bytes()
+            }
+        }.getOrNull()
+    }
+
     /* ── Voices (GET /voice/agents, /voice/voices, PUT /voice/agents/{id}) ───
      * Per-agent voice pin + ElevenLabs tuning. Two things clear independently:
      * the PIN (falls back to the profile's own default) and the TUNING (falls

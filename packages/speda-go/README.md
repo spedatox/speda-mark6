@@ -66,6 +66,45 @@ It covers the full backend surface: chat streaming and cancellation, sessions, b
 
 ---
 
+## Presentation windows
+
+An agent that is presenting rather than answering stages its facts as windows
+instead of speaking them — a figure as a tile, a source as a cutting with its
+photo, a person as a file, a sequence as a timeline. Each is a fenced block whose
+info line is `kind | SCREEN TITLE`; the vocabulary and the brief that produces it
+live in Igor (`core/surface.py` `_VOICE_BRIEF`).
+
+The desktop floats these on a board beside a docked voice orb. **There is no
+voice mode on this client yet**, and floating, hand-resized windows are a mouse
+gesture anyway — so here the board IS the message flow: the windows render
+full-width, in the order the agent staged them, each under the same panel header
+every other rich block wears. Same content, same order, laid out the way a phone
+reads.
+
+| Piece | Where |
+|---|---|
+| Parsing — kinds, titles, the small forgiving body formats | `domain/BoardPanels.kt` |
+| Rendering — stat, image, article, card, timeline, quote | `ui/prose/BoardBlocks.kt` |
+| Pictures | `ui/prose/BoardImage.kt` + `IgorApi.fetchBoardImage` |
+
+`chart`, `map`, `calendar`, `svg`, `html`, `code` and `math` were already
+renderers here and are unchanged; the fence dispatch in `ui/prose/Prose.kt` now
+splits the title off the info line before matching, so a titled chart is still a
+chart.
+
+**Pictures are never fetched from their origin.** `LocalBoardImageResolver` asks
+Igor (`GET /media/proxy`), which fetches server-side and returns bytes. On a
+board about a person, loading a photo directly would tell that person's server
+the owner's IP and the moment he looked. Anything that fails renders no picture
+at all — a window with its fields and no photo, rather than a broken placeholder
+on a dossier.
+
+Every parser is deliberately forgiving: these bodies are written by a model
+mid-sentence, under a word budget, so a missing field makes a window plainer,
+never empty and never a crash.
+
+---
+
 ## Health sync
 
 Two independent WorkManager schedules:
