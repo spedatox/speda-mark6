@@ -298,6 +298,12 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                              "whole sections and drops the MIDDLE, so the directives at a "
                              "file's end survive; nothing is removed from disk and the elided "
                              "part is still readable with the memory tool. 0 = inject whole."),
+            ConfigField("memory_directory_collapse_above", "Collapse Folders Larger Than", "int",
+                        requires_restart=_LIVE,
+                        help="Folders in the injected directory listing with more files than "
+                             "this are shown as a name and a count rather than enumerated. "
+                             "/memories/projects alone is 33 entries in a listing re-sent every "
+                             "turn; the names stay one `view` away. 0 = list everything."),
             ConfigField("relevant_recall_enabled", "Inject Relevant Facts Every Turn", "bool",
                         requires_restart=_LIVE,
                         help="Search the record with his own message each turn and put what "

@@ -37,6 +37,7 @@ from datetime import datetime, timezone
 import numpy as np
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.models.observation import Observation
 
@@ -625,6 +626,95 @@ def target_file(obs: Observation) -> str:
 
 # ── Read path ─────────────────────────────────────────────────────────────────
 
+# ── The vector cache ─────────────────────────────────────────────────────────
+# Recall used to be a tool call — occasional, and paying 12 MB of BLOB reads for
+# one was nobody's problem. Since app/services/relevant_recall.py runs a search
+# on EVERY turn, it is: 2,000 live observations carry 12.3 MB of embeddings, and
+# loading them measured 227 ms before a single dot product had been computed.
+# That is 227 ms added to every message the owner sends, to re-read bytes that
+# change a few times a day.
+#
+# So the vectors are held in process, keyed on a watermark cheap enough to check
+# every time (one aggregate row: how many live observations there are and when
+# one last changed). The FILTERING still happens in SQL, which is what keeps
+# this a pure optimisation — every level/subject/domain/validity predicate is
+# evaluated by the database exactly as before, and the cache is consulted only
+# to turn the surviving ids into vectors. The row query then defers the
+# `embedding` column, so the BLOBs are not read at all on a cache hit.
+#
+# A miss costs what the old path cost every time. An id the cache has not seen
+# (embedded by a background task since the watermark was taken) simply does not
+# take part in the vector pass that turn, and the lexical half still ranks it —
+# which is the same graceful degradation the two-retriever design already has
+# for a row the embedder has not reached yet.
+
+_VECTOR_CACHE: dict[int, tuple[tuple, dict[int, "np.ndarray"]]] = {}
+
+
+async def _vector_watermark(db: AsyncSession, user_id: int) -> tuple:
+    """A cheap fingerprint of this owner's live embedded rows.
+
+    Count plus the newest `updated_at` plus the highest id: between them these
+    move on every insert, every re-embed and every soft delete, and the whole
+    thing is one indexed aggregate rather than a scan.
+    """
+    from sqlalchemy import func
+
+    row = (
+        await db.execute(
+            select(
+                func.count(Observation.id),
+                func.max(Observation.updated_at),
+                func.max(Observation.id),
+            ).where(
+                Observation.user_id == user_id,
+                Observation.deleted_at.is_(None),
+                Observation.embedding.is_not(None),
+            )
+        )
+    ).one()
+    return (row[0], str(row[1]), row[2])
+
+
+async def vectors_for(db: AsyncSession, user_id: int) -> dict[int, "np.ndarray"]:
+    """`{observation_id: unit vector}` for this owner, cached in process."""
+    watermark = await _vector_watermark(db, user_id)
+    cached = _VECTOR_CACHE.get(user_id)
+    if cached is not None and cached[0] == watermark:
+        return cached[1]
+
+    rows = (
+        await db.execute(
+            select(Observation.id, Observation.embedding).where(
+                Observation.user_id == user_id,
+                Observation.deleted_at.is_(None),
+                Observation.embedding.is_not(None),
+            )
+        )
+    ).all()
+    vectors = {
+        int(oid): np.frombuffer(blob, dtype=np.float32)
+        for oid, blob in rows
+        if blob
+    }
+    _VECTOR_CACHE[user_id] = (watermark, vectors)
+    logger.info(
+        "observation_vector_cache_rebuilt",
+        extra={"user_id": user_id, "vectors": len(vectors)},
+    )
+    return vectors
+
+
+def invalidate_vector_cache(user_id: int | None = None) -> None:
+    """Drop the cached vectors. The watermark makes this belt-and-braces rather
+    than load-bearing, but a writer that knows it changed the store should say
+    so instead of relying on a fingerprint to notice."""
+    if user_id is None:
+        _VECTOR_CACHE.clear()
+    else:
+        _VECTOR_CACHE.pop(user_id, None)
+
+
 def _live(user_id: int):
     return (
         select(Observation)
@@ -737,6 +827,10 @@ async def search_observations(
     if before:
         stmt = stmt.where(Observation.created_at < before)
     stmt = stmt.order_by(Observation.created_at.desc()).limit(MAX_SEARCH_CANDIDATES)
+    # The embedding column is never read off these rows — vectors come from
+    # vectors_for()'s cache — and it is 6 KB per row, so deferring it is the
+    # difference between a 12 MB candidate load and a metadata one.
+    stmt = stmt.options(defer(Observation.embedding))
 
     rows = list((await db.execute(stmt)).scalars().all())
     if not rows:
@@ -753,14 +847,15 @@ async def search_observations(
 
     # ── Meaning ──────────────────────────────────────────────────────────────
     vector_ids: list[int] = []
-    embedded = [o for o in rows if o.embedding]
     floor = float(settings.recall_min_similarity)
+    vectors = await vectors_for(db, user_id)
+    # Only the candidates that survived the SQL filters, in a stable order, so
+    # the matrix rows line up with `embedded` for the argsort below.
+    embedded = [o for o in rows if o.id in vectors]
     if embedded:
         try:
             query_vec = (await embed_texts([vector_query]))[0]
-            matrix = np.stack(
-                [np.frombuffer(o.embedding, dtype=np.float32) for o in embedded]
-            )
+            matrix = np.stack([vectors[o.id] for o in embedded])
             scores = matrix @ query_vec
             # Ordered best-first, then cut at the floor. Cutting AFTER the sort
             # rather than masking before it keeps this a single pass and leaves

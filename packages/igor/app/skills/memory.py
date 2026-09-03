@@ -313,7 +313,13 @@ def _format_file_with_lines(path: str, content: str) -> str:
     return f"Here's the content of {path} with line numbers:\n{numbered}"
 
 
-def _format_directory(files: list[MemoryFile], path: str, *, with_sizes: bool = True) -> str:
+def _format_directory(
+    files: list[MemoryFile],
+    path: str,
+    *,
+    with_sizes: bool = True,
+    collapse: int = 0,
+) -> str:
     """Render a file listing, grouped by folder.
 
     Grouping is not cosmetic. Since projects and people became one file each
@@ -323,6 +329,11 @@ def _format_directory(files: list[MemoryFile], path: str, *, with_sizes: bool = 
     tokens per request restating a prefix. It is also what makes the listing an
     index the model can actually use: every project and person is visible by
     name, so the right file can be opened directly instead of searched for.
+
+    `collapse` caps that generosity: past that many files a folder is rendered
+    as a name and a count instead of a list. See the branch below for why the
+    trade changed once the observation store could answer entity questions
+    without a file being opened. 0 enumerates everything, as before.
 
     Output is a pure function of the sorted path set, which is what keeps the
     injected block byte-stable and therefore cacheable.
@@ -378,6 +389,19 @@ def _format_directory(files: list[MemoryFile], path: str, *, with_sizes: bool = 
             # about by name in prompts, and a bare `owner.md` reads like a
             # relative path the tool would then reject.
             lines.extend(_label(f, f.path) for f in members)
+        elif collapse and len(members) > collapse:
+            # A folder past the threshold is announced by NAME AND COUNT rather
+            # than enumerated. /memories/projects alone is 33 entries, and this
+            # listing is re-sent on every turn of every session. Spending
+            # hundreds of tokens per request on a table of contents made sense
+            # while it was the only way to find an entity, and stopped making
+            # sense once `search_memory` could answer a question about a person
+            # or a project without their file being opened at all. The names are
+            # one `view` away for the rarer case where the narrative is what is
+            # wanted, and `view` on a directory has always worked.
+            lines.append(
+                f"{parent}/  ({len(members)} files - `view` this folder to list them)"
+            )
         else:
             lines.append(f"{parent}/")
             lines.extend("  " + _label(f, f.path.rsplit("/", 1)[-1]) for f in members)
@@ -578,26 +602,52 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
     # Keyed by (user_id, agent_id) — different agents preload different files.
     # The source-file assignment is part of the key/watermark so reassigning it
     # from the UI (no file change) still refreshes the injected block.
-    watermark = max((f.updated_at.isoformat() for f in all_files), default="") + f"|{source_file or ''}"
+    #
+    # Only the files that are actually IN the block count. It used to be every
+    # file in the store, and /memories/log.md is rewritten by update_session_log
+    # on every single turn while appearing in the block only as a name in the
+    # directory listing — so the watermark moved every turn and this cache never
+    # once hit. The recomputed bytes were usually identical, so the provider's
+    # prompt cache still held and no tokens were wasted; what was wasted was
+    # rebuilding the listing and re-eliding every injected file, every turn,
+    # to arrive back at the same string.
+    #
+    # The listing is a function of the sorted PATH SET, not of content, so it is
+    # tracked by the path set rather than by anyone's updated_at.
+    by_path = {f.path: f for f in all_files}
+
+    # Resolved against what actually exists: a split injected document
+    # contributes its members, an unsplit one still contributes itself. Needed
+    # HERE, above the watermark, because which files are injected is what
+    # decides which files the watermark may watch.
+    preload = preload_paths(set(by_path))
+    for p in source_preload_for(agent_id):
+        if p not in preload:
+            preload.append(p)
+
+    injected = set(preload)
+    watermarked = [f for f in all_files if f.path in injected]
+    watermark = (
+        max((f.updated_at.isoformat() for f in watermarked), default="")
+        + f"|{source_file or ''}"
+        + f"|{len(all_files)}|{hash(tuple(sorted(f.path for f in all_files)))}"
+    )
     cache_key = (user_id, agent_id)
     cached = cache.get_recall(cache_key)
     if cached and cached[0] == watermark:
         return cached[1]
 
-    by_path = {f.path: f for f in all_files}
-
     from app.config import settings
 
     # Size-free listing keeps this recall block byte-stable across turns so the
     # prompt cache holds (file sizes otherwise change every turn as log.md grows).
-    listing = _format_directory(all_files, MEMORY_ROOT, with_sizes=False)
+    listing = _format_directory(
+        all_files,
+        MEMORY_ROOT,
+        with_sizes=False,
+        collapse=settings.memory_directory_collapse_above,
+    )
 
-    # Resolved against what actually exists: a split injected document
-    # contributes its members, an unsplit one still contributes itself.
-    preload = preload_paths(set(by_path))
-    for p in source_preload_for(agent_id):
-        if p not in preload:
-            preload.append(p)
     # Injected files are capped at injection time, not just on write — see
     # elide_middle(). A file that outgrew its budget gives up its middle,
     # keeping the directives at its end.

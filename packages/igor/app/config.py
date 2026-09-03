@@ -616,6 +616,14 @@ class Settings(BaseSettings):
     # deleted from disk; the elided middle stays readable with the `memory` tool.
     # 0 disables truncation and injects every file whole.
     memory_injected_file_max_chars: int = 6000
+    # Folders in the injected directory listing with MORE than this many files
+    # are rendered as a name and a count instead of being enumerated.
+    # /memories/projects alone is 33 entries, and the listing is 2,952 chars
+    # re-sent every turn. Enumerating every entity was the right call while the
+    # listing was the only way to find one; `search_memory` can now answer a
+    # question about a person or a project without their file being opened, and
+    # the names remain one `view` away. 0 enumerates everything.
+    memory_directory_collapse_above: int = 8
 
     # The Legion — worker model override. EMPTY by default (the provider-agnostic
     # fix): legionnaire models resolve from the parent chat model's provider —
