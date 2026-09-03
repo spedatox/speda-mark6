@@ -712,7 +712,17 @@ async def search_observations(
     if domain:
         stmt = stmt.where(Observation.domain == domain)
     if live_only:
-        stmt = stmt.where(Observation.valid_until.is_(None))
+        # "Has not ended YET" — not "has no end date". A fact can carry a FUTURE
+        # end date and still be true today: his job runs through 2026-09-25 and
+        # his gym membership expires 2026-09-05, and both are current until they
+        # are not. Filtering on `valid_until IS NULL` excluded exactly the facts
+        # that are most precisely dated, which is the opposite of the intent —
+        # and it went unnoticed while almost nothing in the store had an end
+        # date at all.
+        today = datetime.now(timezone.utc).date()
+        stmt = stmt.where(
+            or_(Observation.valid_until.is_(None), Observation.valid_until > today)
+        )
     if as_of is not None:
         # What was true ON that day: started by then, and had not yet ended.
         # This is the query that replaces reading a demoted file to work out

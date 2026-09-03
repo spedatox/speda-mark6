@@ -24,7 +24,10 @@ store. Measured on 2026-09-03 against 638 live observations:
   * **The basics were never distilled at all.** No observation contained the
     owner's birth date, home coordinates or GPA — those live only as prose inside
     owner.md, which is injected but never retrieved. See
-    `distill_owner_profile.py`, which is the other half of this repair.
+    `distill_memory_files.py`, which is the other half of this repair.
+  * **Nothing had an end date.** 1,758 live rows carried no `valid_until`, so a
+    job he left in 2023 was as current as the one he holds. That defect has its
+    own pass here — see `backfill_validity()` and `--validity`.
   * **70 rows were Turkish** in an otherwise English store. A mixed-language
     corpus splits every concept across two embedding neighbourhoods and halves
     the lexical index's usefulness; the owner's decision is that the store is
@@ -70,6 +73,9 @@ uses SQLite's own backup API):
 
 `--limit N` processes only the first N repairable rows, which is the sane way to
 check the prompt is behaving before spending a few hundred model calls on it.
+
+`--validity` runs the OTHER repair instead: end-dating facts that have ended, so
+that a question about the present stops being answered with the past.
 """
 
 import argparse
@@ -234,6 +240,142 @@ def backup_database() -> str | None:
     return dst
 
 
+# ── Validity backfill ─────────────────────────────────────────────────────────
+# A separate pass, because it repairs a different defect from the fragment one.
+#
+# 1,758 live observations carried no `valid_until`, which means the store could
+# not tell a job he holds from a job he left in 2023. "Where does he work right
+# now" returned Nettech — two weeks of sales, three years ago — because sixteen
+# past jobs and one present one were all equally current, and there were more of
+# the past ones. `current_only` on search_memory cannot help while the data
+# insists everything is still true.
+#
+# Only rows that MENTION A YEAR are considered. A fact with no date in it is
+# usually durable ("Osman Bayrak is Ahmet Erol's father") and asking a model to
+# rule on its expiry invites exactly the confident guess this store does not
+# need. The narrowing takes 1,758 candidates down to 653, and removes most of
+# the risk at very little cost to the benefit.
+
+_VALIDITY_PROMPT = """\
+Each entry below is a recorded fact about the owner or his world. For each one,
+decide whether it describes something that has ENDED.
+
+Answer with the end date, "YYYY-MM-DD", ONLY when the entry itself says the
+thing finished — a job with a stated last month, a period given as a range, an
+event that happened on a date and is over. If the entry gives only a month or a
+year for the ending, use the last day of it ("August 2026" becomes 2026-08-31).
+
+Answer NONE when:
+  - the entry is still true, or describes something ongoing;
+  - the entry is a durable fact that cannot end — a birth date, a parent, a
+    permanent trait, a completed exam score;
+  - the entry does not actually say when it ended. A date it MENTIONS is not
+    necessarily the date it ENDED.
+
+When in doubt answer NONE. Marking a live fact as ended hides it from every
+question about the present, which is a worse error than leaving it unmarked.
+
+ENTRIES:
+{entries}
+
+Return ONLY a JSON array, one object per entry, in the same order:
+[{{"n": 1, "end": "2026-08-31"}}, {{"n": 2, "end": "NONE"}}]
+"""
+
+_YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
+_ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+async def backfill_validity(args, model: str) -> None:
+    """Give ended facts an end date, so the present can outrank the past."""
+    from datetime import date
+
+    from app.database import AsyncSessionLocal
+    from app.models.observation import Observation
+    from app.services.llm_client import LLMClient
+    from app.services.observations import _live
+
+    async with AsyncSessionLocal() as db:
+        rows = [
+            o for o in (await db.execute(
+                _live(args.user_id).where(Observation.valid_until.is_(None))
+            )).scalars().all()
+            if _YEAR.search(o.content)
+        ]
+
+    print(f"\n  {len(rows)} live fact(s) with no end date that mention a year")
+    if args.limit:
+        rows = rows[: args.limit]
+        print(f"  --limit {args.limit}: processing {len(rows)}")
+    if not rows:
+        return
+
+    backup = backup_database() if args.commit else None
+    if backup:
+        print(f"  backup: {backup}")
+
+    client = LLMClient()
+    decided: dict[int, str] = {}
+    batches = -(-len(rows) // BATCH_SIZE)
+    for start in range(0, len(rows), BATCH_SIZE):
+        batch = rows[start : start + BATCH_SIZE]
+        entries = "\n".join(
+            f"{i}. [{o.domain}] {o.content}" for i, o in enumerate(batch, start=1)
+        )
+        print(f"  ... batch {start // BATCH_SIZE + 1}/{batches}", flush=True)
+        try:
+            resp = await client.create_message(
+                model=model,
+                system=(
+                    "You judge whether a fact has ended. You return only the "
+                    "JSON array asked for."
+                ),
+                messages=[{
+                    "role": "user",
+                    "content": _VALIDITY_PROMPT.format(entries=entries),
+                }],
+                max_tokens=4096,
+                reasoning_effort="minimal",
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("  ! batch failed: %s", e)
+            continue
+        raw = resp.content[0].text if resp.content else ""
+        for item in _parse_json_array(raw):
+            try:
+                n = int(item.get("n", 0))
+            except (TypeError, ValueError):
+                continue
+            end = str(item.get("end") or "").strip()
+            if 1 <= n <= len(batch) and _ISO_DAY.fullmatch(end):
+                decided[batch[n - 1].id] = end
+
+    print(f"\n  {len(decided)} fact(s) to be marked as ended\n")
+    by_id = {o.id: o for o in rows}
+    for oid, end in list(decided.items())[:80]:
+        print(f"  [{oid}] ends {end}: {by_id[oid].content[:110]}")
+
+    if args.dry_run:
+        print("\n  Dry run - nothing written.\n")
+        return
+    if not decided:
+        return
+
+    async with AsyncSessionLocal() as db:
+        fresh = (await db.execute(
+            _live(args.user_id).where(Observation.id.in_(list(decided)))
+        )).scalars().all()
+        applied = 0
+        for obs in fresh:
+            try:
+                obs.valid_until = date.fromisoformat(decided[obs.id])
+                applied += 1
+            except ValueError:
+                continue
+        await db.commit()
+    print(f"\n  Marked {applied} fact(s) as ended.\n")
+
+
 async def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--user-id", type=int, default=1)
@@ -242,6 +384,8 @@ async def main() -> None:
     mode = p.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="Print every change, write nothing.")
     mode.add_argument("--commit", action="store_true", help="Apply the repairs.")
+    p.add_argument("--validity", action="store_true",
+                   help="Backfill end dates instead of repairing fragments. See backfill_validity().")
     args = p.parse_args()
 
     from app.config import settings
@@ -255,6 +399,10 @@ async def main() -> None:
     model = args.model or settings.llm_background_model or settings.llm_main_model
     if not model:
         print("No model configured (llm_background_model / llm_main_model).")
+        return
+
+    if args.validity:
+        await backfill_validity(args, model)
         return
 
     async with AsyncSessionLocal() as db:

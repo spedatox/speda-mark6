@@ -1,50 +1,819 @@
 {
   "_comment": "Recall probe set. Each probe is a question the roster should be able to answer from the observation store WITHOUT asking the owner. `expect` is a list of literal substrings, matched case-insensitively after ASCII-folding both sides (so a probe written 'Akcalar' matches a stored 'Akçalar'). A retrieved observation counts as a hit if ANY expected substring appears in its content. Probes are grounded in facts that exist somewhere in memory — owner.md prose, current.md, or the observation store. A probe that fails because the fact was never distilled into a retrievable observation is a REAL failure of recall, not a bad probe: that is precisely the gap this harness exists to measure.",
   "probes": [
-    {"id": "birth-date-en", "query": "when was he born", "lang": "en", "tags": ["biography", "basic"], "expect": ["18 october 2004", "october 18", "2004-10-18"]},
-    {"id": "birth-date-tr", "query": "ne zaman doğdu", "lang": "tr", "tags": ["biography", "basic"], "expect": ["18 october 2004", "october 18", "2004-10-18"]},
-    {"id": "age-tr", "query": "kaç yaşında", "lang": "tr", "tags": ["biography", "basic"], "expect": ["18 october 2004", "october 18", "2004-10-18"]},
-    {"id": "hometown-en", "query": "where did he grow up", "lang": "en", "tags": ["biography", "basic"], "expect": ["akcalar"]},
-    {"id": "home-coords-en", "query": "home coordinates", "lang": "en", "tags": ["biography", "basic"], "expect": ["40.18022", "28.74189"]},
-    {"id": "home-coords-tr", "query": "evinin koordinatları", "lang": "tr", "tags": ["biography", "basic"], "expect": ["40.18022", "28.74189"]},
-    {"id": "siblings-en", "query": "does he have brothers or sisters", "lang": "en", "tags": ["biography", "basic"], "expect": ["younger brother", "sister", "ilayda"]},
-    {"id": "siblings-tr", "query": "kardeşi var mı", "lang": "tr", "tags": ["biography", "basic"], "expect": ["younger brother", "sister", "ilayda"]},
-    {"id": "father-work-en", "query": "what does his father do for a living", "lang": "en", "tags": ["biography", "basic"], "expect": ["beekeep"]},
-    {"id": "associate-degree-en", "query": "what did he study for his associate degree", "lang": "en", "tags": ["biography", "education"], "expect": ["computer programming"]},
-    {"id": "gpa-en", "query": "what was his GPA at Uludağ", "lang": "en", "tags": ["education", "basic"], "expect": ["3.17"]},
-    {"id": "gpa-tr", "query": "not ortalaması kaçtı", "lang": "tr", "tags": ["education", "basic"], "expect": ["3.17"]},
-    {"id": "current-university-en", "query": "which university does he attend", "lang": "en", "tags": ["education", "basic"], "expect": ["ostim"]},
-    {"id": "current-university-tr", "query": "hangi üniversitede okuyor", "lang": "tr", "tags": ["education", "basic"], "expect": ["ostim"]},
-    {"id": "yds-score-en", "query": "what did he score on the YDS English exam", "lang": "en", "tags": ["education"], "expect": ["86.25", "86,25"]},
-    {"id": "yds-score-tr", "query": "YDS puanı kaç", "lang": "tr", "tags": ["education"], "expect": ["86.25", "86,25"]},
-    {"id": "dgs-placement-en", "query": "where was he placed by the DGS exam", "lang": "en", "tags": ["education"], "expect": ["ostim"]},
-    {"id": "dgs-target-en", "query": "which university did he actually want", "lang": "en", "tags": ["education"], "expect": ["marmara", "istanbul"]},
-    {"id": "first-job-en", "query": "what was his first job", "lang": "en", "tags": ["work", "basic"], "expect": ["meya kirtasiye", "copy cent"]},
-    {"id": "current-job-en", "query": "where does he work right now", "lang": "en", "tags": ["work", "basic"], "expect": ["arel tarim", "kara makine"]},
-    {"id": "current-job-tr", "query": "şu an nerede çalışıyor", "lang": "tr", "tags": ["work", "basic"], "expect": ["arel tarim", "kara makine"]},
-    {"id": "ostim-supervisor-en", "query": "who is his supervisor at OSTİM", "lang": "en", "tags": ["work", "people"], "expect": ["akin aytekin", "supervisor ali"]},
-    {"id": "mentor-background-en", "query": "what is Akın Aytekin's military background", "lang": "en", "tags": ["people"], "expect": ["colonel", "cyber defense", "nato"]},
-    {"id": "bogazici-en", "query": "did he intern at Boğaziçi", "lang": "en", "tags": ["work"], "expect": ["bogazici"]},
-    {"id": "hackathon-en", "query": "has he won a hackathon", "lang": "en", "tags": ["work"], "expect": ["stellar hackathon", "first-place", "first place"]},
-    {"id": "hackathon-prize-tr", "query": "hackathon ödülü ne kadardı", "lang": "tr", "tags": ["work"], "expect": ["1,000", "1000", "galaxy s24"]},
-    {"id": "phone-en", "query": "which phone does he use", "lang": "en", "tags": ["basic", "possessions"], "expect": ["galaxy s24", "s24"]},
-    {"id": "phone-tr", "query": "hangi telefonu kullanıyor", "lang": "tr", "tags": ["basic", "possessions"], "expect": ["galaxy s24", "s24"]},
-    {"id": "laptop-en", "query": "what laptop does he own", "lang": "en", "tags": ["basic", "possessions"], "expect": ["acer nitro", "nitro 5"]},
-    {"id": "club-en", "query": "what student club did he found", "lang": "en", "tags": ["work"], "expect": ["siberay"]},
-    {"id": "club-advisor-en", "query": "who is Siberay's faculty advisor", "lang": "en", "tags": ["people"], "expect": ["hakan eren"]},
-    {"id": "dorm-en", "query": "which dormitory does he stay in", "lang": "en", "tags": ["basic"], "expect": ["tdv altindag", "altindag erkek"]},
-    {"id": "flight-en", "query": "has he ever flown on a plane", "lang": "en", "tags": ["biography"], "expect": ["never travelled by airplane", "never flown"]},
-    {"id": "gym-expiry-en", "query": "when does his gym membership expire", "lang": "en", "tags": ["state", "basic"], "expect": ["5 september 2026", "2026-09-05"]},
-    {"id": "gym-expiry-tr", "query": "spor salonu üyeliği ne zaman bitiyor", "lang": "tr", "tags": ["state", "basic"], "expect": ["5 september 2026", "2026-09-05"]},
-    {"id": "return-ankara-en", "query": "when is he going back to Ankara", "lang": "en", "tags": ["state", "basic"], "expect": ["2026-09-27", "27 september 2026"]},
-    {"id": "return-ankara-tr", "query": "Ankara'ya ne zaman dönüyor", "lang": "tr", "tags": ["state", "basic"], "expect": ["2026-09-27", "27 september 2026"]},
-    {"id": "waist-en", "query": "what is his waist measurement", "lang": "en", "tags": ["training", "basic"], "expect": ["95 cm"]},
-    {"id": "scholarships-en", "query": "how much scholarship money does he get monthly", "lang": "en", "tags": ["finance", "basic"], "expect": ["11,000", "11000"]},
-    {"id": "scholarships-tr", "query": "aylık burs ne kadar", "lang": "tr", "tags": ["finance", "basic"], "expect": ["11,000", "11000"]},
-    {"id": "codename-en", "query": "what is the backend codename", "lang": "en", "tags": ["project", "basic"], "expect": ["igor"]},
-    {"id": "legion-en", "query": "what is the subagent system called", "lang": "en", "tags": ["project", "basic"], "expect": ["legion"]},
-    {"id": "style-en", "query": "how does he want responses written", "lang": "en", "tags": ["preference", "basic"], "expect": ["concise", "no padding", "jarvis", "short"]},
-    {"id": "style-tr", "query": "nasıl cevap verilmesini istiyor", "lang": "tr", "tags": ["preference", "basic"], "expect": ["concise", "no padding", "jarvis", "short"]},
-    {"id": "skyfall-en", "query": "what is the Skyfall Protocol", "lang": "en", "tags": ["project"], "expect": ["kill switch", "skyfall"]}
+    {
+      "id": "birth-date-en",
+      "query": "when was he born",
+      "lang": "en",
+      "tags": [
+        "biography",
+        "basic"
+      ],
+      "expect": [
+        "18 october 2004",
+        "october 18",
+        "2004-10-18"
+      ]
+    },
+    {
+      "id": "birth-date-tr",
+      "query": "ne zaman doğdu",
+      "lang": "tr",
+      "tags": [
+        "biography",
+        "basic"
+      ],
+      "expect": [
+        "18 october 2004",
+        "october 18",
+        "2004-10-18"
+      ]
+    },
+    {
+      "id": "age-tr",
+      "query": "kaç yaşında",
+      "lang": "tr",
+      "tags": [
+        "biography",
+        "basic"
+      ],
+      "expect": [
+        "18 october 2004",
+        "october 18",
+        "2004-10-18"
+      ]
+    },
+    {
+      "id": "hometown-en",
+      "query": "where did he grow up",
+      "lang": "en",
+      "tags": [
+        "biography",
+        "basic"
+      ],
+      "expect": [
+        "akcalar"
+      ]
+    },
+    {
+      "id": "home-coords-en",
+      "query": "home coordinates",
+      "lang": "en",
+      "tags": [
+        "biography",
+        "basic"
+      ],
+      "expect": [
+        "40.18022",
+        "28.74189"
+      ]
+    },
+    {
+      "id": "home-coords-tr",
+      "query": "evinin koordinatları",
+      "lang": "tr",
+      "tags": [
+        "biography",
+        "basic"
+      ],
+      "expect": [
+        "40.18022",
+        "28.74189"
+      ]
+    },
+    {
+      "id": "siblings-en",
+      "query": "does he have brothers or sisters",
+      "lang": "en",
+      "tags": [
+        "biography",
+        "basic"
+      ],
+      "expect": [
+        "younger brother",
+        "sister",
+        "ilayda"
+      ]
+    },
+    {
+      "id": "siblings-tr",
+      "query": "kardeşi var mı",
+      "lang": "tr",
+      "tags": [
+        "biography",
+        "basic"
+      ],
+      "expect": [
+        "younger brother",
+        "sister",
+        "ilayda"
+      ]
+    },
+    {
+      "id": "father-work-en",
+      "query": "what does his father do for a living",
+      "lang": "en",
+      "tags": [
+        "biography",
+        "basic"
+      ],
+      "expect": [
+        "beekeep"
+      ]
+    },
+    {
+      "id": "associate-degree-en",
+      "query": "what did he study for his associate degree",
+      "lang": "en",
+      "tags": [
+        "biography",
+        "education"
+      ],
+      "expect": [
+        "computer programming"
+      ]
+    },
+    {
+      "id": "gpa-en",
+      "query": "what was his GPA at Uludağ",
+      "lang": "en",
+      "tags": [
+        "education",
+        "basic"
+      ],
+      "expect": [
+        "3.17"
+      ]
+    },
+    {
+      "id": "gpa-tr",
+      "query": "not ortalaması kaçtı",
+      "lang": "tr",
+      "tags": [
+        "education",
+        "basic"
+      ],
+      "expect": [
+        "3.17"
+      ]
+    },
+    {
+      "id": "current-university-en",
+      "query": "which university does he attend",
+      "lang": "en",
+      "tags": [
+        "education",
+        "basic"
+      ],
+      "expect": [
+        "ostim"
+      ]
+    },
+    {
+      "id": "current-university-tr",
+      "query": "hangi üniversitede okuyor",
+      "lang": "tr",
+      "tags": [
+        "education",
+        "basic"
+      ],
+      "expect": [
+        "ostim"
+      ]
+    },
+    {
+      "id": "yds-score-en",
+      "query": "what did he score on the YDS English exam",
+      "lang": "en",
+      "tags": [
+        "education"
+      ],
+      "expect": [
+        "86.25",
+        "86,25"
+      ]
+    },
+    {
+      "id": "yds-score-tr",
+      "query": "YDS puanı kaç",
+      "lang": "tr",
+      "tags": [
+        "education"
+      ],
+      "expect": [
+        "86.25",
+        "86,25"
+      ]
+    },
+    {
+      "id": "dgs-placement-en",
+      "query": "where was he placed by the DGS exam",
+      "lang": "en",
+      "tags": [
+        "education"
+      ],
+      "expect": [
+        "ostim"
+      ]
+    },
+    {
+      "id": "dgs-target-en",
+      "query": "which university did he actually want",
+      "lang": "en",
+      "tags": [
+        "education"
+      ],
+      "expect": [
+        "marmara",
+        "istanbul"
+      ]
+    },
+    {
+      "id": "first-job-en",
+      "query": "what was his first job",
+      "lang": "en",
+      "tags": [
+        "work",
+        "basic"
+      ],
+      "expect": [
+        "meya kirtasiye",
+        "copy cent"
+      ]
+    },
+    {
+      "id": "current-job-en",
+      "query": "where does he work right now",
+      "lang": "en",
+      "tags": [
+        "work",
+        "basic"
+      ],
+      "expect": [
+        "arel tarim",
+        "kara makine"
+      ]
+    },
+    {
+      "id": "current-job-tr",
+      "query": "şu an nerede çalışıyor",
+      "lang": "tr",
+      "tags": [
+        "work",
+        "basic"
+      ],
+      "expect": [
+        "arel tarim",
+        "kara makine"
+      ]
+    },
+    {
+      "id": "ostim-supervisor-en",
+      "query": "who is his supervisor at OSTİM",
+      "lang": "en",
+      "tags": [
+        "work",
+        "people"
+      ],
+      "expect": [
+        "akin aytekin",
+        "supervisor ali"
+      ]
+    },
+    {
+      "id": "mentor-background-en",
+      "query": "what is Akın Aytekin's military background",
+      "lang": "en",
+      "tags": [
+        "people"
+      ],
+      "expect": [
+        "colonel",
+        "cyber defense",
+        "nato"
+      ]
+    },
+    {
+      "id": "bogazici-en",
+      "query": "did he intern at Boğaziçi",
+      "lang": "en",
+      "tags": [
+        "work"
+      ],
+      "expect": [
+        "bogazici"
+      ]
+    },
+    {
+      "id": "hackathon-en",
+      "query": "has he won a hackathon",
+      "lang": "en",
+      "tags": [
+        "work"
+      ],
+      "expect": [
+        "stellar hackathon",
+        "first-place",
+        "first place"
+      ]
+    },
+    {
+      "id": "hackathon-prize-tr",
+      "query": "hackathon ödülü ne kadardı",
+      "lang": "tr",
+      "tags": [
+        "work"
+      ],
+      "expect": [
+        "1,000",
+        "1000",
+        "galaxy s24"
+      ]
+    },
+    {
+      "id": "phone-en",
+      "query": "which phone does he use",
+      "lang": "en",
+      "tags": [
+        "basic",
+        "possessions"
+      ],
+      "expect": [
+        "galaxy s24",
+        "s24"
+      ]
+    },
+    {
+      "id": "phone-tr",
+      "query": "hangi telefonu kullanıyor",
+      "lang": "tr",
+      "tags": [
+        "basic",
+        "possessions"
+      ],
+      "expect": [
+        "galaxy s24",
+        "s24"
+      ]
+    },
+    {
+      "id": "laptop-en",
+      "query": "what laptop does he own",
+      "lang": "en",
+      "tags": [
+        "basic",
+        "possessions"
+      ],
+      "expect": [
+        "acer nitro",
+        "nitro 5"
+      ]
+    },
+    {
+      "id": "club-en",
+      "query": "what student club did he found",
+      "lang": "en",
+      "tags": [
+        "work"
+      ],
+      "expect": [
+        "siberay"
+      ]
+    },
+    {
+      "id": "club-advisor-en",
+      "query": "who is Siberay's faculty advisor",
+      "lang": "en",
+      "tags": [
+        "people"
+      ],
+      "expect": [
+        "hakan eren"
+      ]
+    },
+    {
+      "id": "dorm-en",
+      "query": "which dormitory does he stay in",
+      "lang": "en",
+      "tags": [
+        "basic"
+      ],
+      "expect": [
+        "tdv altindag",
+        "altindag erkek"
+      ]
+    },
+    {
+      "id": "flight-en",
+      "query": "has he ever flown on a plane",
+      "lang": "en",
+      "tags": [
+        "biography"
+      ],
+      "expect": [
+        "never travelled by airplane",
+        "never flown"
+      ]
+    },
+    {
+      "id": "gym-expiry-en",
+      "query": "when does his gym membership expire",
+      "lang": "en",
+      "tags": [
+        "state",
+        "basic"
+      ],
+      "expect": [
+        "5 september 2026",
+        "2026-09-05"
+      ]
+    },
+    {
+      "id": "gym-expiry-tr",
+      "query": "spor salonu üyeliği ne zaman bitiyor",
+      "lang": "tr",
+      "tags": [
+        "state",
+        "basic"
+      ],
+      "expect": [
+        "5 september 2026",
+        "2026-09-05"
+      ]
+    },
+    {
+      "id": "return-ankara-en",
+      "query": "when is he going back to Ankara",
+      "lang": "en",
+      "tags": [
+        "state",
+        "basic"
+      ],
+      "expect": [
+        "2026-09-27",
+        "27 september 2026"
+      ]
+    },
+    {
+      "id": "return-ankara-tr",
+      "query": "Ankara'ya ne zaman dönüyor",
+      "lang": "tr",
+      "tags": [
+        "state",
+        "basic"
+      ],
+      "expect": [
+        "2026-09-27",
+        "27 september 2026"
+      ]
+    },
+    {
+      "id": "waist-en",
+      "query": "what is his waist measurement",
+      "lang": "en",
+      "tags": [
+        "training",
+        "basic"
+      ],
+      "expect": [
+        "95 cm"
+      ]
+    },
+    {
+      "id": "scholarships-en",
+      "query": "how much scholarship money does he get monthly",
+      "lang": "en",
+      "tags": [
+        "finance",
+        "basic"
+      ],
+      "expect": [
+        "11,000",
+        "11000"
+      ]
+    },
+    {
+      "id": "scholarships-tr",
+      "query": "aylık burs ne kadar",
+      "lang": "tr",
+      "tags": [
+        "finance",
+        "basic"
+      ],
+      "expect": [
+        "11,000",
+        "11000"
+      ]
+    },
+    {
+      "id": "codename-en",
+      "query": "what is the backend codename",
+      "lang": "en",
+      "tags": [
+        "project",
+        "basic"
+      ],
+      "expect": [
+        "igor"
+      ]
+    },
+    {
+      "id": "legion-en",
+      "query": "what is the subagent system called",
+      "lang": "en",
+      "tags": [
+        "project",
+        "basic"
+      ],
+      "expect": [
+        "legion"
+      ]
+    },
+    {
+      "id": "style-en",
+      "query": "how does he want responses written",
+      "lang": "en",
+      "tags": [
+        "preference",
+        "basic"
+      ],
+      "expect": [
+        "concise",
+        "no padding",
+        "jarvis",
+        "short"
+      ]
+    },
+    {
+      "id": "style-tr",
+      "query": "nasıl cevap verilmesini istiyor",
+      "lang": "tr",
+      "tags": [
+        "preference",
+        "basic"
+      ],
+      "expect": [
+        "concise",
+        "no padding",
+        "jarvis",
+        "short"
+      ]
+    },
+    {
+      "id": "skyfall-en",
+      "query": "what is the Skyfall Protocol",
+      "lang": "en",
+      "tags": [
+        "project"
+      ],
+      "expect": [
+        "kill switch",
+        "skyfall"
+      ]
+    },
+    {
+      "id": "father-name-en",
+      "query": "what is his father's name",
+      "lang": "en",
+      "tags": [
+        "people",
+        "basic"
+      ],
+      "expect": [
+        "osman bayrak"
+      ]
+    },
+    {
+      "id": "father-name-tr",
+      "query": "babasının adı ne",
+      "lang": "tr",
+      "tags": [
+        "people",
+        "basic"
+      ],
+      "expect": [
+        "osman bayrak"
+      ]
+    },
+    {
+      "id": "sister-name-en",
+      "query": "what is his sister called",
+      "lang": "en",
+      "tags": [
+        "people",
+        "basic"
+      ],
+      "expect": [
+        "ilayda"
+      ]
+    },
+    {
+      "id": "sister-wedding-en",
+      "query": "when is his sister getting married",
+      "lang": "en",
+      "tags": [
+        "people"
+      ],
+      "expect": [
+        "6 september 2026",
+        "28 august 2026"
+      ]
+    },
+    {
+      "id": "sister-wedding-tr",
+      "query": "kardeşinin düğünü ne zaman",
+      "lang": "tr",
+      "tags": [
+        "people"
+      ],
+      "expect": [
+        "6 september 2026",
+        "28 august 2026"
+      ]
+    },
+    {
+      "id": "sinan-who-en",
+      "query": "who is Sinan Kara",
+      "lang": "en",
+      "tags": [
+        "people"
+      ],
+      "expect": [
+        "arel tarim",
+        "kara makine",
+        "founder"
+      ]
+    },
+    {
+      "id": "sinan-codename-en",
+      "query": "what codename is used for Sinan Kara",
+      "lang": "en",
+      "tags": [
+        "people"
+      ],
+      "expect": [
+        "short bank"
+      ]
+    },
+    {
+      "id": "akin-role-en",
+      "query": "what is Akın Aytekin's job title",
+      "lang": "en",
+      "tags": [
+        "people"
+      ],
+      "expect": [
+        "head of it",
+        "bilgi islem"
+      ]
+    },
+    {
+      "id": "akin-role-tr",
+      "query": "Akın Aytekin'in görevi ne",
+      "lang": "tr",
+      "tags": [
+        "people"
+      ],
+      "expect": [
+        "head of it",
+        "bilgi islem"
+      ]
+    },
+    {
+      "id": "pinar-who-en",
+      "query": "who is Pınar Uzun",
+      "lang": "en",
+      "tags": [
+        "people"
+      ],
+      "expect": [
+        "confidant",
+        "ostim",
+        "siberay"
+      ]
+    },
+    {
+      "id": "hakan-eren-en",
+      "query": "who is Doç. Dr. Hakan Eren",
+      "lang": "en",
+      "tags": [
+        "people"
+      ],
+      "expect": [
+        "advisor",
+        "siberay"
+      ]
+    },
+    {
+      "id": "blackwalnut-en",
+      "query": "what is Blackwalnut",
+      "lang": "en",
+      "tags": [
+        "project"
+      ],
+      "expect": [
+        "seo",
+        "social-media",
+        "commercial",
+        "retainer"
+      ]
+    },
+    {
+      "id": "blackwalnut-tr",
+      "query": "Blackwalnut nedir",
+      "lang": "tr",
+      "tags": [
+        "project"
+      ],
+      "expect": [
+        "seo",
+        "social-media",
+        "commercial",
+        "retainer"
+      ]
+    },
+    {
+      "id": "forge-en",
+      "query": "what is FORGE",
+      "lang": "en",
+      "tags": [
+        "project"
+      ],
+      "expect": [
+        "forge"
+      ]
+    },
+    {
+      "id": "siberay-what-en",
+      "query": "what is Siberay",
+      "lang": "en",
+      "tags": [
+        "project"
+      ],
+      "expect": [
+        "cybersecurity",
+        "club"
+      ]
+    },
+    {
+      "id": "gym-coords-en",
+      "query": "where is his gym",
+      "lang": "en",
+      "tags": [
+        "state"
+      ],
+      "expect": [
+        "40.17500",
+        "28.92484",
+        "cali"
+      ]
+    },
+    {
+      "id": "gym-equipment-en",
+      "query": "does his gym have a squat rack",
+      "lang": "en",
+      "tags": [
+        "state"
+      ],
+      "expect": [
+        "squat rack",
+        "power rack"
+      ]
+    },
+    {
+      "id": "pharmatox-en",
+      "query": "what is the Pharmatox project",
+      "lang": "en",
+      "tags": [
+        "project"
+      ],
+      "expect": [
+        "medication",
+        "health"
+      ]
+    },
+    {
+      "id": "ostim-priority-en",
+      "query": "is OSTİM going to keep employing him",
+      "lang": "en",
+      "tags": [
+        "work"
+      ],
+      "expect": [
+        "priority candidate"
+      ]
+    },
+    {
+      "id": "vulnbook-en",
+      "query": "what is VulnBook",
+      "lang": "en",
+      "tags": [
+        "project"
+      ],
+      "expect": [
+        "vulnbook",
+        "vulnerab"
+      ]
+    }
   ]
 }
