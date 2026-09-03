@@ -11,6 +11,7 @@ import com.speda.heartbreaker.data.MessageCache
 import com.speda.heartbreaker.data.PlatformContextProvider
 import com.speda.heartbreaker.data.SettingsStore
 import com.speda.heartbreaker.data.UplinkStore
+import com.speda.heartbreaker.data.VoiceLevels
 import com.speda.heartbreaker.health.HealthSyncManager
 import com.speda.heartbreaker.push.PushRegistrar
 import okhttp3.ConnectionPool
@@ -28,6 +29,11 @@ class AppGraph(context: Context) {
     val uplink: UplinkStore = UplinkStore(appContext)
     val settings: SettingsStore = SettingsStore(appContext)
     val platform: PlatformContextProvider = PlatformContextProvider(appContext)
+
+    // The spoken-output meter the orb reacts to. Built here because it needs a
+    // Context and a session id that outlives any one turn; silent and harmless
+    // until the RECORD_AUDIO permission is granted (see VoiceLevels).
+    val voiceLevels: VoiceLevels = VoiceLevels(appContext)
 
     // Short-lived REST + /health client (ordinary timeouts).
     private val restClient: OkHttpClient = OkHttpClient.Builder()

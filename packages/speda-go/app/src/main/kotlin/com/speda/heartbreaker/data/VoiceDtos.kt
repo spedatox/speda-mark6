@@ -46,3 +46,20 @@ data class VoiceOption(
     val gender: String = "",
     val display: String = "",
 )
+
+/**
+ * The board half of GET /voice/status — how many windows a turn may open, how
+ * long to stagger their arrival, how deep the caption runs.
+ *
+ * Read from the backend rather than held as constants here for one reason: the
+ * SAME settings shape what the agent is asked to WRITE (the word budgets and the
+ * window ceiling reach it through the voice brief). A client with its own idea of
+ * the ceiling would eventually draw six windows for a reply briefed to stage ten.
+ */
+@Serializable
+data class CanvasSettings(
+    val enabled: Boolean = true,
+    @SerialName("max_panels") val maxPanels: Int = 10,
+    @SerialName("reveal_stagger_ms") val revealStaggerMs: Int = 160,
+    @SerialName("caption_lines") val captionLines: Int = 3,
+)

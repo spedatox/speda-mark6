@@ -143,12 +143,38 @@ has a WebSocket path that keeps one prosodic context across a whole turn, so
 intonation carries across a sentence boundary; here each sentence is a standalone
 utterance with its own terminal contour. That seam is the cost of this path.
 
-**Still missing: the orb and a dedicated voice surface.** Replies are spoken in
-the ordinary chat screen, with the staged windows rendering inline as they always
-do. Two constraints shape whatever comes next: the desktop orb is a Three.js
-WebGL scene with custom shaders rather than a 2D drawing, and this app declares
-no `RECORD_AUDIO` on purpose — Android's `Visualizer` needs it, so there is no
-output amplitude to drive a reactive orb without adding that permission.
+### The surface
+
+Switching voice on REPLACES the transcript with `ui/voice/VoiceModeScreen` — the
+point of the mode is that the owner is listening, not reading a scrollback. It
+carries three things: the staged windows as a column in the order the agent
+staged them, the orb, and a live caption of what is being said.
+
+Windows are rendered through `FenceBlock`, the same dispatcher chat uses, so
+every kind works there and a chart on the board is literally the chart from the
+transcript rather than a second implementation that can drift from it.
+
+The caption is a **subtitle, not a transcript**: a few lines deep, riding its own
+tail, capped by `caption_lines` from Settings → Canvas. Anything worth reading
+twice was supposed to become a window.
+
+### The orb, and what it honestly is not
+
+The desktop orb is a Three.js scene — an icosahedron under custom GLSL wrapped in
+a particle membrane. `ui/voice/VoiceOrb.kt` is **not** that and does not pretend
+to be: it is a 2D reading of the same idea (a lit core, a breathing halo, a ring
+that deforms with the voice). It keeps the two behaviours that mean something —
+it reacts while speaking, and it shrinks aside when there is something to present
+— and gives up the ones that are only spectacle.
+
+**It needs a microphone permission to react, for playback.** Android exposes no
+"what am I playing" meter; the only route to the samples is `Visualizer`, which
+is gated behind `RECORD_AUDIO`. So the app now declares it — not to record
+anything (dictation still goes through the system recognizer, which carries its
+own permission) but to read the amplitude of its own output. It is requested the
+first time voice is switched on, never at launch, and **declining costs nothing
+but the reactivity**: `VoiceLevels` simply never emits, and the orb falls back to
+its idle breath.
 
 ---
 

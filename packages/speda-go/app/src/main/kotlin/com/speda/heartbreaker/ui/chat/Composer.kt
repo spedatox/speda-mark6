@@ -110,8 +110,10 @@ fun Composer(
 
     // Dictation. Routed through the platform's own recognizer activity rather
     // than a raw SpeechRecognizer: the system dialog carries the mic permission,
-    // the listening UI and the partial-results display, so the app declares no
-    // RECORD_AUDIO and there is no half-built recording surface to maintain.
+    // the listening UI and the partial-results display, so there is no half-built
+    // recording surface to maintain here and this path needs no permission of its
+    // own. (The app's RECORD_AUDIO is unrelated — it exists so the orb can read
+    // the amplitude of our own PLAYBACK; see data/VoiceLevels.kt.)
     val dictate = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->

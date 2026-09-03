@@ -28,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import com.speda.heartbreaker.data.PendingAsk
 import com.speda.heartbreaker.data.SkyfallArm
+import com.speda.heartbreaker.data.VoiceLevels
 import com.speda.heartbreaker.data.VoiceSpeaker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,6 +54,9 @@ import java.util.UUID
 class ChatViewModel(
     private val api: IgorApi,
     private val cache: MessageCache,
+    /** The spoken-output meter. Owned by the graph because it needs a Context
+     *  and a session id that outlives any one turn; this only drives it. */
+    private val levels: VoiceLevels,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
@@ -75,6 +79,11 @@ class ChatViewModel(
     private val _voiceState = MutableStateFlow(VoiceSpeaker.State.IDLE)
     val voiceState: StateFlow<VoiceSpeaker.State> = _voiceState.asStateFlow()
 
+    /** How loud the agent is right now, 0..1 — what the orb reacts to. Zero
+     *  throughout when the microphone permission was never granted, which the
+     *  orb treats as "animate yourself" rather than as an error. */
+    val voiceLevel: StateFlow<Float> get() = levels.level
+
     /** The speaker for the turn in flight. One per turn: it holds the fence
      *  state of the reply it is filtering, so it can never be reused. */
     private var speaker: VoiceSpeaker? = null
@@ -89,6 +98,7 @@ class ChatViewModel(
     fun stopSpeaking() {
         speaker?.stop()
         speaker = null
+        levels.stop()
         _voiceState.value = VoiceSpeaker.State.IDLE
     }
 
@@ -502,7 +512,19 @@ class ChatViewModel(
                                     // could return.
                                     speaker = VoiceSpeaker(
                                         api, cfg, cfg.agentId, viewModelScope,
-                                    ) { st -> _voiceState.value = st }
+                                        levels.sessionId,
+                                    ) { st ->
+                                        _voiceState.value = st
+                                        // Speech ending on its own releases the
+                                        // meter too — stopSpeaking is not the
+                                        // only way a turn goes quiet.
+                                        if (st == VoiceSpeaker.State.IDLE) levels.stop()
+                                    }
+                                    // Metering runs only while there is
+                                    // something to meter — a Visualizer left
+                                    // enabled is a hardware effect held open
+                                    // across an idle conversation.
+                                    levels.start()
                                 }
                             }
                             runId = event.requestId

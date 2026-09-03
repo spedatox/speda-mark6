@@ -60,6 +60,10 @@ class VoiceSpeaker(
     private val config: AppConfig,
     private val agentId: String?,
     private val scope: CoroutineScope,
+    /** The audio session every clip plays into, so one Visualizer can meter the
+     *  whole conversation rather than being rebuilt per sentence. See
+     *  [VoiceLevels]. */
+    private val audioSessionId: Int,
     /** Called as the turn moves between silence, generating and speaking, so the
      *  surface can show which of the three is happening. */
     private val onState: (State) -> Unit = {},
@@ -207,6 +211,9 @@ class VoiceSpeaker(
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build(),
             )
+            // Before setDataSource — the only point the platform lets a session
+            // be assigned. After it, the setter throws.
+            if (audioSessionId != 0) mp.audioSessionId = audioSessionId
             mp.setDataSource(ByteArrayMediaSource(audio))
             mp.setOnCompletionListener { settle() }
             mp.setOnErrorListener { _, _, _ -> settle(); true }

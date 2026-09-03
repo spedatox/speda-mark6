@@ -160,7 +160,7 @@ private fun Block(node: Node, palette: HbPalette) {
         is BulletList -> ListBlock(node, palette, ordered = false)
         is OrderedList -> ListBlock(node, palette, ordered = true)
         is BlockQuote -> Quote(node, palette)
-        is FencedCodeBlock -> Fence(language = node.info.orEmpty().trim(), code = node.literal.trimEnd('\n'))
+        is FencedCodeBlock -> FenceBlock(language = node.info.orEmpty().trim(), code = node.literal.trimEnd('\n'))
         is IndentedCodeBlock -> CodeBlockView(language = "", code = node.literal.trimEnd('\n'))
         is ThematicBreak -> Hr()
         is TableBlock -> TableView(node, palette)
@@ -217,9 +217,13 @@ private fun carriesMath(node: Node): Boolean {
 /**
  * Which renderer a ``` fence gets, mirroring the `code()` branch in Message.tsx.
  * Anything unclaimed falls through to the glass code block.
+ *
+ * Public because voice mode's board renders staged windows through this same
+ * dispatcher: a chart on the board is then literally the chart from chat rather
+ * than a second implementation of one that can drift away from it.
  */
 @Composable
-private fun Fence(language: String, code: String) {
+fun FenceBlock(language: String, code: String) {
     // A staged window's info line carries its screen title after a bar
     // ("card | VANKO / FILE"), so the language is whatever precedes it. Parsed
     // for EVERY fence, not just the board kinds: an agent that titles its chart

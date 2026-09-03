@@ -32,6 +32,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.speda.heartbreaker.data.CanvasSettings
+import com.speda.heartbreaker.ui.voice.VoiceModeScreen
 import com.speda.heartbreaker.AppGraph
 import com.speda.heartbreaker.data.Health
 import com.speda.heartbreaker.data.HbSettings
@@ -90,7 +92,7 @@ fun ChatScreen(
 ) {
     val scope = rememberCoroutineScope()
     val vm: ChatViewModel = viewModel(
-        factory = viewModelFactory { initializer { ChatViewModel(graph.api, graph.messageCache) } },
+        factory = viewModelFactory { initializer { ChatViewModel(graph.api, graph.messageCache, graph.voiceLevels) } },
     )
     // ChatViewModel is plain Kotlin, not @Composable — it can't read LocalStrings
     // itself, so the shell keeps it in sync on every recomposition.
@@ -146,6 +148,27 @@ fun ChatScreen(
     }
 
     val voiceOn by vm.voiceOn.collectAsStateWithLifecycle()
+    val voiceState by vm.voiceState.collectAsStateWithLifecycle()
+    val voiceLevel by vm.voiceLevel.collectAsStateWithLifecycle()
+    // The board's settings live on the backend so the agent's brief and the
+    // surface that renders it cannot disagree about the window ceiling.
+    var canvas by remember { mutableStateOf(CanvasSettings()) }
+
+    // The microphone permission is for reading the amplitude of our OWN
+    // playback (Android gates Visualizer behind it) — nothing here records.
+    // Asked once, when voice is first switched on, because asking at launch for
+    // a feature the owner may never use is how a permission gets refused.
+    val micPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { /* Declined is fine: the orb animates itself instead of reacting. */ }
+
+    LaunchedEffect(voiceOn, config) {
+        if (!voiceOn) return@LaunchedEffect
+        canvas = graph.api.fetchCanvasSettings(config)
+        if (!graph.voiceLevels.hasPermission()) {
+            micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+    }
 
     var drawerOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
@@ -222,7 +245,21 @@ fun ChatScreen(
                 // full of moving accent light, so bubbles are real frosted glass
                 // rather than the flat occluding-fill fallback.
                 CompositionLocalProvider(LocalHazeState provides LocalAmbientHazeState.current) {
-                    if (state.messages.isEmpty()) {
+                    // Voice mode REPLACES the transcript rather than sitting
+                    // beside it. The point of the mode is that the owner is
+                    // listening, not reading a scrollback — so what shows is the
+                    // current answer's evidence and the words as they are said.
+                    if (voiceOn) {
+                        VoiceModeScreen(
+                            reply = state.messages.lastOrNull {
+                                it.role == com.speda.heartbreaker.domain.Role.Assistant
+                            }?.content.orEmpty(),
+                            state = voiceState,
+                            level = voiceLevel,
+                            captionLines = canvas.captionLines,
+                            maxPanels = canvas.maxPanels,
+                        )
+                    } else if (state.messages.isEmpty()) {
                         WelcomeView(
                             brand = brand,
                             config = config,

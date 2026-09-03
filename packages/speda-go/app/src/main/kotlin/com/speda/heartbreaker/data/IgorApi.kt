@@ -1170,6 +1170,18 @@ class IgorApi(
         }.getOrNull()
     }
 
+    /** The board's settings (GET /voice/status → canvas). Falls back to the
+     *  DTO's own defaults when voice is unconfigured or the call fails, so the
+     *  surface still renders rather than waiting on a number. */
+    suspend fun fetchCanvasSettings(config: AppConfig): CanvasSettings = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/voice/status")?.let {
+                json.parseToJsonElement(it).jsonObject["canvas"]
+                    ?.let { c -> json.decodeFromJsonElement<CanvasSettings>(c) }
+            }
+        }.getOrNull() ?: CanvasSettings()
+    }
+
     /**
      * Synthesize ONE utterance (POST /voice/speak) and return the MP3 bytes.
      *

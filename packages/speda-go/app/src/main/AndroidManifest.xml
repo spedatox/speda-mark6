@@ -3,6 +3,14 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Spoken replies only. The app never records: dictation goes through the
+         system recognizer activity, which carries its own permission. This is
+         here because Android's Visualizer — the ONLY way to read the amplitude of
+         audio this app is itself playing — is gated behind RECORD_AUDIO. Without
+         it the voice still speaks; the orb just animates itself instead of moving
+         with the words. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Opt-in location awareness (Settings toggle). FINE for exact position;
          COARSE declared too so the OS can honour an approximate-only grant. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -31,7 +39,9 @@
              visibility is per-intent on Android 11+, so without this the
              recognizer can't be resolved and the control would sit there
              looking enabled and doing nothing. The system dialog owns the mic
-             permission and the UI, so the app declares no RECORD_AUDIO. -->
+             permission and the recording UI, so dictation itself still needs no
+             permission from us — the RECORD_AUDIO above is for reading the
+             amplitude of our OWN playback, and is unrelated to this. -->
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
         </intent>
