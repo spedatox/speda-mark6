@@ -290,6 +290,14 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                              "Looser than the fact floor because long messages score lower "
                              "cosines for the same relevance.",
                         placeholder="0.25"),
+            ConfigField("memory_injected_file_max_chars", "Injected File Character Cap", "int",
+                        requires_restart=_LIVE,
+                        help="Per-file ceiling on what the always-injected memory files add to "
+                             "every prompt. owner.md was 13.8 KB — 48% of the block — and the "
+                             "declared 12 KB cap was only checked on write. Truncation keeps "
+                             "whole sections and drops the MIDDLE, so the directives at a "
+                             "file's end survive; nothing is removed from disk and the elided "
+                             "part is still readable with the memory tool. 0 = inject whole."),
             ConfigField("relevant_recall_enabled", "Inject Relevant Facts Every Turn", "bool",
                         requires_restart=_LIVE,
                         help="Search the record with his own message each turn and put what "

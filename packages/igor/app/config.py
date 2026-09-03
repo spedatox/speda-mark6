@@ -599,6 +599,24 @@ class Settings(BaseSettings):
     # retrievable intent and would match on stopwords alone.
     relevant_recall_min_query_chars: int = 12
 
+    # ── Injected memory budget ───────────────────────────────────────────────
+    # Per-file ceiling on what the ALWAYS-INJECTED memory files contribute to
+    # every system prompt. memory_schema.INJECTED_FILE_MAX_BYTES declares 12 KB
+    # but was only ever checked on write, so owner.md reached 13.8 KB — 48% of a
+    # 7,200-token block re-sent on every turn of every session.
+    #
+    # The cost is attention, not money: the block carries a cache breakpoint, so
+    # most turns read it at a tenth of input price. But a fact stated once inside
+    # 13.8 KB of prose competes with the whole prompt, and now that every fact in
+    # those files is individually retrievable AND auto-injected when relevant
+    # (relevant_recall_enabled), the narrative no longer has to carry that job.
+    #
+    # Truncation keeps whole sections and drops from the MIDDLE OUTWARD — the
+    # directives in a memory file live at its end and must survive. Nothing is
+    # deleted from disk; the elided middle stays readable with the `memory` tool.
+    # 0 disables truncation and injects every file whole.
+    memory_injected_file_max_chars: int = 6000
+
     # The Legion — worker model override. EMPTY by default (the provider-agnostic
     # fix): legionnaire models resolve from the parent chat model's provider —
     # low/medium-effort workers run on the profile's cheap tier for that provider

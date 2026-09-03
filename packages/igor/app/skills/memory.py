@@ -20,6 +20,7 @@ Commands (matching Anthropic's spec exactly):
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from sqlalchemy import select, delete as sql_delete
@@ -447,6 +448,113 @@ class MemoryRecallCache:
         self._episodic[session_id] = block
 
 
+# ── Injection budget ─────────────────────────────────────────────────────────
+# An injected file is re-sent on every turn of every session, so its size is
+# paid in the one currency that cannot be cached: the model's attention. Money
+# is not the issue — the block carries a cache breakpoint, so most turns read it
+# at a tenth of input price — but a fact stated once inside 13.8 KB of prose
+# competes with everything else in the prompt, and it stopped winning as the
+# prose grew. That is what the owner reported as having to explain simple things
+# twice.
+#
+# `memory_schema.INJECTED_FILE_MAX_BYTES` declares a 12 KB ceiling and was only
+# ever checked on WRITE, never at injection, so owner.md sat 1.7 KB over it and
+# nothing stopped it growing further. This is the injection-time half.
+#
+# Truncation is section-aware and works from the MIDDLE OUTWARD, which is the
+# whole point. owner.md's shape is typical of a narrative memory file:
+#
+#     Origins … Uludağ … Istanbul … Ankara … Employment History   ← 12,640 chars
+#     Communication style                                          ←    180 chars
+#     Explicit instructions                                        ←    840 chars
+#
+# The directives that govern how every agent behaves are the LAST kilobyte, and
+# a naive head-truncation to fit a budget would delete them and keep the
+# chronology. So the tail is kept first, then the head for identity, and the
+# middle — the narrative, which is now individually retrievable as observations
+# and injected on demand by app/services/relevant_recall.py — is what gives way.
+#
+# Nothing is lost: the file is untouched on disk and the elision marker names
+# what was dropped and how to read it.
+
+_SECTION_SPLIT = re.compile(r"^(?=## )", re.MULTILINE)
+
+
+def _split_sections(content: str) -> list[str]:
+    """A document into its `## ` sections, preamble first, order preserved."""
+    parts = [p for p in _SECTION_SPLIT.split(content or "") if p.strip()]
+    return parts or ([content] if content else [])
+
+
+def _heading_of(section: str) -> str:
+    first = section.strip().splitlines()[0] if section.strip() else ""
+    return first.lstrip("# ").strip() or "untitled section"
+
+
+def elide_middle(path: str, content: str, budget: int) -> str:
+    """`content` trimmed to roughly `budget` characters, middle sections first.
+
+    Keeps whole sections — a document cut mid-sentence reads as corrupted and
+    invites the model to guess at the rest. Priority is the TAIL, then the head,
+    because in a narrative memory file the operational directives live at the
+    end and the story lives in the middle. Returns `content` unchanged when it
+    already fits or when there is nothing safe to drop.
+    """
+    body = (content or "").strip()
+    if budget <= 0 or len(body) <= budget:
+        return body
+
+    sections = _split_sections(body)
+    if len(sections) < 3:
+        # Nothing to elide without cutting into a section. Sending it whole and
+        # over budget beats sending half a sentence.
+        return body
+
+    keep: set[int] = set()
+    used = 0
+    # Tail first, then head, alternating inward. The preamble (index 0) is taken
+    # in the head pass like any other section.
+    head, tail = 0, len(sections) - 1
+    take_tail = True
+    while head <= tail:
+        i = tail if take_tail else head
+        size = len(sections[i])
+        if used + size > budget and keep:
+            break
+        keep.add(i)
+        used += size
+        if take_tail:
+            tail -= 1
+        else:
+            head += 1
+        take_tail = not take_tail
+
+    dropped = [i for i in range(len(sections)) if i not in keep]
+    if not dropped:
+        return body
+
+    out: list[str] = []
+    marked = False
+    for i, section in enumerate(sections):
+        if i in keep:
+            out.append(section.strip())
+            marked = False
+            continue
+        if not marked:
+            names = ", ".join(f"“{_heading_of(sections[d])}”" for d in dropped[:8])
+            more = f" and {len(dropped) - 8} more" if len(dropped) > 8 else ""
+            out.append(
+                f"_[{len(dropped)} section(s) not shown here to keep this prompt "
+                f"legible: {names}{more}. They are NOT deleted — the full file is "
+                f"at `{path}`, readable with the `memory` tool, and the facts "
+                f"inside it are individually searchable with `search_memory`. "
+                f"Open it when the answer needs the narrative rather than a "
+                f"fact.]_"
+            )
+            marked = True
+    return "\n\n".join(out)
+
+
 async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache: MemoryRecallCache) -> str:
     """
     Load the memory context to prepend to the system prompt.
@@ -478,6 +586,8 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
 
     by_path = {f.path: f for f in all_files}
 
+    from app.config import settings
+
     # Size-free listing keeps this recall block byte-stable across turns so the
     # prompt cache holds (file sizes otherwise change every turn as log.md grows).
     listing = _format_directory(all_files, MEMORY_ROOT, with_sizes=False)
@@ -488,11 +598,15 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
     for p in source_preload_for(agent_id):
         if p not in preload:
             preload.append(p)
+    # Injected files are capped at injection time, not just on write — see
+    # elide_middle(). A file that outgrew its budget gives up its middle,
+    # keeping the directives at its end.
+    budget = settings.memory_injected_file_max_chars
     sections = [f"### Directory\n\n{listing}"]
     for path in preload:
         f = by_path.get(path)
         if f:
-            sections.append(f"### {path}\n\n{f.content.strip()}")
+            sections.append(f"### {path}\n\n{elide_middle(path, f.content, budget)}")
 
     body = "\n\n".join(sections)
 
