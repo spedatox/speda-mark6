@@ -568,6 +568,37 @@ class Settings(BaseSettings):
     # cached, latency-sensitive call, so the cheapest capable model wins.
     recall_translation_model: str = ""
 
+    # ── Automatic fact extraction ────────────────────────────────────────────
+    # Whether each turn is mined for the durable facts the owner stated, in the
+    # background, instead of waiting for an agent to volunteer a
+    # record_observation call. It waited a long time: 93 facts were recorded
+    # across 10,409 user messages before this existed, which is the real reason
+    # he had to keep repeating himself. See app/services/fact_extraction.py.
+    auto_extract_facts: bool = True
+    # Ceiling per turn. A turn that looks like it holds twenty durable facts is
+    # almost always a long ANSWER being mined for trivia, and flooding the store
+    # with near-facts is exactly how recall degraded in the first place.
+    auto_extract_max_facts: int = 5
+    # Model for the extraction. Empty = the background model.
+    auto_extract_model: str = ""
+
+    # ── Per-turn relevant recall ─────────────────────────────────────────────
+    # Search the record with the owner's own message every turn and inject what
+    # matches, instead of waiting for an agent to decide to call search_memory.
+    # The read-side counterpart to auto_extract_facts: together they are what
+    # makes telling an agent something enough for it to be remembered.
+    # See app/services/relevant_recall.py.
+    relevant_recall_enabled: bool = True
+    # How many facts may be injected per turn. Small on purpose — this is a
+    # reminder, not a second memory file, and a long block of near-misses
+    # teaches the model to skip the section.
+    relevant_recall_limit: int = 6
+    # Hard ceiling on the injected block, independent of the count.
+    relevant_recall_max_chars: int = 2000
+    # Messages shorter than this are not searched: "ok", "yes", "devam" carry no
+    # retrievable intent and would match on stopwords alone.
+    relevant_recall_min_query_chars: int = 12
+
     # The Legion — worker model override. EMPTY by default (the provider-agnostic
     # fix): legionnaire models resolve from the parent chat model's provider —
     # low/medium-effort workers run on the profile's cheap tier for that provider

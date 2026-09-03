@@ -31,6 +31,7 @@ from typing import AsyncGenerator
 from app.core.context import AgentContext
 from app.core.peer_routing import resolve
 from app.schemas.sse import SSEEvent, SSEEventType
+from app.services.relevant_recall import facts_for_message
 from app.skills.memory import recall_for_context
 from app.websocket.manager import WebSocketManager
 
@@ -180,10 +181,22 @@ class ExternalAgentProxy:
         if self._memory_cache is None or context.db is None:
             return ""
         try:
-            return await recall_for_context(
+            block = await recall_for_context(
                 context.user_id, context.db, context.agent_id,
                 cache=self._memory_cache,
             ) or ""
+            # The per-turn facts too, for the same reason the orchestrator
+            # injects them: an external peer running the owner's turn is subject
+            # to the identical failure — it will not think to search the record,
+            # so what he told someone last week never reaches it. Appended
+            # rather than sent separately because the peer prepends this as one
+            # fragment and has nowhere to put a second block.
+            relevant = await facts_for_message(
+                context.user_id, context.db, context.conversation_history,
+                request_id=context.request_id,
+            ) or ""
+            return f"{block}\n\n{relevant}".strip() if relevant else block
+
         except Exception as e:  # noqa: BLE001 — see docstring
             logger.warning(
                 "external_memory_recall_failed",

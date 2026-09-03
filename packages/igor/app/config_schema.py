@@ -290,6 +290,43 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                              "Looser than the fact floor because long messages score lower "
                              "cosines for the same relevance.",
                         placeholder="0.25"),
+            ConfigField("relevant_recall_enabled", "Inject Relevant Facts Every Turn", "bool",
+                        requires_restart=_LIVE,
+                        help="Search the record with his own message each turn and put what "
+                             "matches in front of the model, instead of waiting for it to "
+                             "decide to call search_memory. The read-side twin of automatic "
+                             "extraction — together they are what makes telling an agent "
+                             "something enough for it to be remembered."),
+            ConfigField("relevant_recall_limit", "Facts Injected Per Turn", "int",
+                        requires_restart=_LIVE,
+                        help="Kept small deliberately: this is a reminder, not a second memory "
+                             "file, and a long block of near-misses teaches the model to skip "
+                             "the section."),
+            ConfigField("relevant_recall_max_chars", "Injected Facts Character Cap", "int",
+                        requires_restart=_LIVE,
+                        help="Hard ceiling on the injected block, independent of the count."),
+            ConfigField("relevant_recall_min_query_chars", "Minimum Message Length To Search", "int",
+                        requires_restart=_LIVE,
+                        help="Shorter messages ('ok', 'devam') carry no retrievable intent and "
+                             "would match on stopwords alone."),
+            ConfigField("auto_extract_facts", "Extract Facts From Every Turn", "bool",
+                        requires_restart=_LIVE,
+                        help="Mine each exchange for the durable facts he stated, in the "
+                             "background, instead of waiting for an agent to volunteer a "
+                             "record_observation call. It waited a long time: 93 facts across "
+                             "10,409 messages before this existed. This is the setting that "
+                             "decides whether telling an agent something makes it remembered."),
+            ConfigField("auto_extract_max_facts", "Max Facts Per Turn", "int",
+                        requires_restart=_LIVE,
+                        help="Ceiling on what one exchange may add. A turn that looks like it "
+                             "holds twenty facts is usually a long answer being mined for "
+                             "trivia, and flooding the store is how recall degraded before."),
+            ConfigField("auto_extract_model", "Fact Extraction Model", "text",
+                        requires_restart=_LIVE,
+                        help="Model for that extraction. Empty = the background model. Runs "
+                             "once per turn behind the response, so cost matters more than "
+                             "brilliance.",
+                        placeholder="e.g. deepseek:deepseek-v4-flash"),
             ConfigField("observation_min_content_length", "Minimum Fact Length", "int",
                         requires_restart=_LIVE,
                         help="Characters an observation must reach to be recorded. Short "

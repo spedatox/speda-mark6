@@ -497,6 +497,7 @@ def schedule_background_tasks(
       - snapshot fallback: current brief + dossier (self-guards on 36h staleness)
       - title generation (first turn only — idempotent)
       - conversation compaction (self-guards on the token threshold)
+      - automatic extraction of the durable facts the owner stated
       - semantic embedding of this turn's new messages
       - embedding of any observation stored while the provider was down
 
@@ -553,6 +554,7 @@ async def _run_post_turn_directly(
     from app.services.claim_audit import audit_last_turn
     from app.services.compaction import maybe_compact_session
     from app.services.embedding_indexer import embed_session_tail
+    from app.services.fact_extraction import extract_turn_facts
     from app.services.observations import embed_pending_observations
 
     logger.warning(
@@ -560,6 +562,7 @@ async def _run_post_turn_directly(
         extra={"request_id": request_id, "session_id": session_id},
     )
     await asyncio.gather(
+        extract_turn_facts(session_id, request_id, user_id, model),
         audit_last_turn(session_id, request_id),
         update_session_log(session_id, request_id, user_id, model),
         update_session_recap(session_id, request_id, user_id, model),

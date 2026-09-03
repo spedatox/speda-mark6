@@ -6,56 +6,67 @@ Distil the narrative memory files into retrievable facts.
 
 ## Why
 
-owner.md is 13.8 KB of biography — a life story, well written, injected into
-every single system prompt. It is also the ONLY place a large number of basic
-facts exist. Measured on 2026-09-03: no observation in the store contained the
-owner's birth date, his home coordinates, his Uludağ GPA, his YDS score or which
-phone he carries. Every one of those is in owner.md, buried mid-paragraph.
+/memories holds 190,112 characters of prose across 104 files — one per person,
+per project, per academic and financial thread. Recall cannot reach any of it.
+`search_memory` searches observations; these are markdown, indexed by nothing.
+A handful are preloaded into the system prompt, and the rest are reachable only
+if an agent already knows the path and thinks to open it.
 
-That produces the exact failure the owner reported — "I have to explain the most
-simple things now":
+That is the whole shape of "I have to explain the most simple things now":
 
-  * The narrative is INJECTED but never RETRIEVED. `search_memory` searches
-    observations; owner.md is not in that index, so recall cannot find a fact
-    that only lives there.
-  * Injection does not scale as attention. A fact stated once inside a 13.8 KB
-    story, inside a 28.7 KB memory block, competes with everything else in the
-    prompt. It was reliably found when the block was small. It is not now.
-  * And the store's growth made it worse rather than better, because what grew
-    was project and training minutiae (225 + 191 observations) while biography
-    stayed at 41. Recall got louder without getting more knowledgeable.
+  * A fact written once into `social/professional/sinan-kara.md` is not findable
+    by asking about Sinan Kara. It is findable by an agent that already
+    suspected the file existed.
+  * Injection does not scale as attention. owner.md alone is 13.8 KB inside a
+    28.7 KB memory block. A fact stated once in the middle of that competes with
+    everything else in the prompt, and it stopped winning as the block grew.
+  * The store meanwhile grew in the wrong places — 248 project and 179 training
+    observations against 57 biography — so recall got louder without getting
+    more knowledgeable.
 
-The fix is not to delete the narrative — it is genuinely good context and the
-owner should keep it. The fix is that every ATOMIC fact inside it also exists as
-an observation, so it can be retrieved by a question rather than only spotted by
-a careful reader.
+The narrative is worth keeping; it is good context and it reads well. The fix is
+that every ATOMIC fact inside it ALSO exists as an observation, so it can be
+retrieved by a question instead of only found by a reader who already knew where
+to look.
 
 ## What it does
 
-  1. Reads the narrative files (owner.md by default) and asks the model to
-     extract every atomic, durable fact as one self-contained English sentence,
-     with a domain and a subject.
-  2. Every candidate is validated through the same `validate_observation` the
-     live write path uses — including the fragment guard — so distillation
-     cannot inject anything the roster would be forbidden from recording itself.
-  3. Deduplicates against the existing store on two levels: exact normalised
-     content, and cosine similarity above `--dup-threshold` (0.93 by default)
-     against what is already recorded. This is what makes the script re-runnable
-     as the narrative grows: a second run adds only what the first did not.
-  4. Writes the survivors as `origin="seed"`, `observer="owner"`, embedded and
-     FTS-indexed, which is what puts them inside `search_memory`'s reach.
+  1. Walks the narrative files (every non-audit, non-archive file by default),
+     splits each into sections, and extracts atomic facts.
+  2. Infers the SUBJECT from the path, which is free and reliable:
+     `social/professional/sinan-kara.md` is about `person:Sinan Kara`,
+     `projects/siberay.md` about `project:Siberay`. The entity's real name comes
+     from the file's own H1 where it has one, so "Doç. Dr. Hakan Eren" is not
+     flattened into "Doc Dr Hakan Eren".
+  3. Extracts TEMPORAL VALIDITY alongside each fact. This is what makes "where
+     does he work right now" answerable: without an end date on the fifteen jobs
+     he has left, the current one is one row among sixteen equally-live ones and
+     recall has no basis to prefer it. Only 8 of 780 rows carried a `valid_until`
+     before this ran.
+  4. Validates every candidate through the same `validate_observation` the live
+     write path uses, including the fragment guard.
+  5. GROUNDS every candidate: each number and proper noun in an extracted fact
+     must appear in the section it came from. This is not optional. On the first
+     run a starved section of owner.md produced an entire invented biography — a
+     birthplace in Eskişehir, a father with a textile shop, a high school, a
+     barista job. Fabricated memory is far worse than missing memory.
+  6. Deduplicates on exact text and on cosine similarity, against both the
+     existing store and the facts accepted earlier in the same run.
 
-Nothing in the source files is modified or deleted. This is purely additive.
+Nothing in the source files is modified or deleted. This is purely additive and
+safe to re-run: a second pass adds only what the first did not.
 
 ## Running it
 
-    docker cp scripts/distill_owner_profile.py speda-app-1:/tmp/
-    docker exec -w /app/packages/igor speda-app-1 \\
-        /app/.venv/bin/python /tmp/distill_owner_profile.py --user-id 1 --dry-run
+    docker cp scripts/distill_memory_files.py speda-app-1:/tmp/
+    docker exec -w /app/packages/igor speda-app-1 \
+        /app/.venv/bin/python /tmp/distill_memory_files.py --user-id 1 --all --dry-run
 
-    ... /tmp/distill_owner_profile.py --user-id 1 --commit
+    ... --all --commit
 
-Pass `--path` to distil a different narrative file (repeatable).
+`--path` distils specific files instead (repeatable). `--all` walks everything
+under /memories except `.audit/` and `.archive/`, which are machine logs and
+demoted history rather than current knowledge.
 """
 
 import argparse
@@ -69,8 +80,6 @@ from pathlib import Path
 for candidate in ("/app/packages/igor", str(Path(__file__).resolve().parents[1])):
     if candidate not in sys.path:
         sys.path.insert(0, candidate)
-
-DEFAULT_PATHS = ["/memories/owner.md"]
 
 # Chunk the narrative by section so each extraction call sees a coherent episode
 # with its own dates and names, rather than a window cut mid-paragraph.
@@ -156,40 +165,95 @@ def ungrounded_tokens(fact: str, source: str) -> list[str]:
             missing.append(token)
     return missing
 
-_PROMPT = """\
-Below is one section of a biographical profile of Ahmet Erol Bayrak, written as
-narrative prose. Extract every ATOMIC, DURABLE fact it states.
+# Paths that are history or machine output rather than current knowledge. The
+# archive is DEMOTED facts — distilling it would resurrect exactly what someone
+# decided was no longer true — and the audit tree is Orion's own bookkeeping.
+EXCLUDED_PREFIXES = ("/memories/.audit/", "/memories/.archive/")
+
+# Files whose content is a RENDERING of the observation store rather than a
+# source for it. Distilling these would feed the store its own output back,
+# which manufactures reinforcement out of nothing and makes a fact look
+# better-established every time the renderer runs.
+EXCLUDED_PATHS = frozenset({
+    "/memories/current.md",     # rendered from live observations
+    "/memories/history.md",     # rendered from ended observations
+    "/memories/log.md",         # rolling session log, rewritten daily
+})
+
+_H1 = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
+
+
+def entity_for(path: str, content: str) -> tuple[str, str]:
+    """(subject, human name) for a narrative file, inferred from its path.
+
+    The directory says WHAT KIND of thing the file is about and the H1 says what
+    it is CALLED. Taking the name from the heading rather than the slug is what
+    keeps "Doç. Dr. Hakan Eren" from being stored as "Doc Dr Hakan Eren" and
+    "F.O.R.G.E" from becoming "F O R G E" — the slug is lossy by construction,
+    and a subject that does not match how he writes the name is a subject that
+    never gets matched.
+    """
+    stem = path.rsplit("/", 1)[-1].removesuffix(".md")
+    heading = _H1.search(content or "")
+    # A long H1 is a document title, not an entity name; only a short heading is
+    # trustworthy as the thing's actual name.
+    name = heading.group(1).strip() if heading else ""
+    if not name or len(name) > 60:
+        name = stem.replace("-", " ").title()
+    # Headings often carry a trailing gloss: "Siberay — cybersecurity club".
+    name = re.split(r"\s+[—–-]\s+", name)[0].strip() or stem
+
+    if path.startswith("/memories/social/"):
+        return f"person:{name}", name
+    if path.startswith("/memories/projects/"):
+        return f"project:{name}", name
+    return "owner", "Ahmet Erol Bayrak"
+
+
+
+_PROMPT = """Below is one section of a memory file about {entity}. Extract every ATOMIC,
+DURABLE fact it states.
 
 An atomic fact is ONE self-contained English sentence that answers a question on
 its own, read years later with none of this text around it. Rules:
 
-- NAME HIM. "Ahmet Erol Bayrak was born on 18 October 2004", never "Born in
-  2004". The sentence is stored alone, so a pronoun with no antecedent is a
-  fact nobody can retrieve.
-- ONE FACT PER SENTENCE. Split "graduated from Uludağ with a 3.17 GPA in
-  Computer Programming" into the degree and the GPA only if they answer
-  different questions; do not cram unrelated facts together.
-- KEEP EVERY SPECIFIC: dates, numbers, scores, amounts, coordinates, full
-  names, institution names. These are the entire point — a fact stripped of its
-  number answers nothing.
-- DURABLE ONLY. Extract what remains true or remains historically true. Skip
-  narration, mood, foreshadowing, and the author's commentary.
-- INVENT NOTHING and INFER NOTHING. If the text does not say it, it is not a
-  fact.
+- NAME THE SUBJECT. Write "{entity} was born on 18 October 2004", never "Born in
+  2004" and never "He was born". The sentence is stored and retrieved ALONE, so
+  a pronoun with no antecedent is a fact nobody can use.
+- ONE FACT PER SENTENCE. Do not cram unrelated facts together.
+- KEEP EVERY SPECIFIC: dates, numbers, scores, amounts, coordinates, full names,
+  institution names. A fact stripped of its number answers nothing.
+- DURABLE ONLY. Skip narration, mood, foreshadowing and commentary.
+- INVENT NOTHING and INFER NOTHING. Every name and number you write must appear
+  in the text below. If it is not there, leave it out.
+- ENGLISH ONLY. Translate Turkish source text, but keep proper nouns, place
+  names, institution names and currency codes exactly as written.
 - Under 300 characters each.
 
 For each fact also give:
-  domain  — one of: biography (who he is, durable background), preference (what
-            he likes, dislikes or wants), state (true of his life right now),
+
+  domain  — one of: biography (who someone is, durable background), preference
+            (what he likes, dislikes or wants), state (true of his life now),
             project, training, finance, event.
-  subject — "owner" for a fact about him; "person:<Name>" for a fact about
-            someone else; "project:<Name>" for a fact about a project.
+
+  valid_from  — "YYYY-MM-DD" if the text says when this STARTED being true.
+                Omit if it has simply always held or the text does not say.
+
+  valid_until — "YYYY-MM-DD" if the text says when this STOPPED being true.
+                THIS MATTERS MORE THAN IT LOOKS. A job he left, a place he used
+                to live, a figure that has since changed: without an end date it
+                stays indistinguishable from what is true today, and a question
+                about the present gets answered with the past. If the text gives
+                only a month or a year for the ending, use the last day you can
+                justify from it ("August 2026" → 2026-08-31). Omit ONLY for
+                things still true, which for a past-tense narrative is the
+                minority.
 
 SECTION:
 {section}
 
 Return ONLY a JSON array:
-[{{"text": "<the fact>", "domain": "biography", "subject": "owner"}}]
+[{{"text": "<the fact>", "domain": "biography", "valid_from": "", "valid_until": ""}}]
 """
 
 
@@ -222,10 +286,30 @@ def split_sections(text: str) -> list[str]:
     return out
 
 
+def _parse_day(value: str) -> "object | None":
+    """'YYYY-MM-DD' → date, or None for anything else.
+
+    Deliberately strict. A half-parsed date on a validity field is worse than no
+    date at all: it decides whether a fact reads as current, and a wrong end date
+    silently retires something still true.
+    """
+    from datetime import date
+
+    text = (value or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
 async def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--user-id", type=int, default=1)
     p.add_argument("--path", action="append", default=None, help="Narrative file to distil (repeatable).")
+    p.add_argument("--all", action="store_true",
+                   help="Distil every narrative file except .audit/, .archive/ and rendered surfaces.")
     p.add_argument("--model", default="")
     p.add_argument("--dup-threshold", type=float, default=0.93,
                    help="Cosine similarity against an existing fact above which a candidate is a duplicate.")
@@ -233,6 +317,10 @@ async def main() -> None:
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--commit", action="store_true")
     args = p.parse_args()
+
+    if not args.all and not args.path:
+        print("\n  Give --all or at least one --path.\n")
+        return
 
     import numpy as np
     from sqlalchemy import select
@@ -247,25 +335,29 @@ async def main() -> None:
     from app.services.observations import (
         ObservationRejected,
         _live,
+        normalize_subject,
         validate_observation,
     )
 
-    paths = args.path or DEFAULT_PATHS
     model = args.model or settings.llm_background_model or settings.llm_main_model
     client = LLMClient()
 
     async with AsyncSessionLocal() as db:
-        files = (
-            await db.execute(
-                select(MemoryFile).where(
-                    MemoryFile.user_id == args.user_id, MemoryFile.path.in_(paths)
-                )
-            )
-        ).scalars().all()
+        stmt = select(MemoryFile).where(MemoryFile.user_id == args.user_id)
+        if args.path:
+            stmt = stmt.where(MemoryFile.path.in_(args.path))
+        files = list((await db.execute(stmt.order_by(MemoryFile.path))).scalars().all())
         existing = list((await db.execute(_live(args.user_id))).scalars().all())
 
+    if args.all:
+        files = [
+            f for f in files
+            if not f.path.startswith(EXCLUDED_PREFIXES)
+            and f.path not in EXCLUDED_PATHS
+        ]
+
     if not files:
-        print(f"\n  None of {paths} exist for user {args.user_id}.\n")
+        print("\n  No narrative files matched.\n")
         return
 
     known_text = {" ".join(o.content.lower().split()) for o in existing}
@@ -274,50 +366,57 @@ async def main() -> None:
         np.stack([np.frombuffer(o.embedding, dtype=np.float32) for o in known_vectors])
         if known_vectors else None
     )
+    total_chars = sum(len(f.content or "") for f in files)
     print(f"\n  {len(existing)} live observations already recorded ({len(known_vectors)} embedded)")
+    print(f"  {len(files)} narrative file(s), {total_chars} chars to distil\n")
 
     # ── Extract ──────────────────────────────────────────────────────────────
     candidates: list[dict] = []
-    for f in files:
-        sections = split_sections(f.content)
-        print(f"  {f.path}: {len(f.content)} chars → {len(sections)} section(s)")
-        for i, section in enumerate(sections, start=1):
-            if len(section) < MIN_SECTION_CHARS:
-                print(f"    · section {i}/{len(sections)} skipped ({len(section)} chars — too little to extract from)")
-                continue
-            print(f"    … section {i}/{len(sections)}", flush=True)
+    for n, f in enumerate(files, start=1):
+        subject, entity = entity_for(f.path, f.content)
+        sections = [s for s in split_sections(f.content) if len(s) >= MIN_SECTION_CHARS]
+        if not sections:
+            print(f"  [{n}/{len(files)}] {f.path} — nothing substantial to extract")
+            continue
+        print(f"  [{n}/{len(files)}] {f.path} → {subject} ({len(sections)} section(s))", flush=True)
+        for section in sections:
             try:
                 resp = await client.create_message(
                     model=model,
                     system="You extract atomic facts. You return only the JSON array asked for.",
-                    messages=[{"role": "user", "content": _PROMPT.format(section=section)}],
+                    messages=[{
+                        "role": "user",
+                        "content": _PROMPT.format(entity=entity, section=section),
+                    }],
                     max_tokens=8192,
-                    # Reasoning models otherwise spend the entire budget thinking and
-                    # return an empty message — the same trap app/services/memory.py
-                    # documents for title generation. This is extraction, not
-                    # reasoning; it needs the tokens for output.
+                    # Reasoning models otherwise spend the entire budget thinking
+                    # and return an empty message — the same trap
+                    # app/services/memory.py documents for title generation.
                     reasoning_effort="minimal",
                 )
             except Exception as e:  # noqa: BLE001
-                print(f"    ! section {i} failed: {e}")
+                print(f"      ! section failed: {e}")
                 continue
             raw = resp.content[0].text if resp.content else ""
             for item in _parse_json_array(raw):
                 text = str(item.get("text") or "").strip()
-                if text:
-                    candidates.append({
-                        "text": text,
-                        "domain": str(item.get("domain") or "biography").strip().lower(),
-                        "subject": str(item.get("subject") or "owner").strip(),
-                        "source": f.path,
-                        "_section": section,
-                    })
+                if not text:
+                    continue
+                candidates.append({
+                    "text": text,
+                    "domain": str(item.get("domain") or "biography").strip().lower(),
+                    "subject": subject,
+                    "valid_from": _parse_day(str(item.get("valid_from") or "")),
+                    "valid_until": _parse_day(str(item.get("valid_until") or "")),
+                    "source": f.path,
+                    "_section": section,
+                })
 
     print(f"\n  {len(candidates)} candidate fact(s) extracted")
     if not candidates:
         return
 
-    # ── Validate (the same gate the live write path uses) ────────────────────
+    # ── Ground, then validate ────────────────────────────────────────────────
     valid, rejected, ungrounded = [], [], []
     for c in candidates:
         missing = ungrounded_tokens(c["text"], c["_section"])
@@ -328,6 +427,7 @@ async def main() -> None:
             validate_observation(
                 content=c["text"], level="explicit",
                 subject=c["subject"], domain=c["domain"],
+                valid_from=c["valid_from"], valid_until=c["valid_until"],
             )
             valid.append(c)
         except ObservationRejected as e:
@@ -336,10 +436,10 @@ async def main() -> None:
             rejected.append((c, str(e)))
 
     # ── Deduplicate ──────────────────────────────────────────────────────────
-    #ical duplicates first (free), then semantic ones against the store AND
-    # against candidates already accepted in this run — a narrative repeats
-    # itself across sections, so the run duplicates itself if it only checks the
-    # store it started from.
+    # Exact duplicates first (free), then semantic ones against the store AND
+    # against candidates already accepted in this run — the same fact is written
+    # into several files (a project page and the person's page both state who
+    # funded it), so a run that only checked the store would duplicate itself.
     unique, dup_exact, dup_similar = [], [], []
     accepted_vectors: list = []
     for c in valid:
@@ -371,20 +471,28 @@ async def main() -> None:
                 kept.append(c)
         unique = kept
 
+    dated = sum(1 for c in unique if c["valid_until"])
     print(f"  {len(ungrounded)} REJECTED AS UNGROUNDED (a token the source never mentions)")
     print(f"  {len(rejected)} rejected by the guard")
-    print(f"  {len(dup_exact)} exact duplicate(s) of existing facts")
-    print(f"  {len(dup_similar)} near-duplicate(s) above {args.dup_threshold}")
-    print(f"  {len(unique)} NEW fact(s) to record\n")
+    print(f"  {len(dup_exact)} exact duplicate(s), {len(dup_similar)} near-duplicate(s) above {args.dup_threshold}")
+    print(f"  {len(unique)} NEW fact(s) to record — {dated} of them with an end date\n")
 
+    by_subject: dict[str, int] = {}
     for c in unique:
-        print(f"  + [{c['domain']} · {c['subject']}] {c['text'][:150]}")
+        by_subject[c["subject"]] = by_subject.get(c["subject"], 0) + 1
+    for subject, count in sorted(by_subject.items(), key=lambda kv: -kv[1])[:30]:
+        print(f"    {count:>4}  {subject}")
+
+    print()
+    for c in unique[:250]:
+        span = ""
+        if c["valid_from"] or c["valid_until"]:
+            span = f"  [{c['valid_from'] or '…'} → {c['valid_until'] or 'now'}]"
+        print(f"  + [{c['domain']}] {c['text'][:130]}{span}")
     for c, missing in ungrounded[:25]:
         print(f"  ⚠ ungrounded {missing}: {c['text'][:110]}")
-    for c, reason in rejected[:20]:
+    for c, reason in rejected[:15]:
         print(f"  ✗ {c['text'][:90]} — {reason[:90]}")
-    for c, sim, against in dup_similar[:20]:
-        print(f"  = {c['text'][:80]}\n      ~{sim:.2f} {against[:80]}")
 
     if args.dry_run:
         print("\n  Dry run — nothing written.\n")
@@ -403,8 +511,10 @@ async def main() -> None:
                 origin="seed",
                 content=c["text"],
                 level="explicit",
-                subject=c["subject"],
+                subject=normalize_subject(c["subject"]),
                 domain=c["domain"],
+                valid_from=c["valid_from"],
+                valid_until=c["valid_until"],
                 embedding=c["_vector"].tobytes(),
                 created_at=now,
                 updated_at=now,
@@ -416,7 +526,7 @@ async def main() -> None:
             await lexical.index_observation(db, obs)
         await db.commit()
 
-    print(f"\n  Recorded {len(rows)} new observation(s) from {', '.join(paths)}.\n")
+    print(f"\n  Recorded {len(rows)} new observation(s) from {len(files)} file(s).\n")
 
 
 if __name__ == "__main__":

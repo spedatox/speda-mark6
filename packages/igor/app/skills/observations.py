@@ -277,7 +277,11 @@ class SearchMemorySkill(Skill):
         "premises and to everything derived from it, and — for consolidation work — 'novel' "
         "surfaces the facts most isolated from everything else in memory while 'duplicates' "
         "surfaces pairs that say the same thing in different words. Returns each fact with "
-        "its [id:N], level, observing agent, date and reinforcement count."
+        "its [id:N], level, observing agent, date and reinforcement count. Narrow with "
+        "`subject` when the question is about ONE person or project, and with "
+        "`current_only` for ANY question about the present — he has held sixteen jobs and "
+        "lived in four cities, so without it the past outranks the present simply by "
+        "being more numerous."
     )
     read_only = True
     requires_network = True  # embeds the query for the 'search' mode
@@ -338,6 +342,43 @@ class SearchMemorySkill(Skill):
             "before": {
                 "type": "string",
                 "description": "Optional: only facts recorded before this date (YYYY-MM-DD).",
+            },
+            "subject": {
+                "type": "string",
+                "description": (
+                    "Optional: only facts ABOUT this entity — 'owner', 'person:Sinan Kara', "
+                    "'project:Siberay'. Use it when the question is about one person or one "
+                    "project and you want everything known, rather than whatever happens to "
+                    "rank against your wording."
+                ),
+            },
+            "domain": {
+                "type": "string",
+                "enum": list(DOMAINS),
+                "description": (
+                    "Optional: only facts of this KIND. 'biography' for durable background, "
+                    "'state' for what is true of his life now, 'preference' for how he wants "
+                    "to be treated."
+                ),
+            },
+            "current_only": {
+                "type": "boolean",
+                "description": (
+                    "Optional: only facts that have NOT ended. Set this for any question "
+                    "about the present — 'where does he work', 'what is he studying', 'what "
+                    "does he earn'. Without it a job he left in 2023 and the one he holds "
+                    "today are equally live, and the past routinely outranks the present "
+                    "because there is more of it."
+                ),
+                "default": False,
+            },
+            "as_of": {
+                "type": "string",
+                "description": (
+                    "Optional: what was true ON this date (YYYY-MM-DD) — started by then and "
+                    "not yet ended. This is how you answer 'what was he doing last summer' "
+                    "without reading history."
+                ),
             },
             "limit": {
                 "type": "integer",
@@ -416,6 +457,10 @@ class SearchMemorySkill(Skill):
                 limit=limit,
                 level=(args.get("level") or None),
                 observer=(args.get("observer") or None),
+                subject=(args.get("subject") or None),
+                domain=(args.get("domain") or None),
+                live_only=bool(args.get("current_only")),
+                as_of=(args.get("as_of") or None),
                 after=_parse_date(args.get("after")),
                 before=_parse_date(args.get("before")),
             )

@@ -13,6 +13,7 @@ from app.profiles.registry import ProfileRegistry
 from app.schemas.sse import SSEEvent, SSEEventType
 from app.services import language
 from app.services.llm_client import LLMClient, blocks_to_dicts, supports_vision
+from app.services.relevant_recall import facts_for_message
 from app.skills.memory import MemoryRecallCache, recall_for_context, recall_sessions_for_context
 
 logger = logging.getLogger(__name__)
@@ -325,6 +326,27 @@ class AgentOrchestrator:
                     extra={"request_id": context.request_id, "error": str(exc)},
                 )
 
+        # Per-turn relevant recall — the facts matching what he JUST said. Unlike
+        # the two blocks above, this varies every turn by design, which is
+        # exactly why it is appended after the `_cache`-flagged blocks below and
+        # carries no breakpoint of its own: a varying section in front of the
+        # cached prefix would rewrite the whole prefix every turn.
+        relevant_block = ""
+        if context.db is not None:
+            try:
+                relevant_block = await facts_for_message(
+                    context.user_id,
+                    context.db,
+                    context.conversation_history,
+                    request_id=context.request_id,
+                ) or ""
+            except Exception as exc:  # noqa: BLE001
+                # Same contract as the other two recalls: memory never breaks a turn.
+                logger.warning(
+                    "relevant_recall_failed",
+                    extra={"request_id": context.request_id, "error": str(exc)},
+                )
+
         # Time protocol — replaces the old volatile "## Now" tail. Stable text;
         # the actual clock rides on the user messages. Model line is stable per
         # model, and provider caches are model-scoped anyway.
@@ -438,6 +460,11 @@ class AgentOrchestrator:
         # conversation breakpoint caches it as part of the stable prefix.
         if episodic_block:
             system_blocks.append({"type": "text", "text": episodic_block})
+        # Uncached and after everything stable: this is the one block that is
+        # SUPPOSED to change every turn, and it sits behind all four spent cache
+        # breakpoints so it costs nothing but its own tokens.
+        if relevant_block:
+            system_blocks.append({"type": "text", "text": relevant_block})
         # Trailing, uncached, and last on purpose — see the note where it is
         # built. Everything above this line is byte-identical for a chat turn
         # and an n8n turn on the same agent.

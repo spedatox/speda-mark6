@@ -141,7 +141,19 @@ def _handlers() -> dict:
 
         await polish_pending(request_id=request_id, model=model)
 
+    async def _extract_facts(session_id, request_id, user_id, model):
+        """Mine this turn for the durable facts the owner stated.
+
+        The write half of recall. Everything else post-turn maintains what is
+        already recorded; this is the only task that adds to the record without
+        an agent having decided to.
+        """
+        from app.services.fact_extraction import extract_turn_facts
+
+        await extract_turn_facts(session_id, request_id, user_id, model)
+
     return {
+        "extract_facts": _extract_facts,
         "session_log": update_session_log,
         "session_recap": update_session_recap,
         "daily_maintenance": run_daily_maintenance,
@@ -158,6 +170,10 @@ def _handlers() -> dict:
 # The full post-turn set, in the order they are enqueued. Order is cosmetic —
 # they are independent — but a stable order makes the queue readable.
 POST_TURN_KINDS: tuple[str, ...] = (
+    # First, deliberately: it is the only one that ADDS to the record, and
+    # embed_tail/embed_observations further down the list then pick up whatever
+    # it wrote in the same drain rather than a turn later.
+    "extract_facts",
     "session_log",
     "session_recap",
     "daily_maintenance",
