@@ -538,9 +538,8 @@ _CATALOG = {
         },
     ],
     # Vertex ids carry their publisher prefix — the openapi route wants
-    # "google/gemini-…", not the bare id AI Studio takes. No live listing here:
-    # the OpenAI-compatible route serves chat completions only, so a /models
-    # call would fail on every picker load just to fall back to this list.
+    # "google/gemini-…", not the bare id AI Studio takes. This is only the
+    # OFFLINE FALLBACK: the live list comes from _vertex_models().
     "vertex": [
         {
             "id": "vertex:google/gemini-3.6-flash",
@@ -787,6 +786,74 @@ async def _nvidia_models() -> list[dict]:
     return sorted(rows, key=lambda r: r["name"])
 
 
+# Vertex's model list does NOT come from the chat endpoint: the openapi route
+# serves completions only and GET /models there 404s. The publisher catalog is a
+# separate native call (v1beta1 — v1 404s for this collection), and it returns
+# the whole Google line, so everything the project can actually reach shows up
+# in the picker the day it ships, same as every other provider here.
+_VERTEX_MODELS_URL = "https://aiplatform.googleapis.com/v1beta1/publishers/google/models"
+
+# Non-chat ids particular to Google's publisher line, on top of the shared
+# _NON_CHAT_MARKERS: the catalog also carries image generation, transcription,
+# live translation and native-audio builds, and every one of them 400s on a chat
+# completion. Scoped to Vertex rather than added to the shared tuple so no other
+# provider's listing changes shape.
+_VERTEX_NON_CHAT = ("-image", "transcribe", "translate", "native-audio")
+
+
+async def _vertex_models() -> list[dict]:
+    """Live Gemini catalog for the configured project, straight from the
+    publisher listing. Raises on failure so the caller falls back to _CATALOG."""
+    import httpx
+
+    token = await _vertex_bearer_token()
+    raw: list[dict] = []
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        page: str | None = None
+        while True:
+            params: dict[str, Any] = {"pageSize": 200}
+            if page:
+                params["pageToken"] = page
+            r = await client.get(
+                _VERTEX_MODELS_URL,
+                params=params,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            r.raise_for_status()
+            body = r.json()
+            raw += body.get("publisherModels", [])
+            page = body.get("nextPageToken")
+            if not page:
+                break
+
+    rows: list[dict] = []
+    for m in raw:
+        mid = m.get("name", "").split("/")[-1]
+        low = mid.lower()
+        if not mid or any(x in low for x in _NON_CHAT_MARKERS + _VERTEX_NON_CHAT):
+            continue
+        # The chat route addresses publisher models by their prefixed id.
+        ref = f"vertex:google/{mid}"
+        rank, tag, desc = len(_GEMINI_FAMILY), "", "Gemini on Vertex — billed to Google Cloud"
+        for i, (key, t, d) in enumerate(_GEMINI_FAMILY):
+            if key in low:
+                rank, tag, desc = i, t, d
+                break
+        known = _curated("vertex", ref)
+        rows.append({
+            "id": ref,
+            "name": known["name"] if known else f"{mid} (Vertex)",
+            "description": known["description"] if known else desc,
+            "tags": list(known["tags"]) if known else ([tag] if tag else []),
+            "provider": "vertex",
+            "_rank": rank,
+        })
+    rows.sort(key=lambda r: (r["_rank"], r["id"]))
+    for r in rows:
+        r.pop("_rank", None)
+    return rows
+
+
 async def available_models() -> list[dict]:
     """Selectable models across all CONFIGURED providers, for the UI's model
     picker. A provider appears only when usable: Anthropic/OpenAI/Gemini/z.ai/
@@ -836,7 +903,13 @@ async def available_models() -> list[dict]:
     # Vertex needs no key of its own on the OAuth path, so the project id is
     # what says "this is configured"; without it _vertex_base_url can't be built.
     if settings.vertex_project_id:
-        out += [{**m, "provider": "vertex"} for m in _CATALOG["vertex"]]
+        try:
+            out += await _vertex_models() or [
+                {**m, "provider": "vertex"} for m in _CATALOG["vertex"]
+            ]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("failed_to_fetch_vertex_models", extra={"error": str(exc)})
+            out += [{**m, "provider": "vertex"} for m in _CATALOG["vertex"]]
     if settings.zai_api_key:
         out += await _live_or_static("zai", _ZAI_FAMILY)
     if settings.deepseek_api_key:
