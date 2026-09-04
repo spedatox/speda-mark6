@@ -8,6 +8,7 @@ This file is rules for how to work here, not architecture documentation. For tha
 | `packages/heartbreaker` | [HEARTBREAKER.md](packages/heartbreaker/HEARTBREAKER.md) |
 | `packages/striker` | [STRIKER.md](packages/striker/STRIKER.md) |
 | `packages/speda-go` | [README.md](packages/speda-go/README.md) |
+| `packages/atomix-wear` | [README.md](packages/atomix-wear/README.md), design in [docs/ATOMIX_WEAR.md](docs/ATOMIX_WEAR.md) |
 | `packages/browser` | [README.md](packages/browser/README.md) |
 
 If any of those docs disagrees with the code, the code is right and the doc is wrong — fix the doc as part of whatever change you're making, don't leave it for later.

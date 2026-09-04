@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Atomix's signature green, matching profiles/atomix.py's DocTheme accent
+         and the brand used across Heartbreaker. This is the single constant the
+         ported ThemeEngine will hue-rotate the whole palette from in Phase 3. -->
+    <color name="atomix_accent">#3FAE74</color>
+    <!-- True black. An OLED pixel at #000000 is unlit, which on a watch is the
+         difference between a visible battery cost and none. -->
+    <color name="background">#000000</color>
+</resources>
