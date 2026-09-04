@@ -786,7 +786,7 @@ const tr: Dict = {
     retract: 'Daralt',
     expand: 'Genişlet',
     noTraffic: 'Henüz trafik yok — ajanlar arası gönderimler burada görünür.',
-    legionRunning: (n: number) => `${n} lejyoner çalışıyor`,
+    legionRunning: (n: number) => `${n} arka plan işi çalışıyor`,
     standDownTitle: "Devre dışı bırak — House Party Protocol'ü sonlandır",
     engagedOnlyTitle: "Yalnızca Speda'ya 'House Party Protocol' söylenerek etkinleştirilir",
     housePartyLive: 'House Party aktif — devre dışı bırak',

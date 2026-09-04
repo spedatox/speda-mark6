@@ -336,6 +336,12 @@ async def lifespan(app: FastAPI):
         profiles=profiles,
         session_manager=session_manager,
         ws_manager=ws_manager,
+        # The same registry the background legionnaires stream into. Shared
+        # rather than duplicated: both mint their ticket from an AgentMessage
+        # row id, so the id spaces cannot collide, and sharing means a spawned
+        # peer job appears in the tray and attaches over /legion/attach with no
+        # second endpoint and no client change.
+        runs=registry.legion_runs,
     )
 
     # ── 7.5 Telegram channel — gateway + ingress ───────────────────────────────

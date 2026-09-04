@@ -794,7 +794,7 @@ const en = {
     retract: 'Retract',
     expand: 'Expand',
     noTraffic: 'No traffic yet — dispatches between agents appear here.',
-    legionRunning: (n: number) => `${n} legionnaire${n === 1 ? '' : 's'} running`,
+    legionRunning: (n: number) => `${n} background job${n === 1 ? '' : 's'} running`,
     standDownTitle: 'Stand down — end the House Party Protocol',
     engagedOnlyTitle: "Engaged only by telling Speda: 'House Party Protocol'",
     housePartyLive: 'House Party live — stand down',

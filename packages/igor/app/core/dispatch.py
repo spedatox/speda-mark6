@@ -244,6 +244,15 @@ class AgentDispatcher:
         self._ws_manager = None
         # Correlation futures for external (WebSocket) dispatches, keyed by task_id.
         self._pending_external: dict[str, asyncio.Future] = {}
+        # Live-progress registry for BACKGROUND dispatches, shared with Legion
+        # (app/legion/run_registry.py). Both mint their ticket from the same
+        # AgentMessage row id, so one registry covers both without collision and
+        # a spawned peer job shows up in the tray the legionnaires already use.
+        self._runs = None
+        # task_id (wire correlation, a uuid) → ticket (the AgentMessage row id
+        # the registry and the client key on). Only background dispatches
+        # register here; a synchronous one has no tray row to stream into.
+        self._external_tickets: dict[str, int] = {}
         # Live background (spawned) dispatch tasks — tracked so they aren't GC'd
         # mid-run and can be capped/cancelled on shutdown.
         self._background: set[asyncio.Task] = set()
@@ -252,12 +261,18 @@ class AgentDispatcher:
         # the dispatcher is constructed (it precedes the registry).
         self._report_hook = None
 
-    def wire(self, *, orchestrator, profiles, session_manager, ws_manager) -> None:
-        """Late-bind the engine refs (they are constructed after the registry)."""
+    def wire(self, *, orchestrator, profiles, session_manager, ws_manager,
+             runs=None) -> None:
+        """Late-bind the engine refs (they are constructed after the registry).
+
+        `runs` is the shared background-run registry. Optional so the many unit
+        tests that wire a bare dispatcher keep working: without it a background
+        dispatch behaves exactly as before, it just streams no live progress."""
         self._orchestrator = orchestrator
         self._profiles = profiles
         self._session_manager = session_manager
         self._ws_manager = ws_manager
+        self._runs = runs
 
     def set_report_hook(self, hook) -> None:
         """Install the callback a finished BACKGROUND dispatch fires to report in.
@@ -396,6 +411,7 @@ class AgentDispatcher:
         if external:
             result, status = await self._run_external(
                 to_agent=to_agent, from_agent=from_agent, task=task, cwd=cwd,
+                ticket=own_msg_id,
             )
             if status in ("offline", "error") and profile is not None:
                 # Peer vanished between the presence check and the send —
@@ -420,6 +436,7 @@ class AgentDispatcher:
         else:
             result, status = await self._run_external(
                 to_agent=to_agent, from_agent=from_agent, task=task, cwd=cwd,
+                ticket=own_msg_id,
             )
         return result, status, session_id, int((time.monotonic() - started) * 1000)
 
@@ -464,6 +481,17 @@ class AgentDispatcher:
             kind="dispatch", protocol=protocol, task=task,
             origin_session_id=origin_session_id,
         )
+        # Open the tray row's live-progress channel before the work starts, so a
+        # client that attaches immediately (the tray polls /legion/active the
+        # moment the ticket appears) tails from the first event rather than
+        # missing the opening ones. Registering costs nothing when the peer
+        # streams nothing — the row just stays empty, exactly as it did before.
+        if self._runs is not None and msg_id is not None:
+            self._runs.register(
+                msg_id, agent=to_agent,
+                label=" ".join(task.split())[:120],
+                room_session_id=origin_session_id or 0,
+            )
         task_obj = asyncio.create_task(self._run_and_finish(
             msg_id=msg_id, from_agent=from_agent, to_agent=to_agent, task=task,
             user_id=user_id, request_id=request_id, depth=depth, protocol=protocol, cwd=cwd,
@@ -516,6 +544,7 @@ class AgentDispatcher:
                 duration_ms=int((time.monotonic() - started) * 1000),
                 result="Cancelled — the backend shut down while this was running.",
             )
+            self._finish_run(msg_id, ok=False)
             raise
         except Exception as e:  # noqa: BLE001 — a background dispatch must never crash the loop
             logger.error("agent_dispatch_bg_error", extra={"request_id": request_id, "to": to_agent, "error": str(e)})
@@ -523,6 +552,11 @@ class AgentDispatcher:
         await self._log_finish(
             msg_id, status=status, result=result, session_id=session_id, duration_ms=duration_ms,
         )
+        # Close the live channel on EVERY non-cancelled exit — success, failure
+        # and the hard timeout alike. A run left open keeps its attached clients
+        # tailing a stream that will never produce another event, which is the
+        # same "waiting forever" the ticket sweep exists to prevent on the row.
+        self._finish_run(msg_id, ok=(status == "ok"))
         logger.info(
             "agent_dispatch_bg_done",
             extra={"request_id": request_id, "from": from_agent, "to": to_agent, "status": status},
@@ -793,10 +827,45 @@ class AgentDispatcher:
 
     # ── External (WebSocket peer) path ───────────────────────────────────────
 
+    def _finish_run(self, ticket: int | None, *, ok: bool) -> None:
+        """Close a background run's live channel. Tolerates every shape of
+        "there was no channel" (no registry wired, an untracked ticket) so the
+        finish paths do not each have to re-check."""
+        if self._runs is None or ticket is None:
+            return
+        self._runs.finish(ticket, ok=ok)
+
+    def deliver_task_event(self, task_id: str, event: dict) -> bool:
+        """Route one `task_event` frame from a peer into its tray row.
+
+        The chat path has `ExternalAgentProxy.deliver`; this is its dispatch
+        counterpart. A dispatched job used to be a black box — `task_dispatch`
+        is fire-and-await, so the only thing that ever came back was the final
+        `task_result`, and the owner watched a "running" row for minutes with
+        nothing behind it. The peer now streams the same event vocabulary it
+        streams for a chat, and this puts it in the registry the tray attaches
+        to, so a background peer job renders exactly like a legionnaire.
+
+        Returns False for an unknown task_id — a synchronous dispatch (no
+        ticket), or one whose row has already been evicted. Not an error: the
+        peer streams unconditionally and does not know which of its jobs the
+        backend is showing.
+        """
+        ticket = self._external_tickets.get(task_id)
+        if ticket is None or self._runs is None:
+            return False
+        self._runs.emit(ticket, event)
+        return True
+
     async def _run_external(
         self, *, to_agent: str, from_agent: str, task: str, cwd: str | None = None,
+        ticket: int | None = None,
     ) -> tuple[str, str]:
-        """Dispatch to a standalone peer (Optimus) over its WebSocket connection."""
+        """Dispatch to a standalone peer (Optimus) over its WebSocket connection.
+
+        `ticket` is the tray row this job streams into (background dispatches
+        only); it correlates the peer's `task_event` frames back to the registry
+        the client attaches to."""
         if self._ws_manager is None or not self._ws_manager.is_connected(to_agent):
             return (
                 f"'{to_agent}' is not a registered agent and no external peer by "
@@ -822,6 +891,8 @@ class AgentDispatcher:
         task_id = str(uuid.uuid4())
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending_external[task_id] = fut
+        if ticket is not None:
+            self._external_tickets[task_id] = ticket
         try:
             await self._ws_manager.send(to_agent, {
                 "type": "task_dispatch",
@@ -843,6 +914,7 @@ class AgentDispatcher:
             return f"Dispatch to external peer {to_agent} failed: {e}", "error"
         finally:
             self._pending_external.pop(task_id, None)
+            self._external_tickets.pop(task_id, None)
 
     # ── Telemetry (best-effort — never fails a dispatch) ─────────────────────
 

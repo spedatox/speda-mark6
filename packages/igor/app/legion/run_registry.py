@@ -2,7 +2,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-Live progress registry for BACKGROUND Legion workers.
+Live progress registry for BACKGROUND work — Legion workers and dispatched
+external peer jobs alike.
+
+It is named for Legion because that is what first needed it, but it is not
+Legion-specific: `AgentDispatcher` shares this same instance for background
+dispatches (app/core/dispatch.py). That is safe because both mint their ticket
+from the same `AgentMessage` row id, so the two id spaces cannot collide, and
+it is what lets a spawned Optimus job appear in the tray and attach over
+`/legion/attach/{ticket}` with no second endpoint and no client change.
 
 Mirrors `app/core/turn_runner.py`'s `TurnRegistry` — a ring buffer per run plus
 subscriber queues, snapshot-then-tail semantics on attach — but scoped to

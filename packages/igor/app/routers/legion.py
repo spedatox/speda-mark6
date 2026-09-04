@@ -2,7 +2,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-Live Legion (Task) run visibility — BACKGROUND legionnaires only.
+Live background-run visibility — background legionnaires AND background
+dispatches to external peers (Optimus).
+
+Both stream into one `LegionRunRegistry` (see its module docstring for why
+sharing it is safe), so both are listed by `/legion/active` and tailed by
+`/legion/attach/{ticket}`. The path keeps the `legion` prefix because clients
+already call it; what it serves is "background work", not Legion alone.
 
 Inline dispatches need no endpoints here: their progress rides the parent
 turn's own SSE stream, and reattaches for free via the existing

@@ -352,6 +352,18 @@ async def agent_websocket(
                         "resolved": resolved,
                     },
                 )
+            elif msg_type == "task_event":
+                # Live progress of a DISPATCHED job. The chat path has
+                # chat_event; this is its fire-and-await counterpart, and it
+                # exists because a dispatched job was otherwise a black box —
+                # the peer sent nothing between task_dispatch and task_result,
+                # so a background coding job showed the owner a "running" row
+                # with no way to see what it was doing. Routed to the tray's
+                # run registry (app/core/dispatch.py), which the client
+                # attaches to exactly as it does a background legionnaire.
+                websocket.app.state.dispatcher.deliver_task_event(
+                    str(message.get("task_id", "")), message.get("event") or {}
+                )
             elif msg_type == "chat_event":
                 # Streamed frame of a proxied chat — route to its waiting
                 # SSE stream (app/core/external_proxy.py).
