@@ -17,7 +17,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.automations import composer
@@ -25,6 +25,7 @@ from app.automations import schedule as sched
 from app.automations import templates
 from app.config import settings
 from app.models.automation import Automation
+from app.models.automation_run import AutomationRun
 from app.services.n8n_api import N8nClient
 
 logger = logging.getLogger(__name__)
@@ -466,9 +467,13 @@ async def test_fire(
     return {"started": True, "request_id": request_id, "session_id": session_id, "agent_id": row.agent_id}
 
 
-async def mark_fired(automation_name: str, db: AsyncSession) -> None:
+async def mark_fired(automation_name: str, db: AsyncSession) -> Automation | None:
     """Stamp last_fired_at when a trigger arrives carrying this automation's
-    name. Best-effort — a miss must never break delivery."""
+    name. Best-effort — a miss must never break delivery.
+
+    Returns the resolved row (or None on a miss/error) so a caller that also
+    wants to log a run (trigger_runner._deliver → record_run) gets the id for
+    free, rather than looking the same name up a second time."""
     try:
         row = (
             (await db.execute(select(Automation).where(Automation.name == automation_name)))
@@ -477,5 +482,68 @@ async def mark_fired(automation_name: str, db: AsyncSession) -> None:
         if row:
             row.last_fired_at = _now()
             await db.commit()
+        return row
     except Exception as exc:  # noqa: BLE001
         logger.warning("mark_fired_failed", extra={"automation": automation_name, "error": str(exc)})
+        return None
+
+
+async def record_run(
+    automation_id: int, db: AsyncSession, *,
+    status: str, delivered: bool, channel: str, report: str,
+    request_id: str = "", session_id: int | None = None,
+) -> None:
+    """One row per firing — status, delivery outcome, and what was actually
+    reported — so "did this run last week, and what did it say" stays
+    answerable after the fact. Best-effort like mark_fired: a logging failure
+    here must never break delivery, which has already happened by the time
+    this is called.
+
+    Prunes this automation's own rows older than
+    settings.automation_run_retention_days in the same call, so there is no
+    separate cleanup job to remember to run.
+    """
+    try:
+        db.add(AutomationRun(
+            automation_id=automation_id, status=status, delivered=delivered,
+            channel=channel, report=report or "",
+            request_id=request_id, session_id=session_id,
+        ))
+        cutoff = _now() - timedelta(days=settings.automation_run_retention_days)
+        await db.execute(
+            delete(AutomationRun).where(
+                AutomationRun.automation_id == automation_id,
+                AutomationRun.fired_at < cutoff,
+            )
+        )
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "automation_run_record_failed",
+            extra={"automation_id": automation_id, "error": str(exc)},
+        )
+
+
+async def list_runs(automation_id: int, db: AsyncSession, limit: int = 30) -> list[dict]:
+    """Past firings of one automation, newest first — the history behind the
+    Settings "History" view and the agent tool's action='history'."""
+    rows = (
+        (await db.execute(
+            select(AutomationRun)
+            .where(AutomationRun.automation_id == automation_id)
+            .order_by(AutomationRun.fired_at.desc())
+            .limit(min(limit, 200))
+        )).scalars().all()
+    )
+    return [
+        {
+            "id": r.id,
+            "status": r.status,
+            "delivered": r.delivered,
+            "channel": r.channel,
+            "report": r.report,
+            "request_id": r.request_id,
+            "fired_at": r.fired_at.isoformat() if r.fired_at else None,
+        }
+        for r in rows
+    ]

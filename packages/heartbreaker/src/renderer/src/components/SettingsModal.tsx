@@ -7,6 +7,7 @@ import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
 import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, microsoftLoginUrl, microsoftStatus, microsoftDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationAgents, createAutomation, updateAutomation, testAutomation, telegramConnect, telegramStatus } from '../lib/api'
 import { AutomationBuilder, describeHook, describeSchedule } from './AutomationBuilder'
+import { AutomationRunHistory } from './AutomationRunHistory'
 import VoicesTab from './VoicesTab'
 import { memoryStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus, AutomationAgent, AutomationDraft, MemoryStatus } from '../lib/api'
@@ -117,6 +118,8 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
   const [autoAgents, setAutoAgents] = useState<AutomationAgent[]>([])
   // null = the list. 'new' = the empty builder. An AutomationInfo = editing it.
   const [building, setBuilding] = useState<AutomationInfo | 'new' | null>(null)
+  // Non-null = viewing that automation's run history instead of the list.
+  const [viewingHistory, setViewingHistory] = useState<AutomationInfo | null>(null)
   // Per-row transient feedback for the Test button — 'sending' while the
   // request is in flight, then the result for a few seconds before it clears.
   // Keyed by automation id since every row can fire independently.
@@ -135,7 +138,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
   useEffect(() => { if (tab === 'automations') loadAutos() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
   // Leaving the tab closes the builder. Coming back to a half-filled form the
   // owner had walked away from reads as a bug, not as a saved draft.
-  useEffect(() => { if (tab !== 'automations') setBuilding(null) }, [tab])
+  useEffect(() => { if (tab !== 'automations') { setBuilding(null); setViewingHistory(null) } }, [tab])
   /**
    * Save a draft, then reload. Returns null on success, or the backend's own
    * message — it names the field and the fix, and the form has no better one.
@@ -762,8 +765,17 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
               />
             )}
 
+            {/* Same "takes over the tab" convention as the builder above. */}
+            {tab === 'automations' && building === null && viewingHistory !== null && (
+              <AutomationRunHistory
+                automation={viewingHistory}
+                config={config}
+                onClose={() => setViewingHistory(null)}
+              />
+            )}
+
             {/* Automations tab — Speda's proactive n8n watchers */}
-            {tab === 'automations' && building === null && (
+            {tab === 'automations' && building === null && viewingHistory === null && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22, maxWidth: 720 }}>
                 <SettingsSection title={t.settingsAutomations.pipeline} first />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: -8 }}>
@@ -928,6 +940,9 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                           {t.settingsAutomations.edit}
                         </PillBtn>
                       )}
+                      <PillBtn onClick={() => setViewingHistory(a)} title={t.settingsAutomations.historyTitle}>
+                        {t.settingsAutomations.history}
+                      </PillBtn>
                       <Switch
                         on={a.active}
                         onChange={v => handleToggleAuto(a.id, v)}

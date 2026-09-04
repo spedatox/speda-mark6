@@ -807,6 +807,17 @@ export interface AutomationsStatus {
   telegram_connected: boolean
 }
 
+/** One past firing of an automation — what models/automation_run.py persists. */
+export interface AutomationRun {
+  id: number
+  status: 'ok' | 'failed' | 'cancelled' | string
+  delivered: boolean
+  channel: 'text' | 'voice' | 'silent' | string
+  report: string
+  request_id: string
+  fired_at: string | null
+}
+
 export async function getAutomations(config: AppConfig): Promise<AutomationInfo[]> {
   const res = await fetch(`${config.apiBase}/automations`, { headers: authHeaders(config)})
   if (!res.ok) return []
@@ -904,6 +915,20 @@ export async function testAutomation(
     if (body.error) return { error: body.error }
     return { started: true, request_id: body.request_id }
   } catch (e) { return { error: String(e) } }
+}
+
+/** Past firings of one automation, newest first — the Settings "History" view. */
+export async function getAutomationRuns(
+  config: AppConfig, id: number, limit = 30,
+): Promise<AutomationRun[]> {
+  try {
+    const res = await fetch(
+      `${config.apiBase}/automations/${id}/runs?limit=${limit}`,
+      { headers: authHeaders(config) },
+    )
+    if (!res.ok) return []
+    return (await res.json()).runs ?? []
+  } catch { return [] }
 }
 
 export async function getAutomationsStatus(config: AppConfig): Promise<AutomationsStatus | null> {

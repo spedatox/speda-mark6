@@ -5,11 +5,12 @@ import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
-import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, telegramConnect, telegramStatus } from '../lib/api'
-import type { ConnectionInfo, AutomationInfo, AutomationsStatus } from '../lib/api'
+import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationRuns, telegramConnect, telegramStatus } from '../lib/api'
+import type { ConnectionInfo, AutomationInfo, AutomationsStatus, AutomationRun } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import ConfigTab from './ConfigTab'
 import ScreenLockSettings from './ScreenLockSettings'
+import { useT } from '../lib/i18n'
 
 interface Props {
   config: AppConfig
@@ -22,6 +23,11 @@ export default function SettingsModal({ config, onClose }: Props) {
   const { settings, update } = useSettings()
   const { dispatch } = useChatContext()
   const profile = useProfile()
+  // Only the run-history strings below go through i18n — the rest of this
+  // tab predates the i18n dict being wired in here and stays hardcoded
+  // English for now (see settingsAutomations in lib/i18n, a larger cleanup
+  // out of scope for this change).
+  const t = useT()
   const [tab, setTab] = useState<Tab>('general')
   const [localPrompt, setLocalPrompt] = useState(settings.systemPrompt)
   const [localTemp, setLocalTemp] = useState(settings.temperature)
@@ -54,11 +60,28 @@ export default function SettingsModal({ config, onClose }: Props) {
   const [autos, setAutos] = useState<AutomationInfo[]>([])
   const [autoStatus, setAutoStatus] = useState<AutomationsStatus | null>(null)
   const [tgMsg, setTgMsg] = useState('')
+  // Non-null = viewing that automation's run history instead of the list.
+  const [viewingHistory, setViewingHistory] = useState<AutomationInfo | null>(null)
+  const [runs, setRuns] = useState<AutomationRun[]>([])
+  const [runsLoaded, setRunsLoaded] = useState(false)
+  const [openRun, setOpenRun] = useState<number | null>(null)
   const loadAutos = async () => {
     setAutos(await getAutomations(config))
     setAutoStatus(await getAutomationsStatus(config))
   }
   useEffect(() => { if (tab === 'automations') loadAutos() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Leaving the tab (or closing the history view) drops any in-flight load —
+  // reopening a stale list from the last automation viewed would be wrong.
+  useEffect(() => { if (tab !== 'automations') setViewingHistory(null) }, [tab])
+  useEffect(() => {
+    if (!viewingHistory) { setRuns([]); setRunsLoaded(false); return }
+    let cancelled = false
+    setRunsLoaded(false)
+    getAutomationRuns(config, viewingHistory.id).then(r => {
+      if (!cancelled) { setRuns(r); setRunsLoaded(true) }
+    })
+    return () => { cancelled = true }
+  }, [config, viewingHistory])
   const handleToggleAuto = async (id: number, active: boolean) => {
     setAutos(as => as.map(a => a.id === id ? { ...a, active } : a)) // optimistic
     await toggleAutomation(config, id, active)
@@ -582,8 +605,98 @@ export default function SettingsModal({ config, onClose }: Props) {
               </div>
             )}
 
+            {/* Run history — swaps in for the list, same as the list itself
+                takes over the tab (no nested modal). */}
+            {tab === 'automations' && viewingHistory !== null && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div style={{ fontSize: '0.8rem', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', letterSpacing: '0.06em' }}>
+                  {t.settingsAutomations.historyTitle} · {viewingHistory.name}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {!runsLoaded ? (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      {t.settingsAutomations.historyLoading}
+                    </p>
+                  ) : runs.length === 0 ? (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      {t.settingsAutomations.historyEmpty}
+                    </p>
+                  ) : (
+                    runs.map(r => {
+                      const report = r.report?.trim() ?? ''
+                      const clip = 220
+                      const clipped = report.length > clip
+                      const open = openRun === r.id
+                      const shown = open || !clipped ? report : `${report.slice(0, clip)}…`
+                      const statusLabel = {
+                        ok: t.settingsAutomations.runStatusOk,
+                        failed: t.settingsAutomations.runStatusFailed,
+                        cancelled: t.settingsAutomations.runStatusCancelled,
+                      }[r.status as 'ok' | 'failed' | 'cancelled'] ?? r.status
+                      return (
+                        <div key={r.id} style={{
+                          display: 'flex', flexDirection: 'column', gap: '0.35rem',
+                          padding: '0.6rem 0.75rem',
+                          border: '1px solid var(--border)',
+                          background: 'rgba(255,255,255,0.02)',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <span style={{
+                              width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                              background: r.status === 'ok' ? 'var(--hb-green)' : r.status === 'failed' ? 'var(--hb-red)' : 'var(--text-muted)',
+                            }} />
+                            <span style={{ fontSize: '0.76rem', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                              {r.fired_at ? new Date(r.fired_at).toLocaleString() : ''}
+                            </span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                              {statusLabel}{r.channel === 'voice' && ' · 🔊'}
+                            </span>
+                          </div>
+                          {r.status === 'ok' && r.channel !== 'silent' && !r.delivered && (
+                            <div style={{ fontSize: '0.68rem', color: 'var(--hb-amber)', fontFamily: 'var(--font-mono)' }}>
+                              {t.settingsAutomations.runNotDelivered}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                            {report ? shown : t.settingsAutomations.runNoReport}
+                          </div>
+                          {clipped && (
+                            <button
+                              onClick={() => setOpenRun(open ? null : r.id)}
+                              style={{
+                                alignSelf: 'flex-start', background: 'transparent', border: 'none',
+                                color: 'var(--hb-cyan-bright)', fontSize: '0.7rem', fontFamily: 'var(--font-mono)',
+                                cursor: 'pointer', padding: 0,
+                              }}
+                            >
+                              {open ? t.settingsAutomations.runLess : t.settingsAutomations.runMore}
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+                <div>
+                  <button
+                    onClick={() => setViewingHistory(null)}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      border: '1px solid var(--border)',
+                      background: 'rgba(255,255,255,0.02)',
+                      color: 'var(--text-primary)', cursor: 'pointer',
+                      fontFamily: "'Rajdhani',sans-serif", fontSize: '0.76rem', fontWeight: 700,
+                      letterSpacing: '0.12em', textTransform: 'uppercase',
+                    }}
+                  >
+                    {t.common.close}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Automations tab — Speda's proactive n8n watchers */}
-            {tab === 'automations' && (
+            {tab === 'automations' && viewingHistory === null && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
                 {/* Pipeline status — n8n engine + Telegram delivery */}
@@ -681,6 +794,21 @@ export default function SettingsModal({ config, onClose }: Props) {
                           {a.expires_at && ` · until ${new Date(a.expires_at).toLocaleDateString()}`}
                         </div>
                       </div>
+                      {/* history */}
+                      <button
+                        onClick={() => setViewingHistory(a)}
+                        title={t.settingsAutomations.historyTitle}
+                        style={{
+                          padding: '0.3rem 0.6rem', flexShrink: 0,
+                          border: '1px solid var(--border)',
+                          background: 'rgba(255,255,255,0.02)',
+                          color: 'var(--text-primary)', cursor: 'pointer',
+                          fontFamily: "'Rajdhani',sans-serif", fontSize: '0.68rem', fontWeight: 700,
+                          letterSpacing: '0.1em', textTransform: 'uppercase',
+                        }}
+                      >
+                        {t.settingsAutomations.history}
+                      </button>
                       {/* pause/resume toggle */}
                       <button
                         onClick={() => handleToggleAuto(a.id, !a.active)}

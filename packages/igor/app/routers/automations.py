@@ -143,6 +143,13 @@ async def test_automation(automation_id: int, request: Request, db: AsyncSession
         return {"error": str(exc)}
 
 
+@router.get("/automations/{automation_id}/runs")
+async def automation_runs(automation_id: int, limit: int = 30, db: AsyncSession = Depends(get_db)):
+    """Past firings of one automation, newest first — status, whether it was
+    delivered, and what it actually reported. See manager.list_runs."""
+    return {"runs": await manager.list_runs(automation_id, db, limit=limit)}
+
+
 @router.get("/automations/drift")
 async def workflow_drift():
     """Cheap probe: is n8n running the workflows the repo says it is?

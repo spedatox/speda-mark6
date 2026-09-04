@@ -115,8 +115,12 @@ class AutomationsSkill(Skill):
         "LIFECYCLE: action='list' returns everything with its id; pause/resume/delete "
         "take that automation_id; action='test' (automation_id) fires it RIGHT NOW — "
         "the real turn, not a mock, useful to prove a new one actually works before "
-        "trusting its schedule. Returns the created/affected automation as JSON (with "
-        "webhook_url for webhooks), the full list for 'list', or an actionable error to "
+        "trusting its schedule. action='history' (automation_id) returns its past "
+        "firings, newest first — status, whether it was delivered, and what it "
+        "actually reported — for when the owner asks whether a recurring task ran "
+        "and what happened ('did last week's backup run?'). Returns the "
+        "created/affected automation as JSON (with webhook_url for webhooks), the "
+        "full list for 'list', the run list for 'history', or an actionable error to "
         "fix and retry (missing field, n8n not configured, etc.)."
     )
     read_only = False
@@ -125,12 +129,12 @@ class AutomationsSkill(Skill):
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["create", "list", "pause", "resume", "delete", "test"],
-                "description": "What to do. 'list' shows everything with ids; pause/resume/delete/test need automation_id from a prior list.",
+                "enum": ["create", "list", "pause", "resume", "delete", "test", "history"],
+                "description": "What to do. 'list' shows everything with ids; pause/resume/delete/test/history need automation_id from a prior list.",
             },
             "automation_id": {
                 "type": "integer",
-                "description": "Target automation id (from 'list') — required for pause, resume, delete, and test.",
+                "description": "Target automation id (from 'list') — required for pause, resume, delete, test, and history.",
             },
             "spec": {
                 "type": "object",
@@ -273,7 +277,16 @@ class AutomationsSkill(Skill):
                     "NOT report a result yet, it hasn't happened."
                 )
 
-            return f"Unknown action {action!r} — use create, list, pause, resume, delete, or test."
+            if action == "history":
+                aid = args.get("automation_id")
+                if aid is None:
+                    return "history needs automation_id — call action='list' first to get ids."
+                runs = await manager.list_runs(int(aid), context.db)
+                if not runs:
+                    return f"No firings recorded yet for automation {aid}."
+                return f"Run history for automation {aid} (newest first):\n" + json.dumps(runs, indent=2)
+
+            return f"Unknown action {action!r} — use create, list, pause, resume, delete, test, or history."
 
         except ValueError as exc:
             # Actionable composition/infrastructure error — surface for repair.

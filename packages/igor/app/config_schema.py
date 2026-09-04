@@ -188,6 +188,10 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                         help="Shared X-N8N-Secret validated on POST /trigger."),
             ConfigField("speda_callback_url", "Speda Callback URL", "url",
                         help="URL n8n uses to call back into Speda's /trigger endpoint."),
+            ConfigField("automation_run_retention_days", "Run History Retention (days)", "int",
+                        requires_restart=_LIVE,
+                        help="How long each automation's run history (status, delivery, "
+                             "the report text) is kept before being pruned."),
         ],
     ),
     ConfigGroup(

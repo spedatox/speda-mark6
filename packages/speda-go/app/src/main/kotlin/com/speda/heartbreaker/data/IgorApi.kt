@@ -464,6 +464,16 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
+    /** Past firings of one automation, newest first — the Settings "History" view. */
+    suspend fun getAutomationRuns(config: AppConfig, id: Int, limit: Int = 30): List<AutomationRunInfo> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                getString(config, "/automations/$id/runs?limit=$limit")?.let {
+                    json.decodeFromString<AutomationRunHistoryResponse>(it).runs
+                }
+            }.getOrNull() ?: emptyList()
+        }
+
     suspend fun getAutomationsStatus(config: AppConfig): AutomationsStatus? = withContext(Dispatchers.IO) {
         runCatching {
             getString(config, "/automations/status")?.let { json.decodeFromString<AutomationsStatus>(it) }

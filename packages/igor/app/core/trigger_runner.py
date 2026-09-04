@@ -495,7 +495,8 @@ async def _deliver(
     profile=None,
     sanitize_model: str = "",
 ) -> None:
-    """Post-run delivery: stamp the automation, then push if asked.
+    """Post-run delivery: stamp the automation, record what happened, then
+    push if asked.
 
     The text comes back out of the DB rather than off a stream, so what the
     owner is sent is the turn the transcript shows — including the runner's
@@ -505,47 +506,65 @@ async def _deliver(
     """
     async with AsyncSessionLocal() as db:
         automation_name = payload.get("automation")
+        automation_row = None
         if automation_name:
             from app.automations.manager import mark_fired
 
-            await mark_fired(str(automation_name), db)
+            automation_row = await mark_fired(str(automation_name), db)
+
+        # Fetched unconditionally — a proactive_ask or silent firing delivers
+        # nothing through this function (the reminders tool does its own
+        # delivery mid-turn, or there is simply nothing to push), but the run
+        # history below still wants to know what the turn actually produced.
+        text = await _last_assistant_text(db, session_id)
+        delivered = False
+        channel = "silent"
 
         if output_mode != "push":
-            return
-
-        text = await _last_assistant_text(db, session_id)
-        if not text:
+            pass
+        elif not text:
             logger.warning(
                 "trigger_push_empty",
                 extra={"request_id": request_id, "status": status},
             )
-            return
-
-        # The sender bot is derived from the agent, never passed by n8n — a
-        # Sentinel push speaks from Sentinel's bot. If every bot is unreachable,
-        # persist a Notification row so nothing is lost.
-        if payload.get("voice"):
-            delivered = await _deliver_voice(
-                agent_id=agent_id, text=text, profile=profile,
-                title=str(payload.get("automation") or ""), telegram_bots=telegram_bots,
-                request_id=request_id, sanitize_model=sanitize_model,
-            )
         else:
-            # A push has not been shown to him yet, so unlike a streamed chat
-            # reply a language leak here is still repairable — and a Telegram
-            # notification is exactly the surface where a stray word is most
-            # visible, because there is no conversation around it to explain
-            # itself. The voice branch above does not need this: it runs the
-            # same check inside tts.prepare_speech_text, and paying for two
-            # rewrite passes on one message would be the wrong trade.
-            text = await language.enforce(text, sanitize_model)
-            delivered = await telegram_bots.deliver_message(agent_id, text)
-        if not delivered:
-            await _store_notification(db, agent_id, user_id, request_id, text, payload)
-        logger.info(
-            "trigger_push_delivered" if delivered else "trigger_push_stored",
-            extra={"request_id": request_id, "chars": len(text), "status": status},
-        )
+            # The sender bot is derived from the agent, never passed by n8n —
+            # a Sentinel push speaks from Sentinel's bot. If every bot is
+            # unreachable, persist a Notification row so nothing is lost.
+            if payload.get("voice"):
+                delivered = await _deliver_voice(
+                    agent_id=agent_id, text=text, profile=profile,
+                    title=str(payload.get("automation") or ""), telegram_bots=telegram_bots,
+                    request_id=request_id, sanitize_model=sanitize_model,
+                )
+                channel = "voice"
+            else:
+                # A push has not been shown to him yet, so unlike a streamed
+                # chat reply a language leak here is still repairable — and a
+                # Telegram notification is exactly the surface where a stray
+                # word is most visible, because there is no conversation
+                # around it to explain itself. The voice branch above does
+                # not need this: it runs the same check inside
+                # tts.prepare_speech_text, and paying for two rewrite passes
+                # on one message would be the wrong trade.
+                text = await language.enforce(text, sanitize_model)
+                delivered = await telegram_bots.deliver_message(agent_id, text)
+                channel = "text"
+            if not delivered:
+                await _store_notification(db, agent_id, user_id, request_id, text, payload)
+            logger.info(
+                "trigger_push_delivered" if delivered else "trigger_push_stored",
+                extra={"request_id": request_id, "chars": len(text), "status": status},
+            )
+
+        if automation_row is not None:
+            from app.automations.manager import record_run
+
+            await record_run(
+                automation_row.id, db,
+                status=status, delivered=delivered, channel=channel, report=text,
+                request_id=request_id, session_id=session_id,
+            )
 
 
 async def _deliver_voice(

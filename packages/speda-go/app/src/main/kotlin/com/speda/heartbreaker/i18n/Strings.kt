@@ -378,6 +378,18 @@ data class AppStrings(
         val pausedClickResume: String,
         val lastFired: (String) -> String,
         val saveFailed: (String) -> String,
+        // ── Run history ──────────────────────────────────────────────────────
+        val history: String,
+        val historyTitle: String,
+        val historyEmpty: String,
+        val historyLoading: String,
+        val runStatusOk: String,
+        val runStatusFailed: String,
+        val runStatusCancelled: String,
+        val runNoReport: String,
+        val runNotDelivered: String,
+        val runMore: String,
+        val runLess: String,
     )
 
     data class SettingsVoices(
