@@ -16,7 +16,16 @@ VIEW = 100.0
 MARK_FRAC = 0.50            # mark's long edge as a fraction of the canvas
 BASE = (7, 12, 17)          # the app's near-black field
 
->
+META = {
+    "speda":        "#36abca",
+    "sentinel":     "#d99c44",
+    "nightcrawler": "#9165e6",
+    "ultron":       "#8a93a6",
+    "centurion":    "#d8483c",
+    "atomix":       "#3fae74",
+    "optimus":      "#2f4f8f",
+    "orion":        "#e0703a",
+}
 
 
 def hex_rgb(h):
