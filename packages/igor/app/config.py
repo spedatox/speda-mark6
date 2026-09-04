@@ -287,6 +287,11 @@ class Settings(BaseSettings):
     # URL n8n uses to call BACK into Speda's /trigger endpoint. Internal compose
     # network by default; override with the public domain if n8n runs elsewhere.
     speda_callback_url: str = "http://app:8000"
+    # How long a firing's run-history row (status/delivery/report — see
+    # models/automation_run.py) survives before being pruned. Kept generous by
+    # default since a row is a few hundred bytes and "did this run last month"
+    # is exactly the question the history exists to answer.
+    automation_run_retention_days: int = 180
 
     # ── Telegram (first-class chat channel + primary notification surface) ────
     # ONE BOT PER AGENT. Each agent speaks from its own @BotFather bot so a
@@ -557,6 +562,16 @@ class Settings(BaseSettings):
     # text is longer and noisier than a distilled fact, so its cosines run lower
     # for the same degree of relevance and the floor is looser to match.
     recall_message_min_similarity: float = 0.25
+    # ── Event-loop stall detection (app/services/loop_monitor.py) ─────────────
+    # Everything on this backend shares one event loop, so a coroutine that
+    # blocks it freezes every client at once — and because uvicorn closes any
+    # WebSocket that misses its 20 s ping deadline, a long block reads as "the
+    # network dropped" rather than as a stall. Report anything over this
+    # threshold so the next blocker is found by measurement instead of by
+    # reading code. 5.0 sits well under the ping deadline and well over the
+    # millisecond overshoot a healthy loop shows. 0 disables the watchdog.
+    loop_stall_threshold_s: float = 5.0
+    loop_stall_check_interval_s: float = 1.0
     # Reject observations that are fragments rather than self-contained facts —
     # a bare list item ("a table of incomes", "**Started:** 2026-08-01") carries
     # no meaning on its own, embeds to a generic centroid, and therefore ranks

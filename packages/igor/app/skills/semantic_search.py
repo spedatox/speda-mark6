@@ -49,9 +49,94 @@ from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
 
+
+async def _vector_watermark(db, user_id: int) -> tuple:
+    """A cheap fingerprint of this owner's embedded messages.
+
+    Count plus the highest id plus the newest `created_at`: between them these
+    move on every insert and every backfill, and it is one indexed aggregate
+    rather than a scan. Mirrors observations._vector_watermark.
+    """
+    from sqlalchemy import func
+
+    row = (
+        await db.execute(
+            select(
+                func.count(MessageEmbedding.id),
+                func.max(MessageEmbedding.id),
+                func.max(MessageEmbedding.created_at),
+            ).where(MessageEmbedding.user_id == user_id)
+        )
+    ).one()
+    return (row[0], row[1], str(row[2]))
+
+
+async def _vectors_for(db, user_id: int) -> tuple[dict[int, int], "np.ndarray"]:
+    """`({message_embedding_id: row index}, matrix)` for this owner, cached.
+
+    The matrix is contiguous and L2-normalized (app/services/embeddings.py), so
+    scoring the whole corpus is one `matrix @ query` — cheaper than gathering
+    the filtered subset would be, and it lets the caller pick out the rows that
+    survived SQL filtering by plain lookup.
+    """
+    watermark = await _vector_watermark(db, user_id)
+    cached = _VECTOR_CACHE.get(user_id)
+    if cached is not None and cached[0] == watermark:
+        return cached[1], cached[2]
+
+    rows = (
+        await db.execute(
+            select(MessageEmbedding.id, MessageEmbedding.embedding).where(
+                MessageEmbedding.user_id == user_id
+            )
+        )
+    ).all()
+    usable = [(int(eid), blob) for eid, blob in rows if blob]
+    if not usable:
+        index: dict[int, int] = {}
+        matrix = np.zeros((0, 0), dtype=np.float32)
+    else:
+        index = {eid: i for i, (eid, _) in enumerate(usable)}
+        matrix = np.stack([
+            np.frombuffer(blob, dtype=np.float32) for _, blob in usable
+        ])
+    _VECTOR_CACHE[user_id] = (watermark, index, matrix)
+    logger.info(
+        "recall_vector_cache_filled",
+        extra={"user_id": user_id, "rows": len(usable),
+               "mb": round(matrix.nbytes / 1e6, 1)},
+    )
+    return index, matrix
+
 MAX_CANDIDATES = 50_000   # perf guard on the brute-force scan; single-user scale
 MAX_PER_SESSION = 3       # diversity cap so one conversation can't fill the list
 SNIPPET_CHARS = 400       # per-message text budget inside a rendered snippet
+
+# ── The vector cache ─────────────────────────────────────────────────────────
+# The same optimisation app/services/observations.py documents for the fact
+# tier, applied here for the same reason and at a much worse ratio. That one
+# was fixed when 2,000 observations cost 12.3 MB and 227 ms; this path loads
+# EVERY embedded message's BLOB through the ORM on every call, and on the live
+# deployment that measured:
+#
+#     rows 20,635 · matrix 126.8 MB · DB load 6.05 s · stack 0.33 s · dot 0.01 s
+#
+# Six seconds of it is the BLOB read, and none of those bytes change between one
+# recall and the next. Worse, it is all inside one request coroutine: uvicorn
+# pings every WebSocket every 20 s and drops the ones that miss the deadline, so
+# a few of these overlapping is enough to take out every connected client at
+# once — which is exactly how both Forge peers were dying on the same second.
+#
+# Held in process, keyed on a watermark cheap enough to check every time, and
+# stored as ONE contiguous matrix rather than 20k separate buffers so scoring is
+# a single BLAS call with no per-call gather. The FILTERING still happens in SQL
+# — every session/date/agent predicate is evaluated by the database exactly as
+# before — and the cache is consulted only to turn surviving rows into scores.
+# The row query defers the `embedding` column, so on a hit the BLOBs are never
+# read at all. A row embedded since the watermark simply sits out the vector
+# pass and is still ranked by the lexical half, the same graceful degradation
+# the two-retriever design already has for a row the embedder has not reached.
+_VECTOR_CACHE: dict[int, tuple[tuple, dict[int, int], "np.ndarray"]] = {}
 
 
 def _parse_date(value: str | None) -> datetime | None:
@@ -180,8 +265,14 @@ class SemanticSearchSkill(Skill):
 
         # Exclude the active session — its messages are already in the model's
         # context and would dominate the ranking (they echo the query's wording).
+        # `embedding` is deferred: the vectors come from the in-process cache
+        # above, and loading 126 MB of BLOBs here to rebuild what is already in
+        # memory was the six seconds this path used to cost.
+        from sqlalchemy.orm import defer
+
         stmt = (
             select(MessageEmbedding, Session.title)
+            .options(defer(MessageEmbedding.embedding))
             .join(Session, MessageEmbedding.session_id == Session.id)
             .where(
                 MessageEmbedding.user_id == context.user_id,
@@ -249,10 +340,15 @@ class SemanticSearchSkill(Skill):
         scores = np.zeros(len(rows), dtype=np.float32)
         try:
             query_vec = (await embed_texts([vector_query]))[0]
-            matrix = np.stack([
-                np.frombuffer(row.embedding, dtype=np.float32) for row, _ in rows
-            ])
-            scores = matrix @ query_vec
+            index, matrix = await _vectors_for(context.db, context.user_id)
+            # Score the whole corpus in one BLAS call, then read off the rows
+            # that survived SQL filtering. A row the cache has not seen yet
+            # keeps its zero and is ranked by the lexical half alone.
+            corpus = matrix @ query_vec if matrix.size else np.zeros(0, dtype=np.float32)
+            for i, (row, _) in enumerate(rows):
+                pos = index.get(int(row.id))
+                if pos is not None:
+                    scores[i] = corpus[pos]
             vector_ranking = [
                 int(i) for i in np.argsort(-scores)[: limit * 4]
                 if float(scores[i]) >= floor

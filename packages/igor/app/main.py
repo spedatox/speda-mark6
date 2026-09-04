@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+import asyncio
 import logging
 import re
 from contextlib import asynccontextmanager
@@ -472,10 +473,23 @@ async def lifespan(app: FastAPI):
         },
     )
 
+    # The event-loop stall watchdog. Started last and cheap by design: one
+    # sleeping task whose only job is to notice when something else held the
+    # loop long enough to cost every WebSocket its ping deadline.
+    loop_watch = None
+    if settings.loop_stall_threshold_s > 0:
+        from app.services.loop_monitor import watch_event_loop
+
+        loop_watch = asyncio.create_task(watch_event_loop(
+            settings.loop_stall_check_interval_s, settings.loop_stall_threshold_s,
+        ))
+
     yield
 
     # ── Shutdown ───────────────────────────────────────────────────────────────
     logger.info("shutdown_begin")
+    if loop_watch is not None:
+        loop_watch.cancel()
     await app.state.turns.shutdown()
     await dispatcher.shutdown()
     await registry.legion_shutdown()
