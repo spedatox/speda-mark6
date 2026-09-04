@@ -8,8 +8,22 @@ This file is rules for how to work here, not architecture documentation. For tha
 | `packages/heartbreaker` | [HEARTBREAKER.md](packages/heartbreaker/HEARTBREAKER.md) |
 | `packages/striker` | [STRIKER.md](packages/striker/STRIKER.md) |
 | `packages/speda-go` | [README.md](packages/speda-go/README.md) |
-| `packages/atomix-wear` | [README.md](packages/atomix-wear/README.md), design in [docs/ATOMIX_WEAR.md](docs/ATOMIX_WEAR.md) |
 | `packages/browser` | [README.md](packages/browser/README.md) |
+
+Two clients live in their own repositories rather than here, because each is a
+self-contained Gradle build with its own signed-release pipeline:
+
+| Client | Repository | Talks to |
+|---|---|---|
+| Ultron Wear | [spedatox/ultron-wear](https://github.com/spedatox/ultron-wear) | `/academic/*`, `/devices/register` |
+| Atomix Wear | [spedatox/atomix-wear](https://github.com/spedatox/atomix-wear) | `/health/*`, `/devices/register`, and `/training/*` once it exists |
+
+Their design docs live with them — Atomix Wear's is
+[docs/ATOMIX_WEAR.md](https://github.com/spedatox/atomix-wear/blob/main/docs/ATOMIX_WEAR.md),
+and it is the spec for the `/training/*` endpoints, the exercise catalog and the
+`set_training_plan` skill that are still to be built **here**, in `packages/igor`.
+Read it before starting that work. Cross-client parity applies across the
+repository boundary: these are Mark VI clients that happen to build separately.
 
 If any of those docs disagrees with the code, the code is right and the doc is wrong — fix the doc as part of whatever change you're making, don't leave it for later.
 

@@ -196,6 +196,8 @@ Explicit, high-consequence capabilities, most restricted to a small set of trust
 | **Heartbreaker** | Electron desktop (React, TypeScript) | Full-roster command deck — switch between every agent persona, see the whole system. |
 | **Striker** | Electron desktop (React, TypeScript) | Single-agent public build, forked from Heartbreaker. No roster, no switcher, Speda only. |
 | **Speda GO** | Android (Kotlin, Jetpack Compose) | Native mobile client with Health Connect sync for Atomix and push-driven interactions. |
+| **Atomix Wear** | Wear OS (Kotlin, Wear Compose) | Reads the wrist's own sensors and posts biometrics to Igor directly, removing the phone from the health pipeline. Ships from [its own repo](https://github.com/spedatox/atomix-wear). |
+| **Ultron Wear** | Wear OS (Kotlin, Wear Compose) | Weekly timetable and one-tap attendance ledger on the wrist. Ships from [its own repo](https://github.com/spedatox/ultron-wear). |
 | **Telegram** | Any device | Each agent runs its own bot; a running response can be steered mid-generation instead of starting a competing reply. |
 
 ---
