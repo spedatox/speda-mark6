@@ -488,6 +488,16 @@ class Settings(BaseSettings):
     # being said now and scrolls, and the board carries everything worth reading
     # twice.
     canvas_caption_lines: int = 3
+    # How long a spoken turn may stay silent — no tools fired, no words yet —
+    # before the board opens its ACTIVITY window and shows what is going on.
+    #
+    # It is a threshold rather than "always on" because the mode is supposed to
+    # leave a one-word answer alone: the orb keeps the screen and the words run
+    # underneath. Opening a board for "what time is it" would undo that. But a
+    # turn that sits silent past this is indistinguishable from a hang, which is
+    # the failure this exists to end. Any tool firing opens the window
+    # immediately regardless of this.
+    canvas_activity_after_ms: int = 1200
     # Pictures on the board — a photo on a dossier card, an article's lead image —
     # are fetched by the SERVER and handed to the client as bytes, never loaded
     # from the third-party origin by the client itself (routers/media.py explains

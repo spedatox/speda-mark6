@@ -4,7 +4,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import VoiceOrb, { type OrbState } from './VoiceOrb'
 import VoiceCanvas from './VoiceCanvas'
-import { splitPanels, hasArtifacts, captionOf } from '../lib/voicePanels'
+import { splitPanels, hasArtifacts, captionOf, type VoicePanel } from '../lib/voicePanels'
+import VoiceActivity from './VoiceActivity'
+import type { ToolBadge } from '../lib/types'
 import type { CanvasSettings } from '../lib/voice'
 import type { MicState } from '../lib/mic'
 import { useT, LOCALES, type Locale } from '../lib/i18n'
@@ -90,6 +92,10 @@ interface Props {
   reply: string
   /** True while that reply is still being written (gates partial-fence render). */
   streaming: boolean
+  /** The turn's tool calls, as they fire. Voice mode is the surface where these
+   *  matter MOST — there is no answer on screen to reassure the owner while a
+   *  research turn spends two minutes browsing. */
+  tools: ToolBadge[]
   /** What the owner last said, kept small above the orb for context. */
   prompt: string
   /** The master language, not a speech locale — see lib/language.ts. */
@@ -114,7 +120,7 @@ interface Props {
 }
 
 export default function VoiceMode({
-  state, amplitude, spectrum, inputLevel, reply, streaming, prompt, language, onLanguage,
+  state, amplitude, spectrum, inputLevel, reply, streaming, tools, prompt, language, onLanguage,
   onClose, onStopSpeaking, micState, configured, agentName, canvas, dock, onDock,
 }: Props) {
   const t = useT()
@@ -122,10 +128,45 @@ export default function VoiceMode({
   const hasText = visible.trim().length > 0
   // The staged windows, capped at the same ceiling the agent was briefed with —
   // a model that overruns its budget must not be able to overrun the board too.
-  const panels = useMemo(
+  const staged = useMemo(
     () => (canvas.enabled ? splitPanels(visible).slice(0, canvas.maxPanels) : []),
     [visible, canvas.enabled, canvas.maxPanels],
   )
+
+  /* ── The activity window ─────────────────────────────────────────────────
+   * Voice mode used to show a glowing "thinking" line and nothing else, so a
+   * turn that was browsing six pages and a turn that had hung looked identical
+   * for two minutes and the mode read as slow. The board now carries a window
+   * showing what the machine is DOING, and shows it before any answer exists.
+   *
+   * It leads the panel list because the packer lays windows out in order: first
+   * means top-left, which is where the eye goes while it is waiting.
+   *
+   * WHEN it opens is the delicate part. Opening on every turn would dock the orb
+   * for "what time is it", which is exactly the case the mode is supposed to
+   * leave alone — the orb keeps the screen and the words run underneath. So it
+   * opens on evidence of WORK, not on the mere fact of a turn:
+   *
+   *   - any tool has fired (something is genuinely happening), or
+   *   - the turn has been silent longer than the owner's patience setting.
+   *
+   * The second is what catches a slow first token, which is the failure that
+   * prompted this: no tools, no text, and nothing to distinguish it from a hang. */
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (!streaming || hasText) { setSlow(false); return }
+    const id = window.setTimeout(() => setSlow(true), canvas.activityAfterMs)
+    return () => window.clearTimeout(id)
+  }, [streaming, hasText, canvas.activityAfterMs])
+
+  const showActivity = canvas.enabled && (tools.length > 0 || (streaming && slow))
+  const panels = useMemo(() => {
+    if (!showActivity) return staged
+    const activityPanel: VoicePanel = {
+      id: 'activity', kind: 'activity', title: 'ACTIVITY_LIVE', source: '',
+    }
+    return [activityPanel, ...staged]
+  }, [showActivity, staged])
   const hasCanvas = useMemo(() => hasArtifacts(panels), [panels])
   /** The narration alone — what is being SAID, with every staged window cut out.
    *  This is the caption's text, and it is the same cut the speech path makes. */
@@ -391,6 +432,9 @@ export default function VoiceMode({
             reserveY={orbTop - CANVAS_TOP}
             reflow={reflow}
             stagger={canvas.revealStaggerMs}
+            activity={showActivity
+              ? <VoiceActivity tools={tools} streaming={streaming} hasText={hasCaption} />
+              : undefined}
           />
         </div>
       )}

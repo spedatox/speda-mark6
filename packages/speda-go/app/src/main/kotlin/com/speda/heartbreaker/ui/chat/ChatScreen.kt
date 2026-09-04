@@ -250,14 +250,18 @@ fun ChatScreen(
                     // listening, not reading a scrollback — so what shows is the
                     // current answer's evidence and the words as they are said.
                     if (voiceOn) {
+                        val live = state.messages.lastOrNull {
+                            it.role == com.speda.heartbreaker.domain.Role.Assistant
+                        }
                         VoiceModeScreen(
-                            reply = state.messages.lastOrNull {
-                                it.role == com.speda.heartbreaker.domain.Role.Assistant
-                            }?.content.orEmpty(),
+                            reply = live?.content.orEmpty(),
+                            tools = live?.tools ?: emptyList(),
+                            streaming = state.isStreaming,
                             state = voiceState,
                             level = voiceLevel,
                             captionLines = canvas.captionLines,
                             maxPanels = canvas.maxPanels,
+                            activityAfterMs = canvas.activityAfterMs,
                         )
                     } else if (state.messages.isEmpty()) {
                         WelcomeView(

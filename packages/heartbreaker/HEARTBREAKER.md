@@ -124,6 +124,23 @@ straight from its host would tell that host the owner is looking, which is the
 one thing an OSINT board must not do. Anything that fails renders no picture at
 all; a broken-image icon on a dossier is worse than a dossier without one.
 
+**The board says what the machine is doing.** Voice mode used to show a glowing
+"thinking" line and nothing else, so a turn that was browsing six pages and a
+turn that had hung looked identical for two minutes. `VoiceActivity` is the
+board's own window — not something the agent stages — and it is deliberately
+louder than the transcript's collapsed step list, because here there is no answer
+on screen and the owner is listening rather than reading. It never collapses,
+shows each call's arguments inline rather than behind a click, and **times every
+step live**, which the transcript does not do at all. The timer is the part that
+actually answers "is this broken?": a counter ticking past twelve seconds on a
+page fetch is a slow website, and the same screen without one is
+indistinguishable from a crash.
+
+It opens on evidence of *work*, not on the mere fact of a turn — any tool firing,
+or the turn staying silent past `canvas_activity_after_ms`. Opening always would
+dock the orb for "what time is it", which is the one case the mode is careful to
+leave alone.
+
 **The transcript is a subtitle.** Narration runs along the bottom as a live
 caption a few lines deep, tracking what is being said now. Prose is never a
 window: anything worth reading twice was supposed to become one.

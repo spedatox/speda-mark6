@@ -128,30 +128,57 @@ function shortPath(p: string): string {
   return parts.length <= 2 ? p : '…/' + parts.slice(-2).join('/')
 }
 
-// One-line "what it did", Claude-Code style: a verb + a target.
-function toolSummary(tool: ToolBadge): { verb: string; target?: string } {
+/**
+ * One-line "what it did", Claude-Code style: a verb + a target.
+ *
+ * `running` picks the present tense, because voice mode's activity window shows
+ * a step WHILE it happens and "Searched" under a spinner reads as already-done.
+ * `_t` is accepted and unused: Heartbreaker's copy takes its verbs from the
+ * locale dictionary, and matching the signature is what lets VoiceActivity be
+ * the same file in both clients rather than a fork per brand.
+ */
+export function toolSummary(
+  tool: ToolBadge, _t?: unknown, running = false,
+): { verb: string; target?: string } {
   const inp = (tool.input && typeof tool.input === 'object')
     ? tool.input as Record<string, unknown> : {}
   const str = (k: string) => (typeof inp[k] === 'string' ? inp[k] as string : undefined)
   const path = str('path')
   switch (tool.name) {
-    case 'edit_file':   return { verb: 'Edited', target: path && shortPath(path) }
-    case 'write_file':  return { verb: 'Wrote', target: path && shortPath(path) }
-    case 'read_file':   return { verb: 'Read', target: path && shortPath(path) }
-    case 'run_command': return { verb: 'Ran', target: str('command') }
+    case 'edit_file':   return { verb: running ? 'Editing' : 'Edited', target: path && shortPath(path) }
+    case 'write_file':  return { verb: running ? 'Writing' : 'Wrote', target: path && shortPath(path) }
+    case 'read_file':   return { verb: running ? 'Reading' : 'Read', target: path && shortPath(path) }
+    case 'run_command': return { verb: running ? 'Running' : 'Ran', target: str('command') }
     case 'system_ops': {
       const action = str('action')
-      if (action === 'read_file')  return { verb: 'Read', target: path && shortPath(path) }
-      if (action === 'write_file') return { verb: 'Wrote', target: path && shortPath(path) }
-      return { verb: 'Ran', target: str('command') }   // exec (default)
+      if (action === 'read_file')  return { verb: running ? 'Reading' : 'Read', target: path && shortPath(path) }
+      if (action === 'write_file') return { verb: running ? 'Writing' : 'Wrote', target: path && shortPath(path) }
+      return { verb: running ? 'Running' : 'Ran', target: str('command') }   // exec (default)
     }
-    case 'graph_query':    return { verb: 'Searched graph', target: str('question') }
+    case 'graph_query':    return { verb: running ? 'Searching graph' : 'Searched graph', target: str('question') }
     case 'graph_path':     return { verb: 'Traced the codebase graph' }
     case 'graph_overview': return { verb: 'Mapped the codebase graph' }
     default:
-      if (isSearchTool(tool.name)) return { verb: 'Searched', target: str('query') || str('question') }
+      if (isSearchTool(tool.name)) return { verb: running ? 'Searching' : 'Searched', target: str('query') || str('question') }
       return { verb: tool.name.replace(/_/g, ' ').replace(/-/g, ' ') }
   }
+}
+
+/** A short right-aligned "what came back", taken from the real result text. */
+export function resultSummary(tool: ToolBadge): string | null {
+  if (!tool.result) return null
+  const first = tool.result.split('\n').find(l => l.trim()) ?? ''
+  const t = first.trim()
+  if (!t) return null
+  return t.length > 38 ? t.slice(0, 38) + '…' : t
+}
+
+/** Done / running / failed — read off the result, never invented. */
+export function stepState(tool: ToolBadge, live: boolean): 'running' | 'failed' | 'done' {
+  if (live && !tool.result) return 'running'
+  const r = (tool.result ?? '').toLowerCase()
+  if (/^(error|traceback|exception)\b/.test(r) || r.includes('error:')) return 'failed'
+  return 'done'
 }
 
 // Red/green line diff. edit_file passes old→new; write_file passes new only.

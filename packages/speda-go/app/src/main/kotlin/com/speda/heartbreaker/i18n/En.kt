@@ -27,6 +27,13 @@ val En = AppStrings(
         apiKeyLabel = "API KEY",
         connect = "Connect",
     ),
+    voiceActivity = AppStrings.VoiceActivity(
+        step = "step",
+        steps = "steps",
+        failed = "failed",
+        working = "Working…",
+        composing = "Composing the answer…",
+    ),
     composer = AppStrings.Composer(
         placeholder = "How can I help you today?",
         canMakeMistakes = { name -> "$name can make mistakes" },

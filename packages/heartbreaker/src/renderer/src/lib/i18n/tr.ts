@@ -288,6 +288,13 @@ const tr: Dict = {
     housePartyTag: '· house party',
     tryAgain: 'Tekrar dene',
   },
+  voiceActivity: {
+    step: 'adım',
+    steps: 'adım',
+    failed: 'başarısız',
+    working: 'Çalışıyor…',
+    composing: 'Yanıt hazırlanıyor…',
+  },
   voiceMode: {
     speakRepliesIn: (label: string) => `Her şey ${label} — yazılan, konuşulan, duyulan`,
     reflowTitle: 'Pencereleri yeniden düzenle ve küreyi köşesine geri koy',

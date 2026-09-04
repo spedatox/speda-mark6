@@ -23,6 +23,7 @@ data class AppStrings(
     val common: Common,
     val uplink: Uplink,
     val composer: Composer,
+    val voiceActivity: VoiceActivity,
     val fileCard: FileCard,
     val message: Message,
     val commsTray: CommsTray,
@@ -77,6 +78,15 @@ data class AppStrings(
         val apiBaseLabel: String,
         val apiKeyLabel: String,
         val connect: String,
+    )
+
+    /** Voice mode's activity window — what the machine is doing, live. */
+    data class VoiceActivity(
+        val step: String,
+        val steps: String,
+        val failed: String,
+        val working: String,
+        val composing: String,
     )
 
     data class Composer(

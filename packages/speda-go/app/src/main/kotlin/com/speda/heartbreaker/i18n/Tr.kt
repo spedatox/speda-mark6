@@ -27,6 +27,13 @@ val Tr = AppStrings(
         apiKeyLabel = "API ANAHTARI",
         connect = "Bağlan",
     ),
+    voiceActivity = AppStrings.VoiceActivity(
+        step = "adım",
+        steps = "adım",
+        failed = "başarısız",
+        working = "Çalışıyor…",
+        composing = "Yanıt hazırlanıyor…",
+    ),
     composer = AppStrings.Composer(
         placeholder = "Bugün size nasıl yardımcı olabilirim?",
         canMakeMistakes = { name -> "$name hata yapabilir" },

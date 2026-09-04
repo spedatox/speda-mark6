@@ -152,6 +152,7 @@ without a restart:
 | Input | What it decides |
 |---|---|
 | `settings.canvas_*` | Whether there is a board at all, how many windows a turn may open, and the spoken word budgets (`canvas_spoken_words`, `canvas_briefing_words`). Budgets are **targets, never truncation** — a reply cut off mid-sentence costs the same to synthesize as a finished one and is worth less. |
+| `canvas_activity_after_ms` | How long a spoken turn may stay silent before the clients open a window showing what the machine is doing. A tool firing opens it immediately regardless. It exists because a working turn and a hung one were indistinguishable from the outside. |
 | `Profile.canvas_brief` | What presenting looks like for THIS agent, appended to the generic brief. Identity, so it lives in `app/profiles/` (Rule 10): Sentinel turns every figure into a tile or a chart, NightCrawler gives every source its own window with the photo it came with. |
 
 A window's picture has to come from somewhere, and the brief forbids inventing

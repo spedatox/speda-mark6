@@ -17,7 +17,10 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -28,9 +31,11 @@ import androidx.compose.ui.unit.sp
 import com.speda.heartbreaker.data.VoiceSpeaker
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.domain.ToolBadge
 import com.speda.heartbreaker.domain.captionOf
 import com.speda.heartbreaker.domain.splitBoardPanels
 import com.speda.heartbreaker.ui.prose.FenceBlock
+import kotlinx.coroutines.delay
 
 /**
  * Voice mode — the phone's presentation surface.
@@ -52,16 +57,43 @@ import com.speda.heartbreaker.ui.prose.FenceBlock
  * scrollback: anything worth reading twice was supposed to become a window, and
  * a full transcript here would make this the chat screen with a bigger font.
  */
+/**
+ * Whether a turn has been silent long enough to deserve the activity card.
+ *
+ * A threshold rather than "always", because a one-word answer is supposed to
+ * leave the orb alone — opening a board for "what time is it" would undo the
+ * one behaviour the mode is careful about. A turn sitting silent past this,
+ * though, is indistinguishable from a hang.
+ */
+@Composable
+private fun slowSince(streaming: Boolean, silent: Boolean, afterMs: Int): Boolean {
+    var slow by remember { mutableStateOf(false) }
+    LaunchedEffect(streaming, silent, afterMs) {
+        if (!streaming || !silent) { slow = false; return@LaunchedEffect }
+        delay(afterMs.toLong())
+        slow = true
+    }
+    return slow
+}
+
 @Composable
 fun VoiceModeScreen(
     /** The live reply, exactly as it is arriving. */
     reply: String,
+    /** The turn's tool calls, as they fire. This is the surface where they matter
+     *  MOST: there is no answer on screen to reassure the owner while a research
+     *  turn spends two minutes browsing. */
+    tools: List<ToolBadge>,
+    /** True while the reply is still arriving. */
+    streaming: Boolean,
     state: VoiceSpeaker.State,
     level: Float,
     /** How many caption lines stay on screen — from Settings → Canvas, so the
      *  phone and the desktop are tuned in one place. */
     captionLines: Int,
     maxPanels: Int,
+    /** How long a silent turn may run before the activity card appears. */
+    activityAfterMs: Int,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
@@ -71,7 +103,20 @@ fun VoiceModeScreen(
     // narration the agent placed it — writing order is the cue track.
     val panels = remember(reply, maxPanels) { splitBoardPanels(reply).take(maxPanels) }
     val caption = remember(reply) { captionOf(reply) }
-    val docked = panels.isNotEmpty()
+
+    /* The activity card leads the column, because while a turn is working it is
+     * the only thing on it worth looking at — and because "nothing is happening"
+     * was the whole complaint this answers.
+     *
+     * WHEN it shows is the delicate part. Always would dock the orb for "what
+     * time is it", which is exactly the case the mode should leave alone. So it
+     * appears on evidence of WORK: a tool has fired, or the turn has been silent
+     * past the owner's patience setting. */
+    // Called unconditionally: a composable behind && is a conditional call, and
+    // its remembered state would be thrown away every time the condition flips.
+    val slow = slowSince(streaming, caption.isBlank(), activityAfterMs)
+    val showActivity = tools.isNotEmpty() || (streaming && slow)
+    val docked = panels.isNotEmpty() || showActivity
 
     val boardScroll = rememberScrollState()
     val captionScroll = rememberScrollState()
@@ -96,6 +141,14 @@ fun VoiceModeScreen(
             // works here — a chart, a map, a stat tile, a dossier card — and none
             // of them is a second implementation that can drift from its
             // counterpart in the transcript.
+            if (showActivity) {
+                VoiceActivityCard(
+                    tools = tools,
+                    streaming = streaming,
+                    hasText = caption.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             panels.forEach { p -> FenceBlock(language = p.info, code = p.body) }
         }
 

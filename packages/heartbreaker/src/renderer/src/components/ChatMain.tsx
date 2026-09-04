@@ -1022,6 +1022,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           inputLevel={voiceInputLevel}
           reply={voiceReply?.content ?? ''}
           streaming={!!voiceReply?.isStreaming}
+          tools={voiceReply?.tools ?? []}
           prompt={voicePrompt}
           language={language}
           onLanguage={setLanguage}

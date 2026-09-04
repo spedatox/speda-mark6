@@ -62,4 +62,6 @@ data class CanvasSettings(
     @SerialName("max_panels") val maxPanels: Int = 10,
     @SerialName("reveal_stagger_ms") val revealStaggerMs: Int = 160,
     @SerialName("caption_lines") val captionLines: Int = 3,
+    /** How long a silent turn may run before the board shows what it is doing. */
+    @SerialName("activity_after_ms") val activityAfterMs: Int = 1200,
 )

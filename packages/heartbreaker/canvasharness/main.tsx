@@ -9,7 +9,10 @@ import { createRoot } from 'react-dom/client'
 import VoiceCanvas from '../src/renderer/src/components/VoiceCanvas'
 import { splitPanels, captionOf } from '../src/renderer/src/lib/voicePanels'
 import { ChatContext } from '../src/renderer/src/store/chat'
+import { SettingsContext, useSettingsProvider } from '../src/renderer/src/store/settings'
 import { BoardChatBlock } from '../src/renderer/src/components/VoicePanelBody'
+import VoiceActivity from '../src/renderer/src/components/VoiceActivity'
+import type { ToolBadge } from '../src/renderer/src/lib/types'
 import '../src/renderer/src/theme/heartbreaker.css'
 
 /* A research readout, written the way the brief asks for it. */
@@ -87,6 +90,37 @@ const SCRIPTS: Record<string, string> = {
   // The same kinds as they appear in the chat transcript, where a window has no
   // height to fill and has to set its own.
   'CHAT FLOW': '',
+  // A research turn in progress — what the owner sees BEFORE any answer exists.
+  'ACTIVITY': '',
+}
+
+const SCRIPTED_TOOLS: Array<{ at: number; tool: ToolBadge; resultAt?: number }> = [
+  { at: 300, resultAt: 2400, tool: { id: 't1', name: 'web_search', input: { query: 'Ivan Vanko physicist Moscow' }, result: '7 results' } },
+  { at: 2600, resultAt: 9000, tool: { id: 't2', name: 'browse_page', input: { url: 'https://example.com/moscow-times/vanko', portal: null }, result: 'Physicist held over export breach — Moscow Times' } },
+  { at: 9200, tool: { id: 't3', name: 'browse_page', input: { url: 'https://example.com/archive/1967-deportation' } } },
+]
+
+/** Replays the chain above in wall-clock time, so the activity window can be
+ *  watched behaving rather than inspected as a still. */
+function useScriptedTools(running: boolean): ToolBadge[] {
+  const [t0] = useState(() => Date.now())
+  const [, bump] = useState(0)
+  useEffect(() => {
+    if (!running) return
+    const id = window.setInterval(() => bump(n => n + 1), 120)
+    return () => window.clearInterval(id)
+  }, [running])
+  if (!running) return []
+  const ms = Date.now() - t0
+  return SCRIPTED_TOOLS
+    .filter(s => ms >= s.at)
+    .map(s => ({ ...s.tool, result: s.resultAt !== undefined && ms >= s.resultAt ? s.tool.result : undefined }))
+}
+
+/** The activity window, driven by the scripted chain. */
+function ActivityDemo() {
+  const tools = useScriptedTools(true)
+  return <VoiceActivity tools={tools} streaming hasText={false} />
 }
 
 function Harness() {
@@ -97,7 +131,13 @@ function Harness() {
   const full = SCRIPTS[which]
   const visible = full.slice(0, Math.round(full.length * upto))
 
-  const panels = useMemo(() => splitPanels(visible), [visible])
+  const scripted = useScriptedTools(which !== 'CHAT FLOW' && which !== 'ACTIVITY')
+  const staged = useMemo(() => splitPanels(visible), [visible])
+  // The activity window leads the board, exactly as VoiceMode assembles it.
+  const panels = useMemo(
+    () => [{ id: 'activity', kind: 'activity' as const, title: 'ACTIVITY_LIVE', source: '' }, ...staged],
+    [staged],
+  )
   const caption = useMemo(() => captionOf(visible), [visible])
 
   // Measured live: the packer is driven by the board's real size, so a harness
@@ -128,7 +168,14 @@ function Harness() {
         </span>
       </div>
 
-      {which === 'CHAT FLOW' ? (
+      {which === 'ACTIVITY' ? (
+        <div style={{ position: 'absolute', top: 60, left: 24, width: 460, height: 320 }}
+             className="hb-holo">
+          <div style={{ height: '100%', padding: '0.7rem 0.85rem' }}>
+            <ActivityDemo />
+          </div>
+        </div>
+      ) : which === 'CHAT FLOW' ? (
         <div style={{ position: 'absolute', top: 46, left: 16, right: 16, bottom: 8, overflow: 'auto' }}>
           <BoardChatBlock kind="stat" source={`€4.24M
 +9.1% vs August
@@ -153,6 +200,7 @@ Status: Whereabouts unknown`} />
           reserveY={H - 230}
           reflow={0}
           stagger={160}
+          activity={<VoiceActivity tools={scripted} streaming hasText={false} />}
         />
         {/* Stand-in for the docked orb, so the keep-out quadrant is visible. */}
         <div style={{
@@ -188,6 +236,18 @@ const STUB = {
   dispatch: () => {},
 } as unknown as React.ContextType<typeof ChatContext>
 
+/* The activity window reads the locale through useT, which is only available
+ * under the settings provider — in the app that is always true, so this is a
+ * harness concern rather than a component one. */
+function Providers({ children }: { children: React.ReactNode }) {
+  const settings = useSettingsProvider()
+  return (
+    <SettingsContext.Provider value={settings}>
+      <ChatContext.Provider value={STUB}>{children}</ChatContext.Provider>
+    </SettingsContext.Provider>
+  )
+}
+
 createRoot(document.getElementById('root')!).render(
-  <ChatContext.Provider value={STUB}><Harness /></ChatContext.Provider>,
+  <Providers><Harness /></Providers>,
 )

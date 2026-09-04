@@ -83,6 +83,7 @@ async def voice_status():
             "max_panels": settings.canvas_max_panels,
             "reveal_stagger_ms": settings.canvas_reveal_stagger_ms,
             "caption_lines": settings.canvas_caption_lines,
+            "activity_after_ms": settings.canvas_activity_after_ms,
         },
     }
 

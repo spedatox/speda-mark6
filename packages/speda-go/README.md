@@ -158,6 +158,22 @@ The caption is a **subtitle, not a transcript**: a few lines deep, riding its ow
 tail, capped by `caption_lines` from Settings → Canvas. Anything worth reading
 twice was supposed to become a window.
 
+### What the machine is doing
+
+`ui/voice/VoiceActivityCard` leads the board while a turn is working. Voice mode
+otherwise shows a spinner and nothing else, and a turn that is browsing six pages
+looks exactly like one that has hung. The card never collapses, shows each call's
+arguments inline rather than behind a tap, and times every step live — the timer
+being the part that actually distinguishes "slow website" from "crashed".
+
+It appears on evidence of work: a tool firing, or the turn staying silent past
+`activity_after_ms` from Settings → Canvas. Always-on would dock the orb for a
+one-word answer, which is the case the mode should leave alone.
+
+The step labels come from `ToolStatus.statusLabel`, the same localized
+present-progressive map the transcript uses, and `stepState`/`resultSummary` are
+the existing extension functions rather than new ones.
+
 ### The orb, and what it honestly is not
 
 The desktop orb is a Three.js scene — an icosahedron under custom GLSL wrapped in

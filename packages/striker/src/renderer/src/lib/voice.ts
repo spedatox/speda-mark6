@@ -227,10 +227,14 @@ export interface CanvasSettings {
   maxPanels: number
   revealStaggerMs: number
   captionLines: number
+  /** How long a turn may stay silent before the board opens its activity
+   *  window. A tool firing opens it at once, regardless of this. */
+  activityAfterMs: number
 }
 
 export const CANVAS_FALLBACK: CanvasSettings = {
   enabled: true, maxPanels: 10, revealStaggerMs: 160, captionLines: 3,
+  activityAfterMs: 1200,
 }
 
 /**
@@ -281,6 +285,7 @@ export async function voiceStatus(config: AppConfig): Promise<VoiceStatus> {
         maxPanels: c.max_panels ?? CANVAS_FALLBACK.maxPanels,
         revealStaggerMs: c.reveal_stagger_ms ?? CANVAS_FALLBACK.revealStaggerMs,
         captionLines: c.caption_lines ?? CANVAS_FALLBACK.captionLines,
+        activityAfterMs: c.activity_after_ms ?? CANVAS_FALLBACK.activityAfterMs,
       },
     }
   } catch {

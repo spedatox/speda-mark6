@@ -526,6 +526,13 @@ CONFIG_GROUPS: list[ConfigGroup] = [
             ConfigField("canvas_caption_lines", "Caption Lines", "int", requires_restart=_LIVE,
                         help="How many lines of live subtitle stay under the orb.",
                         placeholder="3"),
+            ConfigField("canvas_activity_after_ms", "Show Activity After (ms)", "int",
+                        requires_restart=_LIVE,
+                        help="How long a spoken turn may stay silent before the board opens a "
+                             "window showing what the machine is doing. A tool firing opens it "
+                             "at once regardless. Raise it to keep short answers on the bare "
+                             "orb for longer; lower it if a turn ever feels hung.",
+                        placeholder="1200"),
             ConfigField("canvas_image_proxy", "Proxy Board Images", "bool", requires_restart=_LIVE,
                         help="Photos on the board are fetched by the SERVER and handed to the "
                              "client as bytes. Keep this on: the clients block remote images "

@@ -57,10 +57,15 @@ interface Props {
   reflow: number
   /** Delay between one window's entrance and the next, from Settings → Canvas. */
   stagger: number
+  /** Contents of the ACTIVITY window, if the board is showing one. The board owns
+   *  that window's placement and chrome like any other; only what goes inside it
+   *  comes from outside, because it is driven by the turn's tool events rather
+   *  than by anything in the reply text. */
+  activity?: React.ReactNode
 }
 
 export default function VoiceCanvas({
-  panels, width, height, reserveX, reserveY, reflow, stagger,
+  panels, width, height, reserveX, reserveY, reflow, stagger, activity,
 }: Props) {
   /** Windows the owner has moved or resized. Absolute, and immune to the layout. */
   const [pinned, setPinned] = useState<Record<string, Pin>>({})
@@ -201,7 +206,15 @@ export default function VoiceCanvas({
               </button>
             </div>
 
-            <VoicePanelBody panel={p} />
+            {p.kind === 'activity'
+              ? (
+                <div className="hb-holo" style={{
+                  flex: 1, minHeight: 0, overflow: 'hidden', padding: '0.7rem 0.85rem',
+                }}>
+                  {activity}
+                </div>
+              )
+              : <VoicePanelBody panel={p} />}
 
             {/* Resize corner. Hidden while a window fills the board, where the
                 board's edge is the size and there is nothing to drag against. */}

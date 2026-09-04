@@ -33,6 +33,11 @@
 export type PanelKind =
   | 'math' | 'chart' | 'map' | 'calendar' | 'code' | 'widget' | 'table'
   | 'stat' | 'image' | 'article' | 'card' | 'timeline' | 'quote'
+  // Not something the agent stages — the board's own window, showing what the
+  // machine is DOING. It is a PanelKind so the packer, the drag, the resize and
+  // EXTEND all treat it as the window it is, rather than it becoming a second
+  // kind of thing floating over the board with its own rules.
+  | 'activity'
 
 export interface VoicePanel {
   id: string
@@ -76,7 +81,7 @@ const LABEL: Record<PanelKind, string> = {
   math: 'SOLUTION', chart: 'CHART', map: 'MAP', calendar: 'SCHEDULE',
   code: 'SOURCE', widget: 'RENDER', table: 'TABLE', stat: 'FIGURE',
   image: 'IMAGE', article: 'SOURCE', card: 'FILE', timeline: 'TIMELINE',
-  quote: 'QUOTE',
+  quote: 'QUOTE', activity: 'ACTIVITY',
 }
 
 /** Base window size per kind, in px, before the fit pass. A plot needs width to
@@ -96,6 +101,9 @@ const SIZE: Record<PanelKind, { w: number; h: number }> = {
   card:     { w: 340, h: 340 },
   timeline: { w: 440, h: 320 },
   quote:    { w: 400, h: 190 },
+  // Tall rather than wide: it is a running list, and the thing worth seeing is
+  // how many steps have happened, not each one's full width.
+  activity: { w: 420, h: 300 },
 }
 
 /** Windows that bring no chrome of their own and therefore need the glass. The
@@ -103,6 +111,7 @@ const SIZE: Record<PanelKind, { w: number; h: number }> = {
  *  panel — wrapping those in a second one would double every border. */
 export const FRAMED = new Set<PanelKind>([
   'math', 'table', 'stat', 'image', 'article', 'card', 'timeline', 'quote',
+  'activity',
 ])
 
 /* ── Reading the stage direction ───────────────────────────────────────────

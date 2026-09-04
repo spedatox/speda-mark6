@@ -147,7 +147,7 @@ function shortPath(p: string): string {
 // picks the present-tense form ("Running") over the past tense ("Ran") so the
 // label itself carries the state, instead of leaving the raw tool identifier
 // (e.g. `system_ops`) on screen for the owner to decode.
-function toolSummary(tool: ToolBadge, t: Dict, running: boolean): { verb: string; target?: string } {
+export function toolSummary(tool: ToolBadge, t: Dict, running: boolean): { verb: string; target?: string } {
   const inp = (tool.input && typeof tool.input === 'object')
     ? tool.input as Record<string, unknown> : {}
   const str = (k: string) => (typeof inp[k] === 'string' ? inp[k] as string : undefined)
@@ -183,7 +183,7 @@ function toolSummary(tool: ToolBadge, t: Dict, running: boolean): { verb: string
  * `title` attrs in ToolRow) for when a step fails and needs searching. */
 
 /** A short right-aligned "what came back", taken from the real result text. */
-function resultSummary(tool: ToolBadge): string | null {
+export function resultSummary(tool: ToolBadge): string | null {
   if (!tool.result) return null
   const first = tool.result.split('\n').find(l => l.trim()) ?? ''
   const t = first.trim()
@@ -192,7 +192,7 @@ function resultSummary(tool: ToolBadge): string | null {
 }
 
 /** Done / running / failed — read off the result, never invented. */
-function stepState(tool: ToolBadge, live: boolean): 'running' | 'failed' | 'done' {
+export function stepState(tool: ToolBadge, live: boolean): 'running' | 'failed' | 'done' {
   if (live && !tool.result) return 'running'
   const r = (tool.result ?? '').toLowerCase()
   if (/^(error|traceback|exception)\b/.test(r) || r.includes('error:')) return 'failed'

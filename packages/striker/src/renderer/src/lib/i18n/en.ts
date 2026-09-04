@@ -281,6 +281,13 @@ const en = {
     housePartyTag: '· house party',
     tryAgain: 'Try again',
   },
+  voiceActivity: {
+    step: 'step',
+    steps: 'steps',
+    failed: 'failed',
+    working: 'Working…',
+    composing: 'Composing the answer…',
+  },
   voiceMode: {
     speakRepliesIn: (label: string) => `Everything in ${label} — what is written, what is spoken, what is heard`,
     reflowTitle: 'Re-pack the windows and put the orb back on its corner',
