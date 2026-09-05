@@ -275,6 +275,20 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         ],
     ),
     ConfigGroup(
+        "pharmacies", "Nöbetçi Eczane",
+        "Powers on_duty_pharmacies — the nearest on-duty pharmacies from the "
+        "official roster. NosyAPI (https://www.nosyapi.com) is the one source "
+        "that knows which pharmacy is on duty at 3am; Google's open-now flag "
+        "does not. Server-side only, same as the Maps key.",
+        [
+            ConfigField("nosyapi_api_key", "NosyAPI Key", "password", secret=True,
+                        requires_restart=_LIVE,
+                        help="From nosyapi.com → profile. Enables on_duty_pharmacies; "
+                             "empty disables it with a clear message. Read live on "
+                             "every call — takes effect immediately, no restart."),
+        ],
+    ),
+    ConfigGroup(
         "recall", "Memory Recall Quality",
         "How hard recall has to try before it admits it does not know. The floors "
         "are the difference between 'not in memory, ask him' and a confident wrong "

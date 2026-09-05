@@ -750,6 +750,15 @@ class Settings(BaseSettings):
     owner_home_lat: float | None = None
     owner_home_lng: float | None = None
 
+    # ── On-duty pharmacy desk (app/skills/pharmacies.py) ────────────────────────
+    # NosyAPI (https://www.nosyapi.com) serves the official nöbetçi eczane roster
+    # — the one list that is correct at 3am, which Google's `openNow` flag on
+    # Places is not (a small pharmacy's duty roster changes nightly and Google's
+    # open-hours data lags it). Backend-side ONLY, same as the Google Maps key:
+    # the phone/watch never holds it. Empty disables on_duty_pharmacies with a
+    # clear "not configured" message (same pattern as the other keyed skills).
+    nosyapi_api_key: str = ""
+
     # ── Aircraft tracking (app/skills/aircraft.py) ──────────────────────────────
     # Live ADS-B lookup by tail number/registration or callsign. Keyless —
     # adsb.lol's community feed needs no signup. airplanes.live (the original

@@ -174,6 +174,11 @@ async def lifespan(app: FastAPI):
     # Read-only + network-gated.
     from app.skills.weather import WeatherSkill
     await registry.register_skill(WeatherSkill())
+    # Pharmacy desk — nearest on-duty pharmacies from the official NosyAPI
+    # roster. Read-only + network-gated; reuses the find_places place store and
+    # ```map fence, so there is no client-side work for it to render.
+    from app.skills.pharmacies import OnDutyPharmacySkill
+    await registry.register_skill(OnDutyPharmacySkill())
     # Health desk — the owner's biometrics, synced from the phone via Health
     # Connect. Read-only; unrestricted so Speda can relay without a dispatch.
     from app.skills.health_data import HealthDataSkill
