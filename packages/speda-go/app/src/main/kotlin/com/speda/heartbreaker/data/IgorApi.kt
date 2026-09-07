@@ -75,6 +75,14 @@ class IgorApi(
         val cwd: String? = null,
         /** Ambient platform + (opt-in) location context for this turn. */
         val clientContext: ClientContext? = null,
+        /** The turn's id, chosen HERE rather than read off the first `start`
+         *  event. Re-attach, cancel and steer are all keyed on it, so minting it
+         *  client-side is what makes the turn recoverable from the instant Send
+         *  is pressed — including in a brand-new chat with no session_id yet.
+         *  Android needs this more than the desktop does: leaving the app kills
+         *  the socket outright, and that almost always happens before the first
+         *  event arrives. */
+        val requestId: String? = null,
     )
 
     // ── Streaming ────────────────────────────────────────────────────────────
@@ -126,6 +134,7 @@ class IgorApi(
             opts.keepMessages?.let { put("keep_messages", it) }
             if (opts.regenerate) put("regenerate", true)
             opts.cwd?.let { put("cwd", it) }
+            opts.requestId?.let { put("request_id", it) }
             opts.clientContext?.let { cc ->
                 put(
                     "client_context",
@@ -162,22 +171,34 @@ class IgorApi(
         return streamSse(request)
     }
 
+    /** Thrown by [attachStream] when the backend does not know the request_id:
+     *  the turn finished and aged out of the replay grace window, or it never
+     *  started. Either way there is nothing to tail — reload the session. */
+    class AttachGone : IOException("attach: no such turn")
+
     fun attachStream(config: AppConfig, requestId: String): Flow<SseEvent> {
         val request = Request.Builder()
             .url("${config.apiBase}/chat/attach/$requestId")
             .header("X-API-Key", config.apiKey)
             .get()
             .build()
-        return streamSse(request)
+        return streamSse(request, attach = true)
     }
 
     /** Shared SSE reader. The blocking read runs in a child coroutine so
      *  [awaitClose] can cancel the Call the instant the collector cancels. */
-    private fun streamSse(request: Request): Flow<SseEvent> = channelFlow {
+    private fun streamSse(request: Request, attach: Boolean = false): Flow<SseEvent> = channelFlow {
         val call = streamClient.newCall(request)
         launch(Dispatchers.IO) {
             call.execute().use { response ->
                 if (!response.isSuccessful) {
+                    // 404 on an ATTACH is a different answer from a transport
+                    // failure: the turn is genuinely gone (finished and aged out,
+                    // or never existed), so retrying is pointless and the caller
+                    // should reload the session instead of reconnecting forever.
+                    // Only on attach — a 404 from POST /chat means an unknown
+                    // agent, which is a real error the owner needs to see.
+                    if (attach && response.code == 404) throw AttachGone()
                     val text = runCatching { response.body?.string() }.getOrNull().orEmpty()
                     throw IOException(if (text.isNotBlank()) text.take(300) else "HTTP ${response.code}")
                 }

@@ -8,6 +8,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -39,6 +40,16 @@ data class HbSettings(
     /** The interface language — Turkish ("tr") by default, mirroring
      *  store/settings.ts's `locale`. Wire value for [com.speda.heartbreaker.i18n.AppLocale]. */
     val locale: String = "tr",
+    /** How many times a dropped chat stream re-attaches to its still-running turn
+     *  before giving up and showing an error. A detached turn survives on the
+     *  backend, so a dropped socket — leaving the app, switching chats, a network
+     *  handoff — should be a reconnect, never a failed answer. 0 disables
+     *  reconnection. Mirrors store/settings.ts `streamReconnectAttempts`. */
+    val streamReconnectAttempts: Int = 5,
+    /** Seconds of backend silence before the client gives up on a turn entirely.
+     *  Only reached when the backend also reports no live run. Mirrors
+     *  store/settings.ts `streamDeadSeconds`. */
+    val streamDeadSeconds: Int = 300,
 )
 
 /** store/settings.ts DEFAULT.model — the routing default until the owner picks. */
@@ -62,6 +73,8 @@ class SettingsStore(private val context: Context) {
         val HEALTH_BACKFILL_DONE = booleanPreferencesKey("health_backfill_done")
         val HEALTH_NUDGE_SEEN = booleanPreferencesKey("health_nudge_seen")
         val LOCALE = stringPreferencesKey("locale")
+        val STREAM_RECONNECT_ATTEMPTS = intPreferencesKey("stream_reconnect_attempts")
+        val STREAM_DEAD_SECONDS = intPreferencesKey("stream_dead_seconds")
     }
 
     val settings: Flow<HbSettings> = context.settingsDataStore.data.map { p ->
@@ -79,6 +92,8 @@ class SettingsStore(private val context: Context) {
             healthBackfillDone = p[Keys.HEALTH_BACKFILL_DONE] ?: false,
             healthNudgeSeen = p[Keys.HEALTH_NUDGE_SEEN] ?: false,
             locale = p[Keys.LOCALE]?.ifEmpty { null } ?: "tr",
+            streamReconnectAttempts = p[Keys.STREAM_RECONNECT_ATTEMPTS] ?: 5,
+            streamDeadSeconds = p[Keys.STREAM_DEAD_SECONDS] ?: 300,
         )
     }
 
@@ -89,6 +104,8 @@ class SettingsStore(private val context: Context) {
     suspend fun setLocationEnabled(on: Boolean) = context.settingsDataStore.edit { it[Keys.LOCATION_ENABLED] = on }.let { }
     suspend fun setLocationPrompted(done: Boolean) = context.settingsDataStore.edit { it[Keys.LOCATION_PROMPTED] = done }.let { }
     suspend fun setLocale(locale: String) = context.settingsDataStore.edit { it[Keys.LOCALE] = locale }.let { }
+    suspend fun setStreamReconnectAttempts(n: Int) = context.settingsDataStore.edit { it[Keys.STREAM_RECONNECT_ATTEMPTS] = n }.let { }
+    suspend fun setStreamDeadSeconds(sec: Int) = context.settingsDataStore.edit { it[Keys.STREAM_DEAD_SECONDS] = sec }.let { }
 
     // ── Atomix health sync ────────────────────────────────────────────────────
 

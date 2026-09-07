@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+import uuid
+
 from pydantic import BaseModel, field_validator
 
 
@@ -60,6 +62,31 @@ class ChatRequest(BaseModel):
     # live user message only (not stored), so Speda is platform- and location-aware
     # without the churn a clock/location in the cached system prefix would cause.
     client_context: ClientContext | None = None
+
+    # The turn's identity, chosen by the CLIENT rather than the server.
+    #
+    # Every recovery path — /chat/attach, /chat/cancel, the reattach poll — is
+    # keyed on request_id, and a server-minted one only reaches the client with
+    # the first START event. That left a window between "send" and "start" in
+    # which a dropped socket was unrecoverable: the client had nothing to
+    # re-attach to, so it painted a network error over a turn that was in fact
+    # running happily server-side. Naming the turn before it is launched closes
+    # that window — the client can attach to its own id from the instant it
+    # hits send, even in a brand-new chat with no session_id yet.
+    #
+    # Rejected if malformed or already in flight, so a client cannot hijack or
+    # collide with another turn; the server falls back to minting its own.
+    request_id: str | None = None
+
+    @field_validator("request_id")
+    @classmethod
+    def _request_id_is_a_uuid(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            return str(uuid.UUID(value))
+        except (ValueError, AttributeError, TypeError):
+            return None
 
     # Regenerate / edit support. The DB is the source of truth for history, so a
     # client editing or regenerating must tell the backend to truncate first —

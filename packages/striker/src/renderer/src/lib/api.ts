@@ -73,6 +73,25 @@ export async function fileToDocBlock(file: File): Promise<DocBlock> {
   }
 }
 
+/** A turn id for `StreamOpts.requestId` — a v4 UUID, which is what the backend
+ *  validator accepts. `crypto.randomUUID` is unavailable on insecure origins
+ *  (the dev web build over plain http), hence the fallback. */
+export function newRequestId(): string {
+  const c = globalThis.crypto
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, ch => {
+    const r = (Math.random() * 16) | 0
+    return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16)
+  })
+}
+
+/** Thrown by {@link attachStream} when the backend does not know the request_id:
+ *  the turn already finished and aged out of the replay grace window, or it never
+ *  started at all. Either way there is nothing to tail — reload the session. */
+export class AttachGone extends Error {
+  constructor() { super('attach: no such turn') ; this.name = 'AttachGone' }
+}
+
 export interface StreamOpts {
   model?: string
   systemPrompt?: string
@@ -88,6 +107,11 @@ export interface StreamOpts {
    *  written — prose to be heard, artefacts fenced for the canvas — so it has to
    *  be known before the turn runs, not filtered out of it afterwards. */
   voice?: boolean
+  /** The turn's id, chosen HERE rather than read off the first `start` event.
+   *  Re-attach, cancel and steer are all keyed on it, so minting it client-side
+   *  is what makes the turn recoverable from the instant Send is pressed —
+   *  including in a brand-new chat that has no session_id yet. */
+  requestId?: string
 }
 
 /**
@@ -123,6 +147,7 @@ export async function* streamChat(
       ...(opts.keepMessages != null ? { keep_messages: opts.keepMessages } : {}),
       ...(opts.regenerate ? { regenerate: true } : {}),
       ...(opts.cwd ? { cwd: opts.cwd } : {}),
+      ...(opts.requestId ? { request_id: opts.requestId } : {}),
       // Surface awareness — tell Speda whether this turn came from the desktop
       // app or the web build. (The Android app and Telegram set their own.)
       client_context: { ...desktopClientContext(), ...(opts.voice ? { voice: true } : {}) },
@@ -181,7 +206,14 @@ export async function* attachStream(
     headers: authHeaders(config),
     signal,
   })
-  if (!res.ok || !res.body) return
+  // 404 = the backend has never heard of this turn, or it finished and aged out
+  // of the replay window. That is a DIFFERENT answer from "connected, nothing to
+  // say", and the caller has to be able to tell them apart: one means reload the
+  // session from the DB, the other means keep listening. Anything else non-OK is
+  // a transport problem and is thrown, so the caller can retry rather than treat
+  // a dead proxy as a finished turn.
+  if (res.status === 404) throw new AttachGone()
+  if (!res.ok || !res.body) throw new Error(`attach failed: HTTP ${res.status}`)
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buf = ''

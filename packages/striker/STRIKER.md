@@ -10,6 +10,7 @@ The single-agent public build — Speda only, no roster, no switcher, no House P
 - [Directory structure](#directory-structure)
 - [Dev workflow](#dev-workflow)
 - [Profile system](#profile-system)
+- [Surviving a dropped connection](#surviving-a-dropped-connection)
 - [Known dead code](#known-dead-code)
 - [Configuration](#configuration)
 
@@ -51,6 +52,23 @@ From the repo root: `npm run striker:dev`, `:build`, `:typecheck`, `:web:dev`, `
 ## Screen lock
 
 Same as Heartbreaker, from the same source: `LockScreen` + `LockScreensaver` driven by `lib/useScreenLock.ts`, configured under Settings → Interface. `Ctrl+L` locks, the lock can be raised on launch, and an idle stretch raises it by itself; the passcode lives as a SHA-256 in `localStorage`. The screensaver parades agent cards the same way Heartbreaker's does — Core just has one agent, so it is a roster of one. Speda GO is deliberately excluded — this is a desktop-client feature.
+
+---
+
+## Surviving a dropped connection
+
+A turn runs **detached** on the backend (`app/core/turn_runner.py`) — the HTTP
+response is only a subscriber, and dropping it never cancels the run. So a
+dropped socket is a reconnect, not a failed answer. The client mints the turn's
+`request_id` itself and sends it in the `POST /chat/{agent}` body (so the turn is
+recoverable from the instant Send is pressed, before any `start` event has
+arrived), re-attaches on `GET /chat/attach/{request_id}` when the stream drops,
+and checks `GET /chat/active` before ever telling the owner the backend is
+unreachable. Attach replays the whole event buffer, so a reconnect rewinds the
+bubble and lets the replay rebuild it.
+
+Reconnect count and give-up timeout are owner settings, not constants. Full
+explanation: [HEARTBREAKER.md](../heartbreaker/HEARTBREAKER.md#surviving-a-dropped-connection).
 
 ---
 

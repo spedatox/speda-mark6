@@ -893,6 +893,48 @@ export default function SettingsModal({ config, onClose }: Props) {
                   </p>
                 </div>
 
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
+                    Reconnect dropped answers
+                  </label>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                    A turn keeps running on the backend even when this app stops listening — switching
+                    chats, sleeping the machine, losing the network. This is how many times a dropped
+                    answer silently re-attaches to the turn still producing it instead of failing.
+                  </p>
+                  <select
+                    className="hb-btn"
+                    value={String(settings.streamReconnectAttempts)}
+                    onChange={e => update({ streamReconnectAttempts: Number(e.target.value) })}
+                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
+                  >
+                    {[0, 3, 5, 10, 20].map(n => (
+                      <option key={n} value={n}>{n === 0 ? 'Never' : n}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
+                    Give up after
+                  </label>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                    How long to wait on a backend that has gone completely silent. Only ever reached
+                    when the backend also reports no running turn — an answer still listed as running
+                    is waited on however long it takes.
+                  </p>
+                  <select
+                    className="hb-btn"
+                    value={String(settings.streamDeadSeconds)}
+                    onChange={e => update({ streamDeadSeconds: Number(e.target.value) })}
+                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
+                  >
+                    {[120, 300, 600, 1800, 3600].map(n => (
+                      <option key={n} value={n}>{Math.round(n / 60)} min</option>
+                    ))}
+                  </select>
+                </div>
+
                 <ScreenLockSettings />
               </div>
             )}

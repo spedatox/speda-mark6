@@ -246,3 +246,51 @@ def _set(lst):
     async def _f():
         lst.append(True)
     return _f()
+
+
+async def test_knows_distinguishes_gone_from_finished():
+    """The client has to be able to tell "that turn is over, reload the session"
+    from "it is still going, keep listening" — an empty replay reads as the
+    former in both cases, which is how a live run could look finished to a
+    client that re-attached a moment too early. /chat/attach 404s on the first
+    and streams on the second, and this is the check it asks."""
+    sm = _FakeSM()
+    reg = turn_runner.TurnRegistry(sm)
+
+    assert not reg.knows("never-existed")
+    assert not reg.is_live("never-existed")
+
+    reg.start(context=_ctx("r-known"), engine_factory=_slow_engine, format_error=str)
+    assert reg.knows("r-known")
+    assert reg.is_live("r-known")
+
+    await _collect(reg, "r-known")          # run to completion
+    # Finished but still inside the replay grace window: attachable, not live.
+    assert reg.knows("r-known")
+    assert not reg.is_live("r-known")
+
+
+async def test_a_client_named_turn_is_attachable_before_its_first_event():
+    """The bug this fixes: every recovery path is keyed on request_id, and a
+    server-minted one only reached the client with the first START event. A
+    socket dropped in that window left the client with nothing to re-attach to,
+    so a turn that was running perfectly well server-side was painted as an
+    unreachable backend. With the client naming the turn, the id is valid from
+    the instant the run is launched."""
+    sm = _FakeSM()
+    reg = turn_runner.TurnRegistry(sm)
+
+    async def _silent_then_answer(ctx):
+        await asyncio.sleep(0.05)           # nothing at all is emitted yet
+        yield SSEEvent(SSEEventType.CHUNK, "late", ctx.session_id, ctx.request_id)
+        yield SSEEvent(SSEEventType.DONE, "done", ctx.session_id, ctx.request_id)
+
+    reg.start(context=_ctx("client-chosen"), engine_factory=_silent_then_answer,
+              format_error=str)
+    # No event has been emitted, yet the turn is already addressable by the id
+    # the CLIENT picked — which is the whole point.
+    assert reg.is_live("client-chosen")
+    assert any(r["request_id"] == "client-chosen" for r in reg.active())
+
+    replay = await _collect(reg, "client-chosen")
+    assert any("late" in s for s in replay)

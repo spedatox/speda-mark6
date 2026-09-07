@@ -51,6 +51,7 @@ export type ChatAction =
   | { type: 'ADD_ASSISTANT_MESSAGE'; payload: ChatMessage }
   | { type: 'APPEND_CHUNK'; payload: { id: string; chunk: string } }
   | { type: 'SET_STATUS'; payload: { id: string; status: string } }
+  | { type: 'REWIND_MESSAGE'; payload: { id: string; status: string } }
   | { type: 'TAG_MESSAGE_SESSION'; payload: { id: string; sessionId: number } }
   | { type: 'SET_MESSAGE_TRIGGER'; payload: { id: string; trigger: import('../lib/types').TriggerMeta } }
   | { type: 'ADD_TOOL'; payload: { id: string; tool: import('../lib/types').ToolBadge } }
@@ -147,6 +148,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           m.id === action.payload.id
             // First text clears any pending status line.
             ? { ...m, content: m.content + action.payload.chunk, status: undefined }
+            : m
+        ),
+      }
+
+    case 'REWIND_MESSAGE':
+      // A re-attach replays the turn's whole event buffer from the top, because
+      // the backend has no idea how much of it we already rendered before the
+      // socket died. So empty the bubble and let the replay rebuild it: the
+      // buffer is the authoritative record of the turn, and appending it to
+      // half-rendered text would show the answer's opening twice. Status is set
+      // to the caller's reconnect line; the first replayed chunk clears it.
+      return {
+        ...state,
+        messages: state.messages.map(m =>
+          m.id === action.payload.id
+            ? { ...m, content: '', tools: [], files: [], status: action.payload.status, isError: false }
             : m
         ),
       }

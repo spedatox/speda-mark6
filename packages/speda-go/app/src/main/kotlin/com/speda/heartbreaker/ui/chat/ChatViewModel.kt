@@ -152,6 +152,14 @@ class ChatViewModel(
      */
     var clientContextProvider: (suspend () -> com.speda.heartbreaker.data.ClientContext?)? = null
 
+    /** How hard a dropped stream tries to reconnect, and how long a silent
+     *  backend is waited on. Owner-settable (Settings ▸ Connection); kept in sync
+     *  by the shell the same way [strings] is. Not constants, because "how long
+     *  do I wait for an answer" is a judgement about a network and a model, not
+     *  a fact about this app. */
+    var streamReconnectAttempts: Int = 5
+    var streamDeadMillis: Long = 300_000L
+
     /** The owner's chosen interface language — Turkish by default, kept in sync
      *  with the shell's `LocalStrings.current` on every recomposition. Plain
      *  `var`, not a CompositionLocal read: this class isn't @Composable. */
@@ -164,6 +172,15 @@ class ChatViewModel(
     private var reattachJob: Job? = null
     private var runId: String? = null          // request_id of the visible streaming turn (Stop cancels this)
     private var turnSessionId: Int? = null      // which session the in-flight local send belongs to
+    /** The session the in-flight turn was SENT from, recorded at send time. In a
+     *  new chat that is null until the backend assigns an id, which is exactly
+     *  the case [turnSessionId] alone could not describe — and the gap
+     *  abort-on-switch used to fall straight through. Paired with
+     *  [turnInFlight], which says whether it means anything right now. */
+    private var turnOriginSessionId: Int? = null
+    /** Is there a turn in flight at all? Separate from [turnOriginSessionId],
+     *  which is legitimately null for a turn sent from a brand-new chat. */
+    private var turnInFlight = false
     private val attached = mutableSetOf<String>() // request_ids already attached to
 
     // ── Config / sessions ─────────────────────────────────────────────────────
@@ -172,7 +189,7 @@ class ChatViewModel(
     fun onConfig(config: AppConfig) {
         if (state.value.config == config) return
         sendJob?.cancel(); reattachJob?.cancel()
-        runId = null; turnSessionId = null; attached.clear()
+        runId = null; turnSessionId = null; turnOriginSessionId = null; turnInFlight = false; attached.clear()
         dispatch(ChatAction.SetConfig(config))
         dispatch(ChatAction.NewChat)
         refreshSessions()
@@ -180,8 +197,8 @@ class ChatViewModel(
 
     fun newChat() {
         reattachJob?.cancel()
-        if (sendJob?.isActive == true && turnSessionId != null) {
-            sendJob?.cancel(); runId = null; turnSessionId = null
+        if (sendJob?.isActive == true && turnInFlight) {
+            sendJob?.cancel(); runId = null; turnSessionId = null; turnOriginSessionId = null; turnInFlight = false
         }
         dispatch(ChatAction.NewChat)
     }
@@ -211,8 +228,18 @@ class ChatViewModel(
         reattachJob?.cancel()
         // Abort-on-switch: if a local send is streaming for ANOTHER session, drop
         // the local fetch (the run keeps going server-side; reattach owns it).
-        if (sendJob?.isActive == true && turnSessionId != null && turnSessionId != sessionId) {
-            sendJob?.cancel(); runId = null; turnSessionId = null
+        //
+        // Two ids, because a turn has two identities before the backend answers:
+        // the view it was sent from (null in a brand-new chat) and the session it
+        // turns out to belong to. Matching EITHER means we are still looking at
+        // this turn. The old guard required turnSessionId to be set, so between
+        // Send and the first `start` event it did nothing at all.
+        if (sendJob?.isActive == true &&
+            turnInFlight &&
+            sessionId != turnOriginSessionId &&
+            sessionId != turnSessionId
+        ) {
+            sendJob?.cancel(); runId = null; turnSessionId = null; turnOriginSessionId = null; turnInFlight = false
         }
         viewModelScope.launch {
             val server = api.fetchMessages(cfg, sessionId)
@@ -281,22 +308,35 @@ class ChatViewModel(
             ),
         )
         val sessionAtSend = state.value.activeSessionId
+        // The turn's id, minted HERE rather than read off the first `start`
+        // event. Everything that can rescue a dropped stream is keyed on it, and
+        // waiting for the backend to hand it over left a window (send → first
+        // event) in which a dropped socket was unrecoverable: `reattach` below
+        // returned null because runId was still null, so the drop was painted as
+        // "couldn't reach the backend" over a turn that was running fine on the
+        // server. On a phone that window is most of the failures — leaving the
+        // app kills the socket immediately.
+        val requestId = java.util.UUID.randomUUID().toString()
+        runId = requestId
+        attached.add(requestId)   // the session watcher must not double-paint it
+        turnOriginSessionId = sessionAtSend
+        turnInFlight = true
+        turnSessionId = null
 
         var myJob: Job? = null
         myJob = viewModelScope.launch {
             try {
                 // Resolve ambient context (platform + opt-in location) for THIS turn.
                 val cc = runCatching { clientContextProvider?.invoke() }.getOrNull()
-                val sendOpts = if (cc != null) opts.copy(clientContext = cc) else opts
+                val sendOpts = (if (cc != null) opts.copy(clientContext = cc) else opts)
+                    .copy(requestId = requestId)
                 collectStream(
                     flow = api.streamChat(if (opts.regenerate) "" else text, sessionAtSend, cfg, sendOpts),
                     assistantId = assistantId,
                     fallbackSessionId = sessionAtSend ?: 0,
                     watchdogModel = opts.model ?: "",
-                    reattach = {
-                        val rid = runId
-                        if (rid != null) api.attachStream(cfg, rid) else null
-                    },
+                    // Always available now, from the first millisecond of the turn.
+                    reattach = { api.attachStream(cfg, requestId) },
                 ) { doneSessionId ->
                     refreshSessions()
                     pollTitle(doneSessionId, cfg)
@@ -307,7 +347,9 @@ class ChatViewModel(
             } finally {
                 // Only clear the refs if this turn still owns them (a newer send or
                 // the switch-abort may have taken over — never null a live turn).
-                if (sendJob === myJob) { runId = null; turnSessionId = null }
+                if (sendJob === myJob) {
+                    runId = null; turnSessionId = null; turnOriginSessionId = null; turnInFlight = false
+                }
             }
         }
         sendJob = myJob
@@ -430,7 +472,7 @@ class ChatViewModel(
      *
      * When [reattach] is non-null and a transient network error drops the stream,
      * the consumer automatically reconnects via the factory (up to
-     * [MAX_REATTACH] times) instead of surfacing an error — the turn keeps
+     * [streamReconnectAttempts] times) instead of surfacing an error — the turn keeps
      * running server-side and [attachStream] picks up where it left off.
      *
      * [softLanding] suppresses the error dispatch when all reattach attempts are
@@ -474,7 +516,7 @@ class ChatViewModel(
                 delay(Watchdog.TICK_MS)
                 if (gotContent) continue // tokens flowing — the cursor is the status now
                 val idle = System.currentTimeMillis() - lastActivity
-                if (idle >= Watchdog.DEAD_MS) {
+                if (idle >= streamDeadMillis) {
                     timedOut = true
                     timeoutReason = Watchdog.timeoutReason(gotStart, gotTool, model, Watchdog.elapsedSeconds(startedAt, System.currentTimeMillis()), strings)
                     scope.cancel()
@@ -613,8 +655,16 @@ class ChatViewModel(
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
                 }
                 throw e
+            } catch (e: IgorApi.AttachGone) {
+                // The backend has no record of this turn: it finished while we
+                // were reconnecting and aged out of the replay window. The answer
+                // is in the DB — finalise rather than accusing the backend of
+                // being unreachable, and let the transcript reload show it.
+                flush(); settled = true
+                dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
+                break
             } catch (e: java.net.SocketException) {
-                if (reattach != null && reattachAttempts < MAX_REATTACH) {
+                if (reattach != null && reattachAttempts < streamReconnectAttempts) {
                     reattachAttempts++
                     gotContent = false; gotTool = false
                     lastActivity = System.currentTimeMillis()
@@ -623,7 +673,13 @@ class ChatViewModel(
                     if (newFlow != null) { currentFlow = newFlow; continue }
                 }
                 flush(); settled = true
-                if (softLanding) {
+                val liveId = runId
+                val stillRunning = liveId != null && cfgOrNull()?.let { c ->
+                    runCatching { api.fetchActiveRuns(c) }.getOrDefault(emptyList())
+                        .any { it.requestId == liveId }
+                } == true
+                if (softLanding || stillRunning) {
+                    if (stillRunning && liveId != null) attached.remove(liveId)
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
                 } else {
                     dispatch(ChatAction.ErrorMessage(assistantId, strings.chatMain.networkError))
@@ -632,7 +688,7 @@ class ChatViewModel(
             } catch (e: Exception) {
                 val msg = e.message.orEmpty()
                 val net = NET_ERROR.containsMatchIn(msg)
-                if (net && reattach != null && reattachAttempts < MAX_REATTACH) {
+                if (net && reattach != null && reattachAttempts < streamReconnectAttempts) {
                     reattachAttempts++
                     gotContent = false; gotTool = false
                     lastActivity = System.currentTimeMillis()
@@ -641,7 +697,18 @@ class ChatViewModel(
                     if (newFlow != null) { currentFlow = newFlow; continue }
                 }
                 flush(); settled = true
-                if (net && softLanding) {
+                // Last check before accusing the backend of being unreachable:
+                // ask it. Reconnection is exhausted, but if the turn is STILL
+                // listed as running then the answer is coming and this is a local
+                // transport problem, not a failed turn — leave the tail to the
+                // reattach path rather than painting an error over a live run.
+                val liveId = runId
+                val stillRunning = liveId != null && cfgOrNull()?.let { c ->
+                    runCatching { api.fetchActiveRuns(c) }.getOrDefault(emptyList())
+                        .any { it.requestId == liveId }
+                } == true
+                if (net && (softLanding || stillRunning)) {
+                    if (stillRunning && liveId != null) attached.remove(liveId)
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
                 } else {
                     dispatch(ChatAction.ErrorMessage(assistantId,
@@ -667,13 +734,11 @@ class ChatViewModel(
 
     private fun makeId(): String = UUID.randomUUID().toString().replace("-", "").take(8)
 
-    private companion object {
-        /** Max automatic reattach attempts when the SSE stream drops on a
-         * transient network error (mobile network handoff, brief disconnection).
-         * The turn keeps running server-side; each attempt calls [IgorApi.attachStream]
-         * to pick up where it left off. */
-        const val MAX_REATTACH = 3
+    /** The live config, or null — [collectStream] needs it to ask the backend
+     *  whether a turn is still running before it calls the backend unreachable. */
+    private fun cfgOrNull(): AppConfig? = state.value.config
 
+    private companion object {
         val NET_ERROR = Regex(
             "failed to fetch|networkerror|load failed|err_connection|unable to resolve|connection refused|timeout|timed out|connection abort|software caused|socketexception|econnreset|broken pipe",
             RegexOption.IGNORE_CASE,

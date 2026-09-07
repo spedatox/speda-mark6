@@ -239,7 +239,13 @@ async def _run_chat(
     if profile is None:
         raise HTTPException(status_code=404, detail=f"Unknown agent '{agent_id}'")
 
-    request_id = str(uuid.uuid4())
+    # The client may name the turn (see ChatRequest.request_id) so it can
+    # re-attach from the instant it hits send rather than from the first START
+    # event. Refuse an id that already names a live turn — two runs sharing an
+    # id would fan out into each other's subscribers — and mint one otherwise.
+    request_id = body.request_id or str(uuid.uuid4())
+    if request.app.state.turns.is_live(request_id):
+        request_id = str(uuid.uuid4())
     user_id = 1
 
     # /bg <task> — background-dispatch THIS agent and return immediately,
@@ -504,8 +510,15 @@ async def chat_active(request: Request, agent_id: str | None = None, session_id:
 @router.get("/chat/attach/{request_id}")
 async def chat_attach(request_id: str, request: Request):
     """Re-attach to a detached turn: replays the buffered events, then tails the
-    live stream to completion. An unknown/evicted id yields an empty stream (its
-    answer is already in the DB — the client just reloads the session normally)."""
+    live stream to completion.
+
+    An unknown/evicted id is a 404, NOT an empty 200. The client has to be able
+    to tell "that turn finished (or never existed) — reload the session" from
+    "it is still running, keep listening", and an empty 200 reads as the former
+    in both cases. That ambiguity is what let a live run look finished to a
+    client re-attaching a moment too early."""
+    if not request.app.state.turns.knows(request_id):
+        raise HTTPException(status_code=404, detail="No such turn")
     return StreamingResponse(
         _with_keepalive(request.app.state.turns.subscribe(request_id)),
         media_type="text/event-stream",

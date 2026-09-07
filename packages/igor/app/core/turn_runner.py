@@ -324,6 +324,19 @@ class TurnRegistry:
 
     # ── Introspection + control ───────────────────────────────────────────────
 
+    def knows(self, request_id: str) -> bool:
+        """Is this id one of ours at all — running, or finished but still inside
+        the replay grace window? False means the client should stop listening and
+        reload the session from the DB (see the 404 on /chat/attach)."""
+        return request_id in self._turns
+
+    def is_live(self, request_id: str) -> bool:
+        """Does this id name a turn that is still running? The router asks before
+        honouring a CLIENT-supplied request_id, so a collision (a retried send, a
+        second device reusing an id) can never fan two runs into one buffer."""
+        turn = self._turns.get(request_id)
+        return turn is not None and not turn.done
+
     def active(self, *, agent_id: str | None = None, session_id: int | None = None) -> list[dict]:
         now = time.monotonic()
         out = []

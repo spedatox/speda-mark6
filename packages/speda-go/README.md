@@ -10,6 +10,7 @@ The native Android client. Kotlin, Jetpack Compose. Package id `com.speda.heartb
 - [Build setup](#build-setup)
 - [Networking](#networking)
 - [Key screens](#key-screens)
+- [Surviving a dropped connection](#surviving-a-dropped-connection)
 - [Health sync](#health-sync)
 - [Push notifications](#push-notifications)
 - [Signing and release](#signing-and-release)
@@ -208,6 +209,23 @@ own permission) but to read the amplitude of its own output. It is requested the
 first time voice is switched on, never at launch, and **declining costs nothing
 but the reactivity**: `VoiceLevels` simply never emits, and the orb falls back to
 its idle breath.
+
+---
+
+## Surviving a dropped connection
+
+A turn runs **detached** on the backend (`app/core/turn_runner.py`) — the HTTP
+response is only a subscriber, and dropping it never cancels the run. So a
+dropped socket is a reconnect, not a failed answer. The client mints the turn's
+`request_id` itself and sends it in the `POST /chat/{agent}` body (so the turn is
+recoverable from the instant Send is pressed, before any `start` event has
+arrived), re-attaches on `GET /chat/attach/{request_id}` when the stream drops,
+and checks `GET /chat/active` before ever telling the owner the backend is
+unreachable. Attach replays the whole event buffer, so a reconnect rewinds the
+bubble and lets the replay rebuild it.
+
+Reconnect count and give-up timeout are owner settings, not constants. Full
+explanation: [HEARTBREAKER.md](../heartbreaker/HEARTBREAKER.md#surviving-a-dropped-connection).
 
 ---
 

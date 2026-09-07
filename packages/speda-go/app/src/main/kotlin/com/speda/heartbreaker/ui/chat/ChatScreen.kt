@@ -126,6 +126,11 @@ fun ChatScreen(
             if (granted) graph.settings.setLocationEnabled(true)
         }
     }
+    // Stream resilience is the owner's call, not a constant — see HbSettings.
+    LaunchedEffect(settings.streamReconnectAttempts, settings.streamDeadSeconds) {
+        vm.streamReconnectAttempts = settings.streamReconnectAttempts
+        vm.streamDeadMillis = settings.streamDeadSeconds.coerceAtLeast(1) * 1000L
+    }
     LaunchedEffect(Unit) {
         vm.clientContextProvider = {
             graph.platform.snapshot(

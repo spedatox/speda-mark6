@@ -64,6 +64,22 @@ export interface AppSettings {
    *  and lands differently on every window size. Faster to grab it than to
    *  describe it. */
   voiceOrbDock: { dx: number; dy: number; scale: number }
+  /** How many times a dropped chat stream re-attaches to its still-running turn
+   *  before giving up and showing an error. A detached turn survives on the
+   *  backend, so a dropped socket — switching chats, closing the laptop, a phone
+   *  changing network — should be a reconnect, never a failed answer. 0 disables
+   *  reconnection (the old behaviour: any drop is an error). */
+  streamReconnectAttempts: number
+  /** Delay before the first re-attach, in ms. Each further attempt waits twice
+   *  as long, so a backend that is genuinely down is not hammered. */
+  streamReconnectDelayMs: number
+  /** Seconds of backend silence before the turn's status line says it is slow.
+   *  Cosmetic — it never ends a turn. */
+  streamStallSeconds: number
+  /** Seconds of backend silence before the client gives up on a turn entirely.
+   *  Only reached when the backend also reports no live run: a turn that is
+   *  still listed as running is waited on however long it takes. */
+  streamDeadSeconds: number
 }
 
 const DEFAULT: AppSettings = {
@@ -78,6 +94,10 @@ const DEFAULT: AppSettings = {
   voiceLocale: 'en-US',
   voiceModel: '',
   voiceOrbDock: { dx: 0, dy: 0, scale: 1 },
+  streamReconnectAttempts: 5,
+  streamReconnectDelayMs: 800,
+  streamStallSeconds: 15,
+  streamDeadSeconds: 300,
   lockOnLaunch: false,
   lockPasscodeHash: '',
   lockIdleMinutes: 0,

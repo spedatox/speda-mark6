@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
-import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, steerRun, fetchWelcome, answerAsk } from '../lib/api'
+import type { SSEEvent } from '../lib/types'
+import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, steerRun, fetchWelcome, answerAsk, newRequestId, AttachGone } from '../lib/api'
 import { useProfile } from './Sidebar'
 import MessageList from './MessageList'
 import PartyStream from './PartyStream'
@@ -402,6 +403,11 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   // Turns are per-session but these refs are singletons — this is how the
   // switch-abort effect and the reattach guard tell "ours" from "elsewhere".
   const turnSessionRef = useRef<number | null>(null)
+  // The session the in-flight turn was SENT from, recorded at send time. In a new
+  // chat that is null until the backend assigns an id, which is exactly the case
+  // turnSessionRef alone could not describe — and the gap abort-on-switch used to
+  // fall through. `undefined` means no turn is in flight.
+  const turnOriginRef = useRef<number | null | undefined>(undefined)
   const [, forceUpdate] = useState(0)
 
   // Fold a finished turn's token spend into the header readout. The DONE event
@@ -456,8 +462,23 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       payload: { id: assistantId, role: 'assistant', content: '', tools: [], isStreaming: true, isError: false, status: t.chatMain.statusConnecting },
     })
 
+    // The turn's id, minted HERE rather than read off the first `start` event.
+    // Everything that can rescue a dropped stream — /chat/attach, the Stop
+    // button, the reattach poll — is keyed on it, and waiting for the backend to
+    // hand it over left a window (send → first event) in which a dropped socket
+    // was unrecoverable and got painted as "couldn't reach the backend" over a
+    // turn that was running perfectly well server-side. Claim it, and the turn is
+    // recoverable from the instant the owner hits Send.
+    let requestId = newRequestId()
     const ctrl = new AbortController()
     abortRef.current = ctrl
+    runIdRef.current = requestId
+    attachedRef.current.add(requestId)   // the session watcher must not double-paint it
+    // Which view this turn was sent FROM. In a new chat that is null until the
+    // backend assigns a session, so abort-on-switch compares against both this
+    // and the id the `start` event brings — see the effect below.
+    turnOriginRef.current = state.activeSessionId
+    turnSessionRef.current = null
     forceUpdate(n => n + 1)
 
     // ── Voice: open a session for THIS turn ──────────────────────────────────
@@ -511,8 +532,8 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     // Real status, not looped filler — and a hard stop if the backend goes
     // quiet. We track the last activity instant; the ticker escalates the
     // status line and finally aborts so the UI never spins forever.
-    const STALL_MS = 15000    // no events this long → tell the user it's slow
-    const DEAD_MS = 300000    // no events this long → give up, surface a precise reason
+    const STALL_MS = Math.max(1, settings.streamStallSeconds) * 1000
+    const DEAD_MS = Math.max(1, settings.streamDeadSeconds) * 1000
     const startedAt = Date.now()
     let lastActivity = startedAt
     let gotStart = false     // backend acknowledged the request (START event)
@@ -547,31 +568,89 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       }
     }, 1000)
 
-    try {
-      for await (const event of streamChat(
+    // The turn's inputs, captured once: a re-attach must not re-read anything
+    // that could have changed while the socket was down.
+    const sendSessionId = state.activeSessionId
+    const streamOpts = {
+      model: settings.model,
+      systemPrompt: settings.systemPrompt || undefined,
+      images: opts.images,
+      documents: opts.documents,
+      keepMessages: opts.keepMessages,
+      regenerate: opts.regenerate,
+      // Forge workspace for Optimus jobs; ignored by in-process agents.
+      cwd: config.agentId === 'optimus' ? (settings.forgeCwd || undefined) : undefined,
+      // Voice mode is a property of the TURN, not the session: the backend
+      // asks for a spoken answer with its visuals fenced off, instead of a
+      // document that then gets read aloud at the owner.
+      voice: voiceOpenRef.current,
+      requestId,
+    }
+
+    // ── Resilient source ────────────────────────────────────────────────────
+    // A detached turn OUTLIVES its socket (app/core/turn_runner.py) — that is the
+    // whole point of the design. So a dropped connection is a reconnect, not a
+    // failed answer: re-attach to the same request_id and carry on. The consumer
+    // loop below never knows it happened.
+    //
+    // /chat/attach replays the turn's full event buffer, so each re-attach
+    // rewinds the bubble and lets the replay rebuild it — see REWIND_MESSAGE.
+    const maxRetries = Math.max(0, settings.streamReconnectAttempts)
+    const baseDelay = Math.max(0, settings.streamReconnectDelayMs)
+    let reconnects = 0
+
+    // Was this a transport failure (as opposed to the backend saying "no")?
+    // Those are the ones worth re-attaching over.
+    const isTransportFailure = (err: unknown): boolean =>
+      err instanceof TypeError ||
+      (err instanceof Error && /failed to fetch|networkerror|load failed|err_connection|network request failed|attach failed: HTTP/i.test(err.message))
+
+    async function* resilientTurn(): AsyncGenerator<SSEEvent> {
+      let source: AsyncGenerator<SSEEvent> = streamChat(
         opts.regenerate ? '' : text,
-        state.activeSessionId,
+        sendSessionId,
         config,
         ctrl.signal,
-        {
-          model: settings.model,
-          systemPrompt: settings.systemPrompt || undefined,
-          images: opts.images,
-          documents: opts.documents,
-          keepMessages: opts.keepMessages,
-          regenerate: opts.regenerate,
-          // Forge workspace for Optimus jobs; ignored by in-process agents.
-          cwd: config.agentId === 'optimus' ? (settings.forgeCwd || undefined) : undefined,
-          // Voice mode is a property of the TURN, not the session: the backend
-          // asks for a spoken answer with its visuals fenced off, instead of a
-          // document that then gets read aloud at the owner.
-          voice: voiceOpenRef.current,
-        },
-      )) {
+        streamOpts,
+      )
+      for (;;) {
+        try {
+          for await (const event of source) yield event
+          return
+        } catch (err) {
+          // An abort (Stop, or switching away) is deliberate — never retried.
+          // A watchdog timeout is a decision this code already made. Anything
+          // the backend answered in words is a real error, not a broken pipe.
+          if (ctrl.signal.aborted || timedOut) throw err
+          if (!isTransportFailure(err) || reconnects >= maxRetries) throw err
+          reconnects++
+          dispatch({ type: 'REWIND_MESSAGE', payload: { id: assistantId, status: t.chatMain.statusReconnecting } })
+          voiceRef.current?.stop()   // the replay will re-feed what was spoken
+          charsSoFar = 0
+          gotContent = false
+          gotTool = false
+          lastActivity = Date.now()
+          await new Promise(r => setTimeout(r, baseDelay * 2 ** (reconnects - 1)))
+          if (ctrl.signal.aborted) throw err
+          source = attachStream(config, requestId, ctrl.signal)
+        }
+      }
+    }
+
+    try {
+      for await (const event of resilientTurn()) {
         lastActivity = Date.now()
         if (event.type === 'start') {
           gotStart = true
-          runIdRef.current = event.request_id ?? null
+          // The backend USUALLY honours the id we minted, but it mints its own
+          // if ours collided with a live turn — so the start event is the
+          // authority on what this turn is called, and re-attach has to chase
+          // that id rather than the one we proposed.
+          if (event.request_id && event.request_id !== requestId) {
+            attachedRef.current.delete(requestId)
+            requestId = event.request_id
+          }
+          runIdRef.current = event.request_id ?? requestId
           // Claim it before the session watcher can see it on /chat/active: this
           // turn is already streaming into a bubble, and an attach would paint a
           // second one for the same answer.
@@ -699,17 +778,34 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       } else if (err instanceof Error && err.name === 'AbortError') {
         // User-initiated stop — keep whatever streamed so far.
         dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: state.activeSessionId ?? 0 } })
+      } else if (err instanceof AttachGone) {
+        // The backend has no record of this turn any more: it finished while we
+        // were reconnecting and aged out of the replay window. The answer is in
+        // the DB — finalise the bubble rather than accusing the backend of being
+        // unreachable, and let the transcript reload show the real text.
+        dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: turnSessionRef.current ?? sendSessionId ?? 0 } })
       } else if (err instanceof Error) {
         // Network failures throw a bare TypeError ("Failed to fetch") — name it
         // as unreachable-backend rather than dumping the opaque string.
-        const net = /failed to fetch|networkerror|load failed|err_connection/i.test(err.message)
-        dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId,
-          error: net
-            ? t.chatMain.networkError
-            : err.message,
-          // No START event means the turn never landed: whatever the reason, the
-          // prompt was not stored and Try again has to send it again.
-          unsent: !gotStart } })
+        const net = /failed to fetch|networkerror|load failed|err_connection|attach failed: HTTP/i.test(err.message)
+        // Last check before accusing the backend of being unreachable: ask it.
+        // Reconnection is exhausted, but if the turn is STILL listed as running
+        // then the answer is coming and this is a local transport problem, not a
+        // failed turn — leave the bubble open and hand it to the reattach poll,
+        // which owns the session's tail from here.
+        if (net && (await fetchActiveRuns(config).catch(() => [])).some(r => r.request_id === requestId)) {
+          attachedRef.current.delete(requestId)
+          dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: t.chatMain.statusReconnecting } })
+          dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: turnSessionRef.current ?? sendSessionId ?? 0 } })
+        } else {
+          dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId,
+            error: net
+              ? t.chatMain.networkError
+              : err.message,
+            // No START event means the turn never landed: whatever the reason, the
+            // prompt was not stored and Try again has to send it again.
+            unsent: !gotStart } })
+        }
       }
     } finally {
       finalizeFlush()  // safety: never leave buffered text undelivered
@@ -721,10 +817,13 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
         abortRef.current = null
         runIdRef.current = null
         turnSessionRef.current = null
+        turnOriginRef.current = undefined
       }
       forceUpdate(n => n + 1)
     }
-  }, [state.activeSessionId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd, dispatch, t])
+  }, [state.activeSessionId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd,
+      settings.streamReconnectAttempts, settings.streamReconnectDelayMs, settings.streamStallSeconds, settings.streamDeadSeconds,
+      dispatch, t])
 
   // Mirror the latest `send` into a ref so the stable row handlers below can call
   // it without listing it as a dependency (which would make them change identity
@@ -773,15 +872,27 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   // reattach effect so it runs first in the same commit.
   useEffect(() => {
     const sid = state.activeSessionId
+    // Two ids, because a turn has two identities before the backend answers: the
+    // view it was sent from (null in a brand-new chat) and the session it turns
+    // out to belong to. The visible session matching EITHER means we are still
+    // looking at this turn — including the moment a new chat is assigned its id,
+    // which is a change of activeSessionId but not a switch away.
+    //
+    // The old guard required turnSessionRef to be set, so between Send and the
+    // first `start` event it did nothing at all: switching chats in that window
+    // left the fetch running, and its eventual death was painted as a backend
+    // failure. That window is where this bug lived.
     if (
       abortRef.current &&
-      turnSessionRef.current !== null &&
-      turnSessionRef.current !== sid
+      turnOriginRef.current !== undefined &&
+      sid !== turnOriginRef.current &&
+      sid !== turnSessionRef.current
     ) {
       abortRef.current.abort()
       abortRef.current = null
       runIdRef.current = null
       turnSessionRef.current = null
+      turnOriginRef.current = undefined
     }
   }, [state.activeSessionId, config.agentId])
 

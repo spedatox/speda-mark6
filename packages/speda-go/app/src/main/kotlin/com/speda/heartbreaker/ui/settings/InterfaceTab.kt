@@ -109,6 +109,34 @@ fun InterfaceTab(config: AppConfig, graph: AppGraph) {
             Hint(t.settingsInterface.locationFooter)
         }
 
+        SectionHeader(t.settingsInterface.streamReconnect)
+        Panel {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf(0, 3, 5, 10, 20).forEach { n ->
+                    ThemeChip(
+                        if (n == 0) t.settingsInterface.reconnectNever else n.toString(),
+                        active = settings.streamReconnectAttempts == n,
+                    ) { scope.launch { graph.settings.setStreamReconnectAttempts(n) } }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Hint(t.settingsInterface.streamReconnectHint)
+        }
+
+        SectionHeader(t.settingsInterface.streamPatience)
+        Panel {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf(120, 300, 600, 1800, 3600).forEach { sec ->
+                    ThemeChip(
+                        t.settingsInterface.minutesLabel(sec / 60),
+                        active = settings.streamDeadSeconds == sec,
+                    ) { scope.launch { graph.settings.setStreamDeadSeconds(sec) } }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Hint(t.settingsInterface.streamPatienceHint)
+        }
+
         SectionHeader(t.settingsInterface.display)
         Panel {
             Hint(t.settingsInterface.displayHint)

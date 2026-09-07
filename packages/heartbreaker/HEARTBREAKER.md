@@ -10,6 +10,7 @@ The full-roster desktop client. Electron, React, TypeScript. Every agent persona
 - [Dev workflow](#dev-workflow)
 - [Profile and branding system](#profile-and-branding-system)
 - [Key components](#key-components)
+- [Surviving a dropped connection](#surviving-a-dropped-connection)
 - [Steering a running response](#steering-a-running-response)
 - [Configuration](#configuration)
 
@@ -195,6 +196,47 @@ After `lockScreensaverSeconds` idle on the lock screen, `LockScreensaver` takes 
 One trap worth knowing: the mark's entrance fills `backwards`, never `both`. An animation left holding a transform + filter keeps the SVG on a composited layer rasterised at the entrance scale, and the mark stays visibly soft for the rest of the beat.
 
 All five values are settings, and the state machine (what raises the lock, what lowers it) lives in `lib/useScreenLock.ts` so both desktop clients mount it identically.
+
+---
+
+## Surviving a dropped connection
+
+A turn runs **detached** on the backend (`app/core/turn_runner.py`): it has its
+own asyncio task, its own DB session, and its own replay buffer, and it persists
+its answer whether or not anyone is listening. The HTTP response is only a
+*subscriber*. Dropping it — switching chats, closing the laptop, killing the app,
+a phone changing network — never cancels the run. `POST /chat/cancel/{id}` is the
+only thing that does.
+
+So a dropped socket is a **reconnect**, not a failed answer. The client:
+
+1. **Names the turn itself.** `request_id` is a client-minted UUID sent in the
+   `POST /chat/{agent}` body, not something read off the first `start` event.
+   Every recovery path is keyed on that id, so minting it locally makes the turn
+   recoverable from the instant Send is pressed — including in a brand-new chat
+   that has no `session_id` yet. The backend validates it and mints its own if it
+   is malformed or already names a live turn.
+2. **Re-attaches instead of erroring.** A transport failure mid-stream re-opens
+   the turn on `GET /chat/attach/{request_id}` and carries on, up to
+   `streamReconnectAttempts` times with exponential backoff. Attach replays the
+   turn's whole event buffer, so each reconnect rewinds the bubble
+   (`REWIND_MESSAGE`) and lets the replay rebuild it rather than appending a
+   second copy of the answer's opening.
+3. **Asks before blaming the backend.** When reconnection is exhausted, the
+   client checks `GET /chat/active`. If the turn is still listed as running, the
+   answer is still coming — the bubble is left to the re-attach poll instead of
+   being painted with "couldn't reach the backend". `/chat/attach` 404s on an id
+   the backend has never heard of (or that finished and aged out of the grace
+   window), which is what lets the client tell "it's over, reload the session"
+   apart from "it's still going, keep listening".
+
+Abort-on-switch compares the visible session against **two** ids — the session
+the turn was sent from (null in a new chat) and the session the `start` event
+says it belongs to. Matching either means the turn is still on screen; that is
+what makes the id assignment of a brand-new chat not read as a switch away.
+
+How hard it tries is the owner's, not a constant: Settings ▸ Interface carries
+the reconnect count and the give-up timeout.
 
 ---
 
