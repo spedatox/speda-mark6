@@ -4,7 +4,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import VoiceOrb, { type OrbState } from './VoiceOrb'
 import VoiceCanvas from './VoiceCanvas'
-import { splitPanels, hasArtifacts, captionOf, type VoicePanel } from '../lib/voicePanels'
+import {
+  splitPanels, hasArtifacts, captionOf, fenceKindOf, STREAMS_LIVE, type VoicePanel,
+} from '../lib/voicePanels'
 import VoiceActivity from './VoiceActivity'
 import type { ToolBadge } from '../lib/types'
 import type { CanvasSettings } from '../lib/voice'
@@ -77,7 +79,23 @@ function renderable(text: string, streaming: boolean): string {
     count++
     idx = i
   }
-  return count % 2 === 1 ? text.slice(0, idx) : text
+  if (count % 2 === 0) return text          // nothing is half-written
+
+  // An open fence. Whether to hold it back depends on WHAT is being written.
+  //
+  // Holding everything is what made the board pop into existence rather than
+  // assemble: a dossier card the model spends eight seconds writing was eight
+  // seconds of nothing, then a card. The presentation parsers were built
+  // forgiving exactly so that a window can be shown while it is still being
+  // typed and simply grow — which is the whole point of a board that is
+  // supposed to keep pace with a voice.
+  //
+  // The rest still waits, and has to: a chart spec or an HTML widget cut in
+  // half is not a partial render, it is a syntax error, and that is what a
+  // mounted iframe or a chart parser would be handed on every single chunk.
+  const nl = text.indexOf('\n', idx)
+  const info = text.slice(idx + 3, nl === -1 ? undefined : nl)
+  return STREAMS_LIVE.has(fenceKindOf(info)) ? text : text.slice(0, idx)
 }
 
 interface Props {
@@ -98,6 +116,16 @@ interface Props {
   tools: ToolBadge[]
   /** What the owner last said, kept small above the orb for context. */
   prompt: string
+  /* ── Answer navigation ──────────────────────────────────────────────────
+   * Voice mode shows ONE answer, which is right — it is a presentation, not a
+   * scrollback. But it meant every previous answer in the conversation was
+   * unreachable without leaving the mode, so a board you wanted to look at
+   * again was gone the moment the next question was asked. These step through
+   * the session's answers; `answerIndex` is 0-based and `answerCount` is how
+   * many there are. */
+  answerIndex: number
+  answerCount: number
+  onAnswer: (index: number) => void
   /** The master language, not a speech locale — see lib/language.ts. */
   language: Locale
   onLanguage: (next: Locale) => void
@@ -120,7 +148,8 @@ interface Props {
 }
 
 export default function VoiceMode({
-  state, amplitude, spectrum, inputLevel, reply, streaming, tools, prompt, language, onLanguage,
+  state, amplitude, spectrum, inputLevel, reply, streaming, tools, prompt,
+  answerIndex, answerCount, onAnswer, language, onLanguage,
   onClose, onStopSpeaking, micState, configured, agentName, canvas, dock, onDock,
 }: Props) {
   const t = useT()
@@ -132,6 +161,9 @@ export default function VoiceMode({
     () => (canvas.enabled ? splitPanels(visible).slice(0, canvas.maxPanels) : []),
     [visible, canvas.enabled, canvas.maxPanels],
   )
+  /** The narration alone — what is being SAID, with every staged window cut out.
+   *  The same cut the speech path makes, so the window says what is spoken. */
+  const caption = useMemo(() => captionOf(visible), [visible])
 
   /* ── The activity window ─────────────────────────────────────────────────
    * Voice mode used to show a glowing "thinking" line and nothing else, so a
@@ -160,17 +192,32 @@ export default function VoiceMode({
   }, [streaming, hasText, canvas.activityAfterMs])
 
   const showActivity = canvas.enabled && (tools.length > 0 || (streaming && slow))
+
+  /* The board's own two windows, ahead of whatever the agent staged.
+   *
+   * ACTIVITY is what the machine is doing; NARRATION is what it is saying. They
+   * lead because the packer lays out in order and first is top-left, which is
+   * where the eye goes: while a turn is working those two ARE the board, and the
+   * evidence fills in around them.
+   *
+   * Narration used to be a three-line caption along the bottom. That only works
+   * if the words track the voice, and they do not — the text arrives at
+   * generation speed while the speech trails behind it, so the strip was both
+   * cramped and out of step. In a window it can simply be read. */
   const panels = useMemo(() => {
-    if (!showActivity) return staged
-    const activityPanel: VoicePanel = {
-      id: 'activity', kind: 'activity', title: 'ACTIVITY_LIVE', source: '',
+    const own: VoicePanel[] = []
+    if (showActivity) {
+      own.push({ id: 'activity', kind: 'activity', title: 'ACTIVITY_LIVE', source: '' })
     }
-    return [activityPanel, ...staged]
-  }, [showActivity, staged])
+    // Only when there IS a board. With nothing staged the orb keeps the screen
+    // and the words run underneath it, which is the right shape for an answer
+    // that is one sentence long.
+    if (caption && (staged.length > 0 || showActivity)) {
+      own.push({ id: 'narration', kind: 'narration', title: 'NARRATION_', source: caption })
+    }
+    return own.length ? [...own, ...staged] : staged
+  }, [showActivity, staged, caption])
   const hasCanvas = useMemo(() => hasArtifacts(panels), [panels])
-  /** The narration alone — what is being SAID, with every staged window cut out.
-   *  This is the caption's text, and it is the same cut the speech path makes. */
-  const caption = useMemo(() => captionOf(visible), [visible])
   // Bumped by REFLOW — hands every window the owner dragged back to the layout.
   const [reflow, setReflow] = useState(0)
 
@@ -370,7 +417,44 @@ export default function VoiceMode({
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        {/* Which answer of the conversation is on the board. Hidden for the
+            first one, because a counter reading 1/1 is furniture. Stepping off
+            the newest is what unpins it; stepping back onto it re-pins, so a
+            live turn keeps arriving on screen unless the owner has deliberately
+            gone looking at an older one. */}
+        {answerCount > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginRight: 6 }}>
+            <button
+              className="hb-btn"
+              onClick={() => onAnswer(answerIndex - 1)}
+              disabled={answerIndex <= 0}
+              title={t.voiceMode.previousAnswer}
+              style={{ ...chip, padding: '0 0.45rem', opacity: answerIndex <= 0 ? 0.35 : 1 }}
+            >
+              ‹
+            </button>
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+              letterSpacing: '0.06em', minWidth: '2.6rem', textAlign: 'center',
+              color: answerIndex === answerCount - 1 ? 'var(--hb-cyan)' : 'var(--hb-amber)',
+            }}>
+              {answerIndex + 1}/{answerCount}
+            </span>
+            <button
+              className="hb-btn"
+              onClick={() => onAnswer(answerIndex + 1)}
+              disabled={answerIndex >= answerCount - 1}
+              title={t.voiceMode.nextAnswer}
+              style={{
+                ...chip, padding: '0 0.45rem',
+                opacity: answerIndex >= answerCount - 1 ? 0.35 : 1,
+              }}
+            >
+              ›
+            </button>
+          </div>
+        )}
         {/* REFLOW — hands the board back to Speda. Only meaningful once there
             is a board, and only worth offering once the owner has moved
             something on it. */}
@@ -494,31 +578,29 @@ export default function VoiceMode({
           ? 'linear-gradient(to top, rgba(4,8,10,0.92) 42%, rgba(4,8,10,0.72) 68%, rgba(4,8,10,0))'
           : 'none',
       }}>
-        {/* ── The caption ────────────────────────────────────────────────
-            What is being said, as it is said. Plain text on purpose: this is
-            speech, and speech has no headings or bullets — anything that WAS
-            markdown was staged as a window instead, and rendering the leftovers
-            through the markdown pipeline is what used to make this a chat log.
+        {/* ── The spoken words, with no board ─────────────────────────────
+            The one-sentence case: nothing was staged, the orb keeps the screen,
+            and the words run underneath it. Plain text on purpose — this is
+            speech, and speech has no headings or bullets.
 
-            It is clamped to a few lines rather than allowed to grow, and rides
-            its own tail, so it behaves like a subtitle track and not like a
-            scrollback the owner is expected to read. Height comes from the line
-            count so the block is exactly as tall as the lines it shows. */}
-        {hasCaption && (
+            The moment there IS a board this stands down, because the narration
+            becomes a window of its own up there. It was a caption in both
+            layouts once, on the theory that words tracking a voice are glanced
+            at rather than read. They do not track it: the text arrives at
+            generation speed and the speech trails behind, so three cramped
+            lines beside a board were unreadable and out of step at the same
+            time. Here, where the whole screen is free and the answer is short,
+            a few centred lines are exactly right. */}
+        {hasCaption && !hasCanvas && (
           <div
             ref={tailRef}
             style={{
-              maxWidth: hasCanvas ? 560 : 640,
-              maxHeight: `${canvas.captionLines * 1.55}em`,
+              maxWidth: 640, maxHeight: '11rem',
               overflowY: 'auto', overflowWrap: 'anywhere', minWidth: 0,
               pointerEvents: 'auto',
-              fontSize: hasCanvas ? '0.86rem' : '1.02rem',
-              lineHeight: 1.55,
+              fontSize: '1.02rem', lineHeight: 1.55,
               color: 'var(--hb-text)',
-              whiteSpace: 'pre-wrap',
-              textAlign: hasCanvas ? 'left' : 'center',
-              // No scrollbar: it is a caption, and a scrollbar on one invites
-              // reading back through it, which is what the board is for.
+              whiteSpace: 'pre-wrap', textAlign: 'center',
               scrollbarWidth: 'none',
             }}
           >

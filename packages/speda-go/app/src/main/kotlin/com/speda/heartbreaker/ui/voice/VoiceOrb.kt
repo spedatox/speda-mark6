@@ -151,16 +151,25 @@ fun VoiceOrb(
     }
 }
 
-/** The orb sized for a corner rather than a screen — the docked form, used when
- *  the board has taken the surface and the orb has stepped aside for it. */
+/**
+ * How wide the orb is, as a fraction of the surface — full while it owns the
+ * screen, small once the board has taken it.
+ *
+ * A FRACTION, and not a scale. `Modifier.scale` is a draw-time transform: it
+ * shrinks the pixels and leaves the layout box the size it was. So a docked orb
+ * scaled to a third was still occupying eighty-odd percent of the width, drawn
+ * small in the middle of that box — which put it nowhere near the corner it was
+ * supposed to be in, and left it sitting on top of the board underneath. Sizing
+ * the box itself is what makes `align(BottomEnd)` mean the bottom-right corner.
+ */
 @Composable
-fun orbScale(docked: Boolean): Float {
-    val scale by animateFloatAsState(
-        targetValue = if (docked) 0.34f else 1f,
+fun orbWidthFraction(docked: Boolean): Float {
+    val fraction by animateFloatAsState(
+        targetValue = if (docked) 0.30f else 0.82f,
         // Long enough to read as the orb MOVING aside rather than cutting to a
         // smaller one. The desktop uses 0.7s for the same reason.
         animationSpec = tween(700),
         label = "orbDock",
     )
-    return scale
+    return fraction
 }

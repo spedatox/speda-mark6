@@ -144,6 +144,35 @@ private val PROSE_RULES = listOf(
 private fun spokenProse(line: String): String =
     PROSE_RULES.fold(line) { acc, (re, replacement) -> re.replace(acc, replacement) }
 
+/**
+ * One fragment of prose, ready to speak.
+ *
+ * [atLineStart] applies the line-level rules — a heading's `##`, a bullet's `-`.
+ * Those belong to a line's OPENING, and re-running them over a mid-sentence
+ * remainder would eat a hyphen out of the middle of a sentence.
+ */
+fun spokenFragment(text: String, atLineStart: Boolean): String =
+    if (atLineStart) spokenProse(inlineMath(text)) else inlineMath(text)
+
+/** A single backslash, named because a raw string cannot end in one. */
+private const val BACKSLASH = "\\"
+
+/**
+ * Could this partial line still turn into something that must NOT be spoken?
+ *
+ * A fence marker, display math and a table row are all decidable from a line's
+ * first character or two — which is what lets prose start speaking before its
+ * newline arrives. While there are fewer characters than that, it is genuinely
+ * undecided and has to wait.
+ */
+fun undecidedLineStart(partial: String): Boolean {
+    val t = partial.trimStart()
+    if (t.isEmpty()) return true
+    if (Regex("^`{1,3}$").matches(t) || t == "$" || t == BACKSLASH) return true
+    return t.startsWith("```") || t.startsWith("$$") ||
+        t.startsWith(BACKSLASH + "[") || t.startsWith("|")
+}
+
 /** A row of a pipe table. The table is an artefact — it gets its own window on
  *  the board — and a speech engine handed one says "pipe root pipe value pipe". */
 private fun isTableRow(t: String): Boolean =
@@ -163,9 +192,26 @@ class SpeakableFilter {
     private var inFence = false
     private var inMath = false
 
-    fun speakable(text: String): String {
+    /** Whether the stream is currently inside a fence or a display-math block —
+     *  the states in which nothing at all may be released early. */
+    val insideArtefact: Boolean get() = inFence || inMath
+
+    /**
+     * @param skipHead how much of the FIRST line has already been spoken, by a
+     *   caller that released it a sentence at a time while it was still being
+     *   written. That line is known to be prose — it could not have been
+     *   released otherwise — so it skips the artefact tests and the line-level
+     *   rules, both of which belong to a line's opening.
+     */
+    fun speakable(text: String, skipHead: Int = 0): String {
         val out = StringBuilder()
-        for (line in text.split('\n')) {
+        var lines = text.split('\n')
+        if (skipHead > 0 && lines.isNotEmpty()) {
+            val rest = lines[0].drop(skipHead)
+            if (rest.isNotEmpty()) out.append(spokenFragment(rest, atLineStart = false)).append('\n')
+            lines = lines.drop(1)
+        }
+        for (line in lines) {
             val t = line.trim()
             if (inFence) {
                 if (t.startsWith("```")) inFence = false

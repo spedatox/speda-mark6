@@ -153,6 +153,11 @@ fun ChatScreen(
     // The board's settings live on the backend so the agent's brief and the
     // surface that renders it cannot disagree about the window ceiling.
     var canvas by remember { mutableStateOf(CanvasSettings()) }
+    /** Which answer voice mode is showing; null follows the newest. A different
+     *  session is a different set of answers, so a stale index there would land
+     *  on someone else's turn. */
+    var voicePin by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(state.activeSessionId, agentId) { voicePin = null }
 
     // The microphone permission is for reading the amplitude of our OWN
     // playback (Android gates Visualizer behind it) — nothing here records.
@@ -250,18 +255,35 @@ fun ChatScreen(
                     // listening, not reading a scrollback — so what shows is the
                     // current answer's evidence and the words as they are said.
                     if (voiceOn) {
-                        val live = state.messages.lastOrNull {
+                        val answers = state.messages.filter {
                             it.role == com.speda.heartbreaker.domain.Role.Assistant
                         }
+                        // null pins to the NEWEST, and that is the default rather
+                        // than a stored index: a live turn has to keep arriving on
+                        // screen, and an index would have to be chased forward
+                        // every time a message landed. Only a deliberate step
+                        // backwards sets a number.
+                        val idx = voicePin ?: (answers.size - 1).coerceAtLeast(0)
+                        val live = answers.getOrNull(idx)
                         VoiceModeScreen(
                             reply = live?.content.orEmpty(),
                             tools = live?.tools ?: emptyList(),
-                            streaming = state.isStreaming,
+                            // Only the newest answer can still be arriving; an
+                            // older one is finished by definition, and showing it
+                            // as live would spin its activity card for ever.
+                            streaming = state.isStreaming && idx == answers.size - 1,
                             state = voiceState,
                             level = voiceLevel,
                             captionLines = canvas.captionLines,
                             maxPanels = canvas.maxPanels,
                             activityAfterMs = canvas.activityAfterMs,
+                            answerIndex = idx,
+                            answerCount = answers.size,
+                            onAnswer = { i ->
+                                // Landing on the newest re-pins, so the board
+                                // resumes following the conversation.
+                                voicePin = if (i >= answers.size - 1) null else i.coerceAtLeast(0)
+                            },
                         )
                     } else if (state.messages.isEmpty()) {
                         WelcomeView(

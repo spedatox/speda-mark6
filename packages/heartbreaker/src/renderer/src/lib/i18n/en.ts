@@ -302,6 +302,8 @@ const en = {
     composing: 'Composing the answer…',
   },
   voiceMode: {
+    previousAnswer: 'Previous answer in this conversation',
+    nextAnswer: 'Next answer',
     speakRepliesIn: (label: string) => `Everything in ${label} — what is written, what is spoken, what is heard`,
     reflowTitle: 'Re-pack the windows and put the orb back on its corner',
     reflow: 'REFLOW',

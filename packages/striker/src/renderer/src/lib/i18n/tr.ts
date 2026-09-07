@@ -283,6 +283,8 @@ const tr: Dict = {
     composing: 'Yanıt hazırlanıyor…',
   },
   voiceMode: {
+    previousAnswer: 'Bu sohbetteki önceki yanıt',
+    nextAnswer: 'Sonraki yanıt',
     speakRepliesIn: (label: string) => `Her şey ${label} — yazılan, konuşulan, duyulan`,
     reflowTitle: 'Pencereleri yeniden düzenle ve küreyi köşesine geri koy',
     reflow: 'YENİDEN DÜZENLE',

@@ -174,6 +174,17 @@ The step labels come from `ToolStatus.statusLabel`, the same localized
 present-progressive map the transcript uses, and `stepState`/`resultSummary` are
 the existing extension functions rather than new ones.
 
+### Narration, and stepping back through answers
+
+The narration is a `NARRATION_` card at the head of the column, not a strip along
+the bottom — a caption only works if the words track the voice, and they trail
+it. The bottom strip survives only when there is no board at all.
+
+A stepper in the top-right corner walks the session's answers. The position is
+held as *null = follow the newest* rather than as an index, so a live turn keeps
+arriving; only a deliberate step back pins it. An older answer is never rendered
+as streaming, or its activity card would spin for ever.
+
 ### The orb, and what it honestly is not
 
 The desktop orb is a Three.js scene — an icosahedron under custom GLSL wrapped in
@@ -182,6 +193,12 @@ to be: it is a 2D reading of the same idea (a lit core, a breathing halo, a ring
 that deforms with the voice). It keeps the two behaviours that mean something —
 it reacts while speaking, and it shrinks aside when there is something to present
 — and gives up the ones that are only spectacle.
+
+The orb is sized by a **width fraction**, not `Modifier.scale`. Scale is a
+draw-time transform: it shrinks the pixels and leaves the layout box alone, so a
+docked orb scaled to a third still occupied most of the width and was drawn small
+in the middle of that box — nowhere near the corner, and sitting on top of the
+board. Sizing the box is what makes `align(BottomEnd)` mean the corner.
 
 **It needs a microphone permission to react, for playback.** Android exposes no
 "what am I playing" meter; the only route to the samples is `Visualizer`, which

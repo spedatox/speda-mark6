@@ -8,7 +8,9 @@ import android.media.MediaDataSource
 import android.media.MediaPlayer
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.SpeakableFilter
+import com.speda.heartbreaker.domain.spokenFragment
 import com.speda.heartbreaker.domain.splitSentences
+import com.speda.heartbreaker.domain.undecidedLineStart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -32,10 +34,13 @@ import kotlin.coroutines.resume
  * Three constraints, and every design choice here falls out of one of them.
  *
  * DELTAS ARE NOT LINES AND LINES ARE NOT SENTENCES. Text arrives a few tokens
- * at a time. Whether a line is inside a ``` fence cannot be judged until the
- * line is complete, so deltas are held to the last newline before being filtered
- * ([SpeakableFilter]); and a sentence is not spoken until it is terminated,
- * because half an utterance is worse than a whole one a moment later.
+ * at a time, and a ``` marker routinely arrives split across two of them — so
+ * anything that might still BECOME an artefact is held ([SpeakableFilter]). But
+ * only that: prose is released a sentence at a time, without waiting for the
+ * line's newline, because a paragraph IS one line and waiting for it meant the
+ * first word went unspoken until the last had been generated. A sentence is
+ * still never spoken until it is terminated — half an utterance is worse than a
+ * whole one a moment later.
  *
  * SYNTHESIS IS SLOWER THAN PLAYBACK AND MUST NOT BE SERIAL WITH IT. Sentence
  * N+1 is generated while N is still being heard — that overlap is the whole
@@ -85,6 +90,11 @@ class VoiceSpeaker(
     /** The stream's tail below the last newline — not yet judgeable, see feed. */
     private var partialLine = ""
 
+    /** How much of [partialLine] has already been spoken, because the line was
+     *  known to be prose and its first sentences went out early. The rest of it
+     *  must not repeat them when the line finishes. */
+    private var spokenHead = 0
+
     private var player: MediaPlayer? = null
     private var stopped = false
     private val drain: Job = scope.launch { playInOrder() }
@@ -92,18 +102,51 @@ class VoiceSpeaker(
     /**
      * Take the next piece of the reply.
      *
-     * Only whole LINES are judged: a fence's opening ``` can arrive in one delta
-     * and its content in the next, so a line held back is a line that cannot be
-     * mistaken for prose and read aloud.
+     * Completed lines are filtered whole, because a fence's opening ``` can
+     * arrive in one delta and its content in the next. The line still being
+     * written is then offered to [releasePartialLine], which is what lets speech
+     * begin on the first sentence rather than the first newline.
      */
     fun feed(delta: String) {
         if (stopped) return
         partialLine += delta
+
         val cut = partialLine.lastIndexOf('\n')
-        if (cut < 0) return
-        val complete = partialLine.substring(0, cut + 1)
-        partialLine = partialLine.substring(cut + 1)
-        absorb(filter.speakable(complete))
+        if (cut >= 0) {
+            val complete = partialLine.substring(0, cut + 1)
+            partialLine = partialLine.substring(cut + 1)
+            absorb(filter.speakable(complete, spokenHead))
+            spokenHead = 0
+        }
+
+        releasePartialLine()
+    }
+
+    /**
+     * Speak complete sentences out of the line still being written.
+     *
+     * This is what stops the voice waiting for a newline the model has no reason
+     * to emit yet. A paragraph is ONE line: three sentences with no break until
+     * the end meant the first word went unspoken until the last word had been
+     * generated, which is where the long silence before a reply came from —
+     * neither synthesis nor the network, just a gate waiting for a character.
+     *
+     * Nothing is released while the line's opening could still turn into a
+     * fence, display math or a table row. Once it cannot, the sentence splitter
+     * decides, and its own rule — never speak an unterminated sentence — is what
+     * keeps this from saying half a clause.
+     */
+    private fun releasePartialLine() {
+        if (filter.insideArtefact) return
+        val pending = partialLine.drop(spokenHead)
+        if (pending.isEmpty()) return
+        if (spokenHead == 0 && undecidedLineStart(partialLine)) return
+
+        val (sentences, rest) = splitSentences(pending)
+        if (sentences.isEmpty()) return
+        val consumed = pending.length - rest.length
+        absorb(spokenFragment(pending.substring(0, consumed), atLineStart = spokenHead == 0))
+        spokenHead += consumed
     }
 
     /**
@@ -113,10 +156,13 @@ class VoiceSpeaker(
      */
     fun finish() {
         if (stopped) return
-        if (partialLine.isNotEmpty()) {
-            absorb(filter.speakable(partialLine + "\n"))
-            partialLine = ""
+        // Only what is LEFT of it: the head may already have gone out a sentence
+        // at a time while the line was still being written.
+        if (partialLine.length > spokenHead) {
+            absorb(filter.speakable(partialLine + "\n", spokenHead))
         }
+        partialLine = ""
+        spokenHead = 0
         val tail = buffered.toString().trim()
         buffered.setLength(0)
         if (tail.isNotEmpty()) enqueue(tail)

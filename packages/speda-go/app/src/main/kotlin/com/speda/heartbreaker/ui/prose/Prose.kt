@@ -237,6 +237,11 @@ fun FenceBlock(language: String, code: String) {
         // orb; here they run down the message in the order they were staged,
         // which is what a board is on a phone.
         board != null -> BoardBlock(board, boardTitle(info.title, board), code)
+        // A staged table is pipe rows, not a language. Re-fencing it as ```table
+        // named a renderer nothing claims, so every one of them fell through to
+        // the code block and arrived as raw pipes with a Copy button. Handed
+        // back to the markdown pipeline it is the table it always was.
+        lang == "table" -> ProseText(code)
         lang == "chart" -> ChartBlock(code)
         lang == "calendar" -> CalendarBlock(code)
         lang == "map" -> MapBlock(code)

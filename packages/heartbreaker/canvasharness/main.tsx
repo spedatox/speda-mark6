@@ -82,6 +82,14 @@ Growth did not come from where you would expect, though — direct is flat and t
 {"type":"bar","xKey":"channel","series":[{"key":"eur","label":"Revenue"}],"data":[{"channel":"Direct","eur":1120000},{"channel":"Partner","eur":1980000},{"channel":"Marketplace","eur":840000},{"channel":"Other","eur":300000}]}
 \`\`\`
 
+\`\`\`table | NAKİT TAHSİS PLANI
+| Kalem | Tutar | Vade |
+|---|---|---|
+| Uludağ KYK Taksiti | 850 ₺ | 30 Eylül |
+| Enpara Kart Ödemesi | 3.150 ₺ | 11 Eylül |
+| Kalan Bakiye | 0 ₺ | Tamponsuz |
+\`\`\`
+
 One thing worth a decision this week: partner concentration is now high enough that losing the top account would erase the runway gain.`
 
 const SCRIPTS: Record<string, string> = {
@@ -131,14 +139,18 @@ function Harness() {
   const full = SCRIPTS[which]
   const visible = full.slice(0, Math.round(full.length * upto))
 
+  const caption = useMemo(() => captionOf(visible), [visible])
   const scripted = useScriptedTools(which !== 'CHAT FLOW' && which !== 'ACTIVITY')
   const staged = useMemo(() => splitPanels(visible), [visible])
   // The activity window leads the board, exactly as VoiceMode assembles it.
   const panels = useMemo(
-    () => [{ id: 'activity', kind: 'activity' as const, title: 'ACTIVITY_LIVE', source: '' }, ...staged],
-    [staged],
+    () => [
+      { id: 'activity', kind: 'activity' as const, title: 'ACTIVITY_LIVE', source: '' },
+      ...(caption ? [{ id: 'narration', kind: 'narration' as const, title: 'NARRATION_', source: caption }] : []),
+      ...staged,
+    ],
+    [staged, caption],
   )
-  const caption = useMemo(() => captionOf(visible), [visible])
 
   // Measured live: the packer is driven by the board's real size, so a harness
   // that read the viewport once at load would test a layout nobody will see.
@@ -211,7 +223,9 @@ Status: Whereabouts unknown`} />
 
       )}
 
-      {/* The caption strip, three lines, riding its tail. */}
+      {/* The no-board form only, as VoiceMode now gates it: with a board the
+          narration is a window up there instead. */}
+      {staged.length === 0 && (
       <div style={{
         position: 'absolute', left: 0, right: 0, bottom: 0, padding: '0.4rem 240px 0.6rem 1.2rem',
         background: 'linear-gradient(to top, rgba(4,8,10,0.92) 42%, rgba(4,8,10,0))',
@@ -223,6 +237,7 @@ Status: Whereabouts unknown`} />
           {caption}
         </div>
       </div>
+      )}
     </div>
   )
 }

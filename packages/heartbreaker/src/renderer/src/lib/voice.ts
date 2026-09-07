@@ -414,6 +414,10 @@ export class VoiceSession {
   private buf = ''
   /** Stream tail below the last newline — not yet judgeable (see feed). */
   private raw = ''
+  /** How many characters at the head of `raw` have already been spoken, because
+   *  the line was known to be prose and its first sentences went out early. The
+   *  rest of that line must not repeat them when it finishes. */
+  private spokenHead = 0
   /** Inside a ``` fence / a display-math block: everything here is for the eye. */
   private inFence = false
   private inMath = false
@@ -654,21 +658,77 @@ export class VoiceSession {
   /**
    * Feed streamed reply text. Safe to call on every delta.
    *
-   * Deltas are held until a line is COMPLETE before being judged: a ``` fence
-   * marker, or a `$$`, routinely arrives split across two chunks, and a filter
-   * that decides per-delta would speak the first half of the artefact it exists
-   * to suppress. Lines are the unit because fences and display math are
-   * line-oriented; prose loses nothing by waiting for its newline, since the
-   * sentence splitter is already holding the tail anyway.
+   * A ``` fence marker, or a `$$`, routinely arrives split across two chunks,
+   * and a filter that decided per-delta would speak the first half of the very
+   * artefact it exists to suppress. So anything that might still BECOME one is
+   * held.
+   *
+   * What is NOT held is prose. This used to wait for the line's newline, on the
+   * reasoning that "prose loses nothing by waiting, the sentence splitter holds
+   * the tail anyway" — and that reasoning was simply wrong about how models
+   * write. A paragraph is one line. Three sentences with no newline until the
+   * end means the newline arrives when the whole paragraph is finished, so the
+   * first word was not spoken until the last word had been generated. That is
+   * where the long silence before a reply started came from: not synthesis, not
+   * the socket, just a gate waiting for a character the model had no reason to
+   * emit yet.
+   *
+   * A line is line-oriented at its START — ```, $$, \[ and | are all decidable
+   * from the first character or two. Once a line is known to be prose, the rest
+   * of it can stream a sentence at a time, and speech begins on the first full
+   * sentence instead of the first newline.
    */
   feed(delta: string): void {
     if (this.stopped || this.ended) return
     this.raw += delta
+
     const nl = this.raw.lastIndexOf('\n')
-    if (nl === -1) return
-    const complete = this.raw.slice(0, nl + 1)
-    this.raw = this.raw.slice(nl + 1)
-    this.absorb(this.speakable(complete))
+    if (nl !== -1) {
+      const complete = this.raw.slice(0, nl + 1)
+      this.raw = this.raw.slice(nl + 1)
+      // `spokenHead` counts what was already released out of the line that is
+      // now finishing, so its opening is not spoken a second time.
+      this.absorb(this.speakable(complete, this.spokenHead))
+      this.spokenHead = 0
+    }
+
+    this.releasePartialLine()
+  }
+
+  /**
+   * Speak complete sentences out of the line still being written.
+   *
+   * Only once that line is known to be prose: while its opening could still turn
+   * into a fence, display math or a table row, nothing is released. After that
+   * the sentence splitter decides, and its own rule — never speak an
+   * unterminated sentence — is what keeps this from saying half a clause.
+   */
+  private releasePartialLine(): void {
+    if (this.inFence || this.inMath) return
+    const pending = this.raw.slice(this.spokenHead)
+    if (!pending) return
+
+    // At the head of the line, the line's kind is still in question.
+    if (this.spokenHead === 0) {
+      const t = this.raw.trimStart()
+      if (t === '') return                                    // whitespace so far
+      if (/^`{1,3}$/.test(t) || t === '$' || t === '\\') return  // might become a marker
+      if (t.startsWith('```') || t.startsWith('$$') || t.startsWith('\\[') || t.startsWith('|')) {
+        return                                                // it did; the line waits
+      }
+    }
+
+    const { sentences, rest } = splitSentences(pending)
+    if (!sentences.length) return
+    const consumed = pending.length - rest.length
+    // Only the FIRST release of a line gets the line-level prose rules: a
+    // heading's `##` or a bullet's `-` is at the start, and re-applying those to
+    // a mid-line remainder would eat a hyphen out of the middle of a sentence.
+    const chunk = pending.slice(0, consumed)
+    this.absorb(this.spokenHead === 0
+      ? spokenProse(inlineMath(chunk))
+      : inlineMath(chunk))
+    this.spokenHead += consumed
   }
 
   /** The turn is over: speak whatever is left, then stop. */
@@ -677,10 +737,13 @@ export class VoiceSession {
     this.ended = true
     // The last line never got its newline; it is only speakable if the stream
     // did not end inside an artefact.
-    if (this.raw) {
-      this.absorb(this.speakable(this.raw + '\n'))
-      this.raw = ''
+    // Only what is left of it: the head may already have gone out a sentence at
+    // a time while the line was still being written.
+    if (this.raw.length > this.spokenHead) {
+      this.absorb(this.speakable(this.raw + '\n', this.spokenHead))
     }
+    this.raw = ''
+    this.spokenHead = 0
     // Still negotiating: `settle` will end the input once it knows which path
     // to end. Ending here would close a socket that has not been told anything.
     if (this.delivery === 'pending') { this.endPending = true; return }
@@ -706,10 +769,24 @@ export class VoiceSession {
     }
   }
 
-  /** Drop everything that belongs on the canvas rather than in the ear. */
-  private speakable(text: string): string {
+  /**
+   * Drop everything that belongs on the canvas rather than in the ear.
+   *
+   * `skipHead` is how much of the FIRST line was already spoken by
+   * releasePartialLine. That line is therefore known to be prose — it could not
+   * have been released otherwise — so it skips both the artefact tests and the
+   * line-level prose rules, which belong to a line's opening and would misread a
+   * mid-sentence remainder as a bullet.
+   */
+  private speakable(text: string, skipHead = 0): string {
     let out = ''
-    for (const line of text.split('\n')) {
+    const lines = text.split('\n')
+    if (skipHead > 0 && lines.length > 0) {
+      const rest = lines[0].slice(skipHead)
+      if (rest) out += inlineMath(rest) + '\n'
+      lines.shift()
+    }
+    for (const line of lines) {
       const t = line.trim()
       if (this.inFence) {
         if (t.startsWith('```')) this.inFence = false
@@ -844,6 +921,7 @@ export class VoiceSession {
     this.jobs = []
     this.buf = ''
     this.raw = ''
+    this.spokenHead = 0
     this.held = ''
     this.onState('idle')
     void this.ctx.close().catch(() => {})

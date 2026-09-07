@@ -21,10 +21,12 @@
  *
  * Two consequences follow, and both are deliberate:
  *
- *  - PROSE IS NOT A WINDOW. Spoken narrative goes to the caption strip under the
- *    orb, live, as a subtitle. The board carries evidence only. A window holding
- *    the same sentences the owner is currently hearing is the transcript-with-a-
- *    font-size mode all over again.
+ *  - PROSE IS ITS OWN WINDOW, not a strip along the bottom. It was a subtitle
+ *    first, on the theory that the words track the voice and are therefore
+ *    glanced at rather than read. They do not track it: the text arrives at
+ *    generation speed and the speech trails it, so three cramped lines were
+ *    unreadable AND out of step. As a window it can be read at leisure, which is
+ *    what it was always going to be used for.
  *  - TITLES ARE AUTHORED. `CHART_01` is fine for a solved equation and useless
  *    for `VANKO / ARREST RECORD`. The agent names its own windows; the
  *    generated label is only the fallback for a block that arrived untitled.
@@ -38,6 +40,10 @@ export type PanelKind =
   // EXTEND all treat it as the window it is, rather than it becoming a second
   // kind of thing floating over the board with its own rules.
   | 'activity'
+  // What the agent is SAYING, as a window rather than a strip along the bottom.
+  // Also not staged by the agent — the board assembles it from the narration it
+  // wrote between the windows.
+  | 'narration'
 
 export interface VoicePanel {
   id: string
@@ -81,7 +87,7 @@ const LABEL: Record<PanelKind, string> = {
   math: 'SOLUTION', chart: 'CHART', map: 'MAP', calendar: 'SCHEDULE',
   code: 'SOURCE', widget: 'RENDER', table: 'TABLE', stat: 'FIGURE',
   image: 'IMAGE', article: 'SOURCE', card: 'FILE', timeline: 'TIMELINE',
-  quote: 'QUOTE', activity: 'ACTIVITY',
+  quote: 'QUOTE', activity: 'ACTIVITY', narration: 'NARRATION',
 }
 
 /** Base window size per kind, in px, before the fit pass. A plot needs width to
@@ -104,6 +110,10 @@ const SIZE: Record<PanelKind, { w: number; h: number }> = {
   // Tall rather than wide: it is a running list, and the thing worth seeing is
   // how many steps have happened, not each one's full width.
   activity: { w: 420, h: 300 },
+  // The widest of them, and tall. It is prose meant to be READ — the reason it
+  // stopped being a three-line caption is that a subtitle only works when it is
+  // in step with the voice, and it never was.
+  narration: { w: 480, h: 320 },
 }
 
 /** Windows that bring no chrome of their own and therefore need the glass. The
@@ -111,7 +121,30 @@ const SIZE: Record<PanelKind, { w: number; h: number }> = {
  *  panel — wrapping those in a second one would double every border. */
 export const FRAMED = new Set<PanelKind>([
   'math', 'table', 'stat', 'image', 'article', 'card', 'timeline', 'quote',
-  'activity',
+  'activity', 'narration',
+])
+
+/**
+ * Kinds whose renderer copes with a HALF-WRITTEN body, and can therefore be put
+ * on the board while the agent is still typing it.
+ *
+ * This is what makes the board assemble in real time instead of popping into
+ * existence. Every window used to wait for its closing fence, so a dossier card
+ * the model spent eight seconds writing was eight seconds of nothing followed by
+ * a card — which is exactly the "no real-time magic" complaint. The presentation
+ * parsers were built forgiving precisely so this would be safe: a card with two
+ * of its four fields renders those two and grows.
+ *
+ * A table is here too. Before its delimiter row arrives remark-gfm sees ordinary
+ * text, so it reads as a line that then becomes a table — arriving, rather than
+ * broken.
+ *
+ * Everything NOT here waits for its fence to close, and must: a chart spec, a
+ * map, a calendar or an HTML widget parsed halfway is not a partial render, it
+ * is a syntax error, and LaTeX cut mid-command throws inside KaTeX.
+ */
+export const STREAMS_LIVE = new Set<PanelKind>([
+  'stat', 'image', 'article', 'card', 'timeline', 'quote', 'table',
 ])
 
 /* ── Reading the stage direction ───────────────────────────────────────────
@@ -127,6 +160,12 @@ function parseInfo(info: string): { lang: string; title: string } {
     lang: info.slice(0, bar).trim().toLowerCase(),
     title: info.slice(bar + 1).trim(),
   }
+}
+
+/** The window kind a fence's info line opens, for callers that need to know
+ *  what is being written before it finishes. */
+export function fenceKindOf(info: string): PanelKind {
+  return FENCE_KIND[parseInfo(info).lang] ?? 'code'
 }
 
 /** Titles render as `MAIN_SUB`, so an authored one is normalised into that
@@ -174,11 +213,20 @@ export function splitPanels(text: string): VoicePanel[] {
       while (i < lines.length && !/^[ \t]*```/.test(lines[i])) body.push(lines[i++])
       if (i < lines.length) i++                      // the closing fence
       const kind = FENCE_KIND[lang] ?? 'code'
-      // The markdown kinds are re-fenced, because they are rendered by the
-      // transcript's own pipeline and it needs the fence to recognise them. The
-      // presentation kinds have their own renderers and take the raw body.
-      const source = RAW_BODY.has(kind)
-        ? body.join('\n')
+      // How a body is handed on depends on who renders it.
+      //
+      //   - The WIDGET kinds (chart, map, calendar, html, svg, code) are keyed
+      //     off the fence language by the markdown pipeline, so they keep it.
+      //   - TABLE must NOT keep it. Re-fencing pipe rows as ```table produced a
+      //     language no renderer claims, so every staged table fell through to
+      //     the code block and arrived as raw pipes with a Copy button. Handed
+      //     over bare, remark-gfm makes it the table it always was.
+      //   - MATH from a ```math fence is LaTeX, and needs the display
+      //     delimiters rather than a fence to reach KaTeX.
+      //   - The presentation kinds parse their own bodies and take them raw.
+      const source = RAW_BODY.has(kind) ? body.join('\n')
+        : kind === 'table' ? body.join('\n')
+        : kind === 'math' ? ['$$', ...body, '$$'].join('\n')
         : ['```' + (lang || ''), ...body, '```'].join('\n')
       push(kind, source, title)
       continue

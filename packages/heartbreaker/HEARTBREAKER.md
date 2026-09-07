@@ -141,9 +141,20 @@ or the turn staying silent past `canvas_activity_after_ms`. Opening always would
 dock the orb for "what time is it", which is the one case the mode is careful to
 leave alone.
 
-**The transcript is a subtitle.** Narration runs along the bottom as a live
-caption a few lines deep, tracking what is being said now. Prose is never a
-window: anything worth reading twice was supposed to become one.
+**Narration is a window, not a subtitle.** It was a caption first, on the theory
+that words tracking a voice are glanced at rather than read. They do not track
+it — text arrives at generation speed while the speech trails behind — so three
+cramped lines were unreadable *and* out of step. It is now a `NARRATION` window
+on the board, read at leisure like everything else. The bottom strip survives
+only for the no-board case, where the answer is one sentence and the orb has the
+screen to itself.
+
+**The board assembles live.** Windows used to wait for their closing fence, so a
+dossier card the model spent eight seconds writing was eight seconds of nothing
+followed by a card. The presentation parsers were built forgiving precisely so a
+half-written window can be shown and simply grow — `STREAMS_LIVE` is the set that
+may, and everything outside it still waits, because a chart spec or an HTML
+widget cut in half is a syntax error rather than a partial render.
 
 **Nothing staged, nothing shown.** A yes, a no, a thank-you, the time — the orb
 keeps the screen and the words run underneath. The board opens on the first
@@ -153,6 +164,15 @@ staged window.
 dragged by the grip or resized from the bottom-right corner; either gesture pins
 a window until `REFLOW` hands the board back. `EXTEND_` blows one up to fill the
 board.
+
+**One answer at a time, but not only the last one.** The mode shows a single
+answer — it is a presentation, not a scrollback — which used to mean every
+earlier board in the conversation was unreachable without leaving. A stepper in
+the top bar walks them. Position is held as *null = follow the newest* rather
+than as an index, so a live turn keeps arriving; only a deliberate step back
+pins it, and stepping onto the newest re-pins. The prompt line follows the
+selected answer rather than the latest question, which would otherwise
+misattribute both.
 
 Everything tunable lives in **Settings → Canvas** (backend `canvas_*` settings):
 the spoken word budgets that shape what the agent *writes*, and the window

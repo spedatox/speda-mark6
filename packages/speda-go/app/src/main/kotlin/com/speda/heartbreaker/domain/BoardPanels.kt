@@ -182,11 +182,24 @@ fun splitBoardPanels(text: String): List<StagedWindow> {
         val body = ArrayList<String>()
         i++
         while (i < lines.size && !lines[i].trimStart().startsWith("```")) body.add(lines[i++])
-        // An UNCLOSED fence is the one still being written. It is dropped rather
-        // than rendered: a half-arrived chart spec parses as garbage, and a
-        // window that flickers through malformed states while it streams is
-        // worse than one that appears when it is ready.
-        if (i >= lines.size) break
+        // An UNCLOSED fence is the one still being written, and whether it can be
+        // shown depends on WHAT it is.
+        //
+        // Dropping every one of them made the board pop into existence rather
+        // than assemble: a dossier card the model spends eight seconds writing
+        // was eight seconds of nothing, then a card. The presentation parsers
+        // were built forgiving precisely so a window can be shown while it is
+        // still being typed and simply grow.
+        //
+        // The rest still waits, and must: a chart spec or an HTML widget cut in
+        // half is not a partial render, it is a syntax error.
+        if (i >= lines.size) {
+            val kind = boardKindOf(parseFenceInfo(info).lang)
+            if (kind != null || parseFenceInfo(info).lang == "table") {
+                out.add(StagedWindow(info, body.joinToString("\n")))
+            }
+            break
+        }
         i++
         out.add(StagedWindow(info, body.joinToString("\n")))
     }

@@ -989,18 +989,38 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
    * previous conversation's answer. Sourcing it here means the mode inherits
    * every transition the transcript already handles — switch, reattach,
    * regenerate, delete — for free. */
-  const voiceReply = useMemo(() => {
-    for (let i = state.messages.length - 1; i >= 0; i--) {
-      if (state.messages[i].role === 'assistant') return state.messages[i]
-    }
-    return null
-  }, [state.messages])
+  const voiceAnswers = useMemo(
+    () => state.messages.filter(m => m.role === 'assistant'),
+    [state.messages],
+  )
+  /* Which answer voice mode is showing.
+   *
+   * null means PINNED TO THE NEWEST, and that is the default rather than a
+   * stored index for a reason: a live turn has to keep arriving on screen, and
+   * an index would have to be chased forward every time a message lands. Only a
+   * deliberate step backwards sets a number, and stepping back onto the newest
+   * clears it — so the mode follows the conversation unless the owner has gone
+   * looking at something older, and then stays where they put it. */
+  const [voicePin, setVoicePin] = useState<number | null>(null)
+  // A different session is a different set of answers; a stale index there
+  // would land on someone else's turn.
+  useEffect(() => { setVoicePin(null) }, [state.activeSessionId, config.agentId])
+
+  const voiceIndex = voicePin ?? Math.max(0, voiceAnswers.length - 1)
+  const voiceReply = voiceAnswers[voiceIndex] ?? null
+  /** The question that produced the answer on screen — the user turn immediately
+   *  before it, not simply the most recent one. Those are the same message while
+   *  the board is following the conversation, and different the moment the owner
+   *  steps back through it, where showing the newest question over an older
+   *  answer would misattribute both. */
   const voicePrompt = useMemo(() => {
-    for (let i = state.messages.length - 1; i >= 0; i--) {
+    if (!voiceReply) return ''
+    const at = state.messages.indexOf(voiceReply)
+    for (let i = at - 1; i >= 0; i--) {
       if (state.messages[i].role === 'user') return state.messages[i].content
     }
     return ''
-  }, [state.messages])
+  }, [state.messages, voiceReply])
 
   // Answering is fire-and-forget: the decision goes to Igor, Igor relays it to
   // the peer, and the peer resumes or reports the refusal in its own stream.
@@ -1023,6 +1043,13 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           reply={voiceReply?.content ?? ''}
           streaming={!!voiceReply?.isStreaming}
           tools={voiceReply?.tools ?? []}
+          answerIndex={voiceIndex}
+          answerCount={voiceAnswers.length}
+          onAnswer={i => setVoicePin(
+            // Landing on the newest re-pins, so the board resumes following the
+            // conversation instead of freezing on what is currently last.
+            i >= voiceAnswers.length - 1 ? null : Math.max(0, i),
+          )}
           prompt={voicePrompt}
           language={language}
           onLanguage={setLanguage}
