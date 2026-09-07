@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useIsPeerOnline } from '../lib/useOnlineAgents'
+import { fetchProjects } from '../lib/api'
 import HisarBrowser from './HisarBrowser'
 import type { AppConfig } from '../lib/types'
 import { useT } from '../lib/i18n'
@@ -272,6 +273,23 @@ export default function Header({
   const t = useT()
   const { state } = useChatContext()
   const activeSession = state.sessions.find(s => s.id === state.activeSessionId)
+  // The project badge. Read from the open session's own row where there is one;
+  // on a chat that does not exist yet (New chat inside a project) the session
+  // list has nothing to read, so fall back to the store's activeProjectId and
+  // resolve the name off the pinned list the sidebar already fetched.
+  const [projectNames, setProjectNames] = useState<Record<number, string>>({})
+  useEffect(() => {
+    if (!state.activeProjectId) return
+    let alive = true
+    fetchProjects(config).then(list => {
+      if (alive) setProjectNames(Object.fromEntries(list.map(p => [p.id, p.name])))
+    })
+    return () => { alive = false }
+  }, [config, state.activeProjectId])
+  const projectName =
+    activeSession?.project_name ||
+    (state.activeProjectId ? projectNames[state.activeProjectId] : '') ||
+    ''
 
   return (
     <div style={{
@@ -305,6 +323,36 @@ export default function Header({
       >
         {activeSession?.title || t.header.newConversation}
       </span>
+
+      {/* Which workspace this conversation belongs to. It sits beside the title
+          rather than inside it because the project is the CONTEXT the answers
+          are being written under — standing instructions and a knowledge base
+          the transcript never shows — and the owner has to be able to see that
+          without opening the project. On a brand-new chat started from a
+          project it appears before the first word is typed, which is the point:
+          you know which workspace you are about to write into. */}
+      {projectName && (
+        <span
+          title={`${t.projects.inProject}: ${projectName}`}
+          className="glass-round"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+            maxWidth: 220, height: 24, padding: '0 10px',
+            border: '1px solid rgba(var(--hb-accent-rgb),0.28)',
+            fontFamily: 'var(--font-mono)', fontSize: '0.64rem',
+            letterSpacing: '0.06em', color: 'var(--hb-cyan)',
+            overflow: 'hidden',
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {projectName}
+          </span>
+        </span>
+      )}
 
       {/* Live state — the pill appears only while the agent is actually working,
           so a settled deck stays quiet. */}

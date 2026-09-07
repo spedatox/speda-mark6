@@ -363,6 +363,11 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       regenerate: opts.regenerate,
       // Forge workspace for Optimus jobs; ignored by in-process agents.
       cwd: config.agentId === 'optimus' ? (settings.forgeCwd || undefined) : undefined,
+      // The workspace this chat belongs to. Only read by the backend on the
+      // turn that CREATES the session — a chat's project is fixed at birth —
+      // so sending it on every turn is harmless and means a brand-new chat
+      // started from a project is bound the moment it exists.
+      projectId: state.activeProjectId,
       requestId,
     }
 
@@ -545,7 +550,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       }
       forceUpdate(n => n + 1)
     }
-  }, [state.activeSessionId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd,
+  }, [state.activeSessionId, state.activeProjectId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd,
       settings.streamReconnectAttempts, settings.streamReconnectDelayMs, settings.streamStallSeconds, settings.streamDeadSeconds,
       dispatch])
 

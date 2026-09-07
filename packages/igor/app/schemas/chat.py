@@ -58,6 +58,17 @@ class ChatRequest(BaseModel):
     attachments: list[ImageAttachment] = []
     documents: list[DocumentAttachment] = []
 
+    # Which project (workspace) a NEW chat is being started in. Only ever read
+    # when the turn creates the session — a chat's project is fixed at birth,
+    # because its history was produced under one set of standing instructions
+    # and re-reading it under another would misrepresent what was said. On an
+    # existing session this field is ignored; the stored project_id wins.
+    #
+    # The value is not trusted: the chat router checks the project belongs to
+    # the addressed agent before stamping it, so a client cannot attach one
+    # agent's workspace to another agent's conversation.
+    project_id: int | None = None
+
     # Ambient client/platform/location context for THIS turn. Stamped onto the
     # live user message only (not stored), so Speda is platform- and location-aware
     # without the churn a clock/location in the cached system prefix would cause.

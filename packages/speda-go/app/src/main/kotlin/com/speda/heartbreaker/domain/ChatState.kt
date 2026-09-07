@@ -20,6 +20,13 @@ data class ChatState(
     val config: AppConfig? = null,
     val sessions: PersistentList<Session> = persistentListOf(),
     val activeSessionId: Int? = null,
+    /** The project a NEW chat will be created in, or null for a loose chat. Set
+     *  by opening a project and cleared by New chat outside one. On an EXISTING
+     *  session it mirrors that session's own project, because the backend fixes
+     *  a chat's project at birth and ignores the field thereafter — it is here
+     *  so the header can name the workspace, and so the send path can pass it on
+     *  the turn that creates the session. */
+    val activeProjectId: Int? = null,
     val messages: PersistentList<ChatMessage> = persistentListOf(),
     val isStreaming: Boolean = false,
 )
@@ -31,8 +38,19 @@ data class ChatState(
 sealed interface ChatAction {
     data class SetConfig(val config: AppConfig) : ChatAction
     data class SetSessions(val sessions: List<Session>) : ChatAction
-    data class SelectSession(val sessionId: Int, val messages: List<ChatMessage>) : ChatAction
-    data object NewChat : ChatAction
+    /** [projectId] is passed when the caller already knows it (opening a chat
+     *  from inside the projects screen, whose listing may reach us before the
+     *  main session list has refreshed); otherwise it is read off the row. */
+    data class SelectSession(
+        val sessionId: Int,
+        val messages: List<ChatMessage>,
+        val projectId: Int? = null,
+    ) : ChatAction
+
+    /** Start a new chat, optionally inside a project. A null [projectId] means a
+     *  LOOSE chat — never "keep the current one", so leaving a project cannot
+     *  leak its standing instructions into the next unrelated conversation. */
+    data class NewChat(val projectId: Int? = null) : ChatAction
     data class AddUserMessage(val message: ChatMessage) : ChatAction
     data class AddAssistantMessage(val message: ChatMessage) : ChatAction
     data class AppendChunk(val id: String, val chunk: String) : ChatAction
@@ -73,6 +91,11 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
         }
         state.copy(
             activeSessionId = action.sessionId,
+            // Follow the opened chat into (or out of) its project, so the header
+            // always names the workspace the transcript was written in rather
+            // than whichever one happened to be open a moment ago.
+            activeProjectId = action.projectId
+                ?: state.sessions.firstOrNull { it.id == action.sessionId }?.projectId,
             messages = (action.messages + kept).toPersistentList(),
             isStreaming = kept.isNotEmpty(),
         )
@@ -84,7 +107,12 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
         }.toPersistentList(),
     )
 
-    ChatAction.NewChat -> state.copy(activeSessionId = null, messages = persistentListOf(), isStreaming = false)
+    is ChatAction.NewChat -> state.copy(
+        activeSessionId = null,
+        activeProjectId = action.projectId,
+        messages = persistentListOf(),
+        isStreaming = false,
+    )
 
     is ChatAction.AddUserMessage -> state.copy(messages = (state.messages + action.message).toPersistentList())
 

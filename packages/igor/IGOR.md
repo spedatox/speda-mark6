@@ -10,6 +10,7 @@ The backend. One FastAPI process: every agent, the memory system, the tool regis
 - [Layering](#layering)
 - [Local development](#local-development)
 - [Core contracts](#core-contracts)
+- [Projects](#projects)
 - [Language](#language)
 - [Authentication](#authentication)
 - [Startup sequence](#startup-sequence)
@@ -119,14 +120,63 @@ class AgentContext:
 
 ```python
 async def get_or_create(db, user_id, triggered_by, model_used, agent_id="speda", session_id=None, channel="app") -> Session
-async def list_sessions(db, user_id, agent_id, limit=500)
+async def list_sessions(db, user_id, agent_id, limit=500, project_id=None)
 async def close(db, session_id)
 async def load_history(db, session_id) -> list[dict]
 async def truncate(db, session_id, keep) -> int
 async def save_message(db, session_id, role, content) -> Message
 ```
 
-`agent_id` defaults to `"speda"` — it's optional, not required.
+`agent_id` defaults to `"speda"` — it's optional, not required. `project_id`
+narrows `list_sessions` to one project's chats; left `None`, every chat comes
+back, project ones included.
+
+---
+
+## Projects
+
+A project is a named workspace owning its own chats, standing instructions and
+knowledge base — `app/models/project.py` (`Project`, `ProjectFile`),
+`app/routers/projects.py`, `app/services/projects.py`.
+
+**Isolation is the contract, and it is the same one chat history has.** A project
+carries an `agent_id`; every listing filters on it and every id-addressed route
+passes through `_owned()`, which 404s on a cross-agent read — deliberately
+indistinguishable from a bad id, because a client has no business learning that
+another agent has a project N. There is no route that returns a project without
+an agent to check it against, and that absence is the point. `build_project_block`
+re-checks ownership even though its only caller already did.
+
+**A chat's project is fixed at birth.** `sessions.project_id` is written once, on
+the turn that creates the session, and `ChatRequest.project_id` is ignored
+thereafter — the history was produced under one set of standing instructions and
+would be misrepresented under another. The chat router validates the project
+belongs to the addressed agent before stamping it; the orchestrator then reads
+the id off the SESSION, never off the request body.
+
+**Where the block sits.** `build_project_block` renders instructions + knowledge
+as one system block, appended after the episodic block and deliberately NOT
+`_cache`-flagged — all four Anthropic breakpoints are already spent, and the
+block is byte-stable across every turn in the project, so the conversation
+breakpoint behind it caches it for free.
+
+**Knowledge files store extracted TEXT, not bytes** — the same reasoning as chat
+attachments (one representation that reaches all six providers identically), and
+it means the budget can be counted in characters before anything is put in front
+of a model. Files go in newest-first until `projects_knowledge_max_chars` runs
+out; the ones that did not fit are still NAMED in the block, so the model knows
+the base is larger than what it can see.
+
+Failure handling is where the knowledge path diverges from the chat path.
+`services/attachments.extract_body` returns `(body, note)`; a chat attachment
+degrades to the note (a failed turn is worse than a turn that knows a file was
+unreadable), while a knowledge upload is REFUSED with it — storing "could not be
+read" as knowledge means every later turn in the project reads that sentence as
+a fact about the subject.
+
+Settings: `projects_enabled`, `projects_max_files`, `projects_file_max_chars`,
+`projects_knowledge_max_chars`, `projects_instructions_max_chars` — all in
+`config.py` and the Projects group of `config_schema.py`.
 
 ---
 

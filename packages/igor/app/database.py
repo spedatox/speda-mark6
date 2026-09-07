@@ -112,10 +112,23 @@ def _apply_additive_migrations(sync_conn) -> None:
                 text("ALTER TABLE sessions ADD COLUMN channel VARCHAR(16) DEFAULT 'app'")
             )
             logger.info("schema_migrated", extra={"change": "sessions.channel"})
+        # Which project a chat belongs to. Deliberately added WITHOUT a REFERENCES
+        # clause: SQLite cannot add a foreign key to an existing table, and the
+        # constraint would only re-state what the model already declares for a
+        # freshly created database.
+        if "project_id" not in scols:
+            sync_conn.execute(text("ALTER TABLE sessions ADD COLUMN project_id INTEGER"))
+            logger.info("schema_migrated", extra={"change": "sessions.project_id"})
         sync_conn.execute(
             text(
                 "CREATE INDEX IF NOT EXISTS ix_sessions_user_agent_started "
                 "ON sessions (user_id, agent_id, started_at)"
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_sessions_project "
+                "ON sessions (user_id, agent_id, project_id, started_at)"
             )
         )
 

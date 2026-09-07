@@ -4,6 +4,7 @@
 package com.speda.heartbreaker.ui.chat
 
 import androidx.activity.compose.BackHandler
+import com.speda.heartbreaker.ui.projects.ProjectsScreen
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -194,6 +195,12 @@ fun ChatScreen(
     var commsOpen by remember { mutableStateOf(false) }
     var boardOpen by remember { mutableStateOf(false) }
     var switcherOpen by remember { mutableStateOf(false) }
+    // The projects surface. A full-screen sheet over the transcript rather than
+    // a tab: it is a place you go and come back from, and back is what leaves.
+    // Two pieces of state rather than one nullable id, because "closed" and
+    // "open on the grid" are both meaningful and a lone Int? cannot say both.
+    var projectsOpen by remember { mutableStateOf(false) }
+    var projectsInitialId by remember { mutableStateOf<Int?>(null) }
     val brand = Brands.BRANDS[agentId] ?: Brands.BRANDS.getValue(Brands.DEFAULT_AGENT)
     val activeTitle = state.sessions.firstOrNull { it.id == state.activeSessionId }?.title
 
@@ -389,6 +396,10 @@ fun ChatScreen(
             userName = settings.userName,
             onSelectSession = { vm.selectSession(it) },
             onNewChat = { vm.newChat() },
+            onOpenProjects = { projectId ->
+                projectsInitialId = projectId
+                projectsOpen = true
+            },
             onRenameSession = { id, title -> vm.renameSession(id, title) },
             onDeleteSession = { vm.deleteSession(it) },
             onClose = { drawerOpen = false },
@@ -399,6 +410,25 @@ fun ChatScreen(
             onToggleComms = { drawerOpen = false; commsOpen = true },
             onToggleBoard = { drawerOpen = false; boardOpen = true },
         )
+
+        // Full-screen projects sheet; back closes it, exactly like settings.
+        if (projectsOpen) {
+            BackHandler { projectsOpen = false }
+            ProjectsScreen(
+                config = config,
+                api = graph.api,
+                initialProjectId = projectsInitialId,
+                onClose = { projectsOpen = false },
+                onOpenChat = { sessionId, projectId ->
+                    projectsOpen = false
+                    vm.selectSession(sessionId, projectId)
+                },
+                onNewChat = { projectId ->
+                    projectsOpen = false
+                    vm.newChat(projectId)
+                },
+            )
+        }
 
         // Full-screen settings sheet over everything; back closes it.
         if (settingsOpen) {

@@ -17,6 +17,13 @@ export interface ChatState {
    *  sessions" so the sidebar can skeleton instead of claiming "No sessions yet". */
   sessionsLoaded: boolean
   activeSessionId: number | null
+  /** The project a NEW chat will be created in, or null for a loose chat.
+   *  Set by opening a project and cleared by New chat outside one. On an
+   *  EXISTING session it mirrors that session's own project, because the
+   *  backend fixes a chat's project at birth and ignores the field thereafter —
+   *  it is here so the composer can say which workspace it is about to write
+   *  into, and so ChatMain can send it on the turn that creates the session. */
+  activeProjectId: number | null
   messages: ChatMessage[]
   isStreaming: boolean
   /** Token spend for the ACTIVE session only. Seeded from the backend when a
@@ -33,6 +40,7 @@ export const initialState: ChatState = {
   sessions: [],
   sessionsLoaded: false,
   activeSessionId: null,
+  activeProjectId: null,
   messages: [],
   isStreaming: false,
   tokenUsage: { input: 0, output: 0 },
@@ -44,8 +52,14 @@ export type ChatAction =
   /** Fired right as a re-fetch starts (agent switch) so the sidebar drops the
    *  PREVIOUS agent's stale list and skeletons instead of showing it mislabeled. */
   | { type: 'SESSIONS_LOADING' }
-  | { type: 'SELECT_SESSION'; payload: { sessionId: number; messages: ChatMessage[] } }
-  | { type: 'NEW_CHAT' }
+  /** `projectId` is passed when the caller already knows it (opening a chat
+   *  from inside a project view, whose listing may reach us before the main
+   *  session list has refreshed). Left off, it is read from the session row. */
+  | { type: 'SELECT_SESSION'; payload: { sessionId: number; messages: ChatMessage[]; projectId?: number | null } }
+  /** Start a new chat, optionally inside a project. Omitting projectId means a
+   *  loose chat — it does NOT mean "keep the current one", so leaving a project
+   *  can never leak its instructions into the next unrelated conversation. */
+  | { type: 'NEW_CHAT'; payload?: { projectId?: number | null } }
   | { type: 'ADD_TOKEN_USAGE'; payload: TokenUsage }
   | { type: 'ADD_USER_MESSAGE'; payload: ChatMessage }
   | { type: 'ADD_ASSISTANT_MESSAGE'; payload: ChatMessage }
@@ -91,6 +105,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         activeSessionId: action.payload.sessionId,
+        // Follow the opened chat into (or out of) its project, so the composer
+        // and the header always name the workspace the transcript was written
+        // in rather than whichever one happened to be open a moment ago.
+        activeProjectId: action.payload.projectId ?? opened?.project_id ?? null,
         messages: [...action.payload.messages, ...kept],
         isStreaming: kept.length > 0,
         tokenUsage: {
@@ -123,6 +141,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'NEW_CHAT':
       return {
         ...state, activeSessionId: null, messages: [], isStreaming: false,
+        activeProjectId: action.payload?.projectId ?? null,
         tokenUsage: { input: 0, output: 0 },
       }
 

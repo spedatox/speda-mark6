@@ -598,10 +598,11 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, media, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar, lifeboat as lifeboat_router, doormat as doormat_router, octavius as octavius_router, skyfall as skyfall_router, legion as legion_router
+    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, media, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar, lifeboat as lifeboat_router, doormat as doormat_router, octavius as octavius_router, skyfall as skyfall_router, legion as legion_router, projects as projects_router
 
     app.include_router(health.router)
     app.include_router(chat.router)
+    app.include_router(projects_router.router)
     app.include_router(legion_router.router)
     app.include_router(trigger.router)
     app.include_router(agents.router)

@@ -10,6 +10,7 @@ The full-roster desktop client. Electron, React, TypeScript. Every agent persona
 - [Dev workflow](#dev-workflow)
 - [Profile and branding system](#profile-and-branding-system)
 - [Key components](#key-components)
+- [Projects](#projects)
 - [Surviving a dropped connection](#surviving-a-dropped-connection)
 - [Steering a running response](#steering-a-running-response)
 - [Configuration](#configuration)
@@ -71,8 +72,41 @@ From the repo root, the same commands are exposed workspace-scoped: `npm run hea
 | Screen lock | `LockScreen`, `LockScreensaver`, `ScreenLockSettings` (Interface tab), `lib/useScreenLock`, `lib/lock` |
 | Status & telemetry | `HudFrame`, `SystemsBoard`, `TelemetryColumn` |
 | Settings | `SettingsModal` (tabbed shell), `AutomationBuilder`, `McpServersPanel`, `PortalsPanel`, `PendingAsksTray`, `RosterModelWindow` |
+| Projects | `ProjectsView` — the workspace grid and one project's detail pane |
 | Delegation | `SubagentPanel`, `SubagentDetailView` |
 | Ecosystem | `HisarBrowser` — the Hisar vault directory picker used for the Forge workspace |
+
+---
+
+## Projects
+
+A project is a named workspace owning its own chats, standing instructions and
+knowledge base. `ProjectsView` is both halves — the card grid and the detail pane
+— and it REPLACES the chat column rather than floating over it (`Layout` holds
+`projectsAt`), because it is a place you go, not a dialog you dismiss; the sidebar
+stays put so the conversation list is still one click away.
+
+Isolation is inherited, not implemented in the component. Every call goes through
+`lib/api`'s project functions, which stamp `config.agentId` on the request, and
+the backend refuses a cross-agent read — so switching agents switches the whole
+project set exactly the way it already switches chat history.
+
+Three things worth knowing before touching this:
+
+- **New chat from the sidebar is always a LOOSE chat**, even while a project is
+  open. `NEW_CHAT` takes an explicit `projectId` and treats its absence as "no
+  project", never as "keep the current one" — inheriting it there is how a
+  workspace's standing instructions end up on an unrelated conversation.
+- **A chat's project is fixed at birth.** `streamChat` sends `projectId` on every
+  turn and the backend reads it only on the one that creates the session, so
+  there is no client-side "move this chat" path and there should not be one.
+- **Project chats stay in the main history list**, badged with a folder glyph
+  rather than hidden. Hiding them is how you lose a conversation.
+
+The sidebar's pinned shelf keeps its own copy of the project list, so anything
+that changes the shelf raises `speda:projects-changed` — one event from the four
+places that can change it, rather than polling for a list that changes a handful
+of times a week.
 
 ---
 

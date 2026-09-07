@@ -14,6 +14,9 @@ class Session(Base):
     # Agent-scoped listing — Sentinel's history never shows up in Ultron's list.
     __table_args__ = (
         Index("ix_sessions_user_agent_started", "user_id", "agent_id", "started_at"),
+        # Listing one project's chats. Agent-scoped too, so the index also
+        # answers "this agent's chats in this project" without a second lookup.
+        Index("ix_sessions_project", "user_id", "agent_id", "project_id", "started_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -25,6 +28,15 @@ class Session(Base):
     # badge Telegram-originated sessions. A Telegram turn is otherwise a normal
     # orchestrator turn — same tables, same memory extraction.
     channel: Mapped[str] = mapped_column(String(16), default="app")
+    # Which project (workspace) this conversation belongs to, or NULL for a
+    # loose chat. Set once when the session is created — a chat does not move
+    # between projects mid-conversation, because its history was produced under
+    # one set of project instructions and would be misread under another.
+    # Scoped by agent like everything else: projects.agent_id always equals
+    # sessions.agent_id, enforced in routers/projects.py and the chat router.
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id"), nullable=True, default=None
+    )
     triggered_by: Mapped[str] = mapped_column(String(32))  # user | n8n | agent
     model_used: Mapped[str] = mapped_column(String(64))
     title: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)

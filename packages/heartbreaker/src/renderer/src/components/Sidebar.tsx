@@ -7,7 +7,8 @@ import type { AppProfile } from '../profile/types'
 import type { Session, AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
-import { deleteSession, renameSession, fetchActiveRuns } from '../lib/api'
+import { deleteSession, renameSession, fetchActiveRuns, fetchProjects } from '../lib/api'
+import type { Project } from '../lib/types'
 import { hasMark } from '../lib/agentMarks'
 import AgentMark from './AgentMark'
 import { SkeletonList } from './Skeleton'
@@ -153,6 +154,24 @@ function SessionItem({ session, active, onSelect, config, running }: {
             paddingRight: lit ? '3.75rem' : '14px',
           }}
         >
+          {/* A chat that lives in a project says so. It stays in the main
+              history list — hiding project chats here is how you lose one —
+              but it is marked, so the list never implies a conversation was
+              had outside the workspace that shaped it. */}
+          {session.project_id ? (
+            <span
+              title={`${t.projects.inProject}: ${session.project_name ?? ''}`}
+              style={{
+                display: 'inline-flex', verticalAlign: -1, marginRight: 6,
+                color: 'var(--hb-cyan-dim)',
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
+            </span>
+          ) : null}
           {displayTitle || t.sidebar.newConversation}
         </button>
       )}
@@ -241,6 +260,82 @@ function GroupLabel({ label }: { label: string }) {
       whiteSpace: 'nowrap',
     }}>
       {label}
+    </div>
+  )
+}
+
+/* ── Projects nav ─────────────────────────────────────────────────────────
+   The entry to the workspace surface, plus the pinned projects underneath it —
+   the same shape every commercial client settled on, and for the same reason:
+   the two or three workspaces you are actually living in should be one click
+   away, and the rest should be behind a list. Pinned rows are scoped to the
+   current agent because the fetch is (see lib/api's project functions), so
+   switching agents swaps this block wholesale. */
+function ProjectsNav({ config, active, onOpen }: {
+  config: AppConfig; active: boolean; onOpen: (projectId?: number) => void
+}) {
+  const t = useT()
+  const [hover, setHover] = useState(false)
+  const [pinned, setPinned] = useState<Project[]>([])
+
+  useEffect(() => {
+    let alive = true
+    // Refetched whenever the agent changes (config is a new object per switch),
+    // and re-run on the pin event any pin/unpin raises, so the strip is never
+    // a stale copy of another agent's shelf.
+    const load = () => {
+      fetchProjects(config).then(list => {
+        if (alive) setPinned(list.filter(p => p.pinned).slice(0, 5))
+      })
+    }
+    load()
+    window.addEventListener('speda:projects-changed', load)
+    return () => { alive = false; window.removeEventListener('speda:projects-changed', load) }
+  }, [config])
+
+  return (
+    <div style={{ padding: '0 16px 4px' }}>
+      <button
+        onClick={() => onOpen()}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        className={active ? 'hb-row hb-row-active' : 'hb-row'}
+        style={{
+          width: '100%', height: 34, padding: '0 10px',
+          display: 'flex', alignItems: 'center', gap: '0.6rem',
+          cursor: 'pointer', textAlign: 'left',
+          color: active || hover ? 'var(--hb-text)' : 'var(--hb-text-dim)',
+          fontFamily: "'SamsungOne','Inter',sans-serif",
+          fontSize: '0.885rem', fontWeight: active ? 500 : 400,
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"
+          style={{ color: active || hover ? 'var(--hb-cyan-bright)' : 'var(--hb-icon-dim)', flexShrink: 0 }}>
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+        {t.projects.nav}
+      </button>
+
+      {pinned.map(p => (
+        <button
+          key={p.id}
+          onClick={() => onOpen(p.id)}
+          className="hb-row"
+          style={{
+            width: '100%', height: 28, padding: '0 10px 0 32px',
+            display: 'flex', alignItems: 'center', gap: '0.45rem',
+            cursor: 'pointer', textAlign: 'left',
+            color: 'var(--hb-text-dim)',
+            fontFamily: "'SamsungOne','Inter',sans-serif", fontSize: '0.82rem',
+          }}
+        >
+          <span style={{ flexShrink: 0, fontSize: '0.8rem', lineHeight: 1 }}>{p.icon || '·'}</span>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {p.name}
+          </span>
+        </button>
+      ))}
     </div>
   )
 }
@@ -728,9 +823,14 @@ interface Props {
   onNewChat: () => void
   onOpenSettings: () => void
   switchAgent: (agentId: string) => void
+  /** Open the projects surface — the grid, or straight into one project. */
+  onOpenProjects: (projectId?: number) => void
+  /** True while the projects view is the thing on screen, so the nav row reads
+   *  as selected the same way an open conversation does. */
+  projectsOpen: boolean
 }
 
-export default function Sidebar({ profile, config, isOpen, mobile, onSelectSession, onToggle, onNewChat, onOpenSettings, switchAgent }: Props) {
+export default function Sidebar({ profile, config, isOpen, mobile, onSelectSession, onToggle, onNewChat, onOpenSettings, switchAgent, onOpenProjects, projectsOpen }: Props) {
   const t = useT()
   const { state } = useChatContext()
   const [search, setSearch]         = useState('')
@@ -808,6 +908,11 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
         <div style={{ padding: '0 16px 6px' }}>
           <NewChatBtn onClick={onNewChat} />
         </div>
+
+        {/* Projects — the workspace surface, above the loose chat history for
+            the same reason it sits there in every client that has one: a
+            project is where work lives, the list below is where it lands. */}
+        <ProjectsNav config={config} active={projectsOpen} onOpen={onOpenProjects} />
 
         {/* Session list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem 16px 0.5rem' }}>

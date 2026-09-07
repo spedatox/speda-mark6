@@ -326,6 +326,32 @@ class AgentOrchestrator:
                     extra={"request_id": context.request_id, "error": str(exc)},
                 )
 
+        # Project context — the standing instructions and knowledge base of the
+        # workspace this chat lives in, if it lives in one. Frozen for the life
+        # of the turn and identical across every turn in the project, so it goes
+        # with the stable blocks rather than the per-turn one below.
+        project_block = ""
+        project_id = context.extra.get("project_id")
+        if context.db is not None and project_id:
+            try:
+                from app.services.projects import build_project_block
+
+                project_block = await build_project_block(
+                    context.db, int(project_id), context.agent_id
+                ) or ""
+                if project_block:
+                    logger.info(
+                        "project_context_injected",
+                        extra={"request_id": context.request_id, "project_id": project_id},
+                    )
+            except Exception as exc:
+                # A project that fails to render must never break the chat —
+                # the turn just runs without its workspace context.
+                logger.warning(
+                    "project_context_failed",
+                    extra={"request_id": context.request_id, "error": str(exc)},
+                )
+
         # Per-turn relevant recall — the facts matching what he JUST said. Unlike
         # the two blocks above, this varies every turn by design, which is
         # exactly why it is appended after the `_cache`-flagged blocks below and
@@ -460,6 +486,11 @@ class AgentOrchestrator:
         # conversation breakpoint caches it as part of the stable prefix.
         if episodic_block:
             system_blocks.append({"type": "text", "text": episodic_block})
+        # Same reasoning as the episodic block, and for the same reason it is not
+        # `_cache`-flagged: byte-stable across every turn in the project, so the
+        # conversation breakpoint behind it caches it for free.
+        if project_block:
+            system_blocks.append({"type": "text", "text": project_block})
         # Uncached and after everything stable: this is the one block that is
         # SUPPOSED to change every turn, and it sits behind all four spent cache
         # breakpoints so it costs nothing but its own tokens.

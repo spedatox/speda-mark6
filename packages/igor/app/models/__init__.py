@@ -26,6 +26,7 @@ from app.models.reminder import ReminderCycle
 from app.models.reminder_definition import ReminderDefinition
 from app.models.route import RouteGeometry
 from app.models.place import PlaceSet
+from app.models.project import Project, ProjectFile
 
 __all__ = [
     "User", "Session", "Message", "Memory", "MemoryFile", "MemoryRevision",
@@ -35,4 +36,5 @@ __all__ = [
     "HealthSample", "HealthDaily",
     "CourseSlot", "TermConfig", "AttendanceEntry", "Device",
     "ReminderCycle", "ReminderDefinition", "RouteGeometry", "PlaceSet",
+    "Project", "ProjectFile",
 ]

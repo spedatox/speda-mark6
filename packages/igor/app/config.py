@@ -541,6 +541,29 @@ class Settings(BaseSettings):
     # max_tokens for the per-turn recap generation call.
     episodic_recap_max_tokens: int = 300
 
+    # ── Projects ─────────────────────────────────────────────────────────────
+    # A project is a named workspace owning its own chats, standing instructions
+    # and knowledge base, isolated per agent exactly like chat history. When a
+    # chat belongs to one, the project's instructions and knowledge are injected
+    # as their own system block on every turn (services/projects.py).
+    projects_enabled: bool = True
+    # How many knowledge files one project may hold. The ceiling that matters is
+    # the character budget below; this one stops a project becoming a dumping
+    # ground the owner can no longer reason about.
+    projects_max_files: int = 40
+    # Per-file cap on extracted characters at UPLOAD time. A file longer than
+    # this is stored truncated and marked so, rather than rejected.
+    projects_file_max_chars: int = 60_000
+    # Hard cap on the whole injected knowledge block (~15k tokens at 4 chars/
+    # token). Files are included newest-first until the budget runs out; the
+    # ones that did not fit are still NAMED in the block, so the model knows
+    # they exist and can ask for them rather than assuming the base is complete.
+    projects_knowledge_max_chars: int = 60_000
+    # Cap on the instructions field, enforced on write. Standing instructions
+    # ride in the cached prefix of every single turn in the project, so this is
+    # a cost control, not a storage one.
+    projects_instructions_max_chars: int = 8_000
+
     # ── Recall quality ───────────────────────────────────────────────────────
     # The relevance floor. Reciprocal Rank Fusion keeps ORDER and throws away
     # SCORE, which means the rank-1 result of a list of pure noise is presented

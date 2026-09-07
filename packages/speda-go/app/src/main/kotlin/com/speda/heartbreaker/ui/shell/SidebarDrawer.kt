@@ -73,6 +73,7 @@ import com.speda.heartbreaker.designsystem.theme.ThemeEngine
 import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.domain.Project
 import com.speda.heartbreaker.domain.Session
 import com.speda.heartbreaker.domain.groupSessions
 import com.speda.heartbreaker.i18n.AppStrings
@@ -103,6 +104,8 @@ fun SidebarDrawer(
     userName: String,
     onSelectSession: (Int) -> Unit,
     onNewChat: () -> Unit,
+    /** Open the projects surface — the grid, or straight into one project. */
+    onOpenProjects: (Int?) -> Unit,
     onRenameSession: (Int, String) -> Unit,
     onDeleteSession: (Int) -> Unit,
     onClose: () -> Unit,
@@ -127,6 +130,15 @@ fun SidebarDrawer(
             running = api.fetchActiveRuns(config).map { it.sessionId }.toSet()
             delay(8_000)
         }
+    }
+
+    // The pinned projects shelf. Scoped to the current agent because the fetch
+    // is — switching agents swaps this block wholesale, exactly like the session
+    // list above it.
+    var pinnedProjects by remember { mutableStateOf<List<Project>>(emptyList()) }
+    LaunchedEffect(config, open) {
+        if (!open) return@LaunchedEffect
+        pinnedProjects = api.fetchProjects(config).filter { it.pinned }.take(5)
     }
 
     var searchOpen by remember { mutableStateOf(false) }
@@ -302,6 +314,16 @@ fun SidebarDrawer(
                 )
             }
 
+            // ── Projects ─────────────────────────────────────────────────────
+            // Above the loose chat history for the same reason it sits there in
+            // every client that has one: a project is where work lives, the list
+            // below is where it lands.
+            ProjectsNav(
+                pinned = pinnedProjects,
+                onOpen = { projectId -> onOpenProjects(projectId); onClose() },
+                t = t,
+            )
+
             // ── Session list ─────────────────────────────────────────────────
             if (groups.isEmpty()) {
                 Box(Modifier.fillMaxWidth().weight(1f).padding(top = 32.dp), contentAlignment = Alignment.TopCenter) {
@@ -456,6 +478,55 @@ private fun translateGroupLabel(label: String, t: AppStrings): String = when (la
     else -> t.sidebar.groupOlder
 }
 
+@Composable
+private fun ProjectsNav(
+    pinned: List<Project>,
+    onOpen: (Int?) -> Unit,
+    t: AppStrings,
+) {
+    val palette = LocalHbPalette.current
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { onOpen(null) }
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            HbGlyphs.Folder(palette.iconDim, 14.dp)
+            Spacer(Modifier.width(9.dp))
+            HbText(
+                t.projects.nav,
+                style = HbType.read.copy(fontSize = 13.5.sp),
+                color = palette.textDim,
+                maxLines = 1,
+            )
+        }
+        pinned.forEach { project ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpen(project.id) }
+                    .padding(start = 32.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                HbText(
+                    project.icon.ifBlank { "·" },
+                    style = HbType.read.copy(fontSize = 12.sp),
+                    color = palette.textFaint,
+                )
+                Spacer(Modifier.width(7.dp))
+                HbText(
+                    project.name,
+                    style = HbType.read.copy(fontSize = 12.5.sp),
+                    color = palette.textFaint,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionRow(
@@ -511,13 +582,25 @@ private fun SessionRow(
                         .onFocusChanged { if (!it.isFocused && editing) commitRename() },
                 )
             } else {
-                HbText(
-                    session.title ?: t.sidebar.newConversation,
-                    style = HbType.read.copy(fontSize = 13.5.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal),
-                    color = if (active) Color(0xFFF3E2C4) else palette.textDim,
-                    maxLines = 1,
-                    modifier = Modifier.padding(start = if (active) 8.dp else 0.dp, end = 16.dp),
-                )
+                // A chat that lives in a project says so. It stays in the main
+                // history list — hiding project chats here is how you lose one —
+                // but it is marked, so the list never implies a conversation was
+                // had outside the workspace that shaped it.
+                Row(
+                    Modifier.padding(start = if (active) 8.dp else 0.dp, end = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (session.projectId != null) {
+                        HbGlyphs.Folder(palette.accentDim, 11.dp)
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    HbText(
+                        session.title ?: t.sidebar.newConversation,
+                        style = HbType.read.copy(fontSize = 13.5.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal),
+                        color = if (active) Color(0xFFF3E2C4) else palette.textDim,
+                        maxLines = 1,
+                    )
+                }
                 if (running) {
                     Box(
                         Modifier

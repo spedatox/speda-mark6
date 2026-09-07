@@ -6,6 +6,7 @@ import contextlib
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -128,19 +129,34 @@ async def list_sessions(
     request: Request,
     agent_id: str = "speda",
     limit: int = 500,
+    project_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     # Agent-scoped: defaults to Speda so the existing UI is unchanged; pass
     # ?agent_id=… to list another agent's sessions once the UI addresses them.
+    # ?project_id=… narrows to one workspace's chats (the project view). Left
+    # off, every chat comes back — project ones included, carrying project_id
+    # and project_name so the sidebar can badge them instead of hiding them.
     session_manager = request.app.state.session_manager
     sessions = await session_manager.list_sessions(
-        db, user_id=1, agent_id=agent_id, limit=limit
+        db, user_id=1, agent_id=agent_id, limit=limit, project_id=project_id
     )
+    # One lookup for the whole page rather than a query per row.
+    names: dict[int, str] = {}
+    pids = {s.project_id for s in sessions if s.project_id is not None}
+    if pids:
+        from sqlalchemy import select as _select
+        from app.models.project import Project
+
+        rows = await db.execute(_select(Project.id, Project.name).where(Project.id.in_(pids)))
+        names = {pid: name for pid, name in rows.all()}
     return [
         {
             "id": s.id,
             "title": s.title,
             "started_at": s.started_at.isoformat(),
+            "project_id": s.project_id,
+            "project_name": names.get(s.project_id) if s.project_id else None,
             # Running token spend for the session. NULL on every session that
             # predates the counter — reported as 0 rather than omitted so the
             # UI never has to special-case a missing field.
@@ -336,6 +352,31 @@ async def _run_chat(
         session_id=body.session_id,
     )
 
+    # Project (workspace) binding. A chat's project is fixed at birth — see
+    # ChatRequest.project_id — so this only ever writes on a session that has
+    # none yet, and the stored value wins on every later turn.
+    #
+    # The check is the isolation boundary: a project belongs to exactly one
+    # agent, so one addressed by a different agent is refused rather than
+    # silently attached. Without it a client could bind Sentinel's workspace to
+    # an Ultron chat and Ultron would then be handed Sentinel's knowledge base
+    # on every turn.
+    if body.project_id is not None and session.project_id is None:
+        from sqlalchemy import select as _select
+        from app.models.project import Project
+
+        proj = (
+            await db.execute(_select(Project).where(Project.id == body.project_id))
+        ).scalar_one_or_none()
+        if proj is None or proj.agent_id != profile.agent_id:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No project {body.project_id} for agent '{profile.agent_id}'",
+            )
+        session.project_id = proj.id
+        proj.last_activity_at = datetime.now(timezone.utc)
+        await db.commit()
+
     # Regenerate / edit: truncate the stored history to the kept prefix BEFORE
     # anything else, so the model can't be re-fed its own previous answer.
     #   - edit:       drop the old user turn + its assistant reply, then resend
@@ -388,6 +429,13 @@ async def _run_chat(
     # Pre-populate active_servers from the session's loaded-toolset memory so
     # tools loaded via use_toolset on a prior turn stay in the tool array — no
     # repeated use_toolset calls, no cache-busting rewrites.
+    # The workspace this chat lives in, if any — the orchestrator turns it into
+    # the project system block (services/projects.py). Read from the SESSION,
+    # never from the request body, so an existing chat cannot be re-pointed at a
+    # different project by a client that sends the wrong id.
+    if session.project_id is not None:
+        context.extra["project_id"] = session.project_id
+
     context.extra["active_servers"] = session_manager.get_loaded_servers(session.id)
     # Same for individually resolved tools (tool_search): seed from the session
     # so a tool found earlier in the conversation is still callable, and give the

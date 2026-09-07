@@ -8,6 +8,7 @@ The single-agent public build — Speda only, no roster, no switcher, no House P
 
 - [What it is](#what-it-is)
 - [Directory structure](#directory-structure)
+- [Projects](#projects)
 - [Dev workflow](#dev-workflow)
 - [Profile system](#profile-system)
 - [Surviving a dropped connection](#surviving-a-dropped-connection)
@@ -25,6 +26,22 @@ Striker was produced by manually copying Heartbreaker's source tree and strippin
 ## Directory structure
 
 Same `electron-vite` layout as Heartbreaker (`main/`, `preload/`, `renderer/src/{components,lib,profile,store,theme}`), no `teaser/` build. `profile/` carries the same four files as Heartbreaker, but `index.ts` hardcodes a single profile instead of selecting from a roster (see below).
+
+---
+
+## Projects
+
+Ported from Heartbreaker's `ProjectsView` under the cross-client parity rule, with
+one deliberate difference: Striker is the single-agent build, so there is no
+roster and no per-agent accent to read off a profile. A project with no colour of
+its own falls back to the one theme accent (`ACCENT` at the top of the file)
+rather than to `useProfile()`, which does not exist here.
+
+Everything else — the grid, the detail pane, project instructions, the knowledge
+base, the pinned sidebar shelf, the folder badge on project-bound chats — is the
+same component and the same API layer. See
+[HEARTBREAKER.md](../heartbreaker/HEARTBREAKER.md#projects) for the contracts;
+they are not restated here.
 
 ---
 

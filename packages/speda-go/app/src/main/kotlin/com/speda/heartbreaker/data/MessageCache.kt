@@ -14,6 +14,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -68,6 +69,11 @@ class MessageCache(cacheRoot: File) {
                             put("id", s.id)
                             s.title?.let { put("title", it) }
                             put("started_at", s.startedAt)
+                            // The project badge has to survive an offline launch
+                            // too — without it the cached list silently claims
+                            // every chat was had outside a workspace.
+                            s.projectId?.let { put("project_id", it) }
+                            s.projectName?.let { put("project_name", it) }
                         },
                     )
                 }
@@ -87,6 +93,8 @@ class MessageCache(cacheRoot: File) {
                     id = o["id"]?.jsonPrimitive?.int ?: return@mapNotNull null,
                     title = o["title"]?.jsonPrimitive?.content,
                     startedAt = o["started_at"]?.jsonPrimitive?.content.orEmpty(),
+                    projectId = o["project_id"]?.jsonPrimitive?.intOrNull,
+                    projectName = o["project_name"]?.jsonPrimitive?.content,
                 )
             }
         }.getOrDefault(emptyList())

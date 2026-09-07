@@ -176,15 +176,25 @@ class SessionManager:
         user_id: int,
         agent_id: str,
         limit: int = 500,
+        project_id: int | None = None,
     ) -> list[Session]:
         """Sessions for one (user, agent), newest first. Scoped by agent_id so
         one agent's history never leaks into another's list (CLAUDE.md
-        SessionManager contract). Backed by ix_sessions_user_agent_started."""
+        SessionManager contract). Backed by ix_sessions_user_agent_started.
+
+        `project_id` narrows the list to one project's chats — the project
+        view's own listing, backed by ix_sessions_project. Passing it does NOT
+        change the agent scope: a project belongs to one agent, so a project id
+        from another agent simply matches nothing rather than crossing over.
+        Left None, every chat is returned, project ones included; the sidebar
+        wants the whole history and badges the project rows itself."""
+        stmt = select(Session).where(
+            Session.user_id == user_id, Session.agent_id == agent_id
+        )
+        if project_id is not None:
+            stmt = stmt.where(Session.project_id == project_id)
         result = await db.execute(
-            select(Session)
-            .where(Session.user_id == user_id, Session.agent_id == agent_id)
-            .order_by(Session.started_at.desc())
-            .limit(limit)
+            stmt.order_by(Session.started_at.desc()).limit(limit)
         )
         return list(result.scalars().all())
 

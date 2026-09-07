@@ -179,6 +179,42 @@ def _raw_extract(name: str, media_type: str, data: bytes) -> str:
     return ""
 
 
+def extract_body(name: str, media_type: str, data_b64: str) -> tuple[str, str]:
+    """Extract one attachment's raw text.
+
+    Returns `(body, note)`: exactly one of the two is non-empty. `body` is the
+    recovered text; `note` is a short human sentence saying why there is none.
+
+    This is the half of extraction that has an OPINION about failure, split out
+    because its two callers need opposite things from it. A chat attachment
+    degrades — a note in place of the text is better than a failed turn, which
+    is what extract_text below builds. A project knowledge file must NOT: storing
+    "could not be read" as knowledge means the model later reads that sentence as
+    a fact about the subject, so routers/projects.py refuses the upload instead.
+    """
+    try:
+        data = base64.b64decode(data_b64)
+    except Exception:
+        return "", f"'{name}' could not be decoded."
+
+    try:
+        body = _raw_extract(name, media_type, data)
+    except ImportError as exc:
+        logger.warning("attachment_extract_missing_lib", extra={"file_name": name, "error": str(exc)})
+        return "", f"'{name}' ({media_type}): text extraction is unavailable on the server."
+    except Exception as exc:
+        logger.warning("attachment_extract_failed", extra={"file_name": name, "error": str(exc)})
+        return "", f"'{name}' ({media_type}) could not be read."
+
+    body = (body or "").strip()
+    if not body:
+        return "", (
+            f"'{name}' ({media_type}) contained no extractable text "
+            f"(it may be a scanned image or an unsupported binary format)."
+        )
+    return body, ""
+
+
 def extract_text(name: str, media_type: str, data_b64: str) -> str:
     """
     Extract the text of one attachment and return it wrapped in a labelled
@@ -186,26 +222,9 @@ def extract_text(name: str, media_type: str, data_b64: str) -> str:
     never raises — on any failure it returns a short note naming the file so the
     model at least knows an attachment was present.
     """
-    try:
-        data = base64.b64decode(data_b64)
-    except Exception:
-        return f"[Attachment '{name}' could not be decoded and was skipped.]"
-
-    try:
-        body = _raw_extract(name, media_type, data)
-    except ImportError as exc:
-        logger.warning("attachment_extract_missing_lib", extra={"name": name, "error": str(exc)})
-        return f"[Attachment '{name}' ({media_type}): text extraction unavailable on the server.]"
-    except Exception as exc:
-        logger.warning("attachment_extract_failed", extra={"name": name, "error": str(exc)})
-        return f"[Attachment '{name}' ({media_type}) could not be read.]"
-
-    body = (body or "").strip()
-    if not body:
-        return (
-            f"[Attachment '{name}' ({media_type}) contained no extractable text "
-            f"(it may be a scanned image or an unsupported binary format).]"
-        )
+    body, note = extract_body(name, media_type, data_b64)
+    if note:
+        return f"[Attachment {note}]"
 
     truncated = ""
     if len(body) > _MAX_CHARS:

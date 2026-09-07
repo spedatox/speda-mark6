@@ -1,7 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { useEffect, useState } from 'react'
 import { useChatContext } from '../store/chat'
+import { fetchProjects } from '../lib/api'
+import { useT } from '../lib/i18n'
 import type { AppConfig } from '../lib/types'
 
 function IconBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
@@ -32,10 +35,28 @@ interface Props {
  * streaming readout, and the systems-board toggle.
  */
 export default function Header({
-  sidebarOpen, onToggleSidebar, boardOpen, onToggleBoard,
+  config, sidebarOpen, onToggleSidebar, boardOpen, onToggleBoard,
 }: Props) {
+  const t = useT()
   const { state } = useChatContext()
   const activeSession = state.sessions.find(s => s.id === state.activeSessionId)
+  // The project badge. Read from the open session's own row where there is one;
+  // on a chat that does not exist yet (New chat inside a project) the session
+  // list has nothing to read, so fall back to the store's activeProjectId and
+  // resolve the name off the project list.
+  const [projectNames, setProjectNames] = useState<Record<number, string>>({})
+  useEffect(() => {
+    if (!state.activeProjectId) return
+    let alive = true
+    fetchProjects(config).then(list => {
+      if (alive) setProjectNames(Object.fromEntries(list.map(p => [p.id, p.name])))
+    })
+    return () => { alive = false }
+  }, [config, state.activeProjectId])
+  const projectName =
+    activeSession?.project_name ||
+    (state.activeProjectId ? projectNames[state.activeProjectId] : '') ||
+    ''
   const hasMessages = state.messages.length > 0
 
   return (
@@ -65,6 +86,31 @@ export default function Header({
           {activeSession?.title || 'New chat'}
         </span>
       </span>
+
+      {/* Which workspace this conversation belongs to. It sits beside the title
+          rather than inside it because the project is the CONTEXT the answers
+          are being written under — standing instructions and a knowledge base
+          the transcript never shows — and the owner has to be able to see that
+          without opening the project. */}
+      {projectName && (
+        <span
+          className="hb-query-box hb-hide-sm"
+          title={`${t.projects.inProject}: ${projectName}`}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            fontSize: '0.7rem', height: 22, maxWidth: '28%',
+            color: 'var(--hb-cyan)', overflow: 'hidden',
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {projectName}
+          </span>
+        </span>
+      )}
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />

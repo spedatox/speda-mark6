@@ -191,16 +191,17 @@ class ChatViewModel(
         sendJob?.cancel(); reattachJob?.cancel()
         runId = null; turnSessionId = null; turnOriginSessionId = null; turnInFlight = false; attached.clear()
         dispatch(ChatAction.SetConfig(config))
-        dispatch(ChatAction.NewChat)
+        dispatch(ChatAction.NewChat())
         refreshSessions()
     }
 
-    fun newChat() {
+    /** [projectId] binds the new chat to a project; null starts a loose one. */
+    fun newChat(projectId: Int? = null) {
         reattachJob?.cancel()
         if (sendJob?.isActive == true && turnInFlight) {
             sendJob?.cancel(); runId = null; turnSessionId = null; turnOriginSessionId = null; turnInFlight = false
         }
-        dispatch(ChatAction.NewChat)
+        dispatch(ChatAction.NewChat(projectId))
     }
 
     /**
@@ -223,7 +224,7 @@ class ChatViewModel(
         }
     }
 
-    fun selectSession(sessionId: Int) {
+    fun selectSession(sessionId: Int, projectId: Int? = null) {
         val cfg = state.value.config ?: return
         reattachJob?.cancel()
         // Abort-on-switch: if a local send is streaming for ANOTHER session, drop
@@ -249,7 +250,7 @@ class ChatViewModel(
             } else {
                 cache.load(cfg.agentId, sessionId) ?: emptyList()
             }
-            dispatch(ChatAction.SelectSession(sessionId, messages))
+            dispatch(ChatAction.SelectSession(sessionId, messages, projectId))
             maybeReattach(sessionId, cfg)
         }
     }
@@ -329,7 +330,13 @@ class ChatViewModel(
                 // Resolve ambient context (platform + opt-in location) for THIS turn.
                 val cc = runCatching { clientContextProvider?.invoke() }.getOrNull()
                 val sendOpts = (if (cc != null) opts.copy(clientContext = cc) else opts)
-                    .copy(requestId = requestId)
+                    // The workspace this chat belongs to. Only read by the backend
+                    // on the turn that CREATES the session — a chat's project is
+                    // fixed at birth — so sending it every turn is harmless, and
+                    // means a chat started from a project is bound the moment it
+                    // exists. Read from the STORE, never from the caller, so one
+                    // path decides which workspace a turn is written into.
+                    .copy(requestId = requestId, projectId = state.value.activeProjectId)
                 collectStream(
                     flow = api.streamChat(if (opts.regenerate) "" else text, sessionAtSend, cfg, sendOpts),
                     assistantId = assistantId,

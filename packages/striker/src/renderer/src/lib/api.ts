@@ -111,6 +111,10 @@ export interface StreamOpts {
    *  Re-attach, cancel and steer are all keyed on it, so minting it client-side
    *  is what makes the turn recoverable from the instant Send is pressed —
    *  including in a brand-new chat that has no session_id yet. */
+  /** The project a BRAND-NEW chat is being started in. Only read on the turn
+   *  that creates the session — a chat's project is fixed at birth, and the
+   *  backend ignores this field on an existing session. */
+  projectId?: number | null
   requestId?: string
 }
 
@@ -148,6 +152,7 @@ export async function* streamChat(
       ...(opts.regenerate ? { regenerate: true } : {}),
       ...(opts.cwd ? { cwd: opts.cwd } : {}),
       ...(opts.requestId ? { request_id: opts.requestId } : {}),
+      ...(opts.projectId ? { project_id: opts.projectId } : {}),
       // Surface awareness — tell Speda whether this turn came from the desktop
       // app or the web build. (The Android app and Telegram set their own.)
       client_context: { ...desktopClientContext(), ...(opts.voice ? { voice: true } : {}) },
@@ -302,6 +307,141 @@ export async function fetchSessions(
   })
   if (!res.ok) return []
   return res.json()
+}
+
+/* ── Projects ──────────────────────────────────────────────────────────────
+ * Every call carries agent_id. That is not decoration: the backend refuses a
+ * cross-agent read, so a call that forgets it silently addresses Speda's
+ * workspaces from whichever agent this build is pointed at. The parameter comes
+ * off `config`, which the agent switcher rewrites, so switching agents switches
+ * the whole project set the way it already switches chat history.
+ */
+
+export async function fetchProjects(
+  config: AppConfig,
+  includeArchived = false
+): Promise<import('./types').Project[]> {
+  try {
+    const res = await fetch(
+      `${config.apiBase}/projects?agent_id=${config.agentId}&include_archived=${includeArchived}`,
+      { headers: authHeaders(config) }
+    )
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
+export async function createProject(
+  config: AppConfig,
+  body: { name: string; description?: string; instructions?: string; icon?: string; color?: string }
+): Promise<import('./types').Project> {
+  const res = await fetch(`${config.apiBase}/projects`, {
+    method: 'POST',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ...body, agent_id: config.agentId }),
+  })
+  if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`))
+  return res.json()
+}
+
+export async function updateProject(
+  config: AppConfig,
+  projectId: number,
+  patch: Partial<{
+    name: string; description: string; instructions: string
+    icon: string; color: string; pinned: boolean; archived: boolean
+  }>
+): Promise<import('./types').Project> {
+  const res = await fetch(
+    `${config.apiBase}/projects/${projectId}?agent_id=${config.agentId}`,
+    {
+      method: 'PATCH',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(patch),
+    }
+  )
+  if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`))
+  return res.json()
+}
+
+export async function deleteProject(config: AppConfig, projectId: number): Promise<void> {
+  await fetch(`${config.apiBase}/projects/${projectId}?agent_id=${config.agentId}`, {
+    method: 'DELETE',
+    headers: authHeaders(config),
+  })
+}
+
+export async function fetchProjectSessions(
+  config: AppConfig,
+  projectId: number
+): Promise<Session[]> {
+  try {
+    const res = await fetch(
+      `${config.apiBase}/projects/${projectId}/sessions?agent_id=${config.agentId}`,
+      { headers: authHeaders(config) }
+    )
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
+export async function fetchProjectFiles(
+  config: AppConfig,
+  projectId: number
+): Promise<import('./types').ProjectFile[]> {
+  try {
+    const res = await fetch(
+      `${config.apiBase}/projects/${projectId}/files?agent_id=${config.agentId}`,
+      { headers: authHeaders(config) }
+    )
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
+}
+
+/** Upload one knowledge file. Reuses `fileToDocBlock` — the wire shape is the
+ *  same as a chat attachment, and the backend runs the same extractor over it,
+ *  so there is exactly one encoder in this client rather than two that drift. */
+export async function uploadProjectFile(
+  config: AppConfig,
+  projectId: number,
+  file: File
+): Promise<import('./types').ProjectFile> {
+  const block = await fileToDocBlock(file)
+  const res = await fetch(
+    `${config.apiBase}/projects/${projectId}/files?agent_id=${config.agentId}`,
+    {
+      method: 'POST',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(block),
+    }
+  )
+  if (!res.ok) {
+    // The backend refuses an unreadable file and a full knowledge base by name,
+    // so its message is worth more to the owner than "HTTP 400".
+    const text = await res.text().catch(() => '')
+    let detail = ''
+    try { detail = JSON.parse(text)?.detail || '' } catch { detail = '' }
+    throw new Error(detail || text || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function deleteProjectFile(
+  config: AppConfig,
+  projectId: number,
+  fileId: number
+): Promise<void> {
+  await fetch(
+    `${config.apiBase}/projects/${projectId}/files/${fileId}?agent_id=${config.agentId}`,
+    { method: 'DELETE', headers: authHeaders(config) }
+  )
 }
 
 export async function fetchModels(config: AppConfig): Promise<ModelInfo[]> {

@@ -153,6 +153,36 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         ],
     ),
     ConfigGroup(
+        "projects", "Projects",
+        "Named workspaces that own their own chats, standing instructions and "
+        "knowledge base. Isolated per agent, exactly like chat history — a "
+        "project belongs to one agent and is invisible to the rest of the "
+        "roster. These numbers govern how much of a project rides in the prompt.",
+        [
+            ConfigField("projects_enabled", "Projects Enabled", "bool", requires_restart=_LIVE,
+                        help="Off hides the project surface in every client and stops project "
+                             "instructions and knowledge being injected into any turn. Existing "
+                             "projects and their chats are untouched — they simply stop applying."),
+            ConfigField("projects_max_files", "Max Files per Project", "int", requires_restart=_LIVE,
+                        help="How many knowledge files one project may hold. The budget below is "
+                             "the cap that governs cost; this one keeps a knowledge base something "
+                             "you can still reason about."),
+            ConfigField("projects_file_max_chars", "Per-file Extract Cap (chars)", "int",
+                        requires_restart=_LIVE,
+                        help="Characters kept from one uploaded file. A longer file is stored "
+                             "truncated and marked so, never rejected."),
+            ConfigField("projects_knowledge_max_chars", "Knowledge Budget (chars)", "int",
+                        requires_restart=_LIVE,
+                        help="Ceiling on the whole knowledge block injected per turn (~4 chars per "
+                             "token). Files go in newest-first until it runs out; the rest are still "
+                             "named, so the model knows they exist rather than assuming it saw all."),
+            ConfigField("projects_instructions_max_chars", "Instructions Cap (chars)", "int",
+                        requires_restart=_LIVE,
+                        help="Ceiling on a project's standing instructions, enforced on save. They "
+                             "ride in the cached prefix of every turn in the project."),
+        ],
+    ),
+    ConfigGroup(
         "telegram", "Telegram Channel",
         "One bot per agent — chat + notifications. Set a token per agent; Speda's "
         "is the fallback voice. Switch ingress to polling (dev) or webhook (prod).",

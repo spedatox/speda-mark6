@@ -83,6 +83,20 @@ Model allocation follows one policy across the roster: the owner's manual per-ag
 - Meaning-based (hybrid vector + keyword) recall across every past conversation, for "did we discuss this" queries that can't be phrased as an exact search term.
 - Pattern detection: a fact or behavior observed enough times graduates into a recorded pattern that agents check *before* planning or promising anything, rather than noting it only after the fact.
 
+### Projects
+
+- Named workspaces that group a body of work: each owns its own chats, its own
+  standing instructions, and its own uploaded knowledge base.
+- Project instructions are injected as a system block on every turn of every chat
+  in the project — they shape tone, scope and format, and sit *under* the agent's
+  own operating contract rather than over it.
+- Knowledge files are extracted to text server-side and budgeted by character
+  count; the files that do not fit a turn's budget are still named, so an agent
+  knows the base is larger than what it can see rather than treating a partial
+  view as complete.
+- Isolated per agent, exactly like chat history: a project belongs to one agent
+  and is invisible to the rest of the roster. There is no shared project.
+
 ### Files, storage & documents
 
 - Generate downloadable PPTX, DOCX, and PDF files from Markdown, auto-branded per agent.

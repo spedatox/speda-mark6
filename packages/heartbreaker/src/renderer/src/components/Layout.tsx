@@ -22,6 +22,7 @@ import AgentSwitcherOverlay from './AgentSwitcherOverlay'
 import HousePartyModal from './HousePartyModal'
 import LockdownModal from './LockdownModal'
 import SkyfallCountdown from './SkyfallCountdown'
+import ProjectsView from './ProjectsView'
 import type { SkyfallArm } from '../lib/api'
 
 interface LayoutProps {
@@ -128,12 +129,18 @@ export default function Layout({
   // "new chat" welcome screen for a conversation that already has history.
   const [historyLoading, setHistoryLoading] = useState(false)
 
-  const handleSelectSession = useCallback(async (sessionId: number) => {
+  // The projects surface replaces the chat column rather than floating over it:
+  // it is a place you go, not a dialog you dismiss, and the sidebar stays put so
+  // the conversation list is still one click away. `null` = the chat view.
+  const [projectsAt, setProjectsAt] = useState<{ projectId: number | null } | null>(null)
+
+  const handleSelectSession = useCallback(async (sessionId: number, projectId?: number | null) => {
     setDrawerOpen(false)
+    setProjectsAt(null)
     // Show the cached transcript instantly (also the offline fallback), then let
     // the server refresh it. If the fetch fails (no network), the cache stays.
     const cached = loadMessages(config.agentId, sessionId)
-    dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages: cached ?? [] } })
+    dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages: cached ?? [], projectId } })
     if (!cached) setHistoryLoading(true)
     try {
       const messages = await fetchMessages(config, sessionId)
@@ -141,7 +148,7 @@ export default function Layout({
       // back empty but we have a cached copy (e.g. an answer lost to a mid-turn
       // restart), keep showing the cache rather than blanking the view.
       if (messages.length || !cached) {
-        dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages } })
+        dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages, projectId } })
         if (messages.length) saveMessages(config.agentId, sessionId, messages)
       }
     } catch { /* offline — keep the cached transcript already shown */ }
@@ -150,7 +157,18 @@ export default function Layout({
 
   const handleNewChat = useCallback(() => {
     setDrawerOpen(false)
+    setProjectsAt(null)
+    // No projectId — New chat from the sidebar is always a LOOSE chat, even
+    // while a project is open. Inheriting the open project here is how a
+    // workspace's standing instructions end up on an unrelated conversation.
     dispatch({ type: 'NEW_CHAT' })
+  }, [dispatch])
+
+  /** New chat bound to a project — the only path that carries a projectId. */
+  const handleNewProjectChat = useCallback((projectId: number) => {
+    setDrawerOpen(false)
+    setProjectsAt(null)
+    dispatch({ type: 'NEW_CHAT', payload: { projectId } })
   }, [dispatch])
 
   return (
@@ -179,6 +197,11 @@ export default function Layout({
         onNewChat={handleNewChat}
         onOpenSettings={() => { setDrawerOpen(false); setSettingsOpen(true) }}
         switchAgent={switchAgent}
+        onOpenProjects={(projectId) => {
+          setDrawerOpen(false)
+          setProjectsAt({ projectId: projectId ?? null })
+        }}
+        projectsOpen={projectsAt !== null}
       />
 
       {/* The chat column. Inset on all four sides so it reads as an island
@@ -207,14 +230,25 @@ export default function Layout({
             onOpenConfig={() => setCoresOpen(true)}
           />
         )}
-        <ChatMain
-          config={config}
-          onSelectSession={handleSelectSession}
-          voiceOpen={voiceOpen && !isMobile}
-          onCloseVoice={() => setVoiceOpen(false)}
-          partyEngaged={partyEngaged}
-          historyLoading={historyLoading}
-        />
+        {projectsAt ? (
+          <ProjectsView
+            config={config}
+            locale={settings.locale}
+            initialProjectId={projectsAt.projectId}
+            onClose={() => setProjectsAt(null)}
+            onOpenChat={(sessionId, projectId) => handleSelectSession(sessionId, projectId)}
+            onNewChat={handleNewProjectChat}
+          />
+        ) : (
+          <ChatMain
+            config={config}
+            onSelectSession={handleSelectSession}
+            voiceOpen={voiceOpen && !isMobile}
+            onCloseVoice={() => setVoiceOpen(false)}
+            partyEngaged={partyEngaged}
+            historyLoading={historyLoading}
+          />
+        )}
       </div>
 
       {/* Right island — telemetry. Starts below the rail's row so the floating

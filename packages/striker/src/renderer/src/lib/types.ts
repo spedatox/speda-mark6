@@ -138,6 +138,55 @@ export interface Session {
    *  responses from a backend older than the counter. */
   tokens_in?: number
   tokens_out?: number
+  /** The project (workspace) this chat belongs to, or null for a loose chat.
+   *  Fixed when the chat is created and never changed — its history was
+   *  produced under one set of standing instructions. The sidebar badges these
+   *  rows rather than hiding them; the project view lists them on their own. */
+  project_id?: number | null
+  project_name?: string | null
+}
+
+/**
+ * A project — a named workspace owning its own chats, standing instructions and
+ * knowledge base.
+ *
+ * Isolated per agent, exactly like chat history: the backend filters every
+ * listing by agent_id and refuses a cross-agent read, so switching agents
+ * switches the entire project set. There is no shared project.
+ */
+export interface Project {
+  id: number
+  agent_id: string
+  name: string
+  /** The blurb on the card. Descriptive only — it is NOT sent to the model. */
+  description: string
+  /** Standing orders prepended to every turn in every chat in this project.
+   *  This is the field that changes behaviour. */
+  instructions: string
+  icon: string          // one emoji, or '' to fall back to the generic mark
+  color: string         // hex accent, or '' to inherit the agent's own
+  pinned: boolean
+  archived: boolean
+  created_at: string
+  updated_at: string
+  last_activity_at: string
+  chat_count: number
+  file_count: number
+}
+
+/** One document in a project's knowledge base. The backend stores the EXTRACTED
+ *  TEXT, not the original bytes, so `chars` (what the model sees) and `size`
+ *  (what was uploaded) are different numbers on purpose. */
+export interface ProjectFile {
+  id: number
+  name: string
+  media_type: string
+  size: number
+  chars: number
+  created_at: string
+  /** Set on the upload response when the file was longer than the per-file cap
+   *  and was stored truncated. Never present on a plain listing. */
+  truncated?: boolean
 }
 
 export interface AppConfig {

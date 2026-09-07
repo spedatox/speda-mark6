@@ -12,6 +12,7 @@ import { loadMessages, saveMessages } from '../store/messageCache'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import ChatMain from './ChatMain'
+import ProjectsView from './ProjectsView'
 import SettingsModal from './SettingsModal'
 import SystemsBoard from './SystemsBoard'
 
@@ -38,19 +39,25 @@ export default function Layout({ profile, config }: LayoutProps) {
 
   const sidebarOpen = settings.sidebarOpen
 
-  const handleSelectSession = useCallback(async (sessionId: number) => {
+  // The projects surface replaces the chat column rather than floating over it:
+  // it is a place you go, not a dialog you dismiss, and the sidebar stays put so
+  // the conversation list is still one click away. `null` = the chat view.
+  const [projectsAt, setProjectsAt] = useState<{ projectId: number | null } | null>(null)
+
+  const handleSelectSession = useCallback(async (sessionId: number, projectId?: number | null) => {
     setDrawerOpen(false)
+    setProjectsAt(null)
     // Show the cached transcript instantly (also the offline fallback), then let
     // the server refresh it. If the fetch fails (no network), the cache stays.
     const cached = loadMessages(config.agentId, sessionId)
-    dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages: cached ?? [] } })
+    dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages: cached ?? [], projectId } })
     try {
       const messages = await fetchMessages(config, sessionId)
       // Server is authoritative when it actually returned the turn; if it came
       // back empty but we have a cached copy (e.g. an answer lost to a mid-turn
       // restart), keep showing the cache rather than blanking the view.
       if (messages.length || !cached) {
-        dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages } })
+        dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages, projectId } })
         if (messages.length) saveMessages(config.agentId, sessionId, messages)
       }
     } catch { /* offline — keep the cached transcript already shown */ }
@@ -58,7 +65,18 @@ export default function Layout({ profile, config }: LayoutProps) {
 
   const handleNewChat = useCallback(() => {
     setDrawerOpen(false)
+    setProjectsAt(null)
+    // No projectId — New chat from the sidebar is always a LOOSE chat, even
+    // while a project is open. Inheriting the open project here is how a
+    // workspace's standing instructions end up on an unrelated conversation.
     dispatch({ type: 'NEW_CHAT' })
+  }, [dispatch])
+
+  /** New chat bound to a project — the only path that carries a projectId. */
+  const handleNewProjectChat = useCallback((projectId: number) => {
+    setDrawerOpen(false)
+    setProjectsAt(null)
+    dispatch({ type: 'NEW_CHAT', payload: { projectId } })
   }, [dispatch])
 
   return (
@@ -86,6 +104,11 @@ export default function Layout({ profile, config }: LayoutProps) {
         onToggle={() => (isMobile ? setDrawerOpen(false) : update({ sidebarOpen: !sidebarOpen }))}
         onNewChat={handleNewChat}
         onOpenSettings={() => { setDrawerOpen(false); setSettingsOpen(true) }}
+        onOpenProjects={(projectId) => {
+          setDrawerOpen(false)
+          setProjectsAt({ projectId: projectId ?? null })
+        }}
+        projectsOpen={projectsAt !== null}
       />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
@@ -97,7 +120,18 @@ export default function Layout({ profile, config }: LayoutProps) {
           boardOpen={boardOpen}
           onToggleBoard={() => setBoardOpen(v => !v)}
         />
-        <ChatMain config={config} onSelectSession={handleSelectSession} />
+        {projectsAt ? (
+          <ProjectsView
+            config={config}
+            locale={settings.locale}
+            initialProjectId={projectsAt.projectId}
+            onClose={() => setProjectsAt(null)}
+            onOpenChat={(sessionId, projectId) => handleSelectSession(sessionId, projectId)}
+            onNewChat={handleNewProjectChat}
+          />
+        ) : (
+          <ChatMain config={config} onSelectSession={handleSelectSession} />
+        )}
       </div>
 
       {boardOpen && <SystemsBoard config={config} onClose={() => setBoardOpen(false)} />}

@@ -125,6 +125,34 @@ object HbGlyphs {
         pathString("M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z", color)
     }
 
+    /** Folder — a project. The workspace mark the sidebar, the session badge and
+     *  the project grid all share, so one shape means "project" everywhere. */
+    @Composable
+    fun Folder(color: Color, size: Dp = 14.dp, modifier: Modifier = Modifier) = Glyph(size, modifier, stroke = 1.7f) {
+        pathString("M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z", color)
+    }
+
+    /** Speech bubble — one chat, in a project's chat list and on its card. */
+    @Composable
+    fun Chat(color: Color, size: Dp = 12.dp, modifier: Modifier = Modifier) = Glyph(size, modifier, stroke = 1.8f) {
+        pathString("M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", color)
+    }
+
+    /** Pin — a project kept on the sidebar shelf. */
+    @Composable
+    fun Pin(color: Color, size: Dp = 12.dp, modifier: Modifier = Modifier) = Glyph(size, modifier, stroke = 1.8f) {
+        line(12f, 17f, 12f, 22f, color)
+        pathString("M9 2h6l-1 7 4 3v2H6v-2l4-3-1-7z", color)
+    }
+
+    /** Archive box — a project put away without being deleted. */
+    @Composable
+    fun Archive(color: Color, size: Dp = 12.dp, modifier: Modifier = Modifier) = Glyph(size, modifier, stroke = 1.8f) {
+        rect(3f, 4f, 18f, 4f, color)
+        pathString("M5 8v12h14V8", color)
+        line(10f, 12f, 14f, 12f, color)
+    }
+
     // ── Message action bar (Message.tsx icons — path data copied verbatim) ────
 
     /** Copy — two overlapping sheets. */

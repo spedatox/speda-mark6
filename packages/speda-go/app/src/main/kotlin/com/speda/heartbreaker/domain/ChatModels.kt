@@ -106,4 +106,50 @@ data class Session(
     val id: Int,
     val title: String?,
     val startedAt: String,
+    /** The project (workspace) this chat belongs to, or null for a loose chat.
+     *  Fixed when the chat is created and never changed — its history was
+     *  produced under one set of standing instructions. The sidebar badges
+     *  these rows rather than hiding them. */
+    val projectId: Int? = null,
+    val projectName: String? = null,
+)
+
+/**
+ * A project — a named workspace owning its own chats, standing instructions and
+ * knowledge base.
+ *
+ * Isolated per agent, exactly like chat history: the backend filters every
+ * listing by agent_id and refuses a cross-agent read, so switching agents
+ * switches the entire project set. There is no shared project.
+ */
+@Immutable
+data class Project(
+    val id: Int,
+    val agentId: String,
+    val name: String,
+    /** The blurb on the card. Descriptive only — it is NOT sent to the model. */
+    val description: String = "",
+    /** Standing orders prepended to every turn in every chat in this project.
+     *  This is the field that changes behaviour. */
+    val instructions: String = "",
+    val icon: String = "",
+    val color: String = "",
+    val pinned: Boolean = false,
+    val archived: Boolean = false,
+    val lastActivityAt: String = "",
+    val chatCount: Int = 0,
+    val fileCount: Int = 0,
+)
+
+/** One document in a project's knowledge base. The backend stores the EXTRACTED
+ *  TEXT, not the original bytes, so [chars] (what the model sees) and [size]
+ *  (what was uploaded) are different numbers on purpose. */
+@Immutable
+data class ProjectFile(
+    val id: Int,
+    val name: String,
+    val mediaType: String = "",
+    val size: Long = 0,
+    val chars: Int = 0,
+    val createdAt: String = "",
 )

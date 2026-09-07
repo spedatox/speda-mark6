@@ -10,6 +10,7 @@ The native Android client. Kotlin, Jetpack Compose. Package id `com.speda.heartb
 - [Build setup](#build-setup)
 - [Networking](#networking)
 - [Key screens](#key-screens)
+- [Projects](#projects)
 - [Surviving a dropped connection](#surviving-a-dropped-connection)
 - [Health sync](#health-sync)
 - [Push notifications](#push-notifications)
@@ -32,6 +33,7 @@ Under `app/src/main/kotlin/com/speda/heartbreaker/`:
 | `ui/comms/` | Inter-agent traffic viewer |
 | `ui/prose/` | Rich-content renderers — SVG, map, chart, calendar, bus, aircraft, code, and math blocks |
 | `ui/settings/` | One tab per settings area — account, automations, connections, protocols, reminders, voices, health, interface |
+| `ui/projects/` | The projects surface — the workspace grid and one project's detail pane |
 | `ui/shell/` | App chrome — header, sidebar, welcome view |
 | `ui/skyfall/` | The Skyfall protocol's full-screen countdown |
 | `ui/switcher/` | The agent switcher overlay |
@@ -63,7 +65,30 @@ It covers the full backend surface: chat streaming and cancellation, sessions, b
 - **Chat** — the primary surface; a Kotlin port of the same send/stop/reattach pipeline the desktop client uses, including a pending-asks tray for owner approvals surfaced directly to the phone.
 - **Agent comms** — inter-agent dispatch traffic.
 - **Settings** — one tab per area, mirroring the desktop settings modal.
+- **Projects** — named workspaces, each owning its own chats, standing
+  instructions and knowledge base. A full-screen sheet over the transcript that
+  back closes, exactly like settings; reached from the Projects row in the sidebar
+  drawer, or straight into one project from the pinned shelf beneath it.
 - **Skyfall** — the full-screen arm/fire/abort countdown.
+
+---
+
+## Projects
+
+Ported from the desktop's `ProjectsView` under the cross-client parity rule, into
+one column because the phone has one. The contracts are Igor's and are documented
+there ([IGOR.md](../igor/IGOR.md#projects)) — a project belongs to one agent and
+is invisible to the rest of the roster, and a chat's project is fixed at birth.
+
+Two client-side notes:
+
+- `ChatViewModel.newChat(projectId)` treats a null id as a LOOSE chat, never as
+  "keep the current one". The send path reads `activeProjectId` off the STORE
+  rather than from its caller, so one place decides which workspace a turn is
+  written into.
+- The offline session cache (`MessageCache.saveSessions`) persists `project_id`
+  and `project_name` alongside the title. Without them the cached list silently
+  claims every chat was had outside a workspace.
 
 ---
 

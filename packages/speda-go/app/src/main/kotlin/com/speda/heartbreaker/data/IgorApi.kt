@@ -7,6 +7,8 @@ import com.speda.heartbreaker.domain.AircraftSpec
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.ChatMessage
 import com.speda.heartbreaker.domain.MapPlace
+import com.speda.heartbreaker.domain.Project
+import com.speda.heartbreaker.domain.ProjectFile
 import com.speda.heartbreaker.domain.RouteGeometry
 import com.speda.heartbreaker.domain.Session
 import com.speda.heartbreaker.domain.parseAircraftSpec
@@ -73,6 +75,10 @@ class IgorApi(
         val keepMessages: Int? = null,
         val regenerate: Boolean = false,
         val cwd: String? = null,
+        /** The project a BRAND-NEW chat is being started in. Only read by the
+         *  backend on the turn that creates the session — a chat's project is
+         *  fixed at birth — so sending it every turn is harmless. */
+        val projectId: Int? = null,
         /** Ambient platform + (opt-in) location context for this turn. */
         val clientContext: ClientContext? = null,
         /** The turn's id, chosen HERE rather than read off the first `start`
@@ -135,6 +141,7 @@ class IgorApi(
             if (opts.regenerate) put("regenerate", true)
             opts.cwd?.let { put("cwd", it) }
             opts.requestId?.let { put("request_id", it) }
+            opts.projectId?.let { put("project_id", it) }
             opts.clientContext?.let { cc ->
                 put(
                     "client_context",
@@ -348,7 +355,9 @@ class IgorApi(
     suspend fun fetchSessions(config: AppConfig, limit: Int = 500): List<Session> = withContext(Dispatchers.IO) {
         runCatching {
             getString(config, "/sessions?agent_id=${config.agentId}&limit=$limit")?.let { body ->
-                json.decodeFromString<List<SessionDto>>(body).map { Session(it.id, it.title, it.startedAt) }
+                json.decodeFromString<List<SessionDto>>(body).map {
+                    Session(it.id, it.title, it.startedAt, it.projectId, it.projectName)
+                }
             }
         }.getOrNull() ?: emptyList()
     }
@@ -360,6 +369,158 @@ class IgorApi(
             }
         }.getOrNull() ?: emptyList()
     }
+
+    // ── Projects ─────────────────────────────────────────────────────────────
+    //
+    // Every call carries agent_id. That is not decoration: the backend refuses a
+    // cross-agent read, so a call that forgets it silently addresses Speda's
+    // workspaces from whichever agent this build is pointed at. The parameter
+    // comes off `config`, which the agent switcher rewrites, so switching agents
+    // switches the whole project set the way it already switches chat history.
+
+    suspend fun fetchProjects(
+        config: AppConfig,
+        includeArchived: Boolean = false,
+    ): List<Project> = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(
+                config,
+                "/projects?agent_id=${config.agentId}&include_archived=$includeArchived",
+            )?.let { body -> json.decodeFromString<List<ProjectDto>>(body).map { it.toModel() } }
+        }.getOrNull() ?: emptyList()
+    }
+
+    suspend fun createProject(
+        config: AppConfig,
+        name: String,
+        description: String = "",
+        instructions: String = "",
+        icon: String = "",
+    ): Project? = withContext(Dispatchers.IO) {
+        runCatching {
+            postJson(
+                config,
+                "/projects",
+                buildJsonObject {
+                    put("agent_id", config.agentId)
+                    put("name", name)
+                    put("description", description)
+                    put("instructions", instructions)
+                    put("icon", icon)
+                },
+            )?.let { json.decodeFromString<ProjectDto>(it).toModel() }
+        }.getOrNull()
+    }
+
+    /** Partial update. Only the fields passed are sent, so `null` genuinely
+     *  means "leave alone" rather than "clear" (pass "" to clear). */
+    suspend fun updateProject(
+        config: AppConfig,
+        projectId: Int,
+        name: String? = null,
+        description: String? = null,
+        instructions: String? = null,
+        icon: String? = null,
+        pinned: Boolean? = null,
+        archived: Boolean? = null,
+    ): Project? = withContext(Dispatchers.IO) {
+        runCatching {
+            patchJson(
+                config,
+                "/projects/$projectId?agent_id=${config.agentId}",
+                buildJsonObject {
+                    name?.let { put("name", it) }
+                    description?.let { put("description", it) }
+                    instructions?.let { put("instructions", it) }
+                    icon?.let { put("icon", it) }
+                    pinned?.let { put("pinned", it) }
+                    archived?.let { put("archived", it) }
+                },
+            )?.let { json.decodeFromString<ProjectDto>(it).toModel() }
+        }.getOrNull()
+    }
+
+    suspend fun deleteProject(config: AppConfig, projectId: Int): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                deleteRequest(config, "/projects/$projectId?agent_id=${config.agentId}") != null
+            }.getOrDefault(false)
+        }
+
+    suspend fun fetchProjectSessions(config: AppConfig, projectId: Int): List<Session> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                getString(
+                    config,
+                    "/projects/$projectId/sessions?agent_id=${config.agentId}",
+                )?.let { body ->
+                    json.decodeFromString<List<SessionDto>>(body).map {
+                        Session(it.id, it.title, it.startedAt, it.projectId, it.projectName)
+                    }
+                }
+            }.getOrNull() ?: emptyList()
+        }
+
+    suspend fun fetchProjectFiles(config: AppConfig, projectId: Int): List<ProjectFile> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                getString(
+                    config,
+                    "/projects/$projectId/files?agent_id=${config.agentId}",
+                )?.let { body ->
+                    json.decodeFromString<List<ProjectFileDto>>(body).map { it.toModel() }
+                }
+            }.getOrNull() ?: emptyList()
+        }
+
+    /** Upload one knowledge file. Takes the same [DocBlock] a chat attachment
+     *  uses — identical wire shape, and the backend runs the same extractor over
+     *  it — so this client has one encoder rather than two that drift. */
+    suspend fun uploadProjectFile(
+        config: AppConfig,
+        projectId: Int,
+        doc: DocBlock,
+    ): Result<ProjectFile> = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder()
+                .url("${config.apiBase}/projects/$projectId/files?agent_id=${config.agentId}")
+                .header("X-API-Key", config.apiKey)
+                .post(
+                    buildJsonObject {
+                        put("name", doc.name)
+                        put("media_type", doc.mediaType)
+                        put("data", doc.data)
+                        put("size", doc.size)
+                    }.toString().toRequestBody(jsonMedia),
+                )
+                .build()
+            restClient.newCall(request).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                if (!res.isSuccessful) {
+                    // The backend refuses an unreadable file and a full knowledge
+                    // base BY NAME, and that sentence is the whole value of the
+                    // failure — surface it rather than "HTTP 400".
+                    val detail = runCatching {
+                        json.parseToJsonElement(body).jsonObject["detail"]?.jsonPrimitive?.content
+                    }.getOrNull()
+                    error(detail ?: "HTTP ${res.code}")
+                }
+                json.decodeFromString<ProjectFileDto>(body).toModel()
+            }
+        }
+    }
+
+    suspend fun deleteProjectFile(config: AppConfig, projectId: Int, fileId: Int): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                deleteRequest(
+                    config,
+                    "/projects/$projectId/files/$fileId?agent_id=${config.agentId}",
+                ) != null
+            }.getOrDefault(false)
+        }
+
+    // ── Sessions, continued ──────────────────────────────────────────────────
 
     /** Rename a session (PATCH /sessions/{id} {title}). Returns success. */
     suspend fun renameSession(config: AppConfig, sessionId: Int, title: String): Boolean =
@@ -1401,5 +1562,41 @@ class IgorApi(
         val id: Int,
         val title: String? = null,
         @SerialName("started_at") val startedAt: String = "",
+        // Absent on a backend older than projects — defaulted, never required.
+        @SerialName("project_id") val projectId: Int? = null,
+        @SerialName("project_name") val projectName: String? = null,
     )
+
+    @Serializable
+    private data class ProjectDto(
+        val id: Int,
+        @SerialName("agent_id") val agentId: String = "speda",
+        val name: String = "",
+        val description: String = "",
+        val instructions: String = "",
+        val icon: String = "",
+        val color: String = "",
+        val pinned: Boolean = false,
+        val archived: Boolean = false,
+        @SerialName("last_activity_at") val lastActivityAt: String = "",
+        @SerialName("chat_count") val chatCount: Int = 0,
+        @SerialName("file_count") val fileCount: Int = 0,
+    ) {
+        fun toModel() = Project(
+            id, agentId, name, description, instructions, icon, color,
+            pinned, archived, lastActivityAt, chatCount, fileCount,
+        )
+    }
+
+    @Serializable
+    private data class ProjectFileDto(
+        val id: Int,
+        val name: String = "",
+        @SerialName("media_type") val mediaType: String = "",
+        val size: Long = 0,
+        val chars: Int = 0,
+        @SerialName("created_at") val createdAt: String = "",
+    ) {
+        fun toModel() = ProjectFile(id, name, mediaType, size, chars, createdAt)
+    }
 }
