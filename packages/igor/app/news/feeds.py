@@ -48,7 +48,9 @@ FEEDS: list[tuple[str, str, str]] = [
     ("Daily Sabah", "world", "https://www.dailysabah.com/rss"),
     ("Yeni Şafak EN", "news", "https://www.yenisafak.com/en/rss"),
     # ── Additional Turkish outlets ───────────────────────────────────────────
-    ("Haber7", "gundem", "https://www.haber7.com/rss"),
+    # /rss 404s — the outlet moved its feed to the CDN host it advertises in
+    # the homepage <link rel="alternate">. The old URL failed every poll.
+    ("Haber7", "gundem", "https://i12.haber7.net/sondakika/newsstand/latest.xml"),
     ("Star", "gundem", "https://www.star.com.tr/rss/rss.asp"),
 ]
 
