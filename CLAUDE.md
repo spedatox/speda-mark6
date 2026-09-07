@@ -43,6 +43,27 @@ If any of those docs disagrees with the code, the code is right and the doc is w
 
 ---
 
+## Carrying work to Core
+
+[spedatox/speda-mark6-core](https://github.com/spedatox/speda-mark6-core) is a
+hand-stripped fork of this repo — one agent, no Legion, no peer bridge, no named
+protocols, all **deleted** rather than flagged off.
+
+Every push to `main` here runs [`.github/workflows/sync-to-core.yml`](.github/workflows/sync-to-core.yml),
+which replays the new commits onto a branch in Core, strips the paths Core's own
+`.github/sync-exclude` lists, and opens a pull request there. It never pushes to
+Core's `main`.
+
+You do not need to do anything for a change to reach Core. You DO need to review
+the PR it opens, because the strip is mechanical: it removes the packages Core
+does not have, and cannot tell whether a change to shared code still means
+anything in a build with one agent. A conflicting commit stops the replay and is
+named in the PR for hand-carrying.
+
+Nothing carries back the other way.
+
+---
+
 ## Licensing
 
 AGPL-3.0-or-later. Every source file carries an SPDX header (`SPDX-FileCopyrightText` / `SPDX-License-Identifier`) — new files need one too.

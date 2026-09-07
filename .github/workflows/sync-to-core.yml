@@ -1,0 +1,173 @@
+name: sync-to-core
+
+# Carry new commits on this repo's main into spedatox/speda-mark6-core, as a
+# pull request. Never as a push.
+#
+# WHY A PR AND NOT A MERGE. Core is not this build with features switched off —
+# it is a hand-stripped fork, and the multi-agent engine, the Legion, the peer
+# bridge and the named protocols are DELETED there, not flagged. A blind merge
+# would resurrect every one of them the first time a roster change landed, and
+# Core would quietly stop being Core. So this workflow does the mechanical half
+# of the carry — fetch, replay, strip the paths Core does not own, push a branch
+# — and leaves the judgement to a person: does this change even MEAN anything in
+# a build with one agent?
+#
+# The strip list lives in Core, at .github/sync-exclude, because Core owns the
+# definition of what Core excludes. This workflow only reads it.
+#
+# Required secret on THIS repo:
+#   CORE_SYNC_TOKEN   a PAT (classic: `repo`; fine-grained: Contents + Pull
+#                     requests, read/write) scoped to speda-mark6-core. The
+#                     default GITHUB_TOKEN cannot reach another repository.
+#
+# If the secret is absent the job is skipped rather than failed — an unconfigured
+# sync should not paint every push red.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Re-carry from this full-build SHA instead of Core's recorded state"
+        required: false
+        type: string
+
+# One carry at a time. Two runs racing would push the same branch from two
+# different replays of the same history.
+concurrency:
+  group: sync-to-core
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CORE_REPO: spedatox/speda-mark6-core
+  SYNC_BRANCH: sync/from-full-build
+
+jobs:
+  sync:
+    name: Open a carry PR against Core
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check the token is configured
+        id: gate
+        env:
+          TOKEN: ${{ secrets.CORE_SYNC_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "CORE_SYNC_TOKEN is not set — skipping the carry." >> "$GITHUB_STEP_SUMMARY"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # This repo, only for the replay script below. The COMMITS being carried
+      # come from the `full` remote added to Core's clone, not from here.
+      - name: Check out the full build (for the replay script)
+        if: steps.gate.outputs.ok == 'true'
+        uses: actions/checkout@v4
+        with:
+          path: full
+
+      # Core is the working tree: we replay this repo's commits ONTO it, so it is
+      # what gets checked out. Full history — a cherry-pick needs the merge base.
+      - name: Check out Core
+        if: steps.gate.outputs.ok == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: spedatox/speda-mark6-core
+          token: ${{ secrets.CORE_SYNC_TOKEN }}
+          fetch-depth: 0
+          path: core
+
+      - name: Fetch the full build
+        if: steps.gate.outputs.ok == 'true'
+        working-directory: core
+        run: |
+          set -euo pipefail
+          git remote add full "https://github.com/${{ github.repository }}.git" 2>/dev/null || true
+          git fetch --no-tags full main
+
+      - name: Replay commits, stripping the paths Core does not own
+        if: steps.gate.outputs.ok == 'true'
+        id: replay
+        working-directory: core
+        env:
+          SINCE_INPUT: ${{ inputs.since }}
+          FULL_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          bash "$GITHUB_WORKSPACE/full/.github/sync/replay.sh"
+
+      - name: Open or update the carry PR
+        if: steps.gate.outputs.ok == 'true' && steps.replay.outputs.should_pr == 'true'
+        working-directory: core
+        env:
+          GH_TOKEN: ${{ secrets.CORE_SYNC_TOKEN }}
+          CORE_REPO: ${{ env.CORE_REPO }}
+          SYNC_BRANCH: ${{ env.SYNC_BRANCH }}
+          CARRIED: ${{ steps.replay.outputs.carried }}
+          SKIPPED: ${{ steps.replay.outputs.skipped }}
+          BLOCKED: ${{ steps.replay.outputs.blocked }}
+          BLOCKED_SUBJECT: ${{ steps.replay.outputs.blocked_subject }}
+          SINCE: ${{ steps.replay.outputs.since }}
+          LAST_OK: ${{ steps.replay.outputs.last_ok }}
+          FULL_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          BODY=/tmp/pr-body.md
+          {
+            printf 'Carried automatically from [`%s`](https://github.com/%s) — %s commit(s) replayed onto Core.\n\n' \
+              "$FULL_REPO" "$FULL_REPO" "$CARRIED"
+            printf 'Range: `%s..%s`\n\n' "$SINCE" "$LAST_OK"
+            if [ "${SKIPPED:-0}" != "0" ]; then
+              printf '%s commit(s) touched only paths in `.github/sync-exclude` and were skipped.\n\n' "$SKIPPED"
+            fi
+            printf '### Read this before merging\n\n'
+            printf 'The strip is mechanical. It removes the paths Core does not own; it cannot\n'
+            printf 'tell whether a change to SHARED code still makes sense with one agent. Look\n'
+            printf 'for anything that assumes a roster, a dispatch, a worker corps or a peer —\n'
+            printf 'that belongs in the full build, not here.\n\n'
+            printf 'This branch is machine-owned and rebuilt from Core `main` on every run, so\n'
+            printf 'do not hand-edit it — your commits would be discarded by the next push.\n'
+            printf 'To fix something, merge this PR and follow up, or move `.github/sync-state`\n'
+            printf 'on `main` and let the next run replay differently.\n\n'
+            if [ -n "${BLOCKED:-}" ]; then
+              printf -- '---\n\n'
+              printf '### Stopped early\n\n'
+              printf '`%s` did not apply cleanly, and everything after it is still waiting.\n\n' "$BLOCKED"
+              printf '> %s\n\n' "$BLOCKED_SUBJECT"
+              printf 'Carry that one by hand, move `.github/sync-state` past it on `main`, and\n'
+              printf 'the next run picks up the rest.\n\n'
+              printf 'https://github.com/%s/commit/%s\n' "$FULL_REPO" "$BLOCKED"
+            fi
+          } > "$BODY"
+
+          TITLE="sync: carry ${CARRIED} commit(s) from the full build"
+          if [ -n "${BLOCKED:-}" ]; then
+            TITLE="${TITLE} (stopped at a conflict)"
+          fi
+
+          EXISTING="$(gh pr list --repo "$CORE_REPO" --head "$SYNC_BRANCH" --state open \
+                        --json number --jq '.[0].number // empty' || true)"
+          if [ -n "${EXISTING:-}" ]; then
+            gh pr edit "$EXISTING" --repo "$CORE_REPO" --title "$TITLE" --body-file "$BODY"
+            echo "Updated [PR #${EXISTING}](https://github.com/${CORE_REPO}/pull/${EXISTING})" >> "$GITHUB_STEP_SUMMARY"
+          else
+            URL="$(gh pr create --repo "$CORE_REPO" --base main --head "$SYNC_BRANCH" \
+                     --title "$TITLE" --body-file "$BODY")"
+            echo "Opened ${URL}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Say what happened
+        if: steps.gate.outputs.ok == 'true'
+        run: |
+          {
+            echo "carried: ${{ steps.replay.outputs.carried }}"
+            echo "skipped (excluded paths only): ${{ steps.replay.outputs.skipped }}"
+            echo "blocked at: ${{ steps.replay.outputs.blocked || 'nothing' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
