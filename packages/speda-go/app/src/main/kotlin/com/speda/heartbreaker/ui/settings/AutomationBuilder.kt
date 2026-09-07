@@ -65,7 +65,7 @@ import kotlinx.coroutines.launch
  * the backend expects, so nothing downstream of [submit] needed to change.
  */
 
-private val SCHEDULE_TEMPLATES = listOf("briefing", "reminder", "proactive_ask")
+private val SCHEDULE_TEMPLATES = listOf("briefing", "task", "reminder", "proactive_ask")
 private val HOOK_TEMPLATES = listOf("hook_keyword", "hook_address", "hook_mail")
 private val WEEK = listOf(1, 2, 3, 4, 5, 6, 7)
 
@@ -78,6 +78,7 @@ private fun defaultInterval(template: String): Int = if (template == "hook_mail"
 
 private fun tplLabel(a: AppStrings.SettingsAutomations, tpl: String): String = when (tpl) {
     "briefing" -> a.tplBriefing
+    "task" -> a.tplTask
     "reminder" -> a.tplOnce
     "proactive_ask" -> a.tplAsk
     "hook_keyword" -> a.tplHookKeyword
@@ -87,6 +88,7 @@ private fun tplLabel(a: AppStrings.SettingsAutomations, tpl: String): String = w
 }
 private fun tplDesc(a: AppStrings.SettingsAutomations, tpl: String): String = when (tpl) {
     "briefing" -> a.tplBriefingDesc
+    "task" -> a.tplTaskDesc
     "reminder" -> a.tplOnceDesc
     "proactive_ask" -> a.tplAskDesc
     "hook_keyword" -> a.tplHookKeywordDesc

@@ -39,7 +39,7 @@ import type {
 const WEEK: number[] = [1, 2, 3, 4, 5, 6, 7]
 
 /** Fire on a clock. Get the full schedule step (frequency/at/days/…). */
-const SCHEDULE_TEMPLATES: AutomationTemplate[] = ['briefing', 'reminder', 'proactive_ask']
+const SCHEDULE_TEMPLATES: AutomationTemplate[] = ['briefing', 'task', 'reminder', 'proactive_ask']
 /** Fire on an EVENT instead — a keyword, a page change, mail arriving. Get the
  *  Hook config step (url/domain + polling interval) instead of a schedule. */
 const HOOK_TEMPLATES: AutomationTemplate[] = ['hook_keyword', 'hook_address', 'hook_mail']
@@ -99,11 +99,11 @@ export function describeHook(h: AutomationHook | null, t: Dict): string {
 }
 
 const TPL_LABEL: Record<AutomationTemplate, keyof Dict['settingsAutomations']> = {
-  briefing: 'tplBriefing', reminder: 'tplOnce', proactive_ask: 'tplAsk',
+  briefing: 'tplBriefing', task: 'tplTask', reminder: 'tplOnce', proactive_ask: 'tplAsk',
   hook_keyword: 'tplHookKeyword', hook_address: 'tplHookAddress', hook_mail: 'tplHookMail',
 }
 const TPL_DESC: Record<AutomationTemplate, keyof Dict['settingsAutomations']> = {
-  briefing: 'tplBriefingDesc', reminder: 'tplOnceDesc', proactive_ask: 'tplAskDesc',
+  briefing: 'tplBriefingDesc', task: 'tplTaskDesc', reminder: 'tplOnceDesc', proactive_ask: 'tplAskDesc',
   hook_keyword: 'tplHookKeywordDesc', hook_address: 'tplHookAddressDesc', hook_mail: 'tplHookMailDesc',
 }
 

@@ -63,19 +63,25 @@ class AutomationsSkill(Skill):
         "a specific EVENT type this tool already understands well. Preferred whenever "
         "it fits: the owner's own panel renders these with a real form (frequency "
         "picker, url field, …) instead of a raw JSON blob, and can re-poll/edit them "
-        "the same way. Three fire on a schedule (`schedule` object required: "
+        "the same way. Four fire on a schedule (`schedule` object required: "
         "frequency 'once'|'daily'|'weekly'|'monthly', at 'HH:MM', plus days [1-7, "
         "Mon=1] for weekly / dom [1-31] for monthly / date 'YYYY-MM-DD' for once — "
         "'once' retires itself automatically after firing, no cleanup needed):"
         "\n  'briefing' — a recurring report you WRITE by calling real tools each time "
         "(gather then compose), e.g. a morning news/mail/calendar summary."
+        "\n  'task' — mechanically identical to 'briefing' (same schedule, same "
+        "push-and-report shape) but for assigning an ACTION rather than a digest: go "
+        "DO something with a real tool on a schedule and report what happened, e.g. "
+        "'run the Octavius backup every week and tell me the details'. Pick this one "
+        "when the ask is a verb ('run X', 'check Y', 'back up Z'), 'briefing' when "
+        "it's a noun ('summarize my news', 'my morning update')."
         "\n  'reminder' — a plain nudge, not data-gathering. Any frequency including "
         "'once' for a single date. Use this for 'her hafta X yap', 'yarın Y hatırlat'."
         "\n  'proactive_ask' — a reminder delivered with ANSWER BUTTONS that keeps "
         "re-asking until the owner responds (e.g. medication checks). Needs `options` "
         "(list of button labels, e.g. ['✅ Yaptım', '⏭️ Atlıyorum']), optional "
         "`every_minutes` (default 5) and `max_asks` (default 10)."
-        "\nAll three optionally take `day_flags`: [{label, days:[1-7]}] — weekday "
+        "\nAll four optionally take `day_flags`: [{label, days:[1-7]}] — weekday "
         "classes the agent must be TOLD rather than compute itself (e.g. gym days), "
         "computed fresh at fire time and appended to the instruction as hard facts."
         "\n\nThree fire on an EVENT instead (no `schedule` — they poll on plain "
@@ -140,7 +146,7 @@ class AutomationsSkill(Skill):
                 "type": "object",
                 "description": (
                     "For 'create'. EITHER set `template` (preferred — see the tool "
-                    "description for the six template names and their required "
+                    "description for the seven template names and their required "
                     "fields) OR set raw `kind` (web_watch|rss_watch|schedule|webhook) "
                     "for the two shapes with no template. Do not mix: a templated spec "
                     "ignores `kind`/`cron`/`intent` in favour of `schedule`/`instruction`."
@@ -148,7 +154,7 @@ class AutomationsSkill(Skill):
                 "properties": {
                     "template": {
                         "type": "string",
-                        "enum": ["briefing", "reminder", "proactive_ask",
+                        "enum": ["briefing", "task", "reminder", "proactive_ask",
                                  "hook_keyword", "hook_address", "hook_mail"],
                         "description": "Preferred path. See the tool description for what each needs.",
                     },

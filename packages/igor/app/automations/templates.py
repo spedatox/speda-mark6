@@ -5,7 +5,7 @@
 The automation templates the owner picks from in Heartbreaker, and the
 deterministic half of the instruction each one fires with.
 
-Two families. SCHEDULE_TEMPLATES fire on a clock (briefing/reminder/
+Two families. SCHEDULE_TEMPLATES fire on a clock (briefing/task/reminder/
 proactive_ask) — their `spec.schedule` block is the structured frequency/at/
 days machinery in `schedule.py`. HOOK_TEMPLATES fire on an EVENT — a keyword
 appearing, a page changing, mail arriving — and poll on a plain
@@ -13,6 +13,16 @@ appearing, a page changing, mail arriving — and poll on a plain
 `manager._prepare()` branches on which family a spec belongs to before either
 validating or composing it. A Hook's `describe()`/`display()` half is
 `composer.hook_display()`, the watcher counterpart of `schedule.describe()`.
+
+`task` and `briefing` are mechanically IDENTICAL — same output mode, same
+`build_intent()` path, no template-specific validation for either. They are
+two picker cards rather than one because they answer different owner
+questions: "summarize/gather something for me" (briefing) vs. "go DO this
+thing and tell me what happened" (task, e.g. "run the Octavius backup every
+week and report the details"). Splitting the label from the mechanics here —
+rather than inventing a second code path — keeps that distinction where it
+actually lives: in what the owner is picturing when he creates one, not in
+how it fires.
 
 `reminder` is deliberately schedule-agnostic — it started as a one-off-only
 template ("reminder_once") and was generalized because the owner's actual need
@@ -53,7 +63,7 @@ import re
 
 from app.automations import schedule as sched
 
-SCHEDULE_TEMPLATES = ("briefing", "reminder", "proactive_ask")
+SCHEDULE_TEMPLATES = ("briefing", "task", "reminder", "proactive_ask")
 # hook_keyword and hook_address are BOTH a web_watch — the only difference is
 # whether 'look_for' is set (wait for a specific word) or absent (fire on any
 # change at all). Kept as two template names rather than one "web watch" pick

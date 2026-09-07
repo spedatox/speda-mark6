@@ -87,6 +87,12 @@ def _prompt(spec: dict, agent_name: str) -> str:
     template = spec.get("template")
     kind = {
         "briefing": "a recurring briefing the owner reads on a schedule",
+        "task": (
+            "a recurring ACTION the owner is assigning the agent — call the real "
+            "tool(s) this needs and report what actually happened, not a digest of "
+            "information gathered elsewhere. Write it as an instruction to DO the "
+            "thing, then report the outcome"
+        ),
         "reminder": (
             "a plain reminder message — not a data-gathering briefing, just a "
             "direct nudge. It may fire once or repeatedly; its schedule is "

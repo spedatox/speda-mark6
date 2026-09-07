@@ -305,6 +305,8 @@ data class AppStrings(
         val stepType: String,
         val tplBriefing: String,
         val tplBriefingDesc: String,
+        val tplTask: String,
+        val tplTaskDesc: String,
         val tplOnce: String,
         val tplOnceDesc: String,
         val tplAsk: String,

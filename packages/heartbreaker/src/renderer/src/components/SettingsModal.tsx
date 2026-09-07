@@ -41,6 +41,12 @@ interface Props {
   onEngageLockdown: () => void
 }
 
+/** Re-attach attempts offered in Interface ▸ Stream. 0 = never reconnect (any
+ *  dropped socket becomes an error, which is what this app did before). */
+const RECONNECT_ATTEMPTS = [0, 3, 5, 10, 20]
+/** How long to wait on a silent backend before giving up, in seconds. */
+const DEAD_SECONDS = [120, 300, 600, 1800, 3600]
+
 type Tab = 'general' | 'config' | 'connections' | 'automations' | 'voices' | 'reminders' | 'protocols' | 'interface' | 'data' | 'account'
 
 /* ── Rail glyphs ─────────────────────────────────────────────────────────── */
@@ -868,6 +874,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                         {a.template
                           ? {
                               briefing: t.settingsAutomations.tplBriefing,
+                              task: t.settingsAutomations.tplTask,
                               reminder: t.settingsAutomations.tplOnce,
                               proactive_ask: t.settingsAutomations.tplAsk,
                               hook_keyword: t.settingsAutomations.tplHookKeyword,
@@ -1042,6 +1049,40 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                     on={settings.sidebarOpen}
                     onChange={v => update({ sidebarOpen: v })}
                   />
+                </SettingsRow>
+
+                <SettingsRow
+                  title={t.settingsInterface.streamReconnect}
+                  desc={t.settingsInterface.streamReconnectDesc}
+                >
+                  <div style={{ minWidth: 130 }}>
+                    <GlassSelect
+                      value={String(settings.streamReconnectAttempts)}
+                      options={RECONNECT_ATTEMPTS.map(n => ({
+                        value: String(n),
+                        label: n === 0 ? t.settingsInterface.reconnectNever : String(n),
+                      }))}
+                      onChange={v => update({ streamReconnectAttempts: Number(v) })}
+                      tint="var(--hb-cyan-bright)"
+                    />
+                  </div>
+                </SettingsRow>
+
+                <SettingsRow
+                  title={t.settingsInterface.streamPatience}
+                  desc={t.settingsInterface.streamPatienceDesc}
+                >
+                  <div style={{ minWidth: 130 }}>
+                    <GlassSelect
+                      value={String(settings.streamDeadSeconds)}
+                      options={DEAD_SECONDS.map(n => ({
+                        value: String(n),
+                        label: t.settingsInterface.minutesLabel(Math.round(n / 60)),
+                      }))}
+                      onChange={v => update({ streamDeadSeconds: Number(v) })}
+                      tint="var(--hb-cyan-bright)"
+                    />
+                  </div>
                 </SettingsRow>
 
                 <ScreenLockSettings />
