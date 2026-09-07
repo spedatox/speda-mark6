@@ -77,7 +77,7 @@ async def _deliver_file(bot: TelegramBot, chat_id: str, meta) -> None:
         candidate = Path(settings.temp_outputs_dir) / Path(name).name
         path = candidate if candidate.is_file() else None
     if path is None:
-        logger.warning("telegram_file_unresolved", extra={"name": name})
+        logger.warning("telegram_file_unresolved", extra={"file_name": name})
         return
     caption = meta.get("title") or name
     await bot.send_document(str(path), caption=caption, chat_id=chat_id)

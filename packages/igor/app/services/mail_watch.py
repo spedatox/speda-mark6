@@ -355,6 +355,6 @@ async def _ensure_label(token: str, name: str) -> str | None:
 
     logger.error(
         "mail_watch_label_create_failed",
-        extra={"name": name, "status": created.status_code},
+        extra={"label_name": name, "status": created.status_code},
     )
     return None

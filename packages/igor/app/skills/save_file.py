@@ -123,7 +123,7 @@ class SaveFileSkill(Skill):
         except Exception as e:  # noqa: BLE001
             logger.error(
                 "save_file_error",
-                extra={"request_id": context.request_id, "filename": filename, "error": str(e)},
+                extra={"request_id": context.request_id, "file_name": filename, "error": str(e)},
             )
             return f"Couldn't save the file: {e}"
 
