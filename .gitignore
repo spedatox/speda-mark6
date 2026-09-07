@@ -82,3 +82,7 @@ packages/igor/scripts/tts_samples/
 
 # Firebase service-account JSON (FCM sending key). Never commit.
 secrets/
+
+# VS Code Counter's reports. Generated, machine-local, and large enough that
+# one `git add -A` sweeps a few thousand lines of them into a commit.
+.VSCodeCounter/
