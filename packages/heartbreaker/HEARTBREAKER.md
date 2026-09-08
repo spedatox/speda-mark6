@@ -11,6 +11,9 @@ The full-roster desktop client. Electron, React, TypeScript. Every agent persona
 - [Profile and branding system](#profile-and-branding-system)
 - [Key components](#key-components)
 - [Projects](#projects)
+- [Voice mode is a presentation, not a talking chat window](#voice-mode-is-a-presentation-not-a-talking-chat-window)
+- [Thinking](#thinking)
+- [Screen lock](#screen-lock)
 - [Surviving a dropped connection](#surviving-a-dropped-connection)
 - [Steering a running response](#steering-a-running-response)
 - [Configuration](#configuration)
@@ -64,7 +67,7 @@ From the repo root, the same commands are exposed workspace-scoped: `npm run hea
 
 | Group | Components |
 |---|---|
-| Chat core | `ChatMain`, `MessageList`, `Message`, `InputBar`, `VoiceMode` |
+| Chat core | `ChatMain`, `MessageList`, `Message` (also `ThinkingPanel`, `ThinkingOrb` — see below), `InputBar`, `VoiceMode` |
 | Voice canvas | `VoiceCanvas` (the board), `VoicePanelBody` (what a window looks like), `VoiceOrb`, `lib/voicePanels` (splitting + layout) |
 | Rich content | `MapBlock`, `ChartBlock`, `CalendarBlock` — inline widgets rendered from fenced code blocks in a message |
 | Roster & coordination | `AgentSwitcherOverlay`, `CommsTray`, `HousePartyModal`, `HousePartyWarning`, `PartyActivation`, `PartyRosterStrip`, `PartyStream` |
@@ -218,6 +221,35 @@ off `/voice/status` rather than holding constants of its own.
 `canvasharness/` is a throwaway dev server (`canvas-harness` in
 `.claude/launch.json`) that renders a staged presentation against the real
 splitter, so the board can be worked on without a backend or a spoken turn.
+
+---
+
+## Thinking
+
+A model's reasoning streams as its own SSE event (`thinking`), separate from
+the answer, and `Message.tsx` renders it as a collapsible panel above the
+content — auto-expanded while it's arriving, collapsed to a "Thought for Ns"
+pill the moment real work resumes (a visible answer, a tool call, or the turn
+finishing). A tap always overrides whichever the live state would otherwise
+pick. Backed by three new `ChatMessage` fields (`thinking`, `thinkingRedacted`,
+`thinkingDone`/`thinkingMs`) and three new reducer actions
+(`APPEND_THINKING`/`THINKING_REDACTED`/`THINKING_DONE`) in `store/chat.ts`,
+mirrored exactly in Striker and Speda GO.
+
+The pre-answer "Thinking…" status line — previously a shimmering label next to
+a rotating spinner — now shows the actual `VoiceOrb` in its `'thinking'` state
+instead: the same component voice mode uses, not a lookalike, at icon scale
+(`amplitude` pinned to a stable zero-returning reference, `zoom` pushed past 1
+to crop the outer dust shell that just reads as noise that small). This is
+deliberately scoped to the single active/streaming message in normal chat —
+at most one WebGL context added — and does NOT extend to House Party's
+`PartyStream` (up to 8 concurrent agent streams), which keeps its existing
+indicator rather than risk exhausting the browser's WebGL context pool.
+
+A client-local `showThinking` setting (Settings → Interface) hides the panel
+without touching the backend — independent of `thinking_visible_enabled`
+(Igor's master switch, which also controls what gets persisted and shared with
+every other surface, Telegram included).
 
 ---
 

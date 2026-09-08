@@ -24,6 +24,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from app.config import settings
 from app.legion.run_registry import LegionRunRegistry
 from app.legion.roster import (
     DEFAULT_LEGIONNAIRE,
@@ -298,7 +299,7 @@ class LegionRunner:
                 system=system,
                 messages=messages,
                 tools=tools,
-                max_tokens=8096,
+                max_tokens=settings.chat_max_output_tokens,
             )
 
             # Account for the call BEFORE any branch can return. A worker that

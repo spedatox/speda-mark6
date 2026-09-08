@@ -317,6 +317,7 @@ fun ChatScreen(
                                         message,
                                         config = config,
                                         downloader = graph.downloader,
+                                        showThinking = settings.showThinking,
                                         onDelete = { vm.deleteMessage(message.id) },
                                         onRegenerate = if (message.role == com.speda.heartbreaker.domain.Role.Assistant) {
                                             { vm.regenerate(message.id, turnOpts(settings)) }

@@ -326,6 +326,17 @@ export default function ChatMain({ config, onSelectSession }: Props) {
     let timeoutReason = ''   // filled at abort so the error says WHY, not filler
     let settled = false  // did we emit a terminal (done/error/abort) for this message?
 
+    // When the turn's first 'thinking' event landed — cleared (and THINKING_DONE
+    // dispatched) the moment real work resumes, so the panel's "Thought for Ns"
+    // pill reads actual wall-clock time spent reasoning, not a guess.
+    let thinkingStartedAt: number | null = null
+    const markThinkingDone = () => {
+      if (thinkingStartedAt != null) {
+        dispatch({ type: 'THINKING_DONE', payload: { id: assistantId, ms: Date.now() - thinkingStartedAt } })
+        thinkingStartedAt = null
+      }
+    }
+
     // Which model the turn is running on — surfaced in the stall/timeout copy so
     // the message names the actual thing that went quiet (e.g. GLM-5.2).
     const modelName = settings.model ? (settings.model.split(':').pop() || settings.model).toUpperCase() : 'the model'
@@ -412,6 +423,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           charsSoFar = 0
           gotContent = false
           gotTool = false
+          thinkingStartedAt = null
           lastActivity = Date.now()
           await new Promise(r => setTimeout(r, baseDelay * 2 ** (reconnects - 1)))
           if (ctrl.signal.aborted) throw err
@@ -443,11 +455,21 @@ export default function ChatMain({ config, onSelectSession }: Props) {
             dispatch({ type: 'TAG_MESSAGE_SESSION', payload: { id: assistantId, sessionId: event.session_id } })
           }
           dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Thinking' } })
+        } else if (event.type === 'thinking') {
+          const d = event.data as { text?: string; redacted?: boolean }
+          if (d.redacted) {
+            dispatch({ type: 'THINKING_REDACTED', payload: { id: assistantId } })
+          } else if (d.text) {
+            if (thinkingStartedAt == null) thinkingStartedAt = Date.now()
+            dispatch({ type: 'APPEND_THINKING', payload: { id: assistantId, text: d.text } })
+          }
         } else if (event.type === 'chunk') {
+          markThinkingDone()
           gotContent = true
           chunkBuf += event.data as string
           if (flushHandle == null) flushHandle = requestAnimationFrame(flushChunks)
         } else if (event.type === 'tool') {
+          markThinkingDone()
           gotTool = true
           // Flush any buffered-but-undispatched text FIRST so charsSoFar reflects
           // everything the owner actually saw before this tool fired — otherwise
@@ -467,6 +489,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         } else if (event.type === 'file') {
           dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
         } else if (event.type === 'done') {
+          markThinkingDone()  // safety net — a turn that only ever thought out loud
           finalizeFlush()  // drain any buffered text before finalizing
           settled = true
           dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: event.session_id } })
@@ -643,13 +666,31 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         dispatch({ type: 'APPEND_CHUNK', payload: { id: assistantId, chunk: c } })
       }
       let settled = false  // saw a terminal (done/error) for this attach
+      // See the live-stream loop above for why this exists.
+      let thinkingStartedAt: number | null = null
+      const markThinkingDone = () => {
+        if (thinkingStartedAt != null) {
+          dispatch({ type: 'THINKING_DONE', payload: { id: assistantId, ms: Date.now() - thinkingStartedAt } })
+          thinkingStartedAt = null
+        }
+      }
 
       try {
         for await (const event of attachStream(config, run.request_id, ctrl.signal)) {
-          if (event.type === 'chunk') {
+          if (event.type === 'thinking') {
+            const d = event.data as { text?: string; redacted?: boolean }
+            if (d.redacted) {
+              dispatch({ type: 'THINKING_REDACTED', payload: { id: assistantId } })
+            } else if (d.text) {
+              if (thinkingStartedAt == null) thinkingStartedAt = Date.now()
+              dispatch({ type: 'APPEND_THINKING', payload: { id: assistantId, text: d.text } })
+            }
+          } else if (event.type === 'chunk') {
+            markThinkingDone()
             buf += event.data as string
             if (handle == null) handle = requestAnimationFrame(flush)
           } else if (event.type === 'tool') {
+            markThinkingDone()
             if (handle != null) { cancelAnimationFrame(handle); handle = null }
             flush()
             const tool = { ...(event.data as import('../lib/types').ToolBadge), afterChars: charsSoFar }
@@ -665,6 +706,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         } else if (event.type === 'file') {
             dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
           } else if (event.type === 'done') {
+            markThinkingDone()
             if (handle != null) cancelAnimationFrame(handle)
             flush()
             settled = true

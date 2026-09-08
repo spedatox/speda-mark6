@@ -58,6 +58,8 @@ import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.data.Downloader
+import com.speda.heartbreaker.data.VoiceSpeaker
+import com.speda.heartbreaker.ui.voice.VoiceOrb
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.ChatMessage
 import com.speda.heartbreaker.domain.MarkdownPrep
@@ -89,6 +91,7 @@ fun MessageItem(
     message: ChatMessage,
     config: AppConfig? = null,
     downloader: Downloader? = null,
+    showThinking: Boolean = true,
     onDelete: (() -> Unit)? = null,
     onRegenerate: (() -> Unit)? = null,
     onEditAndResend: ((String) -> Unit)? = null,
@@ -96,7 +99,7 @@ fun MessageItem(
     if (message.role == Role.User) {
         UserRow(message, onDelete = onDelete, onEditAndResend = onEditAndResend)
     } else {
-        AssistantRow(message, config, downloader, onDelete = onDelete, onRegenerate = onRegenerate)
+        AssistantRow(message, config, downloader, showThinking, onDelete = onDelete, onRegenerate = onRegenerate)
     }
 }
 
@@ -227,6 +230,7 @@ private fun AssistantRow(
     message: ChatMessage,
     config: AppConfig?,
     downloader: Downloader?,
+    showThinking: Boolean,
     onDelete: (() -> Unit)?,
     onRegenerate: (() -> Unit)?,
 ) {
@@ -279,6 +283,18 @@ private fun AssistantRow(
     Row(Modifier.fillMaxWidth().padding(bottom = 18.dp)) {
       CompositionLocalProvider(LocalMessageStreaming provides message.isStreaming) {
         Column(Modifier.fillMaxWidth().noRippleClick { if (!message.isStreaming) showActions = !showActions }) {
+            // The model's reasoning, if this turn (or provider) produced any —
+            // live while streaming, recovered from persisted history on reload.
+            // Always above the answer: reasoning precedes what it led to.
+            if (showThinking && (!message.thinking.isNullOrEmpty() || message.thinkingRedacted)) {
+                ThinkingPanel(
+                    text = message.thinking.orEmpty(),
+                    redacted = message.thinkingRedacted,
+                    done = message.thinkingDone,
+                    streaming = message.isStreaming,
+                    ms = message.thinkingMs,
+                )
+            }
             if (message.content.isNotEmpty() || message.tools.isNotEmpty()) {
                 segments.forEachIndexed { i, seg ->
                     val isLast = i == segments.lastIndex
@@ -297,7 +313,13 @@ private fun AssistantRow(
                     }
                 }
             } else if (message.isStreaming) {
-                WorkingStatus(lastToolName = message.tools.lastOrNull()?.name, status = message.status)
+                // Suppressed once the thinking panel above is already saying
+                // exactly that (the generic placeholder), unless the status has
+                // moved on to a real watchdog escalation like "waiting 45s".
+                val genericThinking = message.status == null || message.status == t.chatMain.statusThinking
+                if (!showThinking || message.thinking.isNullOrEmpty() || !genericThinking) {
+                    WorkingStatus(lastToolName = message.tools.lastOrNull()?.name, status = message.status)
+                }
             }
 
             // What a coding peer delegated this turn — see SubagentPanel's doc.
@@ -469,7 +491,9 @@ private fun EditBox(value: String, onValueChange: (String) -> Unit) {
     )
 }
 
-/** Spinner + shimmering label — the "something's happening" indicator. */
+/** The voice-mode thinking orb + shimmering label — the "something's happening"
+ *  indicator. The same [VoiceOrb] voice mode uses, not a lookalike, so "the
+ *  machine is working" reads identically everywhere. */
 @Composable
 private fun WorkingStatus(lastToolName: String?, status: String?) {
     val palette = LocalHbPalette.current
@@ -480,8 +504,64 @@ private fun WorkingStatus(lastToolName: String?, status: String?) {
         horizontalArrangement = Arrangement.spacedBy(9.dp),
         modifier = Modifier.padding(vertical = 2.dp),
     ) {
-        Spinner()
+        VoiceOrb(state = VoiceSpeaker.State.THINKING, level = 0f, modifier = Modifier.size(20.dp))
         HbText("$label…", style = HbType.read.copy(textAlign = TextAlign.Start), color = palette.accentBright)
+    }
+}
+
+/**
+ * Collapsible reasoning display — the DeepSeek/Claude-style thinking panel.
+ * Auto-expands the instant reasoning starts streaming, auto-collapses to a
+ * "Thought for Ns" pill the instant it's done (a real visible answer, a tool
+ * call, or the turn finishing); a tap always overrides whichever the live
+ * state would otherwise pick. Works identically for a live stream and for a
+ * reloaded message — reload just arrives with `streaming = false` and no `ms`.
+ */
+@Composable
+private fun ThinkingPanel(text: String, redacted: Boolean, done: Boolean, streaming: Boolean, ms: Long?) {
+    val palette = LocalHbPalette.current
+    val t = LocalStrings.current
+    val live = streaming && !done
+    var expanded by remember { mutableStateOf(live) }
+    // Snap open the instant live streaming starts, and closed the instant it
+    // finishes — an explicit tap after that always wins over either, until the
+    // next transition (a new turn) fires this again.
+    LaunchedEffect(live) { expanded = live }
+
+    val label = when {
+        ms != null -> t.message.thinkingPanel.thoughtFor((ms / 1000).toInt())
+        live -> t.message.thinkingPanel.thinking
+        else -> t.message.thinkingPanel.showReasoning
+    }
+
+    if (text.isEmpty() && !redacted) return
+
+    Column(Modifier.padding(bottom = 10.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.noRippleClick { expanded = !expanded }.padding(vertical = 2.dp),
+        ) {
+            VoiceOrb(state = VoiceSpeaker.State.THINKING, level = 0f, modifier = Modifier.size(18.dp))
+            HbText(
+                label,
+                style = HbType.read.copy(textAlign = TextAlign.Start),
+                color = if (live) palette.accentBright else palette.iconDim,
+            )
+        }
+        if (expanded) {
+            Column(Modifier.padding(top = 4.dp, start = 30.dp)) {
+                HbText(text, style = HbType.read.copy(textAlign = TextAlign.Start), color = palette.iconDim)
+                if (redacted) {
+                    HbText(
+                        t.message.thinkingPanel.redactedNote,
+                        style = HbType.read.copy(textAlign = TextAlign.Start),
+                        color = palette.iconDim,
+                        modifier = Modifier.padding(top = if (text.isNotEmpty()) 6.dp else 0.dp),
+                    )
+                }
+            }
+        }
     }
 }
 

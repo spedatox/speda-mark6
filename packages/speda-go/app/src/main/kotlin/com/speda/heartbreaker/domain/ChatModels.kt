@@ -101,6 +101,19 @@ data class ChatMessage(
     /** Which session a STREAMING bubble belongs to — lets SELECT_SESSION preserve
      *  an in-flight tail instead of wiping it in the history-load race. */
     val sessionId: Int? = null,
+    /** The model's reasoning for this turn, streamed live or recovered from the
+     *  persisted `_speda_meta.thinking` field on reload. Display-only — never
+     *  round-tripped back to the model as dialogue. */
+    val thinking: String? = null,
+    /** Part of the reasoning was safety-redacted (Anthropic) — shown as a note,
+     *  the underlying content was never available to show. */
+    val thinkingRedacted: Boolean = false,
+    /** Set once the turn moves past thinking (first visible content, a tool
+     *  call, or the turn finishing) — collapses the panel to a summary pill. */
+    val thinkingDone: Boolean = false,
+    /** Wall-clock ms spent thinking, stamped the moment thinkingDone flips —
+     *  what the collapsed "Thought for Ns" pill reads off. */
+    val thinkingMs: Long? = null,
 )
 
 @Immutable

@@ -224,6 +224,10 @@ const en = {
     telemetryColumnDesc: 'The right-hand column: uplink, session budget, routing and toolsets.',
     sidebar: 'Sidebar',
     sidebarDesc: 'Drag the sidebar edge to resize it.',
+    showThinking: 'Show thinking',
+    showThinkingDesc: 'Display the collapsible reasoning panel when a model streams its '
+      + 'thinking. Off just hides it here — the backend setting under Configuration is '
+      + 'what stops it being captured and shared with every surface, Telegram included.',
     screenLock: 'Screen lock',
     lockOnLaunch: 'Ask when the app opens',
     lockOnLaunchDesc: 'The deck starts locked and wants the passcode before it shows anything.',

@@ -50,6 +50,13 @@ data class HbSettings(
      *  Only reached when the backend also reports no live run. Mirrors
      *  store/settings.ts `streamDeadSeconds`. */
     val streamDeadSeconds: Int = 300,
+    /** Show the thinking panel and its "Thought for Ns" pill. A purely local
+     *  display toggle — off just collapses/hides what already arrived, it does
+     *  not ask the backend to stop capturing or sending reasoning (that is
+     *  `thinking_visible_enabled`, a backend setting, since it also gates what
+     *  gets persisted and shared with every other surface — Telegram included).
+     *  Mirrors store/settings.ts `showThinking`. */
+    val showThinking: Boolean = true,
 )
 
 /** store/settings.ts DEFAULT.model — the routing default until the owner picks. */
@@ -75,6 +82,7 @@ class SettingsStore(private val context: Context) {
         val LOCALE = stringPreferencesKey("locale")
         val STREAM_RECONNECT_ATTEMPTS = intPreferencesKey("stream_reconnect_attempts")
         val STREAM_DEAD_SECONDS = intPreferencesKey("stream_dead_seconds")
+        val SHOW_THINKING = booleanPreferencesKey("show_thinking")
     }
 
     val settings: Flow<HbSettings> = context.settingsDataStore.data.map { p ->
@@ -94,6 +102,7 @@ class SettingsStore(private val context: Context) {
             locale = p[Keys.LOCALE]?.ifEmpty { null } ?: "tr",
             streamReconnectAttempts = p[Keys.STREAM_RECONNECT_ATTEMPTS] ?: 5,
             streamDeadSeconds = p[Keys.STREAM_DEAD_SECONDS] ?: 300,
+            showThinking = p[Keys.SHOW_THINKING] ?: true,
         )
     }
 
@@ -106,6 +115,7 @@ class SettingsStore(private val context: Context) {
     suspend fun setLocale(locale: String) = context.settingsDataStore.edit { it[Keys.LOCALE] = locale }.let { }
     suspend fun setStreamReconnectAttempts(n: Int) = context.settingsDataStore.edit { it[Keys.STREAM_RECONNECT_ATTEMPTS] = n }.let { }
     suspend fun setStreamDeadSeconds(sec: Int) = context.settingsDataStore.edit { it[Keys.STREAM_DEAD_SECONDS] = sec }.let { }
+    suspend fun setShowThinking(on: Boolean) = context.settingsDataStore.edit { it[Keys.SHOW_THINKING] = on }.let { }
 
     // ── Atomix health sync ────────────────────────────────────────────────────
 

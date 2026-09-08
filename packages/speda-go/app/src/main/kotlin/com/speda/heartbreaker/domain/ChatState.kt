@@ -32,7 +32,7 @@ data class ChatState(
 )
 
 /**
- * The 19 reducer actions — same names/semantics as store/chat.ts. Sealed so the
+ * The 22 reducer actions — same names/semantics as store/chat.ts. Sealed so the
  * `when` in [reduce] is exhaustive.
  */
 sealed interface ChatAction {
@@ -54,6 +54,11 @@ sealed interface ChatAction {
     data class AddUserMessage(val message: ChatMessage) : ChatAction
     data class AddAssistantMessage(val message: ChatMessage) : ChatAction
     data class AppendChunk(val id: String, val chunk: String) : ChatAction
+    data class AppendThinking(val id: String, val text: String) : ChatAction
+    data class ThinkingRedacted(val id: String) : ChatAction
+    /** Fired once, the moment the turn moves past thinking (first visible
+     *  content, a tool call, or the turn finishing) — collapses the panel. */
+    data class ThinkingDone(val id: String, val ms: Long) : ChatAction
     data class SetStatus(val id: String, val status: String) : ChatAction
     data class TagMessageSession(val id: String, val sessionId: Int) : ChatAction
     data class AddTool(val id: String, val tool: ToolBadge) : ChatAction
@@ -125,6 +130,24 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
         messages = state.messages.map { m ->
             // First text clears any pending status line.
             if (m.id == action.id) m.copy(content = m.content + action.chunk, status = null) else m
+        }.toPersistentList(),
+    )
+
+    is ChatAction.AppendThinking -> state.copy(
+        messages = state.messages.map { m ->
+            if (m.id == action.id) m.copy(thinking = (m.thinking ?: "") + action.text) else m
+        }.toPersistentList(),
+    )
+
+    is ChatAction.ThinkingRedacted -> state.copy(
+        messages = state.messages.map { m ->
+            if (m.id == action.id) m.copy(thinkingRedacted = true) else m
+        }.toPersistentList(),
+    )
+
+    is ChatAction.ThinkingDone -> state.copy(
+        messages = state.messages.map { m ->
+            if (m.id == action.id && !m.thinkingDone) m.copy(thinkingDone = true, thinkingMs = action.ms) else m
         }.toPersistentList(),
     )
 

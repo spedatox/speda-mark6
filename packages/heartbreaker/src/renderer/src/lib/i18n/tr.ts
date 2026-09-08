@@ -218,6 +218,10 @@ const tr: Dict = {
     telemetryColumnDesc: 'Sağ sütun: bağlantı durumu, oturum bütçesi, yönlendirme ve araç setleri.',
     sidebar: 'Kenar çubuğu',
     sidebarDesc: 'Yeniden boyutlandırmak için kenar çubuğunun kenarını sürükleyin.',
+    showThinking: 'Düşünmeyi göster',
+    showThinkingDesc: 'Bir model düşüncesini akışa aktarırken açılır akıl yürütme panelini '
+      + 'göster. Kapatmak sadece burada gizler — yakalanmasını ve Telegram dahil her yüzeyle '
+      + 'paylaşılmasını durduran, Yapılandırma altındaki arka uç ayarıdır.',
     screenLock: 'Ekran kilidi',
     lockOnLaunch: 'Uygulama açılırken sor',
     lockOnLaunchDesc: 'Güverte kilitli açılır ve hiçbir şey göstermeden önce parolayı ister.',

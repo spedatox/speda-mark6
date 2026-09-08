@@ -1052,6 +1052,16 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                 </SettingsRow>
 
                 <SettingsRow
+                  title={t.settingsInterface.showThinking}
+                  desc={t.settingsInterface.showThinkingDesc}
+                >
+                  <Switch
+                    on={settings.showThinking}
+                    onChange={v => update({ showThinking: v })}
+                  />
+                </SettingsRow>
+
+                <SettingsRow
                   title={t.settingsInterface.streamReconnect}
                   desc={t.settingsInterface.streamReconnectDesc}
                 >

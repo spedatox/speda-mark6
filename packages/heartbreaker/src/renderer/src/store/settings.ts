@@ -80,6 +80,12 @@ export interface AppSettings {
    *  Only reached when the backend also reports no live run: a turn that is
    *  still listed as running is waited on however long it takes. */
   streamDeadSeconds: number
+  /** Show the thinking panel and its "Thought for Ns" pill. A purely local
+   *  display toggle — off just collapses/hides what already arrived, it does
+   *  not ask the backend to stop capturing or sending reasoning (that is
+   *  `thinking_visible_enabled`, a backend setting, since it also gates what
+   *  gets persisted and shared with every other surface — Telegram included). */
+  showThinking: boolean
 }
 
 const DEFAULT: AppSettings = {
@@ -103,6 +109,7 @@ const DEFAULT: AppSettings = {
   lockIdleMinutes: 0,
   lockScreensaverSeconds: 45,
   lockSaverDwellMs: 2200,
+  showThinking: true,
 }
 
 function load(): AppSettings {

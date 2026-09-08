@@ -40,6 +40,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import java.util.UUID
 
 /**
@@ -507,6 +508,17 @@ class ChatViewModel(
         val startedAt = System.currentTimeMillis()
         var lastActivity = startedAt // all touched on the collector thread (Main)
 
+        // When the turn's first 'thinking' event landed — cleared (and
+        // ThinkingDone dispatched) the moment real work resumes, so the panel's
+        // "Thought for Ns" pill reads actual wall-clock time, not a guess.
+        var thinkingStartedAt: Long? = null
+        fun markThinkingDone() {
+            thinkingStartedAt?.let {
+                dispatch(ChatAction.ThinkingDone(assistantId, System.currentTimeMillis() - it))
+                thinkingStartedAt = null
+            }
+        }
+
         fun flush() {
             if (pending.isEmpty()) return
             val c = pending.toString()
@@ -583,7 +595,23 @@ class ChatViewModel(
                             }
                             dispatch(ChatAction.SetStatus(assistantId, strings.chatMain.statusThinking))
                         }
+                        // A model's reasoning, streamed as it's produced and
+                        // never part of the answer. Display-only — see
+                        // ChatMessage.thinking's doc.
+                        "thinking" -> {
+                            (event.data as? JsonObject)?.let { o ->
+                                if ((o["redacted"] as? JsonPrimitive)?.booleanOrNull == true) {
+                                    dispatch(ChatAction.ThinkingRedacted(assistantId))
+                                } else {
+                                    strOf(o["text"])?.let {
+                                        if (thinkingStartedAt == null) thinkingStartedAt = System.currentTimeMillis()
+                                        dispatch(ChatAction.AppendThinking(assistantId, it))
+                                    }
+                                }
+                            }
+                        }
                         "chunk" -> {
+                            markThinkingDone()
                             gotContent = true
                             strOf(event.data)?.let {
                                 pending.append(it)
@@ -595,6 +623,7 @@ class ChatViewModel(
                             }
                         }
                         "tool" -> {
+                            markThinkingDone()
                             gotTool = true
                             flush() // charsSoFar must reflect everything seen before this tool
                             MessageJson.toolFrom(event.data)?.let {
@@ -632,6 +661,7 @@ class ChatViewModel(
                         // would ever be raised. Falling through to the else is
                         // the correct behaviour, not an omission.
                         "done" -> {
+                            markThinkingDone() // safety net — a turn that only ever thought out loud
                             flush(); settled = true
                             // Flush the last part-sentence, then let playback
                             // drain on its own: the turn is over, the SPEECH is
@@ -673,7 +703,7 @@ class ChatViewModel(
             } catch (e: java.net.SocketException) {
                 if (reattach != null && reattachAttempts < streamReconnectAttempts) {
                     reattachAttempts++
-                    gotContent = false; gotTool = false
+                    gotContent = false; gotTool = false; thinkingStartedAt = null
                     lastActivity = System.currentTimeMillis()
                     dispatch(ChatAction.SetStatus(assistantId, "${strings.chatMain.statusReconnecting}…"))
                     val newFlow = reattach()
@@ -697,7 +727,7 @@ class ChatViewModel(
                 val net = NET_ERROR.containsMatchIn(msg)
                 if (net && reattach != null && reattachAttempts < streamReconnectAttempts) {
                     reattachAttempts++
-                    gotContent = false; gotTool = false
+                    gotContent = false; gotTool = false; thinkingStartedAt = null
                     lastActivity = System.currentTimeMillis()
                     dispatch(ChatAction.SetStatus(assistantId, "${strings.chatMain.statusReconnecting}…"))
                     val newFlow = reattach()

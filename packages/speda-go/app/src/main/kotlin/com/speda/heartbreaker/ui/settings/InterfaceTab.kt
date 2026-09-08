@@ -109,6 +109,17 @@ fun InterfaceTab(config: AppConfig, graph: AppGraph) {
             Hint(t.settingsInterface.locationFooter)
         }
 
+        SectionHeader(t.settingsInterface.showThinking)
+        Panel {
+            ToggleRow(
+                label = t.settingsInterface.showThinking,
+                subtitle = t.settingsInterface.showThinkingHint,
+                checked = settings.showThinking,
+                enabled = true,
+                onToggle = { on -> scope.launch { graph.settings.setShowThinking(on) } },
+            )
+        }
+
         SectionHeader(t.settingsInterface.streamReconnect)
         Panel {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

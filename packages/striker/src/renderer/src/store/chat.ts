@@ -64,6 +64,11 @@ export type ChatAction =
   | { type: 'ADD_USER_MESSAGE'; payload: ChatMessage }
   | { type: 'ADD_ASSISTANT_MESSAGE'; payload: ChatMessage }
   | { type: 'APPEND_CHUNK'; payload: { id: string; chunk: string } }
+  | { type: 'APPEND_THINKING'; payload: { id: string; text: string } }
+  | { type: 'THINKING_REDACTED'; payload: { id: string } }
+  // Fired once, the moment the turn moves past thinking (first visible
+  // content, a tool call, or the turn finishing) — collapses the panel.
+  | { type: 'THINKING_DONE'; payload: { id: string; ms: number } }
   | { type: 'SET_STATUS'; payload: { id: string; status: string } }
   | { type: 'REWIND_MESSAGE'; payload: { id: string; status: string } }
   | { type: 'TAG_MESSAGE_SESSION'; payload: { id: string; sessionId: number } }
@@ -182,7 +187,38 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         messages: state.messages.map(m =>
           m.id === action.payload.id
-            ? { ...m, content: '', tools: [], files: [], status: action.payload.status, isError: false }
+            ? {
+                ...m, content: '', tools: [], files: [], status: action.payload.status, isError: false,
+                thinking: undefined, thinkingDone: false, thinkingMs: undefined, thinkingRedacted: false,
+              }
+            : m
+        ),
+      }
+
+    case 'APPEND_THINKING':
+      return {
+        ...state,
+        messages: state.messages.map(m =>
+          m.id === action.payload.id
+            ? { ...m, thinking: (m.thinking || '') + action.payload.text }
+            : m
+        ),
+      }
+
+    case 'THINKING_REDACTED':
+      return {
+        ...state,
+        messages: state.messages.map(m =>
+          m.id === action.payload.id ? { ...m, thinkingRedacted: true } : m
+        ),
+      }
+
+    case 'THINKING_DONE':
+      return {
+        ...state,
+        messages: state.messages.map(m =>
+          m.id === action.payload.id && !m.thinkingDone
+            ? { ...m, thinkingDone: true, thinkingMs: action.payload.ms }
             : m
         ),
       }

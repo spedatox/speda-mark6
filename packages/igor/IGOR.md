@@ -11,6 +11,8 @@ The backend. One FastAPI process: every agent, the memory system, the tool regis
 - [Local development](#local-development)
 - [Core contracts](#core-contracts)
 - [Projects](#projects)
+- [Voice mode is a presentation brief](#voice-mode-is-a-presentation-brief)
+- [Thinking](#thinking)
 - [Language](#language)
 - [Authentication](#authentication)
 - [Startup sequence](#startup-sequence)
@@ -225,6 +227,53 @@ With `canvas_enabled` off the brief degrades to the old one — still written fo
 the ear, no longer asked to present, because there is nowhere to present it.
 The client-side half of the same settings is served on `GET /voice/status`, so
 what the agent is asked to write and what the board draws come from one place.
+
+---
+
+## Thinking
+
+`_ReasoningFilter` (`services/llm_client.py`) used to keep a model's reasoning
+out of its answer by throwing it away — DeepSeek's own `reasoning_content`
+delta field, and the `<think>…</think>` tags GLM/Ollama/generic OpenAI-compat
+proxies inline into `content`, both collected only for a debug log line. It now
+hands that text back instead: a new `SSEEventType.THINKING` streams it to the
+client live, gated by `settings.thinking_visible_enabled` (the master switch —
+off reproduces the old silent-discard behavior exactly), and `turn_runner`
+folds the accumulated text into the same `_speda_meta` block that already
+carries tool/file metadata (`thinking`, `thinkingRedacted`), so a reloaded
+transcript can still show what a turn thought through.
+
+Anthropic's own extended/adaptive thinking is requested the same way, gated by
+a second switch (`anthropic_thinking_enabled`) since it changes cost/latency on
+every Anthropic turn rather than just forwarding what another provider already
+produced. `llm_client.thinking_request_kwargs` picks the mode per model family
+— `{"type": "adaptive"}` + `output_config.effort` for current and future
+frontier releases, `{"type": "enabled"}` + `budget_tokens` only for the Haiku
+family, which has no adaptive mode. Streaming Anthropic thinking deltas reuses
+the same tagged-pump shape `_OpenAICompatStream` already uses for the
+compat-provider path (`_AnthropicTaggedStream`, constructed only when a call
+actually requests thinking — every other Anthropic call, including Legion and
+background tasks, gets the raw SDK stream unchanged).
+
+Two things this does NOT need, and deliberately doesn't do: strip old thinking
+blocks from history before a later turn (Anthropic's own "Preserved Thinking"
+mechanism handles cross-model and stale-prefix cases without our help — see
+platform.claude.com/docs/en/build-with-claude/preserved-thinking — and the
+codebase's existing prompt-cache discipline of stable, append-only history
+already satisfies its prefix-unchanged requirement), or persist raw signed
+thinking blocks to the database (`blocks_to_dicts` already carries them through
+verbatim for the LIVE in-memory tool loop within one turn, which is the only
+place Anthropic's API actually requires it — persisting only the display text
+in `_speda_meta.thinking` is enough for a reload to show the same panel).
+
+**Known limitation, not fixed here:** DeepSeek's API rejects `tool_choice` in
+thinking mode and requires `reasoning_content` to round-trip through history
+once a tool call enters it — which this codebase's agentic loop deliberately
+does not do (Rule: chain-of-thought is dropped between turns). So DeepSeek
+thinking stays forced off whenever tools are present
+(`_to_openai_params`'s deepseek branch), which in practice is every interactive
+chat turn — the infra skills (`memory`, `read_skill`, `use_toolset`,
+`tool_search`) are always available regardless of an agent's tool allowlist.
 
 ---
 

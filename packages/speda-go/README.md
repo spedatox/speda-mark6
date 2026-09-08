@@ -11,6 +11,7 @@ The native Android client. Kotlin, Jetpack Compose. Package id `com.speda.heartb
 - [Networking](#networking)
 - [Key screens](#key-screens)
 - [Projects](#projects)
+- [Thinking](#thinking)
 - [Surviving a dropped connection](#surviving-a-dropped-connection)
 - [Health sync](#health-sync)
 - [Push notifications](#push-notifications)
@@ -234,6 +235,23 @@ own permission) but to read the amplitude of its own output. It is requested the
 first time voice is switched on, never at launch, and **declining costs nothing
 but the reactivity**: `VoiceLevels` simply never emits, and the orb falls back to
 its idle breath.
+
+---
+
+## Thinking
+
+Same feature as Heartbreaker's — full account:
+[HEARTBREAKER.md § Thinking](../heartbreaker/HEARTBREAKER.md#thinking). A model's
+reasoning arrives as its own `"thinking"` SSE frame, handled in
+`ChatViewModel.kt`'s `when (event.type)` and rendered by a `ThinkingPanel`
+composable in `MessageItem.kt` — collapsible, auto-expanding while live and
+collapsing to a "Thought for Ns" pill once the turn moves past it. The
+pre-answer `WorkingStatus` spinner is replaced by this same `ui/voice/VoiceOrb.kt`
+in its `THINKING` state, at icon scale (`level = 0f`) — no WebGL-context concern
+here at all, since the Android orb is a cheap Compose `Canvas`, not a scene, so
+unlike the desktop client it's safe to instantiate as many at once as the chat
+list needs. A local `showThinking` setting (`SettingsStore`) hides the panel
+without touching the backend's own `thinking_visible_enabled` switch.
 
 ---
 

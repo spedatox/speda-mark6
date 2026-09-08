@@ -56,6 +56,12 @@ val Tr = AppStrings(
         saveAndSend = "Kaydet ve Gönder",
         somethingWentWrong = "Bir şeyler ters gitti.",
         thinking = "Düşünüyor",
+        thinkingPanel = AppStrings.ThinkingPanel(
+            thinking = "Düşünüyor",
+            thoughtFor = { s -> "$s sn düşündü" },
+            showReasoning = "Akıl yürütmeyi göster",
+            redactedNote = "Akıl yürütmenin bir kısmı güvenlik nedeniyle gizlendi.",
+        ),
     ),
     commsTray = AppStrings.CommsTray(
         agentTraffic = "Ajan trafiği",
@@ -577,6 +583,10 @@ val Tr = AppStrings(
         lightSoon = "Açık (yakında)",
         themeHint = "Komuta güvertesi tasarım gereği AMOLED siyahı — tüm palet, etkin ajanın rengine göre yeniden tonlanır.",
         locationAwareness = "Konum farkındalığı",
+        showThinking = "Düşünmeyi göster",
+        showThinkingHint = "Bir model düşüncesini akışa aktarırken açılır akıl yürütme panelini "
+            + "göster. Kapatmak sadece burada gizler — yakalanmasını ve Telegram dahil her "
+            + "yüzeyle paylaşılmasını durduran, Yapılandırma altındaki arka uç ayarıdır.",
         streamReconnect = "Kopan yanıtları yeniden bağla",
         streamReconnectHint = "Bir tur, bu uygulama dinlemeyi bıraksa bile sunucuda çalışmaya devam eder — uygulamadan çıkmak, sohbet değiştirmek, ağ geçişi. Kopan bir yanıtın, hata vermek yerine onu üretmeye devam eden tura sessizce kaç kez yeniden bağlanacağı.",
         reconnectNever = "Asla",

@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
+import { Switch } from './settingsUI'
 import { useChatContext } from '../store/chat'
 import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationRuns, telegramConnect, telegramStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus, AutomationRun } from '../lib/api'
@@ -891,6 +892,20 @@ export default function SettingsModal({ config, onClose }: Props) {
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                     Drag the sidebar edge to resize.
                   </p>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
+                      Show thinking
+                    </label>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
+                      Display the collapsible reasoning panel when a model streams its thinking. Off
+                      just hides it here — the backend setting under Configuration is what stops it
+                      being captured and shared with every surface, Telegram included.
+                    </p>
+                  </div>
+                  <Switch on={settings.showThinking} onChange={v => update({ showThinking: v })} />
                 </div>
 
                 <div>

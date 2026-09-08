@@ -1149,8 +1149,12 @@ from app.services.llm_client import _ReasoningFilter
 
 def _filter(deltas):
     f = _ReasoningFilter()
-    visible = "".join(f.feed(d) for d in deltas)
-    visible += f.flush()
+    # feed()/flush() now return (visible, thinking) — thinking is surfaced live
+    # to the caller instead of only being collected in .reasoning for logging.
+    # These tests care about the visible/hidden partition, which is unchanged.
+    visible = "".join(v for v, _ in (f.feed(d) for d in deltas))
+    tail_visible, _ = f.flush()
+    visible += tail_visible
     return visible, "".join(f.reasoning)
 
 

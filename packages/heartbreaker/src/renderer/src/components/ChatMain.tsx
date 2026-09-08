@@ -645,6 +645,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           charsSoFar = 0
           gotContent = false
           gotTool = false
+          thinkingStartedAt = null
           lastActivity = Date.now()
           await new Promise(r => setTimeout(r, baseDelay * 2 ** (reconnects - 1)))
           if (ctrl.signal.aborted) throw err

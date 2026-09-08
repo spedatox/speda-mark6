@@ -10,6 +10,7 @@ import type { ChatMessage, FileMeta, ToolBadge, SubagentRun, ReportMeta } from '
 import { SubagentPanel } from './SubagentPanel'
 import SubagentDetailView from './SubagentDetailView'
 import { useChatContext } from '../store/chat'
+import { useSettings } from '../store/settings'
 import { downloadFile } from '../lib/api'
 import CodeBlock from './CodeBlock'
 import WidgetFrame from './WidgetFrame'
@@ -1172,6 +1173,7 @@ interface Props {
 /* ── Component ───────────────────────────────────────────────────────────── */
 export default function Message({ message, onDelete, onRegenerate, onEditAndResend }: Props) {
   const t = useT()
+  const { settings } = useSettings()
   const [hovered, setHovered] = useState(false)
   const [copied, setCopied] = useState(false)
   const [thumbUp, setThumbUp] = useState(false)
@@ -1500,7 +1502,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
         {/* The model's reasoning, if this turn (or provider) produced any —
             live while streaming, recovered from persisted history on reload.
             Always above the answer: reasoning precedes what it led to. */}
-        {(message.thinking || message.thinkingRedacted) && (
+        {settings.showThinking && (message.thinking || message.thinkingRedacted) && (
           <ThinkingPanel
             text={message.thinking ?? ''}
             redacted={!!message.thinkingRedacted}
@@ -1536,10 +1538,12 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
           // Nothing at all has streamed yet — show the natural-language working
           // indicator. Suppressed while a delegation is open, which is a better
           // and more specific answer to "is anything happening" — and suppressed
-          // here too when the thinking panel above is already saying exactly
-          // that, UNLESS there's a real status line (a watchdog escalation like
-          // "waiting on model 45s"), which stays visible no matter what.
-          (message.status || !message.thinking) && (
+          // here too once the thinking panel above is already saying exactly
+          // that (the generic "Thinking" placeholder set at the START event),
+          // UNLESS the status has moved on to a real watchdog escalation like
+          // "waiting on model 45s", which stays visible no matter what.
+          (!settings.showThinking || !message.thinking ||
+            (message.status && message.status !== t.chatMain.statusThinking)) && (
             <WorkingStatus tools={message.tools} status={message.status} />
           )
         ) : null}

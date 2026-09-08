@@ -120,6 +120,14 @@ data class AppStrings(
         val saveAndSend: String,
         val somethingWentWrong: String,
         val thinking: String,
+        val thinkingPanel: ThinkingPanel,
+    )
+
+    data class ThinkingPanel(
+        val thinking: String,
+        val thoughtFor: (Int) -> String,
+        val showReasoning: String,
+        val redactedNote: String,
     )
 
     /** [com.speda.heartbreaker.domain.ToolStatus] is plain Kotlin, not
@@ -676,6 +684,8 @@ data class AppStrings(
         val lightSoon: String,
         val themeHint: String,
         val locationAwareness: String,
+        val showThinking: String,
+        val showThinkingHint: String,
         val streamReconnect: String,
         val streamReconnectHint: String,
         val reconnectNever: String,

@@ -56,6 +56,12 @@ val En = AppStrings(
         saveAndSend = "Save & Send",
         somethingWentWrong = "Something went wrong.",
         thinking = "Thinking",
+        thinkingPanel = AppStrings.ThinkingPanel(
+            thinking = "Thinking",
+            thoughtFor = { s -> "Thought for ${s}s" },
+            showReasoning = "Show reasoning",
+            redactedNote = "Part of the reasoning was withheld for safety.",
+        ),
     ),
     commsTray = AppStrings.CommsTray(
         agentTraffic = "Agent traffic",
@@ -577,6 +583,10 @@ val En = AppStrings(
         lightSoon = "Light (soon)",
         themeHint = "The command deck is AMOLED-black by design; the whole palette re-hues to the active agent's accent.",
         locationAwareness = "Location awareness",
+        showThinking = "Show thinking",
+        showThinkingHint = "Display the collapsible reasoning panel when a model streams its "
+            + "thinking. Off just hides it here — the backend setting under Configuration is "
+            + "what stops it being captured and shared with every surface, Telegram included.",
         streamReconnect = "Reconnect dropped answers",
         streamReconnectHint = "A turn keeps running on the backend even when this app stops listening — leaving the app, switching chats, a network handoff. This is how many times a dropped answer silently re-attaches to the turn still producing it instead of failing.",
         reconnectNever = "Never",

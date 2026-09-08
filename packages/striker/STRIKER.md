@@ -12,6 +12,7 @@ The single-agent public build — Speda only, no roster, no switcher, no House P
 - [Dev workflow](#dev-workflow)
 - [Profile system](#profile-system)
 - [Surviving a dropped connection](#surviving-a-dropped-connection)
+- [Thinking](#thinking)
 - [Known dead code](#known-dead-code)
 - [Configuration](#configuration)
 
@@ -88,6 +89,10 @@ Reconnect count and give-up timeout are owner settings, not constants. Full
 explanation: [HEARTBREAKER.md](../heartbreaker/HEARTBREAKER.md#surviving-a-dropped-connection).
 
 ---
+
+## Thinking
+
+Same feature as Heartbreaker's — see [HEARTBREAKER.md § Thinking](../heartbreaker/HEARTBREAKER.md#thinking) for the full account. The collapsible reasoning panel and the pre-answer `VoiceOrb`-based indicator are ported into Striker's own `ChatMain.tsx`/`Message.tsx`/`store/chat.ts`, reading `theme/striker.css`'s (not the dead `heartbreaker.css` copy's) `.thinking-shimmer` class. `VoiceOrb.tsx` is used standalone here, the same way as in Heartbreaker — this does **not** wire up Striker's dormant full voice mode (`VoiceMode.tsx` stays unreachable, see below).
 
 ## Known dead code
 

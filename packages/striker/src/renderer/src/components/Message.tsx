@@ -8,7 +8,14 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import type { ChatMessage, FileMeta, ToolBadge } from '../lib/types'
 import { useChatContext } from '../store/chat'
+import { useSettings } from '../store/settings'
 import { downloadFile } from '../lib/api'
+import VoiceOrb from './VoiceOrb'
+
+// A stable reference, not an inline arrow function: VoiceOrb's mount effect
+// depends on `amplitude` by identity, so a fresh closure on every render would
+// tear down and rebuild the whole WebGL scene every render instead of once.
+const ZERO_AMPLITUDE = () => 0
 import CodeBlock from './CodeBlock'
 import WidgetFrame from './WidgetFrame'
 import ChartBlock from './ChartBlock'
@@ -363,12 +370,16 @@ function statusLabel(toolName: string): string {
   return TOOL_STATUS[toolName] ?? `Using ${toolName.replace(/_/g, ' ')}`
 }
 
-// Rotating dashed-ring spinner
-function Spinner() {
+// The voice-mode thinking mood, at message-list scale — the same VoiceOrb
+// component voice mode uses, not a lookalike, so "the machine is working"
+// reads identically everywhere. amplitude is pinned at 0 (no audio here);
+// zoom is pushed in past 1 to crop the outer dust shell, which at icon size
+// just reads as noise — the lit rings and core are what stay legible small.
+function ThinkingOrb({ size }: { size: number }) {
   return (
-    <svg width="15" height="15" viewBox="0 0 16 16" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
-      <circle cx="8" cy="8" r="6" fill="none" stroke="var(--accent)" strokeWidth="1.6" strokeDasharray="1.5 3.2" strokeLinecap="round" />
-    </svg>
+    <div style={{ width: size, height: size, flexShrink: 0 }}>
+      <VoiceOrb state="thinking" amplitude={ZERO_AMPLITUDE} zoom={2.4} />
+    </div>
   )
 }
 
@@ -383,7 +394,7 @@ function WorkingStatus({ tools, status }: { tools: { id: string; name: string }[
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.15rem 0' }}>
-      <Spinner />
+      <ThinkingOrb size={22} />
       <span
         key={label}
         className="thinking-shimmer"
@@ -394,6 +405,82 @@ function WorkingStatus({ tools, status }: { tools: { id: string; name: string }[
       >
         {label}…
       </span>
+    </div>
+  )
+}
+
+/**
+ * Collapsible reasoning display — the DeepSeek/Claude-style thinking panel.
+ * Auto-expands the instant reasoning starts streaming, auto-collapses to a
+ * "Thought for Ns" pill the instant it's done (a real visible answer, a tool
+ * call, or the turn finishing); a click always overrides whichever the live
+ * state would otherwise pick. Works identically for a live stream and for a
+ * reloaded message — reload just arrives with `streaming: false` and no `ms`.
+ */
+function ThinkingPanel({
+  text, redacted, done, streaming, ms,
+}: { text: string; redacted: boolean; done: boolean; streaming: boolean; ms?: number }) {
+  const live = streaming && !done
+  const [expanded, setExpanded] = useState(live)
+  const prevLive = useRef(live)
+  useEffect(() => {
+    if (live !== prevLive.current) {
+      setExpanded(live)
+      prevLive.current = live
+    }
+  }, [live])
+
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (live && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
+  }, [text, live])
+
+  const label = ms != null
+    ? `Thought for ${Math.round(ms / 1000)}s`
+    : live ? 'Thinking' : 'Show reasoning'
+
+  if (!text && !redacted) return null
+
+  return (
+    <div style={{ margin: '0 0 0.65rem' }}>
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none',
+          border: 'none', padding: '0.15rem 0', cursor: 'pointer', font: 'inherit',
+        }}
+      >
+        <ThinkingOrb size={20} />
+        <span className={live ? 'thinking-shimmer' : undefined} style={{
+          fontSize: '0.875rem', fontStyle: 'italic', fontWeight: 450,
+          color: live ? undefined : 'var(--hb-text-faint)',
+        }}>
+          {label}
+        </span>
+        <span style={{
+          fontSize: '0.7rem', opacity: 0.55, color: 'var(--hb-text-faint)',
+          transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease',
+        }}>▸</span>
+      </button>
+      {expanded && (
+        <div
+          ref={bodyRef}
+          style={{
+            marginTop: '0.3rem', marginLeft: '1.75rem', padding: '0.1rem 0 0.1rem 0.65rem',
+            borderLeft: '2px solid var(--hb-text-faint)', fontSize: '0.85rem', lineHeight: 1.55,
+            color: 'var(--hb-text-faint)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
+            maxHeight: live ? '14em' : 'none', overflowY: live ? 'auto' : 'visible',
+          }}
+        >
+          {text}
+          {redacted && (
+            <div style={{ marginTop: text ? '0.5rem' : 0, fontStyle: 'italic', opacity: 0.85 }}>
+              Part of the reasoning was withheld for safety.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -787,6 +874,7 @@ interface Props {
 
 /* ── Component ───────────────────────────────────────────────────────────── */
 export default function Message({ message, onDelete, onRegenerate, onEditAndResend }: Props) {
+  const { settings } = useSettings()
   const [hovered, setHovered] = useState(false)
   const [copied, setCopied] = useState(false)
   const [thumbUp, setThumbUp] = useState(false)
@@ -1033,6 +1121,18 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
       style={{ display: 'flex', marginBottom: '1.5rem', alignItems: 'flex-start', animation: 'fadeSlideIn 0.2s ease' }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
+        {/* The model's reasoning, if this turn (or provider) produced any —
+            live while streaming, recovered from persisted history on reload.
+            Always above the answer: reasoning precedes what it led to. */}
+        {settings.showThinking && (message.thinking || message.thinkingRedacted) && (
+          <ThinkingPanel
+            text={message.thinking ?? ''}
+            redacted={!!message.thinkingRedacted}
+            done={!!message.thinkingDone}
+            streaming={!!message.isStreaming}
+            ms={message.thinkingMs}
+          />
+        )}
         {/* Text and tool activity INTERLEAVED in the order they actually
             happened (see buildSegments) — a tool fired mid-answer shows up
             between the sentences around it, not stacked above the whole
@@ -1056,8 +1156,13 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
             })}
           </div>
         ) : message.isStreaming ? (
-          // Nothing at all has streamed yet — show the natural-language working indicator
-          <WorkingStatus tools={message.tools} status={message.status} />
+          // Nothing at all has streamed yet — show the natural-language working
+          // indicator, unless the thinking panel above is already saying exactly
+          // that (the generic "Thinking" placeholder set at the START event) —
+          // a real watchdog escalation like "waiting on model 45s" still shows.
+          (!settings.showThinking || !message.thinking || (message.status && message.status !== 'Thinking')) && (
+            <WorkingStatus tools={message.tools} status={message.status} />
+          )
         ) : null}
 
         {message.isError && (

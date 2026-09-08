@@ -130,6 +130,19 @@ export interface ChatMessage {
   sessionId?: number  // which session a STREAMING bubble belongs to — lets
                       // SELECT_SESSION preserve an in-flight tail instead of
                       // wiping it in the history-load race
+  /** The model's reasoning for this turn, streamed live or recovered from the
+   *  persisted `_speda_meta.thinking` field on reload. Display-only — never
+   *  round-tripped back to the model as dialogue. */
+  thinking?: string
+  /** Part of the reasoning was safety-redacted (Anthropic) — shown as a note,
+   *  the underlying content was never available to show. */
+  thinkingRedacted?: boolean
+  /** Set once the turn moves past thinking (first visible content, a tool
+   *  call, or the turn finishing) — collapses the panel to a summary pill. */
+  thinkingDone?: boolean
+  /** Wall-clock ms spent thinking, stamped the moment thinkingDone flips —
+   *  what the collapsed "Thought for Ns" pill reads off. */
+  thinkingMs?: number
 }
 
 export interface Session {
@@ -241,7 +254,10 @@ export interface SSEEvent {
   // The owner-only frames Heartbreaker also carries (house_party_auth,
   // lockdown_auth, skyfall_arm) are deliberately absent: Core has no roster and
   // no deployment protocols, so nothing here would ever handle them.
-  type: 'start' | 'chunk' | 'tool' | 'tool_result' | 'file' | 'done' | 'error'
+  // `thinking` — a model's reasoning, streamed as it's produced and never
+  // part of the answer. data is {text} per delta, or {redacted: true} for a
+  // block Anthropic safety-redacted (nothing to show, just a marker).
+  type: 'start' | 'chunk' | 'thinking' | 'tool' | 'tool_result' | 'file' | 'done' | 'error'
       | 'subagent' | 'permission_request'
   data: unknown
   session_id: number
