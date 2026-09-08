@@ -105,3 +105,7 @@ None of this is load-bearing. It's cleanup, not a bug — safe to delete in a fu
 ## Configuration
 
 There's no `connection.json` persistence and no in-app way to change the server URL or key after packaging. `App.tsx` resolves the connection once at boot — from `window.api.getConfig()` on Electron, or `VITE_API_BASE`/`VITE_API_KEY` with a local fallback on the web build — and that's final for the session. Same `X-API-Key` auth scheme as every other client.
+
+## Replying to selected text
+
+Select text within a chat message, then choose **Add selection context** above the composer. The composer previews each selected excerpt and lets you remove it before sending. Write your reply and send; the excerpts travel as quoted text with the reply and remain in chat history. Quotes clear after sending or switching conversations, projects, or agents. English and Turkish labels are supported.

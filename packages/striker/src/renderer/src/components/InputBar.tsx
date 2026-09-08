@@ -3,6 +3,7 @@
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { useSelectionContext } from './SelectionContext'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
@@ -774,6 +775,7 @@ export default function InputBar({
   const [budget, setBudget]         = useState(true)
   const [bgMode, setBgMode]         = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const selectionContext = useSelectionContext(`${config.agentId}:${state.activeSessionId}:${state.activeProjectId}`, settings.locale, () => textareaRef.current?.focus())
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragDepth = useRef(0)
 
@@ -871,11 +873,13 @@ export default function InputBar({
     const task = value.trim()
     // In Background mode an empty field is a no-op, not a bare "/bg" send.
     if (bgMode && !task) return
-    const msg = bgMode ? `${BG_PREFIX}${task}` : task
+    const contextualTask = selectionContext.withContext(task)
+    const msg = bgMode ? `${BG_PREFIX}${contextualTask}` : contextualTask
+    if (!task && attachments.length === 0) return
     if ((!msg && attachments.length === 0) || state.isStreaming) return
     const imageFiles = attachments.filter(a => a.isImage).map(a => a.file)
     const docFiles   = attachments.filter(a => !a.isImage).map(a => a.file)
-    setValue(''); setBgMode(false); clearAttachments(); setTimeout(resize, 0)
+    selectionContext.clear(); setValue(''); setBgMode(false); clearAttachments(); setTimeout(resize, 0)
 
     let images: ImageBlock[] = []
     if (imageFiles.length) {
@@ -979,6 +983,7 @@ export default function InputBar({
   return (
     <div className="hb-composer" style={{ padding: '0.5rem 1.25rem 0.875rem', flexShrink: 0 }}>
       <div style={{ maxWidth: 780, margin: '0 auto' }}>
+        {selectionContext.panel}
 
         {/* ── Composer panel — precision-machined holographic glass ─────── */}
         <div

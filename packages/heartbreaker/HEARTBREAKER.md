@@ -285,3 +285,7 @@ While a response is streaming, typing into the composer swaps the Stop button fo
 Server URL and API key resolve in order: environment variables → values baked in at build time by `build-app.ps1` → `connection.json` in the app's user-data directory, written by the in-app connection setup dialog → a hardcoded local default. Every request carries the resolved key as `X-API-Key`, matching the backend's `SPEDA_API_KEY`.
 
 The browser-only build (`web:dev`/`web:build`) instead reads `VITE_API_BASE`/`VITE_API_KEY` plus `localStorage`.
+
+## Replying to selected text
+
+Select text within a chat message, then choose **Add selection context** above the composer. The composer previews each selected excerpt and lets you remove it before sending. Write your reply and send; the excerpts travel as quoted text with the reply and remain in chat history. Quotes clear after sending or switching conversations, projects, or agents. English and Turkish labels are supported.

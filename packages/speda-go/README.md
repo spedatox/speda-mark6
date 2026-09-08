@@ -274,3 +274,8 @@ Firebase Cloud Messaging, data-only payloads (never notification payloads). The 
 ## Signing and release
 
 The release workflow decodes a keystore from a repository secret, runs the unit tests, builds a signed release APK, verifies the signature, and publishes it as a GitHub Release. Signing requires `SPEDA_GO_KEYSTORE_BASE64` plus the corresponding password and alias secrets — without them, `assembleRelease` produces an unsigned APK.
+
+## Replying to selected text
+
+Long-press and select native chat text, then choose **Add selection context** below the message. The composer previews each selected excerpt and lets you remove it before sending. Write your reply and send; the excerpts travel as quoted text with the reply and remain in chat history. Quotes clear after sending or switching conversations, projects, or agents. English and Turkish labels are supported.
+Selection applies to native text; embedded WebViews and graphical content use their own interaction controls.

@@ -44,12 +44,12 @@ const MemoMessage = memo(function MemoMessage({
     [onEditAndResend, message.id],
   )
   return (
-    <Message
+    <div data-reply-message={message.id}><Message
       message={message}
       onDelete={handleDelete}
       onRegenerate={message.role === 'assistant' ? handleRegenerate : undefined}
       onEditAndResend={message.role === 'user' ? handleEdit : undefined}
-    />
+    /></div>
   )
 })
 

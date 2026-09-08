@@ -103,6 +103,7 @@ fun ChatScreen(
 
     val state by vm.state.collectAsStateWithLifecycle()
     val settings by graph.settings.settings.collectAsStateWithLifecycle(initialValue = HbSettings())
+    var replyQuotes by remember(config, state.activeSessionId, state.activeProjectId) { mutableStateOf<List<String>>(emptyList()) }
     val health by remember(config) { graph.health.poll(config.apiBase, config.apiKey) }
         .collectAsStateWithLifecycle(initialValue = Health.Offline)
 
@@ -311,18 +312,20 @@ fun ChatScreen(
                             contentPadding = PaddingValues(vertical = 12.dp),
                         ) {
                             items(state.messages, key = { it.id }) { message ->
-                                MessageItem(
-                                    message,
-                                    config = config,
-                                    downloader = graph.downloader,
-                                    onDelete = { vm.deleteMessage(message.id) },
-                                    onRegenerate = if (message.role == com.speda.heartbreaker.domain.Role.Assistant) {
-                                        { vm.regenerate(message.id, turnOpts(settings)) }
-                                    } else null,
-                                    onEditAndResend = if (message.role == com.speda.heartbreaker.domain.Role.User) {
-                                        { newText -> vm.editAndResend(message.id, newText, turnOpts(settings)) }
-                                    } else null,
-                                )
+                                ReplySelection(onSelect = { quote -> if (quote !in replyQuotes) replyQuotes = replyQuotes + quote }, turkish = settings.locale == "tr") {
+                                    MessageItem(
+                                        message,
+                                        config = config,
+                                        downloader = graph.downloader,
+                                        onDelete = { vm.deleteMessage(message.id) },
+                                        onRegenerate = if (message.role == com.speda.heartbreaker.domain.Role.Assistant) {
+                                            { vm.regenerate(message.id, turnOpts(settings)) }
+                                        } else null,
+                                        onEditAndResend = if (message.role == com.speda.heartbreaker.domain.Role.User) {
+                                            { newText -> vm.editAndResend(message.id, newText, turnOpts(settings)) }
+                                        } else null,
+                                    )
+                                }
                             }
                         }
                     }
@@ -342,6 +345,8 @@ fun ChatScreen(
             )
 
             Composer(
+                replyQuotes = replyQuotes,
+                onRemoveQuote = { index -> replyQuotes = replyQuotes.filterIndexed { i, _ -> i != index } },
                 isStreaming = state.isStreaming,
                 agentName = brand.name,
                 models = models,
@@ -371,8 +376,11 @@ fun ChatScreen(
                     }
                 },
                 onSend = { text, images, docs ->
+                    val contextualText = if (replyQuotes.isEmpty()) text else
+                        "Reply context (selected chat excerpts):\n" + replyQuotes.joinToString("\n\n") { quote -> quote.lines().joinToString("\n") { "> $it" } } + "\n\n" + text
+                    replyQuotes = emptyList()
                     vm.send(
-                        text,
+                        contextualText,
                         IgorApi.StreamOpts(
                             model = settings.model.ifEmpty { null },
                             systemPrompt = settings.systemPrompt.ifBlank { null },

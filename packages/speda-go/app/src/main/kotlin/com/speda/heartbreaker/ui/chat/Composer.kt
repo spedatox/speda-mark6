@@ -3,6 +3,8 @@
 
 package com.speda.heartbreaker.ui.chat
 
+import com.speda.heartbreaker.ui.HbGlassButton
+
 import android.content.Intent
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -99,6 +101,8 @@ fun Composer(
      *  from one tap. Mirrors lib/language.ts on the desktop clients. */
     onLanguageChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    replyQuotes: List<String> = emptyList(),
+    onRemoveQuote: (Int) -> Unit = {},
 ) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
@@ -177,6 +181,12 @@ fun Composer(
     }
 
     Column(modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
+        replyQuotes.forEachIndexed { index, quote ->
+            Row(Modifier.fillMaxWidth()) {
+                HbText(quote, style = HbType.read, color = palette.text, modifier = Modifier.weight(1f).heightIn(max = 100.dp))
+                HbGlassButton(if (language == "tr") "Bağlamı kaldır" else "Remove context", onClick = { onRemoveQuote(index) })
+            }
+        }
         Box {
             Column(
                 Modifier
