@@ -7,7 +7,6 @@ import remarkGfm from 'remark-gfm'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useHealth } from '../lib/useHealth'
-import { useOnlineAgents } from '../lib/useOnlineAgents'
 import { useIsMobile } from '../lib/useIsMobile'
 import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, fetchMemoryFolders, fetchAgentModels, pinAgentModel, fetchLegionModels, pinLegionModel, commitMemoryFile, fetchMemoryRevisions, restoreMemoryRevision } from '../lib/api'
 import type { ConnectionInfo, MemoryFileInfo, MemoryFolderInfo, AgentModelInfo, LegionModelInfo, MemoryRevisionInfo } from '../lib/api'
@@ -280,8 +279,6 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const { state } = useChatContext()
   const { settings, update } = useSettings()
   const health = useHealth(config.apiBase, config.apiKey, 4000)
-  const onlineAgents = useOnlineAgents(config, 8000)
-  const forgePeer = onlineAgents.find(a => a.agent_id === 'optimus')
   const isMobile = useIsMobile()
 
   const [models, setModels] = useState<ModelInfo[]>([])
@@ -576,8 +573,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               color={budgetMode ? 'var(--hb-amber)' : 'var(--hb-text-faint)'} alt />
           <KV k="Ollama node" v={ollamaUp ? 'Local active' : 'Not detected'}
               color={ollamaUp ? 'var(--hb-green)' : 'var(--hb-text-faint)'} />
-          <KV k="Forge link" v={forgePeer ? 'Optimus · Mk II' : 'In-process'}
-              color={forgePeer ? 'var(--hb-green)' : 'var(--hb-text-faint)'} alt />
+          <KV k="Forge" v="Legion execution" color="var(--hb-green)" alt />
         </Panel>
 
         <Panel title="Connected servers" style={{ flex: 1, animation: 'hbRise 0.4s 0.12s ease both' }}>

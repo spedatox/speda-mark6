@@ -182,8 +182,10 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
                             id = runId,
                             agent = e["agent"]?.jsonPrimitive?.contentOrNull ?: "",
                             label = e["label"]?.jsonPrimitive?.contentOrNull ?: "",
+                            source = e["source"]?.jsonPrimitive?.contentOrNull,
                         )
                     }
+                    e["source"]?.jsonPrimitive?.contentOrNull?.let { run = run.copy(source = it) }
                     when (e["phase"]?.jsonPrimitive?.contentOrNull) {
                         "started" -> run = run.copy(
                             prompt = e["prompt"]?.jsonPrimitive?.contentOrNull,
@@ -211,11 +213,16 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
                                     kind = "tool",
                                     tool = e["tool"]?.jsonPrimitive?.contentOrNull,
                                     input = e["input"],
+                                    toolCallId = e["tool_call_id"]?.jsonPrimitive?.contentOrNull,
                                 )
                                 ).toPersistentList(),
                         )
                         "tool_result" -> {
-                            val i = run.steps.indexOfLast { it.kind == "tool" && it.result == null }
+                            val toolCallId = e["tool_call_id"]?.jsonPrimitive?.contentOrNull
+                            val i = run.steps.indexOfLast {
+                                it.kind == "tool" && it.result == null &&
+                                    (toolCallId == null || it.toolCallId == toolCallId)
+                            }
                             if (i >= 0) {
                                 run = run.copy(
                                     steps = run.steps.set(

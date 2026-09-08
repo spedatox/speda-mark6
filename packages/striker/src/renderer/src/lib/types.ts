@@ -23,6 +23,7 @@ export interface SubagentStep {
   input?: unknown
   result?: string
   text?: string
+  toolCallId?: string
 }
 
 /**
@@ -44,6 +45,7 @@ export interface SubagentRun {
   ok?: boolean
   report?: string
   steps: SubagentStep[]
+  source?: 'legion' | 'peer' | 'forge'
 }
 
 export interface ImageBlock {

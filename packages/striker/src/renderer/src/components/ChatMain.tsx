@@ -362,7 +362,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       keepMessages: opts.keepMessages,
       regenerate: opts.regenerate,
       // Forge workspace for Optimus jobs; ignored by in-process agents.
-      cwd: config.agentId === 'optimus' ? (settings.forgeCwd || undefined) : undefined,
+      cwd: settings.forgeCwd || undefined,
       // The workspace this chat belongs to. Only read by the backend on the
       // turn that CREATES the session — a chat's project is fixed at birth —
       // so sending it on every turn is harmless and means a brand-new chat

@@ -240,12 +240,6 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(AgentChannelSkill())
     await registry.register_skill(DispatchStatusSkill())
     await registry.register_skill(HousePartySkill())
-    # Orion's push of the composed owner memory out to a connected Forge peer
-    # (docs: the Forge owner-memory bridge). Shares `dispatcher` with
-    # DispatchAgentSkill above — same late-bind-via-wire() pattern, since
-    # WebSocketManager doesn't exist yet at this point in startup.
-    from app.skills.forge_sync import SyncOwnerMemoryToForgeSkill
-    await registry.register_skill(SyncOwnerMemoryToForgeSkill(dispatcher))
     # Emergency inbound containment. Owner-only by construction (the skill
     # refuses any non-user trigger) — see app/skills/lockdown.py.
     from app.skills.lockdown import LockdownProtocolSkill
@@ -428,20 +422,14 @@ async def lifespan(app: FastAPI):
     # owner having to ask whether it finished.
     dispatcher.set_report_hook(make_dispatch_reporter(**reporter_deps))
 
-    # ── 9. Child processes — the local sandbox + the Forge peer ────────────────
-    # Both are best-effort: a missing dependency logs a warning and Speda keeps
-    # running. The sandbox gives the run_command skill a computer without Docker;
-    # the Forge peer is the standalone Optimus engine that connects back over the
-    # agents WebSocket (in-process OptimusProfile is the fallback when offline).
-    from app.services.forge_peer import ForgePeerLauncher
+    # ── 9. Child processes — the local sandbox ────────────────────────────────
+    # Best-effort: a missing dependency logs a warning and Speda keeps running.
+    # Forge workers create their own Cells on demand through the Legion backend.
     from app.services.sandbox_launcher import SandboxLauncher
 
     sandbox_launcher = SandboxLauncher()
-    forge_launcher = ForgePeerLauncher()
     await sandbox_launcher.start()
-    await forge_launcher.start()
     app.state.sandbox_launcher = sandbox_launcher
-    app.state.forge_launcher = forge_launcher
 
     # ── 10. Close out dispatches orphaned by the previous process ─────────────
     # A dispatch/legion ticket only ever runs in-process, so anything still
@@ -498,7 +486,6 @@ async def lifespan(app: FastAPI):
     await app.state.turns.shutdown()
     await dispatcher.shutdown()
     await registry.legion_shutdown()
-    await forge_launcher.stop()
     await sandbox_launcher.stop()
     for task in telegram_poll_tasks:
         task.cancel()

@@ -579,7 +579,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       keepMessages: opts.keepMessages,
       regenerate: opts.regenerate,
       // Forge workspace for Optimus jobs; ignored by in-process agents.
-      cwd: config.agentId === 'optimus' ? (settings.forgeCwd || undefined) : undefined,
+      cwd: settings.forgeCwd || undefined,
       // Voice mode is a property of the TURN, not the session: the backend
       // asks for a spoken answer with its visuals fenced off, instead of a
       // document that then gets read aloud at the owner.

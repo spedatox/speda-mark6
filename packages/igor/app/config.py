@@ -858,15 +858,11 @@ class Settings(BaseSettings):
     playwright_mcp_url: str = ""
 
     # ── The Forge peer (app/services/forge_peer.py) ────────────────────────────
-    # The Forge (Mark II) is the standalone execution engine. Speda owns its
-    # lifecycle: the lifespan handler launches ONE child process per agent in
-    # `forge_agents`, and each connects back to WS /agents/ws/<agent_id> as an
-    # external peer. While an agent's peer is online, /chat/<agent_id> is proxied
-    # to it; offline, that agent's in-process profile answers instead (graceful
-    # fallback — the Forge is never a hard dependency). forge_dir empty disables
-    # autostart. The Forge repo ships profiles for every agent listed here.
-    forge_autostart: bool = True
-    forge_dir: str = ""                       # absolute path to the forge-mk1 repo
+    # Forge is imported from forge_dir as the heavy backend for anonymous Legion
+    # workers. Personas, chats, uploads and provider credentials stay in Mark VI.
+    # Peer settings remain temporarily for old configuration-file compatibility.
+    forge_autostart: bool = False
+    forge_dir: str = ""                       # absolute path to the Forge repo
     # Comma-separated agents to back with a Forge peer. Each must have a
     # `<id>/profile.toml` in the Forge repo AND `external_backend = True` on its
     # in-process profile here. `forge_agent` (singular) is the legacy fallback
@@ -879,6 +875,8 @@ class Settings(BaseSettings):
     forge_ws_url: str = "ws://127.0.0.1:8000/agents/ws"
     forge_cell_backend: str = "auto"          # docker | subprocess | auto
     forge_python: str = ""                    # override interpreter; empty → uv run
+    forge_worker_max_iterations: int = 30
+    forge_worker_timeout_s: int = 120
 
     # ── News desk (two-tier RSS + NewsData.io) ─────────────────────────────────
     # Tier 1 (RSS) is keyless and always on. Tier 2 (NewsData.io) needs a free

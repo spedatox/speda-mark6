@@ -43,11 +43,9 @@ class CenturionProfile(AgentProfile):
         "action, not the log lines"
     )
     doc_theme = DocTheme(accent="#d8483c")   # signature red — matches the UI brand
-    # Like Optimus, Centurion can be backed by a Forge peer (its own Cell, with
-    # outbound network for authorized scans). While a peer is connected on
-    # /agents/ws/centurion, /chat/centurion proxies to it; offline, this
-    # in-process profile answers as the identity + fallback engine.
-    external_backend = True
+    # The persona stays here; isolated assessment work is delegated to the
+    # anonymous forge_pentester Legion role.
+    external_backend = False
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.

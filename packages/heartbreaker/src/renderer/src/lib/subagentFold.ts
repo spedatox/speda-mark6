@@ -15,7 +15,8 @@ export function foldLegionEvent(run: SubagentRun | null, event: Record<string, u
   const e = event as {
     id: string; agent?: string; label?: string; phase?: string
     prompt?: string; text?: string; tool?: string; input?: unknown
-    result?: string; report?: string; ok?: boolean; source?: 'legion' | 'peer'
+    result?: string; report?: string; ok?: boolean; source?: 'legion' | 'peer' | 'forge'
+    tool_call_id?: string
   }
   const next: SubagentRun = run
     ? { ...run, steps: [...run.steps] }
@@ -31,10 +32,12 @@ export function foldLegionEvent(run: SubagentRun | null, event: Record<string, u
     if (last?.kind === 'text') last.text = (last.text ?? '') + e.text
     else next.steps.push({ kind: 'text', text: e.text })
   } else if (e.phase === 'tool') {
-    next.steps.push({ kind: 'tool', tool: e.tool, input: e.input })
+    next.steps.push({ kind: 'tool', tool: e.tool, input: e.input, toolCallId: e.tool_call_id })
   } else if (e.phase === 'tool_result') {
     for (let k = next.steps.length - 1; k >= 0; k--) {
-      if (next.steps[k].kind === 'tool' && next.steps[k].result === undefined) {
+      const step = next.steps[k]
+      const matches = e.tool_call_id ? step.toolCallId === e.tool_call_id : step.result === undefined
+      if (step.kind === 'tool' && step.result === undefined && matches) {
         next.steps[k] = { ...next.steps[k], result: e.result }
         break
       }

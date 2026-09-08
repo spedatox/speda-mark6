@@ -214,7 +214,6 @@ export default function Layout({
       }}>
         <Header
           config={config}
-          agentId={profile.agentId}
           sidebarOpen={isMobile ? false : sidebarOpen}
           onToggleSidebar={() => (isMobile ? setDrawerOpen(true) : update({ sidebarOpen: !sidebarOpen }))}
           // The rail floats over this row's right end when the telemetry column

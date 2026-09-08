@@ -23,6 +23,7 @@ export interface SubagentStep {
   input?: unknown
   result?: string
   text?: string
+  toolCallId?: string
 }
 
 /**
@@ -48,7 +49,7 @@ export interface SubagentRun {
    *  (Optimus/Centurion, forwarded 1:1 from its chat_event frames) or an
    *  in-process Legion (Task) dispatch. Absent = 'peer', for events emitted
    *  before this field existed. */
-  source?: 'legion' | 'peer'
+  source?: 'legion' | 'peer' | 'forge'
 }
 
 export interface ImageBlock {

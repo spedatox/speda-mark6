@@ -437,6 +437,22 @@ async def _run_chat(
         context.extra["project_id"] = session.project_id
 
     context.extra["active_servers"] = session_manager.get_loaded_servers(session.id)
+    # Forge is a Legion execution backend, so it consumes the upload Mark VI
+    # already accepted rather than owning another upload route/protocol. Keep
+    # originals only on this live turn; background workers copy the plain data
+    # into their detached context before the request closes.
+    if body.attachments or body.documents:
+        context.extra["forge_inputs"] = [
+            {
+                "name": f"image-{i}.{att.media_type.rsplit('/', 1)[-1] or 'bin'}",
+                "media_type": att.media_type,
+                "data": att.data,
+            }
+            for i, att in enumerate(body.attachments, 1)
+        ] + [
+            {"name": doc.name, "media_type": doc.media_type, "data": doc.data}
+            for doc in body.documents
+        ]
     # Same for individually resolved tools (tool_search): seed from the session
     # so a tool found earlier in the conversation is still callable, and give the
     # skill a callback to record new ones without handing it the SessionManager.

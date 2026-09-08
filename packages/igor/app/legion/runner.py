@@ -63,6 +63,7 @@ class LegionRunner:
         # Live progress for BACKGROUND legionnaires only — inline runs ride
         # the parent turn's own SSE stream and TurnRegistry buffer for free.
         self.runs = LegionRunRegistry()
+        self._forge = None
 
     def set_report_hook(self, hook) -> None:
         """Install the callback a finished BACKGROUND worker fires to report in.
@@ -223,6 +224,11 @@ class LegionRunner:
         run_id: str | None = None,
         emit=None,
     ) -> str:
+        if worker.backend == "forge":
+            return await self._forge_loop(
+                worker=worker, model=model, description=description, prompt=prompt,
+                context=context, run_id=run_id, emit=emit,
+            )
         from app.services.llm_client import blocks_to_dicts
 
         started = time.monotonic()
@@ -409,6 +415,63 @@ class LegionRunner:
                     "report": unknown_result, "source": "legion",
                 })
                 return unknown_result
+
+    async def _forge_loop(
+        self, *, worker: LegionnaireDef, model: str, description: str,
+        prompt: str, context: "AgentContext", run_id: str | None, emit=None,
+    ) -> str:
+        from app.execution.forge import ForgeExecutor
+
+        workspace = str(context.extra.get("cwd") or "").strip()
+        self._safe_emit(emit, {
+            "id": run_id, "agent": worker.worker_id, "label": description,
+            "phase": "started", "prompt": prompt, "source": "forge",
+        })
+        if not workspace:
+            result = (
+                "Forge needs a workspace. Select a Forge workspace in the client "
+                "and deploy this worker again."
+            )
+            self._safe_emit(emit, {
+                "id": run_id, "phase": "finished", "ok": False,
+                "report": result, "source": "forge",
+            })
+            return result
+
+        if self._forge is None:
+            self._forge = ForgeExecutor(self._client)
+
+        role = {
+            "forge_coder": "coder",
+            "forge_reviewer": "reviewer",
+            "forge_pentester": "pentester",
+        }[worker.worker_id]
+
+        def forward(event: dict) -> None:
+            self._safe_emit(emit, {"id": run_id, **event})
+
+        try:
+            result = await self._forge.run(
+                job_id=run_id or f"forge-{uuid.uuid4().hex}",
+                role=role,
+                task=f"{description}\n\n{prompt}",
+                workspace=workspace,
+                model_ref=model,
+                inputs=list(context.extra.get("forge_inputs") or []),
+                emit=forward,
+            )
+        except Exception as exc:  # noqa: BLE001
+            result = f"Forge worker failed: {exc}"
+            self._safe_emit(emit, {
+                "id": run_id, "phase": "finished", "ok": False,
+                "report": result, "source": "forge",
+            })
+            return result
+        self._safe_emit(emit, {
+            "id": run_id, "phase": "finished", "ok": True,
+            "report": result[:MAX_WORKER_RESULT_CHARS], "source": "forge",
+        })
+        return result[:MAX_WORKER_RESULT_CHARS]
 
     # ── Background mode ───────────────────────────────────────────────────────
 
@@ -619,6 +682,8 @@ def _detached_context(context: "AgentContext"):
         timezone=context.timezone,
         extra={"tool_allowlist": context.extra.get("tool_allowlist"),
                "active_servers": set(context.extra.get("active_servers", set())),
+               "cwd": context.extra.get("cwd"),
+               "forge_inputs": list(context.extra.get("forge_inputs") or []),
                # Its own tally: a detached worker outlives the parent turn's
                # counter, so it accumulates here and is logged on completion.
                "token_usage": {"input": 0, "output": 0, "billable_input": 0,

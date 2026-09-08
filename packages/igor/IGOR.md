@@ -30,7 +30,8 @@ The backend. One FastAPI process: every agent, the memory system, the tool regis
 | `app/skills/` | Tier-1 capabilities — one file per LLM-callable tool |
 | `app/mcp/` | Tier-2 MCP client plumbing and the REST-backed pseudo-MCP servers for Gmail/Calendar/Outlook |
 | `app/adapters/` | Tier-3 wrapped external agent runtimes |
-| `app/legion/` | The Tier-0 parallel research worker system |
+| `app/legion/` | Tier-0 anonymous workers, including Forge-backed coding and security roles |
+| `app/execution/` | Heavy worker backends; adapts Igor's model client to Forge without a peer identity |
 | `app/profiles/` | One `AgentProfile` subclass per persona — identity, tool allowlist, model policy, prompt branding |
 | `app/routers/` | Thin FastAPI routers, one per feature surface, delegating to services/orchestrator |
 | `app/middleware/` | API key auth, security headers |

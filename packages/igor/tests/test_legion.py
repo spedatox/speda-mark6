@@ -212,6 +212,45 @@ def test_tool_definition_wire_name_and_schema():
     assert len(TASK_TOOL_DEFINITION["description"]) > 400
 
 
+def test_forge_workers_are_anonymous_execution_backends():
+    assert LEGION_ROSTER["forge_coder"].backend == "forge"
+    assert LEGION_ROSTER["forge_reviewer"].backend == "forge"
+    assert LEGION_ROSTER["forge_pentester"].backend == "forge"
+    assert LEGION_ROSTER["forge_reviewer"].read_only is True
+
+
+async def test_forge_worker_uses_selected_workspace(monkeypatch):
+    calls = []
+
+    class _Forge:
+        def __init__(self, _client):
+            pass
+
+        async def run(self, **kwargs):
+            calls.append(kwargs)
+            kwargs["emit"]({"phase": "text", "text": "working", "source": "forge"})
+            return "implemented and checked"
+
+    monkeypatch.setattr("app.execution.forge.ForgeExecutor", _Forge)
+    worker = LEGION_ROSTER["forge_coder"]
+    runner = LegionRunner(object(), CapabilityRegistry(), None)
+    context = _ctx()
+    context.extra["cwd"] = "/srv/project"
+    events = []
+
+    result = await runner._loop(
+        worker=worker, model="openai:gpt-5.2", tools=[],
+        description="fix it", prompt="do the work", request_id="req",
+        context=context, run_id="forge-run", emit=events.append,
+    )
+
+    assert result == "implemented and checked"
+    assert calls[0]["workspace"] == "/srv/project"
+    assert calls[0]["role"] == "coder"
+    assert [e["phase"] for e in events] == ["started", "text", "finished"]
+    assert all(e["source"] == "forge" for e in events)
+
+
 def test_legacy_env_alias(monkeypatch):
     # SUB_AGENT_MODEL in the environment still pins workers (back-compat).
     monkeypatch.setenv("SUB_AGENT_MODEL", "claude-haiku-4-5-20251001")

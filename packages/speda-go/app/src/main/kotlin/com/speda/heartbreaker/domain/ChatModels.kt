@@ -41,6 +41,7 @@ data class SubagentStep(
     val input: JsonElement? = null,
     val result: String? = null,
     val text: String? = null,
+    val toolCallId: String? = null,
 )
 
 /**
@@ -63,6 +64,7 @@ data class SubagentRun(
     val ok: Boolean? = null,
     val report: String? = null,
     val steps: PersistentList<SubagentStep> = persistentListOf(),
+    val source: String? = null,
 )
 
 @Immutable

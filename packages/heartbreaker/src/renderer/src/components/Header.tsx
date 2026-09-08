@@ -4,7 +4,6 @@
 import { useEffect, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
-import { useIsPeerOnline } from '../lib/useOnlineAgents'
 import { fetchProjects } from '../lib/api'
 import HisarBrowser from './HisarBrowser'
 import type { AppConfig } from '../lib/types'
@@ -26,22 +25,13 @@ import { useT } from '../lib/i18n'
  */
 
 /**
- * FORGE LINK — engine indicator for Optimus. When the standalone Forge peer is
- * connected the chat is running on it (full agentic execution in the Cell);
- * when it is offline Optimus answers from its in-process profile. A quiet jewel
- * states which, with no layout shift between states. For Optimus it also carries
- * a compact workspace field: the directory the Forge runs the job in, chosen
- * from the owner's Hisar vault so both Mark VI and the Forge share the same
- * workspace namespace without path translation.
+ * Workspace selector for anonymous Forge workers deployed through Legion.
+ * Every Mark VI persona can delegate against the selected workspace.
  */
-function ForgeLink({ config, agentId }: { config: AppConfig; agentId: string }) {
+function ForgeLink({ config }: { config: AppConfig }) {
   const t = useT()
-  const online = useIsPeerOnline(config, 'optimus')
   const { settings, update } = useSettings()
   const [browserOpen, setBrowserOpen] = useState(false)
-  if (agentId !== 'optimus') return null
-
-  const color = online ? 'var(--hb-green)' : 'var(--hb-text-faint)'
   const cwd = settings.forgeCwd
   // Show the trailing folder name (the meaningful part). Hisar paths are always
   // POSIX with forward slashes — the UI uses the vault path as-is.
@@ -61,21 +51,6 @@ function ForgeLink({ config, agentId }: { config: AppConfig; agentId: string }) 
         />
       )}
       <span className="hb-hide-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <span
-          title={online ? t.header.forgeOnlineTitle : t.header.forgeOfflineTitle}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
-            letterSpacing: '0.12em', color,
-          }}
-        >
-          <span style={{
-            width: 6, height: 6, borderRadius: '50%', background: color,
-            boxShadow: online ? '0 0 6px var(--hb-green)' : 'none',
-            animation: online ? 'hbBlink 1.6s ease-in-out infinite' : 'none',
-          }} />
-          {online ? t.header.forgeLink : t.header.inProcess}
-        </span>
         <span className="hb-query-box" style={{
           display: 'flex', alignItems: 'center', gap: 6, height: 24,
           maxWidth: 200, padding: '0 0.2rem 0 0.45rem',
@@ -259,7 +234,6 @@ export function DeckRail({
 
 interface Props {
   config: AppConfig
-  agentId: string
   sidebarOpen?: boolean
   onToggleSidebar?: () => void
   /** Width the title row must keep clear on its right so the floating rail,
@@ -268,7 +242,7 @@ interface Props {
 }
 
 export default function Header({
-  config, agentId, sidebarOpen, onToggleSidebar, railClearance = 0,
+  config, sidebarOpen, onToggleSidebar, railClearance = 0,
 }: Props) {
   const t = useT()
   const { state } = useChatContext()
@@ -377,7 +351,7 @@ export default function Header({
       <div style={{ flex: 1, minWidth: 0 }} />
 
       {/* Forge link — Optimus engine state + workspace (Optimus only) */}
-      <ForgeLink config={config} agentId={agentId} />
+      <ForgeLink config={config} />
 
       {/* The rail is NOT here — it floats above the telemetry column, out of
           this column's clipped overflow. Layout renders <DeckRail/>. This

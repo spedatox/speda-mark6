@@ -58,6 +58,9 @@ class LegionnaireDef:
     # that cannot see `news_headlines` cannot be tempted to answer a memory
     # question with a web search. None = no extra narrowing.
     tool_scope: frozenset | None = None
+    # Heavy coding/security workers use Forge's Warden + Cell while keeping the
+    # same Legion lifecycle and subagent UI. They are roles, never personas.
+    backend: str = "legion"
 
 
 _CONTRACT = (
@@ -67,6 +70,31 @@ _CONTRACT = (
 )
 
 LEGION_ROSTER: dict[str, LegionnaireDef] = {
+    "forge_coder": LegionnaireDef(
+        worker_id="forge_coder",
+        when_to_use="heavy coding work in the selected workspace — inspect, edit, run commands and verify",
+        system_prompt=_CONTRACT,
+        effort="high",
+        max_iterations=30,
+        backend="forge",
+    ),
+    "forge_reviewer": LegionnaireDef(
+        worker_id="forge_reviewer",
+        when_to_use="deep read-only review of a codebase with concrete file and line findings",
+        system_prompt=_CONTRACT,
+        effort="high",
+        max_iterations=30,
+        read_only=True,
+        backend="forge",
+    ),
+    "forge_pentester": LegionnaireDef(
+        worker_id="forge_pentester",
+        when_to_use="authorized local code and dependency security assessment in an isolated Forge Cell",
+        system_prompt=_CONTRACT,
+        effort="high",
+        max_iterations=30,
+        backend="forge",
+    ),
     "scout": LegionnaireDef(
         worker_id="scout",
         when_to_use="cheap pre-filter/triage — survey sources fast, return a ranked shortlist of leads, no synthesis",

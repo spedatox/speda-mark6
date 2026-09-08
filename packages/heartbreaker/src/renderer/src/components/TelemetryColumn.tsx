@@ -4,7 +4,6 @@
 import { useEffect, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useHealth } from '../lib/useHealth'
-import { useOnlineAgents } from '../lib/useOnlineAgents'
 import { getConnections, fetchAgentModels, fetchLegionModels } from '../lib/api'
 import type { ConnectionInfo, AgentModelInfo, LegionModelInfo } from '../lib/api'
 import type { AppConfig } from '../lib/types'
@@ -118,8 +117,6 @@ export default function TelemetryColumn({ config, agentId, open }: Props) {
   const t = useT()
   const { state } = useChatContext()
   const health = useHealth(config.apiBase, config.apiKey, 4000)
-  const onlineAgents = useOnlineAgents(config, 8000)
-  const forgeOnline = onlineAgents.some(a => a.agent_id === 'optimus')
 
   const [rtt, setRtt] = useState<number[]>([])
   const [servers, setServers] = useState<ConnectionInfo[]>([])
@@ -260,20 +257,6 @@ export default function TelemetryColumn({ config, agentId, open }: Props) {
               {s.label} {s.tools}
             </span>
           ))}
-          {forgeOnline && (
-            <span
-              className="glass-round"
-              title={t.telemetryColumn.forgeConnectedTitle}
-              style={{
-                height: 28, padding: '0 12px', display: 'flex', alignItems: 'center',
-                border: '1px solid rgba(var(--hb-accent-rgb),0.32)',
-                background: 'rgba(var(--hb-accent-rgb),0.12)',
-                fontSize: 13, color: 'var(--hb-cyan-bright)',
-              }}
-            >
-              {t.telemetryColumn.forgeLinked}
-            </span>
-          )}
         </div>
       </div>
 
