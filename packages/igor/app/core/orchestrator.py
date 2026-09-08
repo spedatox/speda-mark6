@@ -4,15 +4,21 @@
 import asyncio
 import logging
 import time
-from typing import AsyncGenerator
+from typing import AsyncGenerator, AsyncIterator
 
+from app.config import settings
 from app.core.context import AgentContext
 from app.core.registry import CapabilityRegistry
 from app.models.tool_call import ToolCall
 from app.profiles.registry import ProfileRegistry
 from app.schemas.sse import SSEEvent, SSEEventType
 from app.services import language
-from app.services.llm_client import LLMClient, blocks_to_dicts, supports_vision
+from app.services.llm_client import (
+    LLMClient,
+    blocks_to_dicts,
+    supports_vision,
+    thinking_request_kwargs,
+)
 from app.services.relevant_recall import facts_for_message
 from app.skills.memory import MemoryRecallCache, recall_for_context, recall_sessions_for_context
 
@@ -54,6 +60,22 @@ async def _timed(
     start = time.monotonic()
     result = await registry.execute(tool_name, args, context, tool_call_id=tool_call_id, emit=emit)
     return result, int((time.monotonic() - start) * 1000)
+
+
+async def _tagged_deltas(stream) -> AsyncIterator[tuple[str, str]]:
+    """(kind, text) tuples from a stream_message() stream, kind in {"text",
+    "thinking", "thinking_redacted"}. Uses event_stream() when the stream
+    exposes one (an _OpenAICompatStream that surfaced reasoning, or an
+    Anthropic stream wrapped because thinking was requested for this call);
+    falls back to plain text_stream — tagged entirely "text" — for every other
+    case, which is every provider path this feature doesn't touch."""
+    events = getattr(stream, "event_stream", None)
+    if events is not None:
+        async for kind, text in events():
+            yield kind, text
+        return
+    async for text in stream.text_stream:
+        yield "text", text
 
 
 class AgentOrchestrator:
@@ -586,16 +608,38 @@ class AgentOrchestrator:
                 system=system_blocks,
                 messages=messages,
                 tools=tools,
-                max_tokens=8096,
+                max_tokens=settings.chat_max_output_tokens,
                 # Cache-routing key for providers that expose one (OpenAI). Keyed
                 # by agent+session so every iteration of every turn in one
                 # conversation lands on the same cache entry — the prefix they
                 # share is exactly the ~20k the agent re-sends each lap. Ignored
                 # by every other provider.
                 cache_key=f"{context.agent_id}-{context.session_id}",
+                # {} on every provider/call that isn't Anthropic with thinking
+                # turned on — see thinking_request_kwargs for the family/
+                # settings logic. Harmless to spread unconditionally.
+                **thinking_request_kwargs(context.model),
             ) as stream:
                 first_delta = True
-                async for delta in stream.text_stream:
+                async for kind, delta in _tagged_deltas(stream):
+                    if kind == "thinking":
+                        if delta and settings.thinking_visible_enabled:
+                            yield SSEEvent(
+                                type=SSEEventType.THINKING,
+                                data={"text": delta},
+                                session_id=context.session_id,
+                                request_id=context.request_id,
+                            )
+                        continue
+                    if kind == "thinking_redacted":
+                        if settings.thinking_visible_enabled:
+                            yield SSEEvent(
+                                type=SSEEventType.THINKING,
+                                data={"redacted": True},
+                                session_id=context.session_id,
+                                request_id=context.request_id,
+                            )
+                        continue
                     if not delta:
                         continue
                     # When a new text segment begins after earlier text in the same

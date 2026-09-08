@@ -125,6 +125,8 @@ class TurnRegistry:
         chunks: list[str] = []
         tools: list[dict] = []
         files: list[dict] = []
+        thinking_parts: list[str] = []
+        thinking_redacted = False
         cancelled = False
         failed = False          # a terminal error (graceful or raised) ended the turn
         failure_note: str | None = None  # the error text, stamped into the saved turn
@@ -168,6 +170,12 @@ class TurnRegistry:
                                     break
                         elif et == SSEEventType.FILE:
                             files.append(event.data)
+                        elif et == SSEEventType.THINKING:
+                            d = event.data if isinstance(event.data, dict) else {}
+                            if d.get("text"):
+                                thinking_parts.append(d["text"])
+                            if d.get("redacted"):
+                                thinking_redacted = True
                 except asyncio.CancelledError:
                     cancelled = True
                     chunks.append("\n\n_[cancelled by owner]_")
@@ -214,7 +222,9 @@ class TurnRegistry:
 
                 # Persist the assistant turn (moved verbatim out of the router's
                 # SSE generator — it now runs regardless of who is listening).
-                await self._persist(db, turn, chunks, tools, files)
+                await self._persist(
+                    db, turn, chunks, tools, files, thinking_parts, thinking_redacted,
+                )
 
                 # Token spend for this turn, on the session's running totals.
                 # Runs on every outcome including a failed or cancelled turn —
@@ -254,15 +264,31 @@ class TurnRegistry:
         finally:
             await self._finish(turn)
 
-    async def _persist(self, db, turn: _Turn, chunks: list[str], tools: list[dict], files: list[dict]) -> None:
+    async def _persist(
+        self, db, turn: _Turn, chunks: list[str], tools: list[dict], files: list[dict],
+        thinking_parts: list[str] | None = None, thinking_redacted: bool = False,
+    ) -> None:
         full = "".join(chunks)
+        thinking = "".join(thinking_parts) if thinking_parts else ""
         # A turn that ran tools counts as work even with no text — dropping it
-        # would erase what the agent did from the next turn's history.
-        if not (full or files or tools):
+        # would erase what the agent did from the next turn's history. Same
+        # logic for a turn that only thought out loud and got cut off.
+        if not (full or files or tools or thinking or thinking_redacted):
             return
         content: list = [{"type": "text", "text": full}]
-        if tools or files:
-            content.append({"type": "_speda_meta", "tools": tools, "files": files})
+        if tools or files or thinking or thinking_redacted:
+            meta: dict = {"type": "_speda_meta", "tools": tools, "files": files}
+            # Display text only, never round-tripped as a real Anthropic
+            # thinking/redacted_thinking block — see IGOR.md's note on why
+            # persisting reasoning across separate top-level turns is display-
+            # only here. _speda_meta is already an internal marker type that
+            # every provider translation layer skips over, so this inherits
+            # the same safety property tools/files already have.
+            if thinking:
+                meta["thinking"] = thinking
+            if thinking_redacted:
+                meta["thinkingRedacted"] = True
+            content.append(meta)
         try:
             await self._session_manager.save_message(db, turn.session_id, "assistant", content)
         except Exception as e:  # noqa: BLE001

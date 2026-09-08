@@ -612,6 +612,42 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         ],
     ),
     ConfigGroup(
+        "thinking", "Thinking",
+        "Reasoning content used to be captured and thrown straight into a debug "
+        "log line, never shown. These settings turn on the thinking window: a "
+        "collapsible panel showing what the model worked through before it "
+        "answered, sourced from whatever a provider already streams (GLM/z.ai "
+        "by default, Ollama and generic proxies via inline <think> tags) plus, "
+        "optionally, Claude's own thinking. DeepSeek is a known exception — its "
+        "API forces thinking off whenever tools are present, which in this "
+        "backend is effectively every turn, and no setting here changes that.",
+        [
+            ConfigField("thinking_visible_enabled", "Show Thinking", "bool",
+                        requires_restart=_LIVE,
+                        help="Master switch. Off, reasoning is discarded exactly as before — "
+                             "never streamed to a client, never persisted."),
+            ConfigField("anthropic_thinking_enabled", "Ask Claude to Think", "bool",
+                        requires_restart=_LIVE,
+                        help="Additionally request Claude's own thinking on the main chat loop, "
+                             "rather than only forwarding what other providers already produce. "
+                             "Costs extra output tokens and latency on every Anthropic turn. Has "
+                             "no effect while Show Thinking above is off."),
+            ConfigField("anthropic_thinking_effort", "Claude Thinking Depth", "select",
+                        requires_restart=_LIVE, options=["low", "medium", "high"],
+                        help="Adaptive-mode reasoning depth. Ignored on Haiku models, which have "
+                             "no adaptive mode and always use the manual budget below instead."),
+            ConfigField("anthropic_thinking_budget_tokens", "Claude Manual Thinking Budget", "int",
+                        requires_restart=_LIVE,
+                        help="Token budget for models that only support manual thinking "
+                             "(currently the Haiku family). Kept below the output ceiling below.",
+                        placeholder="4096"),
+            ConfigField("chat_max_output_tokens", "Max Reply Length (tokens)", "int",
+                        requires_restart=_LIVE,
+                        help="Hard ceiling on one chat turn's output, across every provider.",
+                        placeholder="8096"),
+        ],
+    ),
+    ConfigGroup(
         "security", "Security & Server",
         "Service credential, CORS, and diagnostics. Change the API key with care — "
         "the desktop app must use the same value.",

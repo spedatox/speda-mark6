@@ -1458,16 +1458,18 @@ def _partial_tail(text: str, tag: str) -> int:
 
 
 class _ReasoningFilter:
-    """Keeps a model's thinking out of its answer.
+    """Keeps a model's thinking out of its answer — and, unlike the name still
+    suggests, hands it back separately instead of throwing it away.
 
-    Reasoning reaches us on two different channels and only one of them is
-    safe. Providers that follow DeepSeek's convention put it on its own
-    `reasoning_content` delta field, which we simply never read into the text.
+    Reasoning reaches us on two different channels. Providers that follow
+    DeepSeek's convention put it on its own `reasoning_content` delta field,
+    read directly off the delta by the caller (see _OpenAICompatStream._pump).
     Others — GLM, Ollama, and anything proxied through a generic OpenAI-compat
     gateway — inline it into `content` wrapped in `<think>…</think>`, where it
-    is indistinguishable from the answer unless someone strips it. Persisted, it
-    becomes conversation history, so the next turn reads the model's own
-    scratchpad back as dialogue.
+    is indistinguishable from the answer unless someone strips it. Persisted
+    into the visible answer, it becomes conversation history, so the next turn
+    would read the model's own scratchpad back as dialogue — this class's job
+    is only to keep the two separated, not to discard either one.
 
     Streaming makes this stateful: a tag can be split across chunk boundaries
     ("<thi" / "nk>"), so the filter holds back any tail that could still become
@@ -1480,20 +1482,25 @@ class _ReasoningFilter:
         self._emitted = False
         self.reasoning: list[str] = []
 
-    def feed(self, delta: str) -> str:
-        """Visible text from this delta. Thinking is diverted to .reasoning."""
+    def feed(self, delta: str) -> tuple[str, str]:
+        """(visible, thinking) text from this delta."""
         self._buf += delta
         out: list[str] = []
+        thinking_out: list[str] = []
         while True:
             if self._inside:
                 idx = self._buf.find(_THINK_CLOSE)
                 if idx == -1:
                     keep = _partial_tail(self._buf, _THINK_CLOSE)
                     cut = len(self._buf) - keep
-                    self.reasoning.append(self._buf[:cut])
+                    piece = self._buf[:cut]
+                    self.reasoning.append(piece)
+                    thinking_out.append(piece)
                     self._buf = self._buf[cut:]
                     break
-                self.reasoning.append(self._buf[:idx])
+                piece = self._buf[:idx]
+                self.reasoning.append(piece)
+                thinking_out.append(piece)
                 self._buf = self._buf[idx + len(_THINK_CLOSE):]
                 self._inside = False
             else:
@@ -1510,23 +1517,24 @@ class _ReasoningFilter:
         text = "".join(out)
         if text:
             self._emitted = True
-        return text
+        return text, "".join(thinking_out)
 
-    def flush(self) -> str:
-        """Whatever is still held back at end of stream.
+    def flush(self) -> tuple[str, str]:
+        """(visible, thinking) for whatever is still held back at end of stream.
 
         An unterminated `<think>` means the model was cut off mid-thought, so
         there is no answer to deliver. If it never produced any visible text at
-        all, the held-back remainder is released anyway and logged: a truncated
-        turn is a failure either way, and one that arrives visibly wrong is far
-        easier to diagnose than one that silently delivers nothing.
+        all, the held-back remainder is released anyway and logged, AS THE
+        ANSWER (not as thinking): a truncated turn is a failure either way, and
+        one that arrives visibly wrong is far easier to diagnose than one that
+        silently delivers nothing.
         """
         rest, self._buf = self._buf, ""
         if not self._inside:
-            return rest
+            return rest, ""
         self.reasoning.append(rest)
         if self._emitted:
-            return ""
+            return "", ""
         # Nothing visible was ever produced, so the diverted text is all there
         # is. It has already been drained out of the buffer chunk by chunk, so
         # salvage the accumulation rather than the (empty) remainder.
@@ -1535,12 +1543,21 @@ class _ReasoningFilter:
             "reasoning_block_unterminated",
             extra={"chars": len(salvage)},
         )
-        return salvage
+        return salvage, ""
 
 
 class _OpenAICompatStream:
     """Chat-completions stream exposing the Anthropic stream surface the
-    orchestrator consumes: .text_stream and get_final_message()."""
+    orchestrator consumes: .text_stream and get_final_message(). Also exposes
+    event_stream() — the same underlying pump, tagged ("text"/"thinking") —
+    for the one caller (the orchestrator's main loop) that wants reasoning
+    surfaced instead of silently dropped.
+
+    text_stream and event_stream() are both thin views over the single-use
+    _pump() generator, which is itself the sole consumer of self._raw (a
+    single-use network iterator) — only ONE of the two may ever be iterated
+    per instance. In practice that's guaranteed by construction: every caller
+    other than the orchestrator's main loop only ever touches text_stream."""
 
     def __init__(self, client, params: dict, provider: str) -> None:
         self._client = client
@@ -1566,9 +1583,19 @@ class _OpenAICompatStream:
 
     @property
     def text_stream(self) -> AsyncIterator[str]:
-        return self._consume()
+        return self._text_only()
 
-    async def _consume(self) -> AsyncIterator[str]:
+    async def _text_only(self) -> AsyncIterator[str]:
+        async for kind, text in self._pump():
+            if kind == "text":
+                yield text
+
+    def event_stream(self) -> AsyncIterator[tuple[str, str]]:
+        """(kind, text) tuples, kind in {"text", "thinking"}. Drives the same
+        pump text_stream does — see class docstring."""
+        return self._pump()
+
+    async def _pump(self) -> AsyncIterator[tuple[str, str]]:
         async for chunk in self._raw:
             if getattr(chunk, "usage", None):
                 self._usage = _usage_from(chunk.usage)
@@ -1581,14 +1608,16 @@ class _OpenAICompatStream:
             if delta is None:
                 continue
             # DeepSeek-convention providers stream thinking on its own field.
-            # Collect it for logging only — it must never reach the text.
             if (thought := getattr(delta, "reasoning_content", None)):
                 self._reasoning.reasoning.append(thought)
+                yield "thinking", thought
             if delta.content:
-                visible = self._reasoning.feed(delta.content)
+                visible, thinking = self._reasoning.feed(delta.content)
+                if thinking:
+                    yield "thinking", thinking
                 if visible:
                     self._text.append(visible)
-                    yield visible
+                    yield "text", visible
             for tc in delta.tool_calls or []:
                 # `index` is what pairs an argument delta with the call it
                 # belongs to. Gemini's bridge can omit it; without a fallback
@@ -1615,12 +1644,15 @@ class _OpenAICompatStream:
                         acc["name"] = tc.function.name
                     if tc.function.arguments:
                         acc["arguments"] += tc.function.arguments
-        if (tail := self._reasoning.flush()):
-            self._text.append(tail)
-            yield tail
+        tail_visible, tail_thinking = self._reasoning.flush()
+        if tail_thinking:
+            yield "thinking", tail_thinking
+        if tail_visible:
+            self._text.append(tail_visible)
+            yield "text", tail_visible
         if self._reasoning.reasoning:
             logger.debug(
-                "reasoning_stripped",
+                "reasoning_surfaced",
                 extra={
                     "provider": self._provider,
                     "chars": sum(len(r) for r in self._reasoning.reasoning),
@@ -1630,7 +1662,7 @@ class _OpenAICompatStream:
 
     async def get_final_message(self) -> LLMMessage:
         if not self._consumed:  # drain remainder if text_stream wasn't finished
-            async for _ in self._consume():
+            async for _ in self._pump():
                 pass
         blocks: list = []
         text = "".join(self._text)
@@ -1655,6 +1687,106 @@ class _OpenAICompatStream:
     async def aclose(self) -> None:
         if self._raw is not None:
             await self._raw.close()
+
+
+# Anthropic families with no adaptive-thinking mode — manual `type: "enabled"`
+# + budget_tokens is their only option. Everything else defaults to adaptive,
+# which is what current and future frontier releases expect: manual mode is
+# deprecated on the 4.6 generation and rejected outright (400) on 4.7 and
+# newer. Matched by substring, same style as _ANTHRO_FAMILY, so a future
+# Haiku release is covered automatically without a code change.
+_MANUAL_THINKING_ONLY = ("haiku",)
+
+
+def thinking_request_kwargs(model_ref: str) -> dict:
+    """Extra stream_message/create_message kwargs to request thinking on
+    `model_ref`, or {} when thinking shouldn't be requested at all — not an
+    Anthropic model, or turned off in settings. Safe to spread into a call to
+    ANY provider unconditionally: the OpenAI-compat translation layer
+    (_to_openai_params/_to_responses_params) only reads keys it already knows
+    about, so an unused `thinking`/`output_config` key is silently ignored
+    rather than sent anywhere."""
+    if not (settings.thinking_visible_enabled and settings.anthropic_thinking_enabled):
+        return {}
+    provider, model = parse_model_ref(model_ref)
+    if provider != "anthropic":
+        return {}
+    if any(fam in model.lower() for fam in _MANUAL_THINKING_ONLY):
+        # budget_tokens must stay below max_tokens for the turn, with room for
+        # an actual answer left over.
+        budget = min(
+            settings.anthropic_thinking_budget_tokens,
+            settings.chat_max_output_tokens - 1024,
+        )
+        if budget < 1024:  # the API's own floor — no room left to think at all
+            return {}
+        return {"thinking": {"type": "enabled", "budget_tokens": budget}}
+    return {
+        "thinking": {"type": "adaptive", "display": "summarized"},
+        "output_config": {"effort": settings.anthropic_thinking_effort},
+    }
+
+
+class _AnthropicTaggedStream:
+    """Wraps a live anthropic.AsyncMessageStream to expose the same
+    .text_stream / event_stream() / get_final_message() surface as
+    _OpenAICompatStream, so the orchestrator's single call site can treat
+    every provider identically once thinking is in play.
+
+    Constructed ONLY when a call actually requested thinking (see
+    _StreamHandle.__aenter__) — the plain SDK stream is returned unwrapped
+    otherwise, so every other caller (Legion, background calls, or an
+    Anthropic call with thinking turned off) is completely unaffected.
+
+    Anthropic's own .text_stream and raw event iteration both pull from the
+    same underlying single-use queue, so once wrapped, the raw stream must
+    never be iterated directly again — everything goes through this class's
+    pump instead."""
+
+    def __init__(self, raw) -> None:
+        self._raw = raw
+        self._consumed = False
+
+    @property
+    def text_stream(self) -> AsyncIterator[str]:
+        return self._text_only()
+
+    async def _text_only(self) -> AsyncIterator[str]:
+        async for kind, text in self._pump():
+            if kind == "text":
+                yield text
+
+    def event_stream(self) -> AsyncIterator[tuple[str, str]]:
+        return self._pump()
+
+    async def _pump(self) -> AsyncIterator[tuple[str, str]]:
+        async for event in self._raw:
+            etype = getattr(event, "type", "")
+            if etype == "content_block_start":
+                block = getattr(event, "content_block", None)
+                if getattr(block, "type", None) == "redacted_thinking":
+                    yield "thinking_redacted", ""
+            elif etype == "content_block_delta":
+                delta = getattr(event, "delta", None)
+                dtype = getattr(delta, "type", None)
+                if dtype == "text_delta":
+                    text = getattr(delta, "text", "") or ""
+                    if text:
+                        yield "text", text
+                elif dtype == "thinking_delta":
+                    thinking = getattr(delta, "thinking", "") or ""
+                    if thinking:
+                        yield "thinking", thinking
+                # signature_delta carries no visible text — the final signed
+                # block is assembled by get_final_message() regardless of how
+                # the streaming deltas were consumed.
+        self._consumed = True
+
+    async def get_final_message(self):
+        if not self._consumed:  # drain remainder if text_stream wasn't finished
+            async for _ in self._pump():
+                pass
+        return await self._raw.get_final_message()
 
 
 class _OpenAIResponsesStream:
@@ -1775,6 +1907,11 @@ class _StreamHandle:
                     )
                     stream = await cm.__aenter__()
                     self._anthropic_cm = cm
+                    # Wrapped only when thinking was actually requested for
+                    # this call — every other Anthropic call (thinking off,
+                    # Legion, background) gets the raw SDK stream unchanged.
+                    if "thinking" in anthro:
+                        return _AnthropicTaggedStream(stream)
                     return stream
                 client = self._owner._compat_client(provider)
                 if _use_responses_api(provider, model, self._kwargs):

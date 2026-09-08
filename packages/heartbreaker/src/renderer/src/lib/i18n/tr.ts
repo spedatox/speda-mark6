@@ -302,6 +302,12 @@ const tr: Dict = {
     },
     usingTool: (toolName: string) => `${toolName.replace(/_/g, ' ')} kullanılıyor`,
     thinking: 'Düşünüyor',
+    thinkingPanel: {
+      thinking: 'Düşünüyor',
+      thoughtFor: (s: number) => `${s} sn düşündü`,
+      showReasoning: 'Akıl yürütmeyi göster',
+      redactedNote: 'Akıl yürütmenin bir kısmı güvenlik nedeniyle gizlendi.',
+    },
     verbEdited: 'Düzenlendi',
     verbWrote: 'Yazıldı',
     verbRead: 'Okundu',

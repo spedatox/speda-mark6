@@ -52,6 +52,8 @@ def _extract_meta(content) -> dict:
                 'tools': block.get('tools', []),
                 'files': block.get('files', []),
                 'uploads': block.get('uploads', []),
+                'thinking': block.get('thinking', ''),
+                'thinkingRedacted': block.get('thinkingRedacted', False),
                 # Provenance for a turn the owner did not write — an n8n
                 # automation, or another agent dispatching a task, opening a
                 # session. The UI attributes the bubble to the sender instead of
@@ -161,6 +163,10 @@ def rows_from_messages(messages: list[Message]) -> list[dict]:
             row['uploads'] = meta['uploads']
         if meta.get('trigger'):
             row['trigger'] = meta['trigger']
+        if meta.get('thinking'):
+            row['thinking'] = meta['thinking']
+        if meta.get('thinkingRedacted'):
+            row['thinkingRedacted'] = True
         # A seed waits for the reply that consumes it. Anything else arriving
         # first means nothing ever will — release it in place, so it is still
         # in the transcript and still in the right order.

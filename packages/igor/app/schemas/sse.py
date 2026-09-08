@@ -8,6 +8,11 @@ from enum import Enum
 class SSEEventType(str, Enum):
     START = "start"
     CHUNK = "chunk"
+    # A model's reasoning, streamed as it's produced — never part of the
+    # answer itself. data is {"text": "..."} per delta, or {"redacted": true}
+    # for a redacted-thinking block (Anthropic safety redaction: nothing to
+    # show, just a marker).
+    THINKING = "thinking"
     TOOL = "tool"
     TOOL_RESULT = "tool_result"   # what a tool returned (for the disclosure panel)
     FILE = "file"     # a downloadable file Speda produced this turn

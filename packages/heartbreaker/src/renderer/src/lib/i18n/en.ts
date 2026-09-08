@@ -308,6 +308,12 @@ const en = {
     },
     usingTool: (toolName: string) => `Using ${toolName.replace(/_/g, ' ')}`,
     thinking: 'Thinking',
+    thinkingPanel: {
+      thinking: 'Thinking',
+      thoughtFor: (s: number) => `Thought for ${s}s`,
+      showReasoning: 'Show reasoning',
+      redactedNote: 'Part of the reasoning was withheld for safety.',
+    },
     verbEdited: 'Edited',
     verbWrote: 'Wrote',
     verbRead: 'Read',

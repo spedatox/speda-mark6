@@ -515,6 +515,37 @@ class Settings(BaseSettings):
     canvas_image_max_bytes: int = 8 * 1024 * 1024
     canvas_image_timeout_s: float = 12.0
 
+    # ── Thinking (surfacing model reasoning instead of discarding it) ────────
+    # Every provider except Anthropic already streams a reasoning channel when
+    # its own thinking mode is on (GLM/z.ai by default, Ollama/generic proxies
+    # via inline <think> tags); llm_client.py's _ReasoningFilter used to divert
+    # all of it straight into a debug log line and nothing ever reached the
+    # owner. These settings turn that into a proper thinking window instead.
+    #
+    # DeepSeek is a known exception: its API rejects tool_choice in thinking
+    # mode and requires reasoning_content to round-trip through history once a
+    # tool call enters it, which the agentic loop deliberately does not do — so
+    # DeepSeek stays silent whenever tools are present, which in this backend
+    # is effectively always. Not something this toggle can fix.
+    thinking_visible_enabled: bool = True
+    # Whether to additionally ASK Claude to think, rather than only passively
+    # forwarding what other providers already produce. A separate switch from
+    # the one above because it changes cost/latency on every Anthropic turn —
+    # off, thinking_visible_enabled still surfaces GLM/Ollama-style reasoning.
+    anthropic_thinking_enabled: bool = True
+    # Adaptive-mode reasoning depth (thinking.type: "adaptive" plus this in
+    # output_config.effort). Ignored on the Haiku family, which has no adaptive
+    # mode and always uses the manual budget below instead.
+    anthropic_thinking_effort: str = "medium"
+    # Manual-mode token budget (thinking.type: "enabled") for models that only
+    # support manual thinking — currently the Haiku family. Must stay below
+    # chat_max_output_tokens; clamped defensively rather than left to 400.
+    anthropic_thinking_budget_tokens: int = 4096
+    # Hard ceiling on one chat turn's output, across every provider. Was a bare
+    # literal on the orchestrator's stream_message call; pulled out here so a
+    # thinking budget above has something real to stay under.
+    chat_max_output_tokens: int = 8096
+
     # ── Conversation compaction ──────────────────────────────────────────────
     # On a long chat, older turns are summarized (background, Haiku) so the model
     # sees [summary] + recent window instead of the whole growing transcript —
