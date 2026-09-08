@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +17,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -115,7 +118,27 @@ fun ProjectsScreen(
 
     val open = projects?.firstOrNull { it.id == openId }
 
-    Column(modifier.fillMaxSize().navigationBarsPadding()) {
+    // A full-screen SHEET, mounted over the chat by ChatScreen — so it has to
+    // occlude and it has to swallow. Without the opaque fill the transcript
+    // reads straight through this screen; without the no-op clickable, taps on
+    // any gap between rows fall through to whatever is under them (the
+    // composer, a message action). Both are exactly what SettingsScreen does,
+    // and this pane is mounted the same way it is.
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(palette.base)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) {}
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            // The instructions, description and name fields all live in here, so
+            // the sheet has to lift off the keyboard or they open underneath it.
+            // Same pairing SettingsScreen and its tabs use.
+            .imePadding(),
+    ) {
         if (open != null) {
             ProjectDetail(
                 config = config,
