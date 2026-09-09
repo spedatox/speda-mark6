@@ -77,7 +77,7 @@ def test_stringify_handles_none_string_and_blocks():
 #
 # An in-process turn's DONE carries {"usage": {input, output}} and the UI folds
 # that into its header. The peer streams `usage` frames instead; the proxy keeps
-# the latest and puts it on DONE so Optimus/Centurion report tokens the same way.
+# the latest and puts it on DONE so Optimus/Scourge report tokens the same way.
 
 import asyncio
 

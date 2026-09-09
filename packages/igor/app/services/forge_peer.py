@@ -4,7 +4,7 @@
 """Forge peer launcher — Speda owns the Forge's lifecycle.
 
 The Forge (Mark II, repo `forge-mk1`) is the standalone execution engine behind
-the external-backend agents (Optimus, Centurion). When `forge_dir` is configured,
+the external-backend agents (Optimus, Scourge). When `forge_dir` is configured,
 the lifespan handler starts ONE child process per agent in `forge_agents`, right
 after the backend's WebSocket routes are live:
 

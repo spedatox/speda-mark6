@@ -22,7 +22,7 @@ import { buildThemeVars, deriveAccents } from '../src/renderer/src/profile/theme
 const accents: Record<string, string> = {
   speda: '#7fa4c4',
   ultron: '#8a93a6',
-  centurion: '#d8483c',
+  scourge: '#d8483c',
   sentinel: '#d99c44',
   atomix: '#3fae74',
   nightcrawler: '#9165e6',

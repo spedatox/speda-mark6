@@ -394,7 +394,7 @@ FORGE_BODY = """
     <div class="grid g3" style="margin-top:2.4rem">
       <article class="holo pad">
         <h3 class="card-title">The Cell</h3>
-        <p class="card-body">Each peer runs its own isolated container. Centurion's is a security distribution
+        <p class="card-body">Each peer runs its own isolated container. Scourge's is a security distribution
           with outbound network for authorized scanning; the tooling never touches the host running the
           assistant.</p>
       </article>
@@ -415,7 +415,7 @@ FORGE_BODY = """
       <h3>Not only Optimus</h3>
       <p>This is worth stating because the architecture documentation describes Optimus as the single
         exception, and the code has since moved past that.
-        <a href="../../agents/centurion/">Centurion</a> also declares an external backend and can be served by
+        <a href="../../agents/scourge/">Scourge</a> also declares an external backend and can be served by
         its own peer on its own socket, with the same proxy-when-online, fallback-when-offline behaviour. Two
         agents can now be externally backed; the rest remain purely in-process.</p>
       <p>Both peers are configured through the launcher rather than compiled in — where the Forge lives,
@@ -561,7 +561,7 @@ CAP_BODY = """
           allows genuine parallel execution rather than serialised tool calls.</p>
         <ul class="chips"><li>tavily</li><li>exa</li><li>brave</li><li>fetch</li><li>arxiv</li><li>alpha vantage</li><li>deep_research</li></ul>
       </article>
-      <article class="holo pad-lg" style="--a: var(--centurion)">
+      <article class="holo pad-lg" style="--a: var(--scourge)">
         <h3 class="card-title">OSINT &amp; security</h3>
         <p class="card-body">A twelve-tool intelligence surface plus CVE intelligence and a wrapped security
           analysis engine — reputation, malware corpora, breach data, exposure search and chain tracing.</p>
@@ -715,7 +715,7 @@ def system_pages() -> list[Page]:
              cite="app/core/dispatch.py",
              body=HOUSE_BODY),
 
-        _sys("capabilities", accent="centurion",
+        _sys("capabilities", accent="scourge",
              title="The Capability Arsenal of Speda Mark VI",
              meta="The four capability tiers of Speda Mark VI, presented to the model as one array: Python skills, MCP servers, wrapped open-source engines and the Legion.",
              keywords="AI agent tools, MCP servers, model context protocol integration, AI capability registry, agent toolset",
@@ -747,7 +747,7 @@ def systems_hub() -> Page:
          "Traffic-aware routing rendered in the conversation, origin defaulted to your live position, never written to stored history."),
         ("house-party", "warroom", "07", "House Party Protocol", "All hands",
          "The whole roster in parallel at full model grade with boundaries relaxed, behind a passphrase and a War Room takeover."),
-        ("capabilities", "centurion", "08", "The arsenal", "Four tiers, one array",
+        ("capabilities", "scourge", "08", "The arsenal", "Four tiers, one array",
          "Skills, MCP servers and wrapped open-source engines, lazily mounted and prompt-cached so breadth is nearly free."),
     ]
     grid = "\n".join(

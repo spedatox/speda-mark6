@@ -158,7 +158,7 @@ fun WelcomeView(
         AgentHero(brand)
         Spacer(Modifier.height(8.dp))
 
-        // Domain tagline — centred, since a long one (Centurion's) wraps.
+        // Domain tagline — centred, since a long one (Scourge's) wraps.
         HbText(
             brand.tagline.uppercase(Locale.ENGLISH),
             style = HbType.readout.copy(

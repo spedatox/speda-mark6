@@ -8,7 +8,7 @@
 # SPEDA_API_KEY in the server's packages/igor/.env.
 #
 # -Agent picks the brand (name, model number, colour) AND the backend agent the
-# app talks to (/chat/{agent}). One of: speda (default), ultron, centurion,
+# app talks to (/chat/{agent}). One of: speda (default), ultron, scourge,
 # sentinel, atomix, nightcrawler, optimus. See packages/heartbreaker profile/brands.ts.
 
 param(

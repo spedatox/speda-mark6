@@ -5,7 +5,7 @@ from app.profiles.base import AgentProfile, DocTheme
 from app.prompts.loader import assemble, build_skills_manifest, derive_iteration
 
 PROMPT_SECTIONS = [
-    "agents/centurion/01_identity.md",
+    "agents/scourge/01_identity.md",
     "core/02_voice.md",   # shared register — see prompts/core/02_voice.md
     "core/04_decision_policy.md",
     "core/05_output_policy.md",
@@ -21,12 +21,12 @@ PROMPT_SECTIONS = [
 ]
 
 
-class CenturionProfile(AgentProfile):
-    """Centurion — cyber security. Defensive, authorized security work for the
+class ScourgeProfile(AgentProfile):
+    """Scourge — cyber security. Defensive, authorized security work for the
     owner's own assets: CVE/threat intelligence, exposure assessment, hardening."""
 
-    agent_id = "centurion"
-    name = "Centurion"
+    agent_id = "scourge"
+    name = "Scourge"
     # The agent's own iteration, read off PROMPT_SECTIONS[0] (its identity
     # prompt). Bump the `Iteration:` line there and the signature follows.
     mark = derive_iteration(PROMPT_SECTIONS[0])

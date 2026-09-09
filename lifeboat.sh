@@ -4,8 +4,8 @@
 #
 # When the Contabo box starts running out of disk, Orion activates this. It bails
 # the cheap water first (throwaway Docker junk), and only throws cargo overboard
-# — the comprehensive Kali arsenal baked into Centurion's Cell image — if that is
-# not enough. Centurion keeps working after a jettison: it falls back to the base
+# — the comprehensive Kali arsenal baked into Scourge's Cell image — if that is
+# not enough. Scourge keeps working after a jettison: it falls back to the base
 # kali-rolling image and re-installs tools per job (slower, but alive), exactly as
 # it did before the bake. Rebuild the arsenal with `--restore` once disk is healthy.
 #
@@ -37,11 +37,11 @@ ACTIVATE_PCT="${LIFEBOAT_ACTIVATE_PCT:-85}"
 TARGET_FREE_GB="${LIFEBOAT_TARGET_FREE_GB:-30}"
 
 FORGE_DIR="${FORGE_DIR:-/opt/forge-mk1}"
-CENTURION_PROFILE="$FORGE_DIR/forge/agents/centurion/profile.toml"
-DOCKERFILE="$FORGE_DIR/deploy/cell-centurion.Dockerfile"
-ARSENAL_IMAGE="forge-cell-centurion:latest"
+SCOURGE_PROFILE="$FORGE_DIR/forge/agents/scourge/profile.toml"
+DOCKERFILE="$FORGE_DIR/deploy/cell-scourge.Dockerfile"
+ARSENAL_IMAGE="forge-cell-scourge:latest"
 FALLBACK_IMAGE="kalilinux/kali-rolling"
-PEER_UNIT="forge@centurion.service"
+PEER_UNIT="forge@scourge.service"
 JETTISON_FLAG="/opt/speda/.lifeboat-jettisoned"
 
 log()  { printf '  %s\n' "$*"; }
@@ -80,7 +80,7 @@ reclaim_step() {  # <label> <command...>
 # ── TIER 1 — bail water: throwaway Docker junk + logs. Zero service impact. ──────
 tier1_bail() {
   head "TIER 1 — bail water (safe, reversible)"
-  # Build cache is the single biggest, cheapest win (the Centurion bake alone left
+  # Build cache is the single biggest, cheapest win (the Scourge bake alone left
   # tens of GB). builder prune only removes cache NOT in use by a running build.
   reclaim_step "docker build cache"    docker builder prune -af
   # Cells are throwaway per job — any stopped one is pure garbage. Running service
@@ -97,20 +97,20 @@ tier1_bail() {
 }
 
 # ── TIER 2 — jettison the arsenal: reclaim the ~25GB Kali image. ────────────────
-# Centurion degrades to the base image (re-installs tools per job) but stays alive.
+# Scourge degrades to the base image (re-installs tools per job) but stays alive.
 tier2_jettison() {
   head "TIER 2 — jettison the Kali arsenal (~25 GB)"
-  if [[ ! -f "$CENTURION_PROFILE" ]]; then
-    log "profile not found at $CENTURION_PROFILE — cannot repoint; skipping jettison."
+  if [[ ! -f "$SCOURGE_PROFILE" ]]; then
+    log "profile not found at $SCOURGE_PROFILE — cannot repoint; skipping jettison."
     return 1
   fi
-  if ! grep -q "$ARSENAL_IMAGE" "$CENTURION_PROFILE"; then
-    log "Centurion already off the arsenal image — nothing to jettison."
+  if ! grep -q "$ARSENAL_IMAGE" "$SCOURGE_PROFILE"; then
+    log "Scourge already off the arsenal image — nothing to jettison."
     return 0
   fi
 
-  log "→ repoint Centurion profile: $ARSENAL_IMAGE → $FALLBACK_IMAGE"
-  if sed -i "s|^image\\s*=.*|image         = \"$FALLBACK_IMAGE\"|" "$CENTURION_PROFILE"; then
+  log "→ repoint Scourge profile: $ARSENAL_IMAGE → $FALLBACK_IMAGE"
+  if sed -i "s|^image\\s*=.*|image         = \"$FALLBACK_IMAGE\"|" "$SCOURGE_PROFILE"; then
     log "   profile repointed"
   else
     log "   could not edit profile (permission?) — ABORTING jettison to avoid a broken state."
@@ -130,7 +130,7 @@ tier2_jettison() {
 
   # Breadcrumb so --restore (and the owner) know the arsenal owes a rebuild.
   printf 'jettisoned %s by lifeboat\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$JETTISON_FLAG" 2>/dev/null || true
-  log "jettison complete — Centurion is on $FALLBACK_IMAGE (per-job installs). Rebuild with --restore when healthy."
+  log "jettison complete — Scourge is on $FALLBACK_IMAGE (per-job installs). Rebuild with --restore when healthy."
 }
 
 # ── RECOVERY — rebuild the arsenal once the storm has passed. ────────────────────
@@ -151,11 +151,11 @@ restore_arsenal() {
   if ( cd "$FORGE_DIR" && docker build -f "$DOCKERFILE" -t "$ARSENAL_IMAGE" deploy/ ); then
     log "   built $ARSENAL_IMAGE"
   else
-    log "   build FAILED — leaving Centurion on the fallback image."
+    log "   build FAILED — leaving Scourge on the fallback image."
     exit 1
   fi
-  log "→ repoint Centurion profile back to the arsenal"
-  sed -i "s|^image\\s*=.*|image         = \"$ARSENAL_IMAGE\"|" "$CENTURION_PROFILE" \
+  log "→ repoint Scourge profile back to the arsenal"
+  sed -i "s|^image\\s*=.*|image         = \"$ARSENAL_IMAGE\"|" "$SCOURGE_PROFILE" \
     && log "   profile repointed" || log "   could not edit profile — do it by hand."
   systemctl restart "$PEER_UNIT" 2>/dev/null \
     && log "   peer restarted" || log "   restart $PEER_UNIT by hand."

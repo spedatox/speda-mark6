@@ -156,7 +156,7 @@ def test_expiry_sends_nothing_to_the_peer(asks):
 def test_a_disconnected_agents_asks_are_forgotten(asks):
     asks.record("optimus", _frame("a1"))
     asks.record("optimus", _frame("a2"))
-    asks.record("centurion", _frame("a3"))
+    asks.record("scourge", _frame("a3"))
 
     assert asks.drop_agent("optimus") == 2
     assert [a.ask_id for a in asks.list_open()] == ["a3"]

@@ -36,7 +36,7 @@ task is about and pay for nothing else.
 | `finance/` | `ledger/<YYYY-MM>.md` (ONE FILE PER MONTH), `scholarships-and-loans`, `blackwalnut`, `monthly-structure`, `notes` | **Sentinel** |
 | `wellness/` | `sessions` (the log), `profile`, `program`, `gym`, `directives` | **Atomix** |
 | `academic/` | `kpss-2026`, `akademik-takvim`, `mufredat`, `ders-materyalleri`, `erasmus`, `akademik-durum`, `session-durumu` | **Ultron** |
-| `cybersec/` | `curriculum`, `progress-log`, `structure`, `resources`, `certifications` | **Centurion** |
+| `cybersec/` | `curriculum`, `progress-log`, `structure`, `resources`, `certifications` | **Scourge** |
 | `ops/` | `runbook`, `actions` | **Orion** |
 
 **A write to a document you do not own is refused.** Not discouraged — refused,

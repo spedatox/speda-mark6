@@ -2,7 +2,7 @@
   "accents": {
     "speda": "#7fa4c4",
     "ultron": "#8a93a6",
-    "centurion": "#d8483c",
+    "scourge": "#d8483c",
     "sentinel": "#d99c44",
     "atomix": "#3fae74",
     "nightcrawler": "#9165e6",
@@ -91,7 +91,7 @@
       "--hb-cyan-dim-rgb": "95, 102, 116",
       "--hb-bar-cyan": "linear-gradient(180deg, #afb6c2 0%, #8a93a6 70%, #5f6674 100%)"
     },
-    "centurion": {
+    "scourge": {
       "--hb-void": "#0a0505",
       "--hb-base": "#100908",
       "--hb-petrol": "#190f0e",
@@ -383,7 +383,7 @@
       "bright": "#afb6c2",
       "dim": "#5f6674"
     },
-    "centurion": {
+    "scourge": {
       "accent": "#d8483c",
       "bright": "#e4837a",
       "dim": "#94332c"

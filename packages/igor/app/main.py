@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
     from app.core.dispatch import AgentDispatcher
     from app.profiles.registry import ProfileRegistry
     from app.profiles.atomix import AtomixProfile
-    from app.profiles.centurion import CenturionProfile
+    from app.profiles.scourge import ScourgeProfile
     from app.profiles.nightcrawler import NightCrawlerProfile
     from app.profiles.optimus import OptimusProfile
     from app.profiles.orion import OrionProfile
@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
     profiles.register(AtomixProfile())      # personal health
     profiles.register(SentinelProfile())    # finance
     profiles.register(NightCrawlerProfile())  # OSINT / web surveillance
-    profiles.register(CenturionProfile())   # cyber security
+    profiles.register(ScourgeProfile())   # cyber security
     profiles.register(OptimusProfile())     # systems / code / infrastructure
     profiles.register(OrionProfile())       # Mark VI maintenance — memory custodian
 

@@ -52,7 +52,7 @@ Eight agents, each owning a distinct domain, all built on the same underlying co
 | **Sentinel** | Finance and budgeting — markets, holdings, and spending turned into numbers behind a decision. Not licensed financial advice. |
 | **Orion** | The system's own custodian — memory hygiene, nightly audits, and host maintenance. |
 | **Optimus** | Systems, code, and infrastructure. Hands off agentic coding work to a dedicated coding-engine peer when one is connected, falling back to its own engine otherwise. |
-| **Centurion** | Security for the owner's own assets — threat intelligence, exposure assessment, hardening. Supports an optional dedicated scanning peer for authorized network work. |
+| **Scourge** | Security for the owner's own assets — threat intelligence, exposure assessment, hardening. Supports an optional dedicated scanning peer for authorized network work. |
 | **Atomix** | Health and wellness coaching — fitness, nutrition, sleep, habits. Not a medical provider. |
 | **Ultron** | Academic and work-life planning — coursework, exams, study schedules. |
 | **NightCrawler** | OSINT and web research from open sources only. |
@@ -185,7 +185,7 @@ Two companion products extend the platform beyond this repository. Neither ships
 
 **Hisar** — the owner's own self-hosted cloud filesystem and web desktop: a real vault of folders (Documents, Media, Projects, Desktop) that agents work inside as guests, not as the backend's storage layer. Any agent with the Hisar skill enabled can read anywhere in the vault; writes are confined to a dedicated folder, never overwrite an existing file, and deleting or renaming isn't reachable from an agent at all — those stay owner-only, inside Hisar itself. It runs as an optional companion service alongside the backend.
 
-**Forge** — a standalone execution engine that runs coding-agent work on a dedicated machine, on behalf of Optimus and Centurion. It holds its own model credentials and makes its own inference calls — the backend hands it jobs, never proxies inference through it. While a Forge peer is connected, that agent's turns route to it; the moment it disconnects, the corresponding agent falls back to its own in-process profile, with one function owning that decision so a turn never lands on the wrong machine. Once a night, the memory custodian pushes a fresh summary of the owner's memory to any connected peer, keeping Forge's picture of the owner no more than a day stale.
+**Forge** — a standalone execution engine that runs coding-agent work on a dedicated machine, on behalf of Optimus and Scourge. It holds its own model credentials and makes its own inference calls — the backend hands it jobs, never proxies inference through it. While a Forge peer is connected, that agent's turns route to it; the moment it disconnects, the corresponding agent falls back to its own in-process profile, with one function owning that decision so a turn never lands on the wrong machine. Once a night, the memory custodian pushes a fresh summary of the owner's memory to any connected peer, keeping Forge's picture of the owner no more than a day stale.
 
 ---
 

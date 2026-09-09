@@ -33,8 +33,8 @@ export const BRANDS: Record<string, Brand> = {
     tagline: 'Academy and Work Operations',
     avatarInitial: 'U', accent: '#8a93a6',
   },
-  centurion: {
-    agentId: 'centurion', name: 'Centurion', modelNumber: 'Mark I', userName: 'Ahmet Erol',
+  scourge: {
+    agentId: 'scourge', name: 'Scourge', modelNumber: 'Mark I', userName: 'Ahmet Erol',
     tagline: 'Cyber Security & Threat Intelligence',
     avatarInitial: 'C', accent: '#d8483c',
   },

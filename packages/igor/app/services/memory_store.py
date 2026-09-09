@@ -58,7 +58,7 @@ CANONICAL_FILES: dict[str, str] = {
     "/memories/finance.md": "Monthly ledger — incomes, expenses, debts, schedules (Sentinel)",
     "/memories/wellness.md": "Training protocol, athlete profile and session log (Atomix)",
     "/memories/academic.md": "Academic calendar, KPSS prep, course materials, standing (Ultron)",
-    "/memories/cybersec.md": "Cybersecurity learning journey (Centurion)",
+    "/memories/cybersec.md": "Cybersecurity learning journey (Scourge)",
     "/memories/ops.md": "Runbook and action log for the host (Orion)",
 }
 

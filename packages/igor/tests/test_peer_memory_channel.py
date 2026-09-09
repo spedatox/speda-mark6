@@ -361,19 +361,19 @@ async def test_a_recall_frame_reaches_the_semantic_search_skill(monkeypatch):
 @pytest.mark.asyncio
 async def test_a_read_agent_channel_frame_reaches_its_skill(monkeypatch):
     """The cross-agent half: Optimus reading the channel is how it learns what
-    Centurion has been doing, through the one skill that already renders it."""
+    Scourge has been doing, through the one skill that already renders it."""
     seen: list = []
     _read_skill(monkeypatch, "read_agent_channel",
                 "AGENT NETWORK CHANNEL...", capture=seen)
 
-    response = await peer_memory.run_memory_command("centurion", {
+    response = await peer_memory.run_memory_command("scourge", {
         "request_id": "s2", "skill": "read_agent_channel",
         "agent": "optimus", "limit": 10,
     })
 
     assert response["ok"] is True
     assert seen[0][0] == {"agent": "optimus", "limit": 10}
-    assert seen[0][1].agent_id == "centurion"
+    assert seen[0][1].agent_id == "scourge"
 
 
 @pytest.mark.asyncio

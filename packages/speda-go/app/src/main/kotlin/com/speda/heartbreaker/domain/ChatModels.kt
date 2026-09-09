@@ -45,7 +45,7 @@ data class SubagentStep(
 )
 
 /**
- * One delegation a coding peer (Optimus, Centurion) made during a turn.
+ * One delegation a coding peer (Optimus, Scourge) made during a turn.
  *
  * It lives BESIDE the message, never inside `content`: a subagent's work is
  * not the answer. Streaming its report as prose is what made a delegate's

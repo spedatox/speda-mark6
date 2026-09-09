@@ -71,7 +71,7 @@ def _roster_cards() -> str:
         "sentinel": "Numbers first, narrative second. Pulls the actual quote before it opines, and states the downside every time.",
         "nightcrawler": "Corroborates, never trusts. A single source is a lead, not a fact — and everything carries its trail back.",
         "ultron": "Owns the collision between university and a job. Plans over pep talks, with honest cut-lines.",
-        "centurion": "Defence and offence in balance, on authorized targets only. Severity lives in the finding, never in the delivery.",
+        "scourge": "Defence and offence in balance, on authorized targets only. Severity lives in the finding, never in the delivery.",
         "atomix": "The owner's body, on evidence rather than fads — and it says plainly when the evidence is weak.",
         "optimus": "Builds to ship. Runs on a standalone execution engine with a real shell when the Forge is up.",
         "orion": "The custodian. Moves, merges and timestamps existing memory — and never invents a fact.",
@@ -169,7 +169,7 @@ HOME_BODY = """
       <h2>Eight specialists, not eight installs</h2>
       <p class="lede">Seven of them are <strong>in-process agent profiles</strong> inside a single backend —
         one event loop, one database, one capability registry, one owner's memory — addressed by
-        <code>agent_id</code> on every request. Optimus is the architectural exception, and Centurion can
+        <code>agent_id</code> on every request. Optimus is the architectural exception, and Scourge can
         join it. Each carries its own identity, accent and doctrine.</p>
     </div>
     <div class="grid g4">
@@ -297,7 +297,7 @@ HOME_BODY = """
         <p class="card-body">The whole roster in parallel at full interactive model grade with domain
           boundaries relaxed — and a War Room takeover of the client until you stand down.</p>
       </a>
-      <a class="holo pad agent-card rise" style="--a: var(--centurion)" href="systems/capabilities/">
+      <a class="holo pad agent-card rise" style="--a: var(--scourge)" href="systems/capabilities/">
         <span class="mark">08</span><span class="name">The arsenal</span>
         <span class="domain">Four tiers, one array</span>
         <p class="card-body">Skills, MCP servers and wrapped open-source applications — all identical to the
@@ -477,14 +477,14 @@ FAQ = [
 
     ("Which agents are in Speda Mark VI?",
      "Eight: Speda (Chief of Staff), Sentinel (finance and budget), NightCrawler (OSINT and web surveillance), "
-     "Ultron (academic life and university-work balance), Centurion (cyber security), Atomix (the owner's "
+     "Ultron (academic life and university-work balance), Scourge (cyber security), Atomix (the owner's "
      "personal health), Optimus (systems, code and infrastructure) and Orion (maintenance and memory custodian). "
-     "Six run purely in-process; Optimus and Centurion can additionally be backed by an external execution peer.",
+     "Six run purely in-process; Optimus and Scourge can additionally be backed by an external execution peer.",
      'Eight — <a href="../agents/speda/">Speda</a>, <a href="../agents/sentinel/">Sentinel</a>, '
      '<a href="../agents/nightcrawler/">NightCrawler</a>, <a href="../agents/ultron/">Ultron</a>, '
-     '<a href="../agents/centurion/">Centurion</a>, <a href="../agents/atomix/">Atomix</a>, '
+     '<a href="../agents/scourge/">Scourge</a>, <a href="../agents/atomix/">Atomix</a>, '
      '<a href="../agents/optimus/">Optimus</a> and <a href="../agents/orion/">Orion</a>. Six run purely '
-     'in-process as agent profiles; Optimus and Centurion can additionally be backed by an external '
+     'in-process as agent profiles; Optimus and Scourge can additionally be backed by an external '
      'execution peer. <a href="../agents/">Full roster →</a>'),
 
     ("Is Speda Mark VI self-hosted, and where does my data go?",

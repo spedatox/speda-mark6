@@ -200,7 +200,7 @@ CONFIG_GROUPS: list[ConfigGroup] = [
             ConfigField("telegram_bot_token_sentinel", "Sentinel Bot Token", "password", secret=True),
             ConfigField("telegram_bot_token_nightcrawler", "NightCrawler Bot Token", "password", secret=True),
             ConfigField("telegram_bot_token_ultron", "Ultron Bot Token", "password", secret=True),
-            ConfigField("telegram_bot_token_centurion", "Centurion Bot Token", "password", secret=True),
+            ConfigField("telegram_bot_token_scourge", "Scourge Bot Token", "password", secret=True),
             ConfigField("telegram_bot_token_atomix", "Atomix Bot Token", "password", secret=True),
             ConfigField("telegram_bot_token_orion", "Orion Bot Token", "password", secret=True),
             ConfigField("telegram_bot_token_optimus", "Optimus Bot Token", "password", secret=True),
@@ -415,7 +415,7 @@ CONFIG_GROUPS: list[ConfigGroup] = [
     ),
     ConfigGroup(
         "osint", "OSINT / Threat Intelligence",
-        "Optional keys for NightCrawler/Centurion. Most tools also run keyless.",
+        "Optional keys for NightCrawler/Scourge. Most tools also run keyless.",
         [
             ConfigField("abuseipdb_api_key", "AbuseIPDB Key", "password", secret=True),
             ConfigField("abuse_ch_api_key", "abuse.ch Auth-Key", "password", secret=True),

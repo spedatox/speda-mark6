@@ -7,7 +7,7 @@ import { PermissionPrompt } from './InteractionPrompt'
 import type { AppConfig, PendingAsk } from '../lib/types'
 
 /**
- * Global tray for irreversible operations a Forge peer (Optimus, Centurion) is
+ * Global tray for irreversible operations a Forge peer (Optimus, Scourge) is
  * waiting on the owner to approve.
  *
  * The inline card in ChatMain only fires on `permission_request` SSE frames,

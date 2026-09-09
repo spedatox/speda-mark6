@@ -56,7 +56,7 @@ From the repo root, the same commands are exposed workspace-scoped: `npm run hea
 
 `src/renderer/src/profile/`:
 
-- **`brands.ts`** — `BRANDS`, a map of eight personas (`speda`, `ultron`, `centurion`, `sentinel`, `atomix`, `nightcrawler`, `optimus`, `orion`), each with a name, tagline, avatar initial, and accent color.
+- **`brands.ts`** — `BRANDS`, a map of eight personas (`speda`, `ultron`, `scourge`, `sentinel`, `atomix`, `nightcrawler`, `optimus`, `orion`), each with a name, tagline, avatar initial, and accent color.
 - **`theme.ts`** — derives the entire CSS custom-property palette from one accent color, preserving each token's saturation and lightness. Also owns House Party's palette-cycling animation across the roster.
 - **`warroom.ts`** — a ninth profile, deliberately excluded from `BRANDS` so it never appears in the agent switcher. Swapped in only when House Party engages.
 - **`index.ts`** — picks the active brand from `BRANDS` via a build-time environment variable, defaulting to Speda.

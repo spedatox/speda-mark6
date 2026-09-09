@@ -195,7 +195,7 @@ async def test_read_only_worker_keeps_only_read_only_skills(registry, monkeypatc
 async def test_unknown_legionnaire_is_corrective(registry):
     runner = LegionRunner(object(), registry, None)
     result = await runner.run_worker(
-        {"description": "d", "prompt": "p", "legionnaire": "centurion"}, _ctx()
+        {"description": "d", "prompt": "p", "legionnaire": "scourge"}, _ctx()
     )
     assert "unknown legionnaire" in result
     assert "researcher" in result  # tells the model what IS valid

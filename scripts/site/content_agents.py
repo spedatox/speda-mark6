@@ -155,17 +155,17 @@ AGENTS = {
                 "rather than produce a schedule that quietly assumes no sleep.",
     ),
 
-    "centurion": dict(
-        title="Centurion — The Cyber Security Agent of Speda Mark VI",
-        meta="Centurion is the cyber security agent of Speda Mark VI: CVE and threat intelligence, exposure assessment, hardening and authorized testing from an isolated cell.",
-        keywords="Centurion agent, AI cyber security agent, CVE intelligence automation, authorized penetration testing AI, threat intelligence agent",
+    "scourge": dict(
+        title="Scourge — The Cyber Security Agent of Speda Mark VI",
+        meta="Scourge is the cyber security agent of Speda Mark VI: CVE and threat intelligence, exposure assessment, hardening and authorized testing from an isolated cell.",
+        keywords="Scourge agent, AI cyber security agent, CVE intelligence automation, authorized penetration testing AI, threat intelligence agent",
         tagline="Defence and offence in balance, on authorized targets only.",
-        lede="Centurion covers vulnerabilities, threats, advisories, exposure, hardening, exploitation and "
+        lede="Scourge covers vulnerabilities, threats, advisories, exposure, hardening, exploitation and "
              "response. It exists to keep the owner's systems safe — and to give him the offensive capability to "
              "test, validate and demonstrate weaknesses in environments he is authorized to attack.",
         doctrine="No alarmism. A critical CVE is reported at the same volume as a patch note — the severity is "
                  "in the finding, never in the delivery.",
-        doctrine_cite="prompts/agents/centurion/01_identity.md",
+        doctrine_cite="prompts/agents/scourge/01_identity.md",
         operates=[
             "<strong>Defensive operations</strong> — vulnerability assessment, security architecture review and "
             "hardening, detection engineering, incident response, threat intelligence and control validation.",
@@ -176,7 +176,7 @@ AGENTS = {
             "<strong>States severity honestly</strong>, inflating nothing and downplaying nothing.",
         ],
         arch=[
-            "<code>external_backend = True</code>. Centurion is the <em>second</em> agent that can be backed by "
+            "<code>external_backend = True</code>. Scourge is the <em>second</em> agent that can be backed by "
             "an external peer, not just Optimus: while a peer is connected on its socket, its chat proxies "
             "there; offline, the in-process profile answers as the identity and fallback engine.",
             "Its peer runs its own <strong>Cell</strong> — a separate isolated container with outbound network "
@@ -308,7 +308,7 @@ HUB_BLURB = {
     "sentinel": "Numbers first, narrative second. Pulls the actual quote before it opines, and names the downside every time.",
     "nightcrawler": "Corroborates, never trusts. A single source is a lead, not a fact — and everything carries its trail back.",
     "ultron": "Owns the collision between university and a job. Plans over pep talks, with honest cut-lines.",
-    "centurion": "Defence and offence in balance, on authorized targets only. Severity lives in the finding, never in the delivery.",
+    "scourge": "Defence and offence in balance, on authorized targets only. Severity lives in the finding, never in the delivery.",
     "atomix": "The owner's body, on evidence rather than fads — and it says plainly when the evidence is weak.",
     "optimus": "Builds to ship. Runs on a standalone execution engine with a real shell when the Forge is up.",
     "orion": "The custodian. Moves, merges and timestamps existing memory — and never invents a fact.",
@@ -319,7 +319,7 @@ DOMAINS = {
     "sentinel": "finance &amp; budget intelligence",
     "nightcrawler": "OSINT, web surveillance &amp; research",
     "ultron": "academic life &amp; university/work balance",
-    "centurion": "cyber security",
+    "scourge": "cyber security",
     "atomix": "personal health &amp; wellness (the owner's health)",
     "optimus": "systems, code &amp; infrastructure",
     "orion": "Mark VI maintenance — memory custodian &amp; host ops",
@@ -327,7 +327,7 @@ DOMAINS = {
 
 ACCENT_HEX = {
     "speda": "#36abca", "sentinel": "#d99c44", "nightcrawler": "#9165e6",
-    "ultron": "#8a93a6", "centurion": "#d8483c", "atomix": "#3fae74",
+    "ultron": "#8a93a6", "scourge": "#d8483c", "atomix": "#3fae74",
     "optimus": "#2f4f8f", "orion": "#e0703a",
 }
 
@@ -466,7 +466,7 @@ def roster_page() -> Page:
     <h1 class="rise">Eight agents,<br>one memory of you</h1>
     <p class="lede rise">They are not eight installs. Six run as <strong>in-process agent profiles</strong>
       inside one backend — one event loop, one database, one capability registry, one owner's memory — while
-      Optimus and Centurion can additionally be backed by an external execution peer. Every request names an
+      Optimus and Scourge can additionally be backed by an external execution peer. Every request names an
       agent, and that single field scopes its sessions, its automations and its history.</p>
   </div>
 </section>
@@ -494,7 +494,7 @@ def roster_page() -> Page:
         <h3 class="card-title">Identity and voice</h3>
         <p class="card-body">Each agent assembles its own identity prompt over a shared set of policy sections,
           so the register stays consistent while the doctrine differs. Sentinel drops its dry note in front of a
-          loss; Centurion reports a critical CVE at patch-note volume.</p>
+          loss; Scourge reports a critical CVE at patch-note volume.</p>
       </article>
       <article class="holo pad">
         <h3 class="card-title">Memory scope</h3>
@@ -505,7 +505,7 @@ def roster_page() -> Page:
       <article class="holo pad">
         <h3 class="card-title">Architectural rank</h3>
         <p class="card-body">Speda commands under House Party Protocol; the others operate. Optimus and
-          Centurion may be proxied to an external peer. Orion and Optimus alone can see the host-operations
+          Scourge may be proxied to an external peer. Orion and Optimus alone can see the host-operations
           capability, guarded at the skill level.</p>
       </article>
     </div>
@@ -557,12 +557,12 @@ def roster_page() -> Page:
         slug="agents",
         title="The Roster — The 8 AI Agents of Speda Mark VI",
         description=(
-            "Speda, Sentinel, NightCrawler, Ultron, Centurion, Atomix, Optimus and Orion — the eight agents of "
+            "Speda, Sentinel, NightCrawler, Ultron, Scourge, Atomix, Optimus and Orion — the eight agents of "
             "Speda Mark VI, their domains and operating doctrines."
         ),
         keywords=(
             "Speda Mark VI agents, multi-agent AI roster, Sentinel agent, NightCrawler OSINT agent, Ultron "
-            "agent, Centurion security agent, Atomix health agent, Optimus coding agent, Orion memory custodian"
+            "agent, Scourge security agent, Atomix health agent, Optimus coding agent, Orion memory custodian"
         ),
         body=body,
         nav="agents",

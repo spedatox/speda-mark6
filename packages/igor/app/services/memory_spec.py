@@ -514,7 +514,7 @@ SECTION_COLLECTIONS: tuple[CollectionSpec, ...] = (
         kind=LEDGER,
         summary="Security learning — tracks, progress, resources",
         entity_noun="topic",
-        owner_agent="centurion",
+        owner_agent="scourge",
         split_from="/memories/cybersec.md",
         entity_level=2,
         members=(
@@ -1011,7 +1011,7 @@ SPECS: dict[str, DocumentSpec] = {
         path="/memories/cybersec.md",
         kind=LEDGER,
         summary="Cybersecurity learning journey",
-        owner_agent="centurion",
+        owner_agent="scourge",
         sections=("Structure", "Tracks", "Progress Log", "Resources",
                   "Certifications / Goals"),
         max_bytes=24_000,

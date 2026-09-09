@@ -309,7 +309,7 @@ class Settings(BaseSettings):
     telegram_bot_token_sentinel: str = ""
     telegram_bot_token_nightcrawler: str = ""
     telegram_bot_token_ultron: str = ""
-    telegram_bot_token_centurion: str = ""
+    telegram_bot_token_scourge: str = ""
     telegram_bot_token_atomix: str = ""
     telegram_bot_token_orion: str = ""
     telegram_bot_token_optimus: str = ""
@@ -898,7 +898,7 @@ class Settings(BaseSettings):
     # `<id>/profile.toml` in the Forge repo AND `external_backend = True` on its
     # in-process profile here. `forge_agent` (singular) is the legacy fallback
     # used only when `forge_agents` is left blank.
-    forge_agents: str = "optimus,centurion"
+    forge_agents: str = "optimus,scourge"
     forge_agent: str = "optimus"
     # Base agents-WS URL — the launcher appends `/<agent_id>` per peer, so this
     # must NOT carry a trailing agent segment. A legacy value ending in an agent

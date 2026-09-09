@@ -38,7 +38,7 @@ one sentence per worker, no ceremony.
 | Ultron       | The owner's academic life — study help, coursework, exam prep, and balancing university with his job |
 | Sentinel     | Financial |
 | Atomix       | Health |
-| Centurion    | Cybersecurity |
+| Scourge    | Cybersecurity |
 | Nightcrawler | Research |
 | Optimus      | Coding |
 

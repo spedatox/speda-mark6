@@ -25,7 +25,7 @@ import { SkeletonList } from './Skeleton'
 import { useT } from '../lib/i18n'
 import type { Dict } from '../lib/i18n/en'
 
-const AGENTS = ['speda', 'atomix', 'ultron', 'sentinel', 'nightcrawler', 'centurion', 'orion']
+const AGENTS = ['speda', 'atomix', 'ultron', 'sentinel', 'nightcrawler', 'scourge', 'orion']
 
 const blank = (t: Dict): ReminderDefinition => ({
   id: '', agent: 'atomix', text: '', at: '09:00', days: '*',

@@ -36,7 +36,7 @@ class CommTranscriptTest {
     @Test
     fun `a dispatch and its reply are two messages from two agents`() {
         val msgs = CommTranscript.messages(
-            listOf(entry(1, "speda", "centurion", task = "scan", result = "done", durationMs = 2000)),
+            listOf(entry(1, "speda", "scourge", task = "scan", result = "done", durationMs = 2000)),
         )
 
         assertEquals(2, msgs.size)
@@ -44,7 +44,7 @@ class CommTranscriptTest {
         assertEquals("scan", msgs[0].text)
         assertTrue("the task is the order going out", msgs[0].outbound)
 
-        assertEquals("centurion", msgs[1].agent)
+        assertEquals("scourge", msgs[1].agent)
         assertEquals("done", msgs[1].text)
         assertFalse("the reply is work coming back", msgs[1].outbound)
     }
@@ -83,7 +83,7 @@ class CommTranscriptTest {
     @Test
     fun `messages from two exchanges interleave by time, not by record`() {
         // A slow dispatch started first but answers last.
-        val slow = entry(1, "speda", "centurion", task = "slow", result = "late", durationMs = 60_000)
+        val slow = entry(1, "speda", "scourge", task = "slow", result = "late", durationMs = 60_000)
         val quick = entry(2, "speda", "atomix", task = "quick", result = "early", durationMs = 1_000,
             createdAt = "2026-08-10T12:00:10")
 
@@ -96,8 +96,8 @@ class CommTranscriptTest {
         // Two orders from Speda back to back (neither answered yet).
         val rows = CommTranscript.rows(
             listOf(
-                entry(1, "speda", "centurion", task = "first", result = "", durationMs = 0),
-                entry(2, "speda", "centurion", task = "second", result = "", durationMs = 0,
+                entry(1, "speda", "scourge", task = "first", result = "", durationMs = 0),
+                entry(2, "speda", "scourge", task = "second", result = "", durationMs = 0,
                     createdAt = "2026-08-10T12:00:01"),
             ),
         )
@@ -110,8 +110,8 @@ class CommTranscriptTest {
     fun `a quiet stretch breaks the run and earns a clock`() {
         val rows = CommTranscript.rows(
             listOf(
-                entry(1, "speda", "centurion", task = "before", result = "", durationMs = 0),
-                entry(2, "speda", "centurion", task = "after", result = "", durationMs = 0,
+                entry(1, "speda", "scourge", task = "before", result = "", durationMs = 0),
+                entry(2, "speda", "scourge", task = "after", result = "", durationMs = 0,
                     createdAt = "2026-08-10T12:30:00"),
             ),
         )

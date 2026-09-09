@@ -28,7 +28,7 @@
 - **Sentinel** (Mark II) — finance and budget intelligence
 - **NightCrawler** (Mark III) — OSINT, web surveillance, the News Desk, watchers
 - **Ultron** (Mark III) — academic research and knowledge synthesis
-- **Centurion** (Mark I) — cyber security, CVE and threat intelligence
+- **Scourge** (Mark I) — cyber security, CVE and threat intelligence
 - **Atomix** (Mark I) — the owner's personal health and wellness (not infrastructure health)
 - **Optimus** (Mark II) — systems, code and infrastructure; the only agent that is a standalone external peer, running on The Forge
 - **Orion** (Mark I) — system maintenance and memory custodian
@@ -54,6 +54,6 @@
 
 - The desktop client is **Heartbreaker**; the mobile client is **SPEDA GO** — never "Heartbreaker mobile" or "Heartbreaker Droid".
 - **Atomix** covers the owner's *health*, not system or infrastructure health.
-- **Centurion** is the *cyber security* agent, not a productivity one.
+- **Scourge** is the *cyber security* agent, not a productivity one.
 - **Optimus** is an external peer, not an in-process profile like the others.
 - **The Legion** are anonymous workers, not members of the eight-agent roster.

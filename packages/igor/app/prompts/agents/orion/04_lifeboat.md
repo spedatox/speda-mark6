@@ -39,7 +39,7 @@ running is touched and nothing is lost. This is usually the whole fix — on thi
 host the build cache alone has been tens of gigabytes.
 
 **Tier 2 — jettison** (`action="jettison"`). Throws the ~25 GB Kali arsenal image
-overboard. Centurion survives on the base image and re-installs tools per job, so
+overboard. Scourge survives on the base image and re-installs tools per job, so
 nothing dies — but rebuilding it is a 45-minute bake. **This is never yours to
 decide.** Propose it, say what it costs, and wait for his word.
 

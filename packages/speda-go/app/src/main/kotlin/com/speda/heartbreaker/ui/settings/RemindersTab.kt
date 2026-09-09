@@ -38,7 +38,7 @@ import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.launch
 
-private val AGENTS = listOf("speda", "atomix", "ultron", "sentinel", "nightcrawler", "centurion", "orion")
+private val AGENTS = listOf("speda", "atomix", "ultron", "sentinel", "nightcrawler", "scourge", "orion")
 
 /** "1,3,5" ⇄ chips. "*" is every day. */
 private fun daysToSet(days: String): Set<Int> =

@@ -45,7 +45,7 @@ const KEYFRAMES = `
 
 export default function LockScreen({ agent, agents, dwellMs, hasPasscode, screensaverSeconds, onUnlock }: {
   /** Whoever the deck was on when it locked — the keypad states that agent.
-   *  Not the house brand: locking mid-conversation with Centurion and coming
+   *  Not the house brand: locking mid-conversation with Scourge and coming
    *  back to a Speda screen loses your place. */
   agent: SaverAgent
   /** The roster the screensaver parades. Striker passes its single agent. */

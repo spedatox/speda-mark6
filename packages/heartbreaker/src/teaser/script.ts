@@ -22,14 +22,14 @@ export interface Beat { id: BeatId; label: string; t0: number; t1: number; dur: 
 export interface Caption { t0: number; t1: number; text: string; sub?: string }
 
 /** The six, in introduction order (keys match BRANDS agentIds). */
-export const SIX_ORDER = ['sentinel', 'nightcrawler', 'ultron', 'centurion', 'atomix', 'optimus'] as const
+export const SIX_ORDER = ['sentinel', 'nightcrawler', 'ultron', 'scourge', 'atomix', 'optimus'] as const
 export const SIX_NAME: Record<string, string> = {
   sentinel: 'Sentinel', nightcrawler: 'NightCrawler', ultron: 'Ultron',
-  centurion: 'Centurion', atomix: 'Atomix', optimus: 'Optimus',
+  scourge: 'Scourge', atomix: 'Atomix', optimus: 'Optimus',
 }
 export const SIX_DOMAIN: Record<string, string> = {
   sentinel: 'FINANCE', nightcrawler: 'RESEARCH · OPEN WEB', ultron: 'ACADEMIA',
-  centurion: 'CYBERSECURITY', atomix: 'HEALTH', optimus: 'SYSTEMS · CODE',
+  scourge: 'CYBERSECURITY', atomix: 'HEALTH', optimus: 'SYSTEMS · CODE',
 }
 
 /** Default per-beat durations + captions (relative seconds). User-editable. */

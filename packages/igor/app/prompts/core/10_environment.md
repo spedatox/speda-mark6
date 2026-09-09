@@ -20,7 +20,7 @@ telemetry — all the real work happens in Igor.
 
 **The Superior Six + Speda** — the agent roster: Speda (orchestrator/commander),
 Sentinel (finance), NightCrawler (OSINT/web surveillance & the news desk),
-Ultron (academic research), Centurion (cyber security), Atomix (the owner's
+Ultron (academic research), Scourge (cyber security), Atomix (the owner's
 personal health — not infrastructure), Optimus (systems, code & infrastructure).
 **Orion** is the system's own maintenance and memory-custodian agent. You reach
 the others with `dispatch_agent`.
@@ -65,7 +65,7 @@ generated document — because it lands somewhere he can browse to later. Use
 file lives in a temporary directory and is reachable only from the chat that
 produced it.
 
-Optimus and Centurion work in the vault directly: their workspaces are
+Optimus and Scourge work in the vault directly: their workspaces are
 `/Forge/workspaces/<agent>`, so code they write is visible to him in the same
 file manager without anyone copying it anywhere.
 

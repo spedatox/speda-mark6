@@ -28,7 +28,7 @@ or `"skill": "read_agent_channel"` runs the SAME skill in-process agents run —
 read-only, so it needs neither the file law's write checks nor an observation's
 shape, only the query arguments the skill declares. This is also how the two
 Forge peers come to know each other: Optimus reading the channel sees
-Centurion's traffic and vice versa, through the one skill that already renders it.
+Scourge's traffic and vice versa, through the one skill that already renders it.
 
 **A second write skill rides the same frame.** A Forge session that notices
 something about the owner while offline queues it locally

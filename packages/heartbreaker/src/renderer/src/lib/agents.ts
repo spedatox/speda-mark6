@@ -6,12 +6,12 @@
 
 export const AGENT_COLORS: Record<string, string> = {
   speda: '#7fa4c4', sentinel: '#d99c44', nightcrawler: '#9165e6',
-  ultron: '#8a93a6', centurion: '#d8483c', atomix: '#3fae74',
+  ultron: '#8a93a6', scourge: '#d8483c', atomix: '#3fae74',
   optimus: '#2f4f8f', orion: '#e0703a', all: '#f2b75c', warroom: '#f2b75c',
 }
 
 /** Every in-process agent, commander first — drives the agent switcher. */
-export const ROSTER = ['speda', 'sentinel', 'nightcrawler', 'ultron', 'centurion', 'atomix', 'optimus', 'orion']
+export const ROSTER = ['speda', 'sentinel', 'nightcrawler', 'ultron', 'scourge', 'atomix', 'optimus', 'orion']
 
 /**
  * Who assembles for the House Party Protocol: Speda and the Superior Six.

@@ -10,7 +10,7 @@
  *  the bright accent. This module takes a brand's accent, reads its HUE, and
  *  regenerates the whole token set at that hue — keeping each token's original
  *  saturation + lightness so the *structure* (depth, contrast, the liquid-glass
- *  feel) is identical, only the colour shifts. Centurion → red everywhere,
+ *  feel) is identical, only the colour shifts. Scourge → red everywhere,
  *  Atomix → green everywhere, background included.
  *
  *  Semantic colours (amber = selected, green = ok, red = alert) and external
@@ -230,7 +230,7 @@ export function stopPartyCycle(): void {
 // House Party. Keep this in step with PARTY_ROSTER in lib/agents.
 const PARTY_COLORS = [
   '#7fa4c4', /* speda */ '#d99c44', /* sentinel */ '#9165e6', /* nightcrawler */
-  '#8a93a6', /* ultron */ '#d8483c', /* centurion */ '#3fae74', /* atomix */
+  '#8a93a6', /* ultron */ '#d8483c', /* scourge */ '#3fae74', /* atomix */
   '#2f4f8f', /* optimus */
 ]
 

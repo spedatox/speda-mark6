@@ -637,7 +637,7 @@ class ChatViewModel(
                             }
                         }
                         "file" -> MessageJson.fileFrom(event.data)?.let { dispatch(ChatAction.AddFile(assistantId, it)) }
-                        // A coding peer (Optimus, Centurion) delegated part of
+                        // A coding peer (Optimus, Scourge) delegated part of
                         // this turn. Goes to its own panel, never into `content`
                         // — see ChatAction.Subagent's doc for why.
                         "subagent" ->

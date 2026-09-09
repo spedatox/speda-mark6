@@ -245,7 +245,7 @@ class AgentOrchestrator:
                     "the conflict between two agents, the next move.\n"
                     "- Keep your own messages short, like someone talking in a group "
                     "chat. The long-form substance comes from the agents.\n"
-                    "- When the owner addresses an agent directly (\"@centurion …\"), "
+                    "- When the owner addresses an agent directly (\"@scourge …\"), "
                     "dispatch that request to that agent essentially verbatim and let "
                     "their answer stand. Do not answer for them.\n\n"
                     "Stand the protocol down (house_party tool) when the owner says "

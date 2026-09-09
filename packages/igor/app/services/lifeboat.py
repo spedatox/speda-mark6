@@ -279,7 +279,7 @@ def recommendation(data: dict, view: dict) -> str:
         if view["by_resource"]["disk"] == CRITICAL:
             moves.append(
                 "Tier 2 (jettison the ~25 GB Kali arsenal) only if Tier 1 leaves "
-                f"less than {settings.lifeboat_target_free_gb} GB free — Centurion "
+                f"less than {settings.lifeboat_target_free_gb} GB free — Scourge "
                 "survives on the base image but the rebuild is a 45-minute bake, "
                 "so this one is the owner's call."
             )
@@ -462,7 +462,7 @@ async def bail() -> tuple[bool, str]:
 
 
 async def jettison() -> tuple[bool, str]:
-    """Tier 2 — throw the ~25 GB Kali arsenal overboard. Centurion survives on
+    """Tier 2 — throw the ~25 GB Kali arsenal overboard. Scourge survives on
     the base image, re-installing tools per job; the rebuild is a 45-minute bake.
     Owner-authorized only, enforced by the skill."""
     return await _script("--force-jettison", timeout=900)

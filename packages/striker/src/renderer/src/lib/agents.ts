@@ -6,12 +6,12 @@
 
 export const AGENT_COLORS: Record<string, string> = {
   speda: '#36abca', sentinel: '#d99c44', nightcrawler: '#9165e6',
-  ultron: '#8a93a6', centurion: '#d8483c', atomix: '#3fae74',
+  ultron: '#8a93a6', scourge: '#d8483c', atomix: '#3fae74',
   optimus: '#2f4f8f', orion: '#e0703a', all: '#f2b75c', warroom: '#f2b75c',
 }
 
 /** The in-process roster, commander first — drives the war-room rail. */
-export const ROSTER = ['speda', 'sentinel', 'nightcrawler', 'ultron', 'centurion', 'atomix', 'optimus', 'orion']
+export const ROSTER = ['speda', 'sentinel', 'nightcrawler', 'ultron', 'scourge', 'atomix', 'optimus', 'orion']
 
 export function agentColor(id: string): string {
   return AGENT_COLORS[id] ?? 'var(--hb-icon-bright)'

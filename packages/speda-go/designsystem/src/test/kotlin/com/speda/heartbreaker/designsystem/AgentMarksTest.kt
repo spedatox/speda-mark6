@@ -73,7 +73,7 @@ class AgentMarksTest {
 
     /** Marks are normalised to a centred 100x100 box. Bounds here include the
      *  off-curve control points, which bulge slightly past the on-curve
-     *  extremes the generator normalised against — worst observed is centurion
+     *  extremes the generator normalised against — worst observed is scourge
      *  at -1.78, hence the 2.5 slack. This is a sanity gate on a bad trace, not
      *  a pixel assertion. */
     @Test

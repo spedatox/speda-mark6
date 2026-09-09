@@ -234,7 +234,7 @@ AGENT_SOURCE_DEFAULTS: dict[str, str] = {
     "atomix": "/memories/wellness",
     "sentinel": "/memories/finance",
     "ultron": "/memories/academic",
-    "centurion": "/memories/cybersec",
+    "scourge": "/memories/cybersec",
     "orion": "/memories/ops",
 }
 

@@ -43,7 +43,7 @@ on:
       agent:
         description: "Which agent the build talks to (/chat/<agent>) and brands as"
         type: choice
-        options: [speda, ultron, centurion, sentinel, atomix, nightcrawler, optimus]
+        options: [speda, ultron, scourge, sentinel, atomix, nightcrawler, optimus]
         default: speda
 
 # Serialize. Two overlapping runs would read the same highest tag and both

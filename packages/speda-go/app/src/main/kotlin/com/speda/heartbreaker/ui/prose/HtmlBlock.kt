@@ -157,8 +157,8 @@ private class WidgetHeightBridge(private val onHeight: (Float) -> Unit) {
  * The injected shell — the Android half of WidgetFrame.tsx's BASE_STYLES +
  * RESIZE_SCRIPT. The custom properties are handed the LIVE palette rather than
  * fixed hexes, so a widget re-hues with the agent exactly like every other
- * surface: model-authored markup that says `var(--accent)` is Centurion red
- * under Centurion.
+ * surface: model-authored markup that says `var(--accent)` is Scourge red
+ * under Scourge.
  */
 private fun buildWidgetDocument(body: String, palette: HbPalette): String {
     fun css(c: androidx.compose.ui.graphics.Color): String =

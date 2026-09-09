@@ -51,7 +51,7 @@ import kotlinx.coroutines.launch
 private const val POLL_MS = 3000L
 
 /**
- * Global tray for irreversible operations an external peer (Optimus, Centurion)
+ * Global tray for irreversible operations an external peer (Optimus, Scourge)
  * is waiting on the owner to approve — mobile port of PendingAsksTray.tsx +
  * InteractionPrompt.tsx's PermissionPrompt.
  *

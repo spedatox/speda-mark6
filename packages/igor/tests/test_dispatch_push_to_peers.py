@@ -64,7 +64,7 @@ async def test_the_frame_reaches_every_host_the_agent_is_attached_from():
 
 @pytest.mark.asyncio
 async def test_it_only_reaches_the_named_agent():
-    ws = _FakeWsManager({"optimus": ["server"], "centurion": ["server"]})
+    ws = _FakeWsManager({"optimus": ["server"], "scourge": ["server"]})
     d = AgentDispatcher()
     d.wire(orchestrator=None, profiles=None, session_manager=None, ws_manager=ws)
 
