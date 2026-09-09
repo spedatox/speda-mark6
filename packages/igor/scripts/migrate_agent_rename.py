@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-One-shot: rename an agent's id in every table that stores it, so the history a
-running deployment already accumulated under the old id follows the rename.
+One-shot: rename an agent's id everywhere it is stored, so the history and the
+settings a running deployment already accumulated under the old id follow the
+rename — the database, AND runtime_state.json, whose maps are keyed by agent id
+too.
 
     python scripts/migrate_agent_rename.py --dry-run          # count, touch nothing
     python scripts/migrate_agent_rename.py                     # centurion -> scourge
@@ -16,6 +18,12 @@ own registry row all carry it. Rename the id in the source alone and every one
 of those rows is orphaned: old Scourge chats, reminders and projects go
 invisible because the code now queries `scourge` while the rows still say
 `centurion`. This rewrites them in place.
+
+The JSON half is the one that bites hardest, because it fails SILENTLY. An
+orphaned `agent_models` entry does not error — the agent simply falls back to
+its profile's own default model and keeps answering, on the wrong model, with
+nothing in the logs saying so. Scourge ran on its profile's Anthropic default
+for weeks that way while the Vertex pin the owner had set sat under `centurion`.
 
 Every column below holds an agent id (verified against app/models on the day of
 the centurion -> scourge rename). `from_agent`/`to_agent` on agent_messages and
@@ -32,6 +40,7 @@ stale old-id row is deleted instead of updated when the new row is already there
 
 import argparse
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -40,6 +49,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import text                              # noqa: E402
 
 from app.database import AsyncSessionLocal, engine       # noqa: E402
+
+# Runtime state is NOT in the database. app/core/runtime_state.py keeps a JSON
+# file whose maps are keyed BY AGENT ID, and the rename orphans every one of
+# them just as thoroughly as a table would be — worse, silently: an orphaned
+# `agent_models` entry means the agent quietly falls back to its profile's own
+# model, so it keeps answering, on the wrong model, with nothing in the logs
+# saying so. That is exactly what happened to Scourge, which ran on its
+# profile's Anthropic default for weeks while its Vertex pin sat under the old
+# id.
+#
+# Dicts keyed by agent id, and lists holding agent ids. Enumerated rather than
+# inferred: this file also holds OAuth tokens and chat ids, and a
+# rewrite-anything-that-matches pass over that is not a thing to be clever with.
+RUNTIME_STATE_DICTS = (
+    "agent_models",       # the owner's model pin per agent
+    "agent_sources",      # per-agent source-of-truth memory file
+    "telegram_models",    # a second pin, for turns arriving over Telegram
+    "voice_overrides",    # voice id + per-voice tuning
+    "telegram_offsets",   # last-read update id per bot
+)
+RUNTIME_STATE_LISTS = (
+    "telegram_started",   # which bots have been started
+)
+
 
 # (table, column). Ordinary agent-id columns rewritten unconditionally for the
 # matched value. agent_registry is deliberately absent here — its primary key
@@ -74,6 +107,58 @@ async def _table_exists(session, table: str) -> bool:
         return table in inspect(conn).get_table_names()
 
     return await session.run_sync(lambda s: _has(s.connection()))
+
+
+def _migrate_runtime_state(old: str, new: str, dry_run: bool) -> int:
+    """Rewrite the agent id in runtime_state.json's agent-keyed maps.
+
+    Same re-runnable shape as the SQL above: a second run matches nothing. Where
+    BOTH ids are present (the app re-seeded the new one after the rename) the
+    new entry is authoritative and the stale old one is dropped rather than
+    overwriting it — the same rule agent_registry follows below.
+    """
+    from app.config import _DATA_DIR
+
+    path = Path(_DATA_DIR) / "runtime_state.json"
+    if not path.exists():
+        print(f"  skip runtime_state.json (not at {path})")
+        return 0
+
+    state = json.loads(path.read_text(encoding="utf-8"))
+    touched = 0
+
+    for key in RUNTIME_STATE_DICTS:
+        section = state.get(key)
+        if not isinstance(section, dict) or old not in section:
+            continue
+        if new in section:
+            print(f"  {'would drop' if dry_run else 'drop'}       1  "
+                  f"runtime_state.{key}['{old}'] ('{new}' already set)")
+        else:
+            print(f"  {'would move' if dry_run else 'move'}       1  "
+                  f"runtime_state.{key}['{old}'] -> ['{new}']")
+            section[new] = section[old]
+        del section[old]
+        touched += 1
+
+    for key in RUNTIME_STATE_LISTS:
+        section = state.get(key)
+        if not isinstance(section, list) or old not in section:
+            continue
+        rebuilt = [x for x in section if x != old]
+        if new not in rebuilt:
+            rebuilt.append(new)
+        rebuilt.sort()
+        print(f"  {'would fix' if dry_run else 'fix'}        1  runtime_state.{key}")
+        state[key] = rebuilt
+        touched += 1
+
+    if touched and not dry_run:
+        path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+    if not touched:
+        print("  runtime_state.json already clean")
+    return touched
 
 
 async def run(old: str, new: str, dry_run: bool) -> None:
@@ -115,6 +200,8 @@ async def run(old: str, new: str, dry_run: bool) -> None:
                         {"new": new, "old": old},
                     )
             total += old_row
+
+        total += _migrate_runtime_state(old, new, dry_run)
 
         if dry_run:
             print(f"\nDRY RUN — {total} rows would change '{old}' -> '{new}'. "
