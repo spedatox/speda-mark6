@@ -101,6 +101,8 @@ Extract a fact only if ALL of these hold:
 For each fact give:
   domain  — biography, preference, state, project, training, finance, or event.
   subject — "owner", "person:<Name>", or "project:<Name>".
+  quote — the exact supporting words copied verbatim from OWNER.
+  Use event for completed actions, state only for ongoing situations. Never default an unknown domain to state.
 
 Return AT MOST {max_facts} facts. Many exchanges contain none at all — small
 talk, a thank-you, a question he asked — and [] is then the correct answer.
@@ -109,10 +111,10 @@ here is a fact he has to tell someone twice.
 
 EXCHANGE:
 OWNER: {user_message}
-ASSISTANT: {assistant_message}
+
 
 Return ONLY a JSON array:
-[{{"text": "<the fact>", "domain": "state", "subject": "owner"}}]
+[{{"text": "<the fact>", "domain": "state", "subject": "owner", "quote": "<verbatim owner evidence>"}}]
 """
 
 _NUMBERS = re.compile(r"\d[\d.,:/]*\d|\d")
@@ -199,6 +201,33 @@ async def extract_turn_facts(
     try:
         async with AsyncSessionLocal() as db:
             user_msg, assistant_msg = await _load_last_exchange(db, session_id)
+            # A queued job must read the exchange it was created for, not the
+            # newest message present when a delayed drain eventually runs.
+            from sqlalchemy import select
+            from app.models.background_job import BackgroundJob
+            from app.models.message import Message
+            from app.models.session import Session
+            session = (await db.execute(select(Session).where(
+                Session.id == session_id, Session.user_id == user_id,
+            ))).scalar_one_or_none()
+            if session is None or session.triggered_by != "user":
+                return  # Workflow/agent seeds are not statements by the owner.
+            job = (await db.execute(select(BackgroundJob).where(
+                BackgroundJob.session_id == session_id,
+                BackgroundJob.request_id == request_id,
+                BackgroundJob.kind == "extract_facts",
+            ).order_by(BackgroundJob.id.desc()).limit(1))).scalar_one_or_none()
+            source_id = (job.payload or {}).get("source_message_id") if job else None
+            if source_id:
+                message = (await db.execute(select(Message).where(
+                    Message.id == source_id, Message.session_id == session_id,
+                    Message.role == "user",
+                ))).scalar_one_or_none()
+                if message is None:
+                    raise ValueError("Queued extraction evidence message is missing.")
+                user_msg = (" ".join(b.get("text", "") for b in message.content
+                            if isinstance(b, dict) and b.get("type") == "text")
+                            if isinstance(message.content, list) else str(message.content))
             if not user_msg.strip():
                 return
 
@@ -218,7 +247,6 @@ async def extract_turn_facts(
                     "content": _PROMPT.format(
                         max_facts=settings.auto_extract_max_facts,
                         user_message=user_msg[:6000],
-                        assistant_message=assistant_msg[:4000],
                     ),
                 }],
                 max_tokens=2048,
@@ -229,20 +257,22 @@ async def extract_turn_facts(
             )
             raw = resp.content[0].text if resp.content else ""
 
-            exchange = f"{user_msg}\n{assistant_msg}"
+            exchange = user_msg
             proposals, ungrounded = [], 0
             for item in _parse_json_array(raw)[: settings.auto_extract_max_facts]:
                 text = str(item.get("text") or "").strip()
                 if not text:
                     continue
-                if ungrounded_tokens(text, exchange):
+                quote = str(item.get("quote") or "").strip()
+                if not quote or quote not in user_msg or ungrounded_tokens(text, quote):
                     ungrounded += 1
                     continue
                 proposals.append({
                     "content": text,
                     "level": "explicit",
-                    "domain": str(item.get("domain") or "state").strip().lower(),
+                    "domain": str(item.get("domain") or "event").strip().lower(),
                     "subject": str(item.get("subject") or "owner").strip(),
+                    "sources": [f"message:{source_id}: {quote}" if source_id else f"session:{session_id}: {quote}"],
                 })
 
             if not proposals:
@@ -259,6 +289,7 @@ async def extract_turn_facts(
                 observer=OBSERVER,
                 proposals=proposals,
                 session_id=session_id,
+                message_ids=[source_id] if source_id else None,
                 request_id=request_id,
             )
             reinforced = sum(1 for o in stored if o.reinforcement_count > 1)
@@ -279,3 +310,6 @@ async def extract_turn_facts(
             "auto_extract_error",
             extra={"request_id": request_id, "session_id": session_id, "error": str(e)},
         )
+        # Let the durable queue retry and expose failures, instead of recording
+        # a successful job after a swallowed provider/database exception.
+        raise

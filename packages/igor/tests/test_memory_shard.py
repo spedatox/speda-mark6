@@ -196,14 +196,15 @@ def test_the_flat_file_is_frozen_for_agents():
     assert "ledger_append" in str(e.value)
 
 
-def test_orion_and_the_owner_can_still_repair_the_flat_file():
-    """Whoever runs the migration has to be able to touch what it is migrating —
-    and the owner is never blocked (§4.3)."""
-    for author in ("orion", "owner"):
+def test_only_owner_can_edit_the_superseded_flat_file():
+    """Migrations use their audited service; Orion repairs the live shards."""
+    with pytest.raises(MemorySchemaViolation):
         check_write(
             path="/memories/finance/ledger.md", before=FLAT, after=FLAT + "\n",
-            is_create=False, author=author,
+            is_create=False, author="orion",
         )
+    check_write(path="/memories/finance/ledger.md", before=FLAT, after=FLAT + "\n",
+                is_create=False, author="owner")
 
 
 def test_the_folder_resolves_and_the_flat_file_does_not_pretend_to_be_a_month():

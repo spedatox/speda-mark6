@@ -145,8 +145,6 @@ def max_bytes_for(path: str) -> int:
     ledger — at the collection's 8K, so the write that crossed 8K would have
     been refused with a number nothing else in the system agreed with.
     """
-    if path in _INJECTED_PATHS:
-        return INJECTED_FILE_MAX_BYTES
     from app.services.memory_spec import spec_for
 
     spec = spec_for(path)
@@ -337,6 +335,7 @@ def check_write(
     after: str,
     is_create: bool,
     author: str,
+    managed: bool = False,
 ) -> list[str]:
     """
     Inspect one pending write. Returns a list of ADVISORY warnings; raises
@@ -346,6 +345,19 @@ def check_write(
     systems-board commit — the owner is inspected but never blocked (§4.3).
     """
     is_owner = author == "owner"
+
+    from app.services.memory_policy import protected_write
+    boundary = protected_write(path, author, managed=managed)
+    if boundary:
+        raise MemorySchemaViolation("Write rejected — " + boundary)
+    if path.startswith("/memories/states/"):
+        from app.services.memory_states import parse
+        try:
+            record = parse(after)
+            if path != f"/memories/states/{record['key']}.md":
+                raise ValueError("State key and path disagree.")
+        except (ValueError, TypeError, KeyError) as exc:
+            raise MemorySchemaViolation(str(exc)) from exc
 
     # System trails are Orion's plumbing, not owner knowledge. No taxonomy.
     if is_system_path(path):
@@ -390,9 +402,8 @@ def check_write(
     if document_owner and author not in (document_owner, "owner", "orion"):
         raise MemorySchemaViolation(
             f"Write rejected — `{path}` belongs to {document_owner}, not to you.\n\n"
-            f"Nothing was saved. If the fact is yours to record, put it in your own "
-            f"document or in the shared ones (current.md, social.md, projects.md, "
-            f"dossier.md). If it genuinely belongs here, hand it to {document_owner} "
+            f"Nothing was saved. Keep the fact in its subject's domain; do not "
+            f"reroute it into a shared file to bypass ownership. Hand it to {document_owner} "
             f"with `dispatch_agent` — a ledger kept by one hand stays readable, and "
             f"one kept by five does not."
         )
@@ -412,7 +423,7 @@ def check_write(
     from app.services.memory_spec import collection_from_monolith, member_path
 
     superseded = collection_from_monolith(path)
-    if superseded is not None and author not in ("owner", "orion"):
+    if superseded is not None and author != "owner":
         if superseded.depth == 2:
             example = f"{superseded.root}/<category>/<name>.md"
             groups = f" Categories: {', '.join(superseded.groups)}." if superseded.groups else ""
@@ -440,7 +451,7 @@ def check_write(
     from app.services.memory_spec import shard_member, shard_root
 
     flat = shard_root(path) if shard_member(path) is None else None
-    if flat is not None and author not in ("owner", "orion"):
+    if flat is not None and author != "owner":
         coll, member = flat
         raise MemorySchemaViolation(
             f"Write rejected — `{coll.root}/{member.stem}` is a DIRECTORY now, one "

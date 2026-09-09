@@ -44,7 +44,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ \"payload\": { \"type\": \"cron\", \"job\": \"memory_audit\", \"event\": \"memory_audit\", \"automation\": \"Orion — nightly memory audit\", \"intent\": \"Run the nightly memory audit. Execute all passes IN ORDER exactly as your audit procedure specifies: (1) boundary sweep against the routing tree, (2) demotion with the epoch test, (3) dedup and normalise dates, (4) compression of sessions.md and social.md, (5) refresh current.md and dossier.md, (6) consolidate the observation store, (7) append the report to /memories/.audit/log.md. Work from evidence: read the files you are auditing and verify a fact against what was actually said before you move it. Move, merge, timestamp and compress existing text only — never author a new fact about the owner, and never revert an owner commit. If a pass finds nothing to do, say so in the report and move on. Notify the owner ONLY if a structural change occurred; a routine no-op night gets a log line and nothing else.\" }, \"output_mode\": \"silent\" }) }}",
+        "jsonBody": "={{ ({\"payload\": {\"type\": \"cron\", \"job\": \"memory_audit\", \"event\": \"memory_audit\", \"automation\": \"Orion — nightly memory audit\", \"intent\": \"Run the current memory custodian procedure. Start and end with memory_audit scan. Review changed documents for subject placement, temporal validity, conflicting records and evidence. Repair narrowly and attest the resulting fingerprints. Report pending review and unresolved defects honestly; never call partial coverage clean.\"}, \"output_mode\": \"silent\"} ) }}",
         "options": {
           "timeout": 600000
         }

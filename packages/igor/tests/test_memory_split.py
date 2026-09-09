@@ -174,7 +174,7 @@ def test_a_new_entity_file_is_expected_not_a_new_file_type():
     assert not is_canonical("/memories/brand-new-idea.md")
 
 
-def test_the_monolith_is_frozen_for_agents_but_not_for_orion():
+def test_the_monolith_is_frozen_for_all_agents_including_orion():
     # Deployment is GitOps, so this code reaches prod before the split runs.
     # Freezing on deploy is what stops the two stores being writable at once —
     # the v1 "facts drift between files" failure, with both files authoritative.
@@ -185,11 +185,12 @@ def test_the_monolith_is_frozen_for_agents_but_not_for_orion():
         )
     assert "/memories/projects/" in str(e.value)
 
-    # Orion repairs documents for a living; the owner is never blocked (§4.3).
-    check_write(
-        path="/memories/projects.md", before="# P", after="# P\n## New",
-        is_create=False, author="orion",
-    )
+    # Repairs belong in live members. Custodians cannot revive a second truth.
+    with pytest.raises(MemorySchemaViolation):
+        check_write(
+            path="/memories/projects.md", before="# P", after="# P\n## New",
+            is_create=False, author="orion",
+        )
 
 
 def test_a_person_file_still_needs_a_who_block():

@@ -151,6 +151,11 @@ def ledger_append(
     spec = spec_for(path)
     if spec is None or spec.kind != "ledger":
         raise WriteRejected(f"`{path}` is not a ledger; ledger_append does not apply to it.")
+    if re.fullmatch(r"\d{4}-\d{2}(?:-\d{2})?", key):
+        try:
+            date.fromisoformat(key if len(key) == 10 else key + "-01")
+        except ValueError as exc:
+            raise WriteRejected("The ledger key must be a real calendar date/month.") from exc
     if spec.index_pattern and not re.match(spec.index_pattern, key):
         raise WriteRejected(
             f"`{key}` is not a valid index key for {path.split('/')[-1]} — it must "
@@ -220,6 +225,16 @@ def ledger_append(
                 f"you supplied {len(row)} value(s). A short row silently shifts "
                 f"every cell after it."
             )
+        for column, value in zip(cols, row):
+            if column.lower() == "date" and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(value)):
+                try:
+                    date.fromisoformat(str(value))
+                except ValueError as exc:
+                    raise WriteRejected("The row date is not a real calendar date.") from exc
+                if not str(value).startswith(key):
+                    raise WriteRejected("The row date does not belong to the ledger key. Use its actual date/month.")
+        if any("\n" in str(c) or "|" in str(c) for c in row):
+            raise WriteRejected("Table cells cannot contain line breaks or unescaped column separators.")
 
         sidx = _find(lines, section, spec.index_level + 1, (kstart, kend))
         if sidx is None:

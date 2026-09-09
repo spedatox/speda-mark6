@@ -127,6 +127,10 @@ async def lifespan(app: FastAPI):
 
     await registry.register_skill(ReadSkillSkill())
     await registry.register_skill(MemorySkill())
+    from app.skills.memory_state import MemoryStateSkill
+    await registry.register_skill(MemoryStateSkill())
+    from app.skills.memory_audit import MemoryAuditSkill
+    await registry.register_skill(MemoryAuditSkill())
     # The observation tier — the sourced, addressable facts beneath the memory
     # files. Registered next to the memory tool because they are one capability
     # with two layers: the file is what gets read, the observation is what can be

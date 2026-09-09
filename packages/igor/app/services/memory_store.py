@@ -19,13 +19,68 @@ Three write paths feed one audit trail (MemoryRevision):
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update, delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.memory_file import MemoryFile
 from app.models.memory_revision import MemoryRevision
 
 logger = logging.getLogger(__name__)
+
+
+class MemoryWriteConflict(ValueError):
+    """A competing write won; reread and recompute instead of losing its data."""
+
+
+async def mutate_file(db, *, user_id: int, path: str, before: str | None,
+                      after: str | None, author: str, action: str,
+                      request_id: str = "", managed: bool = False) -> list[str]:
+    """Agent write gateway. Compare-and-swap + revision are one transaction.
+
+    None means absence/deletion, distinct from an empty document. A conflict
+    rolls back the whole transaction. Never retries an old whole-file payload.
+    """
+    from app.services.memory_policy import protected_write
+    from app.services.memory_schema import check_write, MemorySchemaViolation
+    from app.services.memory_spec import owner_of
+    problem = protected_write(path, author, managed=managed)
+    if problem:
+        raise MemorySchemaViolation("Write rejected — " + problem)
+    if after is None:
+        owner = owner_of(path)
+        if owner and author not in (owner, "orion", "owner"):
+            raise MemorySchemaViolation(f"Write rejected — {path} belongs to {owner}; hand off to that agent.")
+        notes = []
+    else:
+        notes = check_write(path=path, before=before or "", after=after,
+                            is_create=before is None, author=author, managed=managed)
+    if before == after:
+        return notes
+    try:
+        if before is None:
+            db.add(MemoryFile(user_id=user_id, path=path, content=after))
+            await db.flush()
+        else:
+            predicate = (MemoryFile.user_id == user_id, MemoryFile.path == path,
+                         MemoryFile.content == before)
+            statement = (delete(MemoryFile).where(*predicate) if after is None else
+                         update(MemoryFile).where(*predicate).values(
+                             content=after, updated_at=datetime.now(timezone.utc)))
+            result = await db.execute(statement.execution_options(synchronize_session="fetch"))
+            if result.rowcount != 1:
+                raise MemoryWriteConflict(f"Memory changed concurrently at {path}. Reread it and reapply your intended change; nothing was saved.")
+        await record_revision(db, user_id=user_id, path=path, author=author,
+                              action=action, before=before or "", after=after or "",
+                              request_id=request_id)
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise MemoryWriteConflict(f"Memory was created concurrently at {path}. Reread before retrying.") from exc
+    except Exception:
+        await db.rollback()
+        raise
+    return notes
 
 MEMORY_ROOT = "/memories"
 
@@ -108,6 +163,8 @@ def is_owner_editable(path: str) -> bool:
     from app.services.memory_compose import COMPOSED_FILES
     from app.services.memory_render import RENDERED_FILES
 
+    if path == "/memories/current.md" or path.startswith("/memories/states/"):
+        return False
     if path.startswith(AUDIT_ROOT) or "/." in path:
         return False
     if path in RENDERED_FILES or path in COMPOSED_FILES:
@@ -194,24 +251,16 @@ async def commit_file(
         if current_stamp != expected_updated_at:
             raise MemoryConflict(file)
 
-    if file is None:
-        file = MemoryFile(user_id=user_id, path=path, content=content)
-        db.add(file)
-    else:
-        file.content = content
-        file.updated_at = datetime.now(timezone.utc)
-
-    await record_revision(
-        db,
-        user_id=user_id,
-        path=path,
-        author="owner",
-        action="commit",
-        before=before,
-        after=content,
-        request_id=request_id,
-    )
-    await db.commit()
+    try:
+        await mutate_file(db, user_id=user_id, path=path, author="owner", action="commit",
+                          before=before if file is not None else None, after=content,
+                          request_id=request_id)
+    except MemoryWriteConflict:
+        current = await _get_file(db, user_id, path)
+        if current is not None:
+            raise MemoryConflict(current)
+        raise
+    file = await _get_file(db, user_id, path)
     await db.refresh(file)
     logger.info(
         "memory_owner_commit",
@@ -245,20 +294,16 @@ async def delete_file(
             f"{path} is a canonical memory file. Remove it from CANONICAL_FILES "
             f"first — otherwise agents are still routed to it and it comes back empty."
         )
+    if path.startswith("/memories/states/") or "/." in path:
+        raise ValueError("Managed state records and internal archives cannot be deleted here; close states through memory_state.")
 
     file = await _get_file(db, user_id, path)
     if file is None:
         raise KeyError(path)
 
     before = file.content
-    await db.execute(
-        sql_delete(_MF).where(_MF.user_id == user_id, _MF.path == path)
-    )
-    await record_revision(
-        db, user_id=user_id, path=path, author="owner",
-        action="delete", before=before, after="", request_id=request_id,
-    )
-    await db.commit()
+    await mutate_file(db, user_id=user_id, path=path, author="owner", action="delete",
+                      before=before, after=None, request_id=request_id)
     logger.info(
         "memory_file_deleted",
         extra={"user_id": user_id, "path": path, "bytes": len(before),
@@ -301,24 +346,10 @@ async def restore_revision(
     before = file.content if file else ""
     target = rev.after
 
-    if file is None:
-        file = MemoryFile(user_id=user_id, path=rev.path, content=target)
-        db.add(file)
-    else:
-        file.content = target
-        file.updated_at = datetime.now(timezone.utc)
-
-    await record_revision(
-        db,
-        user_id=user_id,
-        path=rev.path,
-        author="owner",
-        action="restore",
-        before=before,
-        after=target,
-        request_id=request_id,
-    )
-    await db.commit()
+    await mutate_file(db, user_id=user_id, path=rev.path, author="owner", action="restore",
+                      before=before if file is not None else None, after=target,
+                      request_id=request_id)
+    file = await _get_file(db, user_id, rev.path)
     await db.refresh(file)
     logger.info(
         "memory_revision_restored",

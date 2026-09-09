@@ -454,11 +454,15 @@ def verify_document(path: str, text: str) -> list[Finding]:
                 else check(path, text, spec)
             )
         except Exception as e:  # noqa: BLE001
-            # A broken check must never block a write or hide the other checks.
+            # A broken validator is NOT a clean document. Keep running the
+            # other checks but fail closed for new writes and expose the fault.
             logger.error(
                 "memory_verify_check_failed",
                 extra={"path": path, "check": check.__name__, "error": str(e)},
             )
+            findings.append(Finding(path, "validator_failed", "error",
+                                    f"Validator {check.__name__} failed: {type(e).__name__}",
+                                    fix="Repair the validator before accepting this write."))
     findings.sort(key=lambda f: (SEVERITY_ORDER.get(f.severity, 9), f.line or 0))
     return findings
 
@@ -500,12 +504,15 @@ async def verify_all(db, user_id: int) -> dict:
         "memory_verify_report",
         extra={"user_id": user_id, "documents": len(rows), **counts},
     )
+    from app.services.memory_audit import coverage
+    semantic = await coverage(db, user_id)
     return {
+        "semantic_review": semantic,
         "documents": len(rows),
         "counts": counts,
         "findings": [f.as_dict() for f in findings],
         "verdict": (
-            "clean" if counts["error"] == 0 and counts["warning"] == 0
+            ("clean" if semantic["verdict"] == "reviewed" else "structurally clean; semantic review incomplete") if counts["error"] == 0 and counts["warning"] == 0
             else f"{counts['error']} error(s), {counts['warning']} warning(s)"
         ),
     }

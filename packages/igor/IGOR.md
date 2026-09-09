@@ -87,6 +87,12 @@ Configuration lives in `packages/igor/.env` (not committed) — copy `.env.examp
 
 ## Core contracts
 
+The executable memory hierarchy, lifecycle, write gateway, evidence intake and
+Orion audit contract are documented in [Memory contract](../../docs/MEMORY_CONTRACT.md).
+Topic documents remain authoritative; `current.md` is the time-aware projection
+of versioned state records. Semantic review coverage is stored explicitly and
+must not be confused with the structural verifier's result.
+
 **`AgentContext`** (`app/core/context.py`) — a plain dataclass, the single source of truth for request state:
 
 ```python

@@ -180,6 +180,18 @@ async def run_memory_command(agent_id: str, frame: dict) -> dict:
     request_id = str(frame.get("request_id", ""))
     skill_name = str(frame.get("skill") or "memory")
 
+    if skill_name == "memory_state":
+        from app.skills.memory_state import MemoryStateSkill
+        skill = MemoryStateSkill()
+        args = {k: frame[k] for k in skill.input_schema["properties"] if k in frame}
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await skill.execute(args, _context(agent_id, db, request_id or uuid.uuid4().hex))
+            ok = not result.startswith(("Error:", "Write rejected"))
+        except Exception as exc:
+            ok, result = False, f"State command failed: {type(exc).__name__}: {exc}"
+        return {"type": "memory_response", "request_id": request_id, "ok": ok, "result": result}
+
     if skill_name == "record_observation":
         return await _run_record_observation(agent_id, frame, request_id)
     read = _READ_SKILLS.get(skill_name)

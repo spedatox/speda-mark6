@@ -8,6 +8,7 @@ from app.models.message import Message
 from app.models.memory import Memory
 from app.models.memory_file import MemoryFile
 from app.models.memory_revision import MemoryRevision
+from app.models.memory_review import MemoryReview
 from app.models.message_embedding import MessageEmbedding
 from app.models.observation import Observation
 from app.models.background_job import BackgroundJob
@@ -29,7 +30,7 @@ from app.models.place import PlaceSet
 from app.models.project import Project, ProjectFile
 
 __all__ = [
-    "User", "Session", "Message", "Memory", "MemoryFile", "MemoryRevision",
+    "User", "Session", "Message", "Memory", "MemoryFile", "MemoryRevision", "MemoryReview",
     "MessageEmbedding", "Observation", "BackgroundJob",
     "AgentRecord", "AgentMessage", "ToolCall", "Notification", "Automation", "AutomationRun",
     "NewsItem", "NewsWatch", "NewsQuota",

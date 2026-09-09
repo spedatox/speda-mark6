@@ -577,7 +577,14 @@ SECTION_COLLECTIONS: tuple[CollectionSpec, ...] = (
     ),
 )
 
-COLLECTIONS = COLLECTIONS + SECTION_COLLECTIONS
+COLLECTIONS = COLLECTIONS + SECTION_COLLECTIONS + (
+    CollectionSpec(root="/memories/states", kind=OBSERVATIONS,
+                   summary="Versioned ongoing situations; managed by memory_state",
+                   entity_noun="state", max_bytes=6_000),
+    CollectionSpec(root="/memories/events", kind=LEDGER,
+                   summary="Dated owner events with no more specific subject log",
+                   entity_noun="month", max_bytes=48_000),
+)
 
 _COLLECTIONS_BY_ROOT = {c.root: c for c in COLLECTIONS}
 
@@ -865,10 +872,10 @@ SPECS: dict[str, DocumentSpec] = {
     "/memories/current.md": DocumentSpec(
         path="/memories/current.md",
         kind=OBSERVATIONS,
-        summary="What is true in the owner's life right now",
+        summary="Computed view of ongoing, waiting and planned states; overdue records are unverified",
         injected=True,
         max_bytes=6_000,
-        notes="A snapshot, not a log. Something that ends moves to history.md.",
+        notes="Read-only projection of /memories/states/. Use memory_state transitions; completed records stay in states/ and leave the current view.",
     ),
     "/memories/history.md": DocumentSpec(
         path="/memories/history.md",
@@ -1052,6 +1059,11 @@ def spec_for(path: str) -> DocumentSpec | None:
     as the monolith exists and only `/memories/projects/<slug>.md` resolves
     through the collection.
     """
+    import re
+    if re.fullmatch(r"/memories/events/\d{4}-\d{2}\.md", path):
+        return DocumentSpec(path=path, kind=LEDGER, summary="Dated events",
+                            index_pattern=r"^\d{4}-\d{2}-\d{2}$", index_level=2,
+                            max_bytes=48_000)
     exact = SPECS.get(path)
     if exact is not None:
         return exact
@@ -1094,6 +1106,18 @@ def route_ledger(path: str, key: str) -> tuple[str, str]:
     import re as _re
 
     p = normalize(path)
+    if p in ("/memories/events", "/memories/events.md") or p.startswith("/memories/events/"):
+        from datetime import date
+        try:
+            if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", key):
+                raise ValueError()
+            date.fromisoformat(key)
+        except ValueError:
+            return "", "Event keys must be real absolute dates (YYYY-MM-DD)."
+        destination = f"/memories/events/{key[:7]}.md"
+        if p.startswith("/memories/events/") and p != destination:
+            return "", "The event date does not belong to the requested month."
+        return destination, ""
 
     # A sharded member is a folder of keys, so the KEY is the file. This catches
     # every way the caller can name it: the folder, one month directly, or
@@ -1187,6 +1211,9 @@ def injected_paths(existing: set[str] | None = None) -> tuple[str, ...]:
             out.append(path)          # not split yet — the monolith is still it
         else:
             out.extend(members)
+            if existing is not None:
+                out.extend(sorted(p for p in existing if p.startswith(coll.root + "/")
+                                  and p not in members and collection_for(p) == coll))
     return tuple(out)
 
 

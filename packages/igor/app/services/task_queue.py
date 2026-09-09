@@ -273,14 +273,31 @@ async def enqueue_post_turn(
                 .all()
             )
             for kind in POST_TURN_KINDS:
-                if kind in existing:
+                if kind == "extract_facts":
+                    # Extraction reads one exchange, unlike a recap watermark.
+                    # Coalescing different requests silently drops owner facts.
+                    duplicate = (await db.execute(select(BackgroundJob.id).where(
+                        BackgroundJob.session_id == session_id,
+                        BackgroundJob.kind == kind,
+                        BackgroundJob.request_id == request_id,
+                    ).limit(1))).scalar_one_or_none()
+                    if duplicate is not None:
+                        continue
+                elif kind in existing:
                     continue
+                payload = {"model": model}
+                if kind == "extract_facts":
+                    from app.models.message import Message
+                    source_id = (await db.execute(select(Message.id).where(
+                        Message.session_id == session_id, Message.role == "user",
+                    ).order_by(Message.id.desc()).limit(1))).scalar_one_or_none()
+                    payload["source_message_id"] = source_id
                 db.add(
                     BackgroundJob(
                         user_id=user_id,
                         session_id=session_id,
                         kind=kind,
-                        payload={"model": model},
+                        payload=payload,
                         request_id=request_id,
                     )
                 )

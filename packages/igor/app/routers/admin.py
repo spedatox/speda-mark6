@@ -332,7 +332,9 @@ async def memory_compose(request: Request) -> JSONResponse:
     that exist, or the composition is rejected and the previous version stands —
     so a bad run is a no-op, never a corrupted biography.
     """
-    from app.services.memory_compose import compose
+    from app.services.memory_compose import compose, COMPOSED_FILES
+    if not COMPOSED_FILES:
+        return JSONResponse({"error": "Composition is disabled. Domain documents and biography remain authoritative; current.md is computed from memory_state records."}, status_code=409)
 
     request_id = getattr(request.state, "request_id", "") or "admin-compose"
     report = await compose(_USER_ID, _memory_model(), request_id=request_id)

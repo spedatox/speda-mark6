@@ -83,7 +83,10 @@ async def _read_memory(user_id: int) -> tuple[str, str]:
                     MemoryFile.path.in_([_OWNER_PATH, _CURRENT_PATH]),
                 )
             )).scalars().all()
+            from app.services.memory_states import effective_current
+            current = await effective_current(db, user_id)
         by_path = {r.path: (r.content or "") for r in rows}
+        by_path[_CURRENT_PATH] = current
         return by_path.get(_OWNER_PATH, "")[:_MEM_CHARS], by_path.get(_CURRENT_PATH, "")[:_MEM_CHARS]
     except Exception as e:  # noqa: BLE001 — memory is optional flavour
         logger.warning("welcome_memory_read_failed", extra={"error": str(e)})

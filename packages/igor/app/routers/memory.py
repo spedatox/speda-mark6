@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.memory_file import MemoryFile
 from app.services import memory_store
+from app.services.memory_schema import MemorySchemaViolation
 from app.skills.memory import AGENT_SOURCE_DEFAULTS, source_file_for
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,9 @@ async def list_memory_files(db: AsyncSession = Depends(get_db)):
         .where(MemoryFile.user_id == _USER_ID)
         .order_by(MemoryFile.path)
     )
-    files = result.scalars().all()
+    from app.core.clock import owner_today
+    from app.services.memory_states import project_files
+    files = project_files(result.scalars().all(), owner_today())
     return [
         _serialize(f)
         for f in files
@@ -265,6 +268,10 @@ async def restore_memory_file(body: RevisionRestore, db: AsyncSession = Depends(
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="No such revision.")
+    except memory_store.MemoryWriteConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except MemorySchemaViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return _serialize(file)
 
 

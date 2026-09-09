@@ -28,7 +28,7 @@ from sqlalchemy import select, delete as sql_delete
 from app.core.context import AgentContext
 from app.models.memory_file import MemoryFile
 from app.services.memory_schema import MemorySchemaViolation, check_write
-from app.services.memory_store import record_revision
+from app.services.memory_store import record_revision, mutate_file, MemoryWriteConflict
 from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
@@ -279,9 +279,9 @@ def source_preload_for(agent_id: str) -> list[str]:
 
 def _validate_path(path: str) -> str | None:
     """Return error string if path is invalid, None if OK."""
-    if not path.startswith(MEMORY_ROOT):
+    if path != MEMORY_ROOT and not path.startswith(MEMORY_ROOT + "/"):
         return f"Error: Path must start with {MEMORY_ROOT}. Got: {path}"
-    if ".." in path:
+    if ".." in path or "\\" in path or "//" in path:
         return f"Error: Path traversal not allowed: {path}"
     return None
 
@@ -614,6 +614,9 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
     #
     # The listing is a function of the sorted PATH SET, not of content, so it is
     # tracked by the path set rather than by anyone's updated_at.
+    from app.core.clock import owner_today
+    from app.services.memory_states import project_files
+    all_files = project_files(all_files, owner_today())
     by_path = {f.path: f for f in all_files}
 
     # Resolved against what actually exists: a split injected document
@@ -629,7 +632,8 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
     watermarked = [f for f in all_files if f.path in injected]
     watermark = (
         max((f.updated_at.isoformat() for f in watermarked), default="")
-        + f"|{source_file or ''}"
+        + f"|{source_file or ''}|{owner_today().isoformat()}"
+        + "|" + str(hash(tuple((f.path, f.content) for f in all_files if f.path == "/memories/current.md")))
         + f"|{len(all_files)}|{hash(tuple(sorted(f.path for f in all_files)))}"
     )
     cache_key = (user_id, agent_id)
@@ -695,8 +699,8 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
                 f"{log_line} These files are the AUTHORITATIVE record for your "
                 f"domain: report every figure from them, and write every update back "
                 f"in the same turn you learn it. Never leave them stale, never keep "
-                f"your domain data only in the conversation, and never create a file "
-                f"the folder does not already have."
+                f"your domain data only in the conversation. Add a new topic in your "
+                f"domain when none fits; reuse the existing topic otherwise."
             )
         else:
             source_directive = (
@@ -708,6 +712,8 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
                 f"only in the conversation."
             )
 
+    from app.services.memory_policy import routing_contract
+    source_directive += "\n\n" + routing_contract()
     block = (
         "## Memory\n\n"
         "This is shared knowledge about your OWNER, maintained across all of your "
@@ -964,6 +970,9 @@ class MemorySkill(Skill):
             return f"The path {path} does not exist. Please provide a valid path."
 
         content = file.content
+        if path == "/memories/current.md":
+            from app.services.memory_states import effective_current
+            content = await effective_current(db, user_id)
         view_range = args.get("view_range")
         if view_range:
             lines = content.splitlines()
@@ -995,17 +1004,12 @@ class MemorySkill(Skill):
         except MemorySchemaViolation as e:
             return str(e)
 
-        db.add(MemoryFile(
-            user_id=user_id,
-            path=path,
-            content=content,
-            updated_at=datetime.now(timezone.utc),
-        ))
-        await record_revision(
-            db, user_id=user_id, path=path, author=context.agent_id,
-            action="create", before="", after=content, request_id=context.request_id,
-        )
-        await db.commit()
+        try:
+            await mutate_file(db, user_id=user_id, path=path, author=context.agent_id,
+                              action="create", before=None, after=content,
+                              request_id=context.request_id)
+        except (MemoryWriteConflict, MemorySchemaViolation) as e:
+            return str(e)
         logger.info("memory_file_created", extra={"user_id": user_id, "path": path})
         return f"File created successfully at: {path}{note}"
 
@@ -1049,17 +1053,15 @@ class MemorySkill(Skill):
         except MemorySchemaViolation as e:
             return str(e)
 
-        file.content = candidate
-        file.updated_at = datetime.now(timezone.utc)
-        await record_revision(
-            db, user_id=user_id, path=path, author=context.agent_id,
-            action="str_replace", before=before, after=file.content,
-            request_id=context.request_id,
-        )
-        await db.commit()
+        try:
+            await mutate_file(db, user_id=user_id, path=path, author=context.agent_id,
+                              action="str_replace", before=before, after=candidate,
+                              request_id=context.request_id)
+        except (MemoryWriteConflict, MemorySchemaViolation) as e:
+            return str(e)
 
         # Return snippet around the change
-        snippet = _format_file_with_lines(path, file.content)
+        snippet = _format_file_with_lines(path, candidate)
         return f"The memory file has been edited.\n{snippet}{note}"
 
     async def _insert(self, path: str, args: dict, context: AgentContext) -> str:
@@ -1096,14 +1098,12 @@ class MemorySkill(Skill):
         except MemorySchemaViolation as e:
             return str(e)
 
-        file.content = candidate
-        file.updated_at = datetime.now(timezone.utc)
-        await record_revision(
-            db, user_id=user_id, path=path, author=context.agent_id,
-            action="insert", before=before, after=file.content,
-            request_id=context.request_id,
-        )
-        await db.commit()
+        try:
+            await mutate_file(db, user_id=user_id, path=path, author=context.agent_id,
+                              action="insert", before=before, after=candidate,
+                              request_id=context.request_id)
+        except (MemoryWriteConflict, MemorySchemaViolation) as e:
+            return str(e)
         return f"The file {path} has been edited.{note}"
 
     async def _delete(self, path: str, context: AgentContext) -> str:
@@ -1137,16 +1137,11 @@ class MemorySkill(Skill):
             )
 
         before = file.content
-        await db.execute(
-            sql_delete(MemoryFile).where(
-                MemoryFile.user_id == user_id,
-                MemoryFile.path == path,
-            )
-        )
-        await record_revision(
-            db, user_id=user_id, path=path, author=context.agent_id,
-            action="delete", before=before, after="", request_id=context.request_id,
-        )
-        await db.commit()
+        try:
+            await mutate_file(db, user_id=user_id, path=path, author=context.agent_id,
+                              action="delete", before=before, after=None,
+                              request_id=context.request_id)
+        except (MemoryWriteConflict, MemorySchemaViolation) as e:
+            return str(e)
         logger.info("memory_file_deleted", extra={"user_id": user_id, "path": path})
         return f"Successfully deleted {path}"

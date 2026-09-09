@@ -504,6 +504,11 @@ async def record_observations(
         ).scalar_one_or_none()
 
         if existing is not None:
+            # Retrying one durable extraction job is not independent evidence.
+            if ((request_id and existing.request_id == request_id) or
+                    (message_ids and set(message_ids).issubset(set(existing.message_ids or [])))):
+                stored.append(existing)
+                continue
             existing.reinforcement_count += 1
             existing.updated_at = datetime.now(timezone.utc)
             if session_id is not None:
@@ -512,6 +517,7 @@ async def record_observations(
                 merged = list(existing.message_ids or []) + list(message_ids)
                 # Keep the tail: recent provenance is what recall pulls context from.
                 existing.message_ids = merged[-20:]
+            existing.sources = list(dict.fromkeys([*(existing.sources or []), *clean["sources"]]))
             stored.append(existing)
             continue
 
@@ -621,7 +627,11 @@ def target_file(obs: Observation) -> str:
         return "/memories/finance.md"
     if obs.domain == "biography":
         return "/memories/owner.md"
-    return "/memories/current.md"
+    if obs.domain == "state":
+        return "/memories/current.md"
+    # Legacy shadow renderer only: events and unclassified facts NEVER become
+    # present-tense state merely because no specialised route matched.
+    return "/memories/history.md"
 
 
 # ── Read path ─────────────────────────────────────────────────────────────────

@@ -114,6 +114,13 @@ def build_seed(payload: dict, output_mode: str) -> str:
     querying date-scoped tools against whatever "today" their training suggested.
     """
     intent = payload.get("intent") or ""
+    if payload.get("job") == "memory_audit" or payload.get("event") == "memory_audit":
+        # Stored n8n intents can predate the running memory architecture. A
+        # scheduler chooses WHEN to audit, never an obsolete implementation.
+        from pathlib import Path
+        procedure = Path(__file__).resolve().parents[1] / "prompts/agents/orion/02_audit.md"
+        intent = procedure.read_text(encoding="utf-8")
+        payload = {**payload, "intent": "Use the current memory custodian procedure above."}
     delivery = {
         "respond": "Your reply streams straight back to the owner.",
         "push": (

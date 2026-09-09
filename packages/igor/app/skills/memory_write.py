@@ -34,7 +34,7 @@ from app.services.memory_spec import (
     shard_member,
     spec_for,
 )
-from app.services.memory_store import record_revision
+from app.services.memory_store import mutate_file, MemoryWriteConflict
 from app.services.memory_write import (
     WriteRejected,
     ledger_append,
@@ -57,32 +57,21 @@ async def _load(context: AgentContext, path: str) -> MemoryFile | None:
 
 
 async def _commit(
-    context: AgentContext, path: str, before: str, after: str, action: str
+    context: AgentContext, path: str, before: str | None, after: str, action: str
 ) -> str:
     """Gate, persist and record one shaped write. Returns the tool result."""
     try:
-        warnings = check_write(
-            path=path, before=before, after=after,
-            is_create=not before, author=context.agent_id,
+        warnings = await mutate_file(
+            context.db, user_id=context.user_id, path=path, author=context.agent_id,
+            action=action, before=before,
+            after=after, request_id=context.request_id,
         )
-    except MemorySchemaViolation as e:
+    except (MemorySchemaViolation, MemoryWriteConflict) as e:
         return str(e)
-
-    file = await _load(context, path)
-    if file is None:
-        context.db.add(MemoryFile(user_id=context.user_id, path=path, content=after))
-    else:
-        file.content = after
-        file.updated_at = datetime.now(timezone.utc)
-    await record_revision(
-        context.db, user_id=context.user_id, path=path, author=context.agent_id,
-        action=action, before=before, after=after, request_id=context.request_id,
-    )
-    await context.db.commit()
     logger.info(
         "memory_shaped_write",
         extra={"request_id": context.request_id, "agent": context.agent_id,
-               "path": path, "action": action, "delta": len(after) - len(before)},
+               "path": path, "action": action, "delta": len(after) - len(before or "")},
     )
     note = ("\n\nNote:\n  - " + "\n  - ".join(warnings)) if warnings else ""
     return f"Written to {path}.{note}"
@@ -192,18 +181,18 @@ class LedgerAppendSkill(Skill):
         # that has had no transactions yet has no file, and refusing the first
         # one because the file is missing would make the folder impossible to
         # start. Everywhere else a missing ledger is still an error.
-        if file is None and shard_member(path) is None:
+        if file is None and shard_member(path) is None and not path.startswith("/memories/events/"):
             return f"`{path}` does not exist."
         before = file.content if file else ""
         try:
             after = ledger_append(
-                before, path=path, key=key,
+                before or (f"# {key[:7]}\n" if path.startswith("/memories/events/") else ""), path=path, key=key,
                 section=(args.get("section") or None),
                 row=args.get("row"), lines_in=args.get("lines"),
             )
         except WriteRejected as e:
             return str(e)
-        return await _commit(context, path, before, after, "ledger_append")
+        return await _commit(context, path, before if file else None, after, "ledger_append")
 
 
 class RegistryUpsertSkill(Skill):
@@ -242,7 +231,7 @@ class RegistryUpsertSkill(Skill):
                 "type": "string",
                 "description": (
                     "For a person only, which group they belong to: Professional, "
-                    "Siberay Board or Personal. Required there; ignored for a project."
+                    "or Personal. Required there; ignored for a project."
                 ),
             },
             "who": {
@@ -296,7 +285,7 @@ class RegistryUpsertSkill(Skill):
             )
         except WriteRejected as e:
             return str(e)
-        return await _commit(context, path, before, after, "registry_upsert")
+        return await _commit(context, path, before if file else None, after, "registry_upsert")
 
 
 class NarrativeReviseSkill(Skill):

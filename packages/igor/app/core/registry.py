@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # meta-tool are part of the engine, not domain capabilities. A scoped agent
 # still needs them to function.
 _ALWAYS_AVAILABLE: frozenset = frozenset(
-    {"memory", "read_skill", "use_toolset", "tool_search"}
+    {"memory", "memory_state", "read_skill", "use_toolset", "tool_search"}
 )
 
 
