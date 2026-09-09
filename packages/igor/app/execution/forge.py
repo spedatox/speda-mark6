@@ -131,6 +131,12 @@ class ForgeExecutor:
                     "result": str(content)[:1500], "source": "forge",
                 })
 
+        images = {
+            "coder": settings.forge_coder_image,
+            "reviewer": settings.forge_reviewer_image,
+            "pentester": settings.forge_pentester_image,
+        }
+
         try:
             result = await execute(
                 ExecutionSpec(
@@ -142,6 +148,7 @@ class ForgeExecutor:
                     max_iterations=settings.forge_worker_max_iterations,
                     timeout_s=settings.forge_worker_timeout_s,
                     cell_backend=settings.forge_cell_backend,
+                    cell_image=images[role],
                 ),
                 model=IgorModelAdapter(self._client, model_ref),
                 emit=forward,

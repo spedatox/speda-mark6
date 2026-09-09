@@ -45,12 +45,27 @@ services:
       # NOT set here: it is a secret and lives in packages/igor/.env, holding
       # the same value Hisar's own env file gives the hisar service.
       HISAR_BASE_URL: http://hisar:8600
+      # Forge is an anonymous Legion execution library. Force Docker Cells in
+      # production so a missing daemon never falls back to running generated
+      # commands alongside Igor's credentials and database.
+      FORGE_DIR: /opt/forge-mk1
+      FORGE_CELL_BACKEND: docker
+      FORGE_CODER_IMAGE: forge-cell-optimus:latest
+      FORGE_REVIEWER_IMAGE: forge-cell-optimus:latest
+      FORGE_PENTESTER_IMAGE: forge-cell-centurion:latest
     volumes:
       - /tmp/speda_outputs:/tmp/speda_outputs
       # Host dir holding speda.db → container's data dir. A directory (not the
       # bare file) so WAL's speda.db-wal / speda.db-shm sidecars persist too.
       # Also carries the system_ops SSH key (host_ops_key) + known_hosts.
       - /opt/speda:/root/.speda
+      # Forge source is read-only. Workspaces use the identical absolute path
+      # inside and outside the app container because the host Docker daemon
+      # resolves the bind source for each disposable Cell.
+      - /opt/forge-mk1:/opt/forge-mk1:ro
+      - /opt/hisar/vault/Forge/workspaces:/opt/hisar/vault/Forge/workspaces
+      - /usr/bin/docker:/usr/bin/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     # system_ops host bridge: lets the container resolve the real host as
     # host.docker.internal so Orion/Optimus can SSH out for server maintenance.
     # On Linux this needs the explicit host-gateway mapping (it is automatic only

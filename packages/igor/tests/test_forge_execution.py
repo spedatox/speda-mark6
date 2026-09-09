@@ -18,6 +18,7 @@ async def test_existing_upload_is_materialized_for_forge_then_removed(tmp_path, 
         uploaded = spec.workspace / ".forge" / "inputs" / "job-1" / "notes.txt"
         observed["task"] = spec.task
         observed["bytes"] = uploaded.read_bytes()
+        observed["image"] = spec.cell_image
         return SimpleNamespace(status="succeeded", report="done", error=None)
 
     monkeypatch.setattr("app.execution.forge._load_runtime", lambda: (_Spec, _execute))
@@ -32,6 +33,7 @@ async def test_existing_upload_is_materialized_for_forge_then_removed(tmp_path, 
 
     assert result == "done"
     assert observed["bytes"] == b"important"
+    assert observed["image"] == "forge-cell-optimus:latest"
     assert ".forge" in observed["task"]
     assert not (tmp_path / ".forge" / "inputs" / "job-1").exists()
 
@@ -55,3 +57,24 @@ async def test_upload_filename_cannot_escape_workspace(tmp_path, monkeypatch):
         }],
     )
     assert not (tmp_path.parent / "escape.txt").exists()
+
+
+async def test_pentester_uses_security_cell_image(tmp_path, monkeypatch):
+    observed = {}
+
+    class _Spec:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    async def _execute(spec, **_kwargs):
+        observed["image"] = spec.cell_image
+        return SimpleNamespace(status="succeeded", report="checked", error=None)
+
+    monkeypatch.setattr("app.execution.forge._load_runtime", lambda: (_Spec, _execute))
+    result = await ForgeExecutor(object()).run(
+        job_id="job-3", role="pentester", task="audit local code",
+        workspace=str(tmp_path), model_ref="test:model", emit=lambda _event: None,
+    )
+
+    assert result == "checked"
+    assert observed["image"] == "forge-cell-centurion:latest"

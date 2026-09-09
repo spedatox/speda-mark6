@@ -906,6 +906,9 @@ class Settings(BaseSettings):
     forge_ws_url: str = "ws://127.0.0.1:8000/agents/ws"
     forge_cell_backend: str = "auto"          # docker | subprocess | auto
     forge_python: str = ""                    # override interpreter; empty → uv run
+    forge_coder_image: str = "forge-cell-optimus:latest"
+    forge_reviewer_image: str = "forge-cell-optimus:latest"
+    forge_pentester_image: str = "forge-cell-centurion:latest"
     forge_worker_max_iterations: int = 30
     forge_worker_timeout_s: int = 120
 
