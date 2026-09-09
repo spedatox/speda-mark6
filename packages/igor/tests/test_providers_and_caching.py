@@ -458,9 +458,15 @@ def test_responses_params_shape():
         {"type": "function", "name": "get_time", "description": "x", "parameters": {"type": "object"}}
     ]
     assert p["input"] == [{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}]
-    # reasoning_effort "none" is not a valid Responses effort — never forwarded.
+    # "none" is not a legal Responses effort, but dropping it would silently
+    # restore the model's OWN default — the opposite of what the level asks for.
+    # It lands on "minimal", the least this endpoint can be told to think.
     p_none = _to_responses_params("gpt-5.6-terra", {"messages": [], "reasoning_effort": "none"})
-    assert "reasoning" not in p_none
+    assert p_none["reasoning"] == {"effort": "minimal"}
+    # Every other level rides through untouched.
+    for lvl in ("low", "medium", "high"):
+        p_lvl = _to_responses_params("gpt-5.6-terra", {"messages": [], "reasoning_effort": lvl})
+        assert p_lvl["reasoning"] == {"effort": lvl}
 
 
 def test_responses_tool_roundtrip_pairs_on_call_id():
@@ -1189,3 +1195,99 @@ def test_unterminated_think_after_real_text_keeps_only_the_text():
     visible, hidden = _filter(["The answer.<think>now let me also"])
     assert visible == "The answer."
     assert "now let me also" in hidden
+
+
+# ── Per-model thinking level, across every provider ─────────────────────────
+# The level is one vocabulary (llm_client.THINKING_LEVELS) resolved per MODEL
+# and translated into each provider's own dialect on the way out. These pin the
+# translations, because every one of them is a place a wrong value is either
+# silently ignored (the level does nothing) or rejected outright (every turn
+# 400s) — and both failure modes look like "the model is just slow".
+
+def test_thinking_level_resolves_per_model_and_falls_back_to_the_default():
+    from app.config import settings
+    from app.core.runtime_state import set_model_thinking
+    from app.services.llm_client import resolve_thinking_level
+
+    try:
+        set_model_thinking("openai:gpt-5", "none")
+        assert resolve_thinking_level("openai:gpt-5") == "none"
+        # An untouched model follows the global default, not a baked literal.
+        assert resolve_thinking_level("openai:gpt-4o") == settings.thinking_default_effort
+    finally:
+        set_model_thinking("openai:gpt-5", None)
+    assert resolve_thinking_level("openai:gpt-5") == settings.thinking_default_effort
+
+
+def test_thinking_none_switches_thinking_off_on_every_provider():
+    from app.core.runtime_state import set_model_thinking
+    from app.services.llm_client import _to_openai_params, thinking_request_kwargs
+
+    tools = [{"name": "x", "description": "", "input_schema": {"type": "object"}}]
+
+    def wire(ref):
+        provider, model = (ref.split(":", 1) if ":" in ref else ("anthropic", ref))
+        kw = thinking_request_kwargs(ref)
+        if provider == "anthropic":
+            return kw
+        return _to_openai_params(
+            provider, model, {**kw, "messages": [], "max_tokens": 900, "tools": tools}
+        ).get("extra_body", {})
+
+    refs = ["claude-opus-5", "openai:gpt-5", "gemini:gemini-2.5-flash",
+            "gemini:gemini-2.5-pro", "zai:glm-4.6", "vertex:gemini-2.5-pro"]
+    for r in refs:
+        set_model_thinking(r, "none")
+    try:
+        # Anthropic: nothing requested at all.
+        assert wire("claude-opus-5") == {}
+        # OpenAI: never the literal "none" — it 401s post-GA and the gpt-5
+        # generation rejects it. "minimal" is the documented floor.
+        assert wire("openai:gpt-5") == {"reasoning_effort": "minimal"}
+        # Gemini: Flash can be switched off outright; Pro refuses the value and
+        # must land on "low" or it 400s every turn.
+        assert wire("gemini:gemini-2.5-flash") == {"reasoning_effort": "none"}
+        assert wire("gemini:gemini-2.5-pro") == {"reasoning_effort": "low"}
+        # GLM's control is binary.
+        assert wire("zai:glm-4.6") == {"thinking": {"type": "disabled"}}
+        # Vertex has three tiers and no off.
+        assert wire("vertex:gemini-2.5-pro") == {"reasoning_effort": "low"}
+    finally:
+        for r in refs:
+            set_model_thinking(r, None)
+
+
+def test_haiku_has_no_adaptive_mode_so_its_level_becomes_a_budget():
+    from app.config import settings
+    from app.core.runtime_state import set_model_thinking
+    from app.services.llm_client import thinking_request_kwargs
+
+    ref = "claude-haiku-4-5-20251001"
+    try:
+        budgets = {}
+        for level in ("low", "medium", "high"):
+            set_model_thinking(ref, level)
+            kw = thinking_request_kwargs(ref)
+            assert kw["thinking"]["type"] == "enabled"
+            budgets[level] = kw["thinking"]["budget_tokens"]
+        # Monotonic, and every one clamped under the turn's output ceiling with
+        # room for an actual answer left over.
+        assert budgets["low"] < budgets["medium"] <= budgets["high"]
+        assert all(b <= settings.chat_max_output_tokens - 1024 for b in budgets.values())
+    finally:
+        set_model_thinking(ref, None)
+
+
+def test_providers_without_a_reasoning_knob_report_it_rather_than_pretending():
+    from app.core.runtime_state import set_model_thinking
+    from app.services.llm_client import supports_thinking, thinking_request_kwargs
+
+    assert supports_thinking("openai:gpt-5") is True
+    assert supports_thinking("ollama:llama3") is False
+    assert supports_thinking("nvidia:some-model") is False
+    # And a level pinned on one sends nothing rather than an ignored key.
+    try:
+        set_model_thinking("ollama:llama3", "high")
+        assert thinking_request_kwargs("ollama:llama3") == {}
+    finally:
+        set_model_thinking("ollama:llama3", None)

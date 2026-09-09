@@ -227,6 +227,44 @@ def set_agent_model(agent_id: str, model: str | None) -> None:
     logger.info("agent_model_set", extra={"agent_id": agent_id, "model": model or "(default)"})
 
 
+# ── Per-model thinking level ────────────────────────────────────────────────
+# How hard a given model is asked to think, keyed by MODEL REF ("provider:model",
+# bare = Anthropic) rather than by agent: the complaint this answers is "this
+# model burns a minute on a trivial turn", which is a property of the model, not
+# of whoever is driving it. Set from the model picker in the clients; honoured by
+# every caller of the model, including Telegram and scheduled runs, because it
+# resolves server-side in llm_client.
+#
+# Values are llm_client.THINKING_LEVELS. An absent entry means "follow
+# settings.thinking_default_effort" — deliberately not stored as a literal, so
+# raising the global default moves every un-pinned model with it.
+
+def get_model_thinking() -> dict[str, str]:
+    return dict(_load().get("model_thinking", {}))
+
+
+def set_model_thinking(model_ref: str, level: str | None) -> None:
+    """Pin `model_ref` to a thinking level, or clear the pin with level=None.
+
+    Validation is the caller's job (the router checks against THINKING_LEVELS);
+    importing llm_client here would be a cycle, since it imports config which
+    this module also builds on.
+    """
+    state = _load()
+    levels = dict(state.get("model_thinking", {}))
+    if level:
+        levels[model_ref] = level
+    else:
+        levels.pop(model_ref, None)
+    state["model_thinking"] = levels
+    _save()
+    # NOT `extra={"level": ...}` — that key collides with the LogRecord's own
+    # severity field and the formatter emits the thinking level where INFO
+    # should be, which is exactly as confusing as it sounds.
+    logger.info("model_thinking_set",
+                extra={"model": model_ref, "thinking_level": level or "(default)"})
+
+
 # ── Per-agent voice overrides ────────────────────────────────────────────────
 # The owner can pin any agent to a specific voice ref AND tune ElevenLabs'
 # per-voice knobs (stability/similarity_boost/style/speed/use_speaker_boost)

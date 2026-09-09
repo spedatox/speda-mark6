@@ -83,6 +83,9 @@ fun Composer(
     models: List<ModelInfo>,
     model: String,
     onModelChange: (String) -> Unit,
+    /** Set how hard one model is asked to think — a persisted server-side
+     *  setting, not a per-turn flag, so every agent on that model follows it. */
+    onModelThinking: (String, String) -> Unit,
     onSend: (String, List<ImageBlock>, List<DocBlock>) -> Unit,
     onStop: () -> Unit,
     /** Null until the backend has answered — the row shows as unknown, not as
@@ -343,6 +346,10 @@ fun Composer(
                     models = models,
                     current = model,
                     onPick = { pickerOpen = false; onModelChange(it) },
+                    // Deliberately does NOT close the picker: setting a level is
+                    // a tweak, not a choice of model, and the owner is usually
+                    // adjusting several in one visit.
+                    onThinking = onModelThinking,
                 )
             }
 
@@ -510,7 +517,12 @@ private fun ModelInfo.providerKey(): String =
  * screen.
  */
 @Composable
-private fun ModelPicker(models: List<ModelInfo>, current: String, onPick: (String) -> Unit) {
+private fun ModelPicker(
+    models: List<ModelInfo>,
+    current: String,
+    onPick: (String) -> Unit,
+    onThinking: (String, String) -> Unit,
+) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
 
@@ -553,7 +565,12 @@ private fun ModelPicker(models: List<ModelInfo>, current: String, onPick: (Strin
                 }
                 if (open) {
                     items(list, key = { it.id }) { m ->
-                        ModelRow(model = m, active = m.id == current, onClick = { onPick(m.id) })
+                        ModelRow(
+                            model = m,
+                            active = m.id == current,
+                            onClick = { onPick(m.id) },
+                            onThinking = { level -> onThinking(m.id, level) },
+                        )
                     }
                 }
             }
@@ -608,20 +625,91 @@ private fun ProviderHeader(
     }
 }
 
+/** The one vocabulary for "how hard should this model think", weakest first.
+ *  Mirrors llm_client.THINKING_LEVELS and the clients' THINKING_LEVELS — the
+ *  server owns the vocabulary, this is the four stops it renders as. */
+private val THINKING_LEVELS = listOf("none", "low", "medium", "high")
+
+/** How hard one model is asked to think — a four-stop track, not a free
+ *  slider: the levels are discrete and a continuous control would imply a
+ *  precision no provider offers. The fill runs from the left so "how far
+ *  along" reads as "how much thinking", and `none` is a real stop at the
+ *  origin — the answer to a model burning a minute on a one-line question.
+ *
+ *  `supported = false` (Ollama, NVIDIA) dims the track rather than hiding it:
+ *  a missing control invites the question, a greyed one answers it. */
+@Composable
+private fun ThinkingLevelSlider(
+    value: String,
+    pinned: Boolean,
+    supported: Boolean,
+    onChange: (String) -> Unit,
+) {
+    val palette = LocalHbPalette.current
+    val t = LocalStrings.current
+    val idx = THINKING_LEVELS.indexOf(value).coerceAtLeast(0)
+    val tint = when {
+        !supported -> palette.iconDim
+        pinned -> palette.accentBright
+        else -> palette.textDim
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            THINKING_LEVELS.forEachIndexed { i, level ->
+                val on = i <= idx
+                Box(
+                    Modifier
+                        .size(width = 11.dp, height = 4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(if (on) tint else palette.iconDim.copy(alpha = 0.28f))
+                        // clickable, not the noRippleClick used elsewhere in
+                        // the chat tree: that helper is private to MessageItem
+                        // and ToolFeed and is not in scope here.
+                        .then(
+                            if (supported) Modifier.clickable { onChange(level) }
+                            else Modifier
+                        )
+                )
+            }
+        }
+        HbText(
+            if (supported) t.thinkingLevel.names[value] ?: value else t.thinkingLevel.na,
+            style = HbType.headerBar.copy(fontSize = 8.5.sp, letterSpacing = 0.1.em),
+            color = tint,
+            caps = true,
+            maxLines = 1,
+        )
+    }
+}
+
 /** One model inside an open provider group. */
 @Composable
-private fun ModelRow(model: ModelInfo, active: Boolean, onClick: () -> Unit) {
+private fun ModelRow(
+    model: ModelInfo,
+    active: Boolean,
+    onClick: () -> Unit,
+    onThinking: (String) -> Unit,
+) {
     val palette = LocalHbPalette.current
     Row(
         Modifier
             .fillMaxWidth()
             .background(if (active) palette.accent.copy(alpha = 0.12f) else Color.Transparent)
-            .clickable(onClick = onClick)
             .padding(start = 25.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(Modifier.weight(1f)) {
+        // The row-wide `clickable` moved onto the name column: the thinking
+        // stops have to be tappable without also picking the model and closing
+        // the picker, and a clickable ancestor would swallow them.
+        Column(Modifier.weight(1f).clickable(onClick = onClick)) {
             HbText(
                 shortModelName(model.name.ifEmpty { model.id }),
                 style = HbType.headerBar.copy(
@@ -642,6 +730,12 @@ private fun ModelRow(model: ModelInfo, active: Boolean, onClick: () -> Unit) {
                 )
             }
         }
+        ThinkingLevelSlider(
+            value = model.thinking,
+            pinned = model.thinkingPinned,
+            supported = model.thinkingSupported,
+            onChange = onThinking,
+        )
         if (active) HbGlyphs.Check(palette.accentBright, size = 11.dp)
     }
 }

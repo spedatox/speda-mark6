@@ -864,6 +864,8 @@ async def available_models() -> list[dict]:
     provider's models endpoint so a newly released model appears without a code
     change; the static _CATALOG is only the offline fallback for when an
     endpoint can't be reached (or doesn't offer a listing at all)."""
+    from app.core.runtime_state import get_model_thinking
+
     out: list[dict] = []
     if settings.anthropic_api_key not in ("", "not-set"):
         try:
@@ -940,6 +942,16 @@ async def available_models() -> list[dict]:
                 )
     except Exception:
         pass
+
+    # Stamp each entry with its thinking state. Done in one pass here rather
+    # than at every call site, so a picker in any client renders the level the
+    # server will actually use — including the global default for models the
+    # owner has never touched, which is the majority of a hundred-odd catalogue.
+    pinned = get_model_thinking()
+    for m in out:
+        m["thinking"] = pinned.get(m["id"]) or resolve_thinking_level(m["id"])
+        m["thinking_pinned"] = m["id"] in pinned
+        m["thinking_supported"] = supports_thinking(m["id"])
 
     return out
 
@@ -1020,15 +1032,14 @@ def _to_openai_params(provider: str, model: str, kwargs: dict) -> dict:
         effort = None
         # NOTE: gpt-5.6+ tool calls never reach this function — _use_responses_api
         # routes them to /v1/responses, where tools need no reasoning override.
-        # The old `reasoning_effort: "none"` workaround lived here and is gone:
-        # post-GA it was honoured intermittently, which is exactly what produced
-        # the every-other-message 401. Do not reintroduce it — the OLDER gpt-5
-        # generation (gpt-5 / mini / nano) outright REJECTS the value 'none'.
-        if reasoning_effort and is_reasoning_model and not tools:
-            # Tool-free reasoning call (e.g. background title/recap generation):
-            # pass the caller's hint so the model doesn't burn its whole budget
-            # on hidden reasoning and return empty content.
-            effort = reasoning_effort
+        #
+        # The literal value 'none' must never be sent on this path. It is what
+        # produced the every-other-message 401 post-GA, and the OLDER gpt-5
+        # generation (gpt-5 / mini / nano) rejects it outright. 'minimal' is the
+        # documented floor for that generation and is what "none" becomes here —
+        # as little hidden reasoning as this endpoint can be asked for.
+        if reasoning_effort and is_reasoning_model:
+            effort = "minimal" if reasoning_effort == "none" else reasoning_effort
         if effort:
             params.setdefault("extra_body", {})["reasoning_effort"] = effort
     elif provider == "vertex" and reasoning_effort:
@@ -1040,7 +1051,16 @@ def _to_openai_params(provider: str, model: str, kwargs: dict) -> dict:
         if tier in ("low", "medium", "high"):
             params.setdefault("extra_body", {})["reasoning_effort"] = tier
     elif provider == "gemini" and reasoning_effort:
-        params.setdefault("extra_body", {})["reasoning_effort"] = reasoning_effort
+        # Gemini is the one provider where "none" is not universally legal:
+        # the Flash/Lite families can have thinking switched off outright, and
+        # Pro cannot — it refuses the value rather than ignoring it, which
+        # would 400 every turn on a model pinned to none. Pro lands on "low"
+        # instead, the least it will accept. Substring-matched like
+        # _MANUAL_THINKING_ONLY, so a future Flash release needs no code change.
+        effort = reasoning_effort
+        if effort == "none" and not any(f in model.lower() for f in _GEMINI_CAN_DISABLE):
+            effort = "low"
+        params.setdefault("extra_body", {})["reasoning_effort"] = effort
 
     # z.ai GLM thinking control. GLM defaults thinking ON, so a short background
     # task (title generation caps output at ~512 tokens) burns the whole budget
@@ -1052,6 +1072,11 @@ def _to_openai_params(provider: str, model: str, kwargs: dict) -> dict:
     # Map a low/minimal effort hint to disabled thinking; leave it default
     # otherwise so interactive chat keeps full reasoning quality. extra_body is
     # how the OpenAI SDK forwards a non-OpenAI request field.
+    #
+    # GLM's control is BINARY — there is no partial setting to give "low" — so
+    # the per-model thinking level collapses onto that: none and low switch it
+    # off, medium and high leave it on. That is the honest mapping of a
+    # four-stop control onto a two-state provider.
     if provider == "zai" and reasoning_effort in ("minimal", "low", "none"):
         params["extra_body"] = {"thinking": {"type": "disabled"}}
 
@@ -1211,12 +1236,13 @@ def _to_responses_params(model: str, kwargs: dict) -> dict:
     if cache_key:
         params["prompt_cache_key"] = str(cache_key)
 
-    # Reasoning is native here and needs no override for tools to work. Only a
-    # caller's explicit hint is forwarded, and never "none" — on this endpoint
-    # the field is an enum of minimal/low/medium/high.
+    # Reasoning is native here and needs no override for tools to work. The
+    # field is an enum of minimal/low/medium/high, so a "none" level lands on
+    # "minimal" — the least this endpoint can be asked to think — rather than
+    # being dropped, which would silently restore the model's own default.
     effort = kwargs.get("reasoning_effort")
-    if effort and effort != "none":
-        params["reasoning"] = {"effort": effort}
+    if effort:
+        params["reasoning"] = {"effort": "minimal" if effort == "none" else effort}
 
     return params
 
@@ -1697,33 +1723,109 @@ class _OpenAICompatStream:
 # Haiku release is covered automatically without a code change.
 _MANUAL_THINKING_ONLY = ("haiku",)
 
+# Gemini families whose thinking can be switched off entirely. Pro refuses the
+# value outright rather than ignoring it, so it must never be sent one — see
+# the gemini branch of _to_openai_params.
+_GEMINI_CAN_DISABLE = ("flash", "lite")
+
+# The one vocabulary for "how hard should this model think", across every
+# provider. Ordered weakest to strongest; the clients render exactly these as
+# the four stops of the thinking control, so adding a level here adds it there.
+#
+# "none" is a real level, not the absence of one: it is the answer to a model
+# spending a minute of hidden reasoning on a one-line question. What it becomes
+# on the wire is per-provider — some can be told to stop thinking outright,
+# some can only be asked to think as little as possible — see
+# _to_openai_params and _to_responses_params.
+THINKING_LEVELS = ("none", "low", "medium", "high")
+
+# Providers with no reasoning control this backend can reach. Listed so the UI
+# can grey the control out and say why, rather than offering a slider that
+# silently does nothing.
+#
+#   ollama    — local models; the OpenAI-compat door exposes no effort field,
+#               and `think` is a native-API flag this client does not speak.
+#   nvidia    — an OpenAI-compat proxy over many third-party models with no
+#               single reasoning parameter behind it.
+_NO_THINKING_CONTROL = ("ollama", "nvidia")
+
+
+def resolve_thinking_level(model_ref: str) -> str:
+    """The thinking level in force for `model_ref` — the owner's per-model pin
+    if there is one, else the global default. Always one of THINKING_LEVELS."""
+    from app.core.runtime_state import get_model_thinking
+
+    level = get_model_thinking().get(model_ref)
+    if level in THINKING_LEVELS:
+        return level
+    default = settings.thinking_default_effort
+    return default if default in THINKING_LEVELS else "medium"
+
+
+def supports_thinking(model_ref: str) -> bool:
+    """Whether a thinking level on `model_ref` reaches the provider at all.
+
+    Not about whether the MODEL reasons — about whether this backend has a knob
+    for it. Drives the disabled state of the control in the clients.
+    """
+    provider, _ = parse_model_ref(model_ref)
+    return provider not in _NO_THINKING_CONTROL
+
+
+def _anthropic_manual_budget(level: str) -> int:
+    """Level → thinking budget for an Anthropic family with no adaptive mode.
+
+    Clamped under the turn's output ceiling with room for a real answer left
+    over, rather than trusting the two settings to have been kept consistent.
+    """
+    by_level = {
+        "low": settings.anthropic_thinking_budget_low_tokens,
+        "medium": settings.anthropic_thinking_budget_tokens,
+        "high": settings.anthropic_thinking_budget_high_tokens,
+    }
+    return min(by_level.get(level, settings.anthropic_thinking_budget_tokens),
+               settings.chat_max_output_tokens - 1024)
+
 
 def thinking_request_kwargs(model_ref: str) -> dict:
-    """Extra stream_message/create_message kwargs to request thinking on
-    `model_ref`, or {} when thinking shouldn't be requested at all — not an
-    Anthropic model, or turned off in settings. Safe to spread into a call to
-    ANY provider unconditionally: the OpenAI-compat translation layer
-    (_to_openai_params/_to_responses_params) only reads keys it already knows
-    about, so an unused `thinking`/`output_config` key is silently ignored
-    rather than sent anywhere."""
-    if not (settings.thinking_visible_enabled and settings.anthropic_thinking_enabled):
+    """Extra stream_message/create_message kwargs expressing `model_ref`'s
+    thinking level, or {} when no thinking should be requested at all.
+
+    Safe to spread into a call to ANY provider unconditionally. Anthropic gets
+    its native `thinking`/`output_config` pair; every OpenAI-compat provider
+    gets `reasoning_effort`, which _to_openai_params and _to_responses_params
+    already translate into that provider's own dialect (GLM's thinking toggle,
+    DeepSeek's, Vertex's three tiers, the Responses API's enum). Keys a given
+    path doesn't know are dropped rather than sent.
+    """
+    if not settings.thinking_visible_enabled:
         return {}
     provider, model = parse_model_ref(model_ref)
+    if not supports_thinking(model_ref):
+        return {}
+
+    level = resolve_thinking_level(model_ref)
+
     if provider != "anthropic":
+        # One key for every other provider. "none" is forwarded rather than
+        # dropped: each translation decides what its provider can actually do
+        # with it, and for several of them "none" is the one that switches
+        # thinking off outright.
+        return {"reasoning_effort": level}
+
+    # Anthropic. The separate "ask Claude to think" switch still gates this —
+    # it predates per-model levels and is the deployment-wide way to keep
+    # Anthropic turns cheap regardless of what any model is pinned to.
+    if not settings.anthropic_thinking_enabled or level == "none":
         return {}
     if any(fam in model.lower() for fam in _MANUAL_THINKING_ONLY):
-        # budget_tokens must stay below max_tokens for the turn, with room for
-        # an actual answer left over.
-        budget = min(
-            settings.anthropic_thinking_budget_tokens,
-            settings.chat_max_output_tokens - 1024,
-        )
+        budget = _anthropic_manual_budget(level)
         if budget < 1024:  # the API's own floor — no room left to think at all
             return {}
         return {"thinking": {"type": "enabled", "budget_tokens": budget}}
     return {
         "thinking": {"type": "adaptive", "display": "summarized"},
-        "output_config": {"effort": settings.anthropic_thinking_effort},
+        "output_config": {"effort": level},
     }
 
 

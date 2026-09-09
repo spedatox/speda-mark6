@@ -361,6 +361,17 @@ fun ChatScreen(
                 voiceOn = voiceOn,
                 onVoiceToggle = { vm.setVoice(!voiceOn) },
                 onModelChange = { scope.launch { graph.settings.setModel(it) } },
+                // Optimistic: the stop must land under the thumb immediately.
+                // The write is a persisted server-side setting whose truth
+                // arrives with the next /models fetch, so a failed call leaves
+                // the optimistic value showing rather than springing back with
+                // no explanation.
+                onModelThinking = { modelId, level ->
+                    models = models.map {
+                        if (it.id == modelId) it.copy(thinking = level, thinkingPinned = true) else it
+                    }
+                    scope.launch { graph.api.setModelThinking(config, modelId, level) }
+                },
                 language = settings.locale,
                 onLanguageChange = { next ->
                     scope.launch {

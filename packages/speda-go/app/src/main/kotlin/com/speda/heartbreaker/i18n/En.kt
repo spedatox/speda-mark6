@@ -52,6 +52,10 @@ val En = AppStrings(
         download = "DOWNLOAD",
         saved = "SAVED",
     ),
+    thinkingLevel = AppStrings.ThinkingLevel(
+        names = mapOf("none" to "None", "low" to "Low", "medium" to "Mid", "high" to "High"),
+        na = "N/A",
+    ),
     message = AppStrings.Message(
         saveAndSend = "Save & Send",
         somethingWentWrong = "Something went wrong.",

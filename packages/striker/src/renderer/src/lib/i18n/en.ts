@@ -275,6 +275,16 @@ const en = {
     rebuilding: 'Rebuilding…',
     rebuildMemory: 'Rebuild memory',
   },
+  thinkingLevel: {
+    names: { none: 'None', low: 'Low', medium: 'Mid', high: 'High' },
+    na: 'N/A',
+    pinned: 'set by you',
+    inherited: 'server default',
+    hint: (level: string, origin: string) =>
+      `Thinking: ${level} (${origin}). Applies to every agent using this model.`,
+    unsupported: 'This provider exposes no thinking control the server can reach.',
+    label: 'Thinking',
+  },
   message: {
     toolStatus: {
       read_skill: 'Reviewing capabilities',

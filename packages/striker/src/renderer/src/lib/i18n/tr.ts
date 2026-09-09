@@ -269,6 +269,16 @@ const tr: Dict = {
     rebuilding: 'Yeniden oluşturuluyor…',
     rebuildMemory: 'Hafızayı yeniden oluştur',
   },
+  thinkingLevel: {
+    names: { none: 'Yok', low: 'Düşük', medium: 'Orta', high: 'Yüksek' },
+    na: 'Yok',
+    pinned: 'sizin seçiminiz',
+    inherited: 'sunucu varsayılanı',
+    hint: (level: string, origin: string) =>
+      `Düşünme: ${level} (${origin}). Bu modeli kullanan her ajan için geçerli.`,
+    unsupported: 'Bu sağlayıcı, sunucunun erişebileceği bir düşünme ayarı sunmuyor.',
+    label: 'Düşünme',
+  },
   message: {
     toolStatus: {
       read_skill: 'Yetenekler gözden geçiriliyor',

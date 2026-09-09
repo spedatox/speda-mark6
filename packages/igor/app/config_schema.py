@@ -632,7 +632,14 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         "by default, Ollama and generic proxies via inline <think> tags) plus, "
         "optionally, Claude's own thinking. DeepSeek is a known exception — its "
         "API forces thinking off whenever tools are present, which in this "
-        "backend is effectively every turn, and no setting here changes that.",
+        "backend is effectively every turn, and no setting here changes that. "
+        "HOW HARD a model thinks is set PER MODEL, from the thinking control in "
+        "the model picker; the default below applies to models never given one. "
+        "Every provider is covered, each translated into its own dialect: "
+        "Anthropic's effort/budget, OpenAI's reasoning_effort, Gemini's (Pro "
+        "cannot be switched off and lands on low), GLM's on/off toggle, "
+        "Vertex's three tiers. Ollama and NVIDIA expose no reasoning knob this "
+        "backend can reach, and their models show the control disabled.",
         [
             ConfigField("thinking_visible_enabled", "Show Thinking", "bool",
                         requires_restart=_LIVE,
@@ -644,15 +651,27 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                              "rather than only forwarding what other providers already produce. "
                              "Costs extra output tokens and latency on every Anthropic turn. Has "
                              "no effect while Show Thinking above is off."),
-            ConfigField("anthropic_thinking_effort", "Claude Thinking Depth", "select",
-                        requires_restart=_LIVE, options=["low", "medium", "high"],
-                        help="Adaptive-mode reasoning depth. Ignored on Haiku models, which have "
-                             "no adaptive mode and always use the manual budget below instead."),
-            ConfigField("anthropic_thinking_budget_tokens", "Claude Manual Thinking Budget", "int",
+            ConfigField("thinking_default_effort", "Default Thinking Depth", "select",
+                        requires_restart=_LIVE, options=["none", "low", "medium", "high"],
+                        help="How hard a model thinks when it has no level of its own — set "
+                             "per model from the model picker, which overrides this. Applies "
+                             "to EVERY provider, each in its own dialect. 'none' asks for as "
+                             "little hidden reasoning as the provider allows, which for most "
+                             "is none at all."),
+            ConfigField("anthropic_thinking_budget_low_tokens", "Claude Budget — Low", "int",
                         requires_restart=_LIVE,
-                        help="Token budget for models that only support manual thinking "
-                             "(currently the Haiku family). Kept below the output ceiling below.",
+                        help="Thinking budget at the LOW level for Anthropic models with no "
+                             "adaptive mode (currently the Haiku family), which take a token "
+                             "budget instead of a level. Kept below the output ceiling.",
+                        placeholder="1024"),
+            ConfigField("anthropic_thinking_budget_tokens", "Claude Budget — Medium", "int",
+                        requires_restart=_LIVE,
+                        help="Same, at the MEDIUM level.",
                         placeholder="4096"),
+            ConfigField("anthropic_thinking_budget_high_tokens", "Claude Budget — High", "int",
+                        requires_restart=_LIVE,
+                        help="Same, at the HIGH level.",
+                        placeholder="8192"),
             ConfigField("chat_max_output_tokens", "Max Reply Length (tokens)", "int",
                         requires_restart=_LIVE,
                         help="Hard ceiling on one chat turn's output, across every provider.",

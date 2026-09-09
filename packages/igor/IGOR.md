@@ -243,13 +243,33 @@ folds the accumulated text into the same `_speda_meta` block that already
 carries tool/file metadata (`thinking`, `thinkingRedacted`), so a reloaded
 transcript can still show what a turn thought through.
 
-Anthropic's own extended/adaptive thinking is requested the same way, gated by
-a second switch (`anthropic_thinking_enabled`) since it changes cost/latency on
-every Anthropic turn rather than just forwarding what another provider already
-produced. `llm_client.thinking_request_kwargs` picks the mode per model family
-— `{"type": "adaptive"}` + `output_config.effort` for current and future
-frontier releases, `{"type": "enabled"}` + `budget_tokens` only for the Haiku
-family, which has no adaptive mode. Streaming Anthropic thinking deltas reuses
+**How hard a model thinks is set per model, across every provider.**
+`llm_client.THINKING_LEVELS` — `none | low | medium | high` — is the one
+vocabulary; `resolve_thinking_level(model_ref)` answers it for any model as the
+owner's pin (`runtime_state.model_thinking`, set from the thinking control on
+each row of the clients' model picker) or `settings.thinking_default_effort`
+for the rest. It is keyed by MODEL, not by agent: "this model burns a minute on
+a trivial turn" is a property of the model, and resolving server-side means
+Telegram and scheduled runs honour it, not just the client that set it.
+
+`thinking_request_kwargs` then speaks each provider's own dialect. Anthropic
+gets its native pair; everything else gets one `reasoning_effort` key that
+`_to_openai_params`/`_to_responses_params` translate on the way out:
+
+| Provider | `none` becomes | how a level is carried |
+|---|---|---|
+| anthropic | no thinking requested | `adaptive` + `output_config.effort`; Haiku has no adaptive mode, so its level becomes one of the three `budget_tokens` settings |
+| openai | `minimal` | `reasoning_effort` — literal `none` must never be sent: it caused the every-other-message 401 post-GA, and the gpt-5 generation rejects it outright |
+| gemini | `none` on Flash/Lite, `low` on Pro | Pro *refuses* the value rather than ignoring it, so it would 400 every turn |
+| vertex | `low` | three tiers only |
+| zai | thinking disabled | GLM's control is binary, so `none`/`low` switch it off and `medium`/`high` leave it on |
+| deepseek | thinking disabled | forced off whenever tools are present regardless — see the known limitation below |
+| ollama, nvidia | — | no reasoning knob this backend can reach; `supports_thinking()` is false and the clients grey the control out rather than hiding it |
+
+`anthropic_thinking_enabled` remains as a second, Anthropic-only gate: it
+predates per-model levels and is the deployment-wide way to keep Anthropic
+turns cheap regardless of what any model is pinned to. Streaming Anthropic
+thinking deltas reuses
 the same tagged-pump shape `_OpenAICompatStream` already uses for the
 compat-provider path (`_AnthropicTaggedStream`, constructed only when a call
 actually requests thinking — every other Anthropic call, including Legion and

@@ -25,6 +25,7 @@ data class AppStrings(
     val composer: Composer,
     val voiceActivity: VoiceActivity,
     val fileCard: FileCard,
+    val thinkingLevel: ThinkingLevel,
     val message: Message,
     val commsTray: CommsTray,
     val sidebar: Sidebar,
@@ -114,6 +115,13 @@ data class AppStrings(
     data class FileCard(
         val download: String,
         val saved: String,
+    )
+
+    data class ThinkingLevel(
+        /** Level id -> label. Keys are llm_client.THINKING_LEVELS. */
+        val names: Map<String, String>,
+        /** Shown instead of a level when the provider exposes no control. */
+        val na: String,
     )
 
     data class Message(

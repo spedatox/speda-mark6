@@ -8,12 +8,13 @@ import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useIsMobile } from '../lib/useIsMobile'
-import { fetchModels, fileToImageBlock, fileToDocBlock, getBudgetMode, setBudgetMode } from '../lib/api'
+import { fetchModels, fileToImageBlock, fileToDocBlock, getBudgetMode, setBudgetMode, setModelThinking } from '../lib/api'
 import { MicSession, micAvailable, type MicState } from '../lib/mic'
 import { useLanguage } from '../lib/language'
 import { LOCALES, type Locale } from '../lib/i18n'
 import { fetchVoices } from '../lib/voice'
-import type { AppConfig, ModelInfo, ImageBlock, DocBlock, UploadedFile } from '../lib/types'
+import type { AppConfig, ModelInfo, ImageBlock, DocBlock, UploadedFile, ThinkingLevel } from '../lib/types'
+import ThinkingLevelSlider from './ThinkingLevelSlider'
 import { useT } from '../lib/i18n'
 import type { Dict } from '../lib/i18n/en'
 
@@ -191,20 +192,23 @@ function SendBtn({ canSend, isStreaming, canSteer, onSend, onStop }: {
 }
 
 /* ── Model item (extracted — hooks cannot live inside .map()) ────────────── */
-function ModelItem({ model, selected, onSelect }: {
+function ModelItem({ model, selected, onSelect, onThinking }: {
   model: ModelInfo; selected: boolean; onSelect: () => void
+  onThinking: (level: ThinkingLevel) => void
 }) {
   const [hover, setHover] = useState(false)
+  // The row is a DIV wrapping two independent controls, not one big button.
+  // The thinking slider has to be clickable without also selecting the model —
+  // nesting it inside the <button> would be invalid HTML and every stop press
+  // would bubble into onSelect and close the panel.
   return (
-    <button
-      onClick={onSelect}
+    <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         // Indented — these rows hang off the provider header above them.
         width: '100%', padding: '0.45rem 0.7rem 0.45rem 1.6rem',
         display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
-        border: 'none',
         borderLeft: selected
           ? '2px solid var(--hb-cyan)'
           : hover
@@ -215,11 +219,16 @@ function ModelItem({ model, selected, onSelect }: {
           : hover
           ? 'rgba(var(--hb-accent-rgb),0.05)'
           : 'transparent',
-        cursor: 'pointer', textAlign: 'left',
         transition: 'background 0.1s, border-color 0.1s',
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <button
+        onClick={onSelect}
+        style={{
+          flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0,
+          cursor: 'pointer', textAlign: 'left', font: 'inherit',
+        }}
+      >
         <div style={{
           fontFamily: "'Rajdhani',sans-serif",
           fontSize: '0.8rem', fontWeight: selected ? 700 : 600,
@@ -237,6 +246,20 @@ function ModelItem({ model, selected, onSelect }: {
             {model.description}
           </div>
         )}
+      </button>
+      {/* Thinking level, on the row itself rather than behind a submenu: the
+          whole complaint is "this model thinks too long", and the moment you
+          are looking at the model is the moment to say how hard it should. */}
+      <div style={{ flexShrink: 0, marginTop: '0.1rem' }}>
+        <ThinkingLevelSlider
+          compact
+          value={model.thinking ?? 'medium'}
+          pinned={model.thinking_pinned}
+          // Absent on a backend too old to report it — treat as available so
+          // the control still works there rather than greying out everything.
+          supported={model.thinking_supported !== false}
+          onChange={onThinking}
+        />
       </div>
       {selected && (
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--hb-cyan)"
@@ -244,7 +267,7 @@ function ModelItem({ model, selected, onSelect }: {
           <polyline points="20 6 9 17 4 12"/>
         </svg>
       )}
-    </button>
+    </div>
   )
 }
 
@@ -316,9 +339,10 @@ function ProviderRow({ label, count, open, holdsActive, onClick }: {
  * no room for a second dropdown. They are separate AXES though: the agent can
  * think on Claude and speak with an OpenAI voice, and nothing couples them.
  */
-function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSelectVoice }: {
+function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSelectVoice, onThinking }: {
   models: ModelInfo[]; activeId: string; onSelect: (id: string) => void
   voices: ModelInfo[]; activeVoiceId: string; onSelectVoice: (id: string) => void
+  onThinking: (modelId: string, level: ThinkingLevel) => void
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
@@ -507,6 +531,10 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
                     model={m}
                     selected={m.id === selectedId}
                     onSelect={() => { choose(m.id); setOpen(false) }}
+                    // Deliberately does NOT close the panel: setting a level is
+                    // a tweak, not a choice of model, and the owner is usually
+                    // adjusting several in one visit.
+                    onThinking={lvl => onThinking(m.id, lvl)}
                   />
                 ))}
               </div>
@@ -793,6 +821,17 @@ export default function InputBar({
   const dragDepth = useRef(0)
 
   useEffect(() => { fetchModels(config).then(setModels).catch(() => {}) }, [config])
+
+  // Set a model's thinking level. Optimistic: the slider must land under the
+  // cursor immediately, and the write is a persisted server-side setting whose
+  // truth arrives with the next /models fetch anyway. A failed call leaves the
+  // optimistic value showing — deliberately, since the alternative is a stop
+  // that springs back with no explanation; the next refresh corrects it.
+  const setThinking = useCallback((modelId: string, level: ThinkingLevel) => {
+    setModels(prev => prev.map(m =>
+      m.id === modelId ? { ...m, thinking: level, thinking_pinned: true } : m))
+    setModelThinking(config, modelId, level).catch(() => {})
+  }, [config])
   // The voice catalogue is a separate call: Azure's list is a live per-region
   // lookup that can fail on its own, and a slow or dead voice endpoint must not
   // hold up the text models the composer actually needs to function.
@@ -1218,6 +1257,7 @@ export default function InputBar({
                 voices={voices}
                 activeVoiceId={settings.voiceModel}
                 onSelectVoice={id => update({ voiceModel: id })}
+                onThinking={setThinking}
               />
 
               {/* Deliberately NOT hidden while streaming: barge-in means

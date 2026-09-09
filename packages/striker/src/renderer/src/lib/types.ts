@@ -212,12 +212,27 @@ export interface AppConfig {
   agentId: string
 }
 
+/** How hard a model is asked to think. Mirrors llm_client.THINKING_LEVELS —
+ *  the backend is the source of truth for the vocabulary. */
+export type ThinkingLevel = 'none' | 'low' | 'medium' | 'high'
+
+export const THINKING_LEVELS: ThinkingLevel[] = ['none', 'low', 'medium', 'high']
+
 export interface ModelInfo {
   id: string
   name: string
   description: string
   tags?: string[]
   provider?: string // 'anthropic' | 'openai' | 'gemini' | 'zai' | 'deepseek' | 'ollama' — absent on old backends
+  /** Level in force for this model — the owner's pin, or the global default.
+   *  Absent on old backends, where the control renders as unavailable. */
+  thinking?: ThinkingLevel
+  /** Whether `thinking` is the owner's own choice rather than the default. */
+  thinking_pinned?: boolean
+  /** Whether the backend has ANY reasoning knob for this model's provider.
+   *  False for Ollama and NVIDIA — the control is shown disabled, not hidden,
+   *  so the absence is legible rather than mysterious. */
+  thinking_supported?: boolean
 }
 
 /** One question in a mid-turn interaction from a peer. */

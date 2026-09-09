@@ -533,14 +533,30 @@ class Settings(BaseSettings):
     # the one above because it changes cost/latency on every Anthropic turn —
     # off, thinking_visible_enabled still surfaces GLM/Ollama-style reasoning.
     anthropic_thinking_enabled: bool = True
-    # Adaptive-mode reasoning depth (thinking.type: "adaptive" plus this in
-    # output_config.effort). Ignored on the Haiku family, which has no adaptive
-    # mode and always uses the manual budget below instead.
-    anthropic_thinking_effort: str = "medium"
-    # Manual-mode token budget (thinking.type: "enabled") for models that only
-    # support manual thinking — currently the Haiku family. Must stay below
-    # chat_max_output_tokens; clamped defensively rather than left to 400.
-    anthropic_thinking_budget_tokens: int = 4096
+    # DEFAULT reasoning depth for any model the owner has not given its own
+    # level — one of THINKING_LEVELS ("none" | "low" | "medium" | "high"). Every
+    # provider honours this, not just Anthropic; llm_client.resolve_thinking_level
+    # reads it and each provider's translation turns it into that provider's own
+    # dialect. Per-model levels live in runtime_state (set from the model picker)
+    # and win over this.
+    #
+    # Aliased: this field was ANTHROPIC_THINKING_EFFORT while thinking was
+    # Anthropic-only, and deployments still have that name in their .env.
+    thinking_default_effort: str = Field(
+        default="medium",
+        validation_alias=AliasChoices(
+            "THINKING_DEFAULT_EFFORT", "ANTHROPIC_THINKING_EFFORT",
+        ),
+    )
+    # Manual-mode token budgets (thinking.type: "enabled") for Anthropic models
+    # that have no adaptive mode — currently the Haiku family, which cannot take
+    # an effort level and needs the level expressed as a budget instead. One per
+    # level; "none" doesn't appear because it means "request no thinking at all".
+    # Each is clamped below chat_max_output_tokens at use, rather than trusting
+    # the pair to stay consistent.
+    anthropic_thinking_budget_low_tokens: int = 1024
+    anthropic_thinking_budget_tokens: int = 4096          # medium
+    anthropic_thinking_budget_high_tokens: int = 8192
     # Hard ceiling on one chat turn's output, across every provider. Was a bare
     # literal on the orchestrator's stream_message call; pulled out here so a
     # thinking budget above has something real to stay under.

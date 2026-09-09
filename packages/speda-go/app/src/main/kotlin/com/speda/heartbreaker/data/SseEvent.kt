@@ -28,6 +28,14 @@ data class ModelInfo(
     val name: String = "",
     val description: String = "",
     val provider: String? = null,
+    /** Thinking level in force — the owner's pin, or the server default.
+     *  Defaulted so a backend too old to report it still decodes. */
+    val thinking: String = "medium",
+    /** Whether [thinking] is the owner's own choice rather than the default. */
+    @SerialName("thinking_pinned") val thinkingPinned: Boolean = false,
+    /** Whether the server has ANY reasoning knob for this provider. False for
+     *  Ollama and NVIDIA — the control shows disabled, not hidden. */
+    @SerialName("thinking_supported") val thinkingSupported: Boolean = true,
 )
 
 /** Detached turns the backend is currently running (lib/api ActiveRun). */

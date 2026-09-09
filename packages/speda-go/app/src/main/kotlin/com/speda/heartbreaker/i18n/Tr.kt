@@ -52,6 +52,10 @@ val Tr = AppStrings(
         download = "İNDİR",
         saved = "KAYDEDİLDİ",
     ),
+    thinkingLevel = AppStrings.ThinkingLevel(
+        names = mapOf("none" to "Yok", "low" to "Düşük", "medium" to "Orta", "high" to "Yüksek"),
+        na = "Yok",
+    ),
     message = AppStrings.Message(
         saveAndSend = "Kaydet ve Gönder",
         somethingWentWrong = "Bir şeyler ters gitti.",

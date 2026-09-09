@@ -73,10 +73,53 @@ async def _with_keepalive(inner, interval: float = KEEPALIVE_S):
 
 @router.get("/models")
 async def list_models():
-    """Models across all configured providers — the LLM layer owns the catalog."""
+    """Models across all configured providers — the LLM layer owns the catalog.
+
+    Each entry carries its thinking state: `thinking` (the level in force),
+    `thinking_pinned` (whether that is the owner's choice or the global
+    default) and `thinking_supported` (whether this backend has any reasoning
+    knob for that provider at all)."""
     from app.services.llm_client import available_models
 
     return await available_models()
+
+
+@router.post("/models/thinking")
+async def set_model_thinking_endpoint(body: dict):
+    """Pin how hard one model is asked to think.
+
+    Body: {"model": "<provider:model>", "level": "none"|"low"|"medium"|"high"}.
+    A null/absent level clears the pin, returning the model to the global
+    default. Keyed by model rather than by agent: this answers "this model
+    burns a minute on a trivial turn", which is a property of the model.
+
+    Server-side and persisted, so Telegram and scheduled runs honour it too —
+    not only the client that set it.
+    """
+    from app.core.runtime_state import set_model_thinking
+    from app.services.llm_client import (
+        THINKING_LEVELS, resolve_thinking_level, supports_thinking,
+    )
+
+    model = str(body.get("model") or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="model is required")
+
+    raw = body.get("level")
+    level = str(raw).strip().lower() if raw is not None else ""
+    if level and level not in THINKING_LEVELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"level must be one of {', '.join(THINKING_LEVELS)}, or null to clear",
+        )
+
+    set_model_thinking(model, level or None)
+    return {
+        "model": model,
+        "thinking": resolve_thinking_level(model),
+        "thinking_pinned": bool(level),
+        "thinking_supported": supports_thinking(model),
+    }
 
 
 @router.get("/welcome/{agent_id}")

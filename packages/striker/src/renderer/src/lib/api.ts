@@ -444,6 +444,27 @@ export async function deleteProjectFile(
   )
 }
 
+/** Pin how hard one model is asked to think, or clear the pin with level=null.
+ *  Server-side and persisted, so Telegram and scheduled runs honour it too.
+ *  Returns the resolved state, or null if the backend is too old to have the
+ *  endpoint — the caller leaves its optimistic update in place either way and
+ *  the next /models refresh tells the truth. */
+export async function setModelThinking(
+  config: AppConfig, model: string, level: string | null,
+): Promise<{ thinking: string; thinking_pinned: boolean } | null> {
+  try {
+    const res = await fetch(`${config.apiBase}/models/thinking`, {
+      method: 'POST',
+      headers: { ...authHeaders(config), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, level }),
+    })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  }
+}
+
 export async function fetchModels(config: AppConfig): Promise<ModelInfo[]> {
   try {
     const res = await fetch(`${config.apiBase}/models`, {

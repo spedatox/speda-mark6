@@ -542,6 +542,19 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
+    /** Pin how hard one model is asked to think; null clears the pin, returning
+     *  it to the server default. Persisted server-side, so every client and
+     *  every Telegram or scheduled turn on that model honours it. Returns true
+     *  when the write landed — false on an older backend without the endpoint,
+     *  where the caller keeps its optimistic value until the next refresh. */
+    suspend fun setModelThinking(config: AppConfig, model: String, level: String?): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body = buildJsonObject { put("model", model); put("level", level) }
+                postJson(config, "/models/thinking", body) != null
+            }.getOrDefault(false)
+        }
+
     suspend fun fetchWelcome(config: AppConfig, agentId: String): String = withContext(Dispatchers.IO) {
         runCatching {
             getString(config, "/welcome/$agentId")?.let {
