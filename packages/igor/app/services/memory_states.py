@@ -108,8 +108,9 @@ def project_files(files, today: date):
     current = next((f for f in files if f.path == CURRENT), None)
     migrated = current is not None and "<!-- state-projection-v1 -->" in current.content
     if not migrated:
+        transitional = render(files, today) if any(f.path.startswith(ROOT) for f in files) else ""
         return [SimpleNamespace(path=f.path, content=(
-            "_Legacy snapshot: not lifecycle-verified. Confirm before present-tense use._\n\n" + f.content
+            transitional + "\n_Legacy snapshot: not lifecycle-verified. Confirm before present-tense use._\n\n" + f.content
             if f.path == CURRENT else f.content), updated_at=f.updated_at) for f in files]
     content = render(files, today)
     return [SimpleNamespace(path=f.path, content=content if f.path == CURRENT else f.content,

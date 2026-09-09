@@ -29,6 +29,8 @@ async def coverage(db, user_id: int) -> dict:
     pending, issues, clean = [], [], 0
     today = owner_today().isoformat()
     for f in files:
+        if f.path == "/memories/current.md" and "<!-- state-projection-v1 -->" not in f.content:
+            issues.append({"path": f.path, "findings": ["Legacy current snapshot has not been migrated to lifecycle records; do not treat it as verified current state."]})
         if "/." in f.path or f.path in ("/memories/current.md", "/memories/log.md"):
             continue
         spec = spec_for(f.path)

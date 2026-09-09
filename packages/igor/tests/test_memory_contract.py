@@ -79,6 +79,16 @@ def test_projection_does_not_mutate_storage_and_legacy_is_not_silently_erased():
     assert "Computed" not in original.content
 
 
+def test_fresh_installs_enable_projection_and_transition_writes_are_visible():
+    from app.skills.memory import INITIAL_FILES
+    assert "<!-- state-projection-v1 -->" in INITIAL_FILES["/memories/current.md"]
+    old = file("/memories/current.md", "# Old\n\nLegacy snapshot.")
+    live = file("/memories/states/pending-application.md", encode(state()))
+    view = project_files([old, live], date(2026, 9, 9))[0].content
+    assert "Application is awaiting" in view
+    assert "Legacy snapshot" in view
+
+
 @pytest.mark.parametrize("path,author", [("/memories/current.md", "orion"),
     ("/memories/current.md", "speda"), ("/memories/current.md", "owner"),
     ("/memories/states/x.md", "orion"), ("/memories/.archive/finance.md", "speda"),

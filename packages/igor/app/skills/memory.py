@@ -57,18 +57,17 @@ him. Organised by theme or era, not as a diary.)
     "/memories/current.md": """\
 # Current — what's active right now
 
-_Last updated: (never)_
+<!-- state-projection-v1 -->
 
-(Refreshed once per day: a short snapshot of what is genuinely current in the
-owner's life. Finished or stale items are moved OUT, not kept. Trust this for
-recency — never present something absent here as new.)
+Computed from /memories/states/. Use memory_state for ongoing situations and
+confirmed plans; completed events belong in the subject's dated log.
 """,
     "/memories/dossier.md": """\
 # Dossier — what we've observed about how he wants to be treated
 
 _The agents' working model of the owner's preferences, built as they talk to him:
-what he likes, dislikes, and wants — and in what manner. Both stated preferences
-and inferred patterns. Every entry is attributed and dated: `- [YYYY-MM-DD,
+what he likes, dislikes, and wants — and in what manner. Owner-stated preferences
+only; inferred patterns belong separately in patterns.md. Every entry is attributed and dated: `- [YYYY-MM-DD,
 agent_id] observation`. Agents LEARN from this and act on it silently; it is never
 read aloud or cited to him._
 
