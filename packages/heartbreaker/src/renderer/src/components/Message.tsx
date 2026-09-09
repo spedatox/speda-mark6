@@ -25,12 +25,6 @@ import { BOARD_KINDS, type PanelKind } from '../lib/voicePanels'
 import HousePartyWarning from './HousePartyWarning'
 import { useT } from '../lib/i18n'
 import type { Dict } from '../lib/i18n/en'
-import VoiceOrb from './VoiceOrb'
-
-// A stable reference, not an inline arrow function: VoiceOrb's mount effect
-// depends on `amplitude` by identity, so a fresh closure on every render would
-// tear down and rebuild the whole WebGL scene every render instead of once.
-const ZERO_AMPLITUDE = () => 0
 
 const RENDERABLE_LANGS = new Set(['html', 'svg'])
 
@@ -600,41 +594,68 @@ function statusLabel(toolName: string, t: Dict): string {
   return (t.message.toolStatus as Record<string, string>)[toolName] ?? t.message.usingTool(toolName)
 }
 
-// The voice-mode thinking mood, at message-list scale — the same VoiceOrb
-// component voice mode uses, not a lookalike, so "the machine is working"
-// reads identically everywhere. amplitude is pinned at 0 (no audio here);
-// zoom is pushed in past 1 to crop the outer dust shell, which at icon size
-// just reads as noise — the lit rings and core are what stay legible small.
-function ThinkingOrb({ size }: { size: number }) {
-  return (
-    <div style={{ width: size, height: size, flexShrink: 0 }}>
-      <VoiceOrb state="thinking" amplitude={ZERO_AMPLITUDE} zoom={2.4} />
-    </div>
-  )
+// How long one escalation band of `t.message.thinkingPhases` lasts, and how
+// often the line inside the current band is re-rolled. Bands run in order and
+// the last one repeats forever, so a wait that never ends parks on the loop
+// phase rather than running off the end of the list.
+const THINKING_BAND_MS = 5000
+const THINKING_LINE_MS = 2000
+
+// Pick a line from `pool` that isn't the one already on screen — a re-roll that
+// lands on the same string reads as a frozen UI, which is the exact opposite of
+// what these lines are for.
+function rollLine(pool: string[], previous: string): string {
+  if (pool.length <= 1) return pool[0] ?? previous
+  const others = pool.filter(line => line !== previous)
+  return others[Math.floor(Math.random() * others.length)]
+}
+
+// The waiting line, escalating with elapsed time. Mounted only while a turn is
+// actually in flight, so mount time is the start of the wait.
+function useWaitingLine(phases: string[][]): string {
+  const startedAt = useRef(Date.now())
+  const [line, setLine] = useState(() => rollLine(phases[0], ''))
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const band = Math.min(
+        phases.length - 1,
+        Math.floor((Date.now() - startedAt.current) / THINKING_BAND_MS),
+      )
+      setLine(previous => rollLine(phases[band], previous))
+    }, THINKING_LINE_MS)
+    return () => clearInterval(id)
+  }, [phases])
+
+  return line
 }
 
 function WorkingStatus({ tools, status }: { tools: { id: string; name: string }[]; status?: string }) {
   const t = useT()
   const lastTool = tools.length ? tools[tools.length - 1].name : null
+  const waiting = useWaitingLine(t.message.thinkingPhases)
 
-  // Real status only — an active tool drives the label; otherwise the live
-  // phase the stream reports (Connecting → Thinking → slow/timeout). No looped
-  // filler: if nothing's happening it says so, and the watchdog eventually
-  // turns this into an error rather than spinning forever.
-  const label = lastTool ? statusLabel(lastTool, t) : (status ?? t.message.thinking)
+  // Real status still wins: an active tool names itself, and so does whatever
+  // phase the stream reports (Connecting → slow → timeout). The rotating lines
+  // fill only the genuinely silent stretch, where the alternative was a single
+  // frozen word. The watchdog still turns a dead stream into an error — this
+  // changes what the wait *reads* like, not how long it is allowed to run.
+  const real = lastTool ? statusLabel(lastTool, t) : status
+  const label = real ? `${real}…` : waiting
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.15rem 0' }}>
-      <ThinkingOrb size={22} />
+    <div style={{ display: 'flex', alignItems: 'center', padding: '0.15rem 0' }}>
       <span
         key={label}
         className="thinking-shimmer"
         style={{
           fontSize: '0.875rem', fontStyle: 'italic', fontWeight: 450,
-          animation: 'fadeIn 0.35s ease',
+          // Both animations, composed: naming only fadeIn here used to shadow
+          // the shimmer sweep the class defines, so the light never moved.
+          animation: 'fadeIn 0.35s ease, textShimmer 1.5s linear infinite',
         }}
       >
-        {label}…
+        {label}
       </span>
     </div>
   )
@@ -683,7 +704,6 @@ function ThinkingPanel({
           border: 'none', padding: '0.15rem 0', cursor: 'pointer', font: 'inherit',
         }}
       >
-        <ThinkingOrb size={20} />
         <span className={live ? 'thinking-shimmer' : undefined} style={{
           fontSize: '0.875rem', fontStyle: 'italic', fontWeight: 450,
           color: live ? undefined : 'var(--hb-text-faint)',

@@ -251,8 +251,9 @@ export default function VoiceActivity({ tools, streaming, hasText }: Props) {
 }
 
 /** The running marker. Same ring the transcript uses, so a step reads the same
- *  in both places. */
-function Spinner() {
+ *  in both places — exported for Message.tsx, which referenced it without ever
+ *  importing it. */
+export function Spinner() {
   return (
     <span style={{
       display: 'block', width: 13, height: 13, borderRadius: '50%',

@@ -10,18 +10,13 @@ import type { ChatMessage, FileMeta, ToolBadge } from '../lib/types'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { downloadFile } from '../lib/api'
-import VoiceOrb from './VoiceOrb'
-
-// A stable reference, not an inline arrow function: VoiceOrb's mount effect
-// depends on `amplitude` by identity, so a fresh closure on every render would
-// tear down and rebuild the whole WebGL scene every render instead of once.
-const ZERO_AMPLITUDE = () => 0
 import CodeBlock from './CodeBlock'
 import WidgetFrame from './WidgetFrame'
 import ChartBlock from './ChartBlock'
 import CalendarBlock from './CalendarBlock'
 import MapBlock from './MapBlock'
 import ErrorBoundary from './ErrorBoundary'
+import { Spinner } from './VoiceActivity'
 import { BoardChatBlock } from './VoicePanelBody'
 import { BOARD_KINDS, type PanelKind } from '../lib/voicePanels'
 
@@ -370,40 +365,83 @@ function statusLabel(toolName: string): string {
   return TOOL_STATUS[toolName] ?? `Using ${toolName.replace(/_/g, ' ')}`
 }
 
-// The voice-mode thinking mood, at message-list scale — the same VoiceOrb
-// component voice mode uses, not a lookalike, so "the machine is working"
-// reads identically everywhere. amplitude is pinned at 0 (no audio here);
-// zoom is pushed in past 1 to crop the outer dust shell, which at icon size
-// just reads as noise — the lit rings and core are what stay legible small.
-function ThinkingOrb({ size }: { size: number }) {
-  return (
-    <div style={{ width: size, height: size, flexShrink: 0 }}>
-      <VoiceOrb state="thinking" amplitude={ZERO_AMPLITUDE} zoom={2.4} />
-    </div>
-  )
+// Waiting lines, escalating with how long the turn has been silent. Bands run
+// in order, one per THINKING_BAND_MS, and the last band repeats forever so an
+// endless wait parks on the loop phase instead of running off the end.
+// Heartbreaker keeps the same ladder in its i18n dictionary (t.message
+// .thinkingPhases); Striker has no i18n surface, so it lives inline here.
+const THINKING_PHASES: string[][] = [
+  // 0-5s — nothing unusual yet
+  ['Thinking…', 'Processing…', 'Compiling the logic…', 'Just connecting the dots…'],
+  // 5-10s — noticing the pause
+  ['Still thinking…', 'Warming up the processors…', 'Hold tight, turning the gears…', 'Awkward silence, am I right?'],
+  // 10-15s — mild panic
+  ['HMMMMMMMMMMMMMMMMM…', 'Okay, I am now embarrassing myself…', 'Did someone trip over the server cable?', 'Calculating… wait, I forgot to carry the one.'],
+  // 15-20s — fourth wall
+  ["Bro it's not that deep…", 'A lot of variables at play here, clearly.', "I'd offer you a coffee, but I lack physical form.", "I promise I'm usually faster than this."],
+  // 20-25s — existential
+  ['Something may or may not be wrong…', 'Sending a search party for my missing data packets.', 'Are we still here? Just checking.', "Either I'm about to give you the greatest answer ever, or I've completely crashed.", "If I don't respond in 10 seconds, avenge me."],
+  // 25s+ — the infinite loop
+  ['Elevator music playing softly in the background…', 'Honestly, I forgot what we were talking about.', 'Have you considered just googling it at this point?', '404: Motivation not found. Retrying…'],
+]
+
+const THINKING_BAND_MS = 5000
+const THINKING_LINE_MS = 2000
+
+// Pick a line from `pool` that isn't the one already on screen — a re-roll that
+// lands on the same string reads as a frozen UI, which is the exact opposite of
+// what these lines are for.
+function rollLine(pool: string[], previous: string): string {
+  if (pool.length <= 1) return pool[0] ?? previous
+  const others = pool.filter(line => line !== previous)
+  return others[Math.floor(Math.random() * others.length)]
+}
+
+// Mounted only while a turn is actually in flight, so mount time is the start
+// of the wait.
+function useWaitingLine(phases: string[][]): string {
+  const startedAt = useRef(Date.now())
+  const [line, setLine] = useState(() => rollLine(phases[0], ''))
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const band = Math.min(
+        phases.length - 1,
+        Math.floor((Date.now() - startedAt.current) / THINKING_BAND_MS),
+      )
+      setLine(previous => rollLine(phases[band], previous))
+    }, THINKING_LINE_MS)
+    return () => clearInterval(id)
+  }, [phases])
+
+  return line
 }
 
 function WorkingStatus({ tools, status }: { tools: { id: string; name: string }[]; status?: string }) {
   const lastTool = tools.length ? tools[tools.length - 1].name : null
+  const waiting = useWaitingLine(THINKING_PHASES)
 
-  // Real status only — an active tool drives the label; otherwise the live
-  // phase the stream reports (Connecting → Thinking → slow/timeout). No looped
-  // filler: if nothing's happening it says so, and the watchdog eventually
-  // turns this into an error rather than spinning forever.
-  const label = lastTool ? statusLabel(lastTool) : (status ?? 'Thinking')
+  // Real status still wins: an active tool names itself, and so does whatever
+  // phase the stream reports (Connecting → slow → timeout). The rotating lines
+  // fill only the genuinely silent stretch, where the alternative was a single
+  // frozen word. The watchdog still turns a dead stream into an error — this
+  // changes what the wait *reads* like, not how long it is allowed to run.
+  const real = lastTool ? statusLabel(lastTool) : status
+  const label = real ? `${real}…` : waiting
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.15rem 0' }}>
-      <ThinkingOrb size={22} />
+    <div style={{ display: 'flex', alignItems: 'center', padding: '0.15rem 0' }}>
       <span
         key={label}
         className="thinking-shimmer"
         style={{
           fontSize: '0.875rem', fontStyle: 'italic', fontWeight: 450,
-          animation: 'fadeIn 0.35s ease',
+          // Both animations, composed: naming only fadeIn here used to shadow
+          // the shimmer sweep the class defines, so the light never moved.
+          animation: 'fadeIn 0.35s ease, textShimmer 1.6s linear infinite',
         }}
       >
-        {label}…
+        {label}
       </span>
     </div>
   )
@@ -451,7 +489,6 @@ function ThinkingPanel({
           border: 'none', padding: '0.15rem 0', cursor: 'pointer', font: 'inherit',
         }}
       >
-        <ThinkingOrb size={20} />
         <span className={live ? 'thinking-shimmer' : undefined} style={{
           fontSize: '0.875rem', fontStyle: 'italic', fontWeight: 450,
           color: live ? undefined : 'var(--hb-text-faint)',

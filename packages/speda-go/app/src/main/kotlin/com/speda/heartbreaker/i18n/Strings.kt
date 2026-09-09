@@ -120,6 +120,11 @@ data class AppStrings(
         val saveAndSend: String,
         val somethingWentWrong: String,
         val thinking: String,
+        /** Waiting lines, escalating with how long the turn has stayed silent.
+         *  One band per THINKING_BAND_MS, re-rolled every THINKING_LINE_MS, last
+         *  band repeating forever. Each line carries its own punctuation — some
+         *  are questions, and a blanket trailing ellipsis reads wrong on those. */
+        val thinkingPhases: List<List<String>>,
         val thinkingPanel: ThinkingPanel,
     )
 

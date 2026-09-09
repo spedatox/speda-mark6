@@ -312,6 +312,18 @@ const en = {
     },
     usingTool: (toolName: string) => `Using ${toolName.replace(/_/g, ' ')}`,
     thinking: 'Thinking',
+    // Waiting lines, escalating with how long the turn has stayed silent. One
+    // band per 5s (THINKING_BAND_MS in Message.tsx), rolled every 2s, last band
+    // repeats forever. Each line carries its own punctuation — some are
+    // questions, and a blanket trailing ellipsis would read wrong on those.
+    thinkingPhases: [
+      ['Thinking…', 'Processing…', 'Compiling the logic…', 'Just connecting the dots…'],
+      ['Still thinking…', 'Warming up the processors…', 'Hold tight, turning the gears…', 'Awkward silence, am I right?'],
+      ['HMMMMMMMMMMMMMMMMM…', 'Okay, I am now embarrassing myself…', 'Did someone trip over the server cable?', 'Calculating… wait, I forgot to carry the one.'],
+      ["Bro it's not that deep…", 'A lot of variables at play here, clearly.', "I'd offer you a coffee, but I lack physical form.", "I promise I'm usually faster than this."],
+      ['Something may or may not be wrong…', 'Sending a search party for my missing data packets.', 'Are we still here? Just checking.', "Either I'm about to give you the greatest answer ever, or I've completely crashed.", "If I don't respond in 10 seconds, avenge me."],
+      ['Elevator music playing softly in the background…', 'Honestly, I forgot what we were talking about.', 'Have you considered just googling it at this point?', '404: Motivation not found. Retrying…'],
+    ],
     thinkingPanel: {
       thinking: 'Thinking',
       thoughtFor: (s: number) => `Thought for ${s}s`,

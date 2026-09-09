@@ -56,6 +56,14 @@ val En = AppStrings(
         saveAndSend = "Save & Send",
         somethingWentWrong = "Something went wrong.",
         thinking = "Thinking",
+        thinkingPhases = listOf(
+            listOf("Thinking…", "Processing…", "Compiling the logic…", "Just connecting the dots…"),
+            listOf("Still thinking…", "Warming up the processors…", "Hold tight, turning the gears…", "Awkward silence, am I right?"),
+            listOf("HMMMMMMMMMMMMMMMMM…", "Okay, I am now embarrassing myself…", "Did someone trip over the server cable?", "Calculating… wait, I forgot to carry the one."),
+            listOf("Bro it's not that deep…", "A lot of variables at play here, clearly.", "I'd offer you a coffee, but I lack physical form.", "I promise I'm usually faster than this."),
+            listOf("Something may or may not be wrong…", "Sending a search party for my missing data packets.", "Are we still here? Just checking.", "Either I'm about to give you the greatest answer ever, or I've completely crashed.", "If I don't respond in 10 seconds, avenge me."),
+            listOf("Elevator music playing softly in the background…", "Honestly, I forgot what we were talking about.", "Have you considered just googling it at this point?", "404: Motivation not found. Retrying…"),
+        ),
         thinkingPanel = AppStrings.ThinkingPanel(
             thinking = "Thinking",
             thoughtFor = { s -> "Thought for ${s}s" },

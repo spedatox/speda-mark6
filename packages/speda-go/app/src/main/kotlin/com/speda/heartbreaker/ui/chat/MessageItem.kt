@@ -3,6 +3,7 @@
 
 package com.speda.heartbreaker.ui.chat
 
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -40,6 +42,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -58,8 +62,6 @@ import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.data.Downloader
-import com.speda.heartbreaker.data.VoiceSpeaker
-import com.speda.heartbreaker.ui.voice.VoiceOrb
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.ChatMessage
 import com.speda.heartbreaker.domain.MarkdownPrep
@@ -491,21 +493,89 @@ private fun EditBox(value: String, onValueChange: (String) -> Unit) {
     )
 }
 
-/** The voice-mode thinking orb + shimmering label — the "something's happening"
- *  indicator. The same [VoiceOrb] voice mode uses, not a lookalike, so "the
- *  machine is working" reads identically everywhere. */
+/** How long one escalation band of [Strings.Message.thinkingPhases] lasts, and
+ *  how often the line inside the current band is re-rolled. Bands run in order
+ *  and the last one repeats forever, so a wait that never ends parks on the
+ *  loop phase instead of running off the end of the list. Mirrors
+ *  THINKING_BAND_MS / THINKING_LINE_MS in Heartbreaker's Message.tsx. */
+private const val THINKING_BAND_MS = 5_000L
+private const val THINKING_LINE_MS = 2_000L
+
+/** One sweep of the shimmer band across the label. */
+private const val THINKING_SHIMMER_MS = 1_500
+
+/** Pick a line from [pool] that isn't the one already on screen — a re-roll
+ *  that lands on the same string reads as a frozen UI, which is the exact
+ *  opposite of what these lines are for. */
+private fun rollLine(pool: List<String>, previous: String): String {
+    if (pool.size <= 1) return pool.firstOrNull() ?: previous
+    return pool.filter { it != previous }.random()
+}
+
+/** The waiting label — a light band sweeping across escalating filler text.
+ *  No orb: this is a text indicator, and an icon next to it just competed with
+ *  the sweep for attention. The shimmer is the whole animation. */
 @Composable
 private fun WorkingStatus(lastToolName: String?, status: String?) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
-    val label = if (lastToolName != null) ToolStatus.statusLabel(lastToolName, t) else (status ?: t.message.thinking)
+    val phases = t.message.thinkingPhases
+
+    // Real status still wins: an active tool names itself, and so does whatever
+    // phase the stream reports (connecting → slow → timeout). The rotating
+    // lines fill only the genuinely silent stretch.
+    val real = if (lastToolName != null) ToolStatus.statusLabel(lastToolName, t) else status
+
+    // Composed only while a turn is in flight, so composition time is the start
+    // of the wait.
+    val startedAt = remember { System.currentTimeMillis() }
+    var waiting by remember { mutableStateOf(rollLine(phases.first(), "")) }
+    LaunchedEffect(phases) {
+        while (true) {
+            delay(THINKING_LINE_MS)
+            val band = ((System.currentTimeMillis() - startedAt) / THINKING_BAND_MS)
+                .toInt().coerceIn(0, phases.size - 1)
+            waiting = rollLine(phases[band], waiting)
+        }
+    }
+
+    val label = if (real != null) "$real…" else waiting
+
+    // The sweep: a bright band riding a muted base, clipped to the glyphs.
+    // Offsets run well past the text width so the band enters and leaves
+    // rather than pulsing in place.
+    val sweep = rememberInfiniteTransition(label = "thinkingShimmer")
+    val phase by sweep.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(THINKING_SHIMMER_MS, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "thinkingShimmerPhase",
+    )
+    var width by remember { mutableFloatStateOf(0f) }
+    val span = if (width > 0f) width else 1f
+    val head = (phase * 2f - 0.5f) * span
+    val brush = Brush.linearGradient(
+        0f to palette.iconDim,
+        0.45f to palette.iconDim,
+        0.5f to palette.accentBright,
+        0.55f to palette.iconDim,
+        1f to palette.iconDim,
+        start = Offset(head - span * 0.5f, 0f),
+        end = Offset(head + span * 0.5f, 0f),
+    )
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
         modifier = Modifier.padding(vertical = 2.dp),
     ) {
-        VoiceOrb(state = VoiceSpeaker.State.THINKING, level = 0f, modifier = Modifier.size(20.dp))
-        HbText("$label…", style = HbType.read.copy(textAlign = TextAlign.Start), color = palette.accentBright)
+        BasicText(
+            text = label,
+            style = HbType.read.copy(textAlign = TextAlign.Start, brush = brush),
+            onTextLayout = { width = it.size.width.toFloat() },
+        )
     }
 }
 
@@ -542,7 +612,6 @@ private fun ThinkingPanel(text: String, redacted: Boolean, done: Boolean, stream
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.noRippleClick { expanded = !expanded }.padding(vertical = 2.dp),
         ) {
-            VoiceOrb(state = VoiceSpeaker.State.THINKING, level = 0f, modifier = Modifier.size(18.dp))
             HbText(
                 label,
                 style = HbType.read.copy(textAlign = TextAlign.Start),
