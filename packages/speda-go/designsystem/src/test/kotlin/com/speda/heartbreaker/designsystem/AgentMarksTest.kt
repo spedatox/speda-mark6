@@ -71,11 +71,12 @@ class AgentMarksTest {
         }
     }
 
-    /** Marks are normalised to a centred 100x100 box. Bounds here include the
-     *  off-curve control points, which bulge slightly past the on-curve
-     *  extremes the generator normalised against — worst observed is scourge
-     *  at -1.78, hence the 2.5 slack. This is a sanity gate on a bad trace, not
-     *  a pixel assertion. */
+    /** Marks are normalised to a centred 100x100 box: the LARGER dimension
+     *  spans it exactly, the smaller is centred. Bounds here include off-curve
+     *  control points, which bulge slightly past the on-curve extremes the
+     *  generator normalised against — worst observed is speda at -0.87 and
+     *  sentinel at 100.01, comfortably inside the 2.5 slack. This is a sanity
+     *  gate on a bad trace, not a pixel assertion. */
     @Test
     fun everyMarkFillsTheViewBox() {
         for ((id, d) in AgentMarks.PATHS) {
