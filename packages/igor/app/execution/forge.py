@@ -9,7 +9,7 @@ import base64
 import binascii
 import shutil
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import AsyncIterator, Callable
 
 from app.config import settings
@@ -24,6 +24,28 @@ def _load_runtime():
         sys.path.insert(0, value)
     from forge.runtime import ExecutionSpec, execute
     return ExecutionSpec, execute
+
+
+def _resolve_workspace(value: str) -> Path:
+    """Map a Hisar picker path and enforce the configured execution boundary."""
+    raw = Path(value).expanduser()
+    if not settings.forge_workspace_root:
+        return raw.resolve()
+
+    root = Path(settings.forge_workspace_root).expanduser().resolve()
+    wire = PurePosixPath(value)
+    prefix = ("/", "Forge", "workspaces")
+    if wire.parts[:3] == prefix:
+        candidate = root.joinpath(*wire.parts[3:])
+    else:
+        candidate = raw
+
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"Forge workspace is outside the allowed root: {value}") from exc
+    return resolved
 
 
 class IgorModelAdapter:
@@ -81,7 +103,7 @@ class ForgeExecutor:
     ) -> str:
         ExecutionSpec, execute = _load_runtime()
 
-        workspace_path = Path(workspace).expanduser().resolve()
+        workspace_path = _resolve_workspace(workspace)
         safe_job = "".join(c for c in job_id if c.isalnum() or c in "-_")[:96] or "job"
         input_root = (workspace_path / ".forge" / "inputs").resolve()
         try:

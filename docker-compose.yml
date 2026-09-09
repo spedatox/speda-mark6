@@ -50,6 +50,7 @@ services:
       # commands alongside Igor's credentials and database.
       FORGE_DIR: /opt/forge-mk1
       FORGE_CELL_BACKEND: docker
+      FORGE_WORKSPACE_ROOT: /opt/hisar/vault/Forge/workspaces
       FORGE_CODER_IMAGE: forge-cell-optimus:latest
       FORGE_REVIEWER_IMAGE: forge-cell-optimus:latest
       FORGE_PENTESTER_IMAGE: forge-cell-centurion:latest

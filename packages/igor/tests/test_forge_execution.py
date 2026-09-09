@@ -4,7 +4,30 @@
 import base64
 from types import SimpleNamespace
 
-from app.execution.forge import ForgeExecutor
+from app.execution.forge import ForgeExecutor, _resolve_workspace
+
+
+def test_hisar_workspace_is_mapped_to_host_visible_root(tmp_path, monkeypatch):
+    workspace = tmp_path / "optimus" / "project"
+    workspace.mkdir(parents=True)
+    monkeypatch.setattr(
+        "app.execution.forge.settings.forge_workspace_root", str(tmp_path)
+    )
+
+    assert _resolve_workspace("/Forge/workspaces/optimus/project") == workspace.resolve()
+
+
+def test_workspace_outside_configured_root_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.execution.forge.settings.forge_workspace_root", str(tmp_path / "allowed")
+    )
+
+    try:
+        _resolve_workspace(str(tmp_path / "elsewhere"))
+    except ValueError as exc:
+        assert "outside the allowed root" in str(exc)
+    else:
+        raise AssertionError("workspace outside the configured root was accepted")
 
 
 async def test_existing_upload_is_materialized_for_forge_then_removed(tmp_path, monkeypatch):
