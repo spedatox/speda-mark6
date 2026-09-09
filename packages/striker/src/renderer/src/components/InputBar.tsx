@@ -179,23 +179,20 @@ function SendBtn({ canSend, isStreaming, onSend, onStop }: {
 }
 
 /* ── Model item (extracted — hooks cannot live inside .map()) ────────────── */
-function ModelItem({ model, selected, onSelect, onThinking }: {
+function ModelItem({ model, selected, onSelect }: {
   model: ModelInfo; selected: boolean; onSelect: () => void
-  onThinking: (level: ThinkingLevel) => void
 }) {
   const [hover, setHover] = useState(false)
-  // The row is a DIV wrapping two independent controls, not one big button.
-  // The thinking slider has to be clickable without also selecting the model —
-  // nesting it inside the <button> would be invalid HTML and every stop press
-  // would bubble into onSelect and close the panel.
   return (
-    <div
+    <button
+      onClick={onSelect}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         // Indented — these rows hang off the provider header above them.
         width: '100%', padding: '0.45rem 0.7rem 0.45rem 1.6rem',
         display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
+        border: 'none',
         borderLeft: selected
           ? '2px solid var(--hb-cyan)'
           : hover
@@ -206,16 +203,11 @@ function ModelItem({ model, selected, onSelect, onThinking }: {
           : hover
           ? 'rgba(var(--hb-accent-rgb),0.05)'
           : 'transparent',
+        cursor: 'pointer', textAlign: 'left',
         transition: 'background 0.1s, border-color 0.1s',
       }}
     >
-      <button
-        onClick={onSelect}
-        style={{
-          flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0,
-          cursor: 'pointer', textAlign: 'left', font: 'inherit',
-        }}
-      >
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontFamily: "'Rajdhani',sans-serif",
           fontSize: '0.8rem', fontWeight: selected ? 700 : 600,
@@ -233,20 +225,6 @@ function ModelItem({ model, selected, onSelect, onThinking }: {
             {model.description}
           </div>
         )}
-      </button>
-      {/* Thinking level, on the row itself rather than behind a submenu: the
-          whole complaint is "this model thinks too long", and the moment you
-          are looking at the model is the moment to say how hard it should. */}
-      <div style={{ flexShrink: 0, marginTop: '0.1rem' }}>
-        <ThinkingLevelSlider
-          compact
-          value={model.thinking ?? 'medium'}
-          pinned={model.thinking_pinned}
-          // Absent on a backend too old to report it — treat as available so
-          // the control still works there rather than greying out everything.
-          supported={model.thinking_supported !== false}
-          onChange={onThinking}
-        />
       </div>
       {selected && (
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--hb-cyan)"
@@ -254,7 +232,7 @@ function ModelItem({ model, selected, onSelect, onThinking }: {
           <polyline points="20 6 9 17 4 12"/>
         </svg>
       )}
-    </div>
+    </button>
   )
 }
 
@@ -326,10 +304,9 @@ function ProviderRow({ label, count, open, holdsActive, onClick }: {
  * no room for a second dropdown. They are separate AXES though: the agent can
  * think on Claude and speak with an OpenAI voice, and nothing couples them.
  */
-function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSelectVoice, onThinking }: {
+function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSelectVoice }: {
   models: ModelInfo[]; activeId: string; onSelect: (id: string) => void
   voices: ModelInfo[]; activeVoiceId: string; onSelectVoice: (id: string) => void
-  onThinking: (modelId: string, level: ThinkingLevel) => void
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
@@ -518,10 +495,6 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
                     model={m}
                     selected={m.id === selectedId}
                     onSelect={() => { choose(m.id); setOpen(false) }}
-                    // Deliberately does NOT close the panel: setting a level is
-                    // a tweak, not a choice of model, and the owner is usually
-                    // adjusting several in one visit.
-                    onThinking={lvl => onThinking(m.id, lvl)}
                   />
                 ))}
               </div>
@@ -809,12 +782,32 @@ export default function InputBar({
 
   useEffect(() => { fetchModels(config).then(setModels).catch(() => {}) }, [config])
 
-  // Set a model's thinking level. Optimistic: the slider must land under the
-  // cursor immediately, and the write is a persisted server-side setting whose
-  // truth arrives with the next /models fetch anyway. A failed call leaves the
-  // optimistic value showing — deliberately, since the alternative is a stop
-  // that springs back with no explanation; the next refresh corrects it.
+  // The row for the model currently selected — the slider beside the picker
+  // reflects and sets this one. Undefined until /models answers, and also when
+  // the pinned model is not in the catalogue at all: a model pinned from
+  // another client, or one whose provider key has since been removed, still
+  // drives every turn but never appears in /models.
+  const activeModel = useMemo(
+    () => models.find(m => m.id === settings.model),
+    [models, settings.model],
+  )
+
+  // Levels set during this session, by model id. The catalogue is the source of
+  // truth on load, but it cannot be the only one: with the active model absent
+  // from it there is no row to patch, and the control would sit on the default
+  // forever no matter how many times it was set — the write reaching the server
+  // each time, invisibly.
+  const [thinkingSet, setThinkingSet] = useState<Record<string, ThinkingLevel>>({})
+  const activeThinking = thinkingSet[settings.model] ?? activeModel?.thinking ?? 'medium'
+  const activePinned = settings.model in thinkingSet || activeModel?.thinking_pinned
+
   const setThinking = useCallback((modelId: string, level: ThinkingLevel) => {
+    // Optimistic on both: the stop must land under the cursor immediately, and
+    // this is a persisted server-side setting whose truth arrives with the next
+    // /models fetch anyway. A failed call leaves the optimistic value showing —
+    // deliberately, since the alternative is a stop that springs back with no
+    // explanation; the next refresh corrects it.
+    setThinkingSet(prev => ({ ...prev, [modelId]: level }))
     setModels(prev => prev.map(m =>
       m.id === modelId ? { ...m, thinking: level, thinking_pinned: true } : m))
     setModelThinking(config, modelId, level).catch(() => {})
@@ -1220,6 +1213,24 @@ export default function InputBar({
 
             {/* Right controls */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              {/* Thinking depth for the model that is actually selected —
+                  one control beside the selector, not one per row inside it.
+                  It reads as a property of "the model I am talking to right
+                  now", which is the thing being adjusted; a slider on every
+                  row of a hundred-odd catalogue is a settings screen, not a
+                  composer control. Setting it still persists against that
+                  model server-side, so it survives switching away and back. */}
+              {/* Rendered even when the provider has no reasoning knob (Ollama,
+                  NVIDIA): disabled with the reason on hover, so switching to
+                  such a model explains why the control went dead instead of
+                  silently removing it from the row. */}
+              <ThinkingLevelSlider
+                compact
+                value={activeThinking}
+                pinned={activePinned}
+                supported={activeModel?.thinking_supported !== false}
+                onChange={lvl => setThinking(settings.model, lvl)}
+              />
               <ModelPicker
                 models={models}
                 activeId={settings.model}
@@ -1227,7 +1238,6 @@ export default function InputBar({
                 voices={voices}
                 activeVoiceId={settings.voiceModel}
                 onSelectVoice={id => update({ voiceModel: id })}
-                onThinking={setThinking}
               />
 
               {/* Deliberately NOT hidden while streaming: barge-in means

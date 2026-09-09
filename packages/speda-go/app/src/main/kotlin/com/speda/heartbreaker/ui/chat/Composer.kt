@@ -113,6 +113,20 @@ fun Composer(
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
     var pickerOpen by remember { mutableStateOf(false) }
+
+    // The catalogue row for the selected model. Null until /models answers, and
+    // also when the pinned model is not in the catalogue at all: a model pinned
+    // from another client, or one whose provider key has since been removed,
+    // still drives every turn but never appears in /models.
+    val activeModel = remember(models, model) { models.firstOrNull { it.id == model } }
+    // Levels set during this session, by model id. The catalogue is the source
+    // of truth on load, but it cannot be the only one: with the active model
+    // absent from it there is no row to patch, and the control would sit on the
+    // default forever no matter how many times it was set — the write reaching
+    // the server each time, invisibly.
+    var thinkingSet by remember { mutableStateOf(mapOf<String, String>()) }
+    val activeThinking = thinkingSet[model] ?: activeModel?.thinking ?: "medium"
+    val activePinned = model in thinkingSet || activeModel?.thinkingPinned == true
     var plusOpen by remember { mutableStateOf(false) }
 
     // Dictation. Routed through the platform's own recognizer activity rather
@@ -295,6 +309,30 @@ fun Composer(
 
                     Spacer(Modifier.weight(1f))
 
+                    // Thinking depth for the model that is actually selected —
+                    // one control beside the selector, not one per row inside
+                    // it. It reads as a property of "the model I am talking to
+                    // right now", which is the thing being adjusted; a stop on
+                    // every row of a hundred-odd catalogue is a settings
+                    // screen, not a composer control. Setting it still persists
+                    // against that model server-side, so it survives switching
+                    // away and back.
+                    //
+                    // Rendered even when the provider has no reasoning knob
+                    // (Ollama, NVIDIA), disabled, so switching to such a model
+                    // explains why it went dead rather than silently vanishing.
+                    ThinkingLevelSlider(
+                        value = activeThinking,
+                        pinned = activePinned,
+                        supported = activeModel?.thinkingSupported != false,
+                        onChange = { level ->
+                            thinkingSet = thinkingSet + (model to level)
+                            onModelThinking(model, level)
+                        },
+                    )
+
+                    Spacer(Modifier.width(8.dp))
+
                     // Model picker keeps its slot on mobile.
                     Row(
                         Modifier
@@ -346,10 +384,6 @@ fun Composer(
                     models = models,
                     current = model,
                     onPick = { pickerOpen = false; onModelChange(it) },
-                    // Deliberately does NOT close the picker: setting a level is
-                    // a tweak, not a choice of model, and the owner is usually
-                    // adjusting several in one visit.
-                    onThinking = onModelThinking,
                 )
             }
 
@@ -517,12 +551,7 @@ private fun ModelInfo.providerKey(): String =
  * screen.
  */
 @Composable
-private fun ModelPicker(
-    models: List<ModelInfo>,
-    current: String,
-    onPick: (String) -> Unit,
-    onThinking: (String, String) -> Unit,
-) {
+private fun ModelPicker(models: List<ModelInfo>, current: String, onPick: (String) -> Unit) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
 
@@ -565,12 +594,7 @@ private fun ModelPicker(
                 }
                 if (open) {
                     items(list, key = { it.id }) { m ->
-                        ModelRow(
-                            model = m,
-                            active = m.id == current,
-                            onClick = { onPick(m.id) },
-                            onThinking = { level -> onThinking(m.id, level) },
-                        )
+                        ModelRow(model = m, active = m.id == current, onClick = { onPick(m.id) })
                     }
                 }
             }
@@ -691,25 +715,18 @@ private fun ThinkingLevelSlider(
 
 /** One model inside an open provider group. */
 @Composable
-private fun ModelRow(
-    model: ModelInfo,
-    active: Boolean,
-    onClick: () -> Unit,
-    onThinking: (String) -> Unit,
-) {
+private fun ModelRow(model: ModelInfo, active: Boolean, onClick: () -> Unit) {
     val palette = LocalHbPalette.current
     Row(
         Modifier
             .fillMaxWidth()
             .background(if (active) palette.accent.copy(alpha = 0.12f) else Color.Transparent)
+            .clickable(onClick = onClick)
             .padding(start = 25.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // The row-wide `clickable` moved onto the name column: the thinking
-        // stops have to be tappable without also picking the model and closing
-        // the picker, and a clickable ancestor would swallow them.
-        Column(Modifier.weight(1f).clickable(onClick = onClick)) {
+        Column(Modifier.weight(1f)) {
             HbText(
                 shortModelName(model.name.ifEmpty { model.id }),
                 style = HbType.headerBar.copy(
@@ -730,12 +747,6 @@ private fun ModelRow(
                 )
             }
         }
-        ThinkingLevelSlider(
-            value = model.thinking,
-            pinned = model.thinkingPinned,
-            supported = model.thinkingSupported,
-            onChange = onThinking,
-        )
         if (active) HbGlyphs.Check(palette.accentBright, size = 11.dp)
     }
 }
