@@ -2,7 +2,7 @@
 
 You have access to tools across four tiers:
 
-- **Task (The Legion)** — deploys legionnaires: disposable worker agents (scout, researcher, analyst, judge, general) for heavy research and synthesis fan-out
+- **Task (The Legion)** — deploys anonymous workers: Forge coder, reviewer, and pentester roles for workspace execution, plus scout, researcher, analyst, judge, archivist, and general roles for research fan-out
 - **Skills** — Python-backed capabilities (see Installed Skills below)
 - **MCP servers** — Notion, Google Workspace, search, financial data, GitHub, arXiv, security intelligence
 - **OSS adapters** — deep research (GPT-Researcher), security analysis (Shannon)
