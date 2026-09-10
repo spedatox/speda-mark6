@@ -594,13 +594,16 @@ function MenuRow({ icon, label, value, valueColor, onClick }: {
   )
 }
 
-function MobileToolsMenu({ budget, listening, language, onAttach, onToggleBudget, onVoice, onLanguage }: {
+function MobileToolsMenu({ budget, listening, language, thinking, thinkingPinned, thinkingSupported, onThinking, onAttach, onToggleBudget, onVoice, onLanguage }: {
   budget: boolean; listening: boolean; language: Locale
+  thinking: ThinkingLevel; thinkingPinned?: boolean; thinkingSupported: boolean
+  onThinking: (level: ThinkingLevel) => void
   onAttach: () => void; onToggleBudget: () => void; onVoice: () => void
   onLanguage: (next: Locale) => void
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
+  const [thinkingOpen, setThinkingOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -706,6 +709,15 @@ function MobileToolsMenu({ budget, listening, language, onAttach, onToggleBudget
             valueColor="var(--hb-cyan-bright)"
             onClick={() => onLanguage(LOCALES.find(l => l.value !== language)?.value ?? 'en')}
           />
+          <MenuRow icon={<span style={{ fontSize: '0.72rem' }}>◇</span>} label={t.thinkingLevel.label}
+            value={thinkingSupported ? t.thinkingLevel.names[thinking] : t.thinkingLevel.na}
+            valueColor={thinkingSupported ? 'var(--hb-cyan-bright)' : 'var(--hb-icon-dim)'}
+            onClick={() => thinkingSupported && setThinkingOpen(v => !v)} />
+          {thinkingOpen && thinkingSupported && (
+            <div style={{ padding: '0.55rem 0.85rem 0.7rem', borderTop: '1px solid rgba(var(--hb-accent-rgb),0.12)' }}>
+              <ThinkingLevelSlider value={thinking} pinned={thinkingPinned} supported onChange={onThinking} />
+            </div>
+          )}
           {/* Available while streaming too — that is when barge-in happens. */}
           <MenuRow
             icon={<svg width="13" height="13" viewBox="0 0 24 24" fill={listening ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
@@ -1162,6 +1174,10 @@ export default function InputBar({
                   budget={budget}
                   listening={listening}
                   language={language}
+                  thinking={activeThinking}
+                  thinkingPinned={activePinned}
+                  thinkingSupported={activeModel?.thinking_supported !== false}
+                  onThinking={lvl => setThinking(settings.model, lvl)}
                   onAttach={() => fileInputRef.current?.click()}
                   onToggleBudget={toggleBudget}
                   onVoice={handleVoiceInput}
@@ -1224,13 +1240,9 @@ export default function InputBar({
                   NVIDIA): disabled with the reason on hover, so switching to
                   such a model explains why the control went dead instead of
                   silently removing it from the row. */}
-              <ThinkingLevelSlider
-                compact
-                value={activeThinking}
-                pinned={activePinned}
+              {!isMobile && <ThinkingLevelSlider compact value={activeThinking} pinned={activePinned}
                 supported={activeModel?.thinking_supported !== false}
-                onChange={lvl => setThinking(settings.model, lvl)}
-              />
+                onChange={lvl => setThinking(settings.model, lvl)} />}
               <ModelPicker
                 models={models}
                 activeId={settings.model}

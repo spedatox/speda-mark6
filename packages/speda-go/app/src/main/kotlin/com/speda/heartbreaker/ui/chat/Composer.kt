@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -67,6 +68,7 @@ import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.i18n.localeFromWire
 import com.speda.heartbreaker.ui.HbText
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** Photo-picker cap — the contract requires more than one. */
 private const val MAX_ATTACHMENTS = 10
@@ -128,6 +130,7 @@ fun Composer(
     val activeThinking = thinkingSet[model] ?: activeModel?.thinking ?: "medium"
     val activePinned = model in thinkingSet || activeModel?.thinkingPinned == true
     var plusOpen by remember { mutableStateOf(false) }
+    var thinkingOpen by remember { mutableStateOf(false) }
 
     // Dictation. Routed through the platform's own recognizer activity rather
     // than a raw SpeechRecognizer: the system dialog carries the mic permission,
@@ -305,7 +308,63 @@ fun Composer(
                             .hbGlass(shape = HbGlassShape.Pill, state = if (plusOpen) HbGlassState.Active else HbGlassState.Default)
                             .clickable { plusOpen = !plusOpen },
                         contentAlignment = Alignment.Center,
-                    ) { HbGlyphs.Plus(if (plusOpen) palette.accentBright else palette.iconBright, size = 14.dp) }
+                    ) {
+                        HbGlyphs.Plus(if (plusOpen) palette.accentBright else palette.iconBright, size = 14.dp)
+                        DropdownMenu(
+                            expanded = plusOpen,
+                            onDismissRequest = { plusOpen = false; thinkingOpen = false },
+                            modifier = Modifier.widthIn(min = 210.dp).hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Menu),
+                        ) {
+                            AttachItem(t.composer.photos) {
+                                plusOpen = false
+                                pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            }
+                            AttachItem(t.composer.files) { plusOpen = false; pickFiles.launch(arrayOf("*/*")) }
+                            AttachItem(t.composer.voiceInput) {
+                                plusOpen = false
+                                runCatching { dictate.launch(speechIntent(language)) }
+                            }
+                            AttachItem(
+                                label = if (voiceOn) t.composer.voiceRepliesOn else t.composer.voiceRepliesOff,
+                                tint = if (voiceOn) palette.accentBright else null,
+                            ) { plusOpen = false; onVoiceToggle() }
+                            AttachItem(
+                                label = t.composer.language(otherLocale(language).label),
+                                tint = palette.accentBright,
+                            ) { plusOpen = false; onLanguageChange(otherLocale(language).wire) }
+                            AttachItem(
+                                label = "${t.thinkingLevel.names[activeThinking] ?: activeThinking} · ${if (language == "tr") "Düşünme" else "Thinking"}",
+                                tint = if (activeModel?.thinkingSupported != false) palette.accentBright else palette.iconDim,
+                            ) {
+                                if (activeModel?.thinkingSupported != false) thinkingOpen = !thinkingOpen
+                            }
+                            if (thinkingOpen && activeModel?.thinkingSupported != false) {
+                                Box(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                                    ThinkingLevelSlider(
+                                        value = activeThinking,
+                                        pinned = activePinned,
+                                        supported = true,
+                                        onChange = { level ->
+                                            thinkingSet = thinkingSet + (model to level)
+                                            onModelThinking(model, level)
+                                        },
+                                    )
+                                }
+                            }
+                            AttachItem(
+                                label = when (budgetMode) {
+                                    true -> t.composer.budgetFrugal
+                                    false -> t.composer.budgetFull
+                                    null -> t.composer.budgetUnknown
+                                },
+                                tint = when (budgetMode) {
+                                    true -> palette.green
+                                    false -> palette.amberBright
+                                    null -> null
+                                },
+                            ) { plusOpen = false; onBudgetToggle() }
+                        }
+                    }
 
                     Spacer(Modifier.weight(1f))
 
@@ -321,18 +380,6 @@ fun Composer(
                     // Rendered even when the provider has no reasoning knob
                     // (Ollama, NVIDIA), disabled, so switching to such a model
                     // explains why it went dead rather than silently vanishing.
-                    ThinkingLevelSlider(
-                        value = activeThinking,
-                        pinned = activePinned,
-                        supported = activeModel?.thinkingSupported != false,
-                        onChange = { level ->
-                            thinkingSet = thinkingSet + (model to level)
-                            onModelThinking(model, level)
-                        },
-                    )
-
-                    Spacer(Modifier.width(8.dp))
-
                     // Model picker keeps its slot on mobile.
                     Row(
                         Modifier
@@ -387,70 +434,6 @@ fun Composer(
                 )
             }
 
-            if (plusOpen) {
-                Column(
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(bottom = 52.dp)
-                        .widthIn(min = 180.dp)
-                        .hbGlass(shape = HbGlassShape.Ctl, state = HbGlassState.Menu),
-                ) {
-                    AttachItem(t.composer.photos) {
-                        plusOpen = false
-                        pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    }
-                    AttachItem(t.composer.files) {
-                        plusOpen = false
-                        pickFiles.launch(arrayOf("*/*"))
-                    }
-                    // Dictation — the transcript is APPENDED to whatever is
-                    // already typed, never replaces it (InputBar.tsx does the
-                    // same): speaking a second clause must not wipe the first.
-                    AttachItem(t.composer.voiceInput) {
-                        plusOpen = false
-                        runCatching { dictate.launch(speechIntent(language)) }
-                    }
-                    // Spoken replies — the other direction from dictation above,
-                    // and a different thing from it: this one changes how the
-                    // agent WRITES, because a spoken turn is briefed to present
-                    // rather than answer.
-                    AttachItem(
-                        label = if (voiceOn) t.composer.voiceRepliesOn else t.composer.voiceRepliesOff,
-                        tint = if (voiceOn) palette.accentBright else null,
-                    ) {
-                        plusOpen = false
-                        onVoiceToggle()
-                    }
-                    // Language. In the overflow rather than out on the toolbar
-                    // for the same reason everything else here is — there is no
-                    // room on a phone — but it is the same one master switch the
-                    // desktop composer carries, not a UI-strings preference.
-                    AttachItem(
-                        label = t.composer.language(otherLocale(language).label),
-                        tint = palette.accentBright,
-                    ) {
-                        plusOpen = false
-                        onLanguageChange(otherLocale(language).wire)
-                    }
-                    // Budget mode. Optimistic in the UI and re-synced after each
-                    // turn by the caller, because Speda can flip it itself.
-                    AttachItem(
-                        label = when (budgetMode) {
-                            true -> t.composer.budgetFrugal
-                            false -> t.composer.budgetFull
-                            null -> t.composer.budgetUnknown
-                        },
-                        tint = when (budgetMode) {
-                            true -> palette.green
-                            false -> palette.amberBright
-                            null -> null
-                        },
-                    ) {
-                        plusOpen = false
-                        onBudgetToggle()
-                    }
-                }
-            }
         }
 
         // Status strip — centred, as InputBar.tsx does (justifyContent: center).
@@ -682,27 +665,24 @@ private fun ThinkingLevelSlider(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            THINKING_LEVELS.forEachIndexed { i, level ->
-                val on = i <= idx
-                Box(
-                    Modifier
-                        .size(width = 11.dp, height = 4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(if (on) tint else palette.iconDim.copy(alpha = 0.28f))
-                        // clickable, not the noRippleClick used elsewhere in
-                        // the chat tree: that helper is private to MessageItem
-                        // and ToolFeed and is not in scope here.
-                        .then(
-                            if (supported) Modifier.clickable { onChange(level) }
-                            else Modifier
-                        )
-                )
-            }
-        }
+        androidx.compose.material3.Slider(
+            value = idx.toFloat(),
+            onValueChange = { raw -> onChange(THINKING_LEVELS[raw.roundToInt().coerceIn(0, THINKING_LEVELS.lastIndex)]) },
+            valueRange = 0f..THINKING_LEVELS.lastIndex.toFloat(),
+            steps = THINKING_LEVELS.size - 2,
+            enabled = supported,
+            modifier = Modifier.width(150.dp),
+            colors = androidx.compose.material3.SliderDefaults.colors(
+                thumbColor = Color(0xFFF7F7F8),
+                activeTrackColor = tint,
+                inactiveTrackColor = palette.iconDim.copy(alpha = 0.28f),
+                activeTickColor = Color.White.copy(alpha = 0.32f),
+                inactiveTickColor = Color.White.copy(alpha = 0.32f),
+                disabledThumbColor = palette.iconDim,
+                disabledActiveTrackColor = palette.iconDim.copy(alpha = 0.35f),
+                disabledInactiveTrackColor = palette.iconDim.copy(alpha = 0.18f),
+            ),
+        )
         HbText(
             if (supported) t.thinkingLevel.names[value] ?: value else t.thinkingLevel.na,
             style = HbType.headerBar.copy(fontSize = 8.5.sp, letterSpacing = 0.1.em),
