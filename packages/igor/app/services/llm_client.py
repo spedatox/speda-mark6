@@ -684,6 +684,12 @@ _GEMINI_FAMILY: list[tuple[str, str, str]] = [
     ("gemma", "fast", "Open-weight Google model"),
 ]
 
+_DEEPSEEK_FAMILY: list[tuple[str, str, str]] = [
+    ("pro", "powerful", "DeepSeek flagship"),
+    ("flash", "fast", "Fastest DeepSeek tier — quick, cheap turns"),
+    ("reasoner", "powerful", "DeepSeek flagship — long-horizon reasoning"),
+]
+
 
 def _curated(provider: str, model_ref: str) -> dict | None:
     """The hand-written _CATALOG entry for a model ref, if there is one. A live
@@ -915,7 +921,7 @@ async def available_models() -> list[dict]:
     if settings.zai_api_key:
         out += await _live_or_static("zai", _ZAI_FAMILY)
     if settings.deepseek_api_key:
-        out += [{**m, "provider": "deepseek"} for m in _CATALOG["deepseek"]]
+        out += await _live_or_static("deepseek", _DEEPSEEK_FAMILY)
     if settings.nvidia_api_key:
         try:
             out += await _nvidia_models()
