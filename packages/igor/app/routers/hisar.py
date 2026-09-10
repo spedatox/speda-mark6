@@ -11,8 +11,11 @@ valid input for the hisar tool the agents call.
 """
 
 import logging
+import os
+from pathlib import Path, PurePosixPath
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 from app.config import settings
 from app.skills.hisar import HisarSkill
@@ -24,6 +27,35 @@ router = APIRouter(tags=["hisar"])
 # their agents see and a directory chosen here is valid input for the tool they
 # call. `entries()` needs no AgentContext — it is a plain read.
 HISAR = HisarSkill()
+
+
+class CreateDirectoryRequest(BaseModel):
+    path: str
+    name: str
+
+
+def _forge_workspace_parent(vault_path: str) -> tuple[Path, Path]:
+    """Translate a picker path while confining writes to Forge workspaces."""
+    if not settings.forge_workspace_root:
+        raise HTTPException(status_code=503, detail="Forge workspace creation is not configured.")
+
+    wire = PurePosixPath(vault_path.strip() or "/")
+    prefix = ("/", "Forge", "workspaces")
+    if wire.parts[:3] != prefix or ".." in wire.parts:
+        raise HTTPException(
+            status_code=403,
+            detail="New folders can be created only under /Forge/workspaces.",
+        )
+
+    root = Path(settings.forge_workspace_root).expanduser().resolve()
+    parent = root.joinpath(*wire.parts[3:]).resolve()
+    try:
+        parent.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Workspace path escapes the allowed root.") from exc
+    if not parent.is_dir():
+        raise HTTPException(status_code=404, detail="The parent workspace folder does not exist.")
+    return root, parent
 
 
 @router.get("/hisar/dirs")
@@ -68,3 +100,52 @@ async def hisar_dirs(request: Request, path: str = "/"):
     dirs.sort(key=lambda d: (not d.startswith(("Speda", "Forge", "Projects", "Documents")), d.lower()))
 
     return {"path": path.strip() or "/", "dirs": dirs}
+
+
+@router.post("/hisar/dirs", status_code=201)
+async def create_hisar_dir(request: Request, body: CreateDirectoryRequest):
+    """Create and return a new Forge workspace directory for the picker."""
+    del request  # Authentication is enforced by AuthMiddleware before routing.
+    name = body.name.strip()
+    if (
+        not name
+        or len(name) > 100
+        or name in {".", ".."}
+        or name.startswith(".")
+        or "/" in name
+        or "\\" in name
+        or any(ord(char) < 32 for char in name)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Use a visible folder name of 1–100 characters without slashes.",
+        )
+
+    root, parent = _forge_workspace_parent(body.path)
+    destination = (parent / name).resolve()
+    try:
+        destination.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Workspace path escapes the allowed root.") from exc
+    if destination.exists():
+        raise HTTPException(status_code=409, detail=f"A folder named {name!r} already exists.")
+
+    try:
+        destination.mkdir(mode=0o2775)
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=f"A folder named {name!r} already exists.") from exc
+
+    try:
+        if os.name != "nt":
+            os.chown(destination, -1, root.stat().st_gid)
+        destination.chmod(0o2775)
+    except OSError as exc:
+        try:
+            destination.rmdir()
+        except OSError:
+            pass
+        logger.exception("hisar_workspace_create_failed", extra={"path": str(destination)})
+        raise HTTPException(status_code=500, detail="Could not create the workspace folder.") from exc
+
+    created = str(PurePosixPath(body.path.rstrip("/") or "/") / name)
+    return {"path": created, "name": name}

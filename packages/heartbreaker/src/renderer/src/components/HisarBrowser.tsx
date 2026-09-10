@@ -29,6 +29,11 @@ interface DirListing {
   dirs: string[]
 }
 
+interface CreatedDirectory {
+  path: string
+  name: string
+}
+
 /**
  * Build the breadcrumb segments from a vault path.
  * "/" → []; "/Projects" → ["Projects"]; "/Projects/site" → ["Projects", "site"]
@@ -47,6 +52,10 @@ export default function HisarBrowser({ config, current, onSelect, onClose }: Pro
   const [listing, setListing] = useState<DirListing | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [folderName, setFolderName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const fetchDirs = useCallback(async (p: string) => {
     setLoading(true)
@@ -82,6 +91,34 @@ export default function HisarBrowser({ config, current, onSelect, onClose }: Pro
   }
 
   const selectThis = () => onSelect(path)
+
+  const normalizedPath = path.replace(/\/+$/, '') || '/'
+  const canCreate = normalizedPath === '/Forge/workspaces'
+    || normalizedPath.startsWith('/Forge/workspaces/')
+
+  const createAndSelect = async () => {
+    const name = folderName.trim()
+    if (!name || creating) return
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const res = await fetch(`${config.apiBase}/hisar/dirs`, {
+        method: 'POST',
+        headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ path, name }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+        throw new Error((body as { detail?: string }).detail || `HTTP ${res.status}`)
+      }
+      const created = (await res.json()) as CreatedDirectory
+      onSelect(created.path)
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Could not create the folder')
+    } finally {
+      setCreating(false)
+    }
+  }
 
   const crumbs = useMemo(() => breadcrumbs(path), [path])
 
@@ -231,6 +268,54 @@ export default function HisarBrowser({ config, current, onSelect, onClose }: Pro
           )}
         </div>
 
+        {showCreate && canCreate && (
+          <div style={{
+            display: 'flex', flexDirection: 'column', gap: '0.4rem',
+            padding: '0.55rem 0.9rem',
+            borderTop: '1px solid var(--hb-border, rgba(255,255,255,0.06))',
+          }}>
+            <div style={{ display: 'flex', gap: '0.4rem' }}>
+              <input
+                autoFocus
+                value={folderName}
+                onChange={e => setFolderName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') void createAndSelect() }}
+                placeholder="New workspace folder"
+                maxLength={100}
+                style={{
+                  flex: 1, minWidth: 0, borderRadius: 5,
+                  border: '1px solid var(--hb-border)',
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'var(--hb-text)', padding: '0.3rem 0.5rem',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.64rem',
+                }}
+              />
+              <button
+                onClick={() => void createAndSelect()}
+                disabled={!folderName.trim() || creating}
+                style={{
+                  border: 'none', borderRadius: 5, padding: '0.3rem 0.65rem',
+                  background: 'var(--hb-cyan)', color: '#000',
+                  cursor: creating ? 'wait' : 'pointer',
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '0.62rem',
+                  fontWeight: 700, letterSpacing: '0.06em',
+                  opacity: !folderName.trim() || creating ? 0.5 : 1,
+                }}
+              >
+                {creating ? 'Creating…' : 'Create & Select'}
+              </button>
+            </div>
+            {createError && (
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: '0.58rem',
+                color: 'var(--hb-amber-bright)',
+              }}>
+                {createError}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Footer — action row */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -246,6 +331,23 @@ export default function HisarBrowser({ config, current, onSelect, onClose }: Pro
             {path}
           </span>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {canCreate && (
+              <button
+                onClick={() => {
+                  setShowCreate(value => !value)
+                  setCreateError(null)
+                }}
+                style={{
+                  border: '1px solid var(--hb-border)', background: 'transparent',
+                  cursor: 'pointer', padding: '0.25rem 0.7rem', borderRadius: 5,
+                  fontFamily: "'Rajdhani', sans-serif", fontSize: '0.64rem',
+                  fontWeight: 600, letterSpacing: '0.08em',
+                  color: 'var(--hb-cyan)',
+                }}
+              >
+                New Folder
+              </button>
+            )}
             <button
               onClick={onClose}
               style={{
