@@ -12,7 +12,7 @@ VIEW = "<!-- finance-projection-v1 -->"
 TYPES = ("transaction", "balance", "report", "recurring")
 MOVEMENTS = ("expense", "income", "transfer", "debt_payment", "loan_disbursement")
 FIELDS = {
-    "transaction": {"date", "movement", "amount", "currency", "account", "counterparty", "event_ref", "reported_on"},
+    "transaction": {"date", "movement", "amount", "currency", "account", "counterparty", "event_ref", "reported_on", "period"},
     "balance": {"date", "amount", "currency", "account", "balance_kind"},
     "report": {"date", "report_ref", "body"},
     "recurring": {"effective_from", "effective_until", "amount", "currency", "frequency", "account", "due_day"},
@@ -64,6 +64,14 @@ def validate(record):
         if not isinstance(record.get("account"), str) or not record["account"].strip():
             raise ValueError("account is required; use 'unknown' if the source does not identify it.")
     if record["type"] == "transaction":
+        if record.get("period"):
+            if not re.fullmatch(r"\d{4}-\d{2}", record["period"]):
+                raise ValueError("period must be YYYY-MM when the month is known but the exact date is unknown.")
+            date.fromisoformat(record["period"] + "-01")
+            if record.get("date") and not record["date"].startswith(record["period"]):
+                raise ValueError("period and occurrence date disagree.")
+            if record["period"] > owner_today().strftime("%Y-%m"):
+                raise ValueError("A future period is a plan, not an actual transaction.")
         if record.get("movement") not in MOVEMENTS or not record.get("event_ref"):
             raise ValueError("A transaction requires movement and an evidence-based event_ref identifying this occurrence.")
     if record["type"] == "balance" and record.get("balance_kind") not in ("asset", "liability"):
@@ -114,9 +122,9 @@ def views(records, legacy_months=()):
     result = {}
     # Include months containing voided transactions too: voiding the last row
     # must clear its old view, not leave yesterday's expense visible.
-    months = sorted({(r.get("date") or r["reported_on"])[:7] for r in records if r["type"] == "transaction"} | set(legacy_months))
+    months = sorted({(r.get("period") or r.get("date") or r["reported_on"])[:7] for r in records if r["type"] == "transaction"} | set(legacy_months))
     for month in months:
-        rows = sorted((r for r in active if r["type"] == "transaction" and (r.get("date") or r["reported_on"]).startswith(month)), key=lambda r: (r.get("date") or r["reported_on"], r["id"]))
+        rows = sorted((r for r in active if r["type"] == "transaction" and (r.get("period") or r.get("date") or r["reported_on"]).startswith(month)), key=lambda r: (r.get("date") or r["reported_on"], r["id"]))
         result[f"/memories/finance/ledger/{month}.md"] = f"# {month}\n\n{VIEW}\n\n" + (
             "Amounts with unknown source values are shown as unknown. Transfers, debt payments and loan proceeds are separate from spending/earned income.\n\n") + table(
             ["Date", "Reported on", "Status", "Kind", "Description", "Amount", "Currency", "Account", "Record"],
@@ -150,9 +158,9 @@ def summarize(records, month):
                     "kind":r["balance_kind"], "as_of":r["date"], "amount":r["amount"], "record":r["id"]}
         if r["type"] != "transaction" or r["status"] == "void":
             continue
-        if not (r.get("date") or r["reported_on"]).startswith(month):
+        if not (r.get("period") or r.get("date") or r["reported_on"]).startswith(month):
             continue
-        if r["status"] != "active" or r["amount"] is None or r.get("date") is None:
+        if r["status"] != "active" or r["amount"] is None or (r.get("date") is None and not r.get("period")):
             excluded.append({"record":r["id"], "reason":"Unverified, unknown amount or unknown occurrence date; not included in period totals."})
             continue
         currency = totals.setdefault(r["currency"], {k:Decimal("0.00") for k in MOVEMENTS})

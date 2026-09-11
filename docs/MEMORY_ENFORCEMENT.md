@@ -21,7 +21,9 @@ Both paths are now enforced by the backend.
 Raw agent create/insert/replace/delete operations cannot commit. All agent writers
 must resolve exact quotations in owner messages, existing observations or memory
 documents. `message:latest` resolves only inside a genuine owner conversation,
-never an automated trigger. A separate, tool-free model call checks source support,
+never an automated trigger. Image evidence uses message:<id>#image:<index> and a
+transcription checked against the attached original by a vision-capable reviewer.
+Receipts store the source hash, not duplicate image bytes. A separate, tool-free model call checks source support,
 subject, section, lifecycle, duplication and loss of unrelated knowledge. A timeout,
 malformed result or rejection saves nothing. The model remains fallible: source
 existence and quotations do not mathematically prove factual entailment.
@@ -47,7 +49,8 @@ readable representation. The representations must agree byte-for-byte.
 Amounts use exact decimal strings (`4914.00`), explicit currencies and no grouping
 separators. `null` means unknown, not zero. A transaction with unknown occurrence
 date has `date: null` and an evidenced `reported_on`; it is excluded from dated
-period totals. Unverified records are explicitly marked. Incorrect records can
+period totals unless an evidenced occurrence month is explicitly recorded in
+`period`. Unverified records are explicitly marked. Incorrect records can
 be voided, retaining their identity and revisions. Corrections update the original
 record rather than creating a second debt containing a correction notice.
 

@@ -74,7 +74,7 @@ async def mutate_file(db, *, user_id: int, path: str, before: str | None,
                              evidence=resolved, model=model)
         receipt = MemoryWriteReceipt(user_id=user_id, path=path, author=author,
             request_id=request_id, before_hash=version(before or ""),
-            after_hash=version(after or ""), evidence=resolved, rationale=reason)
+            after_hash=version(after or ""), evidence=[{k:v for k,v in e.items() if k != "_image"} for e in resolved], rationale=reason)
     try:
         if before is None:
             db.add(MemoryFile(user_id=user_id, path=path, content=after))

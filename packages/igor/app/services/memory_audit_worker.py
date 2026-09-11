@@ -113,7 +113,7 @@ async def repair_batch(db, *, user_id, repairs, request_id, model):
             await record_revision(db, user_id=user_id, path=path, author="orion", action="audit_repair",
                                   before=before or "", after=after, request_id=request_id)
             db.add(MemoryWriteReceipt(user_id=user_id, path=path, author="orion", request_id=request_id,
-                before_hash=version(before or ""), after_hash=version(after), evidence=evidence, rationale=reason))
+                before_hash=version(before or ""), after_hash=version(after), evidence=[{k:v for k,v in e.items() if k != "_image"} for e in evidence], rationale=reason))
         if any(p.startswith(FINANCE_ROOT) for p in changes):
             await db.flush()
             await refresh_views(db, user_id, request_id)
@@ -165,12 +165,17 @@ async def review_document(user_id, path, model, request_id):
             if contract.get("owner_agent"):
                 query = query.where(Session.agent_id.in_((contract["owner_agent"], "speda")))
             messages = (await db.execute(query.order_by(Message.id.desc()).limit(max(1, settings.memory_audit_evidence_messages)))).scalars().all()
-            ranked = sorted(messages, key=lambda m: len(words(text_content(m.content)) & tokens), reverse=True)
+            cited_messages = {int(n) for n in re.findall(r"message:(\d+)", target)}
+            ranked = sorted(messages, key=lambda m: (m.id in cited_messages, len(words(text_content(m.content)) & tokens)), reverse=True)
             for msg in ranked:
                 body = text_content(msg.content)
-                if not body or not words(body) & tokens or used + len(body) > limit:
+                if (not body and msg.id not in cited_messages) or (msg.id not in cited_messages and not words(body) & tokens) or used + len(body) > limit:
                     continue
-                context.append({"ref": f"message:{msg.id}", "date": str(msg.created_at), "content": body})
+                item = {"ref": f"message:{msg.id}", "date": str(msg.created_at), "content": body}
+                if msg.id in cited_messages and isinstance(msg.content,list):
+                    item["images"] = [{"ref":f"message:{msg.id}#image:{i}", "_image":b["source"]}
+                        for i,b in enumerate(b for b in msg.content if isinstance(b,dict) and b.get("type")=="image")]
+                context.append(item)
                 used += len(body)
             result = await ask_json(AUDIT, {"today": owner_today().isoformat(), "path": path,
                 "contract": contract, "content": target, "context": context,

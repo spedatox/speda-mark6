@@ -52,6 +52,8 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         fields=[
             ConfigField("memory_review_model", "Memory Reviewer Model", "text", requires_restart=_LIVE,
                         help="Empty uses the background model. Writes fail closed if review is unavailable."),
+            ConfigField("memory_review_vision_model", "Visual Evidence Reviewer", "text", requires_restart=_LIVE, help="Empty uses the current vision model or the configured provider vision tier."),
+            ConfigField("memory_review_max_images", "Images Per Evidence Review", "int", requires_restart=_LIVE),
             ConfigField("memory_review_max_tokens", "Review Output Tokens", "int", requires_restart=_LIVE),
             ConfigField("memory_review_context_chars", "Review Context Characters", "int", requires_restart=_LIVE),
             ConfigField("memory_review_timeout_s", "Review Timeout Seconds", "int", requires_restart=_LIVE),

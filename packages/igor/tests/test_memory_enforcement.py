@@ -269,3 +269,40 @@ async def test_trigger_runs_controller_without_freeform_orion_turn(monkeypatch):
         output_mode="silent", request_id="test", orchestrator=None, turns=None, session_manager=None,telegram_bots=None)
     assert result == ("test",0)
     queued.assert_awaited_once()
+
+
+def test_known_month_unknown_day_included_once_and_inconsistent_period_rejected():
+    r=transaction(); r.update(date=None, reported_on="2026-09-07", period="2026-09",
+                             movement="loan_disbursement", amount="4000.00")
+    assert finance.summarize([r],"2026-09")["totals"]["TRY"]["loan_disbursement"] == "4000.00"
+    r.update(date="2026-08-31")
+    with pytest.raises(ValueError,match="disagree"):
+        finance.validate(r)
+
+
+async def test_visual_evidence_uses_original_image_and_vision_model(sessions,monkeypatch):
+    from app.models.message import Message
+    from app.models.session import Session
+    from app.services.memory_admission import ask_json
+    from app.services.llm_client import LLMClient
+    from app.config import settings
+    monkeypatch.setattr(settings,"memory_review_model","")
+    monkeypatch.setattr(settings,"memory_review_vision_model","")
+    monkeypatch.setattr(settings,"llm_background_model","deepseek:deepseek-v4-flash")
+    call=AsyncMock(return_value=SimpleNamespace(content=[SimpleNamespace(text='{"allow":true,"reason":"Image verified"}')]))
+    monkeypatch.setattr(LLMClient,"create_message",call)
+    async with sessions() as db:
+        session=Session(user_id=1,agent_id="sentinel",triggered_by="user",model_used="test")
+        db.add(session);await db.flush()
+        msg=Message(session_id=session.id,role="user",content=[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aW1hZ2U="}}])
+        db.add(msg);await db.commit()
+        evidence=await resolve_evidence(db,1,[{"ref":f"message:{msg.id}#image:0","quote":"The visible balance is 4914 TRY."}])
+        assert evidence[0]["evidence_type"] == "image"
+        await ask_json("Validate image",{"evidence":evidence})
+        args=call.call_args.kwargs
+        assert args["model"] == "deepseek:deepseek-v4-flash-vision-exp"
+        blocks=args["messages"][0]["content"]
+        assert any(b["type"]=="image" for b in blocks)
+        assert "aW1hZ2U=" not in blocks[0]["text"]
+        with pytest.raises(ValueError,match="missing"):
+            await resolve_evidence(db,2,[{"ref":f"message:{msg.id}#image:0","quote":"4914"}])

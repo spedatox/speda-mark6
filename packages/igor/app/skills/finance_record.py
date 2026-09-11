@@ -27,7 +27,7 @@ class FinanceRecordSkill(Skill):
         "report: date,report_ref,body; no monetary amount field. "
         "recurring: effective_from,frequency,amount,currency,account; optional effective_until,due_day. "
         "All require id,type,description,status(active/void),evidence[{ref,quote}]. "
-        "Unknown transaction date: date=null, reported_on=owner report date. Unverified claims use status=unverified. "
+        "Unknown transaction date: date=null, reported_on=owner report date. If the occurrence month is evidenced, period=YYYY-MM permits month-precision totals. Unverified claims use status=unverified. "
         "Amounts are strings e.g. 4914.00, NEVER 4.914 or 4,914.00. Unknown is null. "
         "A card balance is not an item purchase price. A repayment/transfer/loan "
         "disbursement is not ordinary spending/income. A credit report is not another debt."
@@ -37,7 +37,7 @@ class FinanceRecordSkill(Skill):
         "month": {"type": "string"},
         "id": {"type": "string"}, "version": {"type": "string"},
         "record": {"type": "object", "properties": {
-            **{k: {"type": "string"} for k in ("id", "description", "reported_on", "currency", "account", "counterparty", "event_ref", "report_ref", "body", "effective_from", "effective_until")},
+            **{k: {"type": "string"} for k in ("id", "description", "reported_on", "period", "currency", "account", "counterparty", "event_ref", "report_ref", "body", "effective_from", "effective_until")},
             "date": {"type": ["string", "null"]},
             "type": {"type": "string", "enum": list(finance.TYPES)},
             "status": {"type": "string", "enum": ["active", "void", "unverified"]},

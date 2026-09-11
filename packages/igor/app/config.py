@@ -671,6 +671,8 @@ class Settings(BaseSettings):
     # he had to keep repeating himself. See app/services/fact_extraction.py.
     # Mandatory semantic admission and Orion's durable document review worker.
     memory_review_model: str = ""
+    memory_review_vision_model: str = ""
+    memory_review_max_images: int = 8
     memory_review_max_tokens: int = 6000
     memory_review_context_chars: int = 70000
     memory_review_timeout_s: int = 180
