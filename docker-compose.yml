@@ -126,8 +126,11 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
 
-  # SPEDA's "capable computer" — isolated container it runs commands in.
-  # No host mounts, no secrets, resource-limited, reachable only on this network.
+  # SPEDA's cyber-development lab — a headless Kali container (packages/sandbox)
+  # it runs commands in. No host mounts, no secrets, reachable only on this
+  # network. The full Kali headless toolset (nmap, nuclei, sqlmap, metasploit,
+  # hashcat, …) is baked into the image; /root persists tool caches (nuclei
+  # templates, msfdb, go module cache) so one-time warm-ups survive rebuilds.
   sandbox:
     build: ./packages/sandbox
     # No host port mapping — only the app talks to it over the internal network.
@@ -135,10 +138,16 @@ services:
       - "9000"
     volumes:
       - sandbox_workspace:/workspace
-    # Resource ceilings so a runaway command can't starve the host.
-    mem_limit: 1g
-    cpus: 1.0
-    pids_limit: 256
+      # Tool state lives in $HOME (nuclei templates, msfdb, go/pkg/mod, pip cache),
+      # not /workspace. Persist it so a `docker compose build` doesn't reset the
+      # lab's one-time warm-up work. Baked apt packages stay in the image layer.
+      - sandbox_home:/root
+    # Resource ceilings so a runaway command can't starve the host. Kali's
+    # toolset (metasploit, hashcat, parallel scans) wants more headroom than the
+    # old Python-only image, so these default higher and stay overridable.
+    mem_limit: ${SANDBOX_MEM_LIMIT:-4g}
+    cpus: ${SANDBOX_CPUS:-2.0}
+    pids_limit: ${SANDBOX_PIDS_LIMIT:-1024}
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
@@ -255,6 +264,7 @@ services:
 
 volumes:
   sandbox_workspace:
+  sandbox_home:
   browser_state:
   n8n_data:
   caddy_data:

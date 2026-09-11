@@ -18,8 +18,9 @@ It only spawns when:
 That last check means a running Docker sandbox — or a manually started one —
 always wins; the launcher never double-binds the port. This is honestly reduced
 isolation (a workspace jail, not a container); Docker remains the production
-isolation. The server itself is stdlib-only and cross-platform, so it needs no
-changes to run here.
+isolation. It also lacks the Kali toolset baked into the Docker image — the
+local jail is a bare host-Python shell, not the lab. The server itself is
+stdlib-only and cross-platform, so it needs no changes to run here.
 """
 
 import asyncio

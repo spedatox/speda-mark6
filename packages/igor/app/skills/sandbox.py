@@ -15,18 +15,21 @@ logger = logging.getLogger(__name__)
 class RunCommandSkill(Skill):
     name = "run_command"
     deferred = True
-    search_keywords = "shell bash terminal command execute script sandbox run code"
+    search_keywords = "shell bash terminal command execute script sandbox run code scan recon exploit kali pentest"
     description = (
-        "Runs a shell command in Speda's own sandboxed Linux computer (an isolated "
-        "container with Python 3.12, pip, git, curl, jq, pandas/numpy preinstalled, "
-        "and a persistent /workspace). Use this to actually DO computing work: run "
-        "scripts, do calculations, process data, fetch files, install packages "
-        "(pip/apt as needed), generate or inspect files. Files and installed packages "
-        "PERSIST across calls, so treat it like a real machine you're working on. "
-        "Do NOT use it for simple math you can do in your head or for answering "
-        "questions that need no execution. It cannot access the user's chat database "
-        "or secrets — it is a clean, separate sandbox. Returns stdout, stderr and the "
-        "exit code."
+        "Runs a shell command in Speda's own sandboxed Linux computer — a headless "
+        "Kali container with a full security/development toolset preinstalled (nmap, "
+        "masscan, amass, theHarvester, nikto, sqlmap, nuclei, ffuf, gobuster, "
+        "feroxbuster, wpscan, metasploit, searchsploit, hydra, john, hashcat, plus "
+        "python3, pip, git, curl, jq, gcc/make, Go, and the pandas/numpy/document "
+        "libraries) and a persistent /workspace. Use this to actually DO work: run "
+        "authorized scans or recon, develop and run scripts, process data, fetch "
+        "files, install packages (pip/apt/go as needed), generate or inspect files. "
+        "Files and installed packages PERSIST across calls, so treat it like a real "
+        "machine you're working on. Do NOT use it for simple math you can do in your "
+        "head or for answering questions that need no execution. It cannot access the "
+        "user's chat database or secrets — it is a clean, separate sandbox. Returns "
+        "stdout, stderr and the exit code."
     )
     read_only = False
     input_schema = {

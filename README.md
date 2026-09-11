@@ -107,7 +107,7 @@ Model allocation follows one policy across the roster: the owner's manual per-ag
 
 ### Code execution & web automation
 
-- Run shell commands in an isolated Linux sandbox with a persistent workspace — Python, pip, git, and data tooling available for real computation, not just text generation.
+- Run shell commands in an isolated headless-Kali sandbox with a persistent workspace — a full security/development toolset (nmap, nuclei, sqlmap, Metasploit, hashcat) plus Python, pip, git, Go, and data tooling, for real computation, authorized recon, and exploit development, not just text generation.
 - Render JavaScript-heavy or blocked pages, drive multi-step browser interactions (click, fill, upload, download, tabs, dialogs), and sign into the owner's own saved web portals without the password ever passing through the model.
 
 ### Research, news & OSINT
@@ -174,7 +174,7 @@ Reached over the Model Context Protocol, each optional and skipped at startup if
 
 - **Deep research** — a wrapped open-source research engine for comprehensive, multi-source reports too broad for individual tool calls.
 - **Security analysis** — a wrapped security toolkit for vulnerability scans, CVE lookups, and network reconnaissance against a named target.
-- **Sandbox** — a no-secrets container that executes arbitrary shell commands with a hard timeout, giving the assistant a real, stateful command line without touching the API container or its credentials.
+- **Sandbox** — a no-secrets headless-Kali container that executes arbitrary shell commands with a hard timeout, giving the assistant a real, stateful security lab (full Kali toolset, Python, Go) without touching the API container or its credentials.
 - **Browser** — the assistant's eyes on the web: renders pages, returns readable text and an accessibility snapshot of what's clickable, and holds the owner's portal sessions in a persisted per-profile cookie jar so a password never becomes text the model produces.
 
 ---
@@ -228,7 +228,7 @@ Explicit, high-consequence capabilities, most restricted to a small set of trust
 | Desktop | Electron, React, TypeScript, electron-vite |
 | Mobile | Kotlin, Jetpack Compose, Health Connect, WorkManager, Firebase Cloud Messaging |
 | Browser automation | Playwright (owner-login sidecar) and the official Playwright MCP server (open web), each containerized separately |
-| Code execution | Isolated Python/shell sandbox container |
+| Code execution | Isolated headless-Kali sandbox container |
 | Infrastructure | Docker Compose, Caddy (reverse proxy, automatic HTTPS), n8n, GitHub Actions |
 
 ---
