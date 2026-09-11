@@ -9,6 +9,8 @@ from app.models.memory import Memory
 from app.models.memory_file import MemoryFile
 from app.models.memory_revision import MemoryRevision
 from app.models.memory_review import MemoryReview
+from app.models.memory_write_receipt import MemoryWriteReceipt
+from app.models.finance_identity import FinanceIdentity
 from app.models.message_embedding import MessageEmbedding
 from app.models.observation import Observation
 from app.models.background_job import BackgroundJob

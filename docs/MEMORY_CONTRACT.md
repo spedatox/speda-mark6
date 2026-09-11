@@ -1,3 +1,7 @@
+# Current implementation
+
+The enforced writers, typed finance views and durable Orion controller are specified in [Memory enforcement](MEMORY_ENFORCEMENT.md). That document supersedes the earlier voluntary-write/audit procedure below.
+
 # Memory contract
 
 This document describes the running design. Historical V1–V4 references in old

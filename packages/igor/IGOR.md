@@ -87,6 +87,8 @@ Configuration lives in `packages/igor/.env` (not committed) — copy `.env.examp
 
 ## Core contracts
 
+The mandatory write admission, typed finance projections and durable Orion controller
+are documented in [Memory enforcement](../../docs/MEMORY_ENFORCEMENT.md).
 The executable memory hierarchy, lifecycle, write gateway, evidence intake and
 Orion audit contract are documented in [Memory contract](../../docs/MEMORY_CONTRACT.md).
 Topic documents remain authoritative; `current.md` is the time-aware projection

@@ -23,7 +23,7 @@ owners and verbs. Classify the meaning first, then the subject, then its time.
   its record and revisions remain available. Plans are not accomplished facts.
 - A **reference** answers a subject question: academic, finance, wellness,
   cybersec or ops. Keep one authoritative topic file. A reissued document
-  replaces its prior edition via `str_replace`; `create` is only for a new file.
+  replaces its prior edition via `memory_edit`; get the contract and version first.
 - A **person/project** has one existing identity under social/ or projects/.
   Read the directory and reuse its spelling. Use registry_upsert for descriptions
   and dated events. People are professional or personal; organisations are facts.
@@ -41,6 +41,23 @@ it already answers the question. System logs and archived originals are protecte
 
 ### Evidence and safe writing
 
+Raw memory create/insert/str_replace/delete are disabled for agents. The `memory`
+tool is for reading. Every write tool requires evidence=[{ref, quote}]: an EXACT
+supporting quote from message:<id>, observation:<id> or an existing memory path.
+message:latest resolves only in the current OWNER conversation, never an automation.
+A separate reviewer checks placement and support before any mutation commits.
+Validation failure is not success; retry only after fixing the stated defect.
+
+Financial activity MUST use finance_record. It chooses the destination from the
+record type. transaction, balance, report and recurring are distinct schemas.
+monthly-structure holds computed recurring rules ONLY. ledger/YYYY-MM holds
+computed actual transactions. Never write this month's activity to standing rules.
+An account balance is not a purchase price; a report or correction notice is not
+another debt; loan proceeds and debt repayments are not earned income/spending.
+Use stable ids to correct records, not a new row containing the correction.
+Unknown amount is null, not zero or a balance borrowed from another field.
+
+
 Record only supported knowledge. An assistant proposal is not an owner decision.
 Use absolute dates; calculate countdowns at read time, never persist them.
 Distinguish planned, attempted, completed, cancelled and unknown outcomes.
@@ -52,9 +69,9 @@ transaction. A concurrency conflict means reread, reassess and reapply the small
 intended change. Never retry an old whole-file replacement blindly. Preserve
 unrelated content. Do not duplicate an event already recorded by another agent.
 
-When moving misfiled content, write and verify its destination FIRST, then remove
-that exact content from the source. Stop on any conflict. A duplicate is
-recoverable; deleting before storing its destination can lose the only copy.
+Cross-file refiling is Orion's atomic audit repair: ask memory_audit(operation="run").
+The source removal and destination insertion must commit together, with exact
+anchors, evidence and revisions. Never improvise two separate raw writes.
 
 Most shared-memory turns need no write. Domain events, explicit corrections,
 preferences and ongoing-state transitions are exceptions: record them when

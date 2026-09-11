@@ -383,6 +383,11 @@ def _member_upsert(
             f"`when` must be an absolute date as YYYY-MM-DD — got {stamp!r}."
         )
 
+    if event:
+        try:
+            date.fromisoformat(stamp)
+        except ValueError as exc:
+            raise WriteRejected("Event date must be a real calendar date.") from exc
     has_markers = bool(coll.markers)
     lines = text.splitlines() if text.strip() else []
 
@@ -406,13 +411,17 @@ def _member_upsert(
                 at = 1 if lines and lines[0].startswith("# ") else 0
                 lines[at:at] = ["", "**Who:** " + who]
         else:
-            at = 1 if lines and lines[0].startswith("# ") else 0
-            lines[at:at] = ["", who]
+            # The introductory description ends at the first section. Replace
+            # only that description, preserving every project detail below it.
+            end = next((i for i, line in enumerate(lines[1:], 1) if line.startswith("## ")), len(lines))
+            lines[1:end] = ["", who, ""]
 
     if event:
         bullet = f"- [{stamp}] {event}"
         for i, line in enumerate(lines):
-            if line.startswith("**Events:**"):
+            if line.startswith("**Events:**") or (not has_markers and line == "## Log"):
+                if bullet in lines:
+                    return "\n".join(lines).rstrip() + "\n"
                 lines.insert(i + 1, bullet)      # newest first
                 break
         else:

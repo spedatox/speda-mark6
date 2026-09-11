@@ -35,7 +35,8 @@ class MemoryWriteConflict(ValueError):
 
 async def mutate_file(db, *, user_id: int, path: str, before: str | None,
                       after: str | None, author: str, action: str,
-                      request_id: str = "", managed: bool = False) -> list[str]:
+                      request_id: str = "", managed: bool = False,
+                      evidence: list | None = None, model: str = "") -> list[str]:
     """Agent write gateway. Compare-and-swap + revision are one transaction.
 
     None means absence/deletion, distinct from an empty document. A conflict
@@ -47,6 +48,8 @@ async def mutate_file(db, *, user_id: int, path: str, before: str | None,
     problem = protected_write(path, author, managed=managed)
     if problem:
         raise MemorySchemaViolation("Write rejected — " + problem)
+    if not managed and author != "owner":
+        raise MemorySchemaViolation("Raw agent writes are disabled. Use memory_edit with evidence and version; finance_record for money; memory_state for ongoing situations; shaped tools for events/entities. Do not reroute into shared files.")
     if after is None:
         owner = owner_of(path)
         if owner and author not in (owner, "orion", "owner"):
@@ -57,6 +60,21 @@ async def mutate_file(db, *, user_id: int, path: str, before: str | None,
                             is_create=before is None, author=author, managed=managed)
     if before == after:
         return notes
+    receipt = None
+    if author != "owner":
+        from app.services.memory_admission import resolve_evidence, admit
+        from app.models.memory_write_receipt import MemoryWriteReceipt
+        from app.services.memory_states import version
+        try:
+            resolved = await resolve_evidence(db, user_id, evidence)
+        except ValueError as exc:
+            raise MemorySchemaViolation(str(exc)) from exc
+        reason = await admit(db, user_id=user_id,
+                             changes=[{"path": path, "before": before, "after": after}],
+                             evidence=resolved, model=model)
+        receipt = MemoryWriteReceipt(user_id=user_id, path=path, author=author,
+            request_id=request_id, before_hash=version(before or ""),
+            after_hash=version(after or ""), evidence=resolved, rationale=reason)
     try:
         if before is None:
             db.add(MemoryFile(user_id=user_id, path=path, content=after))
@@ -73,6 +91,12 @@ async def mutate_file(db, *, user_id: int, path: str, before: str | None,
         await record_revision(db, user_id=user_id, path=path, author=author,
                               action=action, before=before or "", after=after or "",
                               request_id=request_id)
+        if receipt is not None:
+            db.add(receipt)
+        if path.startswith("/memories/finance/records/"):
+            from app.services.finance_records import refresh_views
+            await db.flush()
+            await refresh_views(db, user_id, request_id)
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -163,6 +187,8 @@ def is_owner_editable(path: str) -> bool:
     from app.services.memory_compose import COMPOSED_FILES
     from app.services.memory_render import RENDERED_FILES
 
+    if path.startswith(("/memories/finance/records/", "/memories/finance/ledger/")) or path in ("/memories/finance/balances.md", "/memories/finance/reports.md", "/memories/finance/monthly-structure.md"):
+        return False
     if path == "/memories/current.md" or path.startswith("/memories/states/"):
         return False
     if path.startswith(AUDIT_ROOT) or "/." in path:

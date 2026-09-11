@@ -207,6 +207,9 @@ def _apply_additive_migrations(sync_conn) -> None:
             )
             logger.info("schema_migrated", extra={"change": "reminder_cycles.every_minutes"})
 
+    if "background_jobs" in tables:
+        sync_conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_active_memory_audit ON background_jobs (user_id, kind) WHERE kind = 'memory_audit' AND status IN ('pending','running')"))
+
 
 async def init_db() -> None:
     """Create all tables and seed the default user. Called in lifespan before anything else."""

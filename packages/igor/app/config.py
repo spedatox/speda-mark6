@@ -669,6 +669,18 @@ class Settings(BaseSettings):
     # record_observation call. It waited a long time: 93 facts were recorded
     # across 10,409 user messages before this existed, which is the real reason
     # he had to keep repeating himself. See app/services/fact_extraction.py.
+    # Mandatory semantic admission and Orion's durable document review worker.
+    memory_review_model: str = ""
+    memory_review_max_tokens: int = 6000
+    memory_review_context_chars: int = 70000
+    memory_review_timeout_s: int = 180
+    memory_audit_max_documents: int = 200
+    memory_audit_evidence_messages: int = 500
+    memory_audit_observation_batch: int = 25
+    memory_audit_max_observations: int = 3000
+    memory_audit_repair_rounds: int = 2
+    memory_audit_concurrency: int = 2
+    memory_review_valid_days: int = 7
     auto_extract_facts: bool = True
     # Ceiling per turn. A turn that looks like it holds twenty durable facts is
     # almost always a long ANSWER being mined for trivia, and flooding the store

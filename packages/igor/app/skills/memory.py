@@ -419,7 +419,13 @@ async def ensure_seeded(user_id: int, db) -> None:
         select(MemoryFile.path).where(MemoryFile.user_id == user_id)
     )
     existing = {row[0] for row in result.all()}
-    missing = [(p, c) for p, c in INITIAL_FILES.items() if p not in existing]
+    from app.services.memory_spec import collection_from_monolith
+    missing = []
+    for path, content in INITIAL_FILES.items():
+        coll = collection_from_monolith(path)
+        if path in existing or (coll and any(p.startswith(coll.root + "/") for p in existing)):
+            continue
+        missing.append((path, content))
     if not missing:
         return
     for path, content in missing:

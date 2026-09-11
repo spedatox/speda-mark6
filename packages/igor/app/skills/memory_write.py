@@ -42,6 +42,7 @@ from app.services.memory_write import (
     registry_upsert,
 )
 from app.skills.base import Skill
+from app.services.memory_admission import EVIDENCE_SCHEMA, resolve_evidence
 
 logger = logging.getLogger(__name__)
 
@@ -57,16 +58,17 @@ async def _load(context: AgentContext, path: str) -> MemoryFile | None:
 
 
 async def _commit(
-    context: AgentContext, path: str, before: str | None, after: str, action: str
+    context: AgentContext, path: str, before: str | None, after: str, action: str, evidence: list | None = None
 ) -> str:
     """Gate, persist and record one shaped write. Returns the tool result."""
     try:
+        evidence = await resolve_evidence(context.db, context.user_id, evidence, session_id=context.session_id)
         warnings = await mutate_file(
             context.db, user_id=context.user_id, path=path, author=context.agent_id,
             action=action, before=before,
-            after=after, request_id=context.request_id,
+            after=after, request_id=context.request_id, managed=True, evidence=evidence, model=context.model,
         )
-    except (MemorySchemaViolation, MemoryWriteConflict) as e:
+    except (ValueError, MemorySchemaViolation, MemoryWriteConflict) as e:
         return str(e)
     logger.info(
         "memory_shaped_write",
@@ -119,6 +121,7 @@ class LedgerAppendSkill(Skill):
     input_schema = {
         "type": "object",
         "properties": {
+            "evidence": EVIDENCE_SCHEMA,
             "path": {
                 "type": "string",
                 "description": (
@@ -161,7 +164,7 @@ class LedgerAppendSkill(Skill):
                 ),
             },
         },
-        "required": ["path", "key"],
+        "required": ["path", "key", "evidence"],
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
@@ -173,6 +176,8 @@ class LedgerAppendSkill(Skill):
         path, error = route_ledger(args.get("path") or "", key)
         if error:
             return error
+        if path.startswith("/memories/finance/"):
+            return "Use finance_record: transactions, balances, reports and recurring rules have separate enforced types."
         spec = spec_for(path)
         if spec is None:
             return f"`{path}` is not a known memory document."
@@ -192,7 +197,7 @@ class LedgerAppendSkill(Skill):
             )
         except WriteRejected as e:
             return str(e)
-        return await _commit(context, path, before if file else None, after, "ledger_append")
+        return await _commit(context, path, before if file else None, after, "ledger_append", args.get("evidence"))
 
 
 class RegistryUpsertSkill(Skill):
@@ -215,6 +220,7 @@ class RegistryUpsertSkill(Skill):
     input_schema = {
         "type": "object",
         "properties": {
+            "evidence": EVIDENCE_SCHEMA,
             "kind": {
                 "type": "string",
                 "enum": ["person", "project"],
@@ -250,7 +256,7 @@ class RegistryUpsertSkill(Skill):
                 "description": "The event's date, YYYY-MM-DD. Defaults to today.",
             },
         },
-        "required": ["kind", "entity"],
+        "required": ["kind", "entity", "evidence"],
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
@@ -285,7 +291,7 @@ class RegistryUpsertSkill(Skill):
             )
         except WriteRejected as e:
             return str(e)
-        return await _commit(context, path, before if file else None, after, "registry_upsert")
+        return await _commit(context, path, before if file else None, after, "registry_upsert", args.get("evidence"))
 
 
 class NarrativeReviseSkill(Skill):
@@ -305,6 +311,7 @@ class NarrativeReviseSkill(Skill):
     input_schema = {
         "type": "object",
         "properties": {
+            "evidence": EVIDENCE_SCHEMA,
             "chapter": {
                 "type": "string",
                 "description": "The chapter's exact heading, e.g. 'Communication style'.",
@@ -314,7 +321,7 @@ class NarrativeReviseSkill(Skill):
                 "description": "The chapter's complete new body. Replaces everything under that heading.",
             },
         },
-        "required": ["chapter", "body"],
+        "required": ["chapter", "body", "evidence"],
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
@@ -330,4 +337,4 @@ class NarrativeReviseSkill(Skill):
             )
         except WriteRejected as e:
             return str(e)
-        return await _commit(context, path, file.content, after, "narrative_revise")
+        return await _commit(context, path, file.content, after, "narrative_revise", args.get("evidence"))

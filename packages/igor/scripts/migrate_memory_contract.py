@@ -21,7 +21,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
 from app.database import AsyncSessionLocal
 from app.models.memory_file import MemoryFile
 from app.services.memory_store import record_revision
@@ -48,13 +48,15 @@ async def apply_plan(db, plan: dict, *, apply: bool = False) -> dict:
             continue
         if (version(before) if before is not None else None) != change["expected_sha256"]:
             raise ValueError(f"Plan is stale at {path}; no changes applied.")
+        if after is None and (path == "/memories/current.md" or path.startswith("/memories/states/")):
+            raise ValueError("Managed current/state records cannot be deleted by a repair plan.")
         if path.startswith("/memories/states/"):
             record = parse(after)
             if path != f"/memories/states/{record['key']}.md":
                 raise ValueError("State identity mismatch.")
         if path == "/memories/current.md" and "<!-- state-projection-v1 -->" not in after:
             raise ValueError("Current migration must enable the state projection.")
-        errors = [f.message for f in introduced_by(path, before or "", after) if f.severity == "error"]
+        errors = [f.message for f in introduced_by(path, before or "", after) if f.severity == "error"] if after is not None else []
         if errors:
             raise ValueError(f"Invalid planned document {path}: {errors}")
         pending.append((path, before, after))
@@ -73,18 +75,25 @@ async def apply_plan(db, plan: dict, *, apply: bool = False) -> dict:
                     db.add(MemoryFile(user_id=user_id, path=archive, content=before))
                     await record_revision(db, user_id=user_id, path=archive, author="migration",
                                           action="archive", before="", after=before, request_id=plan_id)
-                result = await db.execute(update(MemoryFile).where(
+                predicate = (
                     MemoryFile.user_id == user_id, MemoryFile.path == path,
                     MemoryFile.content == before,
-                ).values(content=after, updated_at=datetime.now(timezone.utc))
-                  .execution_options(synchronize_session="fetch"))
+                )
+                statement = (delete(MemoryFile).where(*predicate) if after is None else
+                             update(MemoryFile).where(*predicate).values(
+                                 content=after, updated_at=datetime.now(timezone.utc)))
+                result = await db.execute(statement.execution_options(synchronize_session="fetch"))
                 if result.rowcount != 1:
                     raise ValueError(f"Concurrent write at {path}; entire plan rolled back.")
             else:
                 db.add(MemoryFile(user_id=user_id, path=path, content=after))
             await record_revision(db, user_id=user_id, path=path, author="migration",
-                                  action="memory_contract", before=before or "", after=after,
+                                  action="memory_contract", before=before or "", after=after or "",
                                   request_id=plan_id)
+        if any(path.startswith("/memories/finance/records/") for path, _, _ in pending):
+            from app.services.finance_records import refresh_views
+            await db.flush()
+            await refresh_views(db, user_id, plan_id)
         await db.commit()
     except Exception:
         await db.rollback()

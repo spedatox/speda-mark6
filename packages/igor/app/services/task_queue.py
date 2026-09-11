@@ -36,7 +36,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
@@ -152,7 +152,10 @@ def _handlers() -> dict:
 
         await extract_turn_facts(session_id, request_id, user_id, model)
 
+    from app.services.memory_audit_worker import run_audit
+
     return {
+        "memory_audit": run_audit,
         "extract_facts": _extract_facts,
         "session_log": update_session_log,
         "session_recap": update_session_recap,
@@ -214,7 +217,14 @@ async def enqueue_one(
             request_id=request_id,
         )
         db.add(job)
-        await db.commit()
+        from sqlalchemy.exc import IntegrityError
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            if kind == "memory_audit":
+                return None  # another enqueue won the database uniqueness race
+            raise
         await db.refresh(job)
         logger.info("job_enqueued", extra={"kind": kind, "job_id": job.id})
         return job.id
@@ -344,13 +354,18 @@ async def _claim(db: AsyncSession, limit: int) -> list[BackgroundJob]:
         .scalars()
         .all()
     )
+    claimed = []
     for job in rows:
-        job.status = "running"
-        job.started_at = now
-        job.attempts += 1
+        result = await db.execute(update(BackgroundJob).where(
+            BackgroundJob.id == job.id, BackgroundJob.status == "pending",
+            BackgroundJob.run_after <= now,
+        ).values(status="running", started_at=now, attempts=BackgroundJob.attempts + 1)
+          .execution_options(synchronize_session="fetch"))
+        if result.rowcount == 1:
+            claimed.append(job)
     if rows:
         await db.commit()
-    return rows
+    return claimed
 
 
 async def _finish(job_id: int, *, error: str | None) -> None:

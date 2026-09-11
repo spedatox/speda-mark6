@@ -12,6 +12,7 @@ from app.services import memory_states as states
 from app.services.memory_store import mutate_file
 from app.services.memory_schema import MemorySchemaViolation
 from app.skills.base import Skill
+from app.services.memory_admission import EVIDENCE_SCHEMA, resolve_evidence
 
 
 class MemoryStateSkill(Skill):
@@ -31,6 +32,7 @@ class MemoryStateSkill(Skill):
     input_schema = {
         "type": "object",
         "properties": {
+            "evidence": EVIDENCE_SCHEMA,
             "operation": {"type": "string", "enum": ["list", "get", "put"]},
             "key": {"type": "string"},
             "version": {"type": "string", "description": "get/list version, or 'new'."},
@@ -76,10 +78,11 @@ class MemoryStateSkill(Skill):
                 raise ValueError("A future outcome is a plan, not a completed/closed state.")
             after = states.encode(record)
             await states.verify_source(context.db, context.user_id, record["source"])
+            evidence = await resolve_evidence(context.db, context.user_id, args.get("evidence"), session_id=context.session_id)
             await mutate_file(context.db, user_id=context.user_id, path=path,
                               before=before, after=after, author=context.agent_id,
                               action="state_transition", request_id=context.request_id,
-                              managed=True)
+                              managed=True, evidence=evidence, model=context.model)
         except (ValueError, MemorySchemaViolation) as exc:
             return "Write rejected — " + str(exc)
         return json.dumps({"written": path, "version": states.version(after),

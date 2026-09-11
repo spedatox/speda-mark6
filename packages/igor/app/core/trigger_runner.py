@@ -367,6 +367,10 @@ async def start_trigger_turn(
     """
     agent_id = profile.agent_id
     model = profile.allocate_model(triggered_by)
+    if agent_id == "orion" and (payload.get("job") == "memory_audit" or payload.get("event") == "memory_audit"):
+        from app.services.memory_audit_worker import enqueue_audit
+        await enqueue_audit(user_id=user_id, model=model, request_id=request_id)
+        return request_id, session_id or 0
 
     session = await session_manager.get_or_create(
         db=db,

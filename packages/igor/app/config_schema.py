@@ -47,6 +47,24 @@ _LIVE = False  # requires_restart=False shorthand for readability below
 
 CONFIG_GROUPS: list[ConfigGroup] = [
     ConfigGroup(
+        id="memory_integrity", label="Memory Integrity",
+        blurb="Mandatory write review and Orion's measurable document audits.",
+        fields=[
+            ConfigField("memory_review_model", "Memory Reviewer Model", "text", requires_restart=_LIVE,
+                        help="Empty uses the background model. Writes fail closed if review is unavailable."),
+            ConfigField("memory_review_max_tokens", "Review Output Tokens", "int", requires_restart=_LIVE),
+            ConfigField("memory_review_context_chars", "Review Context Characters", "int", requires_restart=_LIVE),
+            ConfigField("memory_review_timeout_s", "Review Timeout Seconds", "int", requires_restart=_LIVE),
+            ConfigField("memory_audit_observation_batch", "Observations Per Review Batch", "int", requires_restart=_LIVE),
+            ConfigField("memory_audit_max_observations", "Observations Per Audit", "int", requires_restart=_LIVE),
+            ConfigField("memory_audit_evidence_messages", "Conversation Evidence Search Window", "int", requires_restart=_LIVE),
+            ConfigField("memory_audit_max_documents", "Documents Per Audit", "int", requires_restart=_LIVE),
+            ConfigField("memory_audit_repair_rounds", "Repair Rounds Per Document", "int", requires_restart=_LIVE),
+            ConfigField("memory_audit_concurrency", "Concurrent Document Reviews", "int", requires_restart=_LIVE),
+            ConfigField("memory_review_valid_days", "Semantic Review Validity Days", "int", requires_restart=_LIVE),
+        ],
+    ),
+    ConfigGroup(
         "language", "Language",
         "The one language the system speaks. It sets what every agent WRITES, what "
         "the replies are spoken in, what the microphone is decoded as, and what the "

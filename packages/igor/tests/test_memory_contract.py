@@ -44,7 +44,8 @@ def test_states_expire_to_unknown_without_claiming_completion():
     assert "Application is awaiting" in render([f], date(2026, 9, 12))
     overdue = render([f], date(2026, 9, 13))
     assert "Application is awaiting" not in overdue
-    assert "Review overdue" in overdue
+    assert "unverified records omitted" in overdue
+    assert "pending-application" not in overdue
     assert parse(f.content)["status"] == "waiting"
 
 
@@ -118,16 +119,18 @@ def test_new_dossier_topics_are_injected_and_caps_match_spec():
     assert max_bytes_for("/memories/owner.md") == 24000
 
 
-async def test_stale_writer_cannot_overwrite_another_agent_or_create_revision(sessions):
+async def test_stale_writer_cannot_overwrite_another_agent_or_create_revision(sessions, monkeypatch):
+    monkeypatch.setattr("app.services.memory_admission.resolve_evidence", AsyncMock(return_value=[]))
+    monkeypatch.setattr("app.services.memory_admission.admit", AsyncMock(return_value="Validated"))
     async with sessions() as db:
         await mutate_file(db, user_id=1, path="/memories/projects/demo.md", before=None,
-                          after="# Demo\n\nOriginal\n", author="speda", action="create")
+                          after="# Demo\n\nOriginal\n", author="speda", action="create", managed=True)
         stale = "# Demo\n\nOriginal\n"
         await mutate_file(db, user_id=1, path="/memories/projects/demo.md", before=stale,
-                          after="# Demo\n\nNew fact\n", author="optimus", action="edit")
+                          after="# Demo\n\nNew fact\n", author="optimus", action="edit", managed=True)
         with pytest.raises(MemoryWriteConflict):
             await mutate_file(db, user_id=1, path="/memories/projects/demo.md", before=stale,
-                              after="# Demo\n\nLost update\n", author="speda", action="edit")
+                              after="# Demo\n\nLost update\n", author="speda", action="edit", managed=True)
         assert (await db.execute(select(MemoryFile.content))).scalar_one() == "# Demo\n\nNew fact\n"
         assert len((await db.execute(select(MemoryRevision))).scalars().all()) == 2
 
@@ -168,10 +171,11 @@ def test_old_scheduled_audit_cannot_restore_disabled_architecture():
     assert "memory_audit(operation=" in seed
 
 
-async def test_state_tool_persists_only_with_existing_evidence_and_version(sessions):
+async def test_state_tool_persists_only_with_existing_evidence_and_version(sessions, monkeypatch):
+    monkeypatch.setattr("app.services.memory_admission.admit", AsyncMock(return_value="Validated"))
     from app.skills.memory_state import MemoryStateSkill
     async with sessions() as db:
-        context = SimpleNamespace(db=db, user_id=1, agent_id="speda", session_id=1, request_id="test")
+        context = SimpleNamespace(db=db, user_id=1, agent_id="speda", session_id=1, request_id="test", model="test")
         args = {**state(), "operation":"put", "version":"new"}
         args.pop("verified_on")
         args["review_on"] = "2099-01-01"
@@ -179,18 +183,22 @@ async def test_state_tool_persists_only_with_existing_evidence_and_version(sessi
         assert "does not exist" in await skill.execute(args, context)
         db.add(MemoryFile(user_id=1, path=args["source"], content="# Erasmus\n\nPending application.\n"))
         await db.commit()
+        args["evidence"] = [{"ref": args["source"], "quote": "Pending application."}]
         result = json.loads(await skill.execute(args, context))
         assert result["status"] == "waiting"
         assert "stale version" in await skill.execute(args, context)
 
 
-async def test_event_tool_creates_month_and_keeps_current_untouched(sessions):
+async def test_event_tool_creates_month_and_keeps_current_untouched(sessions, monkeypatch):
+    monkeypatch.setattr("app.services.memory_admission.admit", AsyncMock(return_value="Validated"))
     from app.skills.memory_write import LedgerAppendSkill
     async with sessions() as db:
-        context = SimpleNamespace(db=db, user_id=1, agent_id="speda", session_id=1, request_id="test")
-        result = await LedgerAppendSkill().execute({"path":"events", "key":"2026-09-09", "lines":["Sent the application."]}, context)
+        context = SimpleNamespace(db=db, user_id=1, agent_id="speda", session_id=1, request_id="test", model="test")
+        db.add(MemoryFile(user_id=1, path="/memories/projects/demo.md", content="# Demo\n\nSent the application."))
+        await db.commit()
+        result = await LedgerAppendSkill().execute({"path":"events", "key":"2026-09-09", "lines":["Sent the application."], "evidence":[{"ref":"/memories/projects/demo.md", "quote":"Sent the application."}]}, context)
         assert "Written to /memories/events/2026-09.md" in result
-        f = (await db.execute(select(MemoryFile))).scalar_one()
+        f = (await db.execute(select(MemoryFile).where(MemoryFile.path.startswith("/memories/events/")))).scalar_one()
         assert "## 2026-09-09" in f.content
 
 

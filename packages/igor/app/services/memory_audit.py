@@ -19,8 +19,14 @@ from app.services.memory_states import ROOT, OPEN, parse, version
 
 
 async def coverage(db, user_id: int) -> dict:
+    from app.models.observation import Observation
+    from types import SimpleNamespace
     from app.services.memory_spec import spec_for
+    from app.config import settings
+    from datetime import timedelta
     files = (await db.execute(select(MemoryFile).where(MemoryFile.user_id == user_id))).scalars().all()
+    observations = (await db.execute(select(Observation).where(Observation.user_id == user_id, Observation.deleted_at.is_(None)))).scalars().all()
+    files = list(files) + [SimpleNamespace(path=f"observation:{o.id}", content=observation_snapshot(o)) for o in observations]
     reviews = (await db.execute(select(MemoryReview).where(MemoryReview.user_id == user_id)
                                .order_by(MemoryReview.id.desc()))).scalars().all()
     latest = {}
@@ -34,13 +40,16 @@ async def coverage(db, user_id: int) -> dict:
         if "/." in f.path or f.path in ("/memories/current.md", "/memories/log.md"):
             continue
         spec = spec_for(f.path)
+        if "<!-- finance-projection-v1 -->" in f.content:
+            continue
         if spec and spec.superseded_by:
             continue
         fingerprint = version(f.content)
         review = latest.get(f.path)
-        if review is None or review.fingerprint != fingerprint:
+        expired = review is not None and review.created_at.date() < owner_today() - timedelta(days=max(1, settings.memory_review_valid_days))
+        if review is None or review.fingerprint != fingerprint or expired:
             pending.append({"path": f.path, "fingerprint": fingerprint,
-                            "reason": "never reviewed" if review is None else "changed since review"})
+                            "reason": "never reviewed" if review is None else ("review expired" if expired else "changed since review")})
         elif json.loads(review.findings):
             issues.append({"path": f.path, "fingerprint": fingerprint, "findings": json.loads(review.findings)})
         else:
@@ -63,17 +72,30 @@ async def coverage(db, user_id: int) -> dict:
 
 async def record_review(db, *, user_id, author, path, fingerprint, findings, rationale):
     from app.services.memory_verify import verify_document
-    file = (await db.execute(select(MemoryFile).where(MemoryFile.user_id == user_id,
-                        MemoryFile.path == path).execution_options(populate_existing=True))).scalar_one_or_none()
+    if path.startswith("observation:"):
+        from app.models.observation import Observation
+        from types import SimpleNamespace
+        obs = (await db.execute(select(Observation).where(Observation.user_id == user_id,
+            Observation.id == int(path.split(":")[1]), Observation.deleted_at.is_(None))
+            .execution_options(populate_existing=True))).scalar_one_or_none()
+        file = SimpleNamespace(content=observation_snapshot(obs)) if obs else None
+    else:
+        file = (await db.execute(select(MemoryFile).where(MemoryFile.user_id == user_id,
+                            MemoryFile.path == path).execution_options(populate_existing=True))).scalar_one_or_none()
     if file is None or version(file.content) != fingerprint:
         raise ValueError("Document changed or is missing. Read and review the current content; no attestation saved.")
     if not isinstance(findings, list) or any(not isinstance(f, str) or not f.strip() for f in findings):
         raise ValueError("findings must be a list of concrete unresolved defects, or [] after review.")
     if not isinstance(rationale, str) or not rationale.strip():
         raise ValueError("Explain the subject, temporal status, evidence and cross-file checks performed.")
-    hard = [f.message for f in verify_document(path, file.content) if f.severity == "error"]
+    hard = [] if path.startswith("observation:") else [f.message for f in verify_document(path, file.content) if f.severity == "error"]
     if hard and not findings:
         raise ValueError("Cannot attest clean while structural errors remain: " + "; ".join(hard))
     db.add(MemoryReview(user_id=user_id, path=path, fingerprint=fingerprint,
                        author=author, findings=json.dumps(findings, ensure_ascii=False), rationale=rationale))
     await db.commit()
+
+
+def observation_snapshot(obs):
+    return json.dumps({k: str(getattr(obs, k)) if k in ("valid_from", "valid_until") and getattr(obs, k) else getattr(obs, k)
+        for k in ("id", "content", "subject", "domain", "level", "origin", "observer", "valid_from", "valid_until", "superseded_by", "sources", "source_ids", "message_ids")}, ensure_ascii=False, sort_keys=True)

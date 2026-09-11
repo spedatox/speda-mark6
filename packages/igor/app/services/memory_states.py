@@ -30,6 +30,8 @@ def parse(content: str) -> dict:
         raise ValueError("State metadata is missing. Use memory_state to repair this record.")
     record = json.loads(line[len(MARKER):-4])
     validate(record)
+    if encode(record) != content:
+        raise ValueError("State metadata and readable text disagree; regenerate through memory_state.")
     return record
 
 
@@ -93,8 +95,10 @@ def render(files, today: date) -> str:
         else:
             active.append(bullet)
     sections = ["# Current — ongoing situations", "", "_Computed from versioned state records. Completed actions belong in dated logs._"]
-    for heading, rows in (("Active / waiting", active), ("Confirmed plans", planned), ("Needs verification", review)):
+    for heading, rows in (("Active / waiting", active), ("Confirmed plans", planned)):
         sections += ["", f"## {heading}", "", *(rows or ["(none recorded)"])]
+    if review:
+        sections += ["", f"_{len(review)} unverified records omitted. See memory_audit scan for the review inbox; no outcome has been assumed._"]
     return "\n".join(sections) + "\n"
 
 

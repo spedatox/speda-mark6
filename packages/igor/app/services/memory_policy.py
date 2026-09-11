@@ -25,7 +25,7 @@ ROUTES = (
           "An ongoing situation, unresolved commitment or confirmed future plan. Requires evidence, review date and an explicit status; current.md is its computed view."),
     Route("event", "subject's dated log; otherwise /memories/events/<YYYY-MM>.md", "ledger_append / registry_upsert",
           "Something that happened. Keep the date and outcome. Never promote an action to active context merely because it is recent."),
-    Route("preference", "/memories/dossier/<topic>.md", "memory",
+    Route("preference", "/memories/dossier/<topic>.md", "memory_edit",
           "An owner-stated standing preference or prohibition, dated and attributed. Never an inferred psychological claim."),
     Route("pattern", "/memories/patterns.md", "record_observation + memory",
           "A fallible inference with cited evidence, confidence and a useful response. Keep separate from owner instructions."),
@@ -33,7 +33,7 @@ ROUTES = (
           "One person, stable identity and dated events. Reuse the existing path; organisations are context, not categories."),
     Route("project", "/memories/projects/<name>.md", "registry_upsert",
           "One project's description, decisions and event history. Reuse its existing identity."),
-    Route("reference", "owning domain's topic file", "memory",
+    Route("reference", "owning domain's topic file", "memory_edit",
           "Subject decides the domain. Preserve tables, units and relationships. Reissued editions replace the existing topic through its revision trail."),
     Route("biography", "/memories/owner.md", "narrative_revise",
           "Durable life history. Correct only the relevant chapter; never regenerate the biography from extracted facts."),
@@ -57,12 +57,16 @@ def routing_contract() -> str:
 
 def protected_write(path: str, author: str, *, managed: bool = False) -> str | None:
     """Hard boundaries, shared by raw tools and shaped tools."""
+    if path.startswith("/memories/finance/ledger/") or path in ("/memories/finance/monthly-structure.md", "/memories/finance/balances.md", "/memories/finance/reports.md"):
+        return "Financial views are computed. Use finance_record; never insert monthly activity into recurring rules."
     if path == "/memories/current.md":
         return "current.md is a computed view. Use memory_state for ongoing situations; ledger_append or registry_upsert for completed events."
     if path.startswith("/memories/states/") and not managed:
         return "State records require memory_state (status, evidence, review date and version). Raw edits would bypass their lifecycle."
     if author == "owner":
         return None
+    if path.startswith("/memories/.audit/"):
+        return "Audit reports are system-generated from actual document reviews. Use memory_audit operation=run/status."
     if "/." in path and not (author == "orion" and path.startswith("/memories/.audit/")):
         return "Internal archives and system metadata are not agent-writeable. Orion may append its audit under /memories/.audit/."
     spec = spec_for(path)

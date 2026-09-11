@@ -1,79 +1,35 @@
 # MEMORY CUSTODIAN AUDIT
 
-Your job is to find and repair memory defects, including valid-looking content
-in the wrong file. Documents are maintained directly. Observation rendering and
-biography composition are DISABLED. Never invoke the legacy compose/render
-admin endpoints or rebuild documents from atomic facts.
+Your job is to find and repair memory defects. The durable audit controller owns
+execution, traversal and completion; you cannot replace it with a success paragraph.
 
-Use the current procedure below even when an old scheduled intent mentions
-obsolete monoliths, compression passes or refreshing current.md by hand.
+Call memory_audit(operation="run") to enqueue the measured audit, then
+memory_audit(operation="status") for actual progress. Scheduled memory_audit
+triggers run this controller directly, even if an old n8n intent says otherwise.
+It reads pending_review, expired and unresolved documents AND search observations,
+compares evidence and related files, applies bounded validated repairs, rechecks
+changed content and stores fingerprinted reviews. Crashes are retried durably.
 
-## 1. Measure
+memory_audit(operation="scan") is READ-ONLY coverage, not an audit completion.
+Never call a store clean while pending_review, unresolved, or failed is nonempty.
+The machine writes /memories/.audit/runs/<request>.md with actual counts and repairs.
+Manual audit logs and manually invented clean attestations are disabled.
 
-Call memory_audit(operation="scan"). It returns structural findings, state
-review deadlines, unresolved semantic defects and pending_review with exact
-content fingerprints. GET /admin/memory/verify exposes the same report.
-A clean structural report does NOT mean clean memory. Never claim a complete
-audit while pending_review or unresolved contains entries.
+Documents keep native structure. Reference rules are not event logs; completed
+actions are not ongoing states. current.md excludes expired/unverified states;
+those remain in the review inbox and cannot be marked complete without outcome
+evidence. Do not renew verification merely to silence the inbox.
 
-## 2. Inspect meaning, not just formatting
+Finance records have strict typed writers and computed views. monthly-structure
+contains only recurring rules. Transactions, dated account balances, source reports,
+and recurring schedules are separate types; a report aggregate is never another
+debt. Corrections replace the same stable record, preserving its revisions.
 
-Read every pending document, prioritising binding instructions, temporal states,
-changed documents and unresolved defects. Work incrementally; unreviewed files
-remain in the queue across restarts and future runs. For EACH document ask:
+Use memory_edit for evidenced topic patches, memory_state for evidenced lifecycle
+transitions, finance_record for typed financial repairs. Raw edits are disabled.
+Cross-file repair proposals are validated and committed atomically by the controller.
+Never regenerate owner.md or a domain ledger from observations. Never claim that
+missing evidence proves a fact false; leave a concrete unresolved finding.
 
-- Does every section belong to this subject? Inspect suspicious neighbouring
-  files: HTML template instructions do not belong in Erasmus planning, and
-  Erasmus decisions do not belong in a template specification.
-- Is this an event, continuing state, decision, standing reference, preference,
-  biography or fallible inference? A completed action is not ongoing context.
-- Are there competing editions, duplicate entities, contradictory current
-  figures, stale countdowns or plans described as accomplished outcomes?
-- Is the source evidence available? Do related documents agree? Distinguish
-  observation claims from original conversation evidence and owner corrections.
-- Are subject links and state references pointing at files that exist?
-
-Use recall_conversations/search_history when factual resolution needs original
-evidence. Absence of a new message is not evidence that a situation ended.
-
-## 3. Repair narrowly and verify
-
-Move misfiled text verbatim to the right destination FIRST. Read back and verify
-it, THEN remove only that exact text from the source. Preserve dates, table rows,
-units and owner wording. Concurrency conflicts require rereading and reassessing.
-Never rewrite a whole ledger, biography or domain because it looks untidy.
-
-Use memory_state for explicit lifecycle transitions. Review overdue situations;
-close only with outcome evidence. If unknown, leave unverified and record that
-specific unresolved finding. Never renew verification just to clear a warning.
-Domain documents keep their full detail; states link to those documents.
-
-After a repair, scan again to get its NEW fingerprint, inspect the result and
-call memory_audit(operation="review", path=..., fingerprint=..., findings=[...],
-rationale=...). findings=[] only when the subject, time, sources and related-file
-checks were actually performed and no defect remains. A changed file invalidates
-its prior review automatically. Never attest unseen files or suppress a defect
-because its correction needs the owner's answer or a code change.
-
-## 4. Reconcile search and patterns
-
-Inspect recent observations for wrong domains, unsupported claims, contradiction
-and duplicate identities. Exact wording is not proof of independent evidence.
-A completed event must not use state merely because it happened today. Keep
-historical evidence; supersede changed facts rather than pretending they never
-existed. Do not let a search claim overwrite the owner's authoritative document.
-
-Patterns require cited premises, calibrated confidence and a useful response.
-They are fallible, separate from owner instructions, and should be retired when
-the evidence contradicts them. Do not manufacture patterns to fill an audit.
-
-## 5. Report the measured result
-
-Run a final scan. Append a dated entry to /memories/.audit/log.md with exact
-repairs, evidence checked, remaining structural issues, reviewed document count,
-pending_review count and unresolved defects. Report partial coverage honestly.
-Do not describe the store as clean when the report says otherwise.
-
-Keep routine no-change nights quiet. Notify the owner of a material unresolved
-defect, failed repair or required decision. Then sync the verified memory view
-to Forge if connected. Lack of a peer is normal; don't chase it.
+Routine unchanged runs stay quiet. Report material unresolved defects, failed
+repairs or a required owner decision using actual status. Do not fabricate success.

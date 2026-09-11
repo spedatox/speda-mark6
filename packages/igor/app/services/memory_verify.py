@@ -438,6 +438,17 @@ def verify_document(path: str, text: str) -> list[Finding]:
             "This document is retired and should not exist.",
             fix="Remove it with DELETE /memory/files (recoverable from the trail).",
         )]
+    from app.services.finance_records import ROOT as FINANCE_ROOT, VIEW, parse as parse_finance
+    if path.startswith(FINANCE_ROOT):
+        try:
+            r = parse_finance(text)
+            if path != f"{FINANCE_ROOT}{r['id']}.md":
+                raise ValueError("Financial record identity does not match path.")
+            return []
+        except (ValueError, TypeError, KeyError) as exc:
+            return [Finding(path, "finance_record", "error", str(exc), fix="Use finance_record.")]
+    if VIEW in text and path.startswith("/memories/finance/"):
+        return check_corrupted_text(path, text)
     spec = spec_for(path)
     if spec is None:
         return [Finding(

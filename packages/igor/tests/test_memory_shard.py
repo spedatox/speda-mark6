@@ -165,7 +165,8 @@ def test_a_new_month_creates_its_file_with_the_key_as_the_title():
     assert "| 2026-10-06 | KYK loan disbursement (OSTİM) | 4,000.00 | Monthly loan |" in out
     # A brand-new month must pass the write gate as a create, or the folder
     # could never grow a month.
-    assert check_write(path=path, before="", after=out, is_create=True, author="sentinel") == []
+    with pytest.raises(MemorySchemaViolation, match="computed"):
+        check_write(path=path, before="", after=out, is_create=True, author="sentinel")
     assert verify_document(path, out) == []
 
 
