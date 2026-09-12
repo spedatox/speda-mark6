@@ -15,16 +15,14 @@ logger = logging.getLogger(__name__)
 class RunCommandSkill(Skill):
     name = "run_command"
     deferred = True
-    search_keywords = "shell bash terminal command execute script sandbox run code scan recon exploit kali pentest"
+    search_keywords = "shell bash terminal command execute script sandbox run code kali development"
     description = (
-        "Runs a shell command in Speda's own sandboxed Linux computer — a headless "
-        "Kali container with a full security/development toolset preinstalled (nmap, "
-        "masscan, amass, theHarvester, nikto, sqlmap, nuclei, ffuf, gobuster, "
-        "feroxbuster, wpscan, metasploit, searchsploit, hydra, john, hashcat, plus "
-        "python3, pip, git, curl, jq, gcc/make, Go, and the pandas/numpy/document "
-        "libraries) and a persistent /workspace. Use this to actually DO work: run "
-        "authorized scans or recon, develop and run scripts, process data, fetch "
-        "files, install packages (pip/apt/go as needed), generate or inspect files. "
+        "Runs a shell command in Speda's own sandboxed Linux computer — a compact "
+        "Kali container with Python, pip, Node.js, Go, git, curl, jq, gcc/make, "
+        "and pandas/numpy/document libraries preinstalled, plus a persistent "
+        "/workspace. Use this to actually DO work: develop and run scripts, "
+        "process data, fetch "
+        "files, install packages (apt/pip/npm/go as needed), generate or inspect files. "
         "Files and installed packages PERSIST across calls, so treat it like a real "
         "machine you're working on. Do NOT use it for simple math you can do in your "
         "head or for answering questions that need no execution. It cannot access the "
