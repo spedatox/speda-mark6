@@ -11,6 +11,12 @@
 ARG KALI_IMAGE=kalilinux/kali-rolling
 FROM ${KALI_IMAGE}
 
+# The default Kali source uses a geo-redirector. A single unhealthy mirror can
+# therefore break an otherwise reproducible build (for example, by presenting
+# an invalid TLS certificate). Use Kali's official download backend directly;
+# callers can still select a private/nearby mirror with --build-arg.
+ARG KALI_APT_MIRROR=https://kali.download/kali
+
 # Compact development baseline. It intentionally excludes desktop/X11 software,
 # scanners, password tools, Metasploit, and language runtimes agents can add only
 # when needed. Python data/document libraries remain preinstalled so established
@@ -18,7 +24,9 @@ FROM ${KALI_IMAGE}
 #
 # Pin KALI_IMAGE (e.g. kalilinux/kali-rolling:2025.4) for a reproducible build.
 RUN export DEBIAN_FRONTEND=noninteractive \
-    && apt-get update \
+    && find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \
+        -exec sed -i "s|https\?://http\.kali\.org/kali|${KALI_APT_MIRROR}|g" {} + \
+    && apt-get -o Acquire::Retries=3 update \
     && apt-get install -y --no-install-recommends \
         # Everyday shell and source-control tools.
         ca-certificates curl wget git openssh-client jq ripgrep fd-find \
