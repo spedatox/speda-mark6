@@ -248,7 +248,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const e = action.payload.event as {
         id: string; agent?: string; label?: string; phase?: string
         prompt?: string; text?: string; tool?: string; input?: unknown
-        result?: string; report?: string; ok?: boolean
+        result?: string; error?: string; report?: string; ok?: boolean
         source?: 'legion' | 'peer' | 'forge'; tool_call_id?: string
       }
       if (!e?.id) return state
@@ -274,15 +274,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             if (last?.kind === 'text') last.text = (last.text ?? '') + e.text
             else run.steps.push({ kind: 'text', text: e.text })
           } else if (e.phase === 'tool') {
-            run.steps.push({ kind: 'tool', tool: e.tool, input: e.input, toolCallId: e.tool_call_id })
+            if (e.tool_call_id) {
+              run.steps.push({ kind: 'tool', tool: e.tool, input: e.input, toolCallId: e.tool_call_id })
+            }
           } else if (e.phase === 'tool_result') {
-            for (let k = run.steps.length - 1; k >= 0; k--) {
-              const step = run.steps[k]
-              const matches = e.tool_call_id ? step.toolCallId === e.tool_call_id : step.result === undefined
-              if (step.kind === 'tool' && step.result === undefined && matches) {
-                run.steps[k] = { ...run.steps[k], result: e.result }
-                break
-              }
+            const k = e.tool_call_id
+              ? run.steps.findIndex(step => step.kind === 'tool' && step.toolCallId === e.tool_call_id)
+              : -1
+            if (k >= 0) {
+              run.steps[k] = { ...run.steps[k], result: e.error ?? e.result }
             }
           } else if (e.phase === 'finished') {
             run.running = false

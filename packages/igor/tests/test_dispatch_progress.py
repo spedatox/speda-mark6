@@ -101,6 +101,24 @@ def test_progress_is_inert_when_no_registry_is_wired():
 
 
 @pytest.mark.asyncio
+async def test_registry_replay_preserves_parallel_tool_correlation():
+    runs = LegionRunRegistry()
+    runs.register(9, agent="general", label="parallel", room_session_id=3)
+    expected = [
+        {"phase": "tool", "tool_call_id": "a", "tool": "first"},
+        {"phase": "tool", "tool_call_id": "b", "tool": "second"},
+        {"phase": "tool_result", "tool_call_id": "b", "tool": "second", "result": "B"},
+        {"phase": "tool_result", "tool_call_id": "a", "tool": "first", "result": "A"},
+    ]
+    for event in expected:
+        runs.emit(9, event)
+    runs.finish(9, ok=True)
+
+    replayed = [event async for event in runs.subscribe(9)]
+    assert replayed == expected
+
+
+@pytest.mark.asyncio
 async def test_the_ticket_correlation_is_dropped_when_the_job_ends(monkeypatch):
     """Otherwise the map grows by one entry per dispatch, forever.
 

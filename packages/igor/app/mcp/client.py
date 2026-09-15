@@ -17,11 +17,18 @@ logger = logging.getLogger(__name__)
 def _mcp_tool_to_anthropic(tool: MCPTool) -> dict:
     """Convert MCP tool format to Anthropic tool definition format."""
     schema = tool.inputSchema if tool.inputSchema else {"type": "object", "properties": {}}
-    return {
+    definition = {
         "name": tool.name,
         "description": tool.description or "",
         "input_schema": schema,
     }
+    annotations = getattr(tool, "annotations", None)
+    if annotations is not None:
+        if hasattr(annotations, "model_dump"):
+            annotations = annotations.model_dump(by_alias=True, exclude_none=True)
+        if isinstance(annotations, dict):
+            definition["annotations"] = annotations
+    return definition
 
 
 class MCPClient:

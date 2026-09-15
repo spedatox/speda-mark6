@@ -48,7 +48,6 @@ services:
       # Forge is an anonymous Legion execution library. Force Docker Cells in
       # production so a missing daemon never falls back to running generated
       # commands alongside Igor's credentials and database.
-      FORGE_DIR: /opt/forge-mk1
       FORGE_CELL_BACKEND: docker
       FORGE_WORKSPACE_ROOT: /opt/hisar/vault/Forge/workspaces
       FORGE_CODER_IMAGE: forge-cell-optimus:latest
@@ -60,10 +59,9 @@ services:
       # bare file) so WAL's speda.db-wal / speda.db-shm sidecars persist too.
       # Also carries the system_ops SSH key (host_ops_key) + known_hosts.
       - /opt/speda:/root/.speda
-      # Forge source is read-only. Workspaces use the identical absolute path
-      # inside and outside the app container because the host Docker daemon
-      # resolves the bind source for each disposable Cell.
-      - /opt/forge-mk1:/opt/forge-mk1:ro
+      # Workspaces use the identical absolute path inside and outside the app
+      # container because the host Docker daemon resolves the bind source for
+      # each disposable Cell. Forge source itself is installed in the image.
       - /opt/hisar/vault/Forge/workspaces:/opt/hisar/vault/Forge/workspaces
       - /usr/bin/docker:/usr/bin/docker:ro
       - /var/run/docker.sock:/var/run/docker.sock

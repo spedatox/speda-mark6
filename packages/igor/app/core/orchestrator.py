@@ -19,7 +19,13 @@ from app.services.llm_client import (
     supports_vision,
     thinking_request_kwargs,
 )
-from app.services.relevant_recall import facts_for_message
+from app.services.relevant_recall import (
+    derived_recall_query,
+    facts_for_message,
+    facts_for_query,
+    initial_recall_query,
+    salient_evidence,
+)
 from app.skills.memory import MemoryRecallCache, recall_for_context, recall_sessions_for_context
 
 logger = logging.getLogger(__name__)
@@ -555,6 +561,9 @@ class AgentOrchestrator:
         # read off `response.content` because a tool-using turn produces text in
         # several passes and a leak in the first one is still a leak.
         emitted_text: list[str] = []
+        original_objective = initial_recall_query(context.conversation_history)
+        evidence_seen = original_objective
+        relevance_refreshes = 0
 
         # `trigger` rides the START event so a client attaching to a turn it did
         # not send can label it the moment it appears — a background job
@@ -778,6 +787,40 @@ class AgentOrchestrator:
                 timed_results = gather_fut.result()
                 results = [r for r, _ in timed_results]
 
+                # A read may disclose the missing noun/date/location that the
+                # owner's original wording could not seed into semantic recall.
+                # Build one small evidence frontier for the whole batch and use
+                # it to refresh the existing observation search at most once.
+                # Raw tool output never becomes a query.
+                read_results = [
+                    res for block, res in zip(tool_use_blocks, results)
+                    if self._registry.call_is_read_only(block.name, block.input)
+                    and not str(res).startswith("Error")
+                ]
+                frontier: list[str] = []
+                adaptive_facts = ""
+                for res in read_results:
+                    frontier.extend(salient_evidence(res, known_text=evidence_seen))
+                frontier = list(dict.fromkeys(frontier))[:8]
+                if frontier and relevance_refreshes < 1 and context.db is not None:
+                    query = derived_recall_query(original_objective, frontier)
+                    log.info(
+                        "adaptive_recall_triggered",
+                        extra={
+                            "request_id": context.request_id,
+                            "evidence": frontier,
+                            "query": query,
+                            "refreshes": relevance_refreshes + 1,
+                        },
+                    )
+                    adaptive_facts = await facts_for_query(
+                        context.user_id, context.db, query, request_id=context.request_id,
+                    )
+                    relevance_refreshes += 1
+                    evidence_seen += " " + " ".join(frontier)
+                elif frontier:
+                    evidence_seen += " " + " ".join(frontier)
+
                 # 2b. Emit each tool's RESULT (truncated) so the UI can show what
                 #     came back when the user expands the tool disclosure.
                 for block, res in zip(tool_use_blocks, results):
@@ -863,6 +906,17 @@ class AgentOrchestrator:
                     for block, res in zip(tool_use_blocks, results)
                 ]
 
+                if adaptive_facts:
+                    tool_results.append({
+                        "type": "text",
+                        "text": (
+                            "## Adaptive relevance refresh\n\n"
+                            "A read-only tool just disclosed new context. These existing "
+                            "records now match the owner's objective plus that evidence. "
+                            "Use them only when relevant; do not repeat the retrieval.\n\n"
+                            + adaptive_facts
+                        ),
+                    })
                 messages.append({"role": "user", "content": tool_results})
 
                 # A tool_search (or use_toolset) call may have resolved new
@@ -875,6 +929,11 @@ class AgentOrchestrator:
                     allowlist=allowlist, agent_id=context.agent_id,
                     loaded_tools=context.extra["loaded_tools"],
                     defer_loading=defer_loading,
+                )
+
+                log.info(
+                    "relevance_refresh_state",
+                    extra={"request_id": context.request_id, "refreshes": relevance_refreshes},
                 )
 
             # ── max_tokens ──────────────────────────────────────────────────

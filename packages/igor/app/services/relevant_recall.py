@@ -48,9 +48,41 @@ person, a date range, the evidence behind a claim, what is well-established
 versus observed once. This is the reflex; the tool is the investigation.
 """
 
+import json
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+_MAX_EVIDENCE_ITEMS = 8
+_MAX_EVIDENCE_ITEM_CHARS = 120
+_MAX_DERIVED_QUERY_CHARS = 2000
+_STAMP_RE = re.compile(r"^\[\d{4}-\d{2}-\d{2}[^\]]*\]\s*")
+_DATE_RE = re.compile(
+    r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?|"
+    r"\d{1,2}:\d{2})\b"
+)
+_ENTITY_RE = re.compile(
+    r"(?<![\w@])(?:[A-ZÇĞİÖŞÜ][\wÇĞİÖŞÜçğıöşü'’-]{2,}"
+    r"(?:\s+[A-ZÇĞİÖŞÜ][\wÇĞİÖŞÜçğıöşü'’-]{2,}){0,3})"
+)
+_MEANINGFUL_KEY_RE = re.compile(
+    r"(?:name|title|person|people|attendee|organizer|organization|company|project|"
+    r"location|place|city|address|date|time|start|end|event|meeting|deadline|due|"
+    r"commitment|decision|status|state|relationship|conflict)",
+    re.IGNORECASE,
+)
+_ANCHOR_KEY_RE = re.compile(r"(?:name|title|subject|label|task|event|project)", re.IGNORECASE)
+_RELATION_KEY_RE = re.compile(
+    r"(?:status|state|deadline|due|decision|relationship|conflict|availability|change|result)",
+    re.IGNORECASE,
+)
+_STATE_CHANGE_RE = re.compile(
+    r"\b(?:moved|extended|approved|cancelled|canceled|blocked|unavailable|"
+    r"rescheduled|completed|rejected|delayed|changed|closed|opened|assigned|"
+    r"confirmed|postponed|paused|failed|passed|depends?\s+on|blocked\s+by)\b",
+    re.IGNORECASE,
+)
 
 
 def _extract_text(content) -> str:
@@ -88,9 +120,136 @@ def latest_user_message(history) -> str:
 # model (see the time protocol in app/core/orchestrator.py). It is not part of
 # what he asked, and leaving it in the query embeds a date into every search.
 def _strip_stamp(text: str) -> str:
-    import re
+    return _STAMP_RE.sub("", text).strip()
 
-    return re.sub(r"^\[\d{4}-\d{2}-\d{2}[^\]]*\]\s*", "", text).strip()
+
+def initial_recall_query(history) -> str:
+    """The bounded objective used by both initial and adaptive recall."""
+    return _strip_stamp(latest_user_message(history))[:_MAX_DERIVED_QUERY_CHARS]
+
+
+def _short(value) -> str:
+    text = " ".join(str(value).split())
+    return text[:_MAX_EVIDENCE_ITEM_CHARS].strip(" ,;:-")
+
+
+def salient_evidence(result, *, known_text: str = "") -> list[str]:
+    """Extract a tiny, deterministic evidence frontier from a tool result.
+
+    Structured fields with relevance-bearing names are preferred. For plain
+    text, dates/times and proper-name-like phrases provide conservative seeds.
+    This is deliberately not a summary and never feeds the raw result to search.
+    """
+    candidates: list[str] = []
+    value = result
+    if isinstance(result, str):
+        raw = result.strip()
+        if not raw or raw.lower() in {"(no output)", "none", "null", "[]", "{}"}:
+            return []
+        try:
+            value = json.loads(raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            value = None
+            for fragment in re.split(r"[\r\n.!?]+", raw[:12000]):
+                if _STATE_CHANGE_RE.search(fragment):
+                    candidates.append(_short(fragment))
+            candidates.extend(_DATE_RE.findall(raw[:12000]))
+            candidates.extend(_ENTITY_RE.findall(raw[:12000]))
+
+    def walk(node, key: str = "", depth: int = 0) -> None:
+        if depth > 4 or len(candidates) >= _MAX_EVIDENCE_ITEMS * 4:
+            return
+        if isinstance(node, dict):
+            anchor = next(
+                (
+                    _short(child)
+                    for child_key, child in node.items()
+                    if _ANCHOR_KEY_RE.search(str(child_key))
+                    and not isinstance(child, (dict, list))
+                    and _short(child)
+                ),
+                "",
+            )
+            for child_key, child in node.items():
+                if (
+                    _RELATION_KEY_RE.search(str(child_key))
+                    and not isinstance(child, (dict, list))
+                    and _short(child)
+                ):
+                    relation = _short(f"{child_key} {_short(child)}")
+                    candidates.append(_short(f"{anchor} -> {relation}") if anchor else relation)
+            for child_key, child in node.items():
+                walk(child, str(child_key), depth + 1)
+        elif isinstance(node, list):
+            for child in node[:20]:
+                walk(child, key, depth + 1)
+        elif node is not None and (_MEANINGFUL_KEY_RE.search(key) or _DATE_RE.search(str(node))):
+            text = _short(node)
+            if text:
+                candidates.append(text)
+
+    if value is not None:
+        walk(value)
+
+    known = {part.casefold() for part in re.findall(r"[\wÇĞİÖŞÜçğıöşü'’-]+", known_text)}
+    seen: set[str] = set()
+    evidence: list[str] = []
+    for candidate in candidates:
+        normalized = _short(candidate).casefold()
+        if not normalized or normalized in seen:
+            continue
+        words = set(re.findall(r"[\wÇĞİÖŞÜçğıöşü'’-]+", normalized))
+        if words and words.issubset(known):
+            continue
+        seen.add(normalized)
+        evidence.append(_short(candidate))
+        if len(evidence) >= _MAX_EVIDENCE_ITEMS:
+            break
+    return evidence
+
+
+def derived_recall_query(objective: str, evidence: list[str]) -> str:
+    """Combine the original objective and frontier without raw tool payloads."""
+    pieces = [objective.strip(), *(_short(item) for item in evidence)]
+    return " | ".join(piece for piece in pieces if piece)[:_MAX_DERIVED_QUERY_CHARS]
+
+
+async def facts_for_query(user_id: int, db, query: str, request_id: str = "") -> str:
+    """Run the existing bounded observation search for an explicit query."""
+    from app.config import settings
+    from app.services.observations import format_observation, search_observations
+
+    query = query.strip()[:_MAX_DERIVED_QUERY_CHARS]
+    if not settings.relevant_recall_enabled or db is None:
+        return ""
+    if len(query) < settings.relevant_recall_min_query_chars:
+        return ""
+
+    logger.info("relevant_recall_query", extra={"request_id": request_id, "query": query})
+    try:
+        scored = await search_observations(
+            db, user_id=user_id, query=query, limit=settings.relevant_recall_limit,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("relevant_recall_failed", extra={"request_id": request_id, "error": str(e)})
+        return ""
+
+    lines: list[str] = []
+    used = 0
+    for obs, _score in scored:
+        line = format_observation(obs)
+        if used + len(line) > settings.relevant_recall_max_chars:
+            break
+        lines.append(line)
+        used += len(line)
+    if not lines:
+        return ""
+
+    logger.info(
+        "relevant_recall_injected",
+        extra={"request_id": request_id, "facts": len(lines), "chars": used},
+    )
+    return "\n".join(lines)
 
 
 async def facts_for_message(user_id: int, db, history, request_id: str = "") -> str:
@@ -100,52 +259,19 @@ async def facts_for_message(user_id: int, db, history, request_id: str = "") -> 
     without it, so a failure costs relevance, never the turn.
     """
     from app.config import settings
-    from app.services.observations import format_observation, search_observations
 
     if not settings.relevant_recall_enabled or db is None:
         return ""
 
-    query = _strip_stamp(latest_user_message(history))
+    query = initial_recall_query(history)
     # A very short message ("ok", "yes", "devam") carries no retrievable intent
     # and would match on stopwords alone.
     if len(query) < settings.relevant_recall_min_query_chars:
         return ""
 
-    try:
-        scored = await search_observations(
-            db,
-            user_id=user_id,
-            query=query[:2000],
-            limit=settings.relevant_recall_limit,
-        )
-    except Exception as e:  # noqa: BLE001
-        logger.warning(
-            "relevant_recall_failed",
-            extra={"request_id": request_id, "error": str(e)},
-        )
+    facts = await facts_for_query(user_id, db, query, request_id=request_id)
+    if not facts:
         return ""
-
-    if not scored:
-        return ""
-
-    lines: list[str] = []
-    used = 0
-    for obs, _score in scored:
-        # format_observation without a score: the number is meaningful to a tool
-        # result the model asked for, and just noise in an unsolicited block.
-        line = format_observation(obs)
-        if used + len(line) > settings.relevant_recall_max_chars:
-            break
-        lines.append(line)
-        used += len(line)
-
-    if not lines:
-        return ""
-
-    logger.info(
-        "relevant_recall_injected",
-        extra={"request_id": request_id, "facts": len(lines), "chars": used},
-    )
     return (
         "## Relevant to what he just said\n\n"
         "Facts already in the record that match his message this turn, retrieved "
@@ -154,5 +280,5 @@ async def facts_for_message(user_id: int, db, history, request_id: str = "") -> 
         "an entry that turns out not to bear on the question is simply irrelevant "
         "— ignore it rather than working it into the answer. If what you need is "
         "not here, `search_memory` searches the whole record deliberately.\n\n"
-        + "\n".join(lines)
+        + facts
     )

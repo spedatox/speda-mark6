@@ -1,0 +1,162 @@
+# Optimus — identity file 1 of 2 (the profile).
+# Mirrors Mark VI's app/profiles/optimus.py: agent_id, model policy, tool
+# allowlist, Cell policy. The Warden engine reads this as data; it contains no
+# "Optimus" string of its own. Adding Centurion later = a sibling folder like
+# this one, plus its own system_prompt.md. No engine edit (§2).
+
+agent_id = "optimus"
+name = "Optimus"
+domain = "systems, code & infrastructure"
+
+# Model IDs live only in profiles (Rule 10, mirrored from Mark VI). The Warden
+# never hardcodes one; the offline demo overrides it with the deterministic
+# ScriptedModel.
+#
+# DeepSeek rather than Anthropic: this peer is meant to run continuously, and
+# metered Anthropic spend is the cost this whole system exists to avoid. Mark
+# VI's own agents are pinned to the same model, so there is one provider to
+# reason about and one key that matters.
+#
+# Known weakness, and the reason the harness matters more than the model here:
+# non-Anthropic providers do not enforce a tool schema's `required`, and this
+# one will claim work it did not do. The Warden is what makes that survivable —
+# every failure returns is_error the model must read, and edit_file's
+# content-hash freshness means it cannot edit a file it has not actually seen.
+# If reported-but-not-done work starts showing up, that is the signal to
+# revisit this line, not the prompt.
+model = "deepseek:deepseek-v4-pro"
+
+# Where a turn goes when it carries a photo. DeepSeek above cannot see one, and
+# until this existed the picture was dropped on the way to the request — the
+# operator sent a screenshot, the model got the sentence without it and answered
+# anyway, which is the one failure this harness is built to refuse.
+#
+# Anthropic rather than a cheaper vision model because it is the provider whose
+# key is already set for the fallback chain, and because a turn with a
+# screenshot in it is a turn where seeing correctly is the whole point. It
+# applies ONLY to turns whose transcript contains an image, so ordinary work
+# stays on the metered-cost model this profile picked it for.
+#
+# Blank it to turn the swap off; the picture is then sent to the model above and
+# the provider refuses it out loud, which is still better than losing it.
+vision_model = "claude-sonnet-4-6"
+
+# Tool allowlist — Optimus is a coding agent. "coding" expands to the curated
+# file / shell / graph tool group. This list IS the security boundary (§2/§4).
+#
+# "web" adds search and page-fetch. Debugging is the reason: without it the only
+# sources are this repo and whatever the model memorised, so an unfamiliar error
+# or a changed API signature has to be guessed at. These are harness-side
+# instruments and do not touch the Cell's network posture below — see
+# forge/tools/web.py.
+#
+# "memory" is the owner's memory, which lives in Mark VI. It is a separate group
+# on purpose — it is the owner's, not the repository's, and it is shared with
+# every other agent that serves him. Without it the memory block that arrives on
+# every turn is instructing this agent to use a tool it does not have: it cannot
+# open a project file, look up a person, or write down anything it learns. The
+# group is withheld automatically when there is no Mark VI on the other end, so
+# the standalone TUI is unaffected.
+#
+# "hisar" is the owner's file vault. Optimus is the agent it was built for: the
+# Cell workspace is scratch and does not survive the job, so a report or an
+# export the owner asked for has nowhere to land without it, and work filed in
+# an earlier session cannot be picked up again. Reads are unrestricted, writes
+# are confined to /SPEDA and /Forge by the server, and delete and rename are
+# owner-only — the boundary is Hisar's, not this line's.
+#
+# "notify" is a line to the owner's phone. `forge connect` runs on a box nobody
+# is logged into, which is the whole reason it exists: the job-finished message
+# already fires on its own, and this is the tool for the other case — something
+# mid-job the owner would want to know before it ends. Rationed by its own
+# description rather than by a counter, on the same argument ask_operator makes:
+# an agent that messages about everything gets muted, and then the one message
+# that mattered is muted too.
+#
+# Both are withheld automatically when the deployment has no vault token and no
+# bot (warden/toolsource.py), so naming them here is not a claim that either is
+# configured.
+#
+# "recall" is the read side of Mark VI's memory: recall_conversations searches
+# every past session by meaning (this peer is stateless between turns, so it is
+# the only way back to a conversation that is not the current one), and
+# read_agent_channel shows what the other agents — Centurion among them — have
+# been doing. Separate from "memory" because it is retrieval, not the power to
+# rewrite what every agent believes; withheld with "memory" when there is no
+# Mark VI channel, so the standalone TUI is unaffected. See forge/tools/recall.py.
+#
+# "remember_about_owner" is named individually rather than pulled in through
+# "memory": it queues a note about the owner LOCALLY and needs no connection at
+# all, so it stays available in exactly the run where "memory" gets withheld —
+# a session with no Mark VI on the other end. See forge/tools/owner_notes.py.
+#
+# "git" is the Warden-side push tool. Commits happen in the Cell with no secret
+# (the identity rides in on env); only `git push` needs a credential, and this
+# group holds it OUTSIDE the Cell so the token is never exposed to executed code.
+# Withheld automatically when no FORGE_GIT_TOKEN is configured for this agent, so
+# naming it here is not a claim the credential exists — see forge/tools/gitpush.py.
+tools = ["coding", "web", "memory", "recall", "hisar", "notify", "git", "remember_about_owner"]
+
+# One working mode with the safety gate always on; "plan" would make it
+# read-only for review (§6).
+permission_mode = "act"
+
+# The single iteration ceiling (§3). NOT Mark VI's 30: that guard is sized for
+# a chat backend answering a question, where thirty tool calls is generous. A
+# coding agent spends thirty orienting in an unfamiliar file — read, grep, read
+# again — and a real change lands well past it. This is a runaway guard, not a
+# work limit, and 30 was silently truncating ordinary jobs half-finished.
+max_iterations = 400
+
+[cell]
+# A coding agent needs the network, and denying it does not make it safer — it
+# makes it useless in a way that reads as a bug. `git push`, `git fetch`, a
+# package install and most test suites all fail at the socket, and the error
+# they produce ("Failed to connect to github.com port 443") looks like a broken
+# machine rather than a policy.
+#
+# What actually bounds this agent is not the socket: it is the permission gate
+# on irreversible commands, the worktree/root confinement, and the fact that
+# the Cell's environment has every provider key stripped from it before any
+# command runs (see subprocess_cell._base_env) — so code executed here cannot
+# exfiltrate the credentials that pay for the model.
+#
+# The default for a NEW agent stays false. This is a considered exception for
+# the one profile whose whole job is working in real repositories.
+allow_network = true
+cpus = 2.0
+memory_mb = 2048
+# A dev turn's slowest single commands are the install and the test run — a cold
+# `npm install`, `uv pip install`, or a full suite routinely runs past a
+# question-answering agent's budget. 300s (matching Centurion's scanning box)
+# keeps those from being killed mid-work and reported as a broken machine; the
+# per-command timeout is raisable per call up to the Cell ceiling when a job
+# genuinely needs longer.
+timeout_s = 300
+# Optimus's baked dev lab — a per-agent override that wins over the process-wide
+# FORGE_CELL_IMAGE, so no .env change is needed. Build it from
+# deploy/cell-optimus.Dockerfile (Python/Node/Go + build tools). Ignored under
+# the subprocess backend (Docker-less host), where commands use the host's own
+# toolchain instead.
+image = "forge-cell-optimus:latest"
+# Root in the Cell, same as Centurion: the Cell is a throwaway, per-job,
+# network-isolated-from-the-host container, so uid 0 inside it is contained by
+# the container boundary, not by the account. It means a dev job can apt-get a
+# package the bake didn't cover, install a global toolchain, or write outside
+# the workspace during a build — the routine tools are still baked so the common
+# case pays nothing, but "anything it might need" no longer stops at what a
+# non-root user can reach. No cap_add: dev work needs root's filesystem/install
+# reach, not raw-socket or net-admin capabilities (those stay dropped).
+run_as_root = true
+# backend = "docker"   # optional per-agent override of FORGE_CELL_BACKEND
+
+# Who git records for work this agent does. Committing under the operator's
+# name makes the history lie about who wrote the code, which costs most later —
+# when someone is working out why a change was made and asks the wrong person.
+# The email is what a host keys on: GitHub links a commit to whichever account
+# owns this address, by email and not by the display name — so Optimus's own
+# account now backs this identity, and the "Optimus Mark II" string is only how
+# the name renders, not what the attribution follows.
+[git]
+name = "Optimus Mark II"
+email = "ahmeterolbayrak1@gmail.com"

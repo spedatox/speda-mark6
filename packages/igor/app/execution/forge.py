@@ -8,20 +8,13 @@ import asyncio
 import base64
 import binascii
 import shutil
-import sys
 from pathlib import Path, PurePosixPath
 from typing import AsyncIterator, Callable
 
 from app.config import settings
+
+
 def _load_runtime():
-    forge_dir = Path(settings.forge_dir).expanduser().resolve() if settings.forge_dir else None
-    if forge_dir is None or not (forge_dir / "forge" / "runtime" / "__init__.py").is_file():
-        raise RuntimeError(
-            "Forge execution is unavailable: set FORGE_DIR to the Forge repository."
-        )
-    value = str(forge_dir)
-    if value not in sys.path:
-        sys.path.insert(0, value)
     from forge.runtime import ExecutionSpec, execute
     return ExecutionSpec, execute
 
@@ -135,23 +128,35 @@ class ForgeExecutor:
                 f"workspace-relative paths:\n- " + "\n- ".join(materialized)
             )
 
+        tool_names: dict[str, str] = {}
+
         async def forward(event) -> None:
             data = event.data
             if event.type == "chunk" and data:
                 emit({"phase": "text", "text": str(data), "source": "forge"})
             elif event.type == "tool" and isinstance(data, dict):
+                call_id = data.get("id")
+                tool_name = data.get("name")
+                if call_id and tool_name:
+                    tool_names[str(call_id)] = str(tool_name)
                 emit({
-                    "phase": "tool", "tool": data.get("name"),
-                    "tool_call_id": data.get("id"), "input": data.get("input"),
+                    "phase": "tool", "tool": tool_name,
+                    "tool_call_id": call_id, "input": data.get("input"),
                     "source": "forge",
                 })
             elif event.type == "tool_result" and isinstance(data, dict):
                 content = data.get("content", data.get("result", ""))
-                emit({
+                call_id = data.get("tool_use_id", data.get("id"))
+                preview = str(content)[:1500]
+                forwarded = {
                     "phase": "tool_result",
-                    "tool_call_id": data.get("tool_use_id", data.get("id")),
-                    "result": str(content)[:1500], "source": "forge",
-                })
+                    "tool_call_id": call_id,
+                    "tool": data.get("name") or tool_names.get(str(call_id)),
+                    "result": preview, "source": "forge",
+                }
+                if data.get("is_error"):
+                    forwarded["error"] = preview
+                emit(forwarded)
 
         images = {
             "coder": settings.forge_coder_image,

@@ -1,0 +1,404 @@
+"""Tests for the load-bearing patterns (§3, §4, §6, §2). Async cases wrap
+asyncio.run so the suite needs no pytest-asyncio plugin."""
+import asyncio
+from pathlib import Path
+
+import pytest
+from pydantic import BaseModel
+
+from forge.gate.protocol import JobRequest
+from forge.model.scripted import ScriptedModel, tool_call
+from forge.warden.engine import Warden
+from forge.warden.filestate import FileStateCache
+from forge.warden.permissions import AllowList, Mode, PermissionEngine
+from forge.warden.state import StopReason
+from forge.warden.tool import Tool, ToolContext, ToolResult
+
+ENGINE_ROOT = Path(__file__).resolve().parent.parent / "forge"
+
+
+# ── Test doubles ─────────────────────────────────────────────────────────────
+class EchoArgs(BaseModel):
+    text: str
+
+
+class Echo(Tool):
+    name = "echo"
+    description = "echo the input text"
+    Args = EchoArgs
+    READ_ONLY = True
+    CONCURRENCY_SAFE = True
+
+    async def call(self, args: EchoArgs, ctx: ToolContext) -> ToolResult:
+        return ToolResult(args.text)
+
+
+def _ctx() -> ToolContext:
+    return ToolContext(agent_id="t", cell=None, graph=None, files=FileStateCache(),
+                       permissions=PermissionEngine(), network_allowed=False)
+
+
+def _warden(steps, tools=None, max_iter=30, signal=None) -> Warden:
+    return Warden(system_prompt="", tools=tools or {"echo": Echo()},
+                  model=ScriptedModel(steps), ctx=_ctx(), max_iterations=max_iter,
+                  signal=signal)
+
+
+# ── §3 the loop ──────────────────────────────────────────────────────────────
+def test_stop_condition_is_no_tool_calls():
+    """The sole stop signal: a turn with no tool_use → completed."""
+    steps = [lambda m: ("using a tool", [tool_call("echo", text="hi")]),
+             lambda m: ("all done", [])]
+    term = asyncio.run(_warden(steps).run("go"))
+    assert term.reason is StopReason.COMPLETED
+    assert term.final_text == "all done"
+
+
+def test_max_iterations_guard():
+    """A model that never stops hits the single ceiling."""
+    steps = [lambda m: ("again", [tool_call("echo", text="x")])] * 50
+    term = asyncio.run(_warden(steps, max_iter=3).run("go"))
+    assert term.reason is StopReason.MAX_ITERATIONS
+    assert term.iterations == 3
+
+
+def test_interrupt_yields_clean_aborted():
+    sig = asyncio.Event()
+    sig.set()
+    steps = [lambda m: ("x", [tool_call("echo", text="x")])]
+    term = asyncio.run(_warden(steps, signal=sig).run("go"))
+    assert term.reason is StopReason.ABORTED
+
+
+# ── §4 the tool boundary: errors-as-results, never exceptions ────────────────
+def test_unknown_tool_becomes_error_result_not_crash():
+    steps = [lambda m: ("call missing", [tool_call("does_not_exist", x=1)]),
+             lambda m: ("done", [])]
+    term = asyncio.run(_warden(steps).run("go"))
+    assert term.reason is StopReason.COMPLETED  # loop survived the bad call
+    blocks = [b for msg in term.messages if isinstance(msg.get("content"), list)
+              for b in msg["content"] if isinstance(b, dict) and b.get("type") == "tool_result"]
+    assert any(b.get("is_error") for b in blocks)
+
+
+def test_bad_input_becomes_error_result():
+    steps = [lambda m: ("bad args", [tool_call("echo")]),  # missing required 'text'
+             lambda m: ("done", [])]
+    term = asyncio.run(_warden(steps).run("go"))
+    assert term.reason is StopReason.COMPLETED
+    blocks = [b for msg in term.messages if isinstance(msg.get("content"), list)
+              for b in msg["content"] if isinstance(b, dict) and b.get("type") == "tool_result"]
+    # The contract is not "it said no" — it is that the refusal names the
+    # missing parameter. See warden/toolerrors.py.
+    assert any(b.get("is_error") and "`text` is missing" in b.get("content", "")
+               for b in blocks)
+
+
+# ── §6 permission & safety gate ──────────────────────────────────────────────
+def test_safety_gate_stops_protected_paths():
+    """The gate is a checkpoint now, not a wall — but it still never lets an
+    operation past without an explicit decision."""
+    eng = PermissionEngine(mode=Mode.ACT)
+    from forge.tools.files import WriteFile, WriteFileArgs
+    d = eng.resolve(WriteFile(), WriteFileArgs(path=".git/config", content="x"), None)
+    assert d.needs_ask and not d.allowed and "safety gate" in d.reason
+
+
+def test_safety_gate_blocks_destructive_command():
+    eng = PermissionEngine(mode=Mode.ACT)
+    from forge.tools.shell import RunCommand, RunCommandArgs
+    d = eng.resolve(RunCommand(), RunCommandArgs(command="rm -rf /"), None)
+    assert not d.allowed and d.needs_ask
+
+
+def test_gate_is_bypass_immune_even_with_allowlist():
+    """An allow-list hit can never override the gate (§6)."""
+    al = AllowList({"run_command"})  # operator allow-listed the whole tool
+    eng = PermissionEngine(mode=Mode.ACT, allowlist=al)
+    from forge.tools.shell import RunCommand, RunCommandArgs
+    d = eng.resolve(RunCommand(), RunCommandArgs(command="git push --force origin main"), None)
+    assert not d.allowed, "a blanket grant is not a decision about THIS action"
+
+
+def test_plan_mode_denies_mutations_allows_reads():
+    eng = PermissionEngine(mode=Mode.PLAN)
+    from forge.tools.files import WriteFile, ReadFile
+    from forge.tools.files import ReadFileArgs, WriteFileArgs
+    assert not eng.resolve(WriteFile(), WriteFileArgs(path="a.txt", content="x"), None).allowed
+    assert eng.resolve(ReadFile(), ReadFileArgs(path="a.txt"), None).allowed
+
+
+def test_allowlist_lets_normal_command_through():
+    eng = PermissionEngine(mode=Mode.ACT, allowlist=AllowList({"run_command:pytest*"}))
+    from forge.tools.shell import RunCommand, RunCommandArgs
+    assert eng.resolve(RunCommand(), RunCommandArgs(command="pytest -q"), None).allowed
+
+
+# ── read-before-write freshness (study §3) ───────────────────────────────────
+def test_read_before_write_freshness():
+    fs = FileStateCache()
+    assert fs.freshness_error("a.py", "hash1") is not None      # never read → blocked
+    fs.record("a.py", "code", "hash1")
+    assert fs.freshness_error("a.py", "hash1") is None           # read & unchanged → ok
+    assert fs.freshness_error("a.py", "hash2") is not None       # changed since read → blocked
+
+
+# ── §7 wire contract validation ──────────────────────────────────────────────
+def test_malformed_job_request_rejected():
+    with pytest.raises(Exception):
+        JobRequest.model_validate_json('{"task": "no agent field"}')
+    ok = JobRequest.model_validate_json('{"agent": "optimus", "task": "do it"}')
+    assert ok.agent == "optimus" and ok.constraints.network is False
+
+
+# ── §7 chat memory: a turn carries its whole conversation, not just the last line
+def test_chat_request_carries_full_history():
+    """Regression: the chat path collapsed history to the last user line, so a
+    turn could not remember what was said two messages earlier."""
+    from forge.gate.protocol import job_from_chat_request
+
+    frame = {"chat_id": "c1", "cwd": "/repo", "history": [
+        {"role": "user", "content": "remember the word FALCON"},
+        {"role": "assistant", "content": "Noted: FALCON."},
+        {"role": "user", "content": "what word did I give you?"},
+    ]}
+    jr = job_from_chat_request(frame, "centurion")
+    assert len(jr.history) == 3                          # whole transcript carried
+    assert jr.history[-1]["role"] == "user"             # ends on a user turn
+    assert jr.task == "what word did I give you?"        # last user text kept
+
+
+def test_run_job_runs_over_the_whole_transcript():
+    """run_job seeds the loop with the full history when present, so the model's
+    turn sees everything already said — not a single-message cold start."""
+    from forge.agents.registry import AgentRegistry
+    from forge.config import ForgeSettings
+    from forge.gate.runner import run_job
+
+    seen: dict[str, list] = {}
+
+    def _step(messages):
+        seen["messages"] = list(messages)
+        return ("FALCON", [])                            # stop: no tool calls
+
+    request = JobRequest(agent="optimus", task="what word did I give you?",
+                         history=[
+                             {"role": "user", "content": "remember FALCON"},
+                             {"role": "assistant", "content": "Noted."},
+                             {"role": "user", "content": "what word did I give you?"},
+                         ])
+
+    async def _sink(_ev):
+        return None
+
+    settings = ForgeSettings.from_env()
+    registry = AgentRegistry.load()
+    term = asyncio.run(run_job(request, settings=settings, registry=registry,
+                               emit=_sink, model=ScriptedModel([_step])))
+    assert term.reason is StopReason.COMPLETED
+    # The model's first turn saw all three prior messages, not just the last.
+    assert [m["role"] for m in seen["messages"]] == ["user", "assistant", "user"]
+
+
+def test_run_job_repairs_a_dangling_transcript_before_replay():
+    """A previous turn that died after asking for a tool leaves a dangling
+    tool_use. run_job must repair it so the model gets a valid transcript
+    instead of the whole conversation failing on arrival."""
+    from forge.agents.registry import AgentRegistry
+    from forge.config import ForgeSettings
+    from forge.gate.runner import run_job
+
+    seen: dict[str, list] = {}
+
+    def _step(messages):
+        seen["messages"] = list(messages)
+        return ("recovered", [])
+
+    request = JobRequest(agent="optimus", task="carry on", history=[
+        {"role": "user", "content": "scan it"},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "t1", "name": "echo", "input": {"text": "x"}}]},
+        # died here — no tool_result — then the operator spoke again
+        {"role": "user", "content": "carry on"},
+    ])
+
+    async def _sink(_ev):
+        return None
+
+    term = asyncio.run(run_job(request, settings=ForgeSettings.from_env(),
+                               registry=AgentRegistry.load(),
+                               emit=_sink, model=ScriptedModel([_step])))
+    assert term.reason is StopReason.COMPLETED
+    # The dangling tool_use was answered before the trailing user turn.
+    msgs = seen["messages"]
+    assert [m["role"] for m in msgs] == ["user", "assistant", "user", "user"]
+    backfilled = [b for b in msgs[2]["content"] if b.get("type") == "tool_result"]
+    assert backfilled and backfilled[0]["tool_use_id"] == "t1"
+
+
+# ── §2 rebrandable core: no identity strings in the engine ───────────────────
+def test_engine_core_has_no_agent_identity_strings():
+    core = ["warden/__init__.py", "warden/engine.py", "warden/state.py",
+            "warden/tool.py", "warden/dispatch.py", "warden/permissions.py",
+            "warden/filestate.py"]
+    for rel in core:
+        text = (ENGINE_ROOT / rel).read_text(encoding="utf-8").lower()
+        assert "optimus" not in text, f"'optimus' leaked into {rel}"
+        assert "centurion" not in text, f"'centurion' leaked into {rel}"
+
+
+# ── §11 peer shuts down on request while a healthy connection is idle ────────
+class _IdleSocket:
+    """A connected socket that never delivers a frame — the steady state."""
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def send(self, _payload):
+        return None
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        await asyncio.Event().wait()        # parks forever, like ws.recv()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_exc):
+        self.closed = True
+        return False
+
+
+def test_stop_request_ends_an_idle_connection(monkeypatch):
+    """A stop must be observed while connected, not only between reconnects.
+
+    Regression: run_forever checked the stop event only around _serve_one, so a
+    healthy idle socket kept the peer parked in ws.recv() and SIGTERM did
+    nothing until systemd escalated to SIGKILL 90s later.
+    """
+    import sys
+    import types
+
+    from forge.agents.registry import AgentRegistry
+    from forge.config import ForgeSettings
+    from forge.gate.peer import ForgePeer
+
+    sock = _IdleSocket()
+    fake = types.ModuleType("websockets")
+    fake.__version__ = "13.0"
+    fake.connect = lambda *_a, **_kw: sock
+    monkeypatch.setitem(sys.modules, "websockets", fake)
+
+    monkeypatch.setenv("SPEDA_API_KEY", "test-key")
+    registry = AgentRegistry.load()
+    peer = ForgePeer(registry.get("optimus"), ForgeSettings.from_env(), registry)
+
+    async def scenario():
+        runner = asyncio.create_task(peer.run_forever())
+        await asyncio.sleep(0.05)           # let it connect and register
+        peer.request_stop()                 # what the SIGTERM handler calls
+        await asyncio.wait_for(runner, timeout=2.0)
+
+    asyncio.run(scenario())                 # TimeoutError here = the bug is back
+    assert sock.closed, "the socket should be closed on the way out"
+
+
+def _reconnect_delays(caplog):
+    """The `in_s` values run_forever logged on peer_reconnect, in order."""
+    return [r.in_s for r in caplog.records if r.getMessage() == "peer_reconnect"]
+
+
+def test_backoff_resets_after_a_connection_that_lasted(monkeypatch, caplog):
+    """A long-lived socket that drops must come back promptly, not at the ceiling.
+
+    Regression: `backoff = _BACKOFF_START_S` sat inside the try block after
+    `await self._serve_one()`, but every ordinary disconnect leaves _serve_one
+    by raising, so the reset was unreachable. The delay climbed 1→2→4→…→60 and
+    stayed pinned at the ceiling for the life of the process — on the server a
+    peer up for days took a FULL MINUTE to re-register after each drop, and a
+    task dispatched inside that window found no peer registered at all.
+    """
+    import logging
+
+    import forge.gate.peer as peer_mod
+    from forge.agents.registry import AgentRegistry
+    from forge.config import ForgeSettings
+    from forge.gate.peer import ForgePeer
+
+    monkeypatch.setenv("SPEDA_API_KEY", "test-key")
+    # Scaled down so the test does not sit through real backoffs; the ratios
+    # (start ≪ max, session ≫ stable) are what is under test.
+    monkeypatch.setattr(peer_mod, "_BACKOFF_START_S", 0.01)
+    monkeypatch.setattr(peer_mod, "_BACKOFF_MAX_S", 0.64)
+    monkeypatch.setattr(peer_mod, "_STABLE_S", 0.05)
+
+    registry = AgentRegistry.load()
+    peer = ForgePeer(registry.get("optimus"), ForgeSettings.from_env(), registry)
+
+    sessions = {"n": 0}
+
+    async def serve_then_drop():
+        # Up comfortably past _STABLE_S, then dropping the way a real socket
+        # does: by raising out of _serve_one.
+        sessions["n"] += 1
+        if sessions["n"] > 3:
+            peer.request_stop()
+            return
+        await asyncio.sleep(0.08)
+        raise ConnectionError("peer closed the socket")
+
+    monkeypatch.setattr(peer, "_serve_one", serve_then_drop)
+
+    with caplog.at_level(logging.INFO, logger="forge.gate.peer"):
+        asyncio.run(asyncio.wait_for(peer.run_forever(), timeout=5.0))
+
+    delays = _reconnect_delays(caplog)
+    assert delays, "expected at least one reconnect delay"
+    assert all(d == 0.01 for d in delays), (
+        f"a session that outlived _STABLE_S must reset the delay to the floor; "
+        f"got {delays} — the backoff is pinned again"
+    )
+
+
+def test_backoff_still_climbs_when_the_endpoint_is_broken(monkeypatch, caplog):
+    """The exponential climb must survive the fix above.
+
+    A connection that fails on arrival (bad key, wrong URL, backend down) never
+    reaches _STABLE_S, so it must still back off rather than hammer the socket
+    at the floor delay forever.
+    """
+    import logging
+
+    import forge.gate.peer as peer_mod
+    from forge.agents.registry import AgentRegistry
+    from forge.config import ForgeSettings
+    from forge.gate.peer import ForgePeer
+
+    monkeypatch.setenv("SPEDA_API_KEY", "test-key")
+    monkeypatch.setattr(peer_mod, "_BACKOFF_START_S", 0.01)
+    monkeypatch.setattr(peer_mod, "_BACKOFF_MAX_S", 0.64)
+    monkeypatch.setattr(peer_mod, "_STABLE_S", 30.0)
+
+    registry = AgentRegistry.load()
+    peer = ForgePeer(registry.get("optimus"), ForgeSettings.from_env(), registry)
+
+    attempts = {"n": 0}
+
+    async def fail_immediately():
+        attempts["n"] += 1
+        if attempts["n"] > 4:
+            peer.request_stop()
+            return
+        raise ConnectionRefusedError("connection refused")
+
+    monkeypatch.setattr(peer, "_serve_one", fail_immediately)
+
+    with caplog.at_level(logging.INFO, logger="forge.gate.peer"):
+        asyncio.run(asyncio.wait_for(peer.run_forever(), timeout=5.0))
+
+    delays = _reconnect_delays(caplog)
+    assert delays[:4] == [0.01, 0.02, 0.04, 0.08], (
+        f"a never-established endpoint must still climb; got {delays}"
+    )

@@ -1,0 +1,125 @@
+"""AgentRegistry — loads every agent folder into an AgentConfig (§2).
+
+Generic and identity-free: it discovers whatever `<id>/profile.toml` +
+`<id>/system_prompt.md` pairs exist under the agents directory and resolves each
+profile's declared tool allowlist against the curated tool set. Adding Centurion
+(or any third agent) later is purely a new folder — this loader and the engine
+are untouched.
+"""
+from __future__ import annotations
+
+import tomllib
+from pathlib import Path
+
+from forge.agents.config import AgentConfig, CellSpec, GitIdentity
+from forge.tools import (ALL_TOOLS, CODING_TOOLS, GIT_TOOLS, HISAR_TOOLS, MEMORY_TOOLS,
+                         NOTIFY_TOOLS, RECALL_TOOLS, SECURITY_TOOLS, WEB_TOOLS)
+
+AGENTS_DIR = Path(__file__).parent
+
+# Named tool groups a profile may reference instead of listing every tool.
+#
+# This dict is the ONLY thing that makes a group nameable. A group defined in
+# forge/tools/__init__.py and missing from here is not a narrower default — it
+# is unreachable, because a profile has no word for it. `hisar` and `notify`
+# spent their whole existence in that state: defined, tested, filtered when
+# unconfigured, and never in any agent's toolset even when they were.
+#
+# Nothing failed loudly. `_resolve_tools` rejects a name it does not know, but
+# there was no check the other way round, so the missing half of the wiring
+# looked exactly like a deliberately narrow default. `tests/test_tool_groups.py`
+# is the check the other way round.
+_TOOL_GROUPS = {
+    "coding": tuple(cls.name for cls in CODING_TOOLS),
+    "security": tuple(cls.name for cls in SECURITY_TOOLS),
+    "web": tuple(cls.name for cls in WEB_TOOLS),
+    "memory": tuple(cls.name for cls in MEMORY_TOOLS),
+    # Recall over past sessions and the shared agent channel — read-only Mark VI
+    # knowledge, withheld with the memory group when there is no channel. Named
+    # separately so a profile takes "remember what was said and see the other
+    # agents" without also taking the power to rewrite the owner's memory.
+    "recall": tuple(cls.name for cls in RECALL_TOOLS),
+    # The owner's filesystem and a line to their phone. Separate groups, and
+    # separate from each other, because that is the entire reason they were not
+    # folded into `coding`: a profile takes one, both or neither on purpose.
+    "hisar": tuple(cls.name for cls in HISAR_TOOLS),
+    "notify": tuple(cls.name for cls in NOTIFY_TOOLS),
+    "git": tuple(cls.name for cls in GIT_TOOLS),
+}
+
+
+def _resolve_tools(entries: list[str]) -> tuple[str, ...]:
+    resolved: list[str] = []
+    for entry in entries:
+        if entry in _TOOL_GROUPS:
+            resolved.extend(_TOOL_GROUPS[entry])
+        elif entry in ALL_TOOLS:
+            resolved.append(entry)
+        else:
+            raise ValueError(f"unknown tool or group in allowlist: {entry!r}")
+    # de-dup, preserve order
+    seen: set[str] = set()
+    return tuple(t for t in resolved if not (t in seen or seen.add(t)))
+
+
+class AgentRegistry:
+    def __init__(self, configs: dict[str, AgentConfig]) -> None:
+        self._configs = configs
+
+    def get(self, agent_id: str) -> AgentConfig:
+        try:
+            return self._configs[agent_id]
+        except KeyError:
+            known = ", ".join(sorted(self._configs)) or "(none)"
+            raise KeyError(f"no agent config for {agent_id!r}. Known agents: {known}.")
+
+    def ids(self) -> list[str]:
+        return sorted(self._configs)
+
+    @classmethod
+    def load(cls, agents_dir: Path = AGENTS_DIR) -> "AgentRegistry":
+        configs: dict[str, AgentConfig] = {}
+        for child in sorted(agents_dir.iterdir()):
+            profile = child / "profile.toml"
+            prompt = child / "system_prompt.md"
+            if not (child.is_dir() and profile.exists() and prompt.exists()):
+                continue
+            configs[child.name] = _load_one(profile, prompt)
+        if not configs:
+            raise RuntimeError(f"no agent configs found under {agents_dir}")
+        return cls(configs)
+
+
+def _load_one(profile_path: Path, prompt_path: Path) -> AgentConfig:
+    data = tomllib.loads(profile_path.read_text(encoding="utf-8"))
+    cell = data.get("cell", {})
+    git = data.get("git", {})
+    agent_id = data["agent_id"]
+    if agent_id != profile_path.parent.name:
+        raise ValueError(
+            f"agent_id {agent_id!r} must match folder name {profile_path.parent.name!r}")
+    return AgentConfig(
+        agent_id=agent_id,
+        name=data["name"],
+        domain=data.get("domain", ""),
+        model_ref=data["model"],
+        tool_names=_resolve_tools(list(data.get("tools", []))),
+        system_prompt=prompt_path.read_text(encoding="utf-8"),
+        permission_mode=data.get("permission_mode", "act"),
+        max_iterations=int(data.get("max_iterations", 30)),
+        vision_model=str(data.get("vision_model", "") or ""),
+        cell=CellSpec(
+            allow_network=bool(cell.get("allow_network", False)),
+            cpus=float(cell.get("cpus", 1.0)),
+            memory_mb=int(cell.get("memory_mb", 1024)),
+            timeout_s=int(cell.get("timeout_s", 60)),
+            backend=cell.get("backend"),
+            image=cell.get("image"),
+            run_as_root=bool(cell.get("run_as_root", False)),
+            cap_add=tuple(cell.get("cap_add", [])),
+        ),
+        git=GitIdentity(
+            name=git.get("name", data["name"]),
+            email=git.get("email", f"{agent_id}@forge.local"),
+        ),
+    )

@@ -48,6 +48,7 @@ class CapabilityRegistry:
         self._mcp_clients: dict[str, "MCPClient"] = {}
         self._mcp_tool_map: dict[str, str] = {}  # tool_name → server_name
         self._mcp_tool_defs: list[dict] = []     # full definitions for list_tools()
+        self._mcp_read_only: set[str] = set()    # MCP readOnlyHint, kept out of provider schema
         self._adapters: dict[str, "OSSAdapter"] = {}
         # Dead Zone Protocol — cached connectivity probe (registry lives on
         # app.state, so this is instance state, not a module global).
@@ -158,8 +159,12 @@ class CapabilityRegistry:
         self._mcp_clients[client.server_name] = client
         tools = await client.list_tools()
         for tool in tools:
+            tool = dict(tool)
+            annotations = tool.pop("annotations", None) or {}
             self._mcp_tool_map[tool["name"]] = client.server_name
             self._mcp_tool_defs.append(tool)
+            if annotations.get("readOnlyHint") is True:
+                self._mcp_read_only.add(tool["name"])
         logger.info(
             "registry_register",
             extra={"tier": 2, "capability": client.server_name, "tools": len(tools)},
@@ -180,6 +185,8 @@ class CapabilityRegistry:
                     await old.disconnect()
                 except BaseException:
                     pass
+            removed_tools = {k for k, v in self._mcp_tool_map.items() if v == name}
+            self._mcp_read_only.difference_update(removed_tools)
             self._mcp_tool_defs = [
                 t for t in self._mcp_tool_defs if self._mcp_tool_map.get(t["name"]) != name
             ]
@@ -204,6 +211,8 @@ class CapabilityRegistry:
             except BaseException as exc:
                 if isinstance(exc, (KeyboardInterrupt, SystemExit)):
                     raise
+        removed_tools = {k for k, v in self._mcp_tool_map.items() if v == name}
+        self._mcp_read_only.difference_update(removed_tools)
         self._mcp_tool_defs = [
             t for t in self._mcp_tool_defs if self._mcp_tool_map.get(t["name"]) != name
         ]
@@ -590,11 +599,20 @@ class CapabilityRegistry:
                 import json as _json
 
                 memo = extra.setdefault("tool_memo", {})
-                memo_key = (tool_name, _json.dumps(args, sort_keys=True, default=str))
+                canonical_args = _json.dumps(args, sort_keys=True, default=str)
+                memo_key = (tool_name, canonical_args)
                 if memo_key in memo:
+                    import hashlib
+
+                    scope = hashlib.sha256(canonical_args.encode()).hexdigest()[:12]
                     logger.info(
-                        "tool_memo_hit",
-                        extra={"tool": tool_name, "request_id": context.request_id},
+                        "duplicate_retrieval_suppressed",
+                        extra={
+                            "tool": tool_name,
+                            "source": self._mcp_tool_map.get(tool_name, "local"),
+                            "scope": scope,
+                            "request_id": context.request_id,
+                        },
                     )
                     return memo[memo_key]
             except (TypeError, ValueError):
@@ -627,12 +645,21 @@ class CapabilityRegistry:
         guessing wrong on a write is far worse than paying for a duplicate
         read."""
         skill = self._skills.get(tool_name)
-        if skill is None:
-            return False
-        if getattr(skill, "read_only", False):
-            return True
-        commands = getattr(skill, "memoizable_commands", None)
-        return bool(commands) and args.get("command") in commands
+        if skill is not None:
+            if getattr(skill, "read_only", False):
+                return True
+            commands = getattr(skill, "memoizable_commands", None)
+            return bool(commands) and args.get("command") in commands
+        adapter = self._adapters.get(tool_name)
+        if adapter is not None:
+            return bool(getattr(adapter, "read_only", False))
+        if tool_name in self._mcp_tool_map:
+            return tool_name in self._mcp_read_only
+        return False
+
+    def call_is_read_only(self, tool_name: str, args: dict) -> bool:
+        """Return only code-owned read-only facts; never infer from a tool name."""
+        return self._memoizable(tool_name, args)
 
     async def _dispatch(
         self, tool_name: str, args: dict, context: "AgentContext", *,

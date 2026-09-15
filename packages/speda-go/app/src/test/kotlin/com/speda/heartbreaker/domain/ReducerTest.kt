@@ -4,6 +4,8 @@
 package com.speda.heartbreaker.domain
 
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -81,6 +83,36 @@ class ReducerTest {
         assertEquals(1, withTool.messages[0].tools.size)
         val withResult = reduce(withTool, ChatAction.SetToolResult("a", "t1", "5 hits"))
         assertEquals("5 hits", withResult.messages[0].tools[0].result)
+    }
+
+    @Test
+    fun subagentTools_correlateParallelResultsStrictlyById() {
+        var state = ChatState(messages = persistentListOf(assistant("m", streaming = true)))
+
+        fun event(phase: String, id: String? = null, tool: String? = null, result: String? = null) =
+            buildJsonObject {
+                put("id", "run")
+                put("phase", phase)
+                id?.let { put("tool_call_id", it) }
+                tool?.let { put("tool", it) }
+                result?.let { put("result", it) }
+            }
+
+        state = reduce(state, ChatAction.Subagent("m", event("started")))
+        state = reduce(state, ChatAction.Subagent("m", event("tool", "a", "first")))
+        state = reduce(state, ChatAction.Subagent("m", event("tool", "b", "second")))
+        state = reduce(state, ChatAction.Subagent("m", event("tool_result", "b", "second", "B")))
+        state = reduce(state, ChatAction.Subagent("m", event("tool_result", "a", "first", "A")))
+
+        val steps = state.messages[0].subagents.single().steps
+        assertEquals(listOf("a", "b"), steps.map { it.toolCallId })
+        assertEquals(listOf("A", "B"), steps.map { it.result })
+
+        val afterIdless = reduce(
+            state,
+            ChatAction.Subagent("m", event("tool_result", result = "wrong")),
+        )
+        assertEquals(steps, afterIdless.messages[0].subagents.single().steps)
     }
 
     @Test

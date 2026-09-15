@@ -4,7 +4,14 @@
 import base64
 from types import SimpleNamespace
 
-from app.execution.forge import ForgeExecutor, _resolve_workspace
+from app.execution.forge import ForgeExecutor, _load_runtime, _resolve_workspace
+
+
+def test_native_runtime_imports_from_workspace_package():
+    ExecutionSpec, execute = _load_runtime()
+
+    assert ExecutionSpec.__module__ == "forge.runtime"
+    assert execute.__module__ == "forge.runtime"
 
 
 def test_hisar_workspace_is_mapped_to_host_visible_root(tmp_path, monkeypatch):
@@ -101,3 +108,39 @@ async def test_pentester_uses_security_cell_image(tmp_path, monkeypatch):
 
     assert result == "checked"
     assert observed["image"] == "forge-cell-centurion:latest"
+
+
+async def test_forge_tool_events_preserve_ids_and_tool_names(tmp_path, monkeypatch):
+    events = []
+
+    class _Spec:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    async def _execute(_spec, **kwargs):
+        await kwargs["emit"](SimpleNamespace(
+            type="tool", data={"id": "forge-a", "name": "shell", "input": {"cmd": "a"}},
+        ))
+        await kwargs["emit"](SimpleNamespace(
+            type="tool", data={"id": "forge-b", "name": "read_file", "input": {"path": "b"}},
+        ))
+        await kwargs["emit"](SimpleNamespace(
+            type="tool_result", data={"tool_use_id": "forge-b", "content": "result-b"},
+        ))
+        await kwargs["emit"](SimpleNamespace(
+            type="tool_result", data={"tool_use_id": "forge-a", "content": "result-a"},
+        ))
+        return SimpleNamespace(status="succeeded", report="done", error=None)
+
+    monkeypatch.setattr("app.execution.forge._load_runtime", lambda: (_Spec, _execute))
+    await ForgeExecutor(object()).run(
+        job_id="job-events", role="coder", task="x", workspace=str(tmp_path),
+        model_ref="test:model", emit=events.append,
+    )
+
+    assert [(e["phase"], e["tool_call_id"], e["tool"]) for e in events] == [
+        ("tool", "forge-a", "shell"),
+        ("tool", "forge-b", "read_file"),
+        ("tool_result", "forge-b", "read_file"),
+        ("tool_result", "forge-a", "shell"),
+    ]

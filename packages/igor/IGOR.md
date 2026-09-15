@@ -368,9 +368,9 @@ both needed:
 
 ## Startup sequence
 
-`app/main.py`'s lifespan handler, in order: initialize the database → construct the LLM client → build the profile registry and register every persona → build the Telegram bot registry for agents with it enabled → build the capability registry and register tools in tier order (Legion → Skills → MCP → Adapters) → run a non-fatal health check across registered capabilities → build the WebSocket manager, agent registry, external-peer proxy, and memory recall cache → build the session manager → build the orchestrator and wire the dispatcher → start the detached turn runner and the Telegram gateway → publish everything onto `app.state` → wire Legion/dispatch completion report hooks → best-effort start the sandbox launcher and Forge peer launcher → sweep dispatch tickets orphaned by a prior crash → recover background jobs left `"running"` at boot → reconcile Lockdown Protocol state if it was left engaged.
+`app/main.py`'s lifespan handler, in order: initialize the database → construct the LLM client → build the profile registry and register every persona → build the Telegram bot registry for agents with it enabled → build the capability registry and register tools in tier order (Legion → Skills → MCP → Adapters) → run a non-fatal health check across registered capabilities → build the WebSocket manager, agent registry, external-peer proxy, and memory recall cache → build the session manager → build the orchestrator and wire the dispatcher → start the detached turn runner and the Telegram gateway → publish everything onto `app.state` → wire Legion/dispatch completion report hooks → best-effort start the sandbox launcher → sweep dispatch tickets orphaned by a prior crash → recover background jobs left `"running"` at boot → reconcile Lockdown Protocol state if it was left engaged.
 
-Shutdown reverses the pieces that need it: turn registry, dispatcher, Legion, Forge/sandbox launchers, Telegram polling, adapter/MCP disconnect, database close.
+Shutdown reverses the pieces that need it: turn registry, dispatcher, Legion, sandbox launcher, Telegram polling, adapter/MCP disconnect, database close.
 
 ---
 

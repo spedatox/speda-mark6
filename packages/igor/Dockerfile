@@ -39,6 +39,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # install). Copy source too — uv installs the workspace member editable.
 COPY pyproject.toml uv.lock ./
 COPY packages/igor/pyproject.toml ./packages/igor/pyproject.toml
+COPY packages/forge/pyproject.toml ./packages/forge/pyproject.toml
+COPY packages/forge/forge ./packages/forge/forge
 COPY packages/igor/app ./packages/igor/app
 COPY packages/igor/scripts ./packages/igor/scripts
 

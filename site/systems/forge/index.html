@@ -169,9 +169,9 @@
         <a href="../../agents/scourge/">Scourge</a> also declares an external backend and can be served by
         its own peer on its own socket, with the same proxy-when-online, fallback-when-offline behaviour. Two
         agents can now be externally backed; the rest remain purely in-process.</p>
-      <p>Both peers are configured through the launcher rather than compiled in — where the Forge lives,
-        whether to start it automatically, which socket to reach it on, and which container backend the Cell
-        should use.</p>
+      <p>Both peers are separate Forge processes that connect independently on their agent-specific sockets.
+        Igor keeps the proxy-when-online, fallback-when-offline routing decision, but does not own the peer
+        processes' lifecycle.</p>
     </div>
 
     <div class="actions">

@@ -36,7 +36,10 @@ WATCH_FS="${LIFEBOAT_WATCH_FS:-/}"
 ACTIVATE_PCT="${LIFEBOAT_ACTIVATE_PCT:-85}"
 TARGET_FREE_GB="${LIFEBOAT_TARGET_FREE_GB:-30}"
 
-FORGE_DIR="${FORGE_DIR:-/opt/forge-mk1}"
+# Legacy standalone-peer recovery assets now live in the Mark VI monorepo.
+# SPEDA_REPO_DIR may be set when the checkout is not at the production default.
+SPEDA_REPO_DIR="${SPEDA_REPO_DIR:-/opt/speda-mark6}"
+FORGE_DIR="$SPEDA_REPO_DIR/packages/forge"
 SCOURGE_PROFILE="$FORGE_DIR/forge/agents/scourge/profile.toml"
 DOCKERFILE="$FORGE_DIR/deploy/cell-scourge.Dockerfile"
 ARSENAL_IMAGE="forge-cell-scourge:latest"
@@ -144,7 +147,7 @@ restore_arsenal() {
   fi
   head "RESTORE — rebuild $ARSENAL_IMAGE"
   if [[ ! -f "$DOCKERFILE" ]]; then
-    log "Dockerfile missing at $DOCKERFILE — pull the forge-mk1 repo first."
+    log "Dockerfile missing at $DOCKERFILE — update the Mark VI checkout first."
     exit 1
   fi
   log "→ docker build (this is the long comprehensive bake)…"

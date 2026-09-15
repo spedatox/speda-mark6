@@ -918,24 +918,10 @@ class Settings(BaseSettings):
     # `ports`) is the entire boundary.
     playwright_mcp_url: str = ""
 
-    # ── The Forge peer (app/services/forge_peer.py) ────────────────────────────
-    # Forge is imported from forge_dir as the heavy backend for anonymous Legion
+    # ── Native Forge execution ────────────────────────────────────────────────
+    # Forge is a workspace package used as the heavy backend for anonymous Legion
     # workers. Personas, chats, uploads and provider credentials stay in Mark VI.
-    # Peer settings remain temporarily for old configuration-file compatibility.
-    forge_autostart: bool = False
-    forge_dir: str = ""                       # absolute path to the Forge repo
-    # Comma-separated agents to back with a Forge peer. Each must have a
-    # `<id>/profile.toml` in the Forge repo AND `external_backend = True` on its
-    # in-process profile here. `forge_agent` (singular) is the legacy fallback
-    # used only when `forge_agents` is left blank.
-    forge_agents: str = "optimus,scourge"
-    forge_agent: str = "optimus"
-    # Base agents-WS URL — the launcher appends `/<agent_id>` per peer, so this
-    # must NOT carry a trailing agent segment. A legacy value ending in an agent
-    # id (…/agents/ws/optimus) is tolerated: the launcher strips it.
-    forge_ws_url: str = "ws://127.0.0.1:8000/agents/ws"
     forge_cell_backend: str = "auto"          # docker | subprocess | auto
-    forge_python: str = ""                    # override interpreter; empty → uv run
     # Optional production boundary. Hisar picker paths under /Forge/workspaces
     # are translated into this host-visible root; every other path must already
     # resolve inside it. Empty keeps unrestricted local-development behavior.

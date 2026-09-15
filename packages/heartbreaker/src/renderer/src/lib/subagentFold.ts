@@ -15,7 +15,7 @@ export function foldLegionEvent(run: SubagentRun | null, event: Record<string, u
   const e = event as {
     id: string; agent?: string; label?: string; phase?: string
     prompt?: string; text?: string; tool?: string; input?: unknown
-    result?: string; report?: string; ok?: boolean; source?: 'legion' | 'peer' | 'forge'
+    result?: string; error?: string; report?: string; ok?: boolean; source?: 'legion' | 'peer' | 'forge'
     tool_call_id?: string
   }
   const next: SubagentRun = run
@@ -32,15 +32,15 @@ export function foldLegionEvent(run: SubagentRun | null, event: Record<string, u
     if (last?.kind === 'text') last.text = (last.text ?? '') + e.text
     else next.steps.push({ kind: 'text', text: e.text })
   } else if (e.phase === 'tool') {
-    next.steps.push({ kind: 'tool', tool: e.tool, input: e.input, toolCallId: e.tool_call_id })
+    if (e.tool_call_id) {
+      next.steps.push({ kind: 'tool', tool: e.tool, input: e.input, toolCallId: e.tool_call_id })
+    }
   } else if (e.phase === 'tool_result') {
-    for (let k = next.steps.length - 1; k >= 0; k--) {
-      const step = next.steps[k]
-      const matches = e.tool_call_id ? step.toolCallId === e.tool_call_id : step.result === undefined
-      if (step.kind === 'tool' && step.result === undefined && matches) {
-        next.steps[k] = { ...next.steps[k], result: e.result }
-        break
-      }
+    const k = e.tool_call_id
+      ? next.steps.findIndex(step => step.kind === 'tool' && step.toolCallId === e.tool_call_id)
+      : -1
+    if (k >= 0) {
+      next.steps[k] = { ...next.steps[k], result: e.error ?? e.result }
     }
   } else if (e.phase === 'finished') {
     next.running = false

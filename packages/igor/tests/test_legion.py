@@ -4,6 +4,7 @@
 """The Legion — unit tests: provider-agnostic model resolution, tool scoping,
 unknown legionnaire handling, and the config alias."""
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -442,8 +443,60 @@ async def test_inline_worker_emits_progress_events(registry, monkeypatch):
     assert all(e["source"] == "legion" for e in events)
     assert events[0]["prompt"] == "p"
     assert events[1]["tool"] == "search_thing"
+    assert events[1]["tool_call_id"] == "tu1"
+    assert events[2]["tool"] == "search_thing"
+    assert events[2]["tool_call_id"] == "tu1"
     assert events[-1]["ok"] is True
     assert events[-1]["report"] == "done"
+
+
+async def test_parallel_tool_results_keep_their_invocation_ids(registry, monkeypatch):
+    """A starts, B starts, B completes, A completes without positional pairing."""
+    from app.core import runtime_state
+    monkeypatch.setattr(runtime_state, "get_budget_mode", lambda: False)
+
+    calls = {"n": 0}
+
+    class _Client:
+        async def create_message(self, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return SimpleNamespace(
+                    content=[
+                        SimpleNamespace(type="tool_use", id="call-a", name="search_thing", input={"q": "a"}),
+                        SimpleNamespace(type="tool_use", id="call-b", name="write_thing", input={"q": "b"}),
+                    ],
+                    stop_reason="tool_use", usage=None,
+                )
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="done")],
+                stop_reason="end_turn", usage=None,
+            )
+
+    async def _execute(name, _args, _context):
+        if name == "search_thing":
+            await asyncio.sleep(0.02)
+            return "result-a"
+        return "result-b"
+
+    monkeypatch.setattr(registry, "execute", _execute)
+    events: list[dict] = []
+    runner = LegionRunner(_Client(), registry, None)
+    await runner.run_worker(
+        {"description": "parallel", "prompt": "p"}, _ctx(),
+        tool_call_id="worker-run", emit=events.append,
+    )
+
+    lifecycle = [
+        (e["phase"], e.get("tool_call_id"), e.get("tool"), e.get("result"))
+        for e in events if e["phase"] in {"tool", "tool_result"}
+    ]
+    assert lifecycle == [
+        ("tool", "call-a", "search_thing", None),
+        ("tool", "call-b", "write_thing", None),
+        ("tool_result", "call-b", "write_thing", "result-b"),
+        ("tool_result", "call-a", "search_thing", "result-a"),
+    ]
 
 
 async def test_emit_failure_never_breaks_the_worker(registry, monkeypatch):

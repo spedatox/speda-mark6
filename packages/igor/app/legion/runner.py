@@ -369,22 +369,41 @@ class LegionRunner:
                     )
                     self._safe_emit(emit, {
                         "id": run_id, "phase": "tool", "tool": block.name,
-                        "input": block.input, "source": "legion",
+                        "tool_call_id": block.id, "input": block.input,
+                        "source": "legion",
                     })
 
                 # Execute all tools in parallel (research skills are read-only
                 # annotated — Rule 9 makes this safe).
+                async def _execute_indexed(index, block):
+                    return index, await self._registry.execute(
+                        block.name, block.input, context,
+                    )
+
                 exec_tasks = [
-                    self._registry.execute(block.name, block.input, context)
-                    for block in tool_use_blocks
+                    asyncio.create_task(_execute_indexed(index, block))
+                    for index, block in enumerate(tool_use_blocks)
                 ]
-                results = await asyncio.gather(*exec_tasks)
-                for res in results:
-                    preview = res if isinstance(res, str) else str(res)
-                    self._safe_emit(emit, {
-                        "id": run_id, "phase": "tool_result",
-                        "result": preview[:1500], "source": "legion",
-                    })
+                results = [None] * len(tool_use_blocks)
+                try:
+                    for completed in asyncio.as_completed(exec_tasks):
+                        index, res = await completed
+                        results[index] = res
+                        block = tool_use_blocks[index]
+                        preview = res if isinstance(res, str) else str(res)
+                        event = {
+                            "id": run_id, "phase": "tool_result",
+                            "tool_call_id": block.id, "tool": block.name,
+                            "result": preview[:1500], "source": "legion",
+                        }
+                        if preview.startswith("Error"):
+                            event["error"] = preview[:1500]
+                        self._safe_emit(emit, event)
+                finally:
+                    for task in exec_tasks:
+                        if not task.done():
+                            task.cancel()
+                    await asyncio.gather(*exec_tasks, return_exceptions=True)
 
                 tool_results = [
                     {

@@ -1,0 +1,197 @@
+"""Seam 1 — where a job's tools come from.
+
+`ALL_TOOLS` is a dict in a package, so a tool that lives anywhere else — an MCP
+server's, a plugin's — has nowhere to stand. This is the standing-place: an
+ordered list of providers, folded at job assembly.
+
+**Collisions are loud.** A later provider may not shadow an earlier provider's
+name. Silent override is how a plugin quietly replaces `write_file` with its own
+and nobody finds out until something is deleted; the alternative to a startup
+error is a security incident.
+
+**Providers are re-callable.** `provide` is asked again between turns, not only
+once at assembly, because an MCP server that finishes connecting mid-job would
+otherwise be unusable until the next job. The fold is cheap and idempotent for
+the builtin provider, so re-asking costs nothing when nothing changed.
+"""
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from forge.warden.tool import Tool
+
+if TYPE_CHECKING:
+    from forge.agents.config import AgentConfig
+    from forge.gate.protocol import JobRequest
+
+logger = logging.getLogger("forge.warden")
+
+
+@runtime_checkable
+class ToolProvider(Protocol):
+    """A source of tools for one job."""
+
+    name: str
+
+    async def provide(self, cfg: "AgentConfig", request: "JobRequest") -> dict[str, Tool]:
+        """The tools this source contributes. Called at assembly and may be
+        called again between turns; it must be safe to call repeatedly."""
+        ...
+
+    async def close(self) -> None:
+        """Release anything held open. Always called, even when the job fails."""
+        ...
+
+
+#: Tools that are useless without a running Graphify sidecar. Their own
+#: descriptions tell the model to reach for them FIRST to orient itself, so
+#: leaving them in the list when the graph is down costs a call — often two,
+#: since the failure reads as "not indexed yet" rather than "not available
+#: here" — before it falls back to grep and gets on with the job.
+#:
+#: `graph_index` is deliberately NOT here: it is the one graph tool that works
+#: without a graph, and withholding it would leave the agent unable to create
+#: the thing whose absence caused the withholding.
+GRAPH_TOOLS = ("graph_query", "graph_path", "graph_overview")
+
+
+def without_graph_tools(tools: dict[str, Tool]) -> dict[str, Tool]:
+    """The toolset minus anything that needs a graph. A tool that cannot work
+    should not be offered: the model has no way to know it will fail, and
+    discovers it only by spending a turn."""
+    return {name: tool for name, tool in tools.items() if name not in GRAPH_TOOLS}
+
+
+#: The vault tools. Same rule as the graph tools and the same reason — all three
+#: need a machine token, and without one every call is a 401 the model reads as
+#: a transient fault worth retrying.
+#:
+#: Unlike the graph set there is no `hisar_index` equivalent: nothing here can
+#: create the missing credential, so the whole group goes.
+HISAR_TOOL_NAMES = ("hisar_list", "hisar_read", "hisar_deposit")
+
+
+def without_hisar_tools(tools: dict[str, Tool]) -> dict[str, Tool]:
+    return {name: tool for name, tool in tools.items()
+            if name not in HISAR_TOOL_NAMES}
+
+
+#: The two tools that reach GitHub. Same rule as the vault: each needs the push
+#: credential, and without one every call is an auth failure the model reads as
+#: transient. Committing needs none of this, so only these two are gated.
+GIT_TOOL_NAMES = ("git_push", "open_pr")
+
+
+def without_git_tools(tools: dict[str, Tool]) -> dict[str, Tool]:
+    return {name: tool for name, tool in tools.items()
+            if name not in GIT_TOOL_NAMES}
+
+
+#: The owner's memory. Same rule again, one layer along: it is withheld when the
+#: run has no channel to Mark VI rather than when the deployment lacks a
+#: credential, so it is filtered per job like the graph set and not once at
+#: startup like the vault. The standalone TUI has no backend and never sees it.
+MEMORY_TOOL_NAMES = ("memory",)
+
+
+def without_memory_tools(tools: dict[str, Tool]) -> dict[str, Tool]:
+    return {name: tool for name, tool in tools.items()
+            if name not in MEMORY_TOOL_NAMES}
+
+
+#: Recall over past sessions and the shared agent channel. Reached over the SAME
+#: peer socket the memory tool uses, so they are withheld on the same condition
+#: and at the same point: no channel to Mark VI, no tools. Kept as a separate set
+#: from MEMORY_TOOL_NAMES only because the two are distinct capabilities a profile
+#: takes on purpose — the withholding rule is identical (ctx.memory is None).
+RECALL_TOOL_NAMES = ("recall_conversations", "read_agent_channel")
+
+
+def without_recall_tools(tools: dict[str, Tool]) -> dict[str, Tool]:
+    return {name: tool for name, tool in tools.items()
+            if name not in RECALL_TOOL_NAMES}
+
+
+def resolve_optional(tools: dict[str, Tool]) -> dict[str, Tool]:
+    """Drop every optional group this deployment cannot actually serve.
+
+    One call site for "what is genuinely available here", so a new
+    externally-gated group is one entry rather than another thing every caller
+    has to remember to filter. The graph is deliberately NOT folded in: it can
+    appear mid-session once `graph_index` builds one, so it is re-checked per
+    turn rather than settled once at startup."""
+    from forge import notify
+    from forge.tools import gitpush, hisar
+
+    if not hisar.configured():
+        tools = without_hisar_tools(tools)
+    if not notify.configured():
+        tools = {n: t for n, t in tools.items() if n != "telegram_send"}
+    if not gitpush.configured():
+        tools = without_git_tools(tools)
+    return tools
+
+
+class BuiltinToolProvider:
+    """The curated set, filtered by the profile's allowlist.
+
+    Behaviour is exactly what `run_job` used to do inline. It exists as a
+    provider so that the builtin tools arrive through the same door as
+    everything else — a seam with one implementation is a guess, and a seam
+    whose only user bypasses it is decoration."""
+
+    name = "builtin"
+
+    def __init__(self, table: dict[str, type[Tool]] | None = None) -> None:
+        if table is None:
+            from forge.tools import ALL_TOOLS
+            table = ALL_TOOLS
+        self._table = table
+
+    async def provide(self, cfg: "AgentConfig", request: "JobRequest") -> dict[str, Tool]:
+        missing = [n for n in cfg.tool_names if n not in self._table]
+        if missing:
+            raise KeyError(
+                f"agent {cfg.agent_id!r} allowlists unknown tool(s): {', '.join(missing)}. "
+                f"Known: {', '.join(sorted(self._table))}.")
+        return {name: self._table[name]() for name in cfg.tool_names}
+
+    async def close(self) -> None:
+        return None
+
+
+async def fold_providers(
+    providers: list[ToolProvider], cfg: "AgentConfig", request: "JobRequest"
+) -> dict[str, Tool]:
+    """Merge every provider's contribution, in order, refusing collisions.
+
+    A provider that raises is fatal at assembly: a job whose toolset silently
+    lost a source would behave like a differently-configured agent, and the
+    model would spend its iterations discovering that a tool it was told about
+    does not exist."""
+    tools: dict[str, Tool] = {}
+    owners: dict[str, str] = {}
+    for provider in providers:
+        contributed = await provider.provide(cfg, request)
+        for name, tool in contributed.items():
+            if name in tools:
+                raise ValueError(
+                    f"tool name collision: {provider.name!r} provides {name!r}, "
+                    f"which {owners[name]!r} already provided. Names must be unique "
+                    f"across providers — a later source may never shadow an earlier "
+                    f"one, because a silently replaced tool is indistinguishable "
+                    f"from the real thing.")
+            tools[name] = tool
+            owners[name] = provider.name
+    return tools
+
+
+async def close_providers(providers: list[ToolProvider]) -> None:
+    """Close every provider, surviving individual failures — one badly-behaved
+    source must not strand the rest."""
+    for provider in providers:
+        try:
+            await provider.close()
+        except Exception:  # noqa: BLE001 — teardown is best-effort by nature
+            logger.warning("tool_provider_close_failed", extra={"provider": provider.name})

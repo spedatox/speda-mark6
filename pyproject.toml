@@ -1,2 +1,2 @@
 [tool.uv.workspace]
-members = ["packages/igor"]
+members = ["packages/igor", "packages/forge"]

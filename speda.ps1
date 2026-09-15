@@ -97,10 +97,10 @@ if ($ready) {
 }
 
 # ── Forge link probe ────────────────────────────────────────────────────────
-# The backend launches the Forge peer (Optimus Mark II) as a lifespan child; it
-# connects back over the agents WebSocket a moment after boot. Probe GET /agents
-# so the operator sees, at a glance, whether Optimus is running on the Forge or
-# on its in-process fallback. Best-effort, non-fatal — a miss never blocks boot.
+# A separately managed Forge peer can connect over the agents WebSocket. Probe
+# GET /agents so the operator sees, at a glance, whether Optimus is running on
+# the Forge or on its in-process fallback. Best-effort, non-fatal — a miss never
+# blocks boot.
 if ($ready) {
     # The endpoint is X-API-Key authenticated. Prefer an explicit env var, then
     # the managed override (~/.speda/.env), then the repo .env, else the dev key.
@@ -158,13 +158,12 @@ try {
     }
     
     # Catch any orphaned children. The backend's lifespan normally stops the
-    # Forge peer + local sandbox itself; this sweep is belt-and-braces for a
-    # backend that crashed without running its shutdown. Match uvicorn workers,
-    # the Forge peer (`forge connect`), and the local sandbox exec server.
+    # local sandbox itself; this sweep is belt-and-braces for a backend that
+    # crashed without running its shutdown. Match uvicorn workers and the local
+    # sandbox exec server.
     $orphanProcs = Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" -ErrorAction SilentlyContinue |
         Where-Object {
             $_.CommandLine -like "*uvicorn*" -or
-            $_.CommandLine -like "*forge connect*" -or
             $_.CommandLine -like "*sandbox*server.py*"
         }
 

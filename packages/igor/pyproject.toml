@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Igor — backend core of SPEDA Mark VI, the Specialized Personal Executive Digital Assistant"
 requires-python = ">=3.11"
 dependencies = [
+    "forge",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "sqlalchemy[asyncio]>=2.0.0",
@@ -38,6 +39,9 @@ dependencies = [
     # additionally wants `packaging`.
     "google-auth[requests]>=2.35.0",
 ]
+
+[tool.uv.sources]
+forge = { workspace = true }
 
 [project.optional-dependencies]
 dev = [

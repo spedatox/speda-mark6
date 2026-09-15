@@ -1,0 +1,121 @@
+"""The Forge's curated tool set.
+
+A small, fixed toolset, so every schema is sent on turn 1 — no deferred-loading /
+ToolSearch machinery (study §2 open question 5: only needed when the tool list
+strains the prompt, which a curated set does not). Each tool declares its own
+harness-side safety flags; the loop and permission engine read those, the model
+never sees them.
+"""
+from forge.tools.shell import RunCommand
+from forge.tools.ask import AskOperator
+from forge.tools.claude_code import ClaudeCode
+from forge.tools.diagnostics import Diagnostics
+from forge.tools.files import ReadFile, WriteFile, EditFile
+from forge.tools.gitpush import GitPush, OpenPR
+from forge.tools.graph import GraphQuery, GraphPath, GraphOverview, GraphIndex
+from forge.tools.hisar import HisarDeposit, HisarList, HisarRead
+from forge.tools.memory import Memory
+from forge.tools.owner_notes import RememberAboutOwner
+from forge.tools.recall import RecallConversations, ReadAgentChannel
+from forge.tools.search import Grep, Glob
+from forge.tools.task import TaskTool
+from forge.tools.telegram import TelegramSend
+from forge.tools.todo import TodoWrite
+from forge.tools.web import WebFetch, WebSearch
+from forge.tools.worktree import EnterWorktree, ExitWorktree
+
+# Navigation — how an agent orients in a repo it did not write. Shared by every
+# profile: the alternative is reading whole files, which fills the window before
+# the work starts.
+NAV_TOOLS = [ReadFile, Grep, Glob]
+
+# Research — what the repo cannot answer. Kept as its own group so a profile can
+# take navigation without taking the open internet; see web.py on why this is
+# independent of the Cell's allow_network posture.
+WEB_TOOLS = [WebSearch, WebFetch]
+
+# The vault. Its own group because it is the owner's filesystem rather than a
+# capability of the repo: a profile can take coding tools without being handed a
+# door into the owner's documents. Withheld at dispatch when no machine token is
+# configured (see toolsource.without_hisar_tools), so an agent whose profile
+# allows them still never sees a door it has no key to.
+HISAR_TOOLS = [HisarList, HisarRead, HisarDeposit]
+
+# Reaching the owner mid-job. Its own group for the same reason the vault is:
+# messaging a person is not a capability of working on a repo, and a profile
+# should be able to take coding tools without one. Withheld at dispatch when
+# no bot is configured.
+NOTIFY_TOOLS = [TelegramSend]
+
+# Publishing to GitHub, with the push credential held Warden-side. Its own group,
+# separate from `coding`, for the same reason the vault is: pushing (and opening
+# a PR, which reuses the same credential) under a real account's token is a
+# capability a profile takes on purpose, not something every repo-working agent
+# inherits. Withheld at dispatch when no token is configured
+# (toolsource.without_git_tools), so a deployment with no credential never offers
+# a door it has no key for. Committing needs none of this — it happens in the
+# Cell with the identity env; only the two calls that reach GitHub are gated.
+GIT_TOOLS = [GitPush, OpenPR]
+
+# Asking the owner a question mid-job. In CODING_TOOLS rather than its own
+# group: reaching a fork you should not pick alone is not an optional extra
+# for real work, it is the alternative to guessing silently. Degrades on its
+# own when no operator is reachable, so it needs no dispatch-time gate.
+ASK_TOOLS = [AskOperator]
+
+# The owner's memory, which lives in Mark VI. Its own group because it is the
+# owner's, not the repository's — the same line the vault is on — and because a
+# profile should be able to take coding tools without being handed the power to
+# rewrite what every other agent believes about him. Withheld at dispatch when
+# there is no channel to Mark VI, so the standalone TUI never sees it.
+MEMORY_TOOLS = [Memory]
+
+# Reaching back through Mark VI for what was SAID (recall over past sessions) and
+# what the OTHER agents have been doing (the shared network channel). Its own
+# group, separate from MEMORY_TOOLS, because it is read-only knowledge retrieval
+# rather than the power to write the owner's memory — a profile can recall past
+# conversations and see its peers' work without also being able to rewrite a
+# fact every other agent trusts. Both reach Mark VI over the same peer socket the
+# `memory` tool uses, so the group is withheld under the same condition: no
+# channel, no tools (toolsource.without_recall_tools). This is also the seam that
+# makes the two Forge peers aware of each other's activity — see forge/tools/recall.py.
+RECALL_TOOLS = [RecallConversations, ReadAgentChannel]
+
+# remember_about_owner is deliberately NOT in MEMORY_TOOLS: that group is
+# stripped whenever there is no channel to Mark VI (toolsource.without_memory_tools),
+# and offline is exactly the case this tool exists for — it queues locally and
+# needs no channel at all. Listed individually in ALL_TOOLS instead, so a
+# profile takes it by name rather than inheriting it through a group built
+# around the opposite assumption.
+
+# Reusable tool groups, referenced by agent configs via their allowlist (§2).
+# todo_write is in the coding group rather than its own: a plan is not an
+# optional capability for multi-step work, it is what keeps it coherent.
+# `task` is here rather than in a group of its own: delegating is not an
+# optional extra for real work, it is how a long job avoids drowning its own
+# context. A profile that omits it simply never spawns subagents.
+CODING_TOOLS = [*NAV_TOOLS, WriteFile, EditFile, RunCommand,
+                GraphQuery, GraphPath, GraphOverview, GraphIndex, Diagnostics, TodoWrite,
+                EnterWorktree, ExitWorktree, TaskTool, ClaudeCode, AskOperator]
+
+# Centurion's group: run security tooling in the Cell (RunCommand) and read/write
+# scan output and engagement reports (files). No graph — its subject is a live
+# target's posture, not a codebase's structure. The Cell policy (allow_network)
+# and the operator's authorization are the real boundary, not this list.
+SECURITY_TOOLS = [*NAV_TOOLS, RunCommand, WriteFile, EditFile]
+
+ALL_TOOLS = {cls.name: cls for cls in [
+    RunCommand, ReadFile, WriteFile, EditFile, Grep, Glob,
+    GraphQuery, GraphPath, GraphOverview, GraphIndex, Diagnostics, WebSearch, WebFetch, TodoWrite,
+    EnterWorktree, ExitWorktree, TaskTool, ClaudeCode,
+    HisarList, HisarRead, HisarDeposit, TelegramSend, AskOperator,
+    Memory, RememberAboutOwner, RecallConversations, ReadAgentChannel, GitPush, OpenPR,
+]}
+
+__all__ = ["ALL_TOOLS", "NAV_TOOLS", "CODING_TOOLS", "SECURITY_TOOLS", "WEB_TOOLS",
+           "HISAR_TOOLS", "NOTIFY_TOOLS", "ASK_TOOLS", "MEMORY_TOOLS", "RECALL_TOOLS",
+           "GIT_TOOLS", "Memory", "RememberAboutOwner", "RecallConversations", "ReadAgentChannel",
+           "RunCommand", "ReadFile", "WriteFile", "EditFile", "Grep", "Glob",
+           "GraphQuery", "GraphPath", "GraphOverview", "GraphIndex", "Diagnostics", "WebSearch", "WebFetch",
+           "TodoWrite", "EnterWorktree", "ExitWorktree", "TaskTool", "ClaudeCode",
+           "HisarList", "HisarRead", "HisarDeposit", "TelegramSend", "AskOperator", "GitPush", "OpenPR"]

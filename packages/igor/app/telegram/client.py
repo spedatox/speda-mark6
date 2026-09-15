@@ -7,10 +7,9 @@ TelegramBot — a thin, reliable wrapper over one bot's Bot API token.
 One instance per configured token (one per agent). It owns nothing about
 identity: it is a dumb pipe that sends text/files and (in polling mode) reads
 updates. Which agent a bot belongs to is the registry's concern, not this
-class's. Supersedes the old single-bot services/telegram.TelegramClient — the
-legacy connect helpers (configured / get_username / connect_deep_link /
-capture_chat_id) live on here so the existing "Connect Telegram" UI keeps
-working against Speda's bot.
+class's. Supersedes the old single-bot client; the legacy connect helpers
+(configured / get_username / connect_deep_link / capture_chat_id) live on here
+so the existing "Connect Telegram" UI keeps working against Speda's bot.
 """
 
 import asyncio

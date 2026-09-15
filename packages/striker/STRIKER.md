@@ -13,7 +13,6 @@ The single-agent public build — Speda only, no roster, no switcher, no House P
 - [Profile system](#profile-system)
 - [Surviving a dropped connection](#surviving-a-dropped-connection)
 - [Thinking](#thinking)
-- [Known dead code](#known-dead-code)
 - [Configuration](#configuration)
 
 ---
@@ -92,18 +91,7 @@ explanation: [HEARTBREAKER.md](../heartbreaker/HEARTBREAKER.md#surviving-a-dropp
 
 ## Thinking
 
-Same feature as Heartbreaker's — see [HEARTBREAKER.md § Thinking](../heartbreaker/HEARTBREAKER.md#thinking) for the full account. The collapsible reasoning panel and the pre-answer `VoiceOrb`-based indicator are ported into Striker's own `ChatMain.tsx`/`Message.tsx`/`store/chat.ts`, reading `theme/striker.css`'s (not the dead `heartbreaker.css` copy's) `.thinking-shimmer` class. `VoiceOrb.tsx` is used standalone here, the same way as in Heartbreaker — this does **not** wire up Striker's dormant full voice mode (`VoiceMode.tsx` stays unreachable, see below).
-
-## Known dead code
-
-Striker was diverged by hand rather than generated, and it shows: several components and modules from Heartbreaker are still present in the source tree but unreachable from any UI path.
-
-- `CommsTray.tsx` and `profile/warroom.ts`'s war-room profile — present, compile, never imported by anything that renders.
-- `profile/brands.ts` — still carries the full eight-persona map from Heartbreaker; nothing in Striker reads it.
-- `ConnectionSetupModal.tsx` and `lib/connection.ts` — copied over, but Striker's `App.tsx` reads config directly from `window.api.getConfig()` and never calls into either of them. Note also that Striker's main/preload process doesn't expose `setConfig` at all, so even if this path were wired up it wouldn't persist anything.
-- `theme/heartbreaker.css`, `theme/speda.css`, `theme/base.css` — unused; only `theme/striker.css` is actually imported.
-
-None of this is load-bearing. It's cleanup, not a bug — safe to delete in a future pass, but harmless as-is since it's never reached.
+Same feature as Heartbreaker's — see [HEARTBREAKER.md § Thinking](../heartbreaker/HEARTBREAKER.md#thinking) for the full account. The collapsible reasoning panel and the pre-answer `VoiceOrb`-based indicator are ported into Striker's own `ChatMain.tsx`/`Message.tsx`/`store/chat.ts`, reading `theme/striker.css`'s `.thinking-shimmer` class. `VoiceOrb.tsx` is used standalone here, the same way as in Heartbreaker — this does **not** wire up Striker's dormant full voice mode (`VoiceMode.tsx` stays unreachable).
 
 ---
 

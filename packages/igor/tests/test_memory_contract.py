@@ -202,6 +202,17 @@ async def test_event_tool_creates_month_and_keeps_current_untouched(sessions, mo
         assert "## 2026-09-09" in f.content
 
 
+async def test_seed_never_resurrects_a_migrated_monolith(sessions):
+    from app.skills.memory import ensure_seeded
+    async with sessions() as db:
+        for path in ("/memories/dossier/likes.md", "/memories/finance/notes.md", "/memories/wellness/profile.md"):
+            db.add(MemoryFile(user_id=1, path=path, content="# Topic\n"))
+        await db.commit()
+        await ensure_seeded(1, db)
+        paths = set((await db.execute(select(MemoryFile.path))).scalars().all())
+        assert not paths.intersection({"/memories/dossier.md", "/memories/finance.md", "/memories/wellness.md"})
+
+
 def test_extraction_prompt_requires_owner_quote_and_excludes_assistant():
     from app.services.fact_extraction import _PROMPT, ungrounded_tokens
     prompt = _PROMPT.format(max_facts=5, user_message="I want to travel.")

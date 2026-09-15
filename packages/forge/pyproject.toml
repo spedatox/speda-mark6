@@ -1,0 +1,54 @@
+[project]
+name = "forge"
+version = "0.3.0"
+description = "Forge — isolated coding and security execution for agents"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.6",
+    "websockets>=12.0",
+    "anthropic>=0.40",
+    # Imported directly by the web tools, the notifier and the H.İ.S.A.R.
+    # client. It arrives anyway underneath anthropic, so this adds nothing to
+    # the install — it says out loud that the Forge uses it, so a future
+    # anthropic that drops it does not silently take three tools with it.
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+# Graphify is the codebase-understanding dependency (§5). Optional at install
+# time so the Forge starts without it; the graph tools are withheld from the
+# toolset entirely when it is absent, rather than offered and failing.
+#
+# The pin was `graphifyy>=1.0`, which does not exist — the package tops out at
+# 0.9.34 — so `pip install -e ".[graph]"` failed for anyone who tried, and the
+# graph has never once run. `mcp` is not pulled in by graphify itself but
+# graphify.serve imports it, so serving died with ModuleNotFoundError after a
+# successful index.
+graph = ["graphifyy>=0.9.34,<1.0", "mcp>=1.0"]
+# Non-Anthropic providers (OpenAI / Gemini / z.ai / DeepSeek / Ollama) share the
+# OpenAI client. Only needed when a profile uses a "provider:model" ref for one
+# of them; Anthropic-only deployments don't need it.
+providers = ["openai>=1.40"]
+# The interactive input line: history, reverse search, completion, and a
+# Windows implementation that behaves. Optional because `serve`, `connect`
+# and `demo` never read a key — only `forge chat` does, and it degrades to
+# plain input() when this is absent.
+tui = ["prompt_toolkit>=3.0", "rich>=13.0"]
+dev = ["pytest>=8.0", "prompt_toolkit>=3.0", "rich>=13.0"]
+# What a person installing on their own machine wants, spelled once so the
+# install line does not have to enumerate it: `pip install -e ".[all]"`.
+all = ["forge[tui,providers,graph]"]
+
+[project.scripts]
+forge = "forge.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["forge"]
+
+[tool.pytest.ini_options]
+# Async tests wrap asyncio.run themselves, so no pytest-asyncio plugin is needed.
+testpaths = ["tests"]
