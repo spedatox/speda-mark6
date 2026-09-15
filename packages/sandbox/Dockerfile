@@ -26,10 +26,16 @@ ARG KALI_APT_MIRROR=https://kali.download/kali
 RUN export DEBIAN_FRONTEND=noninteractive \
     && find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \
         -exec sed -i "s|https\?://http\.kali\.org/kali|${KALI_APT_MIRROR}|g" {} + \
+    # The rolling base can ship without a current CA bundle. Bootstrap only
+    # that bundle without TLS peer checks; signed repository metadata and
+    # package hashes are still verified by APT's baked-in Kali archive key.
+    && apt-get -o Acquire::Retries=3 -o Acquire::https::Verify-Peer=false update \
+    && apt-get -o Acquire::https::Verify-Peer=false install -y --no-install-recommends ca-certificates \
+    # From this point onward every index and package request verifies TLS.
     && apt-get -o Acquire::Retries=3 update \
     && apt-get install -y --no-install-recommends \
         # Everyday shell and source-control tools.
-        ca-certificates curl wget git openssh-client jq ripgrep fd-find \
+        curl wget git openssh-client jq ripgrep fd-find \
         file less nano vim-tiny unzip zip \
         # Build, Python, JavaScript, Go, and local-data essentials.
         build-essential pkg-config make cmake \
