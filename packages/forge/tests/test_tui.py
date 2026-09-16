@@ -8,7 +8,7 @@ security failure rather than a cosmetic one.
 import asyncio
 import io
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import BaseModel
@@ -396,9 +396,11 @@ def test_compact_asks_the_session_when_there_is():
     assert _run("/compact", session).compact is True
 
 
-def test_agent_and_model_report_the_profile():
+def test_agent_and_model_report_the_profile(monkeypatch):
     session = _session()
     assert "optimus" in _run("/agent", session).text
+    from forge.model import catalog as catalog_mod
+    monkeypatch.setattr(catalog_mod, "catalog", AsyncMock(return_value=[]))
     assert "anthropic:test-model" in _run("/model", session).text
 
 

@@ -41,7 +41,7 @@ so this matches it exactly — a longer value would only get clamped."""
 FCC_SERVER_URL_DEFAULT = "http://172.17.0.1:8082"
 """The Docker bridge gateway. A Cell on the default `docker0` bridge reaches
 the host at this address. Overridable via CLAUDE_CODE_SERVER_URL in the
-environment (the forge@.service unit loads it from the env file)."""
+environment (a standalone service may load it from its env file)."""
 
 
 # ── Args ──────────────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 import base64
+import sys
 from types import SimpleNamespace
 
 from app.execution.forge import ForgeExecutor, _load_runtime, _resolve_workspace
@@ -10,6 +11,19 @@ from app.execution.forge import ForgeExecutor, _load_runtime, _resolve_workspace
 def test_native_runtime_imports_from_workspace_package():
     ExecutionSpec, execute = _load_runtime()
 
+    assert ExecutionSpec.__module__ == "forge.runtime"
+    assert execute.__module__ == "forge.runtime"
+
+
+def test_native_runtime_ignores_legacy_checkout_env_and_does_not_mutate_path(
+    monkeypatch,
+):
+    monkeypatch.setenv("FORGE_DIR", "/missing/legacy-forge-checkout")
+    before = list(sys.path)
+
+    ExecutionSpec, execute = _load_runtime()
+
+    assert sys.path == before
     assert ExecutionSpec.__module__ == "forge.runtime"
     assert execute.__module__ == "forge.runtime"
 

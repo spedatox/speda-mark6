@@ -6,9 +6,10 @@
     python -m forge connect [--agent ID]   connect to Mark VI as a WebSocket peer
     python -m forge agents                 list configured agents
 
-The `connect` path is how Mark VI drives the Forge in production; `serve` and
-`demo` run it standalone (§10). There is one mode per invocation — no multi-
-entrypoint dispatch inside the process (§3 rejected list).
+`chat` is the canonical standalone path. `connect` and `serve` remain legacy
+compatibility commands; Mark VI production imports `forge.runtime` directly.
+There is one mode per invocation — no multi-entrypoint dispatch inside the
+process.
 """
 from __future__ import annotations
 
@@ -39,7 +40,9 @@ def _with_default_command(argv: list[str]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="forge", description="The Forge — SPEDA Mark VI execution peer")
+    parser = argparse.ArgumentParser(
+        prog="forge", description="Forge — bounded workspace execution"
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_chat = sub.add_parser("chat", help="interactive session in the current directory")
@@ -52,11 +55,11 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("demo", help="run the offline end-to-end demo")
 
-    p_serve = sub.add_parser("serve", help="standalone native-contract WS job server")
+    p_serve = sub.add_parser("serve", help="legacy compatibility WS job server")
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8770)
 
-    p_conn = sub.add_parser("connect", help="connect to Mark VI as a peer")
+    p_conn = sub.add_parser("connect", help="legacy compatibility Mark VI peer")
     p_conn.add_argument("--agent", default=os.environ.get("FORGE_AGENT", "centurion"))
 
     sub.add_parser("agents", help="list configured agents")

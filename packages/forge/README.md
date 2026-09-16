@@ -620,7 +620,11 @@ To add an agent, create the directory, write the two files, and run
 
 ---
 
-## Running as a peer
+## Legacy peer compatibility
+
+Mark VI production does not use this path; it imports `forge.runtime` from the
+workspace package. The commands below remain for existing standalone peer
+installations during the compatibility window.
 
 ```bash
 forge connect --agent optimus
@@ -660,7 +664,7 @@ actually do is bounded on the peer, by its own tools and permission gate.
 **Why this matters for working locally.** A workstation peer runs the code in
 your working tree while everything Mark VI provides — the owner's memory, the
 model picker, images, permission prompts in the operator's client — arrives over
-the socket exactly as it does in production. That is the loop that does not
+the socket through the compatibility transport. That is the loop that does not
 require a deploy to test a change. Set `FORGE_HOST` before doing it: until each
 peer named its machine, every one registered as `default` and the second to
 connect silently displaced the first.

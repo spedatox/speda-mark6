@@ -20,7 +20,6 @@ class ProfileRegistry:
     Replaces the single ``app.state.profile`` of the pre-multi-tenant design.
     The orchestrator resolves a profile per request from ``context.agent_id``;
     presence ("is agent X available?") is a dict lookup here, not a socket.
-    Optimus is NOT in here — it is an external WebSocket peer, not a profile.
     """
 
     def __init__(self) -> None:

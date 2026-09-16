@@ -10,8 +10,8 @@
 # ignored entirely — this matters only with the Docker Cell.
 #
 # Build (on the host, context is deploy/ to keep the .venv out of the daemon):
-#   cd /opt/forge-mk1
-#   docker build -f deploy/cell-centurion.Dockerfile -t forge-cell-centurion:latest deploy/
+#   docker build -f packages/forge/deploy/cell-centurion.Dockerfile \
+#     -t forge-cell-centurion:latest packages/forge/deploy/
 FROM kalilinux/kali-rolling
 
 LABEL org.opencontainers.image.title="forge-cell-centurion" \

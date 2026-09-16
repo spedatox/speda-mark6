@@ -96,45 +96,6 @@ if ($ready) {
     Write-Log "API timeout (60s). Proceeding with degraded startup." "WARN"
 }
 
-# ── Forge link probe ────────────────────────────────────────────────────────
-# A separately managed Forge peer can connect over the agents WebSocket. Probe
-# GET /agents so the operator sees, at a glance, whether Optimus is running on
-# the Forge or on its in-process fallback. Best-effort, non-fatal — a miss never
-# blocks boot.
-if ($ready) {
-    # The endpoint is X-API-Key authenticated. Prefer an explicit env var, then
-    # the managed override (~/.speda/.env), then the repo .env, else the dev key.
-    function Get-SpedaApiKey {
-        if ($env:SPEDA_API_KEY) { return $env:SPEDA_API_KEY }
-        foreach ($f in @((Join-Path $env:USERPROFILE ".speda\.env"), (Join-Path $PROJECT_ROOT ".env"))) {
-            if (Test-Path $f) {
-                $line = Select-String -Path $f -Pattern '^\s*SPEDA_API_KEY\s*=' -ErrorAction SilentlyContinue | Select-Object -First 1
-                if ($line) {
-                    $val = ($line.Line -replace '^\s*SPEDA_API_KEY\s*=', '').Trim().Trim('"')
-                    if ($val) { return $val }
-                }
-            }
-        }
-        return "dev-key"
-    }
-    $apiKey = Get-SpedaApiKey
-    $forgeOnline = $false
-    # The peer registers within a few seconds of boot — retry briefly.
-    for ($p = 0; $p -lt 6; $p++) {
-        try {
-            $agents = Invoke-RestMethod -Uri "http://127.0.0.1:8000/agents" `
-                -Headers @{ "X-API-Key" = $apiKey } -TimeoutSec 3 -ErrorAction Stop
-            if ($agents | Where-Object { $_.agent_id -eq "optimus" }) { $forgeOnline = $true; break }
-        } catch { }
-        Start-Sleep -Milliseconds 800
-    }
-    if ($forgeOnline) {
-        Write-Log "FORGE LINK ESTABLISHED - Optimus Mark II online." "SUCCESS"
-    } else {
-        Write-Log "Forge peer offline - in-process fallback active." "WARN"
-    }
-}
-
 Write-Host ""
 Write-Host " ──────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
 Write-Log "Launching desktop interface..." "SYSTEM"

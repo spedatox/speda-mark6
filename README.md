@@ -29,7 +29,7 @@ It keeps persistent memory across sessions, runs scheduled and event-driven work
 
 Everything runs through one FastAPI process (`packages/igor`). Every agent persona, the memory system, the tool registry, and the background job queue share that process, one database, and one event loop — there is no per-agent server or per-agent database.
 
-A single API key authenticates every request. Two channels reach the backend: an HTTP/SSE endpoint for interactive chat, and a WebSocket channel reserved for the one agent (Optimus) that can hand work off to an external peer machine. A third-party workflow engine (n8n) owns all scheduling — the backend itself never runs a clock; it exposes trigger and probe endpoints that n8n calls on a timer.
+A single API key authenticates every request. Interactive chat uses HTTP/SSE; a compatibility WebSocket channel remains available to generic external peers but is not used for native Forge execution. A third-party workflow engine (n8n) owns all scheduling — the backend itself never runs a clock; it exposes trigger and probe endpoints that n8n calls on a timer.
 
 Tool capabilities are organized in tiers, all exposed to the model through one registry:
 
@@ -185,7 +185,7 @@ Two companion products extend the platform beyond this repository. Neither ships
 
 **Hisar** — the owner's own self-hosted cloud filesystem and web desktop: a real vault of folders (Documents, Media, Projects, Desktop) that agents work inside as guests, not as the backend's storage layer. Any agent with the Hisar skill enabled can read anywhere in the vault; writes are confined to a dedicated folder, never overwrite an existing file, and deleting or renaming isn't reachable from an agent at all — those stay owner-only, inside Hisar itself. It runs as an optional companion service alongside the backend.
 
-**Forge** — a standalone execution engine that runs coding-agent work on a dedicated machine, on behalf of Optimus and Scourge. It holds its own model credentials and makes its own inference calls — the backend hands it jobs, never proxies inference through it. While a Forge peer is connected, that agent's turns route to it; the moment it disconnects, the corresponding agent falls back to its own in-process profile, with one function owning that decision so a turn never lands on the wrong machine. Once a night, the memory custodian pushes a fresh summary of the owner's memory to any connected peer, keeping Forge's picture of the owner no more than a day stale.
+**Forge** — the monorepo's bounded coding and security execution package. Mark VI invokes `forge.runtime` in-process through anonymous Legion workers while retaining identity, conversation history, model routing, credentials, persistence, orchestration, delivery, and provider retries. Forge owns the worker loop, execution tools, compaction, accounting, and isolated Cell. The standalone Forge CLI uses that same runtime package with its local provider host.
 
 ---
 

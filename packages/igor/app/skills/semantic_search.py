@@ -125,7 +125,7 @@ SNIPPET_CHARS = 400       # per-message text budget inside a rendered snippet
 # recall and the next. Worse, it is all inside one request coroutine: uvicorn
 # pings every WebSocket every 20 s and drops the ones that miss the deadline, so
 # a few of these overlapping is enough to take out every connected client at
-# once — which is exactly how both Forge peers were dying on the same second.
+# once — which is exactly how multiple peer clients were dying on the same second.
 #
 # Held in process, keyed on a watermark cheap enough to check every time, and
 # stored as ONE contiguous matrix rather than 20k separate buffers so scoring is

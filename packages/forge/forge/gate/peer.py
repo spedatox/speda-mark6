@@ -335,13 +335,8 @@ class ForgePeer:
             if not self._oracle.answer(ask_id, str(frame.get("text", ""))):
                 logger.info("question_response_unmatched", extra={"ask_id": ask_id})
         elif ftype == "owner_memory_sync":
-            # Additive frame (law 3), unsolicited: Orion pushes this once a
-            # night, unprompted, after recomposing owner.md/current.md (see
-            # app/skills/forge_sync.py on Mark VI's side). No request_id to
-            # correlate — this refreshes the same on-disk snapshot the live
-            # per-turn `memory_block` already writes, so the offline TUI is
-            # never more than one audit cycle behind even on a night this
-            # peer ran no connected job at all.
+            # Legacy compatibility frame. No request_id to correlate; it
+            # refreshes the same on-disk snapshot as a live `memory_block`.
             owner_memory.remember(str(frame.get("block", "")))
         elif ftype == "memory_response":
             # Mark VI's answer to one memory command. `ok` is carried explicitly

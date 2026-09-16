@@ -3,7 +3,7 @@
 
 """ExternalAgentProxy tool_result normalization.
 
-The peer (Forge) emits tool_result payloads in the Anthropic-native shape
+An external peer emits tool_result payloads in the Anthropic-native shape
 ({tool_use_id, is_error, content}), while every consumer — both clients' live
 renderers and the turn runner that persists the turn for history — reads the
 orchestrator's shape ({id, result}). These tests pin the bridge so a proxied

@@ -12,8 +12,8 @@
 # ignored entirely — this matters only with the Docker Cell.
 #
 # Build (on the host, context is deploy/ to keep the .venv out of the daemon):
-#   cd /opt/forge-mk1
-#   docker build -f deploy/cell-optimus.Dockerfile -t forge-cell-optimus:latest deploy/
+#   docker build -f packages/forge/deploy/cell-optimus.Dockerfile \
+#     -t forge-cell-optimus:latest packages/forge/deploy/
 
 # Node comes from its own official image and is copied in, rather than piped
 # from a remote setup script at build time: both bases are Debian bookworm, so

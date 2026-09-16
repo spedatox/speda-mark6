@@ -11,7 +11,7 @@ The regression this closes, measured on the live deployment before the fix:
 Six of those seconds were the BLOB read, for bytes that had not changed since
 the previous recall. It ran inside a request coroutine, and uvicorn drops any
 WebSocket that misses its 20 s ping deadline — which is how a handful of
-overlapping recalls took out every connected client at once, both Forge peers
+overlapping recalls took out every connected client at once, including peers
 included. app/services/observations.py had already fixed exactly this for the
 fact tier at 12.3 MB / 227 ms; this is the same cache for the message tier.
 

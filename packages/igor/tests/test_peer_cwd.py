@@ -6,7 +6,7 @@
 The regression, 2026-08-04: the owner picked a folder in the desktop file
 dialog and asked Optimus to build a multipage site "here". The literal string
 `C:\\Users\\AREL TARIM\\Downloads\\Yeni klasör` was forwarded to Optimus, which
-runs server-side under systemd at /opt/forge-mk1. On Linux both `\\` and `:`
+runs on a separate Linux host at /srv/external-agent. On Linux both `\\` and `:`
 are legal filename characters, so nothing failed: mkdir created a single
 directory whose NAME was the entire Windows path, fifteen files were written
 into it, every internal link resolved, and Optimus reported success. The site
@@ -42,7 +42,7 @@ WINDOWS_PATHS = [
 ]
 
 POSIX_PATHS = [
-    "/opt/forge-mk1/workspaces/my-site",
+    "/srv/external-agent/workspaces/my-site",
     "/home/deploy/project",
     "/tmp/scratch",
 ]
@@ -80,7 +80,7 @@ def test_the_owners_path_routes_to_the_owners_pc():
 
 
 def test_a_server_path_still_routes_to_the_server_with_a_pc_attached():
-    decision = resolve([SERVER, PC], "/opt/forge-mk1/workspaces/x")
+    decision = resolve([SERVER, PC], "/srv/external-agent/workspaces/x")
     assert decision.ok and decision.host == "server"
 
 
@@ -278,12 +278,12 @@ async def test_dispatch_allows_a_posix_working_directory():
 
     await skill.execute(
         {"agent": "optimus", "task": "build a site",
-         "working_directory": "/opt/forge-mk1/workspaces/site"},
+         "working_directory": "/srv/external-agent/workspaces/site"},
         _context(),
     )
 
     assert len(spy.calls) == 1
-    assert spy.calls[0]["cwd"] == "/opt/forge-mk1/workspaces/site"
+    assert spy.calls[0]["cwd"] == "/srv/external-agent/workspaces/site"
 
 
 @pytest.mark.asyncio
