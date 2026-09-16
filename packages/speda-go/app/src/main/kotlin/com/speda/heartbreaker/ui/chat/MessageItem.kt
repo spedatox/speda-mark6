@@ -496,8 +496,8 @@ private fun EditBox(value: String, onValueChange: (String) -> Unit) {
  *  and the last one repeats forever, so a wait that never ends parks on the
  *  loop phase instead of running off the end of the list. Mirrors
  *  THINKING_BAND_MS / THINKING_LINE_MS in Heartbreaker's Message.tsx. */
-private const val THINKING_BAND_MS = 5_000L
-private const val THINKING_LINE_MS = 2_000L
+private const val THINKING_BAND_MS = 10_000L
+private const val THINKING_LINE_MS = 4_000L
 
 /** One sweep of the shimmer band across the label. */
 private const val THINKING_SHIMMER_MS = 1_500

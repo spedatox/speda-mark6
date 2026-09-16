@@ -385,8 +385,8 @@ const THINKING_PHASES: string[][] = [
   ['Elevator music playing softly in the background…', 'Honestly, I forgot what we were talking about.', 'Have you considered just googling it at this point?', '404: Motivation not found. Retrying…'],
 ]
 
-const THINKING_BAND_MS = 5000
-const THINKING_LINE_MS = 2000
+const THINKING_BAND_MS = 10000
+const THINKING_LINE_MS = 4000
 
 // Pick a line from `pool` that isn't the one already on screen — a re-roll that
 // lands on the same string reads as a frozen UI, which is the exact opposite of

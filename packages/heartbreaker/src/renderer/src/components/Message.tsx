@@ -598,8 +598,8 @@ function statusLabel(toolName: string, t: Dict): string {
 // often the line inside the current band is re-rolled. Bands run in order and
 // the last one repeats forever, so a wait that never ends parks on the loop
 // phase rather than running off the end of the list.
-const THINKING_BAND_MS = 5000
-const THINKING_LINE_MS = 2000
+const THINKING_BAND_MS = 10000
+const THINKING_LINE_MS = 4000
 
 // Pick a line from `pool` that isn't the one already on screen — a re-roll that
 // lands on the same string reads as a frozen UI, which is the exact opposite of
