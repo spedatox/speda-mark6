@@ -152,10 +152,10 @@ def unpinned(monkeypatch):
 def test_background_model_follows_active_provider(unpinned):
     p = SPEDAProfile()
     assert p.background_model("claude-sonnet-4-6") == p.haiku_model
-    assert p.background_model("openai:gpt-5.1") == "openai:gpt-5-mini"
+    assert p.background_model("openai:gpt-5.1") == "openai:gpt-5-nano"
     assert p.background_model("gemini:gemini-2.5-pro") == "gemini:gemini-3.5-flash-lite"
     assert p.background_model("zai:glm-4.6") == "zai:glm-4.5-air"
-    assert p.background_model("deepseek:deepseek-v4-pro") == "deepseek:deepseek-v4-flash"
+    assert p.background_model("deepseek:deepseek-v4-pro") == "openai:gpt-5-nano"
     # Dead Zone: the local model is the only one that exists.
     assert p.background_model("ollama:llama3.1:8b") == "ollama:llama3.1:8b"
 
@@ -253,7 +253,15 @@ def test_a_per_turn_model_pick_is_not_overridden_by_the_agent_pin(unpinned, monk
         "app.core.runtime_state.get_agent_models", lambda: {"speda": "zai:glm-4.6"}
     )
     p = SPEDAProfile()
-    assert p.background_model("openai:gpt-5.1") == "openai:gpt-5-mini"
+    assert p.background_model("openai:gpt-5.1") == "openai:gpt-5-nano"
+
+
+def test_default_background_model_is_gpt_5_nano_and_no_deepseek():
+    """Default deployment policy: all background work uses gpt-5-nano, and DeepSeek is never used."""
+    p = SPEDAProfile()
+    assert p.background_model("deepseek:deepseek-v4-pro") == "openai:gpt-5-nano"
+    assert p.background_model("claude-sonnet-4-6") == "openai:gpt-5-nano"
+    assert p.background_model("gemini:gemini-3.6-flash") == "openai:gpt-5-nano"
 
 
 def test_an_unrecognised_prefix_is_never_rewritten_into_an_anthropic_call(unpinned):

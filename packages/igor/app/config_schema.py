@@ -139,7 +139,8 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                         help="Override the profile's user-facing model. Empty = profile default.",
                         placeholder="e.g. claude-sonnet-4-6"),
             ConfigField("llm_background_model", "Background Model Override", "text", requires_restart=_LIVE,
-                        help="Override the model for n8n/agent/background tasks."),
+                        help="Override the model for n8n/agent/background tasks. Default: openai:gpt-5-nano.",
+                        placeholder="openai:gpt-5-nano"),
             ConfigField("llm_fallback_chain", "Fallback Chain", "text", requires_restart=_LIVE,
                         help="Comma-separated provider:model refs tried when the primary fails."),
             ConfigField("legion_model_override", "Legion Worker Model Override", "text", requires_restart=_LIVE,
@@ -408,7 +409,7 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                         help="Model for that extraction. Empty = the background model. Runs "
                              "once per turn behind the response, so cost matters more than "
                              "brilliance.",
-                        placeholder="e.g. deepseek:deepseek-v4-flash"),
+                        placeholder="e.g. openai:gpt-5-nano"),
             ConfigField("observation_min_content_length", "Minimum Fact Length", "int",
                         requires_restart=_LIVE,
                         help="Characters an observation must reach to be recorded. Short "
@@ -425,7 +426,7 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                         requires_restart=_LIVE,
                         help="Model used for that translation. Empty = the background model. Small, "
                              "cached and on the retrieval hot path, so pick the cheapest capable one.",
-                        placeholder="e.g. deepseek:deepseek-v4-flash"),
+                        placeholder="e.g. openai:gpt-5-nano"),
             ConfigField("observation_require_subject", "Require a Named Subject", "bool",
                         requires_restart=_LIVE,
                         help="Reject observations that never say who or what they are about. "

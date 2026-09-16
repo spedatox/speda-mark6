@@ -522,6 +522,12 @@ _CATALOG = {
             "description": "Fast and inexpensive for everyday tasks",
             "tags": ["fast"],
         },
+        {
+            "id": "openai:gpt-5-nano",
+            "name": "GPT-5 Nano",
+            "description": "Ultra-fast and cheap for background tasks",
+            "tags": ["fastest"],
+        },
     ],
     "gemini": [
         {

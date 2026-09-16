@@ -98,11 +98,11 @@ class SPEDAProfile(AgentProfile):
     # Cheapest sensible model per non-Anthropic provider, used for background
     # tasks when the user is chatting on that provider (see base.background_model).
     background_models = {
-        "openai": "openai:gpt-5-mini",
+        "openai": "openai:gpt-5-nano",
         "gemini": "gemini:gemini-3.5-flash-lite",
         "vertex": "vertex:google/gemini-3.5-flash-lite",
         "zai": "zai:glm-4.5-air",
-        "deepseek": "deepseek:deepseek-v4-flash",
+        "deepseek": "openai:gpt-5-nano",
         "nvidia": "nvidia:meta/llama-3.1-8b-instruct",
     }
 

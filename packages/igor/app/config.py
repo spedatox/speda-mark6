@@ -225,7 +225,7 @@ class Settings(BaseSettings):
     # assignment stays in each agent's profile; these swap it via .env without
     # touching code). Empty = use the profile's models.
     llm_main_model: str = ""        # user-facing interactive responses
-    llm_background_model: str = ""  # n8n/agent-triggered + background tasks
+    llm_background_model: str = "openai:gpt-5-nano"  # n8n/agent-triggered + background tasks
 
     # Comma-separated "provider:model" refs tried in order when the primary
     # provider call fails (auth, rate limit, connection, 5xx). Empty = no
