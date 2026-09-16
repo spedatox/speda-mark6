@@ -40,6 +40,8 @@ class MemoryRevision(Base):
     before: Mapped[str] = mapped_column(Text, default="")   # full content pre-write ("" for create)
     after: Mapped[str] = mapped_column(Text, default="")    # full content post-write ("" for delete)
     request_id: Mapped[str] = mapped_column(String(64), default="")
+    record_id: Mapped[str | None] = mapped_column(String(36), nullable=True, default=None)
+    migration_id: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(timezone.utc),
     )

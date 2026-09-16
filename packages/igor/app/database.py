@@ -210,6 +210,24 @@ def _apply_additive_migrations(sync_conn) -> None:
     if "background_jobs" in tables:
         sync_conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_active_memory_audit ON background_jobs (user_id, kind) WHERE kind = 'memory_audit' AND status IN ('pending','running')"))
 
+    if "memory_revisions" in tables:
+        mcols = {c["name"] for c in insp.get_columns("memory_revisions")}
+        if "record_id" not in mcols:
+            sync_conn.execute(text("ALTER TABLE memory_revisions ADD COLUMN record_id VARCHAR(36)"))
+            logger.info("schema_migrated", extra={"change": "memory_revisions.record_id"})
+        if "migration_id" not in mcols:
+            sync_conn.execute(text("ALTER TABLE memory_revisions ADD COLUMN migration_id VARCHAR(64)"))
+            logger.info("schema_migrated", extra={"change": "memory_revisions.migration_id"})
+
+    if "memory_write_receipts" in tables:
+        wcols = {c["name"] for c in insp.get_columns("memory_write_receipts")}
+        if "record_id" not in wcols:
+            sync_conn.execute(text("ALTER TABLE memory_write_receipts ADD COLUMN record_id VARCHAR(36)"))
+            logger.info("schema_migrated", extra={"change": "memory_write_receipts.record_id"})
+        if "migration_id" not in wcols:
+            sync_conn.execute(text("ALTER TABLE memory_write_receipts ADD COLUMN migration_id VARCHAR(64)"))
+            logger.info("schema_migrated", extra={"change": "memory_write_receipts.migration_id"})
+
 
 async def init_db() -> None:
     """Create all tables and seed the default user. Called in lifespan before anything else."""

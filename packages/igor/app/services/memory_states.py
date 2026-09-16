@@ -14,10 +14,51 @@ from datetime import date
 from types import SimpleNamespace
 
 ROOT = "/memories/states/"
+ROOT_MONTHLY = "/memories/states/"  # states/{MM-YY}/{key}.md in new layout
 CURRENT = "/memories/current.md"
 MARKER = "<!-- memory-state-v1 "
 STATUSES = ("active", "waiting", "planned", "completed", "cancelled", "superseded")
 OPEN = frozenset(STATUSES[:3])
+
+from app.services.memory_paths import MonthPeriod
+
+def monthly_state_path(key: str, period: MonthPeriod) -> str:
+    return f"{ROOT_MONTHLY}{period.folder_name}/{key}.md"
+
+def get_state_head(files, key: str) -> tuple[str, dict] | None:
+    def sort_key(item):
+        path, r = item
+        year, month = 0, 0
+        parts = path[len(ROOT):].split("/")
+        if len(parts) == 2:
+            try:
+                period = MonthPeriod.from_folder(parts[0])
+                year, month = period.year, period.month
+            except ValueError:
+                pass
+        return (r["verified_on"], year, month, path)
+
+    candidates = []
+    for f in files:
+        if not f.path.startswith(ROOT):
+            continue
+        if not (f.path == f"{ROOT}{key}.md" or f.path.endswith(f"/{key}.md")):
+            continue
+        try:
+            r = parse(f.content)
+        except (ValueError, TypeError, KeyError):
+            continue
+        if r["key"] == key:
+            candidates.append((f.path, r))
+            
+    if not candidates:
+        return None
+        
+    return max(candidates, key=sort_key)
+
+def resolve_state_path(files, key: str) -> str | None:
+    head = get_state_head(files, key)
+    return head[0] if head else None
 
 
 def version(content: str) -> str:
@@ -76,24 +117,55 @@ def encode(record: dict) -> str:
 
 def render(files, today: date) -> str:
     active, review, planned = [], [], []
-    for f in sorted(files, key=lambda f: f.path):
+    state_files = []
+    invalid_files = []
+    
+    for f in files:
         if not f.path.startswith(ROOT):
             continue
         try:
             r = parse(f.content)
+            state_files.append((f, r))
         except (ValueError, TypeError, KeyError):
-            review.append(f"- Invalid state record: {f.path}. Inspect and repair; do not infer its contents.")
-            continue
+            invalid_files.append(f)
+            
+    def sort_key(item):
+        path, r = item
+        year, month = 0, 0
+        parts = path[len(ROOT):].split("/")
+        if len(parts) == 2:
+            try:
+                period = MonthPeriod.from_folder(parts[0])
+                year, month = period.year, period.month
+            except ValueError:
+                pass
+        return (r["verified_on"], year, month, path)
+
+    heads: dict[str, tuple[str, dict]] = {}
+    for f, r in state_files:
+        k = r["key"]
+        curr = (f.path, r)
+        if k not in heads:
+            heads[k] = curr
+        else:
+            if sort_key(curr) > sort_key(heads[k]):
+                heads[k] = curr
+
+    for f in sorted(invalid_files, key=lambda f: f.path):
+        review.append(f"- Invalid state record: {f.path}. Inspect and repair; do not infer its contents.")
+
+    for path, r in sorted(heads.values(), key=lambda t: t[0]):
         if r["status"] not in OPEN:
             continue
         stamp = today.isoformat()
         bullet = f"- [{r['key']}] {r['summary']} (status: {r['status']}; verified {r['verified_on']}; source: {r['source']})"
         if r["review_on"] < stamp or (r.get("ends_on") and r["ends_on"] < stamp):
-            review.append(f"- [{r['key']}] Review overdue; last verified {r['verified_on']}. Read {f.path}; do not assume it remains true or has completed.")
+            review.append(f"- [{r['key']}] Review overdue; last verified {r['verified_on']}. Read {path}; do not assume it remains true or has completed.")
         elif r["status"] == "planned" or (r.get("starts_on") and r["starts_on"] > stamp):
             planned.append(bullet)
         else:
             active.append(bullet)
+            
     sections = ["# Current — ongoing situations", "", "_Computed from versioned state records. Completed actions belong in dated logs._"]
     for heading, rows in (("Active / waiting", active), ("Confirmed plans", planned)):
         sections += ["", f"## {heading}", "", *(rows or ["(none recorded)"])]

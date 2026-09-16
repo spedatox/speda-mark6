@@ -13,6 +13,8 @@ class MemoryWriteReceipt(Base):
     path: Mapped[str] = mapped_column(String(512), index=True)
     author: Mapped[str] = mapped_column(String(64))
     request_id: Mapped[str] = mapped_column(String(64), default="")
+    record_id: Mapped[str | None] = mapped_column(String(36), nullable=True, default=None)
+    migration_id: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
     before_hash: Mapped[str] = mapped_column(String(64))
     after_hash: Mapped[str] = mapped_column(String(64))
     evidence: Mapped[list] = mapped_column(JSON)

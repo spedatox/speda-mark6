@@ -30,6 +30,13 @@ from app.models.reminder_definition import ReminderDefinition
 from app.models.route import RouteGeometry
 from app.models.place import PlaceSet
 from app.models.project import Project, ProjectFile
+from app.models.memory_entity import MemoryEntity
+from app.models.memory_record_meta import MemoryRecordMeta
+from app.models.memory_record_link import MemoryRecordLink
+from app.models.memory_path_alias import MemoryPathAlias
+from app.models.memory_entity_head import MemoryEntityHead
+from app.models.memory_capture_job import MemoryCaptureJob
+from app.models.memory_migration_run import MemoryMigrationRun
 
 __all__ = [
     "User", "Session", "Message", "Memory", "MemoryFile", "MemoryRevision", "MemoryReview",
@@ -39,5 +46,7 @@ __all__ = [
     "HealthSample", "HealthDaily",
     "CourseSlot", "TermConfig", "AttendanceEntry", "Device",
     "ReminderCycle", "ReminderDefinition", "RouteGeometry", "PlaceSet",
-    "Project", "ProjectFile",
+    "Project", "ProjectFile", "MemoryEntity", "MemoryRecordMeta",
+    "MemoryRecordLink", "MemoryPathAlias", "MemoryEntityHead",
+    "MemoryCaptureJob", "MemoryMigrationRun",
 ]

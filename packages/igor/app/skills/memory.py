@@ -364,11 +364,11 @@ def _format_directory(
         groups.setdefault(parent, []).append(f)
 
     # A collection with no files yet still has to appear, or it does not exist as
-    # far as the agent is concerned. `life/` is empty until the first document
-    # that belongs to no domain arrives — and the prompt tells agents to file
-    # such a document there, while this listing is what they trust for what
-    # exists. The two disagreeing is how an instruction quietly stops being
-    # followed.
+    # far as the agent is concerned. `general/` is empty until the first event
+    # or reference that belongs to no domain arrives — and the prompt tells
+    # agents to file such a document there, while this listing is what they
+    # trust for what exists. The two disagreeing is how an instruction quietly
+    # stops being followed.
     from app.services.memory_spec import COLLECTIONS
 
     for coll in COLLECTIONS:

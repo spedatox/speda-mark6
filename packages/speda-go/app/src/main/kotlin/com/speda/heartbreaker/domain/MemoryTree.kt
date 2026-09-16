@@ -28,7 +28,7 @@ object MemoryTree {
      *  dot-folders, alphabetically among itself. */
     private val ORDER = listOf(
         "", "dossier", "social/professional", "social/personal",
-        "projects", "life", "wellness", "academic", "finance",
+        "projects", "general", "wellness", "academic", "finance",
         // A folder INSIDE a domain: the monthly ledger, one file per month.
         // Unlisted it would sort into the anonymous 500 block, which puts the
         // owner's ledger below `ops` and away from the rest of his money.

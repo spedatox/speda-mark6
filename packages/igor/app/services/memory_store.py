@@ -33,15 +33,12 @@ class MemoryWriteConflict(ValueError):
     """A competing write won; reread and recompute instead of losing its data."""
 
 
-async def mutate_file(db, *, user_id: int, path: str, before: str | None,
-                      after: str | None, author: str, action: str,
-                      request_id: str = "", managed: bool = False,
-                      evidence: list | None = None, model: str = "") -> list[str]:
-    """Agent write gateway. Compare-and-swap + revision are one transaction.
-
-    None means absence/deletion, distinct from an empty document. A conflict
-    rolls back the whole transaction. Never retries an old whole-file payload.
-    """
+async def _mutate_in_txn(db, *, user_id: int, path: str, before: str | None,
+                         after: str | None, author: str, action: str,
+                         request_id: str = "", managed: bool = False,
+                         evidence: list | None = None, model: str = "",
+                         record_id: str | None = None, migration_id: str | None = None) -> list[str]:
+    """Agent write gateway logic, without the commit. The caller owns the transaction."""
     from app.services.memory_policy import protected_write
     from app.services.memory_schema import check_write, MemorySchemaViolation
     from app.services.memory_spec import owner_of
@@ -74,7 +71,8 @@ async def mutate_file(db, *, user_id: int, path: str, before: str | None,
                              evidence=resolved, model=model)
         receipt = MemoryWriteReceipt(user_id=user_id, path=path, author=author,
             request_id=request_id, before_hash=version(before or ""),
-            after_hash=version(after or ""), evidence=[{k:v for k,v in e.items() if k != "_image"} for e in resolved], rationale=reason)
+            after_hash=version(after or ""), evidence=[{k:v for k,v in e.items() if k != "_image"} for e in resolved], rationale=reason,
+            record_id=record_id)
     try:
         if before is None:
             db.add(MemoryFile(user_id=user_id, path=path, content=after))
@@ -90,21 +88,76 @@ async def mutate_file(db, *, user_id: int, path: str, before: str | None,
                 raise MemoryWriteConflict(f"Memory changed concurrently at {path}. Reread it and reapply your intended change; nothing was saved.")
         await record_revision(db, user_id=user_id, path=path, author=author,
                               action=action, before=before or "", after=after or "",
-                              request_id=request_id)
+                              request_id=request_id, record_id=record_id, migration_id=migration_id)
         if receipt is not None:
             db.add(receipt)
+        await db.flush()
+    except IntegrityError as exc:
+        raise MemoryWriteConflict(f"Memory was created concurrently at {path}. Reread before retrying.") from exc
+    return notes
+
+
+async def mutate_file(db, *, user_id: int, path: str, before: str | None,
+                      after: str | None, author: str, action: str,
+                      request_id: str = "", managed: bool = False,
+                      evidence: list | None = None, model: str = "") -> list[str]:
+    """Agent write gateway. Compare-and-swap + revision are one transaction.
+
+    None means absence/deletion, distinct from an empty document. A conflict
+    rolls back the whole transaction. Never retries an old whole-file payload.
+    """
+    try:
+        notes = await _mutate_in_txn(
+            db, user_id=user_id, path=path, before=before, after=after,
+            author=author, action=action, request_id=request_id,
+            managed=managed, evidence=evidence, model=model
+        )
         if path.startswith("/memories/finance/records/"):
             from app.services.finance_records import refresh_views
             await db.flush()
             await refresh_views(db, user_id, request_id)
         await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise MemoryWriteConflict(f"Memory was created concurrently at {path}. Reread before retrying.") from exc
+        return notes
     except Exception:
         await db.rollback()
         raise
-    return notes
+
+
+async def mutate_files_atomic(
+    db, *, user_id: int,
+    changes: list[dict],
+    request_id: str = "",
+    managed: bool = True,
+    evidence: list | None = None,
+    model: str = "",
+) -> list[list[str]]:
+    """Atomic multi-file mutation. All changes commit together or all roll back.
+    Each change dict: {path, before, after, author, action, record_id?, migration_id?}
+    Returns list of notes per change."""
+    all_notes = []
+    has_finance = False
+    try:
+        for ch in changes:
+            notes = await _mutate_in_txn(
+                db, user_id=user_id, path=ch["path"], before=ch.get("before"),
+                after=ch.get("after"), author=ch["author"], action=ch["action"],
+                request_id=request_id, managed=managed, evidence=evidence, model=model,
+                record_id=ch.get("record_id"), migration_id=ch.get("migration_id")
+            )
+            all_notes.append(notes)
+            if ch["path"].startswith("/memories/finance/records/"):
+                has_finance = True
+                
+        if has_finance:
+            from app.services.finance_records import refresh_views
+            await db.flush()
+            await refresh_views(db, user_id, request_id)
+            
+        await db.commit()
+        return all_notes
+    except Exception:
+        await db.rollback()
+        raise
 
 MEMORY_ROOT = "/memories"
 
@@ -119,6 +172,9 @@ MEMORY_ROOT = "/memories"
 # protecting. The set below is the store as it actually is
 # (docs/MEMORY_ARCHITECTURE_V4.md §2) — keep it that way, and add a file here the
 # same day it is created.
+# NOTE: The system is transitioning to a Monthly Memory Architecture. The files below
+# are maintained for compatibility during the transition, but agents should be aware
+# that general categories (e.g., finance) are now structured monthly (e.g. /memories/finance/09-26/ledger.md).
 CANONICAL_FILES: dict[str, str] = {
     # ── Shared, cross-agent ──────────────────────────────────────────────────
     "/memories/current.md": "What is true in the owner's life right now",
@@ -186,7 +242,9 @@ def is_owner_editable(path: str) -> bool:
     """
     from app.services.memory_compose import COMPOSED_FILES
     from app.services.memory_render import RENDERED_FILES
-
+    import re
+    if re.match(r"^/memories/finance/\d{2}-\d{2}/(?:ledger|balances|reports)\.md$", path):
+        return False
     if path.startswith(("/memories/finance/records/", "/memories/finance/ledger/")) or path in ("/memories/finance/balances.md", "/memories/finance/reports.md", "/memories/finance/monthly-structure.md"):
         return False
     if path == "/memories/current.md" or path.startswith("/memories/states/"):
@@ -208,6 +266,8 @@ async def record_revision(
     before: str,
     after: str,
     request_id: str = "",
+    record_id: str | None = None,
+    migration_id: str | None = None,
 ) -> None:
     """Append one audit row for a memory mutation. Does NOT commit — the caller
     commits the file change and this row in the same transaction so the trail can
@@ -221,6 +281,8 @@ async def record_revision(
             before=before or "",
             after=after or "",
             request_id=request_id or "",
+            record_id=record_id,
+            migration_id=migration_id,
         )
     )
 
@@ -382,3 +444,54 @@ async def restore_revision(
         extra={"user_id": user_id, "path": rev.path, "revision_id": revision_id},
     )
     return file
+
+
+async def rename_file(
+    db: AsyncSession, *, user_id: int, old_path: str, new_path: str, request_id: str = ""
+) -> MemoryFile:
+    """Rename a memory file from old_path to new_path, recording both delete and commit in the revision trail."""
+    if old_path in CANONICAL_FILES:
+        raise ValueError(
+            f"{old_path} is a canonical memory file and cannot be renamed."
+        )
+    if old_path.startswith("/memories/states/") or "/." in old_path:
+        raise ValueError("Managed state records and internal archives cannot be renamed.")
+    if not (new_path.startswith(MEMORY_ROOT + "/") and new_path.endswith(".md")):
+        raise ValueError(f"New path '{new_path}' must be within /memories/ and end in .md")
+
+    old_file = await _get_file(db, user_id, old_path)
+    if old_file is None:
+        raise KeyError(old_path)
+
+    existing_target = await _get_file(db, user_id, new_path)
+    if existing_target is not None:
+        raise ValueError(f"Target memory file already exists: {new_path}")
+
+    content = old_file.content
+    await mutate_file(db, user_id=user_id, path=old_path, author="owner", action="delete",
+                      before=content, after=None, request_id=request_id)
+    await mutate_file(db, user_id=user_id, path=new_path, author="owner", action="commit",
+                      before=None, after=content, request_id=request_id)
+    new_file = await _get_file(db, user_id, new_path)
+    if new_file is None:
+        raise RuntimeError("Failed to retrieve renamed file")
+    await db.refresh(new_file)
+    logger.info(
+        "memory_file_renamed",
+        extra={"user_id": user_id, "old_path": old_path, "new_path": new_path, "request_id": request_id},
+    )
+    return new_file
+
+
+
+async def resolve_alias(db: AsyncSession, user_id: int, path: str) -> str | None:
+    """Query MemoryPathAlias to resolve old paths to their new canonical location."""
+    from app.models.memory_path_alias import MemoryPathAlias
+    result = await db.execute(
+        select(MemoryPathAlias.target_path)
+        .where(
+            MemoryPathAlias.user_id == user_id,
+            MemoryPathAlias.alias_path == path
+        )
+    )
+    return result.scalar_one_or_none()

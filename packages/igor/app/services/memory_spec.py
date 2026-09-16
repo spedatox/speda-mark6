@@ -261,6 +261,11 @@ class CollectionSpec:
     # gets the collection's default. Extensibility is what makes "file it in the
     # domain that owns the subject" an instruction an agent can actually follow.
     extensible: bool = True
+    # Monthly Memory Architecture (§3): when True, paths in this collection
+    # include a `MM-YY` period segment. `collection_for` accounts for the extra
+    # depth when routing a path, and `build_member_path` inserts the period.
+    # Defaults to False so existing collections keep working until migrated.
+    monthly: bool = False
 
     @property
     def closed(self) -> bool:
@@ -314,38 +319,38 @@ COLLECTIONS: tuple[CollectionSpec, ...] = (
 )
 
 SNAPSHOT = "snapshot"   # the current version of a recurring artifact
+MONTHLY = "monthly"     # the monthly archive layout (category/MM-YY/topic.md)
 
 SECTION_COLLECTIONS: tuple[CollectionSpec, ...] = (
     CollectionSpec(
         # OPEN, on purpose — the one folder where an agent may create a file the
         # spec never heard of.
         #
-        # Everything else in the store is a domain with a known shape, and
-        # closing those is what stops a fourteenth wellness topic appearing
-        # under a name only one agent knows. But the owner sends things that are
-        # none of those domains and are genuinely new: the dorm's monthly dinner
-        # menu, a class timetable, a rental contract's terms. They have no home
-        # in wellness or academic, and refusing them means the fact is simply
-        # lost — which is worse than an imperfect filing.
+        # Renamed from `life` under the Monthly Memory Architecture. `general`
+        # holds meaningful personal experiences, events, and references for
+        # which no more specific domain is responsible. It is an ordinary,
+        # actively used memory category. It is not limited to recurring
+        # documents.
         #
-        # These are SNAPSHOTS, and that is the whole point of the kind: such a
-        # document gets REISSUED, and the new edition replaces the old rather
-        # than appending to it. A file that accumulates editions cannot answer
-        # the question it exists to answer — there would be twelve answers and
-        # no way to tell which is current. Nothing is lost: every write records
-        # its `before` in the revision trail, so the prior edition is one
-        # restore away.
-        root="/memories/life",
-        kind=SNAPSHOT,
-        summary="Recurring documents the owner sends — current version only",
+        # When the owner says "I went to Istanbul today," the system records
+        # the experience in that month's `general` folder. It does not require
+        # a statement to be a permanent preference, a recurring artifact, or
+        # important six months from now. It does not fabricate the purpose,
+        # companions, expenses, or outcome of the trip.
+        root="/memories/general",
+        kind=LEDGER,
+        summary="Personal experiences, events, and references without a specialist domain",
         entity_noun="document",
         depth=1,
+        monthly=True,
         max_bytes=12_000,
         notes=(
-            "One file per recurring artifact, named for the thing itself "
-            "(`dorm-menu.md`, `class-timetable.md`). A new version REPLACES the "
-            "file wholly; the previous one stays in the revision trail. Put the "
-            "period it covers in the H1 so a stale file is obvious on sight."
+            "One file per meaningful experience or reference, named for the "
+            "thing itself (`istanbul-trip.md`, `dorm-menu.md`). Trips, outings, "
+            "personal milestones, household events, and miscellaneous references "
+            "without a specialist domain belong here. Capture what the owner "
+            "reported — even ordinary events. Do not require it to matter in "
+            "six months. Do not fabricate details."
         ),
     ),
     CollectionSpec(
@@ -591,8 +596,12 @@ COLLECTIONS = COLLECTIONS + SECTION_COLLECTIONS + (
     CollectionSpec(root="/memories/states", kind=OBSERVATIONS,
                    summary="Versioned ongoing situations; managed by memory_state",
                    entity_noun="state", max_bytes=6_000),
+    # `events` is retired under the Monthly Memory Architecture (§3.2).
+    # Unmatched events migrate to `general`; specialist events migrate to the
+    # appropriate specialist category. Kept as a collection for compatibility
+    # reads; new writes are refused.
     CollectionSpec(root="/memories/events", kind=LEDGER,
-                   summary="Dated owner events with no more specific subject log",
+                   summary="RETIRED — unmatched events now go to general/, specialist events to their domain",
                    entity_noun="month", max_bytes=48_000),
 )
 
@@ -626,27 +635,50 @@ def collection_for(path: str) -> CollectionSpec | None:
     is not a wellness file that happens to be undeclared, it is a file nobody
     designed, and returning None here is what makes the write gate refuse it
     instead of creating a fourteenth topic under a name only one agent knows.
+
+    Monthly collections (§3) carry a `MM-YY` period segment between root and
+    topic: `/memories/general/09-26/istanbul-trip.md`. The function accounts for
+    this extra depth automatically when `coll.monthly` is True. Old-layout
+    (flat) paths continue to resolve for compatibility during migration.
     """
+    import re as _re
+
     for coll in COLLECTIONS:
         prefix = coll.root + "/"
         if not path.startswith(prefix) or not path.endswith(".md"):
             continue
         rest = path[len(prefix):]
-        if rest.count("/") == coll.depth and coll.depth == 1:
-            # A SHARDED member sits one level deeper than its siblings, because
-            # it is a folder rather than a file: `finance/ledger/2026-09.md`
-            # beside `finance/notes.md`.
-            stem = rest.split("/", 1)[0]
+        segments = rest.split("/")
+
+        # ── Monthly path detection ────────────────────────────────────────
+        # A monthly collection expects root/MM-YY/topic.md (depth+1 segments).
+        # We recognise the MM-YY pattern and strip it from depth calculations.
+        month_stripped_rest = rest
+        is_monthly_path = False
+        if coll.monthly and len(segments) >= 2 and _re.fullmatch(r"\d{2}-\d{2}", segments[0]):
+            is_monthly_path = True
+            month_stripped_rest = "/".join(segments[1:])
+            segments = segments[1:]
+
+        depth_segments = len(segments) - 1  # -1 because last segment is the file
+
+        # ── Sharded member (one level deeper than siblings) ───────────────
+        if depth_segments == coll.depth and coll.depth == 1:
+            stem = segments[0]
             m = coll.member(stem)
             if m is not None and m.shard:
                 return coll
             continue
-        if rest.count("/") != coll.depth - 1:
+        if depth_segments != coll.depth - 1:
+            # Also accept old flat paths when collection is monthly but path is not
+            if coll.monthly and not is_monthly_path and rest.count("/") == coll.depth - 1:
+                return coll  # legacy flat path during migration
             continue
         if coll.closed and not coll.extensible:
-            return coll if coll.member(rest[:-3]) else None
+            stem = segments[-1][:-3] if segments else rest[:-3]
+            return coll if coll.member(stem) else None
         if coll.depth == 2 and coll.groups:
-            group = rest.split("/", 1)[0]
+            group = segments[0]
             if group not in coll.groups:
                 return None
         return coll
@@ -1059,6 +1091,7 @@ SPECS: dict[str, DocumentSpec] = {
 RETIRED: dict[str, str] = {
     "/memories/sessions.md": "superseded by wellness.md (same document continued)",
     "/memories/kpss.md": "merged into academic.md — the exam tracker is a section there",
+    "/memories/life": "renamed to general under the Monthly Memory Architecture",
 }
 
 

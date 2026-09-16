@@ -211,6 +211,10 @@ class RegistryUpsertSkill(Skill):
         "or project: `who` sets or replaces their description, `event` adds a dated entry "
         "to their log, newest first; if they have no file yet one is created with the full "
         "required shape, so a person can never end up recorded without a Who block. Do NOT "
+        "send `who` for an existing entity when the new information is only an event — omit "
+        "it and preserve the established description. Before replacing `who`, read the entity "
+        "and supply a complete revised description that retains every still-supported fact; "
+        "do not turn an owner's implication or reaction into a factual event. Do NOT "
         "use it for periodic records like a transaction or a training session (that is "
         "`ledger_append`), and do NOT invent a category — the categories are fixed. "
         "Returns confirmation and the file written, or which categories are valid if you "
@@ -244,12 +248,14 @@ class RegistryUpsertSkill(Skill):
                 "type": "string",
                 "description": (
                     "Who they are and their context to the owner. Replaces the existing "
-                    "description — pass the full updated sentence, not a fragment."
+                    "description — use ONLY when this itself changed. First read the entity, "
+                    "then pass the full updated description retaining all still-supported "
+                    "facts. Omit for an event-only update."
                 ),
             },
             "event": {
                 "type": "string",
-                "description": "A dated thing that happened, added to the top of their log.",
+                "description": "A dated, source-supported thing that happened, added to the top of their log. Report the fact; do not add an unstated interpretation or significance.",
             },
             "when": {
                 "type": "string",

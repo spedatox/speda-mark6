@@ -180,13 +180,15 @@ async def run_memory_command(agent_id: str, frame: dict) -> dict:
     request_id = str(frame.get("request_id", ""))
     skill_name = str(frame.get("skill") or "memory")
 
-    if skill_name in ("memory_state", "memory_edit", "finance_record", "memory_audit"):
+    if skill_name in ("memory_state", "memory_edit", "finance_record", "memory_audit", "memory_event"):
         from app.skills.memory_state import MemoryStateSkill
         from app.skills.memory_edit import MemoryEditSkill
         from app.skills.finance_record import FinanceRecordSkill
         from app.skills.memory_audit import MemoryAuditSkill
+        from app.skills.memory_event import MemoryEventSkill
         skill = {"memory_state":MemoryStateSkill, "memory_edit":MemoryEditSkill,
-                 "finance_record":FinanceRecordSkill, "memory_audit":MemoryAuditSkill}[skill_name]()
+                 "finance_record":FinanceRecordSkill, "memory_audit":MemoryAuditSkill,
+                 "memory_event":MemoryEventSkill}[skill_name]()
         args = {k: frame[k] for k in skill.input_schema["properties"] if k in frame}
         try:
             async with AsyncSessionLocal() as db:

@@ -15,6 +15,8 @@ import { agentColor, monogram } from '../lib/agents'
 import AgentModelPicker from './AgentModelPicker'
 import GlassSelect from './GlassSelect'
 import { Skeleton, SkeletonList } from './Skeleton'
+import MemoryExplorerModal from './MemoryExplorerModal'
+import MemoryEditorModal from './MemoryEditorModal'
 
 /**
  * SYSTEMS BOARD — the deep view of the deck's instrumentation.
@@ -287,13 +289,16 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const [budgetMode, setBudgetMode] = useState(true)
   const [rtt, setRtt] = useState<number[]>([])
   const [memFiles, setMemFiles] = useState<MemoryFileInfo[]>([])
-  // Folders the store DECLARES. `life/` holds nothing until the first
+  // Folders the store DECLARES. `general/` holds nothing until the first
   // document that belongs to no domain arrives, and a folder with no files
   // is absent from a listing built out of file paths — so the owner could
   // not see where such a thing would go before one had gone there.
   const [memFolders, setMemFolders] = useState<MemoryFolderInfo[]>([])
   const [memPath, setMemPath] = useState<string | null>(null)
   const [banksWide, setBanksWide] = useState(false)
+  const [showExplorer, setShowExplorer] = useState(false)
+  const [explorerInitialPath, setExplorerInitialPath] = useState<string | null>(null)
+  const [editorFile, setEditorFile] = useState<MemoryFileInfo | null>(null)
   const [agentInfos, setAgentInfos] = useState<AgentModelInfo[]>([])
   const [legionInfos, setLegionInfos] = useState<LegionModelInfo[]>([])
   // Owner-edit state for the knowledge bank.
@@ -369,7 +374,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
     // an unlisted folder sorts into the anonymous 500 block, which would put
     // the owner's ledger below `ops` and away from the rest of his money.
     const ORDER = ['', 'dossier', 'social/professional', 'social/personal',
-                   'projects', 'life', 'wellness', 'academic', 'finance',
+                   'projects', 'general', 'wellness', 'academic', 'finance',
                    'finance/ledger', 'cybersec', 'ops']
     const groups = new Map<string, MemoryFileInfo[]>()
     for (const f of memFolders) {
@@ -886,6 +891,24 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               {memFiles.length} files
             </span>
             <button
+              onClick={() => {
+                setExplorerInitialPath(memPath)
+                setShowExplorer(true)
+              }}
+              title="Dosyaları Windows Explorer tarzı pencerede keşfet, düzenle ve yönet"
+              className="hb-btn hb-btn-tint"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                height: 26, padding: '0 10px', fontSize: '0.75rem',
+                cursor: 'pointer',
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="#d29922" stroke="none">
+                <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+              </svg>
+              <span>Dosya Gezgini</span>
+            </button>
+            <button
               onClick={() => setBanksWide(w => !w)}
               title={banksWide ? 'Retract (Esc)' : 'Extend the knowledge bank'}
               style={{
@@ -932,6 +955,27 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               width: 186, flexShrink: 0, overflowY: 'auto',
               borderRight: '1px solid rgba(var(--hb-accent-rgb),0.14)',
             }}>
+              <button
+                onClick={() => {
+                  setExplorerInitialPath(memPath)
+                  setShowExplorer(true)
+                }}
+                title="Windows Gezgini modunda tam pencere aç"
+                style={{
+                  width: '100%', padding: '8px 10px',
+                  border: 'none', borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.18)',
+                  background: 'rgba(var(--hb-accent-rgb),0.08)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7,
+                  color: 'var(--hb-cyan-bright)', fontSize: '0.78rem',
+                  fontWeight: 600, textAlign: 'left',
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#d29922" stroke="none">
+                  <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+                </svg>
+                <span>Dosya Gezgini ↗</span>
+              </button>
+
               {memTree.map(([dir, files]) => (
                 <div key={dir} style={{ marginBottom: 6 }}>
                   {dir && (
@@ -1023,6 +1067,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                     )}
                     {file.editable && !editing && !revs && (
                       <>
+                        <button className="hb-btn hb-btn-tint" style={{ ...btn, color: 'var(--hb-cyan-bright)' }} onClick={() => setEditorFile(file)}>Editörde Aç</button>
                         <button className="hb-btn" style={btn} onClick={openHistory}>History</button>
                         <button className="hb-btn" style={btn} onClick={startEdit}>Edit</button>
                       </>
@@ -1096,6 +1141,32 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           </div>
         )}
       </Panel>
+
+      {showExplorer && (
+        <MemoryExplorerModal
+          config={config}
+          initialPath={explorerInitialPath}
+          onClose={() => setShowExplorer(false)}
+          onFilesChanged={() => {
+            fetchMemoryFiles(config).then(files => {
+              setMemFiles(files)
+            }).catch(() => {})
+          }}
+        />
+      )}
+
+      {editorFile && (
+        <MemoryEditorModal
+          config={config}
+          file={editorFile}
+          onClose={() => setEditorFile(null)}
+          onSave={updated => {
+            applyFresh(updated)
+            setEditorFile(null)
+          }}
+        />
+      )}
     </div>
   )
 }
+

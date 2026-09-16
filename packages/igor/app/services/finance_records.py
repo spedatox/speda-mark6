@@ -125,12 +125,20 @@ def views(records, legacy_months=()):
     months = sorted({(r.get("period") or r.get("date") or r["reported_on"])[:7] for r in records if r["type"] == "transaction"} | set(legacy_months))
     for month in months:
         rows = sorted((r for r in active if r["type"] == "transaction" and (r.get("period") or r.get("date") or r["reported_on"]).startswith(month)), key=lambda r: (r.get("date") or r["reported_on"], r["id"]))
-        result[f"/memories/finance/ledger/{month}.md"] = f"# {month}\n\n{VIEW}\n\n" + (
+        rendered_view = f"# {month}\n\n{VIEW}\n\n" + (
             "Amounts with unknown source values are shown as unknown. Transfers, debt payments and loan proceeds are separate from spending/earned income.\n\n") + table(
             ["Date", "Reported on", "Status", "Kind", "Description", "Amount", "Currency", "Account", "Record"],
             [[r.get("date"), r.get("reported_on", r.get("date")), r["status"], r["movement"], r["description"], r["amount"], r["currency"], r["account"], r["id"]] for r in rows])
+        result[f"/memories/finance/ledger/{month}.md"] = rendered_view
+        # Monthly Memory Architecture path: /memories/finance/MM-YY/ledger.md
+        mm_yy = f"{month[5:7]}-{month[2:4]}"
+        result[f"/memories/finance/{mm_yy}/ledger.md"] = rendered_view
     for month in legacy_months:
-        result[f"/memories/finance/ledger/{month}.md"] += f"\nUnreconciled historical source: /memories/finance/legacy/{month}.md. Do not sum that source with reconciled rows above; it can include the same events and outdated classifications.\n"
+        note = f"\nUnreconciled historical source: /memories/finance/legacy/{month}.md. Do not sum that source with reconciled rows above; it can include the same events and outdated classifications.\n"
+        result[f"/memories/finance/ledger/{month}.md"] += note
+        mm_yy = f"{month[5:7]}-{month[2:4]}"
+        if f"/memories/finance/{mm_yy}/ledger.md" in result:
+            result[f"/memories/finance/{mm_yy}/ledger.md"] += note
     result["/memories/finance/balances.md"] = "# Account Balances\n\n" + VIEW + "\n\nDated observations; do not present as live balances without newer evidence. Never add report aggregates to account debts.\n\n" + table(
         ["Status", "As of", "Account", "Kind", "Amount", "Currency", "Record"],
         [[r["status"], r["date"], r["account"], r["balance_kind"], r["amount"], r["currency"], r["id"]] for r in sorted(active, key=lambda r: r.get("date") or "", reverse=True) if r["type"] == "balance"])
@@ -179,7 +187,7 @@ async def refresh_views(db, user_id, request_id=""):
     from datetime import datetime, timezone
     files = (await db.execute(select(MemoryFile).where(MemoryFile.user_id == user_id)
                              .execution_options(populate_existing=True))).scalars().all()
-    records = [parse(f.content) for f in files if f.path.startswith(ROOT)]
+    records = [parse(f.content) for f in files if f.path.startswith(ROOT) or (f.path.startswith("/memories/finance/") and MARKER in f.content)]
     # Unique event keys are enforced by the database too, closing the race in
     # which two agents read the same absence and create two different ids.
     from app.models.finance_identity import FinanceIdentity

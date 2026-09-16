@@ -133,6 +133,8 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(MemoryAuditSkill())
     from app.skills.memory_edit import MemoryEditSkill
     await registry.register_skill(MemoryEditSkill())
+    from app.skills.memory_event import MemoryEventSkill
+    await registry.register_skill(MemoryEventSkill())
     from app.skills.finance_record import FinanceRecordSkill
     await registry.register_skill(FinanceRecordSkill())
     # The observation tier — the sourced, addressable facts beneath the memory

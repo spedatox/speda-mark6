@@ -238,6 +238,28 @@ async def delete_memory_file(path: str, db: AsyncSession = Depends(get_db)):
     return {"deleted": path, "bytes": len(content), "recoverable": True}
 
 
+class MemoryRename(BaseModel):
+    old_path: str
+    new_path: str
+
+
+@router.post("/memory/files/rename")
+async def rename_memory_file(body: MemoryRename, db: AsyncSession = Depends(get_db)):
+    """
+    Rename/move a memory file. Reversible in revision trail.
+    """
+    request_id = str(uuid.uuid4())
+    try:
+        new_file = await memory_store.rename_file(
+            db, user_id=_USER_ID, old_path=body.old_path, new_path=body.new_path, request_id=request_id
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"No such memory file: {body.old_path}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _serialize(new_file)
+
+
 @router.get("/memory/files/revisions")
 async def memory_revisions(path: str, db: AsyncSession = Depends(get_db)):
     """Newest-first revision history for one file — feeds the per-file history

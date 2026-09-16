@@ -646,6 +646,57 @@ export async function restoreMemoryRevision(config: AppConfig, revisionId: numbe
   return res.json()
 }
 
+export async function deleteMemoryFile(config: AppConfig, path: string): Promise<{ deleted: string; bytes: number; recoverable: boolean }> {
+  const res = await fetch(`${config.apiBase}/memory/files?path=${encodeURIComponent(path)}`, {
+    method: 'DELETE',
+    headers: authHeaders(config)
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => null)
+    throw new Error(err?.detail || `Delete failed (${res.status})`)
+  }
+  return res.json()
+}
+
+export async function renameMemoryFile(
+  config: AppConfig,
+  oldPath: string,
+  newPath: string
+): Promise<MemoryFileInfo> {
+  const res = await fetch(`${config.apiBase}/memory/files/rename`, {
+    method: 'POST',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ old_path: oldPath, new_path: newPath })
+  })
+  if (res.ok) {
+    return res.json()
+  }
+  if (res.status === 404 || res.status === 405) {
+    const files = await fetchMemoryFiles(config)
+    const existing = files.find(f => f.path === oldPath)
+    if (!existing) throw new Error(`Source file '${oldPath}' not found`)
+    const created = await commitMemoryFile(config, newPath, existing.content, null)
+    if ('conflict' in created) throw new Error('Target file already exists or conflict occurred')
+    await deleteMemoryFile(config, oldPath).catch(() => {})
+    return created
+  }
+  const err = await res.json().catch(() => null)
+  throw new Error(err?.detail || `Rename failed (${res.status})`)
+}
+
+export async function createMemoryFile(
+  config: AppConfig,
+  path: string,
+  content = ''
+): Promise<MemoryFileInfo> {
+  const res = await commitMemoryFile(config, path, content, null)
+  if ('conflict' in res) {
+    throw new Error('File already exists or conflict occurred')
+  }
+  return res
+}
+
+
 export interface ConnectionInfo {
   server: string
   label: string

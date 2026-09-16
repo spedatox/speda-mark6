@@ -11,6 +11,8 @@ import { useIsMobile } from '../lib/useIsMobile'
 import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, commitMemoryFile, fetchMemoryRevisions, restoreMemoryRevision } from '../lib/api'
 import type { ConnectionInfo, MemoryFileInfo, MemoryRevisionInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
+import MemoryExplorerModal from './MemoryExplorerModal'
+import MemoryEditorModal from './MemoryEditorModal'
 
 /**
  * SYSTEMS BOARD — the "PERIODIC 56A." tactical overlay, mapped onto real data.
@@ -271,6 +273,9 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const [memFiles, setMemFiles] = useState<MemoryFileInfo[]>([])
   const [memPath, setMemPath] = useState<string | null>(null)
   const [banksWide, setBanksWide] = useState(false)
+  const [showExplorer, setShowExplorer] = useState(false)
+  const [explorerInitialPath, setExplorerInitialPath] = useState<string | null>(null)
+  const [editorFile, setEditorFile] = useState<MemoryFileInfo | null>(null)
   // Owner-edit state for the knowledge bank.
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -609,6 +614,28 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
               {memFiles.length} FILES
             </span>
             <button
+              onClick={() => {
+                setExplorerInitialPath(memPath)
+                setShowExplorer(true)
+              }}
+              title="Dosyaları Windows Explorer tarzı pencerede keşfet, düzenle ve yönet"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                border: '1px solid rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.35)',
+                background: 'rgba(var(--hb-accent-rgb), 0.14)',
+                cursor: 'pointer',
+                padding: '2px 8px', borderRadius: 3,
+                fontFamily: MONO, fontSize: '0.54rem', letterSpacing: '0.12em',
+                color: 'var(--hb-cyan-bright)',
+                transition: 'all 0.15s',
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="#d29922" stroke="none">
+                <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+              </svg>
+              GEZGİN_
+            </button>
+            <button
               onClick={() => setBanksWide(w => !w)}
               title={banksWide ? 'Retract (Esc)' : 'Extend the knowledge bank'}
               style={{
@@ -647,9 +674,32 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           }}>
             {/* File rail — one entry per memory file */}
             <div style={{
-              width: 142, flexShrink: 0, overflowY: 'auto',
+              width: 152, flexShrink: 0, overflowY: 'auto',
               borderRight: '1px solid rgba(var(--hb-accent-rgb),0.14)',
+              display: 'flex', flexDirection: 'column',
             }}>
+              <button
+                onClick={() => {
+                  setExplorerInitialPath(memPath)
+                  setShowExplorer(true)
+                }}
+                title="Tüm hafıza dosyalarını Windows Gezgini tarzı pencerede aç"
+                style={{
+                  width: '100%', padding: '0.45rem 0.55rem',
+                  border: 'none', borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.18)',
+                  background: 'rgba(var(--hb-accent-rgb),0.08)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                  color: 'var(--hb-cyan-bright)', fontFamily: MONO, fontSize: '0.54rem',
+                  letterSpacing: '0.1em', fontWeight: 600, textAlign: 'left',
+                  userSelect: 'none',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="#d29922" stroke="none">
+                  <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+                </svg>
+                <span>DOSYA GEZGİNİ ↗</span>
+              </button>
+
               {memFiles.map(f => {
                 // A nested file is named by its folder AND its leaf. Striker's
                 // rail is flat by design — no tree, no folds — and a bare leaf
@@ -707,6 +757,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                     )}
                     {file.editable && !editing && !revs && (
                       <>
+                        <button style={{ ...btn, color: 'var(--hb-cyan-bright)', borderColor: 'rgba(var(--hb-accent-rgb), 0.45)' }} onClick={() => setEditorFile(file)}>EDITÖRDE AÇ</button>
                         <button style={btn} onClick={openHistory}>HISTORY</button>
                         <button style={btn} onClick={startEdit}>EDIT</button>
                       </>
@@ -780,6 +831,32 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
           </div>
         )}
       </Panel>
+
+      {showExplorer && (
+        <MemoryExplorerModal
+          config={config}
+          initialPath={explorerInitialPath}
+          onClose={() => setShowExplorer(false)}
+          onFilesChanged={() => {
+            fetchMemoryFiles(config).then(files => {
+              setMemFiles(files)
+            }).catch(() => {})
+          }}
+        />
+      )}
+
+      {editorFile && (
+        <MemoryEditorModal
+          config={config}
+          file={editorFile}
+          onClose={() => setEditorFile(null)}
+          onSave={updated => {
+            applyFresh(updated)
+            setEditorFile(null)
+          }}
+        />
+      )}
     </div>
   )
 }
+

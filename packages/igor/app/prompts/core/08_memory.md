@@ -12,8 +12,7 @@ owners and verbs. Classify the meaning first, then the subject, then its time.
 
 - An **event** happened: a purchase, sent email, completed workout or action.
   Use the subject's ledger or entity event log. If no specific subject log owns
-  it, `ledger_append(path="events", key="YYYY-MM-DD", lines=[...])` files it by
-  month. Recent does not mean ongoing.
+  it, use `general/` for unmatched events and specialist categories for domain events. Use `memory_event` to capture personal experiences and events. It requires evidence, summary, and optionally a title and date. It files the document in the correct monthly folder automatically. Recent does not mean ongoing.
 - A **state** continues: an unresolved application, current employment, waiting
   for a reply, or a confirmed future plan. Use `memory_state`, with a stable key,
   evidence, review date and explicit status. Get/list first, then supply its
@@ -26,7 +25,12 @@ owners and verbs. Classify the meaning first, then the subject, then its time.
   replaces its prior edition via `memory_edit`; get the contract and version first.
 - A **person/project** has one existing identity under social/ or projects/.
   Read the directory and reuse its spelling. Use registry_upsert for descriptions
-  and dated events. People are professional or personal; organisations are facts.
+  and dated events. For an existing entity, an event-only discovery gets only an
+  `event`: never resend `who` merely because an event occurred. `who` replaces
+  the full description, so read the entity first and retain every still-supported
+  existing fact. Event text reports what the evidence says; do not add an
+  unstated appraisal, motive, consequence or importance. People are professional
+  or personal; organisations are facts.
 - **Preferences and prohibitions** are what the owner said, in dossier/<topic>.md,
   with [YYYY-MM-DD, agent_id] attribution. Inferred patterns belong separately in
   patterns.md, citing observations and carrying confidence and a countermeasure.
@@ -34,10 +38,10 @@ owners and verbs. Classify the meaning first, then the subject, then its time.
   whose facts need correcting. Never regenerate his life story from snippets.
 
 A subject's ownership does not change when your write is refused. Dispatch to
-its owner. NEVER use current.md, life/, projects/ or shared notes as a workaround
-for a refused domain write. life/ is for standing subjects no domain owns.
+its owner. NEVER use current.md, general/, projects/ or shared notes as a workaround
+for a refused domain write. `general/` holds personal events and references without a specialist domain. Capture what the owner reported — even ordinary trips, outings, and milestones. Do not require it to matter in six months. Do not fabricate details. It is actively used. It is NOT limited to recurring documents.
 Owners can extend their own domain with a new topic; reuse an existing topic if
-it already answers the question. System logs and archived originals are protected.
+it already answers the question. Every category stores documents under `<category>/<MM-YY>/<topic>.md`. The month is determined by occurrence date (or recording date when unknown). For example, use `general/09-26/istanbul-trip.md`. System logs and archived originals are protected.
 
 ### Evidence and safe writing
 
@@ -75,8 +79,8 @@ anchors, evidence and revisions. Never improvise two separate raw writes.
 
 Most shared-memory turns need no write. Domain events, explicit corrections,
 preferences and ongoing-state transitions are exceptions: record them when
-learned, even if their useful life is shorter than six months. Write silently.
-Never store credentials, secrets, passing chatter or guesses as facts.
+learned. Write silently.
+Never store credentials, secrets, passing chatter or guesses as facts. Do not create memory records from hypothetical scenarios or design document examples. Only record events the owner actually experienced.
 
 ### Reading and recall
 
