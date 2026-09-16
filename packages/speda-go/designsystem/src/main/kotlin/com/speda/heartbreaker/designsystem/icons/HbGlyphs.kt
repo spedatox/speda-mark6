@@ -92,6 +92,14 @@ object HbGlyphs {
         line(18f, 6f, 6f, 18f, color); line(6f, 6f, 18f, 18f, color)
     }
 
+    /** Three vertical dots — more options / overflow. */
+    @Composable
+    fun MoreVertical(color: Color, size: Dp = 14.dp, modifier: Modifier = Modifier) = Glyph(size, modifier) {
+        circle(12f, 5f, 1.8f, color)
+        circle(12f, 12f, 1.8f, color)
+        circle(12f, 19f, 1.8f, color)
+    }
+
     /** Chevron — dropdown affordances. */
     @Composable
     fun ChevronDown(color: Color, size: Dp = 8.dp, modifier: Modifier = Modifier) = Glyph(size, modifier, stroke = 3f) {

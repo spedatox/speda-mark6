@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -28,11 +30,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.speda.heartbreaker.AppGraph
 import com.speda.heartbreaker.data.AutomationAgent
 import com.speda.heartbreaker.data.AutomationInfo
@@ -78,6 +83,7 @@ fun AutomationsTab(config: AppConfig, graph: AppGraph) {
     var testMsg by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var runs by remember { mutableStateOf<List<AutomationRunInfo>>(emptyList()) }
     var runsLoaded by remember { mutableStateOf(false) }
+    var menuAutomation by remember { mutableStateOf<AutomationInfo?>(null) }
 
     suspend fun reload() {
         autos = api.getAutomations(config)
@@ -148,40 +154,27 @@ fun AutomationsTab(config: AppConfig, graph: AppGraph) {
             }
 
             SectionHeader(t.settingsAutomations.watchers)
-            Panel {
-                if (autos.isEmpty()) {
+            if (autos.isEmpty()) {
+                Panel {
                     HbText(t.settingsAutomations.nothingWatched, style = HbType.readout.copy(fontSize = 11.sp), color = palette.textFaint)
-                } else {
-                    autos.forEachIndexed { i, a ->
-                        if (i > 0) Spacer(Modifier.height(8.dp))
-                        WatcherRow(
-                            a,
-                            testLabel = testMsg?.takeIf { it.first == a.id }?.second,
-                            onToggle = { active ->
-                                autos = autos.map { if (it.id == a.id) it.copy(active = active) else it }
-                                scope.launch { api.toggleAutomation(config, a.id, active); reload() }
-                            },
-                            onDelete = {
-                                autos = autos.filter { it.id != a.id }
-                                scope.launch { api.deleteAutomation(config, a.id); reload() }
-                            },
-                            onEdit = { mode = BuilderMode.Editing(a) },
-                            onHistory = { mode = BuilderMode.History(a) },
-                            onTest = {
-                                scope.launch {
-                                    testMsg = a.id to t.settingsAutomations.testSending
-                                    val ok = api.testAutomation(config, a.id)
-                                    testMsg = a.id to (if (ok) t.settingsAutomations.testSent else t.settingsAutomations.testFailed)
-                                    delay(3000)
-                                    if (testMsg?.first == a.id) testMsg = null
-                                }
-                            },
-                        )
-                    }
                 }
-                Spacer(Modifier.height(10.dp))
-                SettingsButton(t.settingsAutomations.add, onClick = { mode = BuilderMode.New })
+            } else {
+                autos.forEach { a ->
+                    AutomationCard(
+                        a = a,
+                        testLabel = testMsg?.takeIf { it.first == a.id }?.second,
+                        onToggle = { active ->
+                            autos = autos.map { if (it.id == a.id) it.copy(active = active) else it }
+                            scope.launch { api.toggleAutomation(config, a.id, active); reload() }
+                        },
+                        onClick = { mode = BuilderMode.Editing(a) },
+                        onOpenMenu = { menuAutomation = a },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
             }
+            Spacer(Modifier.height(4.dp))
+            SettingsButton(t.settingsAutomations.add, onClick = { mode = BuilderMode.New })
 
             Spacer(Modifier.height(8.dp))
             Hint(t.settingsAutomations.footer)
@@ -223,6 +216,36 @@ fun AutomationsTab(config: AppConfig, graph: AppGraph) {
                 },
             )
         }
+    }
+
+    menuAutomation?.let { a ->
+        AutomationActionDialog(
+            automation = a,
+            onDismiss = { menuAutomation = null },
+            onEdit = {
+                menuAutomation = null
+                mode = BuilderMode.Editing(a)
+            },
+            onHistory = {
+                menuAutomation = null
+                mode = BuilderMode.History(a)
+            },
+            onTest = {
+                menuAutomation = null
+                scope.launch {
+                    testMsg = a.id to t.settingsAutomations.testSending
+                    val ok = api.testAutomation(config, a.id)
+                    testMsg = a.id to (if (ok) t.settingsAutomations.testSent else t.settingsAutomations.testFailed)
+                    delay(3000)
+                    if (testMsg?.first == a.id) testMsg = null
+                }
+            },
+            onDelete = {
+                menuAutomation = null
+                autos = autos.filter { it.id != a.id }
+                scope.launch { api.deleteAutomation(config, a.id); reload() }
+            },
+        )
     }
 }
 
@@ -291,52 +314,245 @@ private fun StatusLine(label: String, ok: Boolean, detail: String) {
 }
 
 @Composable
-private fun WatcherRow(
+private fun AutomationCard(
     a: AutomationInfo,
     testLabel: String?,
     onToggle: (Boolean) -> Unit,
-    onDelete: () -> Unit,
-    onEdit: () -> Unit,
-    onHistory: () -> Unit,
-    onTest: () -> Unit,
+    onClick: () -> Unit,
+    onOpenMenu: () -> Unit,
 ) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
-    Column(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
-                Modifier
-                    .border(1.dp, palette.accent.copy(alpha = 0.3f), RoundedCornerShape(3.dp))
-                    .padding(horizontal = 5.dp, vertical = 1.dp),
+    val shape = RoundedCornerShape(12.dp)
+    val cardFill = Color.White.copy(alpha = if (a.active) 0.035f else 0.015f)
+    val cardBorder = if (a.active) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.04f)
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(cardFill)
+            .border(1.dp, cardBorder, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                Box(
+                    Modifier
+                        .border(
+                            width = 1.dp,
+                            color = if (a.active) palette.accent.copy(alpha = 0.45f) else palette.textFaint.copy(alpha = 0.25f),
+                            shape = RoundedCornerShape(4.dp),
+                        )
+                        .background(
+                            if (a.active) palette.accent.copy(alpha = 0.12f) else Color.Transparent,
+                            RoundedCornerShape(4.dp),
+                        )
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                ) {
+                    HbText(
+                        KIND_LABEL[a.kind] ?: a.kind.uppercase(),
+                        style = HbType.readout.copy(fontSize = 9.sp, fontWeight = FontWeight.SemiBold),
+                        color = if (a.active) palette.accentBright else palette.textFaint,
+                    )
+                }
                 HbText(
-                    KIND_LABEL[a.kind] ?: a.kind.uppercase(),
-                    style = HbType.readout.copy(fontSize = 8.5.sp),
-                    color = if (a.active) palette.accentBright else palette.textFaint,
+                    a.name,
+                    style = HbType.read.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                    color = if (a.active) palette.text else palette.textDim,
+                    maxLines = 2,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             }
-            Column(Modifier.weight(1f).clickable(onClick = onEdit)) {
-                HbText(a.name, style = HbType.read.copy(fontSize = 13.5.sp, fontWeight = FontWeight.Medium), color = palette.text, maxLines = 1)
-                HbText(a.summary, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint, maxLines = 1)
+            val sub = testLabel ?: a.summary
+            if (sub.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                HbText(
+                    sub,
+                    style = HbType.readout.copy(fontSize = 10.5.sp),
+                    color = when {
+                        testLabel == t.settingsAutomations.testFailed -> palette.red
+                        testLabel != null -> palette.accentBright
+                        else -> palette.textFaint
+                    },
+                    maxLines = 1,
+                )
             }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             HbToggle(checked = a.active, color = palette.accent, onToggle = onToggle)
             Box(
-                Modifier.size(26.dp).clickable(onClick = onDelete),
+                Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onOpenMenu),
                 contentAlignment = Alignment.Center,
-            ) { HbGlyphs.Close(palette.textFaint, size = 12.dp) }
-        }
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            SettingsButton(t.settingsAutomations.edit, onClick = onEdit)
-            SettingsButton(t.settingsAutomations.history, onClick = onHistory)
-            SettingsButton(t.settingsAutomations.test, enabled = testLabel == null, onClick = onTest)
-            testLabel?.let {
-                HbText(
-                    it,
-                    style = HbType.readout.copy(fontSize = 10.sp),
-                    color = if (it == t.settingsAutomations.testFailed) palette.red else palette.textFaint,
-                )
+            ) {
+                HbGlyphs.MoreVertical(palette.textDim, size = 15.dp)
             }
         }
+    }
+}
+
+@Composable
+private fun AutomationActionDialog(
+    automation: AutomationInfo,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onHistory: () -> Unit,
+    onTest: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val palette = LocalHbPalette.current
+    val t = LocalStrings.current
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(palette.base)
+                .border(1.dp, palette.edge, RoundedCornerShape(18.dp))
+                .padding(20.dp),
+        ) {
+            // Header: kind badge + title + close
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    Modifier
+                        .border(
+                            width = 1.dp,
+                            color = palette.accent.copy(alpha = 0.45f),
+                            shape = RoundedCornerShape(4.dp),
+                        )
+                        .background(palette.accent.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                ) {
+                    HbText(
+                        KIND_LABEL[automation.kind] ?: automation.kind.uppercase(),
+                        style = HbType.readout.copy(fontSize = 9.sp, fontWeight = FontWeight.SemiBold),
+                        color = palette.accentBright,
+                    )
+                }
+                HbText(
+                    automation.name,
+                    style = HbType.headerBar.copy(fontSize = 16.sp),
+                    color = palette.text,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    HbGlyphs.Close(palette.textDim, size = 13.dp)
+                }
+            }
+
+            if (automation.summary.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                HbText(
+                    automation.summary,
+                    style = HbType.readout.copy(fontSize = 11.5.sp),
+                    color = palette.textFaint,
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
+            Box(Modifier.height(1.dp).fillMaxWidth().background(Color.White.copy(alpha = 0.07f)))
+            Spacer(Modifier.height(6.dp))
+
+            // Actions
+            ActionSheetItem(
+                label = t.settingsAutomations.edit,
+                onClick = onEdit,
+            )
+            ActionSheetItem(
+                label = t.settingsAutomations.test,
+                onClick = onTest,
+            )
+            ActionSheetItem(
+                label = t.settingsAutomations.history,
+                onClick = onHistory,
+            )
+
+            Spacer(Modifier.height(6.dp))
+            Box(Modifier.height(1.dp).fillMaxWidth().background(Color.White.copy(alpha = 0.07f)))
+            Spacer(Modifier.height(10.dp))
+
+            if (!confirmDelete) {
+                ActionSheetItem(
+                    label = t.common.delete,
+                    textColor = palette.red,
+                    onClick = { confirmDelete = true },
+                )
+            } else {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(palette.red.copy(alpha = 0.12f))
+                        .border(1.dp, palette.red.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                        .padding(12.dp),
+                ) {
+                    HbText(
+                        t.settingsAutomations.deleteWatcherTitle,
+                        style = HbType.read.copy(fontSize = 12.sp),
+                        color = palette.text,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        SettingsButton(t.common.cancel, onClick = { confirmDelete = false })
+                        Spacer(Modifier.width(8.dp))
+                        SettingsButton(t.common.delete, onClick = onDelete, tint = palette.red)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionSheetItem(
+    label: String,
+    textColor: Color = LocalHbPalette.current.text,
+    onClick: () -> Unit,
+) {
+    val palette = LocalHbPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HbText(
+            label,
+            style = HbType.read.copy(fontSize = 14.sp),
+            color = textColor,
+            modifier = Modifier.weight(1f),
+        )
+        HbGlyphs.ChevronRight(palette.textFaint, size = 10.dp)
     }
 }
