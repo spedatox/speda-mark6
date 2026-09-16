@@ -312,9 +312,8 @@ async def lifespan(app: FastAPI):
     from app.skills.memory import MemoryRecallCache
     from app.websocket.manager import WebSocketManager
 
-    # Constructed here rather than at 7 because the external proxy needs it too:
-    # an external peer runs the owner's turn, so it must know what the owner's
-    # in-process agents know. One instance for the process (Rule 6).
+    # Constructed here rather than at 7 because the generic external proxy needs
+    # it too. One instance for the process (Rule 6).
     memory_cache = MemoryRecallCache()
 
     ws_manager = WebSocketManager()
@@ -383,7 +382,7 @@ async def lifespan(app: FastAPI):
     app.state.registry = registry
     app.state.agent_registry = agent_registry
     app.state.agent_proxy = agent_proxy
-    # Permission asks relayed from external peers (the Forge's safety gate).
+    # Permission asks relayed from generic external peers.
     app.state.pending_asks = pending_asks
     app.state.orchestrator = orchestrator
     app.state.memory_cache = memory_cache

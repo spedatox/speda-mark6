@@ -437,10 +437,12 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   // memoized message rows from re-rendering during streaming.
   const stateRef = useRef(state)
   stateRef.current = state
+  const userCancelledRef = useRef(false)
   const sendRef = useRef<((text: string, opts?: SendOpts) => Promise<void>) | null>(null)
 
   const send = useCallback(async (text: string, opts: SendOpts = {}) => {
     if (state.isStreaming) return
+    userCancelledRef.current = false
 
     // Regenerate re-runs the existing last user turn — no new user bubble.
     if (!opts.regenerate) {
@@ -804,8 +806,18 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
         // Precise, phase-specific reason built by the watchdog — never filler.
         dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: timeoutReason || t.chatMain.timedOutFallback, unsent: !gotStart } })
       } else if (err instanceof Error && err.name === 'AbortError') {
-        // User-initiated stop — keep whatever streamed so far.
-        dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: state.activeSessionId ?? 0 } })
+        if (userCancelledRef.current) {
+          // User-initiated stop — keep whatever streamed so far.
+          dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: turnSessionRef.current ?? sendSessionId ?? 0 } })
+        } else {
+          // View switch, agent switch, or background abort: backend turn is STILL running!
+          // Remove from attachedRef so reattach can pick it up when the user returns.
+          attachedRef.current.delete(requestId)
+          if (runIdRef.current) {
+            attachedRef.current.delete(runIdRef.current)
+          }
+          // Do NOT dispatch FINISH_MESSAGE — the turn is STILL running on the backend.
+        }
       } else if (err instanceof AttachGone) {
         // The backend has no record of this turn any more: it finished while we
         // were reconnecting and aged out of the replay window. The answer is in
@@ -862,6 +874,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   // longer stops it), then abort the local fetch. The backend persists whatever
   // streamed so far, marked as cancelled.
   const stop = useCallback(() => {
+    userCancelledRef.current = true
     const rid = runIdRef.current
     if (rid) cancelRun(config, rid).catch(() => {})
     abortRef.current?.abort()
@@ -916,11 +929,19 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       sid !== turnOriginRef.current &&
       sid !== turnSessionRef.current
     ) {
+      if (runIdRef.current) {
+        attachedRef.current.delete(runIdRef.current)
+      }
       abortRef.current.abort()
       abortRef.current = null
       runIdRef.current = null
       turnSessionRef.current = null
       turnOriginRef.current = undefined
+    }
+    return () => {
+      if (runIdRef.current) {
+        attachedRef.current.delete(runIdRef.current)
+      }
     }
   }, [state.activeSessionId, config.agentId])
 

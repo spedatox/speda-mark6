@@ -467,6 +467,15 @@ class LegionRunner:
             "forge_pentester": "pentester",
         }[worker.worker_id]
 
+        logger.info(
+            "forge_execution_started",
+            extra={
+                "request_id": context.request_id, "job_id": run_id,
+                "tool": "Task", "worker": worker.worker_id, "role": role,
+                "backend": "forge",
+            },
+        )
+
         def forward(event: dict) -> None:
             self._safe_emit(emit, {"id": run_id, **event})
 
@@ -481,12 +490,28 @@ class LegionRunner:
                 emit=forward,
             )
         except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "forge_execution_finished",
+                extra={
+                    "request_id": context.request_id, "job_id": run_id,
+                    "tool": "Task", "worker": worker.worker_id, "role": role,
+                    "backend": "forge", "status": "failed", "error": str(exc),
+                },
+            )
             result = f"Forge worker failed: {exc}"
             self._safe_emit(emit, {
                 "id": run_id, "phase": "finished", "ok": False,
                 "report": result, "source": "forge",
             })
             return result
+        logger.info(
+            "forge_execution_finished",
+            extra={
+                "request_id": context.request_id, "job_id": run_id,
+                "tool": "Task", "worker": worker.worker_id, "role": role,
+                "backend": "forge", "status": "completed",
+            },
+        )
         self._safe_emit(emit, {
             "id": run_id, "phase": "finished", "ok": True,
             "report": result[:MAX_WORKER_RESULT_CHARS], "source": "forge",

@@ -293,7 +293,7 @@ export default function SubagentDetailView({ run, onClose }: Props) {
             fontSize: '0.72rem', color: 'var(--hb-text-dim)',
             letterSpacing: '0.04em',
           }}>
-            {run.agent}
+            {run.source === 'forge' ? `Forge · ${run.agent.replace(/^forge_/, '')}` : run.agent}
           </span>
         </div>
 

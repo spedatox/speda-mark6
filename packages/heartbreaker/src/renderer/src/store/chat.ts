@@ -127,6 +127,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'TAG_MESSAGE_SESSION':
       return {
         ...state,
+        activeSessionId: state.activeSessionId ?? action.payload.sessionId,
         messages: state.messages.map(m =>
           m.id === action.payload.id ? { ...m, sessionId: action.payload.sessionId } : m
         ),
@@ -294,7 +295,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         isStreaming: false,
-        activeSessionId: action.payload.sessionId,
+        activeSessionId: action.payload.sessionId || state.activeSessionId,
         messages: state.messages.map(m =>
           m.id === action.payload.id ? { ...m, isStreaming: false, status: undefined } : m
         ),

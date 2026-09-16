@@ -4,6 +4,12 @@
 import { useState } from 'react'
 import type { SubagentRun } from '../lib/types'
 
+function executionLabel(run: SubagentRun): string {
+  return run.source === 'forge'
+    ? `Forge · ${run.agent.replace(/^forge_/, '')}`
+    : run.agent
+}
+
 /**
  * What a coding peer delegated during a turn.
  *
@@ -105,7 +111,7 @@ function SubagentRow({
         <span style={{ color: 'var(--text-primary)' }}>
           {run.label || run.agent}
         </span>
-        <span style={{ opacity: 0.6 }}>{run.agent}</span>
+        <span style={{ opacity: 0.6 }}>{executionLabel(run)}</span>
 
         <span style={{ marginLeft: 'auto', opacity: 0.6, fontVariantNumeric: 'tabular-nums' }}>
           {run.running

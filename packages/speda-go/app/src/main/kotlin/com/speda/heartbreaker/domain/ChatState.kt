@@ -107,6 +107,7 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
     }
 
     is ChatAction.TagMessageSession -> state.copy(
+        activeSessionId = state.activeSessionId ?: action.sessionId,
         messages = state.messages.map { m ->
             if (m.id == action.id) m.copy(sessionId = action.sessionId) else m
         }.toPersistentList(),
@@ -284,7 +285,7 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
         } else {
             state.copy(
                 isStreaming = false,
-                activeSessionId = action.sessionId,
+                activeSessionId = if (action.sessionId != 0) action.sessionId else state.activeSessionId,
                 messages = state.messages.map { m ->
                     if (m.id == action.id) m.copy(isStreaming = false, status = null) else m
                 }.toPersistentList(),

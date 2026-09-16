@@ -89,6 +89,8 @@ import java.util.Locale
  */
 
 private const val POLL_MS = 3000L
+private const val SCROLL_TO_END = 1_000_000
+private const val STICK_SLACK_PX = 80
 
 @Composable
 fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
@@ -111,17 +113,21 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
     // Predictive back retracts EXTEND_ first, then closes — the Esc semantics.
     BackHandler { if (wide) wide = false else onClose() }
 
+    val rows = remember(entries) { CommTranscript.rows(entries) }
     val listState = rememberLazyListState()
     val pinnedToEnd by remember {
         derivedStateOf {
             val info = listState.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()
-            last == null || (last.index == info.totalItemsCount - 1 &&
-                last.offset + last.size <= info.viewportEndOffset + 80)
+            val last = info.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
+            last.index >= info.totalItemsCount - 1 &&
+                last.offset + last.size <= info.viewportEndOffset + STICK_SLACK_PX
         }
     }
-    LaunchedEffect(entries.size, wide) {
-        if (entries.isNotEmpty() && pinnedToEnd) listState.animateScrollToItem(entries.lastIndex)
+    val tailKey = rows.lastOrNull()?.msg?.key
+    LaunchedEffect(rows.size, tailKey, wide) {
+        if (rows.isNotEmpty() && pinnedToEnd) {
+            listState.scrollToItem(rows.lastIndex, SCROLL_TO_END)
+        }
     }
 
     val live = entries.count { it.status == "running" }
@@ -186,7 +192,6 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
                 } else {
                     // One timeline, every agent speaking for itself — the same
                     // transcript the war room and the desktop tray render.
-                    val rows = remember(entries) { CommTranscript.rows(entries) }
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxWidth().weight(1f, fill = false),

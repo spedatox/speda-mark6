@@ -18,6 +18,8 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10)
 }
 
+const WATCH_MS = 4000
+
 function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppConfig }) {
   const profile = useProfile()
   const { settings } = useSettings()
@@ -238,10 +240,12 @@ export default function ChatMain({ config, onSelectSession }: Props) {
   // memoized message rows from re-rendering during streaming.
   const stateRef = useRef(state)
   stateRef.current = state
+  const userCancelledRef = useRef(false)
   const sendRef = useRef<((text: string, opts?: SendOpts) => Promise<void>) | null>(null)
 
   const send = useCallback(async (text: string, opts: SendOpts = {}) => {
     if (state.isStreaming) return
+    userCancelledRef.current = false
 
     // Regenerate re-runs the existing last user turn — no new user bubble.
     if (!opts.regenerate) {
@@ -533,8 +537,18 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         // Precise, phase-specific reason built by the watchdog — never filler.
         dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: timeoutReason || 'The backend went silent and the request timed out.' } })
       } else if (err instanceof Error && err.name === 'AbortError') {
-        // User-initiated stop — keep whatever streamed so far.
-        dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: state.activeSessionId ?? 0 } })
+        if (userCancelledRef.current) {
+          // User-initiated stop — keep whatever streamed so far.
+          dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: turnSessionRef.current ?? sendSessionId ?? 0 } })
+        } else {
+          // View switch, agent switch, or background abort: backend turn is STILL running!
+          // Remove from attachedRef so reattach can pick it up when the user returns.
+          attachedRef.current.delete(requestId)
+          if (runIdRef.current) {
+            attachedRef.current.delete(runIdRef.current)
+          }
+          // Do NOT dispatch FINISH_MESSAGE — the turn is STILL running on the backend.
+        }
       } else if (err instanceof AttachGone) {
         // The backend has no record of this turn any more: it finished while we
         // were reconnecting and aged out of the replay window. The answer is in
@@ -586,6 +600,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
   // longer stops it), then abort the local fetch. The backend persists whatever
   // streamed so far, marked as cancelled.
   const stop = useCallback(() => {
+    userCancelledRef.current = true
     const rid = runIdRef.current
     if (rid) cancelRun(config, rid).catch(() => {})
     abortRef.current?.abort()
@@ -606,21 +621,19 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       sid !== turnOriginRef.current &&
       sid !== turnSessionRef.current
     ) {
-      // Two ids, because a turn has two identities before the backend answers:
-      // the view it was sent from (null in a brand-new chat) and the session it
-      // turns out to belong to. Matching EITHER means we are still looking at
-      // this turn — including the moment a new chat is assigned its id, which
-      // changes activeSessionId without being a switch away.
-      //
-      // The old guard required turnSessionRef to be set, so between Send and the
-      // first `start` event it did nothing: switching chats in that window left
-      // the fetch running, and its eventual death was painted as a backend
-      // failure. That window is where this bug lived.
+      if (runIdRef.current) {
+        attachedRef.current.delete(runIdRef.current)
+      }
       abortRef.current.abort()
       abortRef.current = null
       runIdRef.current = null
       turnSessionRef.current = null
       turnOriginRef.current = undefined
+    }
+    return () => {
+      if (runIdRef.current) {
+        attachedRef.current.delete(runIdRef.current)
+      }
     }
   }, [state.activeSessionId, config.agentId])
 
@@ -629,27 +642,27 @@ export default function ChatMain({ config, onSelectSession }: Props) {
   // (a job we switched away from, or one that survived an app reload). If so,
   // append a streaming bubble and tail its live stream — the run kept going
   // server-side the whole time, so this picks up mid-flight and finishes cleanly.
+  //
+  // And then KEEP asking, for as long as the session is open. A turn can begin
+  // in a conversation the owner is already looking at without them sending
+  // anything: a background legionnaire or a dispatched agent finishing reports
+  // back INTO the chat the work was ordered from. Asking once on entry meant
+  // those answers appeared only on the next visit to the session.
   useEffect(() => {
     const sid = state.activeSessionId
     if (sid == null) return
-    // Skip only when the local send streaming right now IS this session's turn;
-    // an orphaned fetch for another session no longer blocks reattach (it gets
-    // aborted by the effect above).
-    if (abortRef.current && turnSessionRef.current === sid) return
     let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
     const ctrl = new AbortController()
+    const sleep = (ms: number) => new Promise<void>(r => { timer = setTimeout(r, ms) })
 
-    ;(async () => {
-      const runs = await fetchActiveRuns(config, sid)
-      if (cancelled || runs.length === 0) return
-      const run = runs[0]
-      if (attachedRef.current.has(run.request_id)) return
+    const tail = async (run: { request_id: string }, status: string) => {
       attachedRef.current.add(run.request_id)
 
       const assistantId = makeId()
       dispatch({ type: 'ADD_ASSISTANT_MESSAGE', payload: {
         id: assistantId, role: 'assistant', content: '', tools: [],
-        isStreaming: true, isError: false, status: 'Reconnecting', sessionId: sid,
+        isStreaming: true, isError: false, status, sessionId: sid,
       } })
       runIdRef.current = run.request_id
 
@@ -677,7 +690,10 @@ export default function ChatMain({ config, onSelectSession }: Props) {
 
       try {
         for await (const event of attachStream(config, run.request_id, ctrl.signal)) {
-          if (event.type === 'thinking') {
+          if (event.type === 'start') {
+            const trig = (event.data as { trigger?: import('../lib/types').TriggerMeta } | null)?.trigger
+            if (trig) dispatch({ type: 'SET_MESSAGE_TRIGGER', payload: { id: assistantId, trigger: trig } })
+          } else if (event.type === 'thinking') {
             const d = event.data as { text?: string; redacted?: boolean }
             if (d.redacted) {
               dispatch({ type: 'THINKING_REDACTED', payload: { id: assistantId } })
@@ -699,11 +715,8 @@ export default function ChatMain({ config, onSelectSession }: Props) {
             const d = event.data as { id: string; result: string }
             dispatch({ type: 'SET_TOOL_RESULT', payload: { id: assistantId, toolId: d.id, result: d.result } })
           } else if (event.type === 'permission_request') {
-          // A peer's gate stopped an irreversible operation. The card replaces
-          // nothing and blocks nothing — the peer is already counting down and
-          // will deny on its own if the owner never answers.
-          setPendingAsk(event.data as PendingAsk)
-        } else if (event.type === 'file') {
+            setPendingAsk(event.data as PendingAsk)
+          } else if (event.type === 'file') {
             dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
           } else if (event.type === 'done') {
             markThinkingDone()
@@ -735,9 +748,34 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         // back re-attaches (a sticky entry here made the SECOND return refuse).
         if (!settled) attachedRef.current.delete(run.request_id)
       }
+    }
+
+    ;(async () => {
+      let entering = true
+      while (!cancelled) {
+        if (!abortRef.current) {
+          const runs = await fetchActiveRuns(config, sid)
+          if (cancelled) return
+          const run = runs.find(
+            r => !attachedRef.current.has(r.request_id) && r.request_id !== runIdRef.current,
+          )
+          entering = entering && runs.length > 0
+          if (run) {
+            await tail(run, entering ? 'Reconnecting' : 'Reporting back')
+            entering = false
+            continue
+          }
+        }
+        entering = false
+        await sleep(WATCH_MS)
+      }
     })()
 
-    return () => { cancelled = true; ctrl.abort() }
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      ctrl.abort()
+    }
   }, [state.activeSessionId, config, dispatch])
 
   const handleDelete = useCallback((id: string) => {

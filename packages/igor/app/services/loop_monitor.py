@@ -6,11 +6,11 @@ Event-loop stall detector.
 
 The backend is one uvicorn process on one event loop, and everything shares it:
 every HTTP request, every SSE stream, and every WebSocket — the Flutter client,
-the Forge peers, the lot. Any coroutine that occupies the loop without awaiting
+external peers, the lot. Any coroutine that occupies the loop without awaiting
 freezes all of them at once, and the failure does not look like a stall. It
 looks like the network died: uvicorn pings every WebSocket every 20 s and closes
 the ones that miss the deadline, so a long-enough block drops every connected
-client in the same second. That is precisely how both Forge peers were dying
+client in the same second. That is precisely how multiple peers were dying
 together, dozens of times a day, while the process itself stayed healthy and
 logged nothing at all.
 

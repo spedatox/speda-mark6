@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-# A little longer than the peer's own ask timeout (FORGE_ASK_TIMEOUT_S, 120s), so
+# A little longer than the legacy peer ask timeout (120s), so
 # the peer is always the first to give up. If Igor expired first it would drop
 # the record while the peer was still waiting, and a late approval would arrive
 # with nowhere to go.

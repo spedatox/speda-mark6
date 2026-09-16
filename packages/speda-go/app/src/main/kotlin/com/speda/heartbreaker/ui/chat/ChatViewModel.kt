@@ -5,6 +5,7 @@ package com.speda.heartbreaker.ui.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.speda.heartbreaker.data.ActiveRun
 import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.data.MessageCache
 import com.speda.heartbreaker.data.MessageJson
@@ -171,6 +172,8 @@ class ChatViewModel(
     // Singleton handles mirroring the ChatMain refs.
     private var sendJob: Job? = null
     private var reattachJob: Job? = null
+    private var activeRunsWatcherJob: Job? = null
+    private var userStopped = false
     private var runId: String? = null          // request_id of the visible streaming turn (Stop cancels this)
     private var turnSessionId: Int? = null      // which session the in-flight local send belongs to
     /** The session the in-flight turn was SENT from, recorded at send time. In a
@@ -189,6 +192,9 @@ class ChatViewModel(
     /** Point the engine at an agent. Cancels any in-flight turn and reloads. */
     fun onConfig(config: AppConfig) {
         if (state.value.config == config) return
+        val rid = runId
+        if (rid != null) attached.remove(rid)
+        activeRunsWatcherJob?.cancel()
         sendJob?.cancel(); reattachJob?.cancel()
         runId = null; turnSessionId = null; turnOriginSessionId = null; turnInFlight = false; attached.clear()
         dispatch(ChatAction.SetConfig(config))
@@ -198,8 +204,11 @@ class ChatViewModel(
 
     /** [projectId] binds the new chat to a project; null starts a loose one. */
     fun newChat(projectId: Int? = null) {
+        activeRunsWatcherJob?.cancel()
         reattachJob?.cancel()
         if (sendJob?.isActive == true && turnInFlight) {
+            val rid = runId
+            if (rid != null) attached.remove(rid)
             sendJob?.cancel(); runId = null; turnSessionId = null; turnOriginSessionId = null; turnInFlight = false
         }
         dispatch(ChatAction.NewChat(projectId))
@@ -227,6 +236,7 @@ class ChatViewModel(
 
     fun selectSession(sessionId: Int, projectId: Int? = null) {
         val cfg = state.value.config ?: return
+        activeRunsWatcherJob?.cancel()
         reattachJob?.cancel()
         // Abort-on-switch: if a local send is streaming for ANOTHER session, drop
         // the local fetch (the run keeps going server-side; reattach owns it).
@@ -241,6 +251,8 @@ class ChatViewModel(
             sessionId != turnOriginSessionId &&
             sessionId != turnSessionId
         ) {
+            val rid = runId
+            if (rid != null) attached.remove(rid)
             sendJob?.cancel(); runId = null; turnSessionId = null; turnOriginSessionId = null; turnInFlight = false
         }
         viewModelScope.launch {
@@ -252,7 +264,7 @@ class ChatViewModel(
                 cache.load(cfg.agentId, sessionId) ?: emptyList()
             }
             dispatch(ChatAction.SelectSession(sessionId, messages, projectId))
-            maybeReattach(sessionId, cfg)
+            startActiveRunsWatcher(sessionId, cfg)
         }
     }
 
@@ -285,6 +297,7 @@ class ChatViewModel(
     fun send(text: String, opts: IgorApi.StreamOpts = IgorApi.StreamOpts()) {
         val cfg = state.value.config ?: return
         if (state.value.isStreaming) return
+        userStopped = false
 
         if (!opts.regenerate) {
             // The bubble carries what the owner attached: images as data: URLs for
@@ -401,10 +414,13 @@ class ChatViewModel(
 
     /** Cancel the detached run on the backend, then abort the local fetch. */
     fun stop() {
+        userStopped = true
         val rid = runId
         val cfg = state.value.config
         if (rid != null && cfg != null) viewModelScope.launch { api.cancelRun(cfg, rid) }
         sendJob?.cancel()
+        activeRunsWatcherJob?.cancel()
+        reattachJob?.cancel()
         // Stop means stop. The speaker is on viewModelScope precisely so it
         // survives the stream ending, which also means cancelling the stream
         // does not silence it — this has to.
@@ -414,46 +430,88 @@ class ChatViewModel(
     override fun onCleared() {
         // Nothing keeps talking into a torn-down screen.
         stopSpeaking()
+        activeRunsWatcherJob?.cancel()
+        reattachJob?.cancel()
         super.onCleared()
     }
 
-    // ── Reattach ────────────────────────────────────────────────────────────────
+    // ── Reattach & active runs watcher ──────────────────────────────────────────
 
-    private fun maybeReattach(sessionId: Int, cfg: AppConfig) {
-        // Skip only when the local send streaming right now IS this session's turn.
-        if (sendJob?.isActive == true && turnSessionId == sessionId) return
-        reattachJob?.cancel()
-        reattachJob = viewModelScope.launch {
-            val run = api.fetchActiveRuns(cfg, sessionId).firstOrNull() ?: return@launch
-            if (!attached.add(run.requestId)) return@launch
-            val assistantId = makeId()
-            dispatch(
-                ChatAction.AddAssistantMessage(
-                    ChatMessage(id = assistantId, role = Role.Assistant, content = "", isStreaming = true, status = strings.chatMain.statusReconnecting, sessionId = sessionId),
-                ),
-            )
-            runId = run.requestId
-            var settled = false
-            try {
-                collectStream(
-                    flow = api.attachStream(cfg, run.requestId),
-                    assistantId = assistantId,
-                    fallbackSessionId = sessionId,
-                    watchdogModel = null, // attach has no watchdog
-                    reattach = {
-                        val rid = runId
-                        if (rid != null) api.attachStream(cfg, rid) else null
-                    },
-                    softLanding = true,   // a dropped reattach leaves partial text, no error
-                ) { }
-                settled = true
-            } catch (e: CancellationException) {
-                throw e
-            } finally {
-                if (runId == run.requestId) runId = null
-                // No terminal seen → we left mid-run; forget the id so returning re-attaches.
-                if (!settled) attached.remove(run.requestId)
+    private fun startActiveRunsWatcher(sessionId: Int, cfg: AppConfig) {
+        activeRunsWatcherJob?.cancel()
+        activeRunsWatcherJob = viewModelScope.launch {
+            var entering = true
+            while (isActive) {
+                // Don't poll over our own send if it belongs to this session
+                val isOwnSendActive = sendJob?.isActive == true &&
+                    (turnSessionId == sessionId || (turnSessionId == null && turnOriginSessionId == sessionId))
+                if (!isOwnSendActive) {
+                    val runs = runCatching { api.fetchActiveRuns(cfg, sessionId) }.getOrNull() ?: emptyList()
+                    val run = runs.firstOrNull { !attached.contains(it.requestId) && it.requestId != runId }
+                    if (run != null) {
+                        tailActiveRun(
+                            run,
+                            sessionId,
+                            cfg,
+                            strings.chatMain.statusReconnecting,
+                        )
+                        entering = false
+                        continue
+                    }
+                }
+                entering = false
+                delay(3_000L)
             }
+        }
+    }
+
+    private suspend fun tailActiveRun(
+        run: ActiveRun,
+        sessionId: Int,
+        cfg: AppConfig,
+        status: String,
+    ) {
+        if (!attached.add(run.requestId)) return
+        val assistantId = makeId()
+        dispatch(
+            ChatAction.AddAssistantMessage(
+                ChatMessage(
+                    id = assistantId,
+                    role = Role.Assistant,
+                    content = "",
+                    isStreaming = true,
+                    status = status,
+                    sessionId = sessionId,
+                ),
+            ),
+        )
+        runId = run.requestId
+        var settled = false
+        try {
+            collectStream(
+                flow = api.attachStream(cfg, run.requestId),
+                assistantId = assistantId,
+                fallbackSessionId = sessionId,
+                watchdogModel = null, // attach has no watchdog
+                reattach = {
+                    val rid = runId
+                    if (rid != null) api.attachStream(cfg, rid) else null
+                },
+                softLanding = true,   // a dropped reattach leaves partial text, no error
+            ) { doneSessionId ->
+                refreshSessions()
+                pollTitle(doneSessionId, cfg)
+                if (state.value.activeSessionId == doneSessionId) {
+                    cache.save(cfg.agentId, doneSessionId, state.value.messages)
+                }
+            }
+            settled = true
+        } catch (e: CancellationException) {
+            throw e
+        } finally {
+            if (runId == run.requestId) runId = null
+            // No terminal seen → we left mid-run; forget the id so returning re-attaches.
+            if (!settled) attached.remove(run.requestId)
         }
     }
 
@@ -687,9 +745,16 @@ class ChatViewModel(
                 flush()
                 if (timedOut) {
                     dispatch(ChatAction.ErrorMessage(assistantId, timeoutReason.ifEmpty { strings.chatMain.timedOutFallback }))
-                } else if (!settled) {
-                    // User-initiated stop or a view switch — keep whatever streamed.
-                    dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
+                } else if (userStopped) {
+                    if (!settled) {
+                        dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
+                    }
+                } else {
+                    // View switch, agent switch, or background abort: backend turn is STILL running!
+                    // Remove from attached set so watcher can reattach when returning.
+                    val activeRid = runId
+                    if (activeRid != null) attached.remove(activeRid)
+                    // Do NOT dispatch FinishMessage — the turn is STILL running on the backend.
                 }
                 throw e
             } catch (e: IgorApi.AttachGone) {
@@ -715,8 +780,10 @@ class ChatViewModel(
                     runCatching { api.fetchActiveRuns(c) }.getOrDefault(emptyList())
                         .any { it.requestId == liveId }
                 } == true
-                if (softLanding || stillRunning) {
-                    if (stillRunning && liveId != null) attached.remove(liveId)
+                if (stillRunning) {
+                    if (liveId != null) attached.remove(liveId)
+                    dispatch(ChatAction.DeleteMessage(assistantId))
+                } else if (softLanding) {
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
                 } else {
                     dispatch(ChatAction.ErrorMessage(assistantId, strings.chatMain.networkError))
@@ -744,8 +811,10 @@ class ChatViewModel(
                     runCatching { api.fetchActiveRuns(c) }.getOrDefault(emptyList())
                         .any { it.requestId == liveId }
                 } == true
-                if (net && (softLanding || stillRunning)) {
-                    if (stillRunning && liveId != null) attached.remove(liveId)
+                if (net && stillRunning) {
+                    if (liveId != null) attached.remove(liveId)
+                    dispatch(ChatAction.DeleteMessage(assistantId))
+                } else if (net && softLanding) {
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
                 } else {
                     dispatch(ChatAction.ErrorMessage(assistantId,
