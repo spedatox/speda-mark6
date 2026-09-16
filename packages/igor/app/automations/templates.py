@@ -72,13 +72,15 @@ SCHEDULE_TEMPLATES = ("briefing", "task", "reminder", "proactive_ask")
 HOOK_TEMPLATES = ("hook_keyword", "hook_address", "hook_mail")
 TEMPLATES = SCHEDULE_TEMPLATES + HOOK_TEMPLATES
 
-# What every push-mode automation must be told, once, at the end. Kept here
-# rather than in the polisher's prompt because it is a fact about the transport,
-# not a matter of style — a model may not rephrase or omit it.
-_PUSH_GUARD = (
+_PUSH_GUARD_TR = (
     "Yazdığın metin owner'a otomatik push olarak iletilir — "
     "send_telegram_message ÇAĞIRMA."
 )
+_PUSH_GUARD_EN = (
+    "Your reply is automatically delivered to the owner as a push notification — "
+    "do NOT call send_telegram_message."
+)
+_PUSH_GUARD = _PUSH_GUARD_TR
 
 
 class TemplateError(ValueError):
@@ -193,9 +195,10 @@ def build_intent(spec: dict) -> str:
     """
     template = spec.get("template")
     body = (spec.get("instruction") or spec.get("intent") or "").strip()
+    is_en = spec.get("language") == "en"
 
     if template == "proactive_ask":
-        return _ask_intent(spec, body)
+        return _ask_intent(spec, body, is_en=is_en)
 
     parts = [body]
     # Keyed off the SCHEDULE, not the template: any push automation firing on a
@@ -206,15 +209,21 @@ def build_intent(spec: dict) -> str:
     if schedule.get("frequency") == "once":
         when = schedule.get("date")
         if when:
-            parts.append(
-                f"Bu tek seferlik bir hatırlatmadır ve bugün {when} tarihinde "
-                "tetiklendi. Tarihi kendin hesaplama, yukarıdakini kullan."
-            )
-    parts.append(_PUSH_GUARD)
+            if is_en:
+                parts.append(
+                    f"This is a one-time reminder triggered today on {when}. "
+                    "Do not calculate the date yourself; use the one above."
+                )
+            else:
+                parts.append(
+                    f"Bu tek seferlik bir hatırlatmadır ve bugün {when} tarihinde "
+                    "tetiklendi. Tarihi kendin hesaplama, yukarıdakini kullan."
+                )
+    parts.append(_PUSH_GUARD_EN if is_en else _PUSH_GUARD_TR)
     return "\n\n".join(p for p in parts if p)
 
 
-def _ask_intent(spec: dict, body: str) -> str:
+def _ask_intent(spec: dict, body: str, is_en: bool = False) -> str:
     """The proactive-ask instruction: content, then the exact `reminders` call.
 
     The tool call is spelled out rather than described because its shape is what
@@ -228,6 +237,19 @@ def _ask_intent(spec: dict, body: str) -> str:
     asks = int(spec.get("max_asks") or 10)
     rid = spec.get("reminder_id") or _slug(spec.get("name") or "", "owner_ask")
     rendered = ", ".join(f"'{o}'" for o in options)
+
+    if is_en:
+        return (
+            f"{body}\n\n"
+            "THEN — and this is critical — send your message using the `reminders` tool:\n"
+            f"  action='ask', reminder_id='{rid}', text=<your message>,\n"
+            f"  options=[{rendered}],\n"
+            f"  every_minutes={every}, max_asks={asks}\n\n"
+            "This tool sends the message with buttons and RE-ASKS every "
+            f"{every} minutes until the owner answers. Do NOT call send_telegram_message "
+            "and do NOT write the message as a plain reply — this tool is the only "
+            "delivery path. If the tool says 'already_open', do not send a second message."
+        )
 
     return (
         f"{body}\n\n"

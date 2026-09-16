@@ -393,3 +393,35 @@ async def test_push_keeps_the_failure_marker_a_broken_turn_was_stamped_with(db):
     )
     assert bots.sent, "a failed turn still delivers what it had"
     assert "Partial answer." in bots.sent[-1][1]
+
+
+def test_language_clause_honors_explicit_language():
+    assert "Turkish" in tr._language_clause("tr")
+    assert "English" in tr._language_clause("en")
+
+
+def test_build_seed_includes_explicit_language_clause():
+    seed_en = tr.build_seed({"intent": "check status", "language": "en"}, "push")
+    assert "goes to the owner in English" in seed_en
+    seed_tr = tr.build_seed({"intent": "durumu kontrol et", "language": "tr"}, "push")
+    assert "goes to the owner in Turkish" in seed_tr
+
+
+def test_composer_callback_carries_language():
+    from app.automations import composer
+    wf = composer.compose({"kind": "schedule", "cron": "0 9 * * *", "language": "tr"})
+    cb = [n for n in wf["nodes"] if n["name"] == "Notify Speda"][0]
+    body = cb["parameters"]["jsonBody"]
+    assert '"language": "tr"' in body
+
+
+def test_templates_intent_language_adaptation():
+    from app.automations import templates
+    intent_en = templates.build_intent({
+        "template": "briefing", "instruction": "summarize headlines", "language": "en",
+    })
+    assert "Your reply is automatically delivered" in intent_en
+    intent_tr = templates.build_intent({
+        "template": "briefing", "instruction": "haberleri özetle", "language": "tr",
+    })
+    assert "Yazdığın metin owner'a otomatik push olarak iletilir" in intent_tr

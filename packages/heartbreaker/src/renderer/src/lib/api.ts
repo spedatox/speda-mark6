@@ -961,6 +961,7 @@ export interface AutomationInfo {
    *  sent as a Telegram audio message instead of text. Always false for
    *  proactive_ask, which already delivers through the reminders tool. */
   voice: boolean
+  language?: string | null
 }
 
 /** The form's payload. Mirrors the composer spec; the backend validates it. */
@@ -990,6 +991,7 @@ export interface AutomationDraft {
   interval_minutes?: number
   /** Any push template except proactive_ask. */
   voice?: boolean
+  language?: string | null
 }
 
 export interface AutomationsStatus {

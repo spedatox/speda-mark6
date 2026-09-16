@@ -82,6 +82,9 @@ def tts_locale(explicit: str | None = None) -> str:
     the master switch.
     """
     if explicit:
+        norm = normalize(explicit)
+        if norm in LANGUAGES and (explicit == norm or explicit.lower() == norm):
+            return LANGUAGES[norm]["tts"]
         return explicit
     return settings.tts_locale or LANGUAGES[current()]["tts"]
 

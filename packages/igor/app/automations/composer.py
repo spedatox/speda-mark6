@@ -81,7 +81,7 @@ def _secret_headers() -> dict:
 
 def _callback_body(kind: str, name: str, intent: str, output_mode: str = "push",
                    with_facts: bool = False, allow_override: bool = False,
-                   voice: bool = False) -> str:
+                   voice: bool = False, language: str | None = None) -> str:
     """n8n expression building the /trigger/speda body. Static strings are
     JSON-escaped (valid JS literals); `$json` carries the upstream item so Speda
     sees what actually fired (the new email, the changed page, the feed item).
@@ -103,6 +103,9 @@ def _callback_body(kind: str, name: str, intent: str, output_mode: str = "push",
     and read by core.trigger_runner._deliver, which speaks the reply through
     whichever TTS engine the firing agent's profile names instead of pushing
     plain text.
+
+    `language`: optional target language code (e.g. 'en', 'tr'). If None, inherits
+    the system default.
     """
     # With a day-flags node upstream, the computed facts are APPENDED to the
     # intent here rather than baked into it — they are only knowable at fire
@@ -118,6 +121,7 @@ def _callback_body(kind: str, name: str, intent: str, output_mode: str = "push",
         f"\"automation\": {json.dumps(name)}, "
         f"\"intent\": {intent_expr}, "
         f"\"voice\": {json.dumps(bool(voice))}, "
+        f"\"language\": {json.dumps(language)}, "
         "\"data\": $json }, "
         f"\"output_mode\": {json.dumps(output_mode)} }}) }}}}"
     )
@@ -125,7 +129,8 @@ def _callback_body(kind: str, name: str, intent: str, output_mode: str = "push",
 
 def _callback_node(kind: str, name: str, intent: str, x: int, agent_id: str = "speda",
                    output_mode: str = "push", with_facts: bool = False,
-                   allow_override: bool = False, voice: bool = False) -> dict:
+                   allow_override: bool = False, voice: bool = False,
+                   language: str | None = None) -> dict:
     """The terminal HTTP Request → the owning agent. Carries both required
     secrets and fires /trigger/{agent_id} so the push is composed in that
     agent's voice."""
@@ -136,7 +141,7 @@ def _callback_node(kind: str, name: str, intent: str, x: int, agent_id: str = "s
         "headerParameters": _secret_headers(),
         "sendBody": True,
         "specifyBody": "json",
-        "jsonBody": _callback_body(kind, name, intent, output_mode, with_facts, allow_override, voice),
+        "jsonBody": _callback_body(kind, name, intent, output_mode, with_facts, allow_override, voice, language),
         "options": {},
     })
 
@@ -315,6 +320,7 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
     # speak, and proactive_ask's reply already goes out through the
     # `reminders` tool with buttons, not a Telegram audio message.
     voice = bool(spec.get("voice")) and mode == "push"
+    lang = spec.get("language")
 
     if kind == "schedule":
         # Structured schedule first: cron is compiled from it, never stored as
@@ -347,7 +353,7 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
             nodes.append(_node("Day facts", _T_CODE, x, {"jsCode": _day_flags_code(flags)}))
             chain.append("Day facts")
             x += 220
-        nodes.append(_callback_node(kind, name, intent, x, agent_id, mode, bool(flags), voice=voice))
+        nodes.append(_callback_node(kind, name, intent, x, agent_id, mode, bool(flags), voice=voice, language=lang))
         chain.append("Notify Speda")
 
     elif kind == "web_watch":
@@ -368,7 +374,7 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
         gate = _node("Detect change", _T_CODE, 440, {
             "jsCode": _gate_code(spec.get("look_for"), expires_at)
         })
-        cb = _callback_node(kind, name, intent, 660, agent_id, mode, voice=voice)
+        cb = _callback_node(kind, name, intent, 660, agent_id, mode, voice=voice, language=lang)
         nodes = [trigger, fetch, gate, cb]
         chain = ("Schedule", "Fetch page", "Detect change", "Notify Speda")
 
@@ -381,7 +387,7 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
             "feedUrl": feed,
             "pollTimes": {"item": [{"mode": "everyX", "value": every, "unit": "minutes"}]},
         })
-        cb = _callback_node(kind, name, intent, 220, agent_id, mode, voice=voice)
+        cb = _callback_node(kind, name, intent, 220, agent_id, mode, voice=voice, language=lang)
         nodes, chain = [trigger, cb], ("RSS", "Notify Speda")
 
     elif kind == "mail_watch":
@@ -409,7 +415,7 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
             "options": {},
         }, retryOnFail=True, maxTries=3, waitBetweenTries=5000)
         gate = _node("Gate", _T_CODE, 440, {"jsCode": _mail_gate_code(label)})
-        cb = _callback_node(kind, name, intent, 660, agent_id, mode, allow_override=True, voice=voice)
+        cb = _callback_node(kind, name, intent, 660, agent_id, mode, allow_override=True, voice=voice, language=lang)
         # Exactly-once, same contract as scripts/n8n/mail_watch.json: this call
         # commits LAST, after the trigger already succeeded, so a failed ack
         # leaves the mail unlabelled and it is simply re-scanned next poll —
@@ -437,7 +443,7 @@ def compose(spec: dict, agent_id: str = "speda") -> dict:
         trigger = _node("Webhook", _T_WEBHOOK, 0, {
             "path": path, "httpMethod": "POST", "responseMode": "onReceived",
         })
-        cb = _callback_node(kind, name, intent, 220, agent_id, mode, voice=voice)
+        cb = _callback_node(kind, name, intent, 220, agent_id, mode, voice=voice, language=lang)
         nodes, chain = [trigger, cb], ("Webhook", "Notify Speda")
 
     else:

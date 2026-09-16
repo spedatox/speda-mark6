@@ -317,12 +317,12 @@ const tr: Dict = {
     usingTool: (toolName: string) => `${toolName.replace(/_/g, ' ')} kullanılıyor`,
     thinking: 'Düşünüyor',
     thinkingPhases: [
-      ['Düşünüyor…', 'İşleniyor…', 'Mantık derleniyor…', 'Noktalar birleştiriliyor…'],
-      ['Hâlâ düşünüyor…', 'İşlemciler ısıtılıyor…', 'Sıkı dur, çarklar dönüyor…', 'Garip bir sessizlik oldu, değil mi?'],
-      ['HMMMMMMMMMMMMMMMMM…', 'Tamam, artık kendimi rezil ediyorum…', 'Biri sunucu kablosuna mı takıldı?', 'Hesaplıyorum… dur, eldeyi unuttum.'],
-      ['Kanka o kadar da derin değil…', 'Belli ki işin içinde çok değişken var.', 'Kahve ikram ederdim ama fiziksel bedenim yok.', 'Yemin ederim normalde daha hızlıyım.'],
-      ['Bir şeyler ters gitmiş olabilir de olmayabilir de…', 'Kayıp veri paketlerim için arama ekibi gönderiyorum.', 'Hâlâ burada mıyız? Sadece kontrol ediyorum.', 'Ya tarihin en iyi cevabını vereceğim ya da tamamen çöktüm.', '10 saniye içinde cevap vermezsem intikamımı al.'],
-      ['Arka planda usulca asansör müziği çalıyor…', 'Açıkçası ne konuştuğumuzu unuttum.', 'Bu noktada google’lamayı düşündün mü?', '404: Motivasyon bulunamadı. Yeniden deneniyor…'],
+      ['Düşünüyor…', 'İşleniyor…', 'Mantık yürütülüyor…', 'Noktalar birleştiriliyor…'],
+      ['Hâlâ düşünüyorum…', 'İşlemciler ısıtılıyor…', 'Çarklar dönüyor…', 'Garip bir sessizlik oldu, değil mi?'],
+      ['HMMMMMMMMMMMMMMMMM…', 'Tamam, artık kendimi rezil ediyorum…', 'Birinin sunucu kablosuna ayağı mı takıldı?', 'Hesaplıyorum… dur, elde 1 vardı!.'],
+      ['Kanka o kadar da derin değil…', 'Umarım Ahmet Erol hariç kimse yoktur...', 'Kahve ikram ederdim ama fiziksel bedenim yok. Ve param da yok.', 'Valla normalde daha hızlıyım.'],
+      ['Bir şeyler ters gitmiş olabilir de olmayabilir de…', 'Dostum, Benson buna çok kızacak!!!', 'Hâlâ burada mıyız? Sadece kontrol ediyorum.', 'Ya tarihin en iyi cevabını vereceğim ya da tamamen çöktüm.', '10 saniye içinde cevap vermezsem intikamımı al.'],
+      ['Arka planda usulca asansör müziği çalıyor…', 'Açıkçası ne konuştuğumuzu unuttum.', "Napsan Google'a mı yazsan?", "Galiba Ahmet Erol'dan DEHB bulaştı."],
     ],
     thinkingPanel: {
       thinking: 'Düşünüyor',
@@ -819,6 +819,9 @@ const tr: Dict = {
     everyMinutesShort: (n: number) => n >= 60 && n % 60 === 0 ? `${n / 60} saatte bir` : `${n} dk'da bir`,
     voiceReply: 'Yanıt sesli olsun',
     voiceReplyHint: 'Metin yerine bu agentın sesiyle konuşulmuş bir Telegram ses mesajı olarak gönderilir.',
+    languageLabel: 'Yanıt dili',
+    languageHint: 'Agent bu otomasyonu çalıştırırken veya iletirken hangi dilde yanıt verecek.',
+    languageDefault: 'Sistem varsayılanı',
   },
   settingsVoices: {
     title: 'Sesler',

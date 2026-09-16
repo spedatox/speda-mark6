@@ -431,6 +431,9 @@ data class AppStrings(
         val everyMinutesShort: (Int) -> String,
         val voiceReply: String,
         val voiceReplyHint: String,
+        val languageLabel: String,
+        val languageHint: String,
+        val languageDefault: String,
         // ── List-row actions ────────────────────────────────────────────────
         val test: String,
         val testSending: String,

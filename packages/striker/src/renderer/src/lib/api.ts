@@ -723,6 +723,7 @@ export interface AutomationInfo {
   expires_at: string | null
   last_fired_at: string | null
   summary: string
+  language?: string | null
 }
 
 export interface AutomationsStatus {

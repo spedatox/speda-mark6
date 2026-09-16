@@ -91,6 +91,7 @@ def _as_dict(a: Automation) -> dict:
         # whether the reply is spoken through the firing agent's TTS voice
         # and sent as a Telegram audio message instead of plain text.
         "voice": bool(spec.get("voice")),
+        "language": spec.get("language"),
     }
     if a.kind == "webhook":
         d["webhook_url"] = _webhook_url(spec)
@@ -307,15 +308,18 @@ async def update_automation(
 
     for field in ("name", "schedule", "instruction", "options", "every_minutes",
                   "max_asks", "day_flags", "url", "look_for", "domain",
-                  "recipient", "interval_minutes", "voice"):
-        if field in changes and changes[field] is not None:
-            spec[field] = changes[field]
+                  "recipient", "interval_minutes", "voice", "language"):
+        if field in changes:
+            if field == "language" and not changes[field]:
+                spec.pop("language", None)
+            elif changes[field] is not None:
+                spec[field] = changes[field]
 
-    # An edited instruction is the owner's words again, so it goes back through
-    # the polisher — otherwise his rewrite would sit beneath a polished version
-    # of the sentence he just replaced.
-    if "instruction" in changes and changes["instruction"] is not None:
-        spec["instruction_raw"] = changes["instruction"]
+    # An edited instruction or changed language goes back through the polisher
+    # so the stored intent stays fresh in the right words and language.
+    if ("instruction" in changes and changes["instruction"] is not None) or "language" in changes:
+        if "instruction" in changes and changes["instruction"] is not None:
+            spec["instruction_raw"] = changes["instruction"]
         spec["intent_status"] = "raw"
 
     # A schedule that no longer fires once must lose the expiry the old one
@@ -447,6 +451,7 @@ async def test_fire(
             # tests the WRONG delivery path — exactly the bug this fixes:
             # push-only, same as composer.py's own `mode == "push"` gate.
             "voice": bool(spec.get("voice")) and output_mode == "push",
+            "language": spec.get("language"),
         },
         output_mode=output_mode,
         request_id=request_id,

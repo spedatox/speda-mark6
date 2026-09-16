@@ -72,6 +72,7 @@ data class AutomationInfo(
      *  sent as a Telegram audio message instead of text. Always false for
      *  proactive_ask, which already delivers through the reminders tool. */
     val voice: Boolean = false,
+    val language: String? = null,
 )
 
 /**
@@ -150,6 +151,7 @@ data class AutomationDraft(
     @SerialName("interval_minutes") val intervalMinutes: Int? = null,
     /** Any push template except proactive_ask. */
     val voice: Boolean? = null,
+    val language: String? = null,
 )
 
 @Serializable

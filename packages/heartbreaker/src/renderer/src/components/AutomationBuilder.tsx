@@ -218,6 +218,7 @@ export function AutomationBuilder({ existing, agents, onCancel, onSave }: {
   const [maxAsks, setMaxAsks] = useState(existing?.max_asks ?? 10)
   const [dayFlags, setDayFlags] = useState<AutomationDayFlag[]>(existing?.day_flags ?? [])
   const [voice, setVoice] = useState(existing?.voice ?? false)
+  const [language, setLanguage] = useState<string | null>(existing?.language ?? null)
   // Hook fields.
   const [url, setUrl] = useState(existing?.url ?? '')
   const [lookFor, setLookFor] = useState(existing?.look_for ?? '')
@@ -285,6 +286,7 @@ export function AutomationBuilder({ existing, agents, onCancel, onSave }: {
       // so never sent for one: a checkbox nobody can see must not carry a
       // value into the spec either.
       voice: template === 'proactive_ask' ? false : voice,
+      language: language || null,
     }
     if (isHook(template)) {
       draft.interval_minutes = intervalMinutes
@@ -364,6 +366,18 @@ export function AutomationBuilder({ existing, agents, onCancel, onSave }: {
                   {ag.name} — {ag.domain}
                 </option>
               ))}
+            </select>
+          </SettingsField>
+
+          <SettingsField label={a.languageLabel} hint={a.languageHint}>
+            <select
+              value={language ?? ''}
+              onChange={e => setLanguage(e.target.value ? e.target.value : null)}
+              style={fieldStyle}
+            >
+              <option value="">{a.languageDefault}</option>
+              <option value="en">English</option>
+              <option value="tr">Türkçe</option>
             </select>
           </SettingsField>
 

@@ -67,7 +67,7 @@ def format_trigger_context(payload: dict) -> dict:
     }
 
 
-def _language_clause() -> str:
+def _language_clause(lang: str | None = None) -> str:
     """The language contract, restated at the END of an automated seed.
 
     It is already in the system prompt, and for a chat turn that is enough. An
@@ -84,7 +84,7 @@ def _language_clause() -> str:
     every automation stored before that still carries the old one, and this is
     what makes those fire correctly without a migration.
     """
-    name = language.name_of()
+    name = language.name_of(lang)
     return (
         f"\n\nLANGUAGE — the message you are about to write goes to the owner in "
         f"{name}, every word of it. The intent above may be written in another "
@@ -113,6 +113,7 @@ def build_seed(payload: dict, output_mode: str) -> str:
     prefix every minute), and an unstamped automated turn left agents date-blind,
     querying date-scoped tools against whatever "today" their training suggested.
     """
+    lang = payload.get("language")
     intent = payload.get("intent") or ""
     if payload.get("job") == "memory_audit" or payload.get("event") == "memory_audit":
         # Stored n8n intents can predate the running memory architecture. A
@@ -142,7 +143,7 @@ def build_seed(payload: dict, output_mode: str) -> str:
     # the research it already paid for — or redeploy the worker and loop. This
     # branch says: read, synthesise, report.
     if payload.get("type") in ("legion_report", "dispatch_report"):
-        return _completion_seed(payload, delivery)
+        return _completion_seed(payload, delivery, lang=lang)
 
     return (
         "AUTOMATED TRIGGER — no human is waiting on this turn, so you must ACT, "
@@ -165,11 +166,11 @@ def build_seed(payload: dict, output_mode: str) -> str:
         f"- {delivery}\n\n"
         f"intent: {intent}\n\n"
         f"full payload: {payload}"
-        + _language_clause()
+        + _language_clause(lang)
     )
 
 
-def _completion_seed(payload: dict, delivery: str) -> str:
+def _completion_seed(payload: dict, delivery: str, lang: str | None = None) -> str:
     """The seed for a finished piece of BACKGROUND work reporting back.
 
     One shape, two sources: a legionnaire the agent deployed (`legion_report`)
@@ -234,7 +235,7 @@ def _completion_seed(payload: dict, delivery: str) -> str:
         # Same reason as a briefing: the findings below were written by another
         # agent or a legionnaire and can be in any language, and they are the
         # last thing the model reads before it writes.
-        + _language_clause()
+        + _language_clause(lang)
     )
 
 
@@ -531,6 +532,7 @@ async def _deliver(
         delivered = False
         channel = "silent"
 
+        lang = payload.get("language")
         if output_mode != "push":
             pass
         elif not text:
@@ -547,6 +549,7 @@ async def _deliver(
                     agent_id=agent_id, text=text, profile=profile,
                     title=str(payload.get("automation") or ""), telegram_bots=telegram_bots,
                     request_id=request_id, sanitize_model=sanitize_model,
+                    language=lang,
                 )
                 channel = "voice"
             else:
@@ -558,7 +561,7 @@ async def _deliver(
                 # not need this: it runs the same check inside
                 # tts.prepare_speech_text, and paying for two rewrite passes
                 # on one message would be the wrong trade.
-                text = await language.enforce(text, sanitize_model)
+                text = await language.enforce(text, sanitize_model, target=lang)
                 delivered = await telegram_bots.deliver_message(agent_id, text)
                 channel = "text"
             if not delivered:
@@ -580,7 +583,7 @@ async def _deliver(
 
 async def _deliver_voice(
     *, agent_id: str, text: str, profile, title: str, telegram_bots, request_id: str,
-    sanitize_model: str = "",
+    sanitize_model: str = "", language: str | None = None,
 ) -> bool:
     """Speak `text` and send it as a Telegram audio message instead of plain
     text — the point of an automation's "reply as voice" checkbox
@@ -608,8 +611,8 @@ async def _deliver_voice(
     voice_ref = tts.resolve_voice(None, agent_id, profile=profile)
     voice_settings = tts.resolve_voice_settings(agent_id)
     try:
-        spoken = await tts.prepare_speech_text(text, sanitize_model=sanitize_model)
-        audio = await tts.synthesize_prepared(spoken, voice_ref, voice_settings=voice_settings)
+        spoken = await tts.prepare_speech_text(text, locale=language, sanitize_model=sanitize_model)
+        audio = await tts.synthesize_prepared(spoken, voice_ref, locale=language, voice_settings=voice_settings)
     except tts.TTSError as exc:
         logger.warning(
             "automation_voice_synthesis_failed",

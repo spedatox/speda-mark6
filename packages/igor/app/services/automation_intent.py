@@ -169,13 +169,10 @@ def _prompt(spec: dict, agent_name: str) -> str:
         f"The agent is {agent_name}. This automation is {kind}.\n"
         f"It runs: {spec.get('_when', 'on a schedule')}."
         f"{voice_block}\n\n"
-        # The system's one language (services/language.py), not the wish's. See
-        # the LANGUAGE rule in _SYSTEM for why this is read off the switch: what
-        # is written here is stored and re-read on every future firing, so
-        # composing it in the wish's language pins that automation to that
-        # language for good.
-        f"The system speaks {language.name_of()}. Write everything in "
-        f"{language.name_of()}.\n\n"
+        # The system's one language (services/language.py), or the automation's
+        # explicit language override.
+        f"The system speaks {language.name_of(spec.get('language'))}. Write everything in "
+        f"{language.name_of(spec.get('language'))}.\n\n"
         f"The owner asked for:\n{spec.get('instruction_raw') or spec.get('instruction')}\n\n"
         "Write the instruction."
     )

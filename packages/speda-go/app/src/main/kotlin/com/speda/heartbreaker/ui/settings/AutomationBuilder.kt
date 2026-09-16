@@ -131,6 +131,7 @@ fun AutomationBuilder(
     var maxAsks by remember { mutableStateOf(existing?.maxAsks ?: 10) }
     var dayFlags by remember { mutableStateOf(existing?.dayFlags ?: emptyList()) }
     var voice by remember { mutableStateOf(existing?.voice ?: false) }
+    var language by remember { mutableStateOf(existing?.language) }
     var url by remember { mutableStateOf(existing?.url ?: "") }
     var lookFor by remember { mutableStateOf(existing?.lookFor ?: "") }
     var domain by remember { mutableStateOf(existing?.domain ?: "") }
@@ -181,6 +182,7 @@ fun AutomationBuilder(
             // through the reminders tool, so composer.py forces it false
             // there regardless.
             voice = if (tpl == "proactive_ask") false else voice,
+            language = language,
             schedule = if (!isHook(tpl)) {
                 AutomationDraftSchedule(
                     frequency = frequency,
@@ -240,6 +242,12 @@ fun AutomationBuilder(
             Hint(a.stepAgentHint)
             Spacer(Modifier.height(8.dp))
             AgentPicker(agents, agentId) { agentId = it }
+
+            Spacer(Modifier.height(14.dp))
+            FieldLabel(a.languageLabel)
+            Hint(a.languageHint)
+            Spacer(Modifier.height(8.dp))
+            LanguagePicker(language, a) { language = it }
 
             if (isHook(tpl)) {
                 SectionHeader(a.stepHookConfig)
@@ -460,6 +468,15 @@ private fun AgentPicker(agents: List<AutomationAgent>, selected: String, onSelec
         agents.forEach { ag ->
             ChoiceChip("${ag.name} — ${ag.domain}", selected = selected == ag.agentId) { onSelect(ag.agentId) }
         }
+    }
+}
+
+@Composable
+private fun LanguagePicker(selected: String?, a: AppStrings.SettingsAutomations, onSelect: (String?) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ChoiceChip(a.languageDefault, selected = selected == null) { onSelect(null) }
+        ChoiceChip("English", selected = selected == "en") { onSelect("en") }
+        ChoiceChip("Türkçe", selected = selected == "tr") { onSelect("tr") }
     }
 }
 
