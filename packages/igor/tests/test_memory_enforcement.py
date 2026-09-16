@@ -103,6 +103,28 @@ async def test_missing_or_fabricated_quote_never_calls_reviewer(sessions, monkey
     ask.assert_not_called()
 
 
+async def test_near_verbatim_message_quote_is_canonicalized_to_source(sessions):
+    """A one-character model transcription error must not poison a valid write."""
+    from app.models.message import Message
+    from app.models.session import Session
+
+    async with sessions() as db:
+        session = Session(user_id=1, agent_id="speda", triggered_by="user", model_used="test")
+        db.add(session)
+        await db.flush()
+        body = "Siberyadan aradılar yönetim kuruluyla tanışmak istiyorlar."
+        db.add(Message(session_id=session.id, role="user", content=body))
+        await db.commit()
+
+        evidence = await resolve_evidence(
+            db, 1,
+            [{"ref": "message:latest", "quote": "Siberyadan aradılar yöentim kuruluyla tanışmak istiyorlar."}],
+            session_id=session.id,
+        )
+
+    assert evidence[0]["quote"] == body
+
+
 async def test_validator_rejection_or_outage_saves_nothing(sessions, monkeypatch):
     async with sessions() as db:
         db.add(MemoryFile(user_id=1, path="/memories/projects/evidence.md", content="# Evidence\nPaid 3000 to the card."))
@@ -306,3 +328,18 @@ async def test_visual_evidence_uses_original_image_and_vision_model(sessions,mon
         assert "aW1hZ2U=" not in blocks[0]["text"]
         with pytest.raises(ValueError,match="missing"):
             await resolve_evidence(db,2,[{"ref":f"message:{msg.id}#image:0","quote":"4914"}])
+
+
+async def test_memory_reviewer_reuses_working_turn_model_before_background(monkeypatch):
+    from app.config import settings
+    from app.services.memory_admission import ask_json
+    from app.services.llm_client import LLMClient
+
+    monkeypatch.setattr(settings, "memory_review_model", "")
+    monkeypatch.setattr(settings, "llm_background_model", "openai:gpt-5-nano")
+    call = AsyncMock(return_value=SimpleNamespace(content=[SimpleNamespace(text='{"allow":true,"reason":"ok"}')]))
+    monkeypatch.setattr(LLMClient, "create_message", call)
+
+    await ask_json("Validate", {"change": "test"}, model="anthropic:claude-sonnet-4-6")
+
+    assert call.call_args.kwargs["model"] == "anthropic:claude-sonnet-4-6"

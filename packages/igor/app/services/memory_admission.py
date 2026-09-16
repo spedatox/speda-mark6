@@ -6,6 +6,7 @@ The model is a fallible second check, never the access-control or transaction
 layer. It cannot execute tools, choose credentials, or make mutations itself.
 """
 import asyncio
+import difflib
 import hashlib
 import json
 import re
@@ -47,6 +48,56 @@ def text_content(content):
     if isinstance(content, list):
         return "\n".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
     return ""
+
+
+def _canonical_quote(body: str, quote: str) -> str | None:
+    """Return the literal source text for a near-verbatim tool quotation.
+
+    Agents occasionally make a one-character transcription error while copying
+    the user's message into a tool call.  Evidence must still be stored and
+    reviewed as *literal* source text, rather than accepting the misspelling.
+    Recover only a unique, extremely close contiguous span; anything ambiguous
+    or materially different remains a hard failure.
+    """
+    if quote in body:
+        return quote
+    if len(quote) < 24:
+        return None
+
+    # A short length window covers a missing/extra punctuation character while
+    # keeping the search bounded for unusually long pasted messages.
+    wiggle = min(8, max(2, len(quote) // 50))
+    candidates: list[tuple[float, str]] = []
+    # Find candidate offsets from literal anchors first.  Comparing the quote
+    # against every possible source span is prohibitively expensive for a long
+    # pasted message, while a near-verbatim quote necessarily retains at least
+    # one of these non-overlapping fragments.
+    anchor_width = min(16, max(8, len(quote) // 5))
+    starts: set[int] = set()
+    for offset in range(0, len(quote) - anchor_width + 1, anchor_width):
+        anchor = quote[offset:offset + anchor_width]
+        pos = body.find(anchor)
+        while pos >= 0 and len(starts) < 32:
+            candidate_start = pos - offset
+            if candidate_start >= 0:
+                starts.add(candidate_start)
+            pos = body.find(anchor, pos + 1)
+    for start in starts:
+        for width in range(max(1, len(quote) - wiggle), min(len(body) - start, len(quote) + wiggle) + 1):
+            candidate = body[start:start + width]
+            ratio = difflib.SequenceMatcher(a=quote, b=candidate, autojunk=False).ratio()
+            # A transposed adjacent character costs two edits. The uniqueness
+            # requirement below keeps this recovery narrower than fuzzy search.
+            if ratio >= 0.98:
+                candidates.append((ratio, candidate))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    best_ratio, best = candidates[0]
+    # Do not choose between two equally plausible passages.  Duplicate literal
+    # passages are harmless because either canonical quote is the same.
+    contenders = {candidate for ratio, candidate in candidates if best_ratio - ratio < 0.003}
+    return best if len(contenders) == 1 else None
 
 
 async def resolve_evidence(db, user_id, evidence, *, session_id=None):
@@ -110,9 +161,10 @@ async def resolve_evidence(db, user_id, evidence, *, session_id=None):
             ))).scalar_one_or_none() or ""
         else:
             raise ValueError(f"Unsupported evidence reference: {ref}")
-        if not body or quote not in body:
+        canonical = _canonical_quote(body, quote) if body else None
+        if canonical is None:
             raise ValueError(f"Quotation is not present in the owner's source {ref}.")
-        resolved.append({"ref": ref, "quote": quote, "source_sha256": version(body)})
+        resolved.append({"ref": ref, "quote": canonical, "source_sha256": version(body)})
     return resolved
 
 
@@ -120,7 +172,11 @@ async def ask_json(system, payload, *, model=""):
     from app.config import settings
     from app.services.llm_client import LLMClient, supports_vision, parse_model_ref
     fallback_model = model
-    model = settings.memory_review_model or settings.llm_background_model or model
+    # Interactive writes should first reuse the model that successfully ran the
+    # owner's turn.  The old order selected the default background OpenAI model
+    # even when that provider had no credentials, turning an otherwise working
+    # conversation into a fail-closed memory write.
+    model = settings.memory_review_model or model or settings.llm_background_model
     if not model:
         raise ValueError("No memory reviewer model configured; write held for retry.")
     images = []
@@ -203,7 +259,11 @@ async def admit(db, *, user_id, changes, evidence, model=""):
     try:
         verdict = await ask_json(ADMISSION, {"changes": data, "evidence": evidence, "neighbors": neighbors}, model=model)
     except Exception as exc:
-        raise MemorySchemaViolation(f"Memory validation unavailable ({type(exc).__name__}); nothing saved. Retry the same change.") from exc
+        reviewer = settings.memory_review_model or model or settings.llm_background_model or "unconfigured"
+        raise MemorySchemaViolation(
+            f"Memory validation unavailable ({type(exc).__name__}) for reviewer `{reviewer}`; "
+            "nothing saved. Check that provider's credentials or configure a working Memory Reviewer Model, then retry the same change."
+        ) from exc
     if verdict.get("allow") is not True or not isinstance(verdict.get("reason"), str) or not verdict["reason"].strip():
         raise MemorySchemaViolation("Memory validation rejected this change: " + str(verdict.get("reason", "invalid reviewer result")))
     return verdict["reason"]
