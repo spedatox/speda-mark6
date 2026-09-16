@@ -421,12 +421,13 @@ function WorkingStatus({ tools, status }: { tools: { id: string; name: string }[
   const lastTool = tools.length ? tools[tools.length - 1].name : null
   const waiting = useWaitingLine(THINKING_PHASES)
 
-  // Real status still wins: an active tool names itself, and so does whatever
-  // phase the stream reports (Connecting → slow → timeout). The rotating lines
-  // fill only the genuinely silent stretch, where the alternative was a single
-  // frozen word. The watchdog still turns a dead stream into an error — this
-  // changes what the wait *reads* like, not how long it is allowed to run.
-  const real = lastTool ? statusLabel(lastTool) : status
+  // Real status only when an active tool is executing or reconnecting.
+  // Generic thinking ('Thinking') and watchdog stall notices ("no tokens yet")
+  // stay on the escalating waiting line so the humorous lines continue uninterrupted.
+  const isGenericOrStall = !status ||
+    status === 'Thinking' ||
+    status.includes('token')
+  const real = lastTool ? statusLabel(lastTool) : (!isGenericOrStall ? status : null)
   const label = real ? `${real}…` : waiting
 
   return (
@@ -473,9 +474,10 @@ function ThinkingPanel({
     if (live && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
   }, [text, live])
 
+  const waiting = useWaitingLine(THINKING_PHASES)
   const label = ms != null
     ? `Thought for ${Math.round(ms / 1000)}s`
-    : live ? 'Thinking' : 'Show reasoning'
+    : live ? waiting : 'Show reasoning'
 
   if (!text && !redacted) return null
 
@@ -489,9 +491,10 @@ function ThinkingPanel({
           border: 'none', padding: '0.15rem 0', cursor: 'pointer', font: 'inherit',
         }}
       >
-        <span className={live ? 'thinking-shimmer' : undefined} style={{
+        <span key={live ? label : 'done'} className={live ? 'thinking-shimmer' : undefined} style={{
           fontSize: '0.875rem', fontStyle: 'italic', fontWeight: 450,
           color: live ? undefined : 'var(--hb-text-faint)',
+          animation: live ? 'fadeIn 0.35s ease, textShimmer 1.6s linear infinite' : undefined,
         }}>
           {label}
         </span>
@@ -1197,7 +1200,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
           // indicator, unless the thinking panel above is already saying exactly
           // that (the generic "Thinking" placeholder set at the START event) —
           // a real watchdog escalation like "waiting on model 45s" still shows.
-          (!settings.showThinking || !message.thinking || (message.status && message.status !== 'Thinking')) && (
+          (!settings.showThinking || !message.thinking) && (
             <WorkingStatus tools={message.tools} status={message.status} />
           )
         ) : null}

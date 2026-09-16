@@ -315,11 +315,9 @@ private fun AssistantRow(
                     }
                 }
             } else if (message.isStreaming) {
-                // Suppressed once the thinking panel above is already saying
-                // exactly that (the generic placeholder), unless the status has
-                // moved on to a real watchdog escalation like "waiting 45s".
-                val genericThinking = message.status == null || message.status == t.chatMain.statusThinking
-                if (!showThinking || message.thinking.isNullOrEmpty() || !genericThinking) {
+                // Suppressed while thinking panel above is already open and showing
+                // the live thinking text.
+                if (!showThinking || message.thinking.isNullOrEmpty()) {
                     WorkingStatus(lastToolName = message.tools.lastOrNull()?.name, status = message.status)
                 }
             }
@@ -512,22 +510,9 @@ private fun rollLine(pool: List<String>, previous: String): String {
     return pool.filter { it != previous }.random()
 }
 
-/** The waiting label — a light band sweeping across escalating filler text.
- *  No orb: this is a text indicator, and an icon next to it just competed with
- *  the sweep for attention. The shimmer is the whole animation. */
+/** Composable hook for the escalating waiting line, re-rolling every 2 seconds. */
 @Composable
-private fun WorkingStatus(lastToolName: String?, status: String?) {
-    val palette = LocalHbPalette.current
-    val t = LocalStrings.current
-    val phases = t.message.thinkingPhases
-
-    // Real status still wins: an active tool names itself, and so does whatever
-    // phase the stream reports (connecting → slow → timeout). The rotating
-    // lines fill only the genuinely silent stretch.
-    val real = if (lastToolName != null) ToolStatus.statusLabel(lastToolName, t) else status
-
-    // Composed only while a turn is in flight, so composition time is the start
-    // of the wait.
+private fun rememberWaitingLine(phases: List<List<String>>): String {
     val startedAt = remember { System.currentTimeMillis() }
     var waiting by remember { mutableStateOf(rollLine(phases.first(), "")) }
     LaunchedEffect(phases) {
@@ -538,7 +523,28 @@ private fun WorkingStatus(lastToolName: String?, status: String?) {
             waiting = rollLine(phases[band], waiting)
         }
     }
+    return waiting
+}
 
+/** The waiting label — a light band sweeping across escalating filler text.
+ *  No orb: this is a text indicator, and an icon next to it just competed with
+ *  the sweep for attention. The shimmer is the whole animation. */
+@Composable
+private fun WorkingStatus(lastToolName: String?, status: String?) {
+    val palette = LocalHbPalette.current
+    val t = LocalStrings.current
+    val phases = t.message.thinkingPhases
+    val waiting = rememberWaitingLine(phases)
+
+    // Real status only for active tool execution or reconnect.
+    // Generic thinking ('Thinking' / 'Düşünüyor') and watchdog stall notices ("no tokens yet")
+    // stay on the escalating waiting line so the humorous lines continue uninterrupted.
+    val isGenericOrStall = status == null ||
+        status == t.chatMain.statusThinking ||
+        status == "Thinking" ||
+        status == "Düşünüyor" ||
+        status.contains("token")
+    val real = if (lastToolName != null) ToolStatus.statusLabel(lastToolName, t) else if (!isGenericOrStall) status else null
     val label = if (real != null) "$real…" else waiting
 
     // The sweep: a bright band riding a muted base, clipped to the glyphs.
@@ -591,6 +597,7 @@ private fun WorkingStatus(lastToolName: String?, status: String?) {
 private fun ThinkingPanel(text: String, redacted: Boolean, done: Boolean, streaming: Boolean, ms: Long?) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
+    val phases = t.message.thinkingPhases
     val live = streaming && !done
     var expanded by remember { mutableStateOf(live) }
     // Snap open the instant live streaming starts, and closed the instant it
@@ -598,9 +605,10 @@ private fun ThinkingPanel(text: String, redacted: Boolean, done: Boolean, stream
     // next transition (a new turn) fires this again.
     LaunchedEffect(live) { expanded = live }
 
+    val waiting = if (live) rememberWaitingLine(phases) else ""
     val label = when {
         ms != null -> t.message.thinkingPanel.thoughtFor((ms / 1000).toInt())
-        live -> t.message.thinkingPanel.thinking
+        live -> waiting
         else -> t.message.thinkingPanel.showReasoning
     }
 

@@ -635,12 +635,15 @@ function WorkingStatus({ tools, status }: { tools: { id: string; name: string }[
   const lastTool = tools.length ? tools[tools.length - 1].name : null
   const waiting = useWaitingLine(t.message.thinkingPhases)
 
-  // Real status still wins: an active tool names itself, and so does whatever
-  // phase the stream reports (Connecting → slow → timeout). The rotating lines
-  // fill only the genuinely silent stretch, where the alternative was a single
-  // frozen word. The watchdog still turns a dead stream into an error — this
-  // changes what the wait *reads* like, not how long it is allowed to run.
-  const real = lastTool ? statusLabel(lastTool, t) : status
+  // Real status only when an active tool is executing or reconnecting.
+  // Generic thinking ('Thinking' / 'Düşünüyor') and watchdog stall notices ("no tokens yet")
+  // stay on the escalating waiting line so the humorous lines continue uninterrupted.
+  const isGenericOrStall = !status ||
+    status === t.chatMain.statusThinking ||
+    status === 'Thinking' ||
+    status === 'Düşünüyor' ||
+    status.includes('token')
+  const real = lastTool ? statusLabel(lastTool, t) : (!isGenericOrStall ? status : null)
   const label = real ? `${real}…` : waiting
 
   return (
@@ -688,9 +691,10 @@ function ThinkingPanel({
     if (live && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
   }, [text, live])
 
+  const waiting = useWaitingLine(t.message.thinkingPhases)
   const label = ms != null
     ? t.message.thinkingPanel.thoughtFor(Math.round(ms / 1000))
-    : live ? t.message.thinkingPanel.thinking : t.message.thinkingPanel.showReasoning
+    : live ? waiting : t.message.thinkingPanel.showReasoning
 
   if (!text && !redacted) return null
 
@@ -704,9 +708,10 @@ function ThinkingPanel({
           border: 'none', padding: '0.15rem 0', cursor: 'pointer', font: 'inherit',
         }}
       >
-        <span className={live ? 'thinking-shimmer' : undefined} style={{
+        <span key={live ? label : 'done'} className={live ? 'thinking-shimmer' : undefined} style={{
           fontSize: '0.875rem', fontStyle: 'italic', fontWeight: 450,
           color: live ? undefined : 'var(--hb-text-faint)',
+          animation: live ? 'fadeIn 0.35s ease, textShimmer 1.5s linear infinite' : undefined,
         }}>
           {label}
         </span>
@@ -1562,8 +1567,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
           // that (the generic "Thinking" placeholder set at the START event),
           // UNLESS the status has moved on to a real watchdog escalation like
           // "waiting on model 45s", which stays visible no matter what.
-          (!settings.showThinking || !message.thinking ||
-            (message.status && message.status !== t.chatMain.statusThinking)) && (
+          (!settings.showThinking || !message.thinking) && (
             <WorkingStatus tools={message.tools} status={message.status} />
           )
         ) : null}
