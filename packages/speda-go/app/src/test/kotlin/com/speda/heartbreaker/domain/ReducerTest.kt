@@ -104,7 +104,7 @@ class ReducerTest {
         state = reduce(state, ChatAction.Subagent("m", event("tool_result", "b", "second", "B")))
         state = reduce(state, ChatAction.Subagent("m", event("tool_result", "a", "first", "A")))
 
-        val steps = state.messages[0].subagents.single().steps
+        val steps = requireNotNull(state.messages[0].subagents).single().steps
         assertEquals(listOf("a", "b"), steps.map { it.toolCallId })
         assertEquals(listOf("A", "B"), steps.map { it.result })
 
@@ -112,7 +112,7 @@ class ReducerTest {
             state,
             ChatAction.Subagent("m", event("tool_result", result = "wrong")),
         )
-        assertEquals(steps, afterIdless.messages[0].subagents.single().steps)
+        assertEquals(steps, requireNotNull(afterIdless.messages[0].subagents).single().steps)
     }
 
     @Test
