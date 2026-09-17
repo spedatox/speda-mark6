@@ -24,8 +24,11 @@ a short note in place of its text, so one bad attachment never fails the turn.
 
 import base64
 import csv
+import hashlib
 import io
 import logging
+import re
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,76 @@ logger = logging.getLogger(__name__)
 # the context window and per-turn cost (~4 chars/token → 120k chars ≈ 30k
 # tokens). Truncated files are marked so the model knows it saw only a prefix.
 _MAX_CHARS = 120_000
+EXTRACTION_VERSION = 1
+
+
+@dataclass(frozen=True)
+class DocumentSegment:
+    text: str
+    char_start: int
+    char_end: int
+    page: int | None = None
+    heading: str | None = None
+    item_number: str | None = None
+
+
+@dataclass(frozen=True)
+class ExtractedDocument:
+    text: str
+    segments: list[DocumentSegment]
+    content_hash: str
+
+
+_SECTION_MARKER_RE = re.compile(
+    r"(?m)^--- (?:(Page|Slide) (\d+)|Sheet: ([^-\n]+)) ---\s*$"
+)
+_ITEM_RE = re.compile(r"(?m)^\s*(?:Q(?:uestion)?\s*)?(\d{1,3})[.):]\s+(.+)$", re.IGNORECASE)
+_HEADING_RE = re.compile(r"(?m)^#{1,6}\s+(.+)$")
+
+
+def segments_from_text(text: str) -> list[DocumentSegment]:
+    """Recover stable page/slide/sheet and item locators from extracted text."""
+    segments: list[DocumentSegment] = []
+    markers = list(_SECTION_MARKER_RE.finditer(text))
+    boundaries = markers or [None]
+    for index, marker in enumerate(boundaries):
+        start = marker.end() if marker else 0
+        end = markers[index + 1].start() if marker and index + 1 < len(markers) else len(text)
+        chunk = text[start:end].strip()
+        if not chunk:
+            continue
+        actual_start = text.find(chunk, start, end)
+        page = None
+        heading = None
+        if marker:
+            page = int(marker.group(2)) if marker.group(1) in {"Page", "Slide"} else None
+            heading = marker.group(3).strip() if marker.group(3) else None
+
+        items = list(_ITEM_RE.finditer(chunk))
+        if items:
+            for item_index, item in enumerate(items):
+                local_start = item.start()
+                local_end = items[item_index + 1].start() if item_index + 1 < len(items) else len(chunk)
+                item_text = chunk[local_start:local_end].strip()
+                item_start = actual_start + local_start
+                segments.append(DocumentSegment(
+                    text=item_text,
+                    char_start=item_start,
+                    char_end=item_start + len(item_text),
+                    page=page,
+                    heading=heading,
+                    item_number=item.group(1),
+                ))
+        else:
+            heading_match = _HEADING_RE.search(chunk)
+            segments.append(DocumentSegment(
+                text=chunk,
+                char_start=actual_start,
+                char_end=actual_start + len(chunk),
+                page=page,
+                heading=heading or (heading_match.group(1).strip() if heading_match else None),
+            ))
+    return segments
 
 # Media types (and filename suffixes) we treat as already-plaintext: decode the
 # bytes as UTF-8 directly, no library needed. Covers code, config, data and
@@ -179,6 +252,33 @@ def _raw_extract(name: str, media_type: str, data: bytes) -> str:
     return ""
 
 
+def extract_document(name: str, media_type: str, data_b64: str) -> ExtractedDocument:
+    """Extract text plus stable provenance locators.
+
+    The compatibility ``extract_body`` API below delegates here, so chat and
+    project uploads continue receiving the same text while ACE-aware callers
+    can retain a hash and exact segment locations.
+    """
+    try:
+        data = base64.b64decode(data_b64)
+    except Exception:
+        return ExtractedDocument(text="", segments=[], content_hash="")
+    content_hash = hashlib.sha256(data).hexdigest()
+    try:
+        text = (_raw_extract(name, media_type, data) or "").strip()
+    except (ImportError, Exception) as exc:  # best-effort boundary by contract
+        logger.warning(
+            "attachment_extract_failed",
+            extra={"file_name": name, "error": str(exc)},
+        )
+        return ExtractedDocument(text="", segments=[], content_hash=content_hash)
+    return ExtractedDocument(
+        text=text,
+        segments=segments_from_text(text) if text else [],
+        content_hash=content_hash,
+    )
+
+
 def extract_body(name: str, media_type: str, data_b64: str) -> tuple[str, str]:
     """Extract one attachment's raw text.
 
@@ -192,21 +292,8 @@ def extract_body(name: str, media_type: str, data_b64: str) -> tuple[str, str]:
     "could not be read" as knowledge means the model later reads that sentence as
     a fact about the subject, so routers/projects.py refuses the upload instead.
     """
-    try:
-        data = base64.b64decode(data_b64)
-    except Exception:
-        return "", f"'{name}' could not be decoded."
-
-    try:
-        body = _raw_extract(name, media_type, data)
-    except ImportError as exc:
-        logger.warning("attachment_extract_missing_lib", extra={"file_name": name, "error": str(exc)})
-        return "", f"'{name}' ({media_type}): text extraction is unavailable on the server."
-    except Exception as exc:
-        logger.warning("attachment_extract_failed", extra={"file_name": name, "error": str(exc)})
-        return "", f"'{name}' ({media_type}) could not be read."
-
-    body = (body or "").strip()
+    document = extract_document(name, media_type, data_b64)
+    body = document.text
     if not body:
         return "", (
             f"'{name}' ({media_type}) contained no extractable text "

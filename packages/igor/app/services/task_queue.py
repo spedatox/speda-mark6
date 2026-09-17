@@ -65,9 +65,8 @@ DEFAULT_DRAIN_LIMIT = 32
 
 
 # ── Handler registry ──────────────────────────────────────────────────────────
-# kind → async fn(session_id, request_id, user_id, model). Every post-turn task
-# already shares that signature, so the payload stays uniform and the registry
-# stays a plain dict rather than a serialization format.
+# kind → async fn(session_id, request_id, user_id, model, payload). Payload is
+# required for source-specific event jobs and remains a plain JSON object.
 
 def _handlers() -> dict:
     """Built lazily: importing these at module scope would make the task queue a
@@ -85,13 +84,13 @@ def _handlers() -> dict:
         index_pending_observations,
     )
 
-    async def _title(session_id, request_id, user_id, model):
+    async def _title(session_id, request_id, user_id, model, payload):
         await generate_title(session_id, request_id, model)
 
-    async def _embed_tail(session_id, request_id, user_id, model):
+    async def _embed_tail(session_id, request_id, user_id, model, payload):
         await embed_session_tail(session_id, request_id, user_id)
 
-    async def _embed_observations(session_id, request_id, user_id, model):
+    async def _embed_observations(session_id, request_id, user_id, model, payload):
         # Both halves of hybrid recall heal here: the vector index and the
         # lexical one. They are one job because a fact that is searchable by
         # meaning but not by name is only half-recallable, and splitting them
@@ -99,10 +98,10 @@ def _handlers() -> dict:
         await embed_pending_observations(user_id, request_id)
         await index_pending_observations(user_id, request_id)
 
-    async def _compact(session_id, request_id, user_id, model):
+    async def _compact(session_id, request_id, user_id, model, payload):
         await maybe_compact_session(session_id, request_id, model)
 
-    async def _render_surfaces(session_id, request_id, user_id, model):
+    async def _render_surfaces(session_id, request_id, user_id, model, payload):
         """Regenerate the derived memory files if the record moved this turn.
 
         Pure assembly, no model call, and a no-op when nothing changed — so this
@@ -116,7 +115,7 @@ def _handlers() -> dict:
         async with AsyncSessionLocal() as db:
             await commit_rendered(db, user_id, request_id=request_id, author="render")
 
-    async def _memory_reindex(session_id, request_id, user_id, model):
+    async def _memory_reindex(session_id, request_id, user_id, model, payload):
         """Rebuild the memory record from raw history.
 
         Not post-turn work — it is enqueued by the owner pressing a button, and
@@ -128,7 +127,7 @@ def _handlers() -> dict:
 
         await reindex(user_id, model, request_id=request_id)
 
-    async def _automation_intent(session_id, request_id, user_id, model):
+    async def _automation_intent(session_id, request_id, user_id, model, payload):
         """Upgrade the owner's plain-language automation wishes into executable
         instructions, and republish the affected n8n workflows.
 
@@ -141,7 +140,7 @@ def _handlers() -> dict:
 
         await polish_pending(request_id=request_id, model=model)
 
-    async def _extract_facts(session_id, request_id, user_id, model):
+    async def _extract_facts(session_id, request_id, user_id, model, payload):
         """Mine this turn for the durable facts the owner stated.
 
         The write half of recall. Everything else post-turn maintains what is
@@ -154,9 +153,34 @@ def _handlers() -> dict:
 
     from app.services.memory_audit_worker import run_audit
 
+    async def _memory_audit(session_id, request_id, user_id, model, payload):
+        await run_audit(session_id, request_id, user_id, model)
+
+    async def _analyze_patterns(session_id, request_id, user_id, model, payload):
+        from app.services.pattern_analysis import analyze_patterns
+
+        await analyze_patterns(user_id=user_id, request_id=request_id)
+
+    async def _analyze_artifact(session_id, request_id, user_id, model, payload):
+        from app.services.pattern_analysis import analyze_artifact
+
+        await analyze_artifact(
+            user_id=user_id,
+            project_file_id=int(payload["project_file_id"]),
+            request_id=request_id,
+        )
+
+    async def _evaluate_countermeasure(session_id, request_id, user_id, model, payload):
+        from app.services.outcome_learning import evaluate_countermeasure
+
+        await evaluate_countermeasure(user_id=user_id, payload=payload)
+
     return {
-        "memory_audit": run_audit,
+        "memory_audit": _memory_audit,
         "extract_facts": _extract_facts,
+        "analyze_patterns": _analyze_patterns,
+        "analyze_artifact": _analyze_artifact,
+        "evaluate_countermeasure": _evaluate_countermeasure,
         "session_log": update_session_log,
         "session_recap": update_session_recap,
         "daily_maintenance": run_daily_maintenance,
@@ -177,6 +201,7 @@ POST_TURN_KINDS: tuple[str, ...] = (
     # embed_tail/embed_observations further down the list then pick up whatever
     # it wrote in the same drain rather than a turn later.
     "extract_facts",
+    "analyze_patterns",
     "session_log",
     "session_recap",
     "daily_maintenance",
@@ -227,6 +252,56 @@ async def enqueue_one(
             raise
         await db.refresh(job)
         logger.info("job_enqueued", extra={"kind": kind, "job_id": job.id})
+        return job.id
+
+
+async def enqueue_payload_job(
+    *,
+    kind: str,
+    unique_key: str,
+    payload: dict,
+    user_id: int,
+    model: str = "",
+    request_id: str = "",
+) -> int | None:
+    """Queue one exact source event without collapsing sibling events."""
+    key = unique_key.strip()
+    if not key:
+        raise ValueError("unique_key is required for a payload job")
+    async with AsyncSessionLocal() as db:
+        existing = (
+            await db.execute(
+                select(BackgroundJob).where(
+                    BackgroundJob.user_id == user_id,
+                    BackgroundJob.kind == kind,
+                    BackgroundJob.unique_key == key,
+                    BackgroundJob.status.in_(("pending", "running")),
+                )
+            )
+        ).scalars().first()
+        if existing is not None:
+            return None
+        body = dict(payload)
+        body["model"] = model
+        job = BackgroundJob(
+            user_id=user_id,
+            kind=kind,
+            unique_key=key[:255],
+            payload=body,
+            request_id=request_id,
+        )
+        db.add(job)
+        from sqlalchemy.exc import IntegrityError
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            return None
+        await db.refresh(job)
+        logger.info(
+            "job_enqueued",
+            extra={"kind": kind, "job_id": job.id, "unique_key": key},
+        )
         return job.id
 
 
@@ -409,13 +484,13 @@ async def _finish(job_id: int, *, error: str | None) -> None:
 
 
 async def _run_one(job_id: int, kind: str, session_id, user_id: int, model: str,
-                   request_id: str) -> bool:
+                   request_id: str, payload: dict) -> bool:
     handler = _handlers().get(kind)
     if handler is None:
         await _finish(job_id, error=f"no handler registered for kind '{kind}'")
         return False
     try:
-        await handler(session_id, request_id, user_id, model)
+        await handler(session_id, request_id, user_id, model, payload)
     except Exception as e:  # noqa: BLE001
         await _finish(job_id, error=f"{type(e).__name__}: {e}")
         return False
@@ -440,7 +515,7 @@ async def drain(limit: int = DEFAULT_DRAIN_LIMIT) -> dict:
         # own sessions and must not touch these instances.
         work = [
             (j.id, j.kind, j.session_id, j.user_id,
-             (j.payload or {}).get("model", ""), j.request_id)
+             (j.payload or {}).get("model", ""), j.request_id, j.payload or {})
             for j in claimed
         ]
 

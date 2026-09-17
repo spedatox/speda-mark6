@@ -402,6 +402,27 @@ class AgentOrchestrator:
                     extra={"request_id": context.request_id, "error": str(exc)},
                 )
 
+        # ACE tactical recall is a distinct retrieval product from remembered
+        # facts: it ranks evidence-scored models and linked countermeasures for
+        # the current objective. It is equally non-fatal and per-turn varying.
+        tactical_block = ""
+        if context.db is not None:
+            try:
+                from app.services.tactical_context import tactical_context_for_message
+
+                tactical_block = await tactical_context_for_message(
+                    context.user_id,
+                    context.db,
+                    context.conversation_history,
+                    agent_id=context.agent_id,
+                    request_id=context.request_id,
+                ) or ""
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "tactical_context_failed",
+                    extra={"request_id": context.request_id, "error": str(exc)},
+                )
+
         # Time protocol — replaces the old volatile "## Now" tail. Stable text;
         # the actual clock rides on the user messages. Model line is stable per
         # model, and provider caches are model-scoped anyway.
@@ -525,6 +546,8 @@ class AgentOrchestrator:
         # breakpoints so it costs nothing but its own tokens.
         if relevant_block:
             system_blocks.append({"type": "text", "text": relevant_block})
+        if tactical_block:
+            system_blocks.append({"type": "text", "text": tactical_block})
         # Trailing, uncached, and last on purpose — see the note where it is
         # built. Everything above this line is byte-identical for a chat turn
         # and an n8n turn on the same agent.

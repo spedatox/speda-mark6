@@ -208,7 +208,35 @@ def _apply_additive_migrations(sync_conn) -> None:
             logger.info("schema_migrated", extra={"change": "reminder_cycles.every_minutes"})
 
     if "background_jobs" in tables:
+        bcols = {c["name"] for c in insp.get_columns("background_jobs")}
+        if "unique_key" not in bcols:
+            sync_conn.execute(
+                text("ALTER TABLE background_jobs ADD COLUMN unique_key VARCHAR(255) DEFAULT ''")
+            )
+            logger.info("schema_migrated", extra={"change": "background_jobs.unique_key"})
         sync_conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_active_memory_audit ON background_jobs (user_id, kind) WHERE kind = 'memory_audit' AND status IN ('pending','running')"))
+        sync_conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_background_jobs_unique_key "
+            "ON background_jobs (user_id, kind, unique_key, status)"
+        ))
+        sync_conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_active_background_payload "
+            "ON background_jobs (user_id, kind, unique_key) "
+            "WHERE unique_key <> '' AND status IN ('pending','running')"
+        ))
+
+    if "project_files" in tables:
+        pcols = {c["name"] for c in insp.get_columns("project_files")}
+        if "content_hash" not in pcols:
+            sync_conn.execute(
+                text("ALTER TABLE project_files ADD COLUMN content_hash VARCHAR(64) DEFAULT ''")
+            )
+            logger.info("schema_migrated", extra={"change": "project_files.content_hash"})
+        if "extraction_version" not in pcols:
+            sync_conn.execute(
+                text("ALTER TABLE project_files ADD COLUMN extraction_version INTEGER DEFAULT 1")
+            )
+            logger.info("schema_migrated", extra={"change": "project_files.extraction_version"})
 
     if "memory_revisions" in tables:
         mcols = {c["name"] for c in insp.get_columns("memory_revisions")}

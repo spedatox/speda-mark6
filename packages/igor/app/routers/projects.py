@@ -311,11 +311,18 @@ async def add_project_file(
             detail=f"This project already holds its limit of {settings.projects_max_files} files",
         )
 
-    from app.services.attachments import extract_body
+    from app.services.attachments import EXTRACTION_VERSION, extract_document
 
-    text, note = extract_body(body.name, body.media_type, body.data)
-    if note:
-        raise HTTPException(status_code=400, detail=note[0].upper() + note[1:])
+    document = extract_document(body.name, body.media_type, body.data)
+    text = document.text
+    if not text:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"'{body.name}' ({body.media_type}) contained no extractable text "
+                "(it may be a scanned image or an unsupported binary format)."
+            ),
+        )
 
     cap = settings.projects_file_max_chars
     truncated = len(text) > cap
@@ -329,6 +336,8 @@ async def add_project_file(
         size_bytes=body.size or 0,
         chars=len(text),
         content=text,
+        content_hash=document.content_hash,
+        extraction_version=EXTRACTION_VERSION,
     )
     db.add(record)
     project.last_activity_at = _now()
@@ -342,6 +351,22 @@ async def add_project_file(
         "project_file_added",
         extra={"project_id": project.id, "file_name": record.name, "chars": record.chars},
     )
+    # Artifact analysis is durable and source-specific. A failure to enqueue is
+    # logged but never turns a successfully stored upload into a misleading 500.
+    try:
+        from app.services.task_queue import enqueue_payload_job
+
+        await enqueue_payload_job(
+            kind="analyze_artifact",
+            unique_key=f"project_file:{record.id}:v{record.extraction_version}",
+            payload={"project_file_id": record.id, "project_id": project.id},
+            user_id=project.user_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "artifact_analysis_enqueue_failed",
+            extra={"project_file_id": record.id, "error": str(exc)},
+        )
     return {
         "id": record.id,
         "name": record.name,

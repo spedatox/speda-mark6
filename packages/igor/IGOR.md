@@ -191,6 +191,32 @@ Settings: `projects_enabled`, `projects_max_files`, `projects_file_max_chars`,
 
 ---
 
+## Adaptive Countermeasure Engine (ACE)
+
+ACE is a shared service layer, not an agent. An inductive `Observation` remains
+the canonical natural-language claim; `PatternState` and `PatternEvidence`
+store numeric confidence, lifecycle and exact provenance around it. Repeated
+evidence from one source group cannot manufacture source diversity, and
+`agent_inference`/`synthetic` evidence is retained for audit with zero scoring
+weight.
+
+`analyze_patterns` is normal durable post-turn work. Project uploads additionally
+enqueue one payload-keyed `analyze_artifact` job per file; attachment extraction
+preserves a SHA-256 content hash and page/item locators without retaining the
+original bytes. The initial academic analyzer deterministically recognizes
+negative stems and multiple-choice structure, counting one file as one
+independent source regardless of how many matching questions it contains.
+
+Before each turn, `services/tactical_context.py` ranks only relevant active or
+contested patterns and linked active countermeasures. Its bounded, uncached
+Tactical Context block follows ordinary relevant recall in the orchestrator.
+`inspect_patterns` exposes evidence on demand and `pattern_feedback` records
+explicit owner verdicts or countermeasure outcomes. ACE never expands an
+agent's permissions; countermeasure autonomy is descriptive and all existing
+confirmation/execution controls still apply.
+
+---
+
 ## Voice mode is a presentation brief
 
 A spoken turn is not "the reply, read aloud". `app/core/surface.py` stamps a

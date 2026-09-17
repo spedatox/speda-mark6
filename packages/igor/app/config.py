@@ -708,6 +708,17 @@ class Settings(BaseSettings):
     # retrievable intent and would match on stopwords alone.
     relevant_recall_min_query_chars: int = 12
 
+    # ── Adaptive Countermeasure Engine (ACE) ─────────────────────────────
+    # Pattern state is synchronized in durable background work; tactical recall
+    # is a bounded, uncached per-turn block beside relevant fact recall.
+    ace_enabled: bool = True
+    ace_tactical_max_patterns: int = 5
+    ace_tactical_max_countermeasures: int = 3
+    ace_tactical_max_chars: int = 3000
+    ace_min_query_chars: int = 12
+    ace_active_min_support: int = 3
+    ace_active_min_diversity: int = 2
+
     # ── Injected memory budget ───────────────────────────────────────────────
     # Per-file ceiling on what the ALWAYS-INJECTED memory files contribute to
     # every system prompt. memory_schema.INJECTED_FILE_MAX_BYTES declares 12 KB

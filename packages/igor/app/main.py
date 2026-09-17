@@ -108,6 +108,7 @@ async def lifespan(app: FastAPI):
         RecordObservationSkill,
         SearchMemorySkill,
     )
+    from app.skills.patterns import InspectPatternsSkill, PatternFeedbackSkill
     from app.skills.news import (
         NewsDeepDiveSkill,
         NewsHeadlinesSkill,
@@ -149,6 +150,8 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(RecordObservationSkill())
     await registry.register_skill(SearchMemorySkill())
     await registry.register_skill(ForgetObservationSkill())
+    await registry.register_skill(InspectPatternsSkill())
+    await registry.register_skill(PatternFeedbackSkill())
     await registry.register_skill(SearchHistorySkill())
     await registry.register_skill(SemanticSearchSkill())
     await registry.register_skill(TTSSkill())

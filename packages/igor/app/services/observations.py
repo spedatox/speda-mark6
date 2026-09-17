@@ -309,8 +309,8 @@ def validate_observation(
             )
         if conf not in CONFIDENCE_LEVELS:
             raise ObservationRejected(
-                "Rejected: an 'inductive' observation requires `confidence` — "
-                "'high' for 5+ sources, 'medium' for 3-4, 'low' for 2."
+                "Rejected: an 'inductive' observation requires an initial `confidence` "
+                "label: low, medium or high. ACE recalculates it from evidence after storage."
             )
     else:
         # Qualifiers are meaningless off the inductive level; drop rather than
@@ -517,6 +517,9 @@ async def record_observations(
                 merged = list(existing.message_ids or []) + list(message_ids)
                 # Keep the tail: recent provenance is what recall pulls context from.
                 existing.message_ids = merged[-20:]
+            existing.source_ids = list(dict.fromkeys([
+                *(existing.source_ids or []), *clean["source_ids"]
+            ]))
             existing.sources = list(dict.fromkeys([*(existing.sources or []), *clean["sources"]]))
             stored.append(existing)
             continue
@@ -557,6 +560,16 @@ async def record_observations(
         for obs in stored:
             await lexical.index_observation(db, obs)
         await db.commit()
+        # An inductive observation is the canonical ACE claim. Synchronize its
+        # machine state immediately; the background analyze_patterns job remains
+        # the restart/rebuild safety net and is idempotent.
+        inductive = [obs for obs in stored if obs.level == "inductive"]
+        if inductive:
+            from app.services.pattern_evidence import sync_inductive_observation
+
+            for obs in inductive:
+                await sync_inductive_observation(db, obs, commit=False)
+            await db.commit()
 
     logger.info(
         "observations_recorded",

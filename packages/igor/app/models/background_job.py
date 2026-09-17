@@ -40,6 +40,12 @@ class BackgroundJob(Base):
         Index("ix_background_jobs_due", "status", "run_after"),
         # Deduplication of an already-queued unit of work.
         Index("ix_background_jobs_dedup", "session_id", "kind", "status"),
+        Index("ix_background_jobs_unique_key", "user_id", "kind", "unique_key", "status"),
+        Index(
+            "uq_active_background_payload", "user_id", "kind", "unique_key", unique=True,
+            sqlite_where=text("unique_key <> '' AND status IN ('pending','running')"),
+            postgresql_where=text("unique_key <> '' AND status IN ('pending','running')"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -50,6 +56,9 @@ class BackgroundJob(Base):
 
     # Handler key — see HANDLERS in app/services/task_queue.py.
     kind: Mapped[str] = mapped_column(String(64))
+    # Source-specific jobs (artifact analysis, outcome evaluation) cannot be
+    # deduplicated at kind/user granularity. This identifies their exact unit.
+    unique_key: Mapped[str] = mapped_column(String(255), default="")
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
 
     # pending → running → done | failed

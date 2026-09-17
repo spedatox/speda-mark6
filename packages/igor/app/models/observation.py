@@ -85,6 +85,9 @@ class Observation(Base):
     #   "seed"    — parsed out of the pre-v3 markdown files on the one-time
     #               migration. Preserved, because its source no longer exists.
     #   "owner"   — written by the owner. Preserved, always, and wins conflicts.
+    #   "artifact"— extracted from a source document, with ACE locator evidence.
+    #   "tool"    — structured external/system state returned by a tool.
+    #   "synthetic" / "agent" — retained for context but never primary ACE evidence.
     origin: Mapped[str] = mapped_column(String(16), default="live")
 
     content: Mapped[str] = mapped_column(Text)

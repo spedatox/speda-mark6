@@ -141,8 +141,8 @@ class RecordObservationSkill(Skill):
                             "type": "string",
                             "enum": list(CONFIDENCE_LEVELS),
                             "description": (
-                                "(inductive only) 'high' for 5+ sources, 'medium' for 3-4, "
-                                "'low' for 2."
+                                "(inductive only) Initial compatibility label. ACE recalculates "
+                                "it from weighted support, contradiction, source diversity and recency."
                             ),
                         },
                         "subject": {

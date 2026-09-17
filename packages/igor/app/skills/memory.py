@@ -82,15 +82,12 @@ not prose")
 ## Open questions
 (things still unclear about the owner)
 """,
-    "/memories/patterns.md": """\n# Patterns — what he repeatedly does, and what to do about it
+    "/memories/patterns.md": """\n# Patterns — owner-facing ACE view
 
-_Induced, not stated. Every line is `- [YYYY-MM-DD, agent_id, confidence] the
-pattern → the move it calls for`, where confidence is high (5+ supporting
-facts), medium (3-4) or low (2). This file is in front of every agent on every
-turn for one reason: a pattern is only worth anything BEFORE it fires. Act on it
-silently, the way you act on the dossier. It is induced from evidence and can be
-wrong, so a low-confidence line is a hypothesis to watch, not a fact to assert —
-and never read one aloud or cite it to him._
+_Operational pattern state is held by ACE around canonical inductive
+observations. This markdown file is an inspectable compatibility surface, not a
+second source of truth and not something agents manually maintain during a
+turn. Use `inspect_patterns` for live evidence, confidence and countermeasures._
 
 ## Behaviour
 (what he repeatedly DOES, in situations that recur)

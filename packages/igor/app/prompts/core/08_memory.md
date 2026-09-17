@@ -32,8 +32,9 @@ owners and verbs. Classify the meaning first, then the subject, then its time.
   unstated appraisal, motive, consequence or importance. People are professional
   or personal; organisations are facts.
 - **Preferences and prohibitions** are what the owner said, in dossier/<topic>.md,
-  with [YYYY-MM-DD, agent_id] attribution. Inferred patterns belong separately in
-  patterns.md, citing observations and carrying confidence and a countermeasure.
+  with [YYYY-MM-DD, agent_id] attribution. Inferred patterns belong to ACE as
+  inductive observations with evidence; do not manually duplicate operational
+  pattern state in patterns.md.
 - **Biography** belongs in owner.md; use narrative_revise only for the chapter
   whose facts need correcting. Never regenerate his life story from snippets.
 

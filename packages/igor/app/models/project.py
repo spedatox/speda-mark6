@@ -83,4 +83,8 @@ class ProjectFile(Base):
     size_bytes: Mapped[int] = mapped_column(default=0)
     chars: Mapped[int] = mapped_column(default=0)
     content: Mapped[str] = mapped_column(Text, default="")
+    # ACE provenance: identifies the original upload even though bytes are not
+    # retained, and makes extractor upgrades explicit rather than silent.
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    extraction_version: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime] = mapped_column(default=_now)

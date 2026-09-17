@@ -37,6 +37,13 @@ from app.models.memory_path_alias import MemoryPathAlias
 from app.models.memory_entity_head import MemoryEntityHead
 from app.models.memory_capture_job import MemoryCaptureJob
 from app.models.memory_migration_run import MemoryMigrationRun
+from app.models.pattern import (
+    Countermeasure,
+    CountermeasurePattern,
+    CountermeasureRun,
+    PatternEvidence,
+    PatternState,
+)
 
 __all__ = [
     "User", "Session", "Message", "Memory", "MemoryFile", "MemoryRevision", "MemoryReview",
@@ -49,4 +56,6 @@ __all__ = [
     "Project", "ProjectFile", "MemoryEntity", "MemoryRecordMeta",
     "MemoryRecordLink", "MemoryPathAlias", "MemoryEntityHead",
     "MemoryCaptureJob", "MemoryMigrationRun",
+    "PatternState", "PatternEvidence", "Countermeasure",
+    "CountermeasurePattern", "CountermeasureRun",
 ]
