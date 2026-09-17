@@ -34,7 +34,7 @@ export const BRANDS: Record<string, Brand> = {
     avatarInitial: 'U', accent: '#8a93a6',
   },
   scourge: {
-    agentId: 'scourge', name: 'Scourge', modelNumber: 'Mark I', userName: 'Ahmet Erol',
+    agentId: 'scourge', name: 'Scourge', modelNumber: 'Mark II', userName: 'Ahmet Erol',
     tagline: 'Cyber Security & Threat Intelligence',
     avatarInitial: 'C', accent: '#d8483c',
   },
@@ -54,7 +54,7 @@ export const BRANDS: Record<string, Brand> = {
     avatarInitial: 'N', accent: '#9165e6',
   },
   optimus: {
-    agentId: 'optimus', name: 'Optimus', modelNumber: 'Mark II', userName: 'Ahmet Erol',
+    agentId: 'optimus', name: 'Optimus', modelNumber: 'Mark III', userName: 'Ahmet Erol',
     tagline: 'Systems, Code & Infrastructure',
     avatarInitial: 'O', accent: '#2f4f8f',
   },

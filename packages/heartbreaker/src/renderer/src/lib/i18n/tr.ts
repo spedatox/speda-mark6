@@ -96,7 +96,7 @@ const tr: Dict = {
     openPanel: 'Paneli aç',
     newConversation: 'Yeni sohbet',
     responding: 'Yanıtlıyor',
-    forgeOnlineTitle: 'Optimus, Forge (Mark II) üzerinde çalışıyor — izole bir Cell içinde tam ajansal yürütme.',
+    forgeOnlineTitle: 'Optimus, Forge (Mark III) üzerinde çalışıyor — izole bir Cell içinde tam ajansal yürütme.',
     forgeOfflineTitle: 'Forge eşi çevrimdışı — Optimus, süreç içi yedek motorundan yanıt veriyor.',
     forgeLink: 'FORGE BAĞLANTISI',
     inProcess: 'SÜREÇ İÇİ',

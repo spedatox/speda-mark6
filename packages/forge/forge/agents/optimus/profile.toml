@@ -155,8 +155,8 @@ run_as_root = true
 # when someone is working out why a change was made and asks the wrong person.
 # The email is what a host keys on: GitHub links a commit to whichever account
 # owns this address, by email and not by the display name — so Optimus's own
-# account now backs this identity, and the "Optimus Mark II" string is only how
+# account now backs this identity, and the "Optimus Mark III" string is only how
 # the name renders, not what the attribution follows.
 [git]
-name = "Optimus Mark II"
+name = "Optimus Mark III"
 email = "ahmeterolbayrak1@gmail.com"

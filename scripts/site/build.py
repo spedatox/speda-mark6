@@ -42,9 +42,9 @@ ROSTER = [
     ("sentinel",     "Sentinel",     "Mark II",  "Finance & Budget"),
     ("nightcrawler", "NightCrawler", "Mark III", "OSINT & Surveillance"),
     ("ultron",       "Ultron",       "Mark III", "Academic Life"),
-    ("scourge",    "Scourge",    "Mark I",   "Cyber Security"),
+    ("scourge",    "Scourge",    "Mark II",  "Cyber Security"),
     ("atomix",       "Atomix",       "Mark I",   "Health & Wellness"),
-    ("optimus",      "Optimus",      "Mark II",  "Systems & Code"),
+    ("optimus",      "Optimus",      "Mark III", "Systems & Code"),
     ("orion",        "Orion",        "Mark I",   "Maintenance & Memory"),
 ]
 

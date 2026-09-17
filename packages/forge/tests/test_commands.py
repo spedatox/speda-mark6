@@ -337,9 +337,9 @@ def test_the_agent_identity_becomes_git_environment():
     recorded as committer of a patch they never saw."""
     from forge.agents.config import GitIdentity
 
-    env = GitIdentity("Optimus Mark II", "optimus@example.com").env()
-    assert env["GIT_AUTHOR_NAME"] == "Optimus Mark II"
-    assert env["GIT_COMMITTER_NAME"] == "Optimus Mark II"
+    env = GitIdentity("Optimus Mark III", "optimus@example.com").env()
+    assert env["GIT_AUTHOR_NAME"] == "Optimus Mark III"
+    assert env["GIT_COMMITTER_NAME"] == "Optimus Mark III"
     assert env["GIT_AUTHOR_EMAIL"] == env["GIT_COMMITTER_EMAIL"]
 
 
@@ -369,10 +369,10 @@ def test_the_identity_reaches_every_command_in_the_cell():
     from forge.cell.base import CellPolicy
     from forge.cell.subprocess_cell import SubprocessCell
 
-    policy = CellPolicy(env={"GIT_AUTHOR_NAME": "Optimus Mark II"})
+    policy = CellPolicy(env={"GIT_AUTHOR_NAME": "Optimus Mark III"})
     cell = SubprocessCell(Path("."), policy)
 
-    assert cell._base_env(None)["GIT_AUTHOR_NAME"] == "Optimus Mark II"  # noqa: SLF001
+    assert cell._base_env(None)["GIT_AUTHOR_NAME"] == "Optimus Mark III"  # noqa: SLF001
 
 
 def test_a_per_call_env_still_wins_over_the_policy():
@@ -399,12 +399,12 @@ def test_commit_with_nothing_staged_says_so(tmp_path):
 def test_commit_stages_then_commits_and_names_the_author(tmp_path):
     cell = _Cell({"git status --porcelain": _Result(" M a.py\n"),
                   "git commit": _Result("[main abc123] msg\n"),
-                  "git log -1": _Result("Optimus Mark II\n")})
+                  "git log -1": _Result("Optimus Mark III\n")})
     out = _run("commit", "fix the retry", _Session(tmp_path, cell))
 
     assert any(c == "git add -A" for c in cell.ran)
     assert any("git commit -m" in c for c in cell.ran)
-    assert "Optimus Mark II" in out.text
+    assert "Optimus Mark III" in out.text
 
 
 def test_a_quote_in_the_message_cannot_break_the_command(tmp_path):

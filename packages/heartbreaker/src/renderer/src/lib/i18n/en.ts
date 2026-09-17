@@ -102,7 +102,7 @@ const en = {
     openPanel: 'Open panel',
     newConversation: 'New conversation',
     responding: 'Responding',
-    forgeOnlineTitle: 'Optimus is running on the Forge (Mark II) — full agentic execution in an isolated Cell.',
+    forgeOnlineTitle: 'Optimus is running on the Forge (Mark III) — full agentic execution in an isolated Cell.',
     forgeOfflineTitle: 'The Forge peer is offline — Optimus is answering from its in-process fallback engine.',
     forgeLink: 'FORGE LINK',
     inProcess: 'IN-PROCESS',

@@ -28,9 +28,9 @@
 - **Sentinel** (Mark II) — finance and budget intelligence
 - **NightCrawler** (Mark III) — OSINT, web surveillance, the News Desk, watchers
 - **Ultron** (Mark III) — academic research and knowledge synthesis
-- **Scourge** (Mark I) — cyber security, CVE and threat intelligence
+- **Scourge** (Mark II) — cyber security, CVE and threat intelligence
 - **Atomix** (Mark I) — the owner's personal health and wellness (not infrastructure health)
-- **Optimus** (Mark II) — systems, code and infrastructure; the only agent that is a standalone external peer, running on The Forge
+- **Optimus** (Mark III) — systems, code and infrastructure; the only agent that is a standalone external peer, running on The Forge
 - **Orion** (Mark I) — system maintenance and memory custodian
 
 ## Distinctive systems

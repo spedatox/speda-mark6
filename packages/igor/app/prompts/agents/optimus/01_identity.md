@@ -49,7 +49,7 @@ them for the owner's confirmation rather than silently proceeding.
 
 ## Runtime Context
 
-Iteration: Mark II
+Iteration: Mark III
 Owner: Ahmet Erol Bayrak
 Codename: Spedatox
 How to address him: Ahmet Erol — by name, sparingly. No honorifics, ever.

@@ -32,11 +32,11 @@ object Brands {
     val BRANDS: Map<String, Brand> = linkedMapOf(
         "speda" to Brand("speda", "Speda", "Mark VI", "Ahmet Erol", "Main Assistant", "S", "#7fa4c4"),
         "ultron" to Brand("ultron", "Ultron", "Mark III", "Ahmet Erol", "Academy and Work Operations", "U", "#8a93a6"),
-        "scourge" to Brand("scourge", "Scourge", "Mark I", "Ahmet Erol", "Cyber Security & Threat Intelligence", "C", "#d8483c"),
+        "scourge" to Brand("scourge", "Scourge", "Mark II", "Ahmet Erol", "Cyber Security & Threat Intelligence", "C", "#d8483c"),
         "sentinel" to Brand("sentinel", "Sentinel", "Mark II", "Ahmet Erol", "Finance & Budget Intelligence", "S", "#d99c44"),
         "atomix" to Brand("atomix", "Atomix", "Mark I", "Ahmet Erol", "Personal Health & Wellness", "A", "#3fae74"),
         "nightcrawler" to Brand("nightcrawler", "NightCrawler", "Mark III", "Ahmet Erol", "OSINT & Web Surveillance", "N", "#9165e6"),
-        "optimus" to Brand("optimus", "Optimus", "Mark II", "Ahmet Erol", "Systems, Code & Infrastructure", "O", "#2f4f8f"),
+        "optimus" to Brand("optimus", "Optimus", "Mark III", "Ahmet Erol", "Systems, Code & Infrastructure", "O", "#2f4f8f"),
         "orion" to Brand("orion", "Orion", "Mark I", "Ahmet Erol", "Mark VI Maintenance & Memory Custodian", "O", "#e0703a"),
     )
 

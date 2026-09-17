@@ -465,7 +465,7 @@ profile:
 
 ```toml
 [git]
-name  = "Optimus Mark II"
+name  = "Optimus Mark III"
 email = "optimus@spedatox.systems"
 ```
 
