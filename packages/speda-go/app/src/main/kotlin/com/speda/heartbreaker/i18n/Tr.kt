@@ -61,12 +61,12 @@ val Tr = AppStrings(
         somethingWentWrong = "Bir şeyler ters gitti.",
         thinking = "Düşünüyor",
         thinkingPhases = listOf(
-            listOf("Düşünüyor…", "İşleniyor…", "Mantık derleniyor…", "Noktalar birleştiriliyor…"),
-            listOf("Hâlâ düşünüyor…", "İşlemciler ısıtılıyor…", "Sıkı dur, çarklar dönüyor…", "Garip bir sessizlik oldu, değil mi?"),
-            listOf("HMMMMMMMMMMMMMMMMM…", "Tamam, artık kendimi rezil ediyorum…", "Biri sunucu kablosuna mı takıldı?", "Hesaplıyorum… dur, eldeyi unuttum."),
-            listOf("Kanka o kadar da derin değil…", "Belli ki işin içinde çok değişken var.", "Kahve ikram ederdim ama fiziksel bedenim yok.", "Yemin ederim normalde daha hızlıyım."),
-            listOf("Bir şeyler ters gitmiş olabilir de olmayabilir de…", "Kayıp veri paketlerim için arama ekibi gönderiyorum.", "Hâlâ burada mıyız? Sadece kontrol ediyorum.", "Ya tarihin en iyi cevabını vereceğim ya da tamamen çöktüm.", "10 saniye içinde cevap vermezsem intikamımı al."),
-            listOf("Arka planda usulca asansör müziği çalıyor…", "Açıkçası ne konuştuğumuzu unuttum.", "Bu noktada google’lamayı düşündün mü?", "404: Motivasyon bulunamadı. Yeniden deneniyor…"),
+            listOf("Düşünüyor…", "İşleniyor…", "Mantık yürütülüyor…", "Noktalar birleştiriliyor…"),
+            listOf("Hâlâ düşünüyorum…", "İşlemciler ısıtılıyor…", "Çarklar dönüyor…", "Garip bir sessizlik oldu, değil mi?"),
+            listOf("HMMMMMMMMMMMMMMMMM…", "Tamam, artık kendimi rezil ediyorum…", "Birinin sunucu kablosuna ayağı mı takıldı?", "Hesaplıyorum… dur, elde 1 vardı!."),
+            listOf("Kanka o kadar da derin değil…", "Umarım Ahmet Erol hariç kimse yoktur...", "Kahve ikram ederdim ama fiziksel bedenim yok. Ve param da yok.", "Valla normalde daha hızlıyım."),
+            listOf("Bir şeyler ters gitmiş olabilir de olmayabilir de…", "Dostum, Benson buna çok kızacak!!!", "Hâlâ burada mıyız? Sadece kontrol ediyorum.", "Ya tarihin en iyi cevabını vereceğim ya da tamamen çöktüm.", "10 saniye içinde cevap vermezsem intikamımı al."),
+            listOf("Arka planda usulca asansör müziği çalıyor…", "Açıkçası ne konuştuğumuzu unuttum.", "Napsan Google'a mı yazsan?", "Galiba Ahmet Erol'dan DEHB bulaştı."),
         ),
         thinkingPanel = AppStrings.ThinkingPanel(
             thinking = "Düşünüyor",
