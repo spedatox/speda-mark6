@@ -52,7 +52,7 @@ services:
       FORGE_WORKSPACE_ROOT: /opt/hisar/vault/Forge/workspaces
       FORGE_CODER_IMAGE: forge-cell-optimus:latest
       FORGE_REVIEWER_IMAGE: forge-cell-optimus:latest
-      FORGE_PENTESTER_IMAGE: forge-cell-centurion:latest
+      FORGE_PENTESTER_IMAGE: forge-cell-scourge:latest
     volumes:
       - /tmp/speda_outputs:/tmp/speda_outputs
       # Host dir holding speda.db → container's data dir. A directory (not the

@@ -1,0 +1,62 @@
+# Scourge — identity file 1 of 2 (the profile).
+# The Forge's cyber security agent.
+# Mirrors Mark VI's app/profiles/scourge.py — cyber security, defensive
+# and authorized-offensive work on target systems with strict OPSEC.
+
+agent_id = "scourge"
+name = "Scourge"
+domain = "cyber security"
+
+# Model IDs live only in profiles (Rule 10). Same reasoning tier as Optimus —
+# and the same provider, so the two peers share one key and one failure mode
+# rather than two. See optimus/profile.toml for why it is not Anthropic.
+model = "deepseek:deepseek-v4-pro"
+
+# Tool allowlist — Scourge is the main pentester agent. "security" is his core (shell +
+# file I/O in the Cell), but he also needs the operator's ecosystem to be useful:
+#   hisar   — evidence vault; findings, pcaps, and reports survive Cell teardown
+#   web     — research CVEs, fetch advisory pages, look up exploit details
+#   memory  — the operator's notes, past engagement context, standing scope
+#   recall  — recall past engagements by meaning (Scourge is stateless between
+#             turns) and read the agent channel to see Optimus's recent work
+#   notify  — reach the operator mid-engagement if something urgent lands
+#
+# All are withheld automatically when the deployment has no vault token / bot
+# / Mark VI channel, so naming them is not a claim that they are configured.
+#
+# "remember_about_owner" — named individually, not via "memory": it queues a
+# note about the operator LOCALLY with no connection required, so it stays
+# available in exactly the run where "memory" gets withheld. See
+# forge/tools/owner_notes.py.
+tools = ["security", "hisar", "web", "memory", "recall", "notify", "remember_about_owner"]
+
+# One working mode with the safety gate always on; "plan" would make it
+# read-only for reviewing an intended engagement before it runs (§6).
+permission_mode = "act"
+
+# The single iteration ceiling (§3). Security work is legitimately long-running —
+# recon, enumeration, scanning and follow-up across many targets each cost turns,
+# and a 30-turn cap cut real engagements short. This is a runaway/cost backstop,
+# not a work budget: set high enough that a genuine assessment never trips it.
+max_iterations = 400
+
+[cell]
+# Scourge's work is inherently networked — recon, scanning,
+# and authorized testing reach out. Outbound is ON. Everything else stays capped;
+# the Cell is still throwaway and isolated per job.
+allow_network = true
+cpus          = 2.0
+memory_mb     = 2048
+# Scans and enumeration run longer than a build step — give commands more wall-clock.
+timeout_s     = 300
+# Scourge builds his lab from THIS image, not Optimus's python:3.12-slim — a
+# per-agent override (cfg.cell.image) that wins over the process-wide
+# FORGE_CELL_IMAGE.
+image         = "forge-cell-scourge:latest"
+run_as_root   = true
+cap_add       = ["NET_RAW", "NET_ADMIN", "NET_BIND_SERVICE", "CHOWN", "DAC_OVERRIDE", "SETUID", "SETGID", "FOWNER"]
+
+# See optimus/profile.toml.
+[git]
+name = "Scourge Mark II"
+email = "scourge@spedatox.systems"

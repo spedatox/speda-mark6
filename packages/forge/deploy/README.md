@@ -16,8 +16,8 @@ Build the Cell images from the monorepo root:
 ```bash
 docker build -f packages/forge/deploy/cell-optimus.Dockerfile \
   -t forge-cell-optimus:latest packages/forge/deploy/
-docker build -f packages/forge/deploy/cell-centurion.Dockerfile \
-  -t forge-cell-centurion:latest packages/forge/deploy/
+docker build -f packages/forge/deploy/cell-scourge.Dockerfile \
+  -t forge-cell-scourge:latest packages/forge/deploy/
 ```
 
 Normal server execution is entirely in-process:

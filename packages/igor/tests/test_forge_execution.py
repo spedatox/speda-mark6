@@ -121,7 +121,7 @@ async def test_pentester_uses_security_cell_image(tmp_path, monkeypatch):
     )
 
     assert result == "checked"
-    assert observed["image"] == "forge-cell-centurion:latest"
+    assert observed["image"] == "forge-cell-scourge:latest"
 
 
 async def test_forge_tool_events_preserve_ids_and_tool_names(tmp_path, monkeypatch):

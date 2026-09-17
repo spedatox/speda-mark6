@@ -142,6 +142,13 @@ class DockerCell(Cell):
             args += ["--cap-add", cap]
         if not self.policy.allow_network:
             args += ["--network", "none"]       # default posture: no outbound network (§8)
+        else:
+            # When outbound network is allowed, configure privacy DNS so Docker
+            # does not inject the host server's local/ISP/cloud DNS into the container.
+            args += ["--dns", "9.9.9.9", "--dns", "1.1.1.1"]
+        # Allow VPN tunnel devices if NET_ADMIN is granted and /dev/net/tun is present on host
+        if "NET_ADMIN" in self.policy.cap_add and Path("/dev/net/tun").exists():
+            args += ["--device", "/dev/net/tun:/dev/net/tun"]
         if self.workspace_mount is not None:
             self.workspace_mount.mkdir(parents=True, exist_ok=True)
             self._hand_mount_to_cell_user()
