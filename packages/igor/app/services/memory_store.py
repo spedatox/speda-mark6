@@ -71,7 +71,7 @@ async def _mutate_in_txn(db, *, user_id: int, path: str, before: str | None,
                              evidence=resolved, model=model)
         receipt = MemoryWriteReceipt(user_id=user_id, path=path, author=author,
             request_id=request_id, before_hash=version(before or ""),
-            after_hash=version(after or ""), evidence=[{k:v for k,v in e.items() if k != "_image"} for e in resolved], rationale=reason,
+            after_hash=version(after or ""), evidence=[{k:v for k,v in e.items() if k not in ("_image", "source_body")} for e in resolved], rationale=reason,
             record_id=record_id)
     try:
         if before is None:
