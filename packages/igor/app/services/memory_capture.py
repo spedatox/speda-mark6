@@ -221,6 +221,7 @@ async def commit_candidate(
         after=content,
         author=author,
         action='commit',
+        managed=True,
         record_id=routing.record_id,
         evidence=candidate.evidence
     )

@@ -100,7 +100,8 @@ async def _mutate_in_txn(db, *, user_id: int, path: str, before: str | None,
 async def mutate_file(db, *, user_id: int, path: str, before: str | None,
                       after: str | None, author: str, action: str,
                       request_id: str = "", managed: bool = False,
-                      evidence: list | None = None, model: str = "") -> list[str]:
+                      evidence: list | None = None, model: str = "",
+                      record_id: str | None = None, migration_id: str | None = None) -> list[str]:
     """Agent write gateway. Compare-and-swap + revision are one transaction.
 
     None means absence/deletion, distinct from an empty document. A conflict
@@ -110,7 +111,8 @@ async def mutate_file(db, *, user_id: int, path: str, before: str | None,
         notes = await _mutate_in_txn(
             db, user_id=user_id, path=path, before=before, after=after,
             author=author, action=action, request_id=request_id,
-            managed=managed, evidence=evidence, model=model
+            managed=managed, evidence=evidence, model=model,
+            record_id=record_id, migration_id=migration_id
         )
         if path.startswith("/memories/finance/records/"):
             from app.services.finance_records import refresh_views
