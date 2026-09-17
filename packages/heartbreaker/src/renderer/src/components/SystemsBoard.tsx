@@ -1,15 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useMemo, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { useEffect, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { useHealth } from '../lib/useHealth'
 import { useIsMobile } from '../lib/useIsMobile'
-import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, fetchMemoryFolders, fetchAgentModels, pinAgentModel, fetchLegionModels, pinLegionModel, commitMemoryFile, fetchMemoryRevisions, restoreMemoryRevision } from '../lib/api'
-import type { ConnectionInfo, MemoryFileInfo, MemoryFolderInfo, AgentModelInfo, LegionModelInfo, MemoryRevisionInfo } from '../lib/api'
+import { fetchModels, getConnections, getBudgetMode, setConnection, fetchMemoryFiles, fetchAgentModels, pinAgentModel, fetchLegionModels, pinLegionModel } from '../lib/api'
+import type { ConnectionInfo, MemoryFileInfo, AgentModelInfo, LegionModelInfo } from '../lib/api'
 import type { AppConfig, ModelInfo } from '../lib/types'
 import { agentColor, monogram } from '../lib/agents'
 import AgentModelPicker from './AgentModelPicker'
@@ -17,6 +15,7 @@ import GlassSelect from './GlassSelect'
 import { Skeleton, SkeletonList } from './Skeleton'
 import MemoryExplorerModal from './MemoryExplorerModal'
 import MemoryEditorModal from './MemoryEditorModal'
+import GlassFolderIcon from './GlassFolderIcon'
 
 /**
  * SYSTEMS BOARD — the deep view of the deck's instrumentation.
@@ -28,10 +27,7 @@ import MemoryEditorModal from './MemoryEditorModal'
  *   Uplink + network nodes→ /health telemetry and the per-server token load
  *   Token budget          → the live ITPM prompt-prefix budget
  *   RTT trace             → sparkline from the /health probe
- *   Data banks            → session archive + the memory files, owner-editable
- *
- * The right telemetry column on the chat deck (TelemetryColumn.tsx) is the
- * glanceable half of this; keep the two saying the same thing.
+ *   Data banks            → big fluid glass folder categories
  *
  * Every value on this board comes from the backend. Nothing is set dressing —
  * the old header's "SYSTEMS 56A. / MODE 3Dx. 78A / ver 17" instrument markings
@@ -42,8 +38,93 @@ import MemoryEditorModal from './MemoryEditorModal'
 const MONO = "var(--font-mono)"
 const UI = "'Rajdhani', sans-serif"
 
-// Hoisted so react-markdown doesn't rebuild its processor on every render.
-const MEM_REMARK_PLUGINS = [remarkGfm]
+interface MemoryCategoryDef {
+  id: string
+  name: string
+  subtitle: string
+  path: string
+  badge: 'dossier' | 'finance' | 'wellness' | 'projects' | 'social' | 'academic' | 'cybersec' | 'ops'
+  color: string
+  match: (path: string) => boolean
+}
+
+const MEMORY_CATEGORIES: MemoryCategoryDef[] = [
+  {
+    id: 'dossier',
+    name: 'KİMLİK & DOSSIER',
+    subtitle: 'Kişisel profil, roller ve ilkeler',
+    path: '',
+    badge: 'dossier',
+    color: '#5fcce6',
+    match: p => {
+      const rel = p.replace(/^\/memories\//, '')
+      return !rel.includes('/') || rel.includes('dossier') || rel.includes('owner') || rel.includes('current') || rel.includes('patterns')
+    },
+  },
+  {
+    id: 'finance',
+    name: 'FİNANS & LEDGER',
+    subtitle: 'Varlıklar, bütçe ve ledger',
+    path: 'finance',
+    badge: 'finance',
+    color: '#f2b75c',
+    match: p => p.startsWith('/memories/finance'),
+  },
+  {
+    id: 'wellness',
+    name: 'SAĞLIK & ATHLETE',
+    subtitle: 'Antrenman, biyometri ve sağlık',
+    path: 'wellness',
+    badge: 'wellness',
+    color: '#51cf66',
+    match: p => p.startsWith('/memories/wellness'),
+  },
+  {
+    id: 'projects',
+    name: 'PROJELER & KOD',
+    subtitle: 'Aktif repo, mimari ve sistemler',
+    path: 'projects',
+    badge: 'projects',
+    color: '#4dabf7',
+    match: p => p.startsWith('/memories/projects'),
+  },
+  {
+    id: 'social',
+    name: 'SOSYAL & NETWORK',
+    subtitle: 'İletişim ve profesyonel ağ',
+    path: 'social',
+    badge: 'social',
+    color: '#e599f7',
+    match: p => p.startsWith('/memories/social'),
+  },
+  {
+    id: 'academic',
+    name: 'AKADEMİK & KPSS',
+    subtitle: 'Dersler, testler ve çalışma',
+    path: 'academic',
+    badge: 'academic',
+    color: '#ffd43b',
+    match: p => p.startsWith('/memories/academic'),
+  },
+  {
+    id: 'cybersec',
+    name: 'SİBER GÜVENLİK',
+    subtitle: 'Pentest, ağ güvenliği ve audit',
+    path: 'cybersec',
+    badge: 'cybersec',
+    color: '#ff6b6b',
+    match: p => p.startsWith('/memories/cybersec'),
+  },
+  {
+    id: 'ops',
+    name: 'SİSTEM & TELEMETRİ',
+    subtitle: 'Loglar, operasyon ve telemetri',
+    path: 'ops',
+    badge: 'ops',
+    color: '#20c997',
+    match: p => p.startsWith('/memories/ops') || p.includes('.audit') || p.includes('log.md'),
+  },
+]
 
 const PROVIDER_TAGS: Record<string, string> = {
   anthropic: 'ANTHROPIC', openai: 'OPENAI', gemini: 'GEMINI', zai: 'Z.AI · GLM', deepseek: 'DEEPSEEK', ollama: 'OLLAMA · LOCAL',
@@ -55,14 +136,7 @@ function symbolOf(name: string): string {
   return name.slice(0, 2).toUpperCase()
 }
 
-/** A revision with no timestamp is a real row the API can return, so this
- *  takes the null rather than making every caller guard it. */
-function fmtDate(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`
-}
+
 
 /* ── Panel shell — bracketed steel module with a header plate ─────────────── */
 function Panel({ title, light, right, pad = true, style, children }: {
@@ -289,24 +363,12 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
   const [budgetMode, setBudgetMode] = useState(true)
   const [rtt, setRtt] = useState<number[]>([])
   const [memFiles, setMemFiles] = useState<MemoryFileInfo[]>([])
-  // Folders the store DECLARES. `general/` holds nothing until the first
-  // document that belongs to no domain arrives, and a folder with no files
-  // is absent from a listing built out of file paths — so the owner could
-  // not see where such a thing would go before one had gone there.
-  const [memFolders, setMemFolders] = useState<MemoryFolderInfo[]>([])
-  const [memPath, setMemPath] = useState<string | null>(null)
   const [banksWide, setBanksWide] = useState(false)
   const [showExplorer, setShowExplorer] = useState(false)
   const [explorerInitialPath, setExplorerInitialPath] = useState<string | null>(null)
   const [editorFile, setEditorFile] = useState<MemoryFileInfo | null>(null)
   const [agentInfos, setAgentInfos] = useState<AgentModelInfo[]>([])
   const [legionInfos, setLegionInfos] = useState<LegionModelInfo[]>([])
-  // Owner-edit state for the knowledge bank.
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saveMsg, setSaveMsg] = useState<string | null>(null)
-  const [revs, setRevs] = useState<MemoryRevisionInfo[] | null>(null)
   // False until the boot batch below settles — without it, an agent switch
   // (this re-fetches on every `config` change) briefly reads as "no servers
   // connected" / "no model catalogue" instead of loading.
@@ -324,13 +386,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
       fetchAgentModels(config).then(setAgentInfos),
       fetchLegionModels(config).then(setLegionInfos),
       getBudgetMode(config).then(setBudgetMode).catch(() => {}),
-      fetchMemoryFolders(config).then(setMemFolders).catch(() => {}),
-      fetchMemoryFiles(config).then(files => {
-        setMemFiles(files)
-        // Open on the owner file — the extracted facts about the user.
-        const preferred = files.find(f => f.path.endsWith('/owner.md')) ?? files[0]
-        if (preferred) setMemPath(preferred.path)
-      }).catch(() => {}),
+      fetchMemoryFiles(config).then(setMemFiles).catch(() => {}),
       loadConns(),
     ]).finally(() => setBoardLoaded(true))
   }, [config]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -353,102 +409,8 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, banksWide])
 
-  // Switching files always drops out of edit / history mode.
-  useEffect(() => {
-    setEditing(false); setRevs(null); setSaveMsg(null)
-  }, [memPath])
-
-  const selFile = memFiles.find(f => f.path === memPath) || null
-
-  /** The store as a tree: loose files first, then one group per folder.
-   *
-   *  Ordering is deliberate and not alphabetical. The flat files at the root
-   *  are what the owner reads about himself, so they lead; the domains follow
-   *  in the order the roster owns them; dot-folders (`.audit`, `.archive`) sink
-   *  to the bottom because they are machine trails, not knowledge. Within a
-   *  folder, alphabetical — there is no meaningful order among topics and a
-   *  stable one is easier to scan than a clever one. */
-  const memTree = useMemo(() => {
-    // `finance/ledger` is a folder INSIDE a domain — the monthly ledger, one
-    // file per month. Listing it here keeps it next to the domain that owns it;
-    // an unlisted folder sorts into the anonymous 500 block, which would put
-    // the owner's ledger below `ops` and away from the rest of his money.
-    const ORDER = ['', 'dossier', 'social/professional', 'social/personal',
-                   'projects', 'general', 'wellness', 'academic', 'finance',
-                   'finance/ledger', 'cybersec', 'ops']
-    const groups = new Map<string, MemoryFileInfo[]>()
-    for (const f of memFolders) {
-      groups.set(f.path.replace(/^\/memories\//, ''), [])
-    }
-    for (const f of memFiles) {
-      const parts = f.path.replace(/^\/memories\//, '').split('/')
-      const dir = parts.slice(0, -1).join('/')
-      const g = groups.get(dir)
-      if (g) g.push(f); else groups.set(dir, [f])
-    }
-    const rank = (d: string) => {
-      const i = ORDER.indexOf(d)
-      if (i >= 0) return i
-      return d.startsWith('.') ? 900 : 500      // dot-folders last
-    }
-    return [...groups.entries()]
-      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
-      .map(([dir, files]) => [
-        dir,
-        files.slice().sort((x, y) => x.path.localeCompare(y.path)),
-      ] as [string, MemoryFileInfo[]])
-  }, [memFiles, memFolders])
-
-  // Folders start OPEN. A collapsed-by-default tree hides the thing the panel
-  // exists to show, and the owner opened it to look at his memory.
-  const [memFolded, setMemFolded] = useState<Record<string, boolean>>({})
-
   const applyFresh = (f: MemoryFileInfo) => {
     setMemFiles(prev => prev.map(x => (x.path === f.path ? { ...x, ...f } : x)))
-  }
-
-  const startEdit = () => {
-    if (!selFile) return
-    setDraft(selFile.content)
-    setSaveMsg(null)
-    setEditing(true)
-  }
-
-  const commitEdit = async () => {
-    if (!selFile) return
-    setSaving(true); setSaveMsg(null)
-    try {
-      const res = await commitMemoryFile(config, selFile.path, draft, selFile.updated_at)
-      if ('conflict' in res) {
-        if (res.current) applyFresh(res.current)
-        setSaveMsg('This file changed since you opened it — reloaded the latest. Re-apply your edit.')
-        if (res.current) setDraft(res.current.content)
-      } else {
-        applyFresh(res)
-        setEditing(false)
-        setSaveMsg('Committed.')
-      }
-    } catch {
-      setSaveMsg('Commit failed.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const openHistory = async () => {
-    if (!selFile) return
-    setRevs(await fetchMemoryRevisions(config, selFile.path))
-  }
-
-  const doRestore = async (id: number) => {
-    try {
-      const f = await restoreMemoryRevision(config, id)
-      applyFresh(f)
-      setRevs(null); setEditing(false)
-      setSaveMsg('Restored.')
-    } catch {
-      setSaveMsg('Restore failed.')
-    }
   }
 
   const toggleServer = async (c: ConnectionInfo) => {
@@ -495,7 +457,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         : 'minmax(220px, 300px) minmax(340px, 1fr) minmax(200px, 268px)',
       // Bottom track is fr-based so EXTEND can animate it: the knowledge bank
       // rises to ~80% of the board while the tactical grid compresses upward.
-      gridTemplateRows: isMobile ? 'auto' : `44px 1fr ${banksWide ? '4.4fr' : '0.28fr'}`,
+      gridTemplateRows: isMobile ? 'auto' : `44px 1fr ${banksWide ? '4.4fr' : '230px'}`,
       transition: 'grid-template-rows 0.5s cubic-bezier(0.22, 0.9, 0.3, 1)',
       overflowY: isMobile ? 'auto' : undefined,
       gap: 16, padding: '10px 24px 24px',
@@ -892,10 +854,10 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
             </span>
             <button
               onClick={() => {
-                setExplorerInitialPath(memPath)
+                setExplorerInitialPath('')
                 setShowExplorer(true)
               }}
-              title="Dosyaları Windows Explorer tarzı pencerede keşfet, düzenle ve yönet"
+              title="Tüm hafıza dosyalarını Windows Gezgini tarzı pencerede aç"
               className="hb-btn hb-btn-tint"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -930,216 +892,138 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         }
         style={{ gridColumn: '1 / -1', animation: 'hbRise 0.45s 0.26s ease both' }}
       >
-        {!boardLoaded ? (
-          <div style={{ margin: '4px 18px' }}>
-            <SkeletonList rows={2} mark={false} />
-          </div>
-        ) : memFiles.length === 0 ? (
-          <p style={{ margin: '4px 18px', fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>
-            No memory files yet — nothing has been written to the record.
-          </p>
-        ) : (
+        <div style={{
+          display: 'flex', flexDirection: 'column',
+          height: isMobile ? (banksWide ? '68vh' : 320) : '100%',
+          transition: 'height 0.5s cubic-bezier(0.22, 0.9, 0.3, 1)',
+          overflow: 'hidden', padding: '10px 18px',
+        }}>
+          {/* Top Fluid Glass Header Strip */}
           <div style={{
-            display: 'flex', minHeight: 0,
-            height: isMobile ? (banksWide ? '68vh' : 280) : '100%',
-            transition: 'height 0.5s cubic-bezier(0.22, 0.9, 0.3, 1)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '2px 4px 10px', flexWrap: 'wrap', gap: 8,
+            borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+            marginBottom: 10,
           }}>
-            {/* File rail — the memory TREE, grouped by folder.
-                A flat list of filenames stopped working the moment memory
-                became a tree: `sessions.md`, `ledger.md`, `notes.md` and
-                `profile.md` all read alike, and eighty-odd of them in one
-                column told the owner nothing about which domain he was
-                looking at. Folders are the index now, exactly as they are for
-                the agents. */}
-            <div style={{
-              width: 186, flexShrink: 0, overflowY: 'auto',
-              borderRight: '1px solid rgba(var(--hb-accent-rgb),0.14)',
-            }}>
-              <button
-                onClick={() => {
-                  setExplorerInitialPath(memPath)
-                  setShowExplorer(true)
-                }}
-                title="Windows Gezgini modunda tam pencere aç"
-                style={{
-                  width: '100%', padding: '8px 10px',
-                  border: 'none', borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.18)',
-                  background: 'rgba(var(--hb-accent-rgb),0.08)',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7,
-                  color: 'var(--hb-cyan-bright)', fontSize: '0.78rem',
-                  fontWeight: 600, textAlign: 'left',
-                }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="#d29922" stroke="none">
-                  <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
-                </svg>
-                <span>Dosya Gezgini ↗</span>
-              </button>
-
-              {memTree.map(([dir, files]) => (
-                <div key={dir} style={{ marginBottom: 6 }}>
-                  {dir && (
-                    <button
-                      onClick={() => setMemFolded(m => ({ ...m, [dir]: !m[dir] }))}
-                      style={{
-                        width: '100%', display: 'flex', alignItems: 'center', gap: 6,
-                        padding: '7px 10px 5px', background: 'transparent', border: 'none',
-                        cursor: 'pointer', textAlign: 'left',
-                        fontFamily: "'Rajdhani', sans-serif", fontSize: '0.74rem',
-                        letterSpacing: '0.13em', textTransform: 'uppercase',
-                        color: 'var(--hb-text-faint)',
-                      }}
-                    >
-                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        strokeWidth="2.5" style={{
-                          flexShrink: 0, opacity: 0.6,
-                          transform: memFolded[dir] ? 'rotate(-90deg)' : 'none',
-                          transition: 'transform 0.15s',
-                        }}>
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {dir}
-                      </span>
-                      <span style={{ marginLeft: 'auto', opacity: 0.5, letterSpacing: 0 }}>
-                        {files.length}
-                      </span>
-                    </button>
-                  )}
-                  {!memFolded[dir] && files.map(f => {
-                    // Inside a folder the folder name is already overhead, so
-                    // the row carries only the leaf — `sessions`, not
-                    // `wellness/sessions.md`.
-                    const leaf = (f.path.split('/').pop() || f.path).replace(/\.md$/, '')
-                    const sel = f.path === memPath
-                    return (
-                      <button
-                        key={f.path}
-                        onClick={() => setMemPath(f.path)}
-                        className={sel ? 'hb-row hb-row-active' : 'hb-row'}
-                        style={{
-                          width: '100%', padding: '7px 12px 7px', marginBottom: 1,
-                          paddingLeft: dir ? 26 : 12,
-                          display: 'flex', alignItems: 'center', gap: 8,
-                          cursor: 'pointer', textAlign: 'left', fontSize: '0.84rem',
-                          color: sel ? 'var(--hb-text)' : 'var(--hb-text-dim)',
-                          fontWeight: sel ? 500 : 400,
-                        }}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                          style={{ flexShrink: 0, color: sel ? 'var(--hb-cyan)' : 'var(--hb-icon-dim)' }}>
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {leaf}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: 'var(--hb-cyan-bright)',
+                boxShadow: '0 0 8px var(--hb-cyan-bright)',
+              }} />
+              <span style={{ fontFamily: UI, fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.12em', color: 'var(--hb-cyan-bright)' }}>
+                SPEDA // STARK FLUID GLASS KNOWLEDGE VAULT
+              </span>
+              <span style={{ fontSize: '0.78rem', color: 'var(--hb-text-faint)' }}>
+                ({memFiles.length} aktif arşiv dosyası · 8 dinamik alan)
+              </span>
             </div>
 
-            {/* Fact readout — the selected file's extracted knowledge.
-                Flows as a single vertical column; extending just gives it
-                more height, never a side-by-side split. */}
-            <div style={{
-              flex: 1, overflowY: 'auto', padding: '0.35rem 0.7rem 0.5rem',
-            }}>
-              {(() => {
-                const file = selFile
-                if (!file) return null
-                // Real buttons on the deck's control corner, not 0.5rem mono
-                // chips with a hand-rolled 3px radius.
-                const btn = {
-                  fontSize: '0.8125rem', letterSpacing: 0,
-                  height: 30, padding: '0 13px', cursor: 'pointer',
-                  display: 'inline-flex', alignItems: 'center',
-                  color: 'var(--hb-text-dim)',
-                } as const
-                const toolbar = (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center', marginBottom: 10, columnSpan: 'all' }}>
-                    {saveMsg && <span style={{ fontSize: '0.8125rem', color: 'var(--hb-cyan-bright)', marginRight: 'auto' }}>{saveMsg}</span>}
-                    {file.updated_at && !editing && !revs && (
-                      <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>Last write {fmtDate(file.updated_at)}</span>
-                    )}
-                    {file.editable && !editing && !revs && (
-                      <>
-                        <button className="hb-btn hb-btn-tint" style={{ ...btn, color: 'var(--hb-cyan-bright)' }} onClick={() => setEditorFile(file)}>Editörde Aç</button>
-                        <button className="hb-btn" style={btn} onClick={openHistory}>History</button>
-                        <button className="hb-btn" style={btn} onClick={startEdit}>Edit</button>
-                      </>
-                    )}
-                    {editing && (
-                      <>
-                        <button className="hb-btn" style={btn} onClick={() => setEditing(false)} disabled={saving}>Cancel</button>
-                        <button className="hb-btn hb-btn-tint" style={{ ...btn, color: 'var(--hb-cyan-bright)' }} onClick={commitEdit} disabled={saving}>{saving ? 'Saving…' : 'Commit'}</button>
-                      </>
-                    )}
-                    {revs && <button className="hb-btn" style={btn} onClick={() => setRevs(null)}>Close</button>}
-                  </div>
-                )
-
-                if (editing) return (
-                  <div style={{ columnSpan: 'all' }}>
-                    {toolbar}
-                    <textarea
-                      value={draft}
-                      onChange={e => setDraft(e.target.value)}
-                      spellCheck={false}
-                      style={{
-                        width: '100%', minHeight: banksWide ? '46vh' : 200, resize: 'vertical',
-                        background: 'rgba(0,0,0,0.28)', color: 'var(--hb-text-dim)',
-                        border: '1px solid rgba(var(--hb-accent-rgb),0.28)', borderRadius: 4,
-                        fontSize: '0.875rem', lineHeight: 1.6, padding: '12px 14px',
-                      }}
-                    />
-                  </div>
-                )
-
-                if (revs) return (
-                  <div style={{ columnSpan: 'all' }}>
-                    {toolbar}
-                    {revs.length === 0 && <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)' }}>No revisions yet</p>}
-                    {revs.map(r => (
-                      <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.2rem 0', borderBottom: '1px solid rgba(var(--hb-accent-rgb),0.08)' }}>
-                        <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', minWidth: 118 }}>{fmtDate(r.created_at)}</span>
-                        <span style={{ fontSize: '0.8125rem', color: r.author === 'owner' ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)', minWidth: 64 }}>{r.author}</span>
-                        <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-dim)', flex: 1 }}>{r.action}</span>
-                        <button style={btn} onClick={() => doRestore(r.id)}>RESTORE</button>
-                      </div>
-                    ))}
-                  </div>
-                )
-
-                if (!file.content.trim()) return (
-                  <>
-                    {toolbar}
-                    <p style={{ fontSize: '0.875rem', color: 'var(--hb-text-faint)', padding: '4px 0' }}>
-                      Empty — nothing has been written to this file yet.
-                    </p>
-                  </>
-                )
-                // Render the file as real markdown — bold, links, code, tables,
-                // blockquotes, nested + task lists and rules all honoured. The
-                // .hb-mem-md rules in heartbreaker.css keep the dossier voice
-                // (cyan uppercase headers, ▸ fact bullets, italic notes).
-                return (
-                  <>
-                    {toolbar}
-                    <div className="hb-mem-md">
-                      <ReactMarkdown remarkPlugins={MEM_REMARK_PLUGINS}>
-                        {file.content}
-                      </ReactMarkdown>
-                    </div>
-                  </>
-                )
-              })()}
-            </div>
+            <button
+              onClick={() => {
+                setExplorerInitialPath('')
+                setShowExplorer(true)
+              }}
+              className="glass glass-interactive"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                padding: '4px 14px', borderRadius: 20,
+                fontFamily: UI, fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.08em',
+                color: 'var(--hb-cyan-bright)', cursor: 'pointer',
+                border: '1px solid rgba(var(--hb-cyan-bright-rgb), 0.38)',
+                background: 'linear-gradient(180deg, rgba(var(--hb-cyan-bright-rgb), 0.14) 0%, rgba(var(--hb-accent-rgb), 0.04) 100%), var(--glass-fill)',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.35)',
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+              </svg>
+              <span>TÜM HAFIZA GEZGİNİ (ROOT EXPLORER) ↗</span>
+            </button>
           </div>
-        )}
+
+          {/* Big Glass Folder Categories Grid */}
+          <div style={{
+            flex: 1, overflowY: 'auto',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+            gap: 12, alignContent: 'start',
+            paddingRight: 4,
+          }}>
+            {!boardLoaded ? (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <SkeletonList rows={2} mark={false} />
+              </div>
+            ) : (
+              MEMORY_CATEGORIES.map(cat => {
+                const fileCount = memFiles.filter(f => cat.match(f.path)).length
+                return (
+                  <div
+                    key={cat.id}
+                    onClick={() => {
+                      setExplorerInitialPath(cat.path)
+                      setShowExplorer(true)
+                    }}
+                    className="glass glass-interactive"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '12px 14px', borderRadius: 12,
+                      cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(12, 16, 22, 0.7) 100%), var(--glass-fill)',
+                      boxShadow: 'var(--glass-shadow)',
+                      transition: 'all 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = cat.color
+                      e.currentTarget.style.boxShadow = `0 8px 24px ${cat.color}25, inset 0 1px 0 rgba(255,255,255,0.22)`
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
+                      e.currentTarget.style.boxShadow = 'var(--glass-shadow)'
+                      e.currentTarget.style.transform = 'translateY(0)'
+                    }}
+                  >
+                    <GlassFolderIcon size={48} color={cat.color} badgeIcon={cat.badge} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 2 }}>
+                        <span style={{
+                          fontFamily: UI, fontSize: '0.86rem', fontWeight: 700,
+                          letterSpacing: '0.06em', color: '#fff',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>
+                          {cat.name}
+                        </span>
+                        <span style={{
+                          fontSize: '0.66rem', fontWeight: 600,
+                          padding: '1px 6px', borderRadius: 4,
+                          background: `${cat.color}20`, color: cat.color,
+                          border: `1px solid ${cat.color}38`,
+                          flexShrink: 0,
+                        }}>
+                          {fileCount}
+                        </span>
+                      </div>
+                      <div style={{
+                        fontSize: '0.74rem', color: 'var(--hb-text-dim)',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
+                        {cat.subtitle}
+                      </div>
+                      <div style={{
+                        fontSize: '0.68rem', color: 'var(--hb-text-faint)',
+                        marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
+                        {cat.path ? `/memories/${cat.path}` : '/memories (kök)'}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
       </Panel>
 
       {showExplorer && (

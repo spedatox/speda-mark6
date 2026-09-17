@@ -26,7 +26,7 @@ export default function MemoryEditorModal({
   const [content, setContent] = useState(file.content)
   const [lastSavedContent, setLastSavedContent] = useState(file.content)
   const [saving, setSaving] = useState(false)
-  const [, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'conflict'>('idle')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'conflict'>('idle')
   const [statusMsg, setStatusMsg] = useState<string>('')
   const [viewMode, setViewMode] = useState<'code' | 'split' | 'preview'>('split')
   const [showHistory, setShowHistory] = useState(false)
@@ -86,7 +86,7 @@ export default function MemoryEditorModal({
     if (saving) return
     setSaving(true)
     setSaveStatus('saving')
-    setStatusMsg('Kaydediliyor...')
+    setStatusMsg('Kayıt yapılıyor...')
     try {
       const res = await commitMemoryFile(config, file.path, content, file.updated_at)
       if ('conflict' in res) {
@@ -171,116 +171,190 @@ export default function MemoryEditorModal({
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
-        background: 'rgba(5, 7, 10, 0.82)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '24px', animation: 'hbFadeIn 0.2s ease',
+        position: 'fixed',
+        inset: 0,
+        zIndex: 10000,
+        background: 'rgba(3, 6, 10, 0.82)',
+        backdropFilter: 'blur(22px)',
+        WebkitBackdropFilter: 'blur(22px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        animation: 'hbFadeIn 0.22s ease',
       }}
     >
-      {/* Editor Window Container */}
+      {/* Editor Window Container — Authentic Stark Fluid Glass */}
       <div
+        className="glass"
         style={{
-          width: '94vw', maxWidth: 1200, height: '88vh', maxHeight: 880,
-          background: '#14171c',
-          border: '1px solid rgba(var(--hb-accent-rgb), 0.35)',
-          borderRadius: 8,
-          boxShadow: '0 24px 64px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255,255,255,0.06)',
-          display: 'flex', flexDirection: 'column',
+          width: '95vw',
+          maxWidth: 1260,
+          height: '90vh',
+          maxHeight: 900,
+          borderRadius: 16,
+          background: 'linear-gradient(145deg, rgba(20, 24, 33, 0.82) 0%, rgba(10, 13, 19, 0.95) 100%), var(--glass-fill)',
+          backdropFilter: 'blur(28px) saturate(140%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(140%)',
+          border: '1px solid rgba(255, 255, 255, 0.16)',
+          boxShadow: '0 28px 72px rgba(0, 0, 0, 0.85), inset 0 1px 0 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 0 rgba(255, 255, 255, 0.06), 0 0 40px rgba(95, 204, 230, 0.12)',
+          display: 'flex',
+          flexDirection: 'column',
           overflow: 'hidden',
           fontFamily: 'var(--font-read), -apple-system, sans-serif',
-          color: '#d1d7e0',
+          color: '#e6edf3',
+          position: 'relative',
         }}
       >
-        {/* VS Code / Notepad Title Bar */}
+        {/* Title Bar (Stark Fluid Glass HUD Style) */}
         <div
           style={{
-            height: 38, flexShrink: 0,
-            background: '#0d1014',
+            height: 42,
+            flexShrink: 0,
+            background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(0, 0, 0, 0.22) 100%)',
             borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '0 12px', userSelect: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 14px',
+            userSelect: 'none',
           }}
         >
-          {/* Left: Window Title & App Icon */}
+          {/* Left: Window Title & Breadcrumb HUD */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--hb-cyan)" strokeWidth="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="16" y1="13" x2="8" y2="13" />
-              <line x1="16" y1="17" x2="8" y2="17" />
-              <polyline points="10 9 9 9 8 9" />
-            </svg>
-            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e6edf3', letterSpacing: '0.02em' }}>
-              {filename} — Hafıza Düzenleyicisi
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: isDirty ? 'var(--hb-amber, #f2b75c)' : 'var(--hb-cyan-bright, #5fcce6)',
+                boxShadow: isDirty ? '0 0 10px #f2b75c' : '0 0 10px var(--hb-cyan-bright, #5fcce6)',
+                transition: 'all 0.2s',
+              }}
+            />
+            <span
+              style={{
+                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                letterSpacing: '0.12em',
+                color: '#fff',
+                textTransform: 'uppercase',
+              }}
+            >
+              SPEDA_MK_VI // FLUID_EDITOR // {filename.toUpperCase()}
             </span>
-            <span style={{ fontSize: '0.72rem', color: '#7d8590', fontFamily: 'monospace' }}>
-              ({relativePath})
+            <span
+              style={{
+                fontFamily: 'var(--font-mono), monospace',
+                fontSize: '0.64rem',
+                color: 'var(--hb-cyan-bright, #5fcce6)',
+                background: 'rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.12)',
+                border: '1px solid rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.3)',
+                padding: '1px 8px',
+                borderRadius: 4,
+              }}
+            >
+              {relativePath}
             </span>
           </div>
 
           {/* Right: Window Controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span
+              style={{
+                fontFamily: 'var(--font-mono), monospace',
+                fontSize: '0.62rem',
+                color: 'var(--hb-text-faint, #5f6368)',
+                letterSpacing: '0.08em',
+              }}
+            >
+              MARKDOWN_SYNTHESIS · LIVE_BUFFER
+            </span>
             <button
               onClick={onClose}
               title="Kapat (Esc)"
+              className="glass glass-interactive"
               style={{
-                background: 'transparent', border: 'none', color: '#8b949e',
-                cursor: 'pointer', padding: '4px 8px', borderRadius: 4,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.15s',
+                width: 28,
+                height: 28,
+                borderRadius: 6,
+                background: 'transparent',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#9aa0a6',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
               }}
               onMouseEnter={e => {
-                e.currentTarget.style.background = '#e81123'
+                e.currentTarget.style.background = 'rgba(232, 17, 35, 0.35)'
+                e.currentTarget.style.borderColor = 'rgba(232, 17, 35, 0.8)'
                 e.currentTarget.style.color = '#fff'
               }}
               onMouseLeave={e => {
                 e.currentTarget.style.background = 'transparent'
-                e.currentTarget.style.color = '#8b949e'
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)'
+                e.currentTarget.style.color = '#9aa0a6'
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              ✕
             </button>
           </div>
         </div>
 
-        {/* Tab Bar & Action Ribbon */}
+        {/* Action Ribbon / Glass Tab Bar */}
         <div
           style={{
-            height: 42, flexShrink: 0,
-            background: '#161a20',
+            height: 46,
+            flexShrink: 0,
+            background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(0, 0, 0, 0.12) 100%)',
             borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '0 12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 14px',
           }}
         >
-          {/* Active Tab */}
+          {/* Active Stark Tab */}
           <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
             <div
+              className="glass"
               style={{
-                height: '100%', padding: '0 16px',
-                background: '#1c2128',
-                borderTop: '2px solid var(--hb-cyan)',
+                height: '100%',
+                padding: '0 18px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderTop: '2px solid var(--hb-cyan-bright, #5fcce6)',
                 borderRight: '1px solid rgba(255, 255, 255, 0.08)',
-                display: 'flex', alignItems: 'center', gap: 8,
-                fontSize: '0.8rem', color: '#f0f6fc', fontWeight: 500,
+                borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 9,
+                fontSize: '0.78rem',
+                color: '#fff',
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                boxShadow: 'inset 0 1px 0 0 rgba(255, 255, 255, 0.15)',
               }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--hb-cyan)" strokeWidth="2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--hb-cyan-bright, #5fcce6)" strokeWidth="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+                <polyline points="10 9 9 9 8 9" />
               </svg>
               <span>{filename}</span>
               {isDirty && (
                 <span
-                  title="Kaydedilmemiş değişiklikler var"
+                  title="Kaydedilmemiş değişiklikler mevcut"
                   style={{
-                    width: 7, height: 7, borderRadius: '50%',
-                    background: 'var(--hb-amber, #e3b341)',
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: 'var(--hb-amber, #f2b75c)',
+                    boxShadow: '0 0 8px #f2b75c',
                     display: 'inline-block',
                   }}
                 />
@@ -289,50 +363,69 @@ export default function MemoryEditorModal({
           </div>
 
           {/* Action Toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {/* View Mode Switcher */}
             <div
+              className="glass"
               style={{
-                display: 'flex', alignItems: 'center',
-                background: '#0d1117', border: '1px solid rgba(255, 255, 255, 0.12)',
-                borderRadius: 4, padding: 2,
+                display: 'flex',
+                alignItems: 'center',
+                background: 'rgba(0, 0, 0, 0.45)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                borderRadius: 8,
+                padding: 3,
               }}
             >
               <button
                 onClick={() => setViewMode('code')}
                 title="Yalnızca Kod Düzenleyici"
                 style={{
-                  background: viewMode === 'code' ? 'rgba(var(--hb-accent-rgb), 0.25)' : 'transparent',
-                  color: viewMode === 'code' ? 'var(--hb-cyan-bright)' : '#8b949e',
-                  border: 'none', padding: '4px 9px', borderRadius: 3,
-                  cursor: 'pointer', fontSize: '0.75rem', fontWeight: 500,
+                  background: viewMode === 'code' ? 'rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.22)' : 'transparent',
+                  color: viewMode === 'code' ? 'var(--hb-cyan-bright, #5fcce6)' : '#9aa0a6',
+                  border: viewMode === 'code' ? '1px solid rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.4)' : '1px solid transparent',
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: '0.74rem',
+                  fontWeight: 600,
+                  transition: 'all 0.15s ease',
                 }}
               >
-                Kod
+                KOD
               </button>
               <button
                 onClick={() => setViewMode('split')}
-                title="Bölünmüş Görünüm (Kod + Canlı Markdown)"
+                title="İkili Bölünmüş Görünüm (Kod + Canlı Markdown)"
                 style={{
-                  background: viewMode === 'split' ? 'rgba(var(--hb-accent-rgb), 0.25)' : 'transparent',
-                  color: viewMode === 'split' ? 'var(--hb-cyan-bright)' : '#8b949e',
-                  border: 'none', padding: '4px 9px', borderRadius: 3,
-                  cursor: 'pointer', fontSize: '0.75rem', fontWeight: 500,
+                  background: viewMode === 'split' ? 'rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.22)' : 'transparent',
+                  color: viewMode === 'split' ? 'var(--hb-cyan-bright, #5fcce6)' : '#9aa0a6',
+                  border: viewMode === 'split' ? '1px solid rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.4)' : '1px solid transparent',
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: '0.74rem',
+                  fontWeight: 600,
+                  transition: 'all 0.15s ease',
                 }}
               >
-                İkili Bölme
+                İKİLİ BÖLME
               </button>
               <button
                 onClick={() => setViewMode('preview')}
                 title="Yalnızca Markdown Önizleme"
                 style={{
-                  background: viewMode === 'preview' ? 'rgba(var(--hb-accent-rgb), 0.25)' : 'transparent',
-                  color: viewMode === 'preview' ? 'var(--hb-cyan-bright)' : '#8b949e',
-                  border: 'none', padding: '4px 9px', borderRadius: 3,
-                  cursor: 'pointer', fontSize: '0.75rem', fontWeight: 500,
+                  background: viewMode === 'preview' ? 'rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.22)' : 'transparent',
+                  color: viewMode === 'preview' ? 'var(--hb-cyan-bright, #5fcce6)' : '#9aa0a6',
+                  border: viewMode === 'preview' ? '1px solid rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.4)' : '1px solid transparent',
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: '0.74rem',
+                  fontWeight: 600,
+                  transition: 'all 0.15s ease',
                 }}
               >
-                Önizleme
+                ÖNİZLEME
               </button>
             </div>
 
@@ -340,50 +433,74 @@ export default function MemoryEditorModal({
             <button
               onClick={() => setWordWrap(!wordWrap)}
               title={wordWrap ? 'Satır Kaydırmayı Kapat' : 'Satır Kaydırmayı Aç'}
+              className="glass glass-interactive"
               style={{
-                background: wordWrap ? 'rgba(255,255,255,0.08)' : 'transparent',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: wordWrap ? '#f0f6fc' : '#8b949e',
-                borderRadius: 4, padding: '4px 8px', fontSize: '0.74rem',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                background: wordWrap ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: wordWrap ? '#fff' : '#8b949e',
+                borderRadius: 7,
+                padding: '5px 10px',
+                fontSize: '0.74rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                transition: 'all 0.15s ease',
               }}
             >
-              ↩ Kaydır
+              <span>↩</span> Kaydır
             </button>
 
             {/* Revisions History Button */}
             <button
               onClick={handleOpenHistory}
               title="Sürüm Geçmişini Görüntüle"
+              className="glass glass-interactive"
               style={{
-                background: showHistory ? 'rgba(var(--hb-accent-rgb), 0.2)' : 'transparent',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: showHistory ? 'var(--hb-cyan-bright)' : '#c9d1d9',
-                borderRadius: 4, padding: '4px 10px', fontSize: '0.74rem',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                background: showHistory ? 'rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.18)' : 'rgba(255, 255, 255, 0.03)',
+                border: showHistory ? '1px solid rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.45)' : '1px solid rgba(255, 255, 255, 0.12)',
+                color: showHistory ? 'var(--hb-cyan-bright, #5fcce6)' : '#c9d1d9',
+                borderRadius: 7,
+                padding: '5px 12px',
+                fontSize: '0.74rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                transition: 'all 0.15s ease',
               }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 6 12 12 16 14" />
               </svg>
-              Geçmiş
+              <span>Geçmiş</span>
             </button>
 
             {/* Save Button */}
             <button
               onClick={handleSave}
               disabled={saving || !isDirty}
-              title="Kaydet (Ctrl+S)"
+              title="Değişiklikleri Kaydet (Ctrl+S)"
               style={{
-                background: isDirty ? 'var(--hb-cyan, #36abca)' : 'rgba(255,255,255,0.06)',
-                color: isDirty ? '#0a0d12' : '#6e7681',
-                border: 'none', borderRadius: 4,
-                padding: '4px 14px', fontSize: '0.76rem', fontWeight: 600,
+                background: isDirty
+                  ? 'linear-gradient(135deg, rgba(95, 204, 230, 0.95) 0%, rgba(54, 171, 202, 0.95) 100%)'
+                  : 'rgba(255, 255, 255, 0.05)',
+                color: isDirty ? '#05080c' : '#5f6368',
+                border: isDirty ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: 7,
+                padding: '5px 16px',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                letterSpacing: '0.04em',
                 cursor: isDirty && !saving ? 'pointer' : 'default',
-                display: 'flex', alignItems: 'center', gap: 6,
-                boxShadow: isDirty ? '0 2px 8px rgba(54, 171, 202, 0.35)' : 'none',
-                transition: 'all 0.15s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                boxShadow: isDirty ? '0 0 16px rgba(95, 204, 230, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4)' : 'none',
+                transition: 'all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
               }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -391,85 +508,156 @@ export default function MemoryEditorModal({
                 <polyline points="17 21 17 13 7 13 7 21" />
                 <polyline points="7 3 7 8 15 8" />
               </svg>
-              {saving ? 'KAYDEDİLİYOR…' : 'KAYDET'}
+              <span>{saving ? 'KAYDEDİLİYOR…' : 'KAYDET'}</span>
             </button>
           </div>
         </div>
 
         {/* Main Work Area */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden' }}>
-          {/* Revisions Drawer */}
+          {/* Revisions Drawer (Frosted Stark Glass) */}
           {showHistory && (
             <div
+              className="glass"
               style={{
-                position: 'absolute', right: 0, top: 0, bottom: 0, width: 340, zIndex: 30,
-                background: '#12161c', borderLeft: '1px solid rgba(var(--hb-accent-rgb), 0.3)',
-                boxShadow: '-8px 0 24px rgba(0,0,0,0.5)',
-                display: 'flex', flexDirection: 'column',
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: 360,
+                zIndex: 35,
+                background: 'linear-gradient(180deg, rgba(16, 20, 28, 0.94) 0%, rgba(10, 13, 18, 0.97) 100%)',
+                backdropFilter: 'blur(28px)',
+                WebkitBackdropFilter: 'blur(28px)',
+                borderLeft: '1px solid rgba(95, 204, 230, 0.3)',
+                boxShadow: '-12px 0 36px rgba(0, 0, 0, 0.75)',
+                display: 'flex',
+                flexDirection: 'column',
+                animation: 'hbFadeIn 0.2s ease',
               }}
             >
               <div
                 style={{
-                  height: 38, padding: '0 14px',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  fontWeight: 600, fontSize: '0.78rem', color: '#e6edf3',
+                  height: 42,
+                  padding: '0 16px',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'rgba(255, 255, 255, 0.02)',
                 }}
               >
-                <span>Sürüm Geçmişi (Revisions)</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: 'var(--hb-cyan-bright, #5fcce6)',
+                      boxShadow: '0 0 8px var(--hb-cyan-bright, #5fcce6)',
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontFamily: "'Rajdhani', sans-serif",
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      letterSpacing: '0.08em',
+                      color: '#fff',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Sürüm Geçmişi (Revisions)
+                  </span>
+                </div>
                 <button
                   onClick={() => setShowHistory(false)}
-                  style={{ background: 'transparent', border: 'none', color: '#8b949e', cursor: 'pointer' }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#8b949e',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#8b949e')}
                 >
                   ✕
                 </button>
               </div>
 
-              <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
                 {loadingRevs && (
-                  <p style={{ padding: '16px', fontSize: '0.75rem', color: '#8b949e', textAlign: 'center' }}>
+                  <p style={{ padding: '24px', fontSize: '0.75rem', color: '#8b949e', textAlign: 'center' }}>
                     Sürümler yükleniyor...
                   </p>
                 )}
                 {!loadingRevs && (!revs || revs.length === 0) && (
-                  <p style={{ padding: '16px', fontSize: '0.75rem', color: '#8b949e', textAlign: 'center' }}>
-                    Henüz kayıtlı bir geçmiş yok.
+                  <p style={{ padding: '24px', fontSize: '0.75rem', color: '#8b949e', textAlign: 'center' }}>
+                    Henüz kayıtlı bir sürüm geçmişi bulunmuyor.
                   </p>
                 )}
-                {!loadingRevs && revs?.map(r => (
-                  <div
-                    key={r.id}
-                    style={{
-                      background: '#171c23', border: '1px solid rgba(255,255,255,0.06)',
-                      borderRadius: 4, padding: '8px 10px', marginBottom: 8,
-                      fontSize: '0.74rem',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ color: r.author === 'owner' ? '#f2b75c' : 'var(--hb-cyan)' }}>
-                        {r.author.toUpperCase()}
-                      </span>
-                      <span style={{ color: '#8b949e', fontSize: '0.7rem' }}>
-                        {r.created_at ? new Date(r.created_at).toLocaleString() : ''}
-                      </span>
-                    </div>
-                    <div style={{ color: '#c9d1d9', marginBottom: 6, fontSize: '0.72rem' }}>
-                      İşlem: {r.action}
-                    </div>
-                    <button
-                      onClick={() => handleRestore(r.id)}
+                {!loadingRevs &&
+                  revs?.map(r => (
+                    <div
+                      key={r.id}
+                      className="glass"
                       style={{
-                        background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)',
-                        color: '#f0f6fc', borderRadius: 3, padding: '3px 8px', fontSize: '0.7rem',
-                        cursor: 'pointer', width: '100%',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: 8,
+                        padding: '10px 12px',
+                        marginBottom: 10,
+                        fontSize: '0.74rem',
+                        transition: 'all 0.15s ease',
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(var(--hb-accent-rgb), 0.3)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
                     >
-                      Bu Sürüme Geri Yükle
-                    </button>
-                  </div>
-                ))}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            letterSpacing: '0.05em',
+                            color: r.author === 'owner' ? '#f2b75c' : 'var(--hb-cyan-bright, #5fcce6)',
+                          }}
+                        >
+                          {r.author.toUpperCase()}
+                        </span>
+                        <span style={{ color: '#8b949e', fontSize: '0.68rem', fontFamily: 'monospace' }}>
+                          {r.created_at ? new Date(r.created_at).toLocaleString() : ''}
+                        </span>
+                      </div>
+                      <div style={{ color: '#c9d1d9', marginBottom: 8, fontSize: '0.72rem' }}>
+                        <span style={{ color: '#8b949e' }}>İşlem: </span>
+                        {r.action}
+                      </div>
+                      <button
+                        onClick={() => handleRestore(r.id)}
+                        className="glass glass-interactive"
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.06)',
+                          border: '1px solid rgba(255, 255, 255, 0.14)',
+                          color: '#fff',
+                          borderRadius: 6,
+                          padding: '5px 10px',
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          width: '100%',
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = 'rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.25)'
+                          e.currentTarget.style.borderColor = 'rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.5)'
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.14)'
+                        }}
+                      >
+                        Bu Sürüme Geri Yükle ↺
+                      </button>
+                    </div>
+                  ))}
               </div>
             </div>
           )}
@@ -479,8 +667,9 @@ export default function MemoryEditorModal({
             <div
               style={{
                 flex: viewMode === 'split' ? 1 : '1 1 100%',
-                display: 'flex', minHeight: 0,
-                background: '#12151a',
+                display: 'flex',
+                minHeight: 0,
+                background: 'rgba(7, 10, 15, 0.45)',
                 borderRight: viewMode === 'split' ? '1px solid rgba(255, 255, 255, 0.08)' : 'none',
                 position: 'relative',
               }}
@@ -489,14 +678,17 @@ export default function MemoryEditorModal({
               <div
                 ref={lineGutterRef}
                 style={{
-                  width: 48, flexShrink: 0,
-                  background: '#0d1014',
+                  width: 50,
+                  flexShrink: 0,
+                  background: 'rgba(0, 0, 0, 0.35)',
                   borderRight: '1px solid rgba(255, 255, 255, 0.06)',
-                  padding: '12px 6px 12px 0',
+                  padding: '14px 8px 14px 0',
                   textAlign: 'right',
                   fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
-                  fontSize: '0.78rem', lineHeight: '1.5rem',
-                  color: '#484f58', userSelect: 'none',
+                  fontSize: '0.76rem',
+                  lineHeight: '1.5rem',
+                  color: 'rgba(255, 255, 255, 0.2)',
+                  userSelect: 'none',
                   overflow: 'hidden',
                 }}
               >
@@ -505,8 +697,9 @@ export default function MemoryEditorModal({
                     key={i}
                     style={{
                       height: '1.5rem',
-                      color: cursorPos.line === i + 1 ? 'var(--hb-cyan, #36abca)' : '#484f58',
-                      fontWeight: cursorPos.line === i + 1 ? 600 : 400,
+                      color: cursorPos.line === i + 1 ? 'var(--hb-cyan-bright, #5fcce6)' : 'rgba(255, 255, 255, 0.22)',
+                      fontWeight: cursorPos.line === i + 1 ? 700 : 400,
+                      textShadow: cursorPos.line === i + 1 ? '0 0 8px rgba(95, 204, 230, 0.6)' : 'none',
                     }}
                   >
                     {i + 1}
@@ -527,12 +720,18 @@ export default function MemoryEditorModal({
                 spellCheck={false}
                 placeholder="Hafıza notlarınızı buraya yazın..."
                 style={{
-                  flex: 1, height: '100%',
-                  background: 'transparent', color: '#e6edf3',
-                  border: 'none', outline: 'none', resize: 'none',
-                  padding: '12px 16px',
+                  flex: 1,
+                  height: '100%',
+                  background: 'transparent',
+                  color: '#e6edf3',
+                  caretColor: 'var(--hb-cyan-bright, #5fcce6)',
+                  border: 'none',
+                  outline: 'none',
+                  resize: 'none',
+                  padding: '14px 18px',
                   fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
-                  fontSize: '0.78rem', lineHeight: '1.5rem',
+                  fontSize: '0.78rem',
+                  lineHeight: '1.5rem',
                   whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
                   overflowX: wordWrap ? 'hidden' : 'auto',
                   overflowY: 'auto',
@@ -547,12 +746,37 @@ export default function MemoryEditorModal({
             <div
               style={{
                 flex: viewMode === 'split' ? 1 : '1 1 100%',
-                overflowY: 'auto', padding: '16px 24px',
-                background: '#151921',
+                overflowY: 'auto',
+                padding: '18px 26px',
+                background: 'rgba(12, 16, 22, 0.55)',
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
               }}
             >
-              <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6, color: '#8b949e', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                <span>Dossier Markdown Görünümü</span>
+              <div
+                style={{
+                  marginBottom: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  color: 'var(--hb-text-dim, #9aa0a6)',
+                  fontSize: '0.72rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontWeight: 600,
+                }}
+              >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: 'var(--hb-cyan-bright, #5fcce6)',
+                    boxShadow: '0 0 6px var(--hb-cyan-bright, #5fcce6)',
+                  }}
+                />
+                <span>DOSSIER MARKDOWN CANLI ÖNİZLEME</span>
               </div>
               <div className="hb-mem-md">
                 <ReactMarkdown remarkPlugins={MEM_REMARK_PLUGINS}>
@@ -563,37 +787,88 @@ export default function MemoryEditorModal({
           )}
         </div>
 
-        {/* Bottom Status Bar (VS Code Style) */}
+        {/* Bottom Status Bar (Stark Fluid Glass HUD Style) */}
         <div
           style={{
-            height: 26, flexShrink: 0,
-            background: 'var(--hb-cyan, #36abca)',
-            color: '#080c10',
-            fontSize: '0.72rem', fontWeight: 600,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '0 14px', userSelect: 'none',
+            height: 30,
+            flexShrink: 0,
+            background: 'linear-gradient(90deg, rgba(14, 18, 25, 0.95) 0%, rgba(20, 26, 36, 0.95) 100%)',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            color: 'var(--hb-text-dim, #9aa0a6)',
+            fontSize: '0.72rem',
+            fontWeight: 500,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 14px',
+            userSelect: 'none',
           }}
         >
           {/* Left: Position & Stats */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <span>Satır {cursorPos.line}, Sütun {cursorPos.col}</span>
-            <span>{content.length} karakter</span>
-            <span>{lineCount} satır</span>
+            <span style={{ fontFamily: 'var(--font-mono), monospace' }}>
+              Satır {cursorPos.line}, Sütun {cursorPos.col}
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono), monospace' }}>
+              {content.length} karakter
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono), monospace' }}>
+              {lineCount} satır
+            </span>
             {isDirty ? (
-              <span style={{ color: '#4a1500', background: 'rgba(255,255,255,0.4)', padding: '0 5px', borderRadius: 2 }}>
+              <span
+                style={{
+                  color: '#f2b75c',
+                  background: 'rgba(242, 183, 92, 0.15)',
+                  border: '1px solid rgba(242, 183, 92, 0.3)',
+                  padding: '1px 7px',
+                  borderRadius: 4,
+                  fontWeight: 600,
+                }}
+              >
                 ● Kaydedilmedi
               </span>
             ) : (
-              <span>✓ Güncel</span>
+              <span
+                style={{
+                  color: 'var(--hb-cyan-bright, #5fcce6)',
+                  background: 'rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.12)',
+                  border: '1px solid rgba(var(--hb-cyan-bright-rgb, 95, 204, 230), 0.25)',
+                  padding: '1px 7px',
+                  borderRadius: 4,
+                  fontWeight: 600,
+                }}
+              >
+                ✓ Güncel
+              </span>
             )}
-            {statusMsg && <span style={{ color: '#161a20', fontWeight: 700 }}>— {statusMsg}</span>}
+            {saveStatus === 'saving' && (
+              <span style={{ color: 'var(--hb-cyan-bright, #5fcce6)', fontWeight: 600 }}>
+                {statusMsg || 'Kaydediliyor...'}
+              </span>
+            )}
+            {saveStatus === 'error' && (
+              <span style={{ color: '#f87171', fontWeight: 600 }}>
+                {statusMsg || 'Kaydetme hatası!'}
+              </span>
+            )}
+            {saveStatus === 'conflict' && (
+              <span style={{ color: '#fb923c', fontWeight: 600 }}>
+                {statusMsg}
+              </span>
+            )}
+            {saveStatus === 'saved' && statusMsg && (
+              <span style={{ color: '#4ade80', fontWeight: 600 }}>
+                {statusMsg}
+              </span>
+            )}
           </div>
 
           {/* Right: Format Info */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontFamily: 'var(--font-mono), monospace', fontSize: '0.66rem' }}>
             <span>UTF-8</span>
-            <span>Markdown</span>
-            <span>Speda Memory Bank</span>
+            <span>MARKDOWN</span>
+            <span style={{ color: 'var(--hb-cyan-bright, #5fcce6)' }}>SPEDA // FLUID_VAULT</span>
           </div>
         </div>
       </div>
