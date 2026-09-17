@@ -68,7 +68,11 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      # The action's default also requests the retired SDK `tools` package,
+      # which makes sdkmanager fail on current Android repositories.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       # No gradlew wrapper jar is committed (see docs/ANDROID_PORT_PLAN.md), so
       # the Gradle version is pinned here instead. Keep it in step with the
