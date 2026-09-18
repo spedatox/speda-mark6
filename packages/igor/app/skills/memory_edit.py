@@ -4,7 +4,9 @@
 import json
 from sqlalchemy import select
 from app.models.memory_file import MemoryFile
-from app.services.memory_admission import EVIDENCE_SCHEMA, purpose, resolve_evidence
+from app.services.memory_admission import (
+    EVIDENCE_SCHEMA, purpose, resolve_evidence, session_review_evidence,
+)
 from app.services.memory_states import version
 from app.services.memory_store import mutate_file
 from app.skills.base import Skill
@@ -58,7 +60,21 @@ class MemoryEditSkill(Skill):
                 if not old or before.count(old) != 1:
                     raise ValueError("old must match exactly once; reread and provide an unambiguous patch.")
                 after = before.replace(old, new, 1)
-            evidence = await resolve_evidence(context.db, context.user_id, args.get("evidence"), session_id=context.session_id)
+            try:
+                evidence = await resolve_evidence(
+                    context.db, context.user_id, args.get("evidence"),
+                    session_id=context.session_id,
+                )
+            except ValueError:
+                # The admission reviewer gets the persisted owner conversation
+                # and tool trace, rather than being forced to decide from a
+                # stale `message:latest` citation.  The store resolves these
+                # references again before commit, so they remain auditable.
+                evidence = await session_review_evidence(
+                    context.db, context.user_id, session_id=context.session_id,
+                )
+                if not evidence:
+                    raise
             await mutate_file(context.db, user_id=context.user_id, path=path, before=before,
                               after=after, author=context.agent_id, action="topic_patch",
                               request_id=context.request_id, managed=True, evidence=evidence, model=context.model)

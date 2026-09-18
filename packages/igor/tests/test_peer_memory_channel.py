@@ -241,13 +241,17 @@ async def test_a_record_observation_frame_reaches_the_skill(monkeypatch):
     response = await peer_memory.run_memory_command("optimus", {
         "request_id": "o1", "skill": "record_observation",
         "content": "Prefers dark mode.", "level": "explicit", "domain": "state",
+        "evidence": [{"ref": "/memories/dossier.md", "quote": "Prefers dark mode."}],
     })
 
     assert response["ok"] is True
     assert response["request_id"] == "o1"
     args, context = seen[0]
     assert args == {"observations": [
-        {"content": "Prefers dark mode.", "level": "explicit", "domain": "state"},
+        {
+            "content": "Prefers dark mode.", "level": "explicit", "domain": "state",
+            "evidence": [{"ref": "/memories/dossier.md", "quote": "Prefers dark mode."}],
+        },
     ]}
     assert context.agent_id == "optimus"      # same author rule as the memory path
 

@@ -92,14 +92,19 @@ chat_id, type) that are Igor's business and not the skill's, and a peer that
 one day adds a field must not be able to reach the skill's kwargs with it."""
 
 _OBSERVATION_KEYS = (
-    "content", "level", "source_ids", "premises", "sources",
+    "content", "evidence", "level", "source_ids", "premises", "sources",
     "pattern_type", "confidence", "subject", "domain",
     "valid_from", "valid_until", "supersedes",
 )
-"""One observation's fields, per RecordObservationSkill.input_schema. A queued
-Forge fact is always ONE fact per frame (owner_memory.py flushes its local
-queue line by line), so this wraps into the single-element `observations` list
-the skill expects rather than exposing Forge to that shape directly."""
+"""One observation's fields, per RecordObservationSkill.input_schema.
+
+Evidence is deliberately included here.  Leaving it out made every peer-origin
+observation impossible to admit: the underlying skill requires exact evidence,
+but the bridge silently discarded it before validation.  A queued Forge fact is
+still one fact per frame, so this wraps it in the single-element
+``observations`` list the skill expects rather than exposing Forge to that
+shape directly.
+"""
 
 
 class _ReadSkill:

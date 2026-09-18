@@ -18,7 +18,7 @@ from app.services.memory_states import version
 
 EVIDENCE_SCHEMA = {"type": "array", "minItems": 1, "items": {
     "type": "object", "properties": {
-        "ref": {"type": "string", "description": "message:<id>, message:latest (this user turn), message:<id>#image:<index> (or latest#image:<index>), observation:<id>, or /memories/...md"},
+        "ref": {"type": "string", "description": "message:<id>, message:latest (this user turn), message:<id>#image:<index> (or latest#image:<index>), observation:<id>, tool_call:<id>, or /memories/...md"},
         "quote": {"type": "string", "description": "Exact source quotation; for an image reference, transcribe the relevant visible evidence for visual verification."},
     }, "required": ["ref", "quote"], "additionalProperties": False}}
 
@@ -105,6 +105,7 @@ async def resolve_evidence(db, user_id, evidence, *, session_id=None):
     from app.models.session import Session
     from app.models.observation import Observation
     from app.models.memory_file import MemoryFile
+    from app.models.tool_call import ToolCall
     if not isinstance(evidence, list) or not evidence:
         raise ValueError("Evidence is mandatory: provide [{ref, quote}], with an exact supporting quotation.")
     resolved = []
@@ -155,6 +156,13 @@ async def resolve_evidence(db, user_id, evidence, *, session_id=None):
                 Observation.deleted_at.is_(None),
             ))).scalar_one_or_none()
             body = obs.content if obs else ""
+        elif re.fullmatch(r"tool_call:\d+", ref):
+            call = (await db.execute(select(ToolCall).join(Session).where(
+                Session.user_id == user_id, Session.triggered_by == "user",
+                ToolCall.id == int(ref.split(":")[1]), ToolCall.error.is_(None),
+            ))).scalar_one_or_none()
+            result = call.tool_result if call and isinstance(call.tool_result, str) else ""
+            body = f"Tool `{call.tool_name}` result:\n{result.strip()}" if result.strip() else ""
         elif ref.startswith("/memories/") and ref.endswith(".md") and ".." not in ref:
             body = (await db.execute(select(MemoryFile.content).where(
                 MemoryFile.user_id == user_id, MemoryFile.path == ref,
@@ -176,6 +184,61 @@ async def resolve_evidence(db, user_id, evidence, *, session_id=None):
             entry["source_body"] = body[:_SOURCE_BODY_CAP]
         resolved.append(entry)
     return resolved
+
+
+async def session_review_evidence(db, user_id, *, session_id=None):
+    """Return immutable, review-only context from the active owner turn.
+
+    Agents routinely learn a fact from a sequence of messages or a browser/tool
+    result, then cite the last user sentence because there was no way to point
+    the reviewer at the actual trace.  That is worse than no reviewer: a sound
+    fact is rejected and a retry tends to cite the same irrelevant sentence.
+
+    These records are *not* a free-form assertion supplied by the agent.  They
+    are rows already persisted by Igor, scoped to this owner-triggered session,
+    and each carries a hash in the eventual write receipt.  The reviewer still
+    decides whether they support the claim; this only gives it the material to
+    decide.
+    """
+    if not session_id:
+        return []
+    from app.models.message import Message
+    from app.models.session import Session
+    from app.models.tool_call import ToolCall
+
+    session = (await db.execute(select(Session).where(
+        Session.id == session_id, Session.user_id == user_id,
+        Session.triggered_by == "user",
+    ))).scalar_one_or_none()
+    if session is None:
+        return []
+
+    entries = []
+    messages = (await db.execute(select(Message).where(
+        Message.session_id == session_id, Message.role == "user",
+    ).order_by(Message.id.asc()))).scalars().all()
+    for message in messages:
+        body = text_content(message.content).strip()
+        if body:
+            entries.append({
+                "ref": f"message:{message.id}", "quote": body[:4000],
+                "source_sha256": version(body), "source_body": body[:4000],
+                "evidence_type": "owner_chat_context",
+            })
+
+    calls = (await db.execute(select(ToolCall).where(
+        ToolCall.session_id == session_id, ToolCall.error.is_(None),
+    ).order_by(ToolCall.id.asc()))).scalars().all()
+    for call in calls:
+        result = call.tool_result if isinstance(call.tool_result, str) else ""
+        if result.strip():
+            body = f"Tool `{call.tool_name}` result:\n{result.strip()}"
+            entries.append({
+                "ref": f"tool_call:{call.id}", "quote": body[:4000],
+                "source_sha256": version(body), "source_body": body[:4000],
+                "evidence_type": "tool_trace_context",
+            })
+    return entries
 
 
 async def ask_json(system, payload, *, model=""):

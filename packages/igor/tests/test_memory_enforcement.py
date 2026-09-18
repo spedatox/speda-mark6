@@ -125,6 +125,41 @@ async def test_near_verbatim_message_quote_is_canonicalized_to_source(sessions):
     assert evidence[0]["quote"] == body
 
 
+async def test_reviewer_gets_owner_chat_and_successful_tool_trace_from_active_session(sessions):
+    """A stale/incorrect `message:latest` citation must not hide the real trace."""
+    from app.models.message import Message
+    from app.models.session import Session
+    from app.models.tool_call import ToolCall
+    from app.services.memory_admission import session_review_evidence
+
+    async with sessions() as db:
+        session = Session(user_id=1, agent_id="ultron", triggered_by="user", model_used="test")
+        other = Session(user_id=2, agent_id="ultron", triggered_by="user", model_used="test")
+        db.add_all([session, other]); await db.flush()
+        db.add_all([
+            Message(session_id=session.id, role="user", content="Navigate OBS through the course-registration iframe."),
+            Message(session_id=other.id, role="user", content="This must never leak."),
+            ToolCall(session_id=session.id, request_id="r", tool_name="browser",
+                     tool_input={}, tool_result="Clicked Ders Kayit; advisor status is visible.", duration_ms=5),
+            ToolCall(session_id=session.id, request_id="r", tool_name="browser",
+                     tool_input={}, tool_result="Error: navigation failed", error="Error: navigation failed", duration_ms=5),
+        ])
+        await db.commit()
+        evidence = await session_review_evidence(db, 1, session_id=session.id)
+        tool_ref = next(entry for entry in evidence if entry["ref"].startswith("tool_call:"))
+        resolved_tool = await resolve_evidence(
+            db, 1, [{"ref": tool_ref["ref"], "quote": tool_ref["quote"]}],
+        )
+
+    assert len(evidence) == 2
+    assert any(entry["ref"].startswith("message:") for entry in evidence)
+    assert any(entry["ref"].startswith("tool_call:") for entry in evidence)
+    assert any("course-registration iframe" in entry["source_body"] for entry in evidence)
+    assert any("advisor status" in entry["source_body"] for entry in evidence)
+    assert all("never leak" not in entry["source_body"] for entry in evidence)
+    assert resolved_tool[0]["ref"] == tool_ref["ref"]
+
+
 async def test_validator_rejection_or_outage_saves_nothing(sessions, monkeypatch):
     async with sessions() as db:
         db.add(MemoryFile(user_id=1, path="/memories/projects/evidence.md", content="# Evidence\nPaid 3000 to the card."))
