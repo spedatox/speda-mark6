@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+[Unit]
+Description=Orion Spark — Reliability Watchdog for Speda Mark VI
+Documentation=https://github.com/spedatox/speda-mark6
+After=docker.service network.target
+Wants=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/speda
+EnvironmentFile=-/opt/speda/spark.env
+EnvironmentFile=-/etc/orion-spark/spark.env
+ExecStart=/usr/local/bin/python3 -m orion_spark run
+Restart=always
+RestartSec=5s
+
+# Host watchdog bounds
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

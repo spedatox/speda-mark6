@@ -58,6 +58,8 @@ def test_health_subpaths_are_not_exempt_from_auth():
     # /health is exempt as an EXACT match. If this ever becomes a prefix match,
     # the owner's biometrics become world-readable — hence the explicit test.
     assert "/health" in UNPROTECTED_PATHS
+    assert "/health/live" in UNPROTECTED_PATHS
+    assert "/health/ready" in UNPROTECTED_PATHS
     for path in ("/health/ingest", "/health/status", "/health/data",
                  "/health/freshness", "/health/sync-demand"):
         assert path not in UNPROTECTED_PATHS

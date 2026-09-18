@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 # Paths that bypass authentication entirely.
 #   /health                    — liveness probe (no sensitive data)
+#   /health/live               — process liveness probe (Orion Spark)
+#   /health/ready              — readiness probe (Orion Spark)
 #   /oauth/google/callback     — Google's redirect can't carry our header
 #   /oauth/notion/callback     — Notion's redirect can't carry our header either
 #   /oauth/microsoft/callback  — nor can Microsoft's
@@ -30,6 +32,8 @@ logger = logging.getLogger(__name__)
 # DEBUG, are allowed through below for local convenience only.
 UNPROTECTED_PATHS = frozenset({
     "/health",
+    "/health/live",
+    "/health/ready",
     "/oauth/google/callback",
     "/oauth/notion/callback",
     "/oauth/microsoft/callback",

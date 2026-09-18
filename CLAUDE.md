@@ -9,6 +9,7 @@ This file is rules for how to work here, not architecture documentation. For tha
 | `packages/striker` | [STRIKER.md](packages/striker/STRIKER.md) |
 | `packages/speda-go` | [README.md](packages/speda-go/README.md) |
 | `packages/browser` | [README.md](packages/browser/README.md) |
+| `packages/orion-spark` | [README.md](packages/orion-spark/README.md) |
 
 Two clients live in their own repositories rather than here, because each is a
 self-contained Gradle build with its own signed-release pipeline:

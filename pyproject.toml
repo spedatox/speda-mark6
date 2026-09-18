@@ -1,2 +1,5 @@
 [tool.uv.workspace]
-members = ["packages/igor", "packages/forge"]
+members = ["packages/igor", "packages/forge", "packages/orion-spark"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

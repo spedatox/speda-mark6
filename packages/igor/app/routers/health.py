@@ -16,6 +16,7 @@ Thin per Rule 1: all ingest/rollup/query logic lives in services/health.py.
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import runtime_state
@@ -36,6 +37,40 @@ async def health(request: Request) -> JSONResponse:
             "tools_registered": len(tools),
         }
     )
+
+
+@router.get("/health/live")
+async def health_live() -> JSONResponse:
+    """Process liveness probe for Orion Spark and host watchdogs.
+    Confirms that the FastAPI process is running and responding."""
+    return JSONResponse({"status": "ok", "live": True})
+
+
+@router.get("/health/ready")
+async def health_ready(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
+    """Readiness probe for Orion Spark and host watchdogs.
+    Confirms that Speda is capable of serving requests (database reachable,
+    tool registry initialized). Returns 503 if the database probe fails."""
+    try:
+        await db.execute(text("SELECT 1"))
+        registry = getattr(request.app.state, "registry", None)
+        tools = registry.list_tools() if registry else []
+        return JSONResponse(
+            {
+                "status": "ready",
+                "database": "ok",
+                "tools_registered": len(tools),
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unavailable",
+                "database": "error",
+                "detail": str(e),
+            },
+        )
 
 
 @router.post("/health/ingest")
