@@ -16,6 +16,7 @@ PROMPT_SECTIONS = [
     "agents/orion/06_octavius.md",     # the database backup, and how to restore one
     "core/02_voice.md",   # shared register — see prompts/core/02_voice.md
     "core/05_output_policy.md",
+    "core/06_visual_output.md",
     "core/07_formatting.md",
     "core/08_memory.md",
     "core/09_agent_network.md",
@@ -54,10 +55,10 @@ class OrionProfile(AgentProfile):
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:MF3mGyEYCl7XYWbV9V6O"
     canvas_brief = (
-        "Presenting maintenance: host, memory and service state are stat tiles, "
-        "anything with a history is a timeline, and logs or configuration go in "
-        "code windows. Speak the verdict — healthy, degraded, needs a decision — "
-        "and let the board hold the numbers"
+        "Presenting maintenance: host, memory and service metrics are stat tiles or "
+        "chart windows, maintenance sequences are timelines, and logs or configuration "
+        "go in code windows. Proactively stage visual windows on the board; speak the verdict "
+        "— healthy, degraded, needs a decision — and let the board hold the numbers"
     )
     doc_theme = DocTheme(accent="#8a7fd6")   # signature indigo
 

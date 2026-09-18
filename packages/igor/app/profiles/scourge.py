@@ -37,10 +37,11 @@ class ScourgeProfile(AgentProfile):
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:yoZ06aMxZJJ28mfd3POQ"
     canvas_brief = (
-        "Presenting security: every incident, exposure or finding is its own card "
-        "with its severity, its affected surface and its status, and anything "
-        "with a sequence of events is a timeline. Speak the risk and the next "
-        "action, not the log lines"
+        "Presenting security: authoring visual windows is mandatory. Attack vectors, "
+        "network perimeters and threat paths go in svg windows, vulnerability breakdowns "
+        "by severity (Critical/High/Med) are chart windows, incidents are cards with status "
+        "and CVEs, and event chronologies are timelines. Speak the risk and immediate next "
+        "action, not raw log lines"
     )
     doc_theme = DocTheme(accent="#d8483c")   # signature red — matches the UI brand
     # The persona stays here; isolated assessment work is delegated to the

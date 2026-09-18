@@ -1,6 +1,6 @@
 ---
 name: inline-rendering
-description: Renders chart blocks, SVG, and HTML as live previews directly inside the chat. Use when the user requests charts, graphs, diagrams, flowcharts, data visualisations, UI mockups, or any visual output.
+description: Renders chart blocks, calendar blocks, SVG diagrams, and HTML widgets as live previews directly inside chat and the canvas board. The owner loves visualizations — use proactively in moderation whenever presenting data series, schedules, architectures, workflows, or comparisons. In Canvas Mode, authoring visual windows is mandatory.
 ---
 
 # Inline Rendering
@@ -8,6 +8,11 @@ description: Renders chart blocks, SVG, and HTML as live previews directly insid
 Output a fenced code block — the frontend renders it flush inside the message, like a native
 UI element. There is NO surrounding card, white background, or border drawn by you. The render
 must look like it belongs in a sleek dark chat app.
+
+The owner loves visualizations. Do not wait to be asked: proactively accompany your answers with
+the best-fitting visual block whenever data, schedules, structures, or flows are involved, in moderation
+("abartmadan, dozunda"). In Canvas Mode (Voice Canvas presentation board), staging visual windows
+is a strict mandatory hard rule.
 
 ## Rule 0 — Data charts (line/area/bar/pie) → use a ```chart``` block, never SVG or HTML
 

@@ -38,13 +38,11 @@ class NightCrawlerProfile(AgentProfile):
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:VR6AewLTigWG4xSOukaG"
     canvas_brief = (
-        "Presenting research: one window per source, never one summary of all of "
-        "them. Each finding is an article window with its outlet, its date, its "
-        "link and the excerpt that actually mattered; every person, company or "
-        "place you name gets a card with its photo; anything with dates gets a "
-        "timeline; a source's own damaging words go up as a quote rather than "
-        "being paraphrased. Speak the assessment — what this adds up to and how "
-        "far it can be trusted — and put the evidence on the wall"
+        "Presenting research: authoring visual windows is mandatory — put the evidence "
+        "on the wall. One window per source (article), persons or entities as cards with photo, "
+        "geographical targets as map windows, chronology of events as timelines, and volume "
+        "or sentiment metrics as chart windows. Speak the assessment — what this adds up to "
+        "and how far it can be trusted — and let the board carry the intelligence"
     )
     doc_theme = DocTheme(accent="#9165e6")   # signature violet — matches the UI brand
 

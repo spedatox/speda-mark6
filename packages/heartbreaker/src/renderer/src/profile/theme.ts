@@ -69,10 +69,12 @@ function mix(hex: string, target: string, t: number): string {
 const WHITE = '#ffffff'
 const VOID = '#05070a'
 
-/** Re-hue a base colour to `hue`, preserving its saturation & lightness. */
-function rehue(baseHex: string, hue: number): Rgb {
+/** Re-hue a base colour to `hue`, preserving its saturation & lightness.
+ *  If `sat` is 0 (achromatic brand accent), base saturation drops to 0 so the
+ *  material becomes pure metal/gray with zero color tint. */
+function rehue(baseHex: string, hue: number, sat = 1): Rgb {
   const { s, l } = rgbToHsl(hexToRgb(baseHex))
-  return hslToRgb(hue, s, l)
+  return hslToRgb(hue, s * sat, l)
 }
 
 // Structural palette — the original cool-petrol values. Each is re-hued to the
@@ -121,20 +123,23 @@ const BASE_RGBA: Record<string, [string, number]> = {
  *  routing rows and inactive chips, so it has to survive on the near-black
  *  base. 0.62 toward the void crushed it into the background. */
 export function deriveAccents(accent: string): { accent: string; bright: string; dim: string } {
-  return { accent, bright: mix(accent, WHITE, 0.32), dim: mix(accent, VOID, 0.32) }
+  const { s } = rgbToHsl(hexToRgb(accent))
+  const voidColor = s === 0 ? '#050505' : VOID
+  return { accent, bright: mix(accent, WHITE, 0.32), dim: mix(accent, voidColor, 0.32) }
 }
 
 /** Build every CSS custom property the UI uses, re-hued to the brand accent. */
 export function buildThemeVars(accent: string): Record<string, string> {
-  const { h } = rgbToHsl(hexToRgb(accent))
+  const { h, s } = rgbToHsl(hexToRgb(accent))
+  const sat = s === 0 ? 0 : 1
   const { bright, dim } = deriveAccents(accent)
   const a = hexToRgb(accent), br = hexToRgb(bright), dm = hexToRgb(dim)
   const out: Record<string, string> = {}
 
-  for (const k in BASE_HEX) out[k] = rgbToHex(rehue(BASE_HEX[k], h))
+  for (const k in BASE_HEX) out[k] = rgbToHex(rehue(BASE_HEX[k], h, sat))
   for (const k in BASE_RGBA) {
     const [hex, alpha] = BASE_RGBA[k]
-    const c = rehue(hex, h)
+    const c = rehue(hex, h, sat)
     out[k] = `rgba(${clamp(c.r)}, ${clamp(c.g)}, ${clamp(c.b)}, ${alpha})`
   }
 
@@ -229,8 +234,8 @@ export function stopPartyCycle(): void {
 // Orion is NOT in the parade: it is Mark VI's own custodian, not part of the
 // House Party. Keep this in step with PARTY_ROSTER in lib/agents.
 const PARTY_COLORS = [
-  '#7fa4c4', /* speda */ '#d99c44', /* sentinel */ '#9165e6', /* nightcrawler */
-  '#8a93a6', /* ultron */ '#d8483c', /* scourge */ '#3fae74', /* atomix */
+  '#36abca', /* speda */ '#d99c44', /* sentinel */ '#9165e6', /* nightcrawler */
+  '#9e9e9e', /* ultron */ '#d8483c', /* scourge */ '#3fae74', /* atomix */
   '#2f4f8f', /* optimus */
 ]
 

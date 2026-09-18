@@ -20,7 +20,7 @@ META = {
     "speda":        "#36abca",
     "sentinel":     "#d99c44",
     "nightcrawler": "#9165e6",
-    "ultron":       "#8a93a6",
+    "ultron":       "#9e9e9e",
     "scourge":    "#d8483c",
     "atomix":       "#3fae74",
     "optimus":      "#2f4f8f",

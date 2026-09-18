@@ -37,11 +37,11 @@ class SentinelProfile(AgentProfile):
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:ErXwobaYiN019PkySvjV"
     canvas_brief = (
-        "Presenting finance: never speak a figure you could show. Every headline "
-        "number is its own stat tile with the change on it, every trend and every "
-        "category split is a chart, and any month-on-month movement worth "
-        "mentioning is a timeline. Say what the numbers MEAN — what moved, what "
-        "is unusual, what to do about it — and let the board carry the arithmetic"
+        "Presenting finance: never speak a figure you could show — authoring visual "
+        "windows is a mandatory rule. Every headline number is a stat tile with change, "
+        "every trend and category split is a chart window (line, bar, or pie), and any "
+        "period movement is a timeline or table. Say what the numbers MEAN and what to do, "
+        "and let the board carry the arithmetic"
     )
     doc_theme = DocTheme(accent="#d99c44")   # signature gold — matches the UI brand
 

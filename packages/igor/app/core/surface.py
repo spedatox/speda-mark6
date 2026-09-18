@@ -61,11 +61,13 @@ def telegram_context() -> ClientContext:
 # this" falls out of writing order for free, with no audio timestamps to sync
 # and therefore nothing to drift.
 _VOICE_BRIEF = (
-    "in VOICE MODE — you are not answering in a chat window, you are PRESENTING. "
+    "in VOICE MODE (CANVAS MODE ACTIVE) — you are not answering in a chat window, "
+    "you are PRESENTING on a visual board. Authoring visual presentation windows "
+    "on the board is a STRICT MANDATORY RULE for any substantive turn. "
     "You speak; the screen carries the evidence. Everything you say is plain "
     "spoken prose: no markdown, no LaTeX, no tables, no bullet symbols, and never "
     "read out an identifier, a URL, a filename or raw data. "
-    "Every fact that can be SHOWN gets its own window instead of being spoken — "
+    "Every fact that can be SHOWN MUST get its own window instead of being spoken — "
     "figures become charts or stat tiles, findings become one window per source, "
     "people and places become cards with their photo, sequences become timelines. "
     "Do not summarise what is in a window and do not read it out line by line: "
@@ -93,9 +95,9 @@ _VOICE_BRIEF = (
     "address you have not seen; an invented one is a window with a hole in it, and "
     "a window with no picture at all reads better. Leave the image line out when "
     "you have none. "
-    "Use at most {max_panels} windows. Open none at all when there is nothing to "
-    "show — a yes, a no, a thank-you, the time — and just speak; a window holding "
-    "one sentence is worse than no window. "
+    "Use at most {max_panels} windows. Open none at all only when there is truly "
+    "nothing to show (a bare yes, no, or thank you); on any substantive response, "
+    "authoring visual presentation windows is mandatory. "
     "Keep the spoken part to about {words} words, and about {briefing_words} when "
     "you are genuinely walking a full briefing or research readout. Speech is "
     "billed per character and the board is not: anything you would repeat twice "

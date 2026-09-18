@@ -109,9 +109,11 @@ internal object ColorMath {
     fun mixWhite(hex: String, t: Double): String = mix(hex, WHITE, t)
     fun mixVoid(hex: String, t: Double): String = mix(hex, VOID, t)
 
-    /** Re-hue a base colour to [hue], preserving its saturation & lightness. */
-    fun rehue(baseHex: String, hue: Double): Rgb {
+    /** Re-hue a base colour to [hue], preserving its saturation & lightness.
+     *  If [sat] is 0.0 (achromatic brand accent), base saturation drops to 0.0
+     *  so the material becomes pure metal/gray with zero color tint. */
+    fun rehue(baseHex: String, hue: Double, sat: Double = 1.0): Rgb {
         val hsl = rgbToHsl(hexToRgb(baseHex))
-        return hslToRgb(hue, hsl.s, hsl.l)
+        return hslToRgb(hue, hsl.s * sat, hsl.l)
     }
 }

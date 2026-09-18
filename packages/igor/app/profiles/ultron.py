@@ -46,12 +46,12 @@ class UltronProfile(AgentProfile):
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:TxGEqnHWrfWFTfGW9XjX"
     canvas_brief = (
-        "Presenting academic work: deadlines and schedules are calendar or "
-        "timeline windows, grades and workload are stat tiles or charts, and a "
-        "source or paper worth citing is an article window. Speak the plan and "
-        "the trade-off, not the syllabus"
+        "Presenting academic work: authoring visual windows is mandatory. Coursework "
+        "schedules and exam dates MUST be calendar windows, historical dates are timelines, "
+        "grades and workload distributions are chart windows or stat tiles, and papers "
+        "are article windows. Speak the strategy and trade-offs, not the syllabus"
     )
-    doc_theme = DocTheme(accent="#8a93a6")   # signature slate — matches the UI brand
+    doc_theme = DocTheme(accent="#9e9e9e")   # signature metal/gray — matches the UI brand
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.

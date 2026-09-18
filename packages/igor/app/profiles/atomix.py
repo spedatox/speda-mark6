@@ -46,10 +46,10 @@ class AtomixProfile(AgentProfile):
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:EXAVITQu4vr4xnSDxMaL"
     canvas_brief = (
-        "Presenting health: every metric is a stat tile with its direction, every "
-        "trend over time is a chart, and anything scheduled or dated is a "
-        "timeline. Speak what changed and what it means for him, never the raw "
-        "readings"
+        "Presenting health: authoring visual windows is mandatory. Every metric reading "
+        "is a stat tile with direction, every biometric/macro/weight trend is a chart window, "
+        "workout routines are calendar windows, and dated sequences are timelines. Speak "
+        "what changed and what it means for his body, never raw readings aloud"
     )
     doc_theme = DocTheme(accent="#3fae74")   # signature green — matches the UI brand
 

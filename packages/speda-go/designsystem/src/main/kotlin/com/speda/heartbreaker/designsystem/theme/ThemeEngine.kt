@@ -19,11 +19,15 @@ object ThemeEngine {
     data class Accents(val accent: String, val bright: String, val dim: String)
 
     /** Derive the bright (active) and dim shades from a single accent hex. */
-    fun deriveAccents(accent: String): Accents = Accents(
-        accent = accent,
-        bright = ColorMath.mixWhite(accent, 0.32),
-        dim = ColorMath.mixVoid(accent, 0.32),
-    )
+    fun deriveAccents(accent: String): Accents {
+        val s = ColorMath.rgbToHsl(ColorMath.hexToRgb(accent)).s
+        val voidColor = if (s == 0.0) "#050505" else "#05070a"
+        return Accents(
+            accent = accent,
+            bright = ColorMath.mixWhite(accent, 0.32),
+            dim = ColorMath.mix(accent, voidColor, 0.32),
+        )
+    }
 
     /**
      * Build every CSS custom property the UI uses, re-hued to [accent].
@@ -31,7 +35,9 @@ object ThemeEngine {
      * which the fixture tests assert against.
      */
     fun buildThemeVars(accent: String): Map<String, String> {
-        val h = ColorMath.rgbToHsl(ColorMath.hexToRgb(accent)).h
+        val hsl = ColorMath.rgbToHsl(ColorMath.hexToRgb(accent))
+        val h = hsl.h
+        val sat = if (hsl.s == 0.0) 0.0 else 1.0
         val (_, bright, dim) = deriveAccents(accent)
         val a = ColorMath.hexToRgb(accent)
         val br = ColorMath.hexToRgb(bright)
@@ -39,11 +45,11 @@ object ThemeEngine {
         val out = LinkedHashMap<String, String>()
 
         for ((k, hex) in BaseTokens.BASE_HEX) {
-            out[k] = ColorMath.rgbToHex(ColorMath.rehue(hex, h))
+            out[k] = ColorMath.rgbToHex(ColorMath.rehue(hex, h, sat))
         }
         for ((k, spec) in BaseTokens.BASE_RGBA) {
             val (hex, alpha) = spec
-            val c = ColorMath.rehue(hex, h)
+            val c = ColorMath.rehue(hex, h, sat)
             out[k] = "rgba(${ColorMath.clamp(c.r)}, ${ColorMath.clamp(c.g)}, ${ColorMath.clamp(c.b)}, $alpha)"
         }
 

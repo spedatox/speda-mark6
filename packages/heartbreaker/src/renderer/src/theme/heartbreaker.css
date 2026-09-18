@@ -61,31 +61,31 @@
   --hb-steel:       #161d26;   /* raised surface */
   --hb-line:        rgba(219, 230, 236, 0.08);        /* structural hairline — neutral */
   --hb-line-bright: rgba(var(--hb-accent-rgb), 0.30); /* active border — carries the brand */
-  --hb-cyan:        #7fa4c4;   /* primary accent — steel-blue, cold */
-  --hb-cyan-bright: #a9c6dc;   /* active accent */
-  --hb-cyan-dim:    #5b7691;   /* dim accent — still readable on the void */
+  --hb-cyan:        #36abca;   /* primary accent — cyan */
+  --hb-cyan-bright: #76c6db;   /* active accent */
+  --hb-cyan-dim:    #26778d;   /* dim accent */
   /* Raw accent triplets — applyTheme() overrides these per agent so every
      rgba(var(--hb-…-rgb), A) in the UI recolours with the brand. */
-  --hb-accent-rgb:      127, 164, 196;
-  --hb-cyan-bright-rgb: 169, 198, 220;
-  --hb-cyan-dim-rgb:    91, 118, 145;
+  --hb-accent-rgb:      54, 171, 202;
+  --hb-cyan-bright-rgb: 118, 198, 219;
+  --hb-cyan-dim-rgb:    38, 119, 141;
   /* Dim icon scale — inactive chrome icons. Re-hued per agent. */
-  --hb-icon:        #7c8f9b;
-  --hb-icon-dim:    #5d6f7a;
-  --hb-icon-bright: #93a6b1;
+  --hb-icon:        #7c959b;
+  --hb-icon-dim:    #5d747a;
+  --hb-icon-bright: #93abb1;
   --hb-amber:        #d99c44;  /* Stark orange — selection, folders, timestamps */
   --hb-amber-bright: #f2b75c;  /* active orange */
   --hb-amber-dim:    rgba(217,156,68,0.14); /* orange fill */
   --hb-red:         #c84a3a;   /* alert */
   --hb-green:       #4fa377;   /* nominal */
-  --hb-text:        #dbe6ec;   /* primary text — cool light */
-  --hb-text-dim:    #93a6b1;   /* secondary */
-  --hb-text-faint:  #5d6f7a;   /* muted / captions */
+  --hb-text:        #dbe8ec;   /* primary text — cool light */
+  --hb-text-dim:    #93abb1;   /* secondary */
+  --hb-text-faint:  #5d747a;   /* muted / captions */
   /* White header bars — "IP ADDRESS BOOK" / "SEARCH CONFIGURATION" style */
   --hb-bar-light:      linear-gradient(180deg, #edf3f5 0%, #cfdade 55%, #b9c9cf 100%);
   --hb-bar-light-text: #16242c;
   /* Accent-filled header bars — rebuilt per brand by applyTheme(). */
-  --hb-bar-cyan:       linear-gradient(180deg, #a9c6dc 0%, #7fa4c4 70%, #5b7691 100%);
+  --hb-bar-cyan:       linear-gradient(180deg, #76c6db 0%, #36abca 70%, #26778d 100%);
   --hb-bar-cyan-text:  #eef3f6;
 
   /* ── Liquid glass ─────────────────────────────────────────────────────────
@@ -713,10 +713,10 @@ body {
    palette, and if the two lap lengths differ they slide out of phase and the
    rim ends up a different agent's colour than the background. */
 @keyframes hbPartyCycle {
-  0%, 100% { color: #7fa4c4; }  /* speda */
+  0%, 100% { color: #36abca; }  /* speda */
   14.28%   { color: #d99c44; }  /* sentinel */
   28.57%   { color: #9165e6; }  /* nightcrawler */
-  42.86%   { color: #8a93a6; }  /* ultron */
+  42.86%   { color: #9e9e9e; }  /* ultron */
   57.14%   { color: #d8483c; }  /* scourge */
   71.43%   { color: #3fae74; }  /* atomix */
   85.71%   { color: #2f4f8f; }  /* optimus */

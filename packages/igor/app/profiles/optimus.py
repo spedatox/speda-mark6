@@ -40,10 +40,10 @@ class OptimusProfile(AgentProfile):
     # if not; premade voice ids can vary by plan/account.
     voice_id = "elevenlabs:eleven_multilingual_v2:AZnzlk1XvdvUeBnXmlld"
     canvas_brief = (
-        "Presenting systems: code, diffs and configuration go in code windows, "
-        "architecture and flow go in svg or html windows, and service or host "
-        "state goes in stat tiles. Speak the diagnosis and the fix, never read "
-        "source aloud"
+        "Presenting systems: authoring visual windows is mandatory. Architecture, data "
+        "flow, and topologies go in svg or html windows, system performance and latency "
+        "trends are chart windows, server/container health are stat tiles, and diffs go "
+        "in code windows. Speak the diagnosis and architectural strategy, never read source aloud"
     )
     doc_theme = DocTheme(accent="#2eb6ac")   # signature teal — matches the UI brand
     external_backend = False
