@@ -9,7 +9,6 @@ from typing import AsyncGenerator, AsyncIterator
 from app.config import settings
 from app.core.context import AgentContext
 from app.core.registry import CapabilityRegistry
-from app.legion.execution_routing import prefer_forge
 from app.models.tool_call import ToolCall
 from app.profiles.registry import ProfileRegistry
 from app.schemas.sse import SSEEvent, SSEEventType
@@ -578,64 +577,7 @@ class AgentOrchestrator:
             allowlist=allowlist, agent_id=context.agent_id,
             loaded_tools=context.extra["loaded_tools"], defer_loading=defer_loading,
         )
-        # Clear workspace execution intent receives a deterministic preference
-        # for an existing Forge-backed Legion worker. This per-turn policy does
-        # not classify advice/explanation or ambiguous requests. Restricting the
-        # first execution surface to Task prevents generic shell/filesystem/MCP
-        # tools from accidentally bypassing Forge; after Task returns, the
-        # normal loop and full tool surface resume.
-        latest_user = next(
-            (
-                str(message.get("content", ""))
-                for message in reversed(messages)
-                if message.get("role") == "user"
-            ),
-            "",
-        )
-        forge_preference = prefer_forge(
-            latest_user,
-            has_workspace=bool(str(context.extra.get("cwd") or "").strip()),
-        )
-        forge_route_pending = bool(
-            forge_preference and any(tool.get("name") == "Task" for tool in tools)
-        )
-        all_tools = tools
-        if forge_route_pending:
-            tools = [tool for tool in tools if tool.get("name") == "Task"]
-            system_blocks.append({
-                "type": "text",
-                "text": (
-                    "## Canonical workspace execution\n\n"
-                    "This request has clear workspace execution intent. Use the "
-                    f"`Task` tool with legionnaire=`{forge_preference.worker_id}` "
-                    "before answering. Forge must perform the real inspection, "
-                    "mutation, commands, and verification; do not merely describe "
-                    "the work. Pass the owner's complete request and constraints in "
-                    "a self-contained prompt."
-                ),
-            })
-            context.extra["forge_preference"] = forge_preference.worker_id
-            log.info(
-                "forge_route_preferred",
-                extra={
-                    "request_id": context.request_id,
-                    "worker": forge_preference.worker_id,
-                    "reason": forge_preference.reason,
-                    "tool": "Task",
-                },
-            )
-        elif forge_preference:
-            log.warning(
-                "forge_route_unavailable",
-                extra={
-                    "request_id": context.request_id,
-                    "worker": forge_preference.worker_id,
-                    "reason": forge_preference.reason,
-                    "fallback": "ordinary_agent_loop",
-                },
-            )
         iterations = 0
-        forge_route_retries = 0
         produced_text = False  # any text streamed yet this turn (for paragraph breaks)
         # Every text delta of this turn, kept so the finished reply can be checked
         # against the language contract once it exists. Accumulated rather than
@@ -799,37 +741,6 @@ class AgentOrchestrator:
             # ── end_turn ────────────────────────────────────────────────────
             # Text was already streamed above — nothing left to emit, just finish.
             if stop_reason == "end_turn":
-                if forge_route_pending and forge_route_retries < 1:
-                    forge_route_retries += 1
-                    messages.append({
-                        "role": "user",
-                        "content": [{
-                            "type": "text",
-                            "text": (
-                                "Execute the request now through Task using "
-                                f"{forge_preference.worker_id}; do not answer before "
-                                "the Forge result is available."
-                            ),
-                        }],
-                    })
-                    log.warning(
-                        "forge_route_retry",
-                        extra={
-                            "request_id": context.request_id,
-                            "worker": forge_preference.worker_id,
-                        },
-                    )
-                    continue
-                if forge_route_pending:
-                    log.warning(
-                        "forge_route_bypassed",
-                        extra={
-                            "request_id": context.request_id,
-                            "expected_worker": forge_preference.worker_id,
-                            "selected_tools": [],
-                            "fallback": "model_answer",
-                        },
-                    )
                 break
 
             # ── tool_use ────────────────────────────────────────────────────
@@ -837,25 +748,6 @@ class AgentOrchestrator:
             elif stop_reason == "tool_use":
                 iterations += 1
                 tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-
-                if forge_route_pending:
-                    selected_forge = any(
-                        block.name == "Task"
-                        and block.input.get("legionnaire") == forge_preference.worker_id
-                        for block in tool_use_blocks
-                    )
-                    if selected_forge:
-                        forge_route_pending = False
-                        tools = all_tools
-                    else:
-                        log.warning(
-                            "forge_route_bypassed",
-                            extra={
-                                "request_id": context.request_id,
-                                "expected_worker": forge_preference.worker_id,
-                                "selected_tools": [b.name for b in tool_use_blocks],
-                            },
-                        )
 
                 # 1. Stream all the TOOL start events to the frontend immediately.
                 #    Include the tool INPUT so the UI can show WHAT it did
