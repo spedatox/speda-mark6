@@ -27,7 +27,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/root/go/bin:/root/.local/bin:${PATH}" \
     PIP_NO_CACHE_DIR=1
 
-# 1) Core security toolset, compilers, runtimes, and networking utilities.
+# 1) Pin apt to official Kali mirrors only — Docker build picks mirror randomly
+#    and third-party mirrors (e.g. kalimirror.velden.media) sometimes have broken
+#    SSL certs that fail the fetch step with certificate verify failed / exit 100.
+#    Official mirrors are stable; overwrite sources.list before any apt call.
+RUN printf 'deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\ndeb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware\n' \
+        > /etc/apt/sources.list
+
+# 2) Core security toolset, compilers, runtimes, and networking utilities.
 RUN apt-get update \
  && apt-get -y dist-upgrade \
  && apt-get -y install --no-install-recommends \
