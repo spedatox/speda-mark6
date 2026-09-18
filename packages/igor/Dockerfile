@@ -41,6 +41,9 @@ COPY pyproject.toml uv.lock ./
 COPY packages/igor/pyproject.toml ./packages/igor/pyproject.toml
 COPY packages/forge/pyproject.toml ./packages/forge/pyproject.toml
 COPY packages/forge/forge ./packages/forge/forge
+COPY packages/orion-spark/pyproject.toml ./packages/orion-spark/pyproject.toml
+COPY packages/orion-spark/README.md ./packages/orion-spark/README.md
+COPY packages/orion-spark/orion_spark ./packages/orion-spark/orion_spark
 COPY packages/igor/app ./packages/igor/app
 COPY packages/igor/scripts ./packages/igor/scripts
 
