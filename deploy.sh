@@ -189,6 +189,17 @@ for var in SPEDA_API_KEY N8N_SECRET BROWSER_TOKEN; do
   [[ -n "${val}" ]] && export "${var}=${val}"
 done
 
+# ── Forge Cell images ─────────────────────────────────────────────────────────
+# The Cell images are NOT part of the compose stack — they are launched by the
+# host Docker daemon on demand (via the socket mount). compose up --build never
+# touches them. Build them here so a fresh server always has them; subsequent
+# runs are fast because Docker reuses cached layers.
+say "Building Forge Cell images (optimus + scourge)…"
+docker build -f packages/forge/deploy/cell-optimus.Dockerfile \
+  -t forge-cell-optimus:latest packages/forge/deploy/
+docker build -f packages/forge/deploy/cell-scourge.Dockerfile \
+  -t forge-cell-scourge:latest packages/forge/deploy/
+
 # ── Build + start ────────────────────────────────────────────────────────────
 say "Building and starting the stack (sandbox + api${DOMAIN:+ + caddy})…"
 docker compose "${PROFILE[@]}" up -d --build

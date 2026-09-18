@@ -52,6 +52,38 @@ RUN apt-get update \
 # 2) Ensure Go and pipx bin directories exist and are ready for niche tool installs
 RUN mkdir -p /root/go/bin /root/.local/bin /workspace
 
+# 2a) Web pentest — apt additions
+#   wafw00f : WAF detection
+RUN apt-get update \
+ && apt-get -y install --no-install-recommends \
+        wafw00f \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
+
+# 2b) Web pentest — Go tools (ProjectDiscovery suite + community favourites)
+#   subfinder       : passive subdomain enumeration (referenced in system_prompt but was not baked)
+#   httpx           : fast HTTP probing / tech fingerprint
+#   katana          : modern web crawler / JS-aware spidering
+#   dnsx            : DNS resolver / bulk record lookup
+#   interactsh-client: OOB interaction server client (SSRF, blind XXE …)
+#   gau             : fetch known URLs from AlienVault / Wayback / CommonCrawl
+#   waybackurls     : Wayback Machine URL dump
+#   hakrawler       : fast web crawler for endpoint discovery
+#   dalfox          : parameter analysis + XSS scanner
+RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
+ && go install github.com/projectdiscovery/httpx/cmd/httpx@latest \
+ && go install github.com/projectdiscovery/katana/cmd/katana@latest \
+ && go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest \
+ && go install github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest \
+ && go install github.com/lc/gau/v2/cmd/gau@latest \
+ && go install github.com/tomnomnom/waybackurls@latest \
+ && go install github.com/hakluke/hakrawler@latest \
+ && go install github.com/hahwul/dalfox/v2@latest
+
+# 2c) Web pentest — Python tools via pipx
+#   arjun : HTTP parameter discovery (GET/POST/JSON/XML brute-force)
+RUN pipx install arjun
+
 # 3) Decompress rockyou wordlist so it is immediately usable
 RUN if [ -f /usr/share/wordlists/rockyou.txt.gz ]; then \
         gunzip -k /usr/share/wordlists/rockyou.txt.gz; \
