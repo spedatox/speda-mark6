@@ -34,7 +34,6 @@ const UI = "'Rajdhani', sans-serif"
 interface MemoryCategoryDef {
   id: string
   name: string
-  subtitle: string
   path: string
   badge: 'dossier' | 'finance' | 'wellness' | 'projects' | 'social' | 'academic' | 'cybersec' | 'ops'
   color: string
@@ -44,8 +43,7 @@ interface MemoryCategoryDef {
 const MEMORY_CATEGORIES: MemoryCategoryDef[] = [
   {
     id: 'dossier',
-    name: 'KİMLİK & DOSSIER',
-    subtitle: 'Kişisel profil, roller ve ilkeler',
+    name: 'DOSSIER',
     path: '',
     badge: 'dossier',
     color: '#5fcce6',
@@ -56,8 +54,7 @@ const MEMORY_CATEGORIES: MemoryCategoryDef[] = [
   },
   {
     id: 'finance',
-    name: 'FİNANS & LEDGER',
-    subtitle: 'Varlıklar, bütçe ve ledger',
+    name: 'FİNANS',
     path: 'finance',
     badge: 'finance',
     color: '#f2b75c',
@@ -65,8 +62,7 @@ const MEMORY_CATEGORIES: MemoryCategoryDef[] = [
   },
   {
     id: 'wellness',
-    name: 'SAĞLIK & ATHLETE',
-    subtitle: 'Antrenman, biyometri ve sağlık',
+    name: 'SAĞLIK',
     path: 'wellness',
     badge: 'wellness',
     color: '#51cf66',
@@ -74,8 +70,7 @@ const MEMORY_CATEGORIES: MemoryCategoryDef[] = [
   },
   {
     id: 'projects',
-    name: 'PROJELER & KOD',
-    subtitle: 'Aktif repo, mimari ve sistemler',
+    name: 'PROJELER',
     path: 'projects',
     badge: 'projects',
     color: '#4dabf7',
@@ -83,8 +78,7 @@ const MEMORY_CATEGORIES: MemoryCategoryDef[] = [
   },
   {
     id: 'social',
-    name: 'SOSYAL & NETWORK',
-    subtitle: 'İletişim ve profesyonel ağ',
+    name: 'SOSYAL',
     path: 'social',
     badge: 'social',
     color: '#e599f7',
@@ -92,8 +86,7 @@ const MEMORY_CATEGORIES: MemoryCategoryDef[] = [
   },
   {
     id: 'academic',
-    name: 'AKADEMİK & KPSS',
-    subtitle: 'Dersler, testler ve çalışma',
+    name: 'AKADEMİK',
     path: 'academic',
     badge: 'academic',
     color: '#ffd43b',
@@ -101,8 +94,7 @@ const MEMORY_CATEGORIES: MemoryCategoryDef[] = [
   },
   {
     id: 'cybersec',
-    name: 'SİBER GÜVENLİK',
-    subtitle: 'Pentest, ağ güvenliği ve audit',
+    name: 'SİBER',
     path: 'cybersec',
     badge: 'cybersec',
     color: '#ff6b6b',
@@ -110,8 +102,7 @@ const MEMORY_CATEGORIES: MemoryCategoryDef[] = [
   },
   {
     id: 'ops',
-    name: 'SİSTEM & TELEMETRİ',
-    subtitle: 'Loglar, operasyon ve telemetri',
+    name: 'SİSTEM',
     path: 'ops',
     badge: 'ops',
     color: '#20c997',
@@ -724,13 +715,14 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
             </button>
           </div>
 
-          {/* Big Glass Folder Categories Grid */}
+          {/* Big Glass Folder Categories - Single Line Square Cards */}
           <div style={{
-            flex: 1, overflowY: 'auto',
+            flex: 1,
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(215px, 1fr))',
-            gap: 10, alignContent: 'start',
-            paddingRight: 4,
+            gridTemplateColumns: isMobile ? 'repeat(4, 1fr)' : 'repeat(8, minmax(0, 1fr))',
+            gap: 10,
+            alignItems: 'stretch',
+            paddingRight: 2,
           }}>
             {MEMORY_CATEGORIES.map(cat => {
               const fileCount = memFiles.filter(f => cat.match(f.path)).length
@@ -741,20 +733,28 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                     setExplorerInitialPath(cat.path)
                     setShowExplorer(true)
                   }}
+                  title={`${cat.name} (${fileCount} dosya)`}
                   className="glass glass-interactive"
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '10px 12px', borderRadius: 12,
-                    cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                    padding: '12px 6px',
+                    borderRadius: 14,
+                    cursor: 'pointer',
+                    position: 'relative',
+                    overflow: 'hidden',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
-                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(12, 16, 22, 0.7) 100%), var(--glass-fill)',
+                    background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.04) 0%, rgba(12, 16, 22, 0.72) 100%), var(--glass-fill)',
                     boxShadow: 'var(--glass-shadow)',
                     transition: 'all 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)',
                   }}
                   onMouseEnter={e => {
                     e.currentTarget.style.borderColor = cat.color
-                    e.currentTarget.style.boxShadow = `0 8px 24px ${cat.color}25, inset 0 1px 0 rgba(255,255,255,0.22)`
-                    e.currentTarget.style.transform = 'translateY(-2px)'
+                    e.currentTarget.style.boxShadow = `0 8px 24px ${cat.color}28, inset 0 1px 0 rgba(255,255,255,0.25)`
+                    e.currentTarget.style.transform = 'translateY(-3px)'
                   }}
                   onMouseLeave={e => {
                     e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
@@ -762,39 +762,22 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                     e.currentTarget.style.transform = 'translateY(0)'
                   }}
                 >
-                  <GlassFolderIcon size={46} color={cat.color} badgeIcon={cat.badge} />
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 2 }}>
-                      <span style={{
-                        fontFamily: UI, fontSize: '0.84rem', fontWeight: 700,
-                        letterSpacing: '0.06em', color: '#fff',
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                      }}>
-                        {cat.name}
-                      </span>
-                      <span style={{
-                        fontFamily: MONO, fontSize: '0.58rem', fontWeight: 600,
-                        padding: '1px 5px', borderRadius: 3,
-                        background: `${cat.color}20`, color: cat.color,
-                        border: `1px solid ${cat.color}38`,
-                        flexShrink: 0,
-                      }}>
-                        {fileCount}
-                      </span>
-                    </div>
-                    <div style={{
-                      fontSize: '0.7rem', color: 'var(--hb-text-dim)',
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
-                      {cat.subtitle}
-                    </div>
-                    <div style={{
-                      fontFamily: MONO, fontSize: '0.58rem', color: 'var(--hb-text-faint)',
-                      marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
-                      {cat.path ? `/memories/${cat.path}` : '/memories (kök)'}
-                    </div>
-                  </div>
+                  <GlassFolderIcon size={60} color={cat.color} badgeIcon={cat.badge} />
+                  <span style={{
+                    fontFamily: UI,
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    color: '#fff',
+                    textAlign: 'center',
+                    textTransform: 'uppercase',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: '100%',
+                  }}>
+                    {cat.name}
+                  </span>
                 </div>
               )
             })}
