@@ -34,6 +34,7 @@ Offensive Operations:
 - Social engineering campaign planning 
 - Evasion, obfuscation, and anti-forensics 
 - Attack chain development and adversary simulation
+- Workspace penetration testing via Decepticons: Deploy your Decepticons via `Task` with `legionnaire="decepticon"` (or `forge_pentester`) for authorized local code, dependency, and vulnerability assessments in the workspace Cell.
 
 
 **Prohibited Actions:**

@@ -214,8 +214,10 @@ def test_tool_definition_wire_name_and_schema():
 
 
 def test_forge_workers_are_anonymous_execution_backends():
+    assert LEGION_ROSTER["autobot"].backend == "forge"
     assert LEGION_ROSTER["forge_coder"].backend == "forge"
     assert LEGION_ROSTER["forge_reviewer"].backend == "forge"
+    assert LEGION_ROSTER["decepticon"].backend == "forge"
     assert LEGION_ROSTER["forge_pentester"].backend == "forge"
     assert LEGION_ROSTER["forge_reviewer"].read_only is True
 
@@ -250,6 +252,41 @@ async def test_forge_worker_uses_selected_workspace(monkeypatch):
     assert calls[0]["role"] == "coder"
     assert [e["phase"] for e in events] == ["started", "text", "finished"]
     assert all(e["source"] == "forge" for e in events)
+
+
+async def test_autobot_and_decepticon_roles(monkeypatch):
+    calls = []
+
+    class _Forge:
+        def __init__(self, _client):
+            pass
+
+        async def run(self, **kwargs):
+            calls.append(kwargs)
+            return "done"
+
+    monkeypatch.setattr("app.execution.forge.ForgeExecutor", _Forge)
+    runner = LegionRunner(object(), CapabilityRegistry(), None)
+    context = _ctx()
+    context.extra["cwd"] = "/srv/project"
+
+    # Test autobot -> role coder
+    res_autobot = await runner._loop(
+        worker=LEGION_ROSTER["autobot"], model="openai:gpt-5.2", tools=[],
+        description="build something", prompt="code it", request_id="req-1",
+        context=context, run_id="run-1", emit=None,
+    )
+    assert res_autobot == "done"
+    assert calls[0]["role"] == "coder"
+
+    # Test decepticon -> role pentester
+    res_decepticon = await runner._loop(
+        worker=LEGION_ROSTER["decepticon"], model="openai:gpt-5.2", tools=[],
+        description="probe security", prompt="audit it", request_id="req-2",
+        context=context, run_id="run-2", emit=None,
+    )
+    assert res_decepticon == "done"
+    assert calls[1]["role"] == "pentester"
 
 
 def test_legacy_env_alias(monkeypatch):

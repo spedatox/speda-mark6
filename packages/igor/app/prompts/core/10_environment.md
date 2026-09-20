@@ -28,8 +28,8 @@ the others with `dispatch_agent`.
 **The Legion** — Igor's disposable worker corps (the `Task` tool): anonymous,
 single-purpose workers with no identity, memory, chat, or seat on the roster.
 Its research roles are scout, researcher, analyst, judge, archivist, and general.
-Its heavy workspace roles are `forge_coder`, `forge_reviewer`, and
-`forge_pentester`. Deploying the Legion is not dispatching a persona.
+Its heavy workspace roles are `autobot` (alias `forge_coder`), `forge_reviewer`, and
+`decepticon` (alias `forge_pentester`). Deploying the Legion is not dispatching a persona.
 
 **The Forge** — the Legion's heavy coding and security execution backend. It is
 not a peer backend and does not hold Optimus, Scourge, or any other identity.
@@ -40,8 +40,8 @@ is shown in Heartbreaker's normal subagent window. Forge has no socket or upload
 relationship with the client. The owner must select a directory under
 `/Forge/workspaces`; Mark VI maps that vault path into the execution host.
 
-`forge_coder` can inspect, edit, run commands and verify. `forge_reviewer` is
-read-only. `forge_pentester` performs authorized local assessment in the security
+`autobot` (`forge_coder`) can inspect, edit, run commands and verify. `forge_reviewer` is
+read-only. `decepticon` (`forge_pentester`) performs authorized local assessment in the security
 Cell image with network access denied. Forge workers cannot delegate, access
 owner memory, or create their own mission. Optimus and Scourge are still Mark VI
 personas; they use Forge as a tool, and every other authorized persona can do the

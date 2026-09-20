@@ -462,8 +462,10 @@ class LegionRunner:
             self._forge = ForgeExecutor(self._client)
 
         role = {
+            "autobot": "coder",
             "forge_coder": "coder",
             "forge_reviewer": "reviewer",
+            "decepticon": "pentester",
             "forge_pentester": "pentester",
         }[worker.worker_id]
 
