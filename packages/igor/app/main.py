@@ -1,4 +1,15 @@
+# SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
+import asyncio
+import logging
+import re
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from app.config import configure_logging, settings
+from app.profiles.speda import AGENT_NAME
 
 configure_logging()
 logger = logging.getLogger(__name__)
