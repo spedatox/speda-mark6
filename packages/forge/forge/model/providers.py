@@ -210,6 +210,9 @@ class OpenAICompatModel:
                             slot["name"] = tc.function.name
                         if tc.function.arguments:
                             slot["arguments"] += tc.function.arguments
+                    sig = _thought_signature(tc)
+                    if sig:
+                        slot["signature"] = sig
         finally:
             await raw.close()
         if signal.is_set():
@@ -220,7 +223,8 @@ class OpenAICompatModel:
             yield ToolUseRequest(id=slot["id"] or _gen_tool_id(),
                                  name=slot["name"],
                                  input=_parse_tool_args(slot["arguments"], slot["name"]),
-                                 reasoning_content=reasoning)
+                                 reasoning_content=reasoning,
+                                 signature=slot.get("signature"))
         report = _usage_report(usage)
         if report is not None:
             yield report
@@ -488,11 +492,15 @@ def _translate_message(message: dict[str, Any]) -> list[dict[str, Any]]:
             if role != "assistant":
                 user_images.append(block)
         elif btype == "tool_use":
-            tool_calls.append({
+            call = {
                 "id": block["id"], "type": "function",
                 "function": {"name": block["name"],
                              "arguments": json.dumps(block.get("input") or {})},
-            })
+            }
+            signature = block.get("_signature") or block.get("signature")
+            if signature:
+                call["extra_content"] = {"google": {"thought_signature": signature}}
+            tool_calls.append(call)
             # DeepSeek requires the chain-of-thought to round-trip on the SAME
             # assistant message that carries the tool calls. It arrives on the
             # first tool_use block (all blocks in a turn share one reasoning
@@ -540,3 +548,14 @@ def _gen_tool_id() -> str:
     # Some compat layers (Gemini) omit tool-call ids; the loop needs one to pair
     # tool_use with tool_result. Generated, never hardcoded.
     return f"call_{uuid.uuid4().hex[:24]}"
+
+
+def _thought_signature(tc: Any) -> str | None:
+    """Pull Gemini's thought signature off a returned tool call."""
+    extra = getattr(tc, "extra_content", None)
+    if extra is None:
+        extra = (getattr(tc, "model_extra", None) or {}).get("extra_content")
+    google = extra.get("google") if isinstance(extra, dict) else getattr(extra, "google", None)
+    if isinstance(google, dict):
+        return google.get("thought_signature")
+    return getattr(google, "thought_signature", None)

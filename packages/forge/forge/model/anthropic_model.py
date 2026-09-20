@@ -89,6 +89,30 @@ def _cached_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _strip_internal_markers(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop underscore-prefixed keys from message content blocks.
+
+    Anthropic rejects unknown keys (like `_signature`) on content blocks.
+    """
+    if not any(
+        isinstance(b, dict) and any(k.startswith("_") for k in b)
+        for m in messages
+        for b in (m.get("content") or [] if isinstance(m.get("content"), list) else [])
+    ):
+        return messages
+    cleaned = []
+    for m in messages:
+        content = m.get("content")
+        if isinstance(content, list):
+            m = {**m, "content": [
+                {k: v for k, v in b.items() if not k.startswith("_")}
+                if isinstance(b, dict) else b
+                for b in content
+            ]}
+        cleaned.append(m)
+    return cleaned
+
+
 class AnthropicModel:
     def __init__(self, model_id: str, api_key: str, max_tokens: int = 4096) -> None:
         if not api_key:
@@ -109,6 +133,8 @@ class AnthropicModel:
         in the logs on every run."""
         await self._client.close()
 
+    aclose = close
+
     async def stream(self, *, system: str, messages: list[dict[str, Any]],
                      tools: list[dict[str, Any]], signal: asyncio.Event
                      ) -> AsyncIterator[ModelEvent]:
@@ -116,7 +142,7 @@ class AnthropicModel:
             model=self.model_id,
             max_tokens=self.max_tokens,
             system=_cached_system(system),
-            messages=_cached_messages(messages),
+            messages=_cached_messages(_strip_internal_markers(messages)),
             tools=_cached_tools(tools),
         ) as stream:
             async for event in stream:

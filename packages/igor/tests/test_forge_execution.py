@@ -158,3 +158,50 @@ async def test_forge_tool_events_preserve_ids_and_tool_names(tmp_path, monkeypat
         ("tool_result", "forge-b", "read_file"),
         ("tool_result", "forge-a", "shell"),
     ]
+
+
+async def test_igor_model_adapter_propagates_thought_signature_to_assistant_message():
+    import asyncio
+    from app.execution.forge import IgorModelAdapter
+    from app.services.llm_client import LLMMessage, ToolUseBlock, _translate_message
+    from forge.model.base import ToolUseRequest
+    from forge.warden.engine import _Turn
+
+    class _MockClient:
+        async def create_message(self, **_kwargs):
+            return LLMMessage(
+                content=[
+                    ToolUseBlock(
+                        id="call_run_cmd",
+                        name="run_command",
+                        input={"cmd": "ls -la"},
+                        signature="SIG_GEMINI_ROUNDTRIP_123",
+                    )
+                ],
+                stop_reason="tool_use",
+            )
+
+    adapter = IgorModelAdapter(_MockClient(), "gemini:gemini-2.5-flash")
+    events = [
+        ev
+        async for ev in adapter.stream(
+            system="test", messages=[], tools=[], signal=asyncio.Event()
+        )
+    ]
+
+    tool_uses = [ev for ev in events if isinstance(ev, ToolUseRequest)]
+    assert len(tool_uses) == 1
+    assert tool_uses[0].signature == "SIG_GEMINI_ROUNDTRIP_123"
+
+    turn = _Turn(tool_uses=tool_uses)
+    assistant_msg = turn.assistant_message()
+    assert assistant_msg["role"] == "assistant"
+    assert assistant_msg["content"][0]["type"] == "tool_use"
+    assert assistant_msg["content"][0]["_signature"] == "SIG_GEMINI_ROUNDTRIP_123"
+
+    translated = _translate_message(assistant_msg)
+    assert translated[0]["role"] == "assistant"
+    assert translated[0]["tool_calls"][0]["extra_content"] == {
+        "google": {"thought_signature": "SIG_GEMINI_ROUNDTRIP_123"}
+    }
+

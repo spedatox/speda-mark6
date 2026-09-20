@@ -74,6 +74,7 @@ class IgorModelAdapter:
                     name=block.name,
                     input=block.input,
                     reasoning_content=getattr(block, "reasoning_content", None),
+                    signature=getattr(block, "signature", None) or getattr(block, "_signature", None),
                 )
         usage = getattr(response, "usage", None)
         if usage is not None:

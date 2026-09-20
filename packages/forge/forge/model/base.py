@@ -26,6 +26,10 @@ class ToolUseRequest:
     models). Carried here so the assistant message carrying the tool call can
     round-trip it back, which DeepSeek requires once thinking is enabled. Empty
     for providers that do not emit it."""
+    signature: str | None = None
+    """Provider thought signature (Gemini 3.x). Carried here so the assistant
+    message carrying the tool call can round-trip it back, which Gemini requires
+    on the turn following a tool call. Empty for providers that do not emit it."""
 
 
 @dataclass

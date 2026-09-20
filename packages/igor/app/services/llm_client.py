@@ -1161,7 +1161,7 @@ def _translate_message(message: dict) -> list[dict]:
             # Hand Gemini back its own thought signature on the call it signed.
             # Mandatory on Gemini 3.x (see _thought_signature); every other
             # provider never set one, so nothing is added for them.
-            signature = block.get("_signature")
+            signature = block.get("_signature") or block.get("signature")
             if signature:
                 call["extra_content"] = {"google": {"thought_signature": signature}}
             tool_calls.append(call)

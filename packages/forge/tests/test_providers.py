@@ -94,6 +94,23 @@ def test_translate_tool_use_round_trips_reasoning_content():
     assert out[0]["reasoning_content"] == "check the dir first"
 
 
+def test_translate_tool_use_round_trips_thought_signature():
+    """Gemini 3.x requires the thought_signature on tool_use to ride back in extra_content."""
+    assistant = {"role": "assistant", "content": [
+        {"type": "tool_use", "id": "t1", "name": "run_command",
+         "input": {"command": "ls"}, "_signature": "SIG_123"},
+    ]}
+    out = _translate_message(assistant)
+    assert out[0]["tool_calls"][0]["extra_content"] == {"google": {"thought_signature": "SIG_123"}}
+
+    assistant2 = {"role": "assistant", "content": [
+        {"type": "tool_use", "id": "t2", "name": "run_command",
+         "input": {"command": "pwd"}, "signature": "SIG_456"},
+    ]}
+    out2 = _translate_message(assistant2)
+    assert out2[0]["tool_calls"][0]["extra_content"] == {"google": {"thought_signature": "SIG_456"}}
+
+
 # ── streaming translation against a fake OpenAI client ───────────────────────
 def _chunk(content=None, tool=None, index=0, reasoning=None):
     fn = None
