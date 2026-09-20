@@ -37,21 +37,18 @@ RUN rm -f /etc/apt/sources.list.d/kali.sources \
  && printf 'deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\ndeb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware\n' \
         > /etc/apt/sources.list
 
-# 2) Core security toolset, compilers, runtimes, and networking utilities.
-#    Note: resolvconf is intentionally EXCLUDED. In Docker's init-less environment
-#    its postinst script calls invoke-rc.d which policy-rc.d denies → dpkg exits 1.
-#    resolv.conf is managed directly by the OPSEC helper scripts (use-privacy-dns).
+# 2) Essential security toolset, runtimes, and networking utilities.
+#    Lean and targeted: deliberately excludes bloated metapackages (kali-linux-headless),
+#    heavy exploitation frameworks (metasploit-framework, exploitdb), and gigabytes of
+#    wordlists (seclists/wordlists/rockyou). Scourge runs as root in-cell with full network
+#    access and can install task-specific niche tools on demand via apt, pipx, or go install.
 RUN apt-get update \
- && apt-get -y dist-upgrade \
  && apt-get -y install --no-install-recommends \
-        kali-linux-headless \
-        nmap masscan nikto sqlmap hydra john hashcat \
-        metasploit-framework exploitdb \
-        nuclei ffuf gobuster feroxbuster wpscan dirsearch \
-        amass theharvester recon-ng \
-        seclists wordlists \
-        socat netcat-traditional tcpdump tshark \
-        iproute2 iputils-ping dnsutils whois whatweb \
+        nmap masscan nikto sqlmap \
+        nuclei ffuf gobuster dirsearch \
+        wafw00f whatweb \
+        socat netcat-traditional tcpdump \
+        iproute2 iputils-ping dnsutils whois \
         iptables nftables \
         build-essential cmake make gcc g++ pkg-config \
         libpcap-dev libssl-dev libffi-dev \
@@ -62,50 +59,19 @@ RUN apt-get update \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-# 2) Ensure Go and pipx bin directories exist and are ready for niche tool installs
+# 3) Ensure Go and pipx bin directories exist and are ready for tool installs
 RUN mkdir -p /root/go/bin /root/.local/bin /workspace
 
-# 2a) Web pentest — apt additions
-#   wafw00f : WAF detection
-RUN apt-get update \
- && apt-get -y install --no-install-recommends \
-        wafw00f \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
-
-# 2b) Web pentest — Go tools (ProjectDiscovery suite + community favourites)
-#   subfinder       : passive subdomain enumeration (referenced in system_prompt but was not baked)
-#   httpx           : fast HTTP probing / tech fingerprint
-#   katana          : modern web crawler / JS-aware spidering
-#   dnsx            : DNS resolver / bulk record lookup
-#   interactsh-client: OOB interaction server client (SSRF, blind XXE …)
-#   gau             : fetch known URLs from AlienVault / Wayback / CommonCrawl
-#   waybackurls     : Wayback Machine URL dump
-#   hakrawler       : fast web crawler for endpoint discovery
-#   dalfox          : parameter analysis + XSS scanner
+# 4) Web pentest — Go tools (ProjectDiscovery suite)
 RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
  && go install github.com/projectdiscovery/httpx/cmd/httpx@latest \
  && go install github.com/projectdiscovery/katana/cmd/katana@latest \
- && go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest \
- && go install github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest \
- && go install github.com/lc/gau/v2/cmd/gau@latest \
- && go install github.com/tomnomnom/waybackurls@latest \
- && go install github.com/hakluke/hakrawler@latest \
- && go install github.com/hahwul/dalfox/v2@latest
+ && go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest
 
-# 2c) Web pentest — Python tools via pipx
-#   arjun : HTTP parameter discovery (GET/POST/JSON/XML brute-force)
+# 5) Web pentest — Python tools via pipx
 RUN pipx install arjun
 
-# 3) Decompress rockyou wordlist so it is immediately usable
-RUN if [ -f /usr/share/wordlists/rockyou.txt.gz ]; then \
-        gunzip -k /usr/share/wordlists/rockyou.txt.gz; \
-    fi
-
-# 4) Warm the SearchSploit database
-RUN searchsploit -u || true
-
-# 5) OPSEC & Anonymity Configuration
+# 6) OPSEC & Anonymity Configuration
 # - Configure proxychains4: enable proxy_dns (prevents DNS leak), quiet_mode, and point to local Tor SOCKS5
 RUN cat << 'EOF' > /etc/proxychains4.conf
 # proxychains.conf - Pre-configured for Scourge OPSEC

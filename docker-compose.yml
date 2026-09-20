@@ -1,5 +1,6 @@
 services:
   app:
+    image: speda-app:latest
     build:
       context: .                            # repo root — uv workspace + lock live here
       dockerfile: packages/igor/Dockerfile
@@ -129,6 +130,7 @@ services:
   # language and package-manager caches so task-specific additions survive
   # rebuilds without making the baked image large.
   sandbox:
+    image: speda-sandbox:latest
     build: ./packages/sandbox
     # No host port mapping — only the app talks to it over the internal network.
     expose:
@@ -153,6 +155,7 @@ services:
   # holds live session cookies for the owner's student portal. Internal network
   # only, and BROWSER_TOKEN on top of that.
   browser:
+    image: speda-browser:latest
     build: ./packages/browser
     expose:
       - "9200"
@@ -198,6 +201,7 @@ services:
   # keeps every session's profile in memory only — it must never accumulate
   # cookies for anything, which is also why it gets no state volume.
   playwright-mcp:
+    image: speda-playwright-mcp:latest
     build: ./packages/playwright-mcp
     expose:
       - "8931"
@@ -215,6 +219,7 @@ services:
   # placement plan). Only starts with `--profile hisar`, which deploy.sh enables
   # when ../hisar-mk1/.env exists — so a server without Hisar is unaffected.
   hisar:
+    image: speda-hisar:latest
     build: ../hisar-mk1
     profiles: ["hisar"]
     restart: unless-stopped

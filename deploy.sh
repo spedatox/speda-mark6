@@ -2,7 +2,9 @@
 #
 # SPEDA Mark VI — one-shot server deploy.
 #
-#   ./deploy.sh                      # build + start the whole stack
+#   ./deploy.sh                      # build + start the stack (one-time bakes preserved)
+#   ./deploy.sh --rebuild-cells      # force-rebuild Forge Cell images (optimus + scourge)
+#   ./deploy.sh --rebuild-all        # force-rebuild all images (cells + compose services)
 #   ./deploy.sh --migrate speda.db   # ...and import your existing SQLite memory
 #
 # Reads packages/igor/.env. If DOMAIN is set there, it also starts Caddy with
@@ -12,9 +14,13 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 MIGRATE_DB=""
+ARG_REBUILD_CELLS=false
+ARG_REBUILD_ALL=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --migrate) MIGRATE_DB="${2:-}"; shift 2 ;;
+    --rebuild-cells) ARG_REBUILD_CELLS=true; shift ;;
+    --rebuild-all) ARG_REBUILD_ALL=true; shift ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
@@ -189,20 +195,57 @@ for var in SPEDA_API_KEY N8N_SECRET BROWSER_TOKEN; do
   [[ -n "${val}" ]] && export "${var}=${val}"
 done
 
-# ── Forge Cell images ─────────────────────────────────────────────────────────
+# ── Forge Cell images (One-time bake) ─────────────────────────────────────────
 # The Cell images are NOT part of the compose stack — they are launched by the
-# host Docker daemon on demand (via the socket mount). compose up --build never
-# touches them. Build them here so a fresh server always has them; subsequent
-# runs are fast because Docker reuses cached layers.
-say "Building Forge Cell images (optimus + scourge)…"
-docker build -f packages/forge/deploy/cell-optimus.Dockerfile \
-  -t forge-cell-optimus:latest packages/forge/deploy/
-docker build -f packages/forge/deploy/cell-scourge.Dockerfile \
-  -t forge-cell-scourge:latest packages/forge/deploy/
+# host Docker daemon on demand (via the socket mount). They are baked ONCE on
+# initial server setup and skipped on routine deploys. Pass --rebuild-cells or
+# --rebuild-all to force a rebuild.
+if $ARG_REBUILD_CELLS || $ARG_REBUILD_ALL || ! docker image inspect forge-cell-optimus:latest >/dev/null 2>&1; then
+  say "Baking Forge Cell image (optimus)…"
+  docker build -f packages/forge/deploy/cell-optimus.Dockerfile \
+    -t forge-cell-optimus:latest packages/forge/deploy/
+else
+  say "Forge Cell image (optimus) already baked — skipping (use --rebuild-cells to force)"
+fi
+
+if $ARG_REBUILD_CELLS || $ARG_REBUILD_ALL || ! docker image inspect forge-cell-scourge:latest >/dev/null 2>&1; then
+  say "Baking Forge Cell image (scourge — lean cybersec essentials)…"
+  docker build -f packages/forge/deploy/cell-scourge.Dockerfile \
+    -t forge-cell-scourge:latest packages/forge/deploy/
+else
+  say "Forge Cell image (scourge) already baked — skipping (use --rebuild-cells to force)"
+fi
 
 # ── Build + start ────────────────────────────────────────────────────────────
-say "Building and starting the stack (sandbox + api${DOMAIN:+ + caddy})…"
-docker compose "${PROFILE[@]}" up -d --build
+# One-time bake for sidecar services. On code pushes, only `app` needs building.
+# Sidecars (sandbox, browser, playwright-mcp) are baked ONCE and skipped if their
+# image already exists, unless --rebuild-all is passed.
+for svc in sandbox browser playwright-mcp; do
+  img="speda-${svc}:latest"
+  if $ARG_REBUILD_ALL || ! docker image inspect "${img}" >/dev/null 2>&1; then
+    say "Baking ${svc} image (${img})…"
+    docker compose "${PROFILE[@]}" build "${svc}"
+  else
+    say "Service ${svc} (${img}) already baked — skipping"
+  fi
+done
+
+if $HISAR_ON; then
+  if $ARG_REBUILD_ALL || ! docker image inspect speda-hisar:latest >/dev/null 2>&1; then
+    say "Baking H.İ.S.A.R. image…"
+    docker compose "${PROFILE[@]}" build hisar
+  fi
+fi
+
+say "Building app container (code updates)…"
+docker compose "${PROFILE[@]}" build app
+
+say "Starting the stack…"
+docker compose "${PROFILE[@]}" up -d
+
+# Prune dangling <none>:<none> layers left behind to prevent disk junk accumulation
+say "Pruning dangling Docker images…"
+docker image prune -f || true
 
 # Editing a mounted Caddyfile does not recreate the container, so a config
 # change (a new peer site block) needs an explicit reload. Harmless no-op when
