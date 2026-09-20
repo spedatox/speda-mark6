@@ -195,27 +195,6 @@ for var in SPEDA_API_KEY N8N_SECRET BROWSER_TOKEN; do
   [[ -n "${val}" ]] && export "${var}=${val}"
 done
 
-# ── Forge Cell images (One-time bake) ─────────────────────────────────────────
-# The Cell images are NOT part of the compose stack — they are launched by the
-# host Docker daemon on demand (via the socket mount). They are baked ONCE on
-# initial server setup and skipped on routine deploys. Pass --rebuild-cells or
-# --rebuild-all to force a rebuild.
-if $ARG_REBUILD_CELLS || $ARG_REBUILD_ALL || ! docker image inspect forge-cell-optimus:latest >/dev/null 2>&1; then
-  say "Baking Forge Cell image (optimus)…"
-  docker build -f packages/forge/deploy/cell-optimus.Dockerfile \
-    -t forge-cell-optimus:latest packages/forge/deploy/
-else
-  say "Forge Cell image (optimus) already baked — skipping (use --rebuild-cells to force)"
-fi
-
-if $ARG_REBUILD_CELLS || $ARG_REBUILD_ALL || ! docker image inspect forge-cell-scourge:latest >/dev/null 2>&1; then
-  say "Baking Forge Cell image (scourge — lean cybersec essentials)…"
-  docker build -f packages/forge/deploy/cell-scourge.Dockerfile \
-    -t forge-cell-scourge:latest packages/forge/deploy/
-else
-  say "Forge Cell image (scourge) already baked — skipping (use --rebuild-cells to force)"
-fi
-
 # ── Build + start ────────────────────────────────────────────────────────────
 # One-time bake for sidecar services. On code pushes, only `app` needs building.
 # Sidecars (sandbox, browser, playwright-mcp) are baked ONCE and skipped if their
@@ -242,10 +221,6 @@ docker compose "${PROFILE[@]}" build app
 
 say "Starting the stack…"
 docker compose "${PROFILE[@]}" up -d
-
-# Prune dangling <none>:<none> layers left behind to prevent disk junk accumulation
-say "Pruning dangling Docker images…"
-docker image prune -f || true
 
 # Editing a mounted Caddyfile does not recreate the container, so a config
 # change (a new peer site block) needs an explicit reload. Harmless no-op when
@@ -281,6 +256,31 @@ if $HISAR_ON; then
   done
   $hok && echo "  H.İ.S.A.R. is healthy." || echo "  ⚠ H.İ.S.A.R. did not report healthy in 60s — check: docker compose logs hisar"
 fi
+
+# ── Forge Cell images (One-time bake) ─────────────────────────────────────────
+# The Cell images are NOT part of the compose stack — they are launched by the
+# host Docker daemon on demand (via the socket mount). They are baked ONCE on
+# initial server setup and skipped on routine deploys. Pass --rebuild-cells or
+# --rebuild-all to force a rebuild.
+if $ARG_REBUILD_CELLS || $ARG_REBUILD_ALL || ! docker image inspect forge-cell-optimus:latest >/dev/null 2>&1; then
+  say "Baking Forge Cell image (optimus)…"
+  docker build -f packages/forge/deploy/cell-optimus.Dockerfile \
+    -t forge-cell-optimus:latest packages/forge/deploy/ || say "⚠ Optimus cell bake deferred"
+else
+  say "Forge Cell image (optimus) already baked — skipping (use --rebuild-cells to force)"
+fi
+
+if $ARG_REBUILD_CELLS || $ARG_REBUILD_ALL || ! docker image inspect forge-cell-scourge:latest >/dev/null 2>&1; then
+  say "Baking Forge Cell image (scourge — lean cybersec essentials)…"
+  docker build -f packages/forge/deploy/cell-scourge.Dockerfile \
+    -t forge-cell-scourge:latest packages/forge/deploy/ || say "⚠ Scourge cell bake deferred"
+else
+  say "Forge Cell image (scourge) already baked — skipping (use --rebuild-cells to force)"
+fi
+
+# ── Cleanup dangling Docker layers ───────────────────────────────────────────
+say "Pruning dangling Docker images…"
+docker image prune -f || true
 
 # ── Import memory (optional, one time) ───────────────────────────────────────
 if [[ -n "${MIGRATE_DB}" ]]; then

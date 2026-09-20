@@ -37,41 +37,32 @@ RUN rm -f /etc/apt/sources.list.d/kali.sources \
  && printf 'deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\ndeb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware\n' \
         > /etc/apt/sources.list
 
-# 2) Essential security toolset, runtimes, and networking utilities.
-#    Lean and targeted: deliberately excludes bloated metapackages (kali-linux-headless),
-#    heavy exploitation frameworks (metasploit-framework, exploitdb), and gigabytes of
-#    wordlists (seclists/wordlists/rockyou). Scourge runs as root in-cell with full network
-#    access and can install task-specific niche tools on demand via apt, pipx, or go install.
+# 2) Essential security toolset and networking utilities.
+#    Ultra-lean: uses precompiled binaries exclusively. Excludes heavy C/C++
+#    compiler suites (build-essential, gcc, g++, cmake) and Go compiler runtime
+#    to prevent memory exhaustion (OOM 137) during package extraction.
 RUN apt-get update \
  && apt-get -y install --no-install-recommends \
         nmap masscan nikto sqlmap \
         nuclei ffuf gobuster dirsearch \
+        subfinder httpx-toolkit \
         wafw00f whatweb \
         socat netcat-traditional tcpdump \
         iproute2 iputils-ping dnsutils whois \
         iptables nftables \
-        build-essential cmake make gcc g++ pkg-config \
-        libpcap-dev libssl-dev libffi-dev \
-        python3-pip python3-venv python3-dev pipx \
-        golang-go \
+        python3-pip python3-venv pipx \
         git curl wget jq unzip zip tar file procps ca-certificates \
         tor proxychains4 openvpn wireguard-tools \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-# 3) Ensure Go and pipx bin directories exist and are ready for tool installs
-RUN mkdir -p /root/go/bin /root/.local/bin /workspace
+# 3) Ensure directories exist
+RUN mkdir -p /root/.local/bin /workspace
 
-# 4) Web pentest — Go tools (ProjectDiscovery suite)
-RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
- && go install github.com/projectdiscovery/httpx/cmd/httpx@latest \
- && go install github.com/projectdiscovery/katana/cmd/katana@latest \
- && go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest
-
-# 5) Web pentest — Python tools via pipx
+# 4) Web pentest — Python tools via pipx
 RUN pipx install arjun
 
-# 6) OPSEC & Anonymity Configuration
+# 5) OPSEC & Anonymity Configuration
 # - Configure proxychains4: enable proxy_dns (prevents DNS leak), quiet_mode, and point to local Tor SOCKS5
 RUN cat << 'EOF' > /etc/proxychains4.conf
 # proxychains.conf - Pre-configured for Scourge OPSEC
