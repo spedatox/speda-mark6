@@ -30,6 +30,7 @@ majority of runs.
 | `memory_audit.json` | *(nothing — it schedules)* | **once a night, by design** |
 | `task_queue_drain.json` | Post-turn work that failed or was orphaned | only when a job actually needs re-running |
 | `ultron_wear_attendance.json` | A lecture ending unanswered | never; it pushes to the watch directly |
+| `onyx_watch.json` | Onyx ticket events (client deliverables) | a ticket event arrives |
 
 `octavius_backup.json` inverts the rule rather than breaking it: the scheduled
 half IS the work — Igor snapshots, verifies and uploads the database itself, for

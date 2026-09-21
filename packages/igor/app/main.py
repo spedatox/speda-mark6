@@ -163,6 +163,8 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(SaveFileSkill())
     await registry.register_skill(GenerateDailyTrainingProgramSkill())   # Atomix-only (restricted_to)
     await registry.register_skill(HisarSkill())
+    from app.skills.onyx import OnyxSkill
+    await registry.register_skill(OnyxSkill())
     await registry.register_skill(SystemSkill())
     await registry.register_skill(SystemOpsSkill())   # Orion-only (restricted_to)
     await registry.register_skill(BudgetModeSkill())

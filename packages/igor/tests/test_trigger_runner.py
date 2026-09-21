@@ -425,3 +425,80 @@ def test_templates_intent_language_adaptation():
         "template": "briefing", "instruction": "haberleri özetle", "language": "tr",
     })
     assert "Yazdığın metin owner'a otomatik push olarak iletilir" in intent_tr
+
+
+def test_extract_onyx_data():
+    raw = {
+        "event": "ticket.created",
+        "ticket": {
+            "ticket_number": 1002,
+            "title": "Ceviz ayıklama sehpaları",
+            "organization": {"name": "Arel Tarım"},
+            "requester": {"name": "Kadir Sarıbaş"},
+        },
+    }
+    extracted = tr._extract_onyx_data(raw)
+    assert extracted is not None
+    assert extracted["ticket"]["ticket_number"] == 1002
+
+    # Nested in data
+    wrapped = {"type": "webhook", "automation": "Onyx hook", "data": raw}
+    extracted_nested = tr._extract_onyx_data(wrapped)
+    assert extracted_nested is not None
+    assert extracted_nested["ticket"]["ticket_number"] == 1002
+
+
+def test_onyx_seed_ticket_created_instructs_google_tasks():
+    payload = {
+        "event": "ticket.created",
+        "ticket": {
+            "ticket_number": 1002,
+            "title": "Ceviz ayıklama sehpaları",
+            "description": "Soyma makinesi ayrı satılır notu eklenmesi",
+            "status": "OPEN",
+            "priority": "NORMAL",
+            "category": "E-Commerce",
+            "organization": {"name": "Arel Tarım"},
+            "requester": {"name": "Kadir Sarıbaş"},
+            "target_date": "2026-09-21",
+        },
+    }
+    seed = tr.build_seed(payload, "push")
+    assert "ONYX TICKET NOTIFICATION" in seed
+    assert "tasks_create" in seed
+    assert "[Onyx #1002] Ceviz ayıklama sehpaları" in seed
+    assert "2026-09-21" in seed
+    assert "Arel Tarım" in seed
+    assert "NEVER dump raw bullet points" in seed
+
+
+def test_onyx_seed_ticket_completed_instructs_tasks_update():
+    payload = {
+        "event": "ticket.completed",
+        "ticket": {
+            "ticket_number": 1002,
+            "title": "Ceviz ayıklama sehpaları",
+            "completion_summary": "Tüm görsellere uyarı notu eklendi.",
+            "status": "COMPLETED",
+            "organization": {"name": "Arel Tarım"},
+            "requester": {"name": "Kadir Sarıbaş"},
+        },
+    }
+    seed = tr.build_seed(payload, "push")
+    assert "TICKET COMPLETED" in seed
+    assert "tasks_update" in seed
+    assert "completed=True" in seed
+    assert "NEVER dump bullet points" in seed
+
+
+def test_session_title_formats_onyx_cleanly():
+    payload = {
+        "event": "ticket.created",
+        "ticket": {
+            "ticket_number": 1002,
+            "title": "Ceviz ayıklama sehpaları",
+        },
+    }
+    title = tr.session_title(payload)
+    assert "Onyx #1002 · Ceviz ayıklama sehpaları" in title
+

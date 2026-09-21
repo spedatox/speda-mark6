@@ -145,6 +145,9 @@ def build_seed(payload: dict, output_mode: str) -> str:
     if payload.get("type") in ("legion_report", "dispatch_report"):
         return _completion_seed(payload, delivery, lang=lang)
 
+    if (onyx_data := _extract_onyx_data(payload)) is not None:
+        return _onyx_seed(onyx_data, payload, delivery, lang=lang)
+
     return (
         "AUTOMATED TRIGGER — no human is waiting on this turn, so you must ACT, "
         "not narrate.\n\n"
@@ -239,6 +242,152 @@ def _completion_seed(payload: dict, delivery: str, lang: str | None = None) -> s
     )
 
 
+def _extract_onyx_data(payload: dict) -> dict | None:
+    """Extract ticket event and ticket details from an Onyx webhook payload,
+    whether raw or wrapped by n8n."""
+    if not isinstance(payload, dict):
+        return None
+    # 1. Top-level ticket payload
+    if isinstance(payload.get("ticket"), dict) and (
+        "ticket_number" in payload["ticket"] or "ticketNumber" in payload["ticket"]
+    ):
+        return payload
+    # 2. Nested in data / raw / body
+    for key in ("data", "raw", "body"):
+        sub = payload.get(key)
+        if isinstance(sub, dict) and isinstance(sub.get("ticket"), dict):
+            return sub
+    # 3. Explicit event check
+    event = str(payload.get("event") or "")
+    if event.startswith("ticket."):
+        return payload
+    # 4. Automation name check with ticket object
+    automation = str(payload.get("automation") or "").lower()
+    if "onyx" in automation and isinstance(payload.get("ticket"), dict):
+        return payload
+    return None
+
+
+def _onyx_seed(onyx: dict, raw_payload: dict, delivery: str, lang: str | None = None) -> str:
+    """The seed for an incoming Onyx webhook event.
+
+    Pushes Ultron to speak in his authentic Mark III persona (sharp, competent,
+    candid peer balancing academic and client load) rather than dumping a
+    lifeless, static key-value list of ticket fields (- Title: ... - Status: ...).
+
+    Also instructs Ultron to automatically manage the owner's to-do list using
+    Google Tasks (`tasks_create` for ticket.created, `tasks_update` for ticket.completed).
+    """
+    event = str(onyx.get("event") or raw_payload.get("event") or "ticket.updated")
+    ticket = onyx.get("ticket") or {}
+    t_num = ticket.get("ticket_number") or ticket.get("ticketNumber") or ticket.get("public_id") or ""
+    t_title = ticket.get("title") or ""
+    t_status = ticket.get("status") or ""
+    t_priority = ticket.get("priority") or "NORMAL"
+    t_cat = ticket.get("category") or ""
+    t_org = ""
+    if isinstance(ticket.get("organization"), dict):
+        t_org = ticket["organization"].get("name") or ""
+    elif isinstance(ticket.get("organization"), str):
+        t_org = ticket["organization"]
+    t_req = ""
+    if isinstance(ticket.get("requester"), dict):
+        t_req = ticket["requester"].get("name") or ticket["requester"].get("email") or ""
+    elif isinstance(ticket.get("requester"), str):
+        t_req = ticket["requester"]
+    t_desc = ticket.get("description") or ""
+    t_target = ticket.get("target_date") or ticket.get("targetDate") or ""
+    if t_target and "T" in str(t_target):
+        t_target = str(t_target).split("T")[0]
+    t_summary = ticket.get("completion_summary") or ticket.get("completionSummary") or ""
+
+    comment = onyx.get("comment") or {}
+    c_author = comment.get("author") or ""
+    c_text = comment.get("content") or ""
+
+    if event == "ticket.created":
+        event_guidance = (
+            f"NEW TICKET CREATED: #{t_num} — '{t_title}'.\n"
+            f"Client / Organization: {t_org} (Requester: {t_req})\n"
+            f"Priority: {t_priority} | Category: {t_cat}\n"
+            f"Target Date: {t_target or 'none specified'}\n"
+            f"Details: {t_desc}\n\n"
+            "ACTIONS REQUIRED THIS TURN:\n"
+            "1. ADD TO GOOGLE TASKS: You must call `tasks_create` (the Google Tasks tool is active this turn):\n"
+            f"   - title: '[Onyx #{t_num}] {t_title}'\n"
+            f"   - notes: 'Client: {t_org} | Requester: {t_req}\\nDetails: {t_desc}'\n"
+            + (f"   - due: '{t_target}'\n" if t_target else "")
+            + "2. COMPOSE TELEGRAM PUSH: Deliver a lively, natural 1–3 sentence message for Ahmet Erol. "
+            "Name the client and requester, ticket number and title, explain the real substance of the request plainly, "
+            "and note that you added it to his Google Tasks. If priority is high/urgent or deadline is tight, call that out. "
+            "NEVER dump raw bullet points (- Title: ... - Status: ...). Write like a real person talking to a friend."
+        )
+    elif event in ("ticket.status.changed", "ticket.updated"):
+        event_guidance = (
+            f"TICKET STATUS CHANGE / UPDATE: #{t_num} — '{t_title}'.\n"
+            f"Client / Organization: {t_org}\n"
+            f"New Status: {t_status} | Priority: {t_priority}\n"
+            f"Details: {t_desc}\n\n"
+            "ACTION REQUIRED THIS TURN:\n"
+            "Deliver a crisp 1–2 sentence push update on the status change. "
+            "State what moved (e.g. ticket is now in progress) and what that means for his queue. "
+            "Do NOT recite the whole description unless it changed. NEVER dump bullet points."
+        )
+    elif event == "ticket.comment.created":
+        event_guidance = (
+            f"NEW COMMENT ON TICKET: #{t_num} — '{t_title}'.\n"
+            f"Client / Organization: {t_org}\n"
+            f"Comment Author: {c_author}\n"
+            f"Comment Text: {c_text}\n"
+            f"Current Status: {t_status}\n\n"
+            "ACTION REQUIRED THIS TURN:\n"
+            "Tell Ahmet Erol about the comment in 1–2 sentences. "
+            "If Ahmet Erol himself posted the comment, acknowledge it flatly ('Noted on #...: ...'). "
+            "If the client or someone else commented, state who said what and if any action is needed. "
+            "NEVER dump bullet points."
+        )
+    elif event == "ticket.completed":
+        event_guidance = (
+            f"TICKET COMPLETED: #{t_num} — '{t_title}'.\n"
+            f"Client / Organization: {t_org}\n"
+            f"Resolution: {t_summary or t_desc or 'Done'}\n\n"
+            "ACTIONS REQUIRED THIS TURN:\n"
+            f"1. UPDATE GOOGLE TASKS: Search for the task with `[Onyx #{t_num}]` in title using `tasks_list()`, "
+            "and if found, call `tasks_update(task_id=..., completed=True)` so it is marked done on his Google Tasks list.\n"
+            "2. COMPOSE TELEGRAM PUSH: Announce the completion cleanly and with satisfaction in 1–2 sentences. "
+            "Summarize the resolution and note it's checked off his plate. NEVER dump bullet points."
+        )
+    elif event == "ticket.reopened":
+        event_guidance = (
+            f"TICKET REOPENED: #{t_num} — '{t_title}'.\n"
+            f"Client / Organization: {t_org}\n"
+            f"Reason/Details: {t_desc}\n\n"
+            "ACTION REQUIRED THIS TURN:\n"
+            "Alert him that the ticket was reopened and why in 1–2 direct sentences. NEVER dump bullet points."
+        )
+    else:
+        event_guidance = (
+            f"ONYX TICKET EVENT ({event}): #{t_num} — '{t_title}'.\n"
+            f"Client: {t_org} | Status: {t_status}\n"
+            f"Summary: {t_summary or t_desc}\n\n"
+            "ACTION REQUIRED THIS TURN:\n"
+            "Deliver a concise, lively update on this event. NEVER dump a list of fields."
+        )
+
+    return (
+        "ONYX TICKET NOTIFICATION — a real-time event just arrived from the owner's ticketing system (Onyx).\n"
+        "No human is in this turn; you are executing this turn and composing the live push notification delivered straight to Ahmet Erol's Telegram.\n\n"
+        f"{event_guidance}\n\n"
+        "CRITICAL RULES:\n"
+        "- VOICE: You are Ultron Mark III. A sharp, competent peer who balances the owner's academic life and client work. "
+        "Talk like a friend who knows the context cold. Zero corporate stiffness, zero robot headers ('Onyx ticket update:'), "
+        "and ABSOLUTELY NO raw field dumps (- Title: ... - Status: ...).\n"
+        "- LENGTH: 1 to 3 punchy sentences max. Respect his attention.\n"
+        f"- {delivery}\n"
+        + _language_clause(lang)
+    )
+
+
 def report_meta(payload: dict) -> dict | None:
     """The completion report, as structured data for the UI's collapsed card.
 
@@ -329,6 +478,14 @@ def session_title(payload: dict, today: datetime | None = None) -> str:
     # The owner's date, not the container's: a run at 01:00 Istanbul is still
     # "yesterday" in UTC, and the sidebar would name it the wrong day.
     stamp = (today or owner_now()).strftime("%d %b")
+    if (onyx := _extract_onyx_data(payload)) is not None:
+        ticket = onyx.get("ticket") or {}
+        num = ticket.get("ticket_number") or ticket.get("ticketNumber") or ticket.get("public_id") or ""
+        title = ticket.get("title") or ""
+        prefix = f"Onyx #{num}" if num else "Onyx"
+        if title:
+            return f"{prefix} · {title} · {stamp}"[:255]
+        return f"{prefix} · {stamp}"[:255]
     return f"{_label(payload)} · {stamp}"[:255]
 
 
@@ -443,7 +600,10 @@ async def start_trigger_turn(
     )
     # Toolsets loaded in an earlier turn of this session stay loaded, exactly as
     # in chat — otherwise every run re-calls use_toolset and rewrites the cache.
-    context.extra["active_servers"] = session_manager.get_loaded_servers(session.id)
+    loaded_servers = set(session_manager.get_loaded_servers(session.id))
+    if _extract_onyx_data(payload) is not None:
+        loaded_servers.add("google_tasks")
+    context.extra["active_servers"] = loaded_servers
     # The same provenance the seed was persisted with, handed to the STREAM. A
     # client watching this turn arrive must render what a client reloading it
     # later renders — one card, from one dict, whichever way it got here.

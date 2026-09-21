@@ -282,6 +282,10 @@ class Settings(BaseSettings):
     hisar_base_url: str = "http://hisar:8600"
     hisar_machine_token: str = ""
 
+    # Onyx — internal ticket tracking platform (client work, e-commerce, automations)
+    onyx_api_url: str = "http://localhost:3000"
+    onyx_api_token: str = "speda-service-token-2026"
+
     n8n_api_url: str = "http://n8n:5678"
     n8n_api_key: str = ""   # n8n → Settings → n8n API → create key
     # URL n8n uses to call BACK into Speda's /trigger endpoint. Internal compose

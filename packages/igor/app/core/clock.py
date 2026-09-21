@@ -50,14 +50,17 @@ def owner_tz() -> ZoneInfo:
     global _warned
     try:
         return ZoneInfo(settings.owner_timezone)
-    except (ZoneInfoNotFoundError, ValueError, KeyError):
+    except (ZoneInfoNotFoundError, ValueError, KeyError, Exception):
         if not _warned:
             logger.error(
                 "owner_timezone_invalid",
                 extra={"value": settings.owner_timezone, "falling_back_to": "UTC"},
             )
             _warned = True
-        return ZoneInfo("UTC")
+        try:
+            return ZoneInfo("UTC")
+        except Exception:
+            return timezone.utc
 
 
 def utc_now() -> datetime:
