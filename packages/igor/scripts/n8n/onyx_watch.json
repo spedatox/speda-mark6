@@ -7,7 +7,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "onyx-webhook",
+        "path": "onyx-ticket-events",
         "responseMode": "onReceived",
         "options": {}
       },
@@ -20,7 +20,7 @@
         300
       ],
       "webhookId": "onyx-ticket-events",
-      "notes": "Receives inbound webhook notifications from the Onyx ticketing platform. In Onyx Settings ▸ Webhooks, point the endpoint URL to this webhook (e.g. http://n8n:5678/webhook/onyx-webhook or public HTTPS via Caddy)."
+      "notes": "Receives inbound webhook notifications from the Onyx ticketing platform. In Onyx Settings ▸ Webhooks, point the endpoint URL to this webhook (e.g. https://<n8n-domain>/webhook/onyx-ticket-events). Ensure the workflow is toggled to Active!"
     },
     {
       "parameters": {
