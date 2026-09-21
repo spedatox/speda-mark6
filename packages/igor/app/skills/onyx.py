@@ -61,16 +61,16 @@ class OnyxSkill(Skill):
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["list", "get", "update_status", "add_comment", "complete"],
+                "enum": ["list", "get", "update_status", "add_comment", "complete", "delete"],
                 "description": (
                     "'list' finds tickets by status; 'get' reads a specific ticket with discussion; "
                     "'update_status' moves a ticket; 'add_comment' posts a comment or progress note; "
-                    "'complete' marks a ticket done with a summary."
+                    "'complete' marks a ticket done with a summary; 'delete' permanently deletes a ticket."
                 ),
             },
             "ticket_number": {
                 "type": "integer",
-                "description": "The ticket number, e.g. 1002. Required for get, update_status, add_comment, complete.",
+                "description": "The ticket number, e.g. 1002. Required for get, update_status, add_comment, complete, delete.",
             },
             "status": {
                 "type": "string",
@@ -227,6 +227,23 @@ class OnyxSkill(Skill):
                         return f"Ticket #{ticket_number} not found."
                     resp.raise_for_status()
                     return f"Ticket #{ticket_number} marked as COMPLETED. Summary: {summary}"
+
+                elif action == "delete":
+                    ticket_number = args.get("ticket_number")
+                    if not ticket_number:
+                        return "Action 'delete' requires 'ticket_number'."
+                    resp = await client.post(
+                        endpoint,
+                        headers=_headers(),
+                        json={
+                            "action": "delete_ticket",
+                            "ticket_number": ticket_number,
+                        },
+                    )
+                    if resp.status_code == 404:
+                        return f"Ticket #{ticket_number} not found."
+                    resp.raise_for_status()
+                    return f"Ticket #{ticket_number} deleted successfully from Onyx."
 
                 else:
                     return f"Unknown action: {action!r}."
