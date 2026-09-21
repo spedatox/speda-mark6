@@ -7,8 +7,9 @@ import remarkGfm from 'remark-gfm'
 import { useChatContext } from '../store/chat'
 import { fetchAgentComms } from '../lib/api'
 import type { AgentCommEntry } from '../lib/api'
-import type { AppConfig, ChatMessage } from '../lib/types'
-import { AgentSay, Divider, OwnerSay, Working } from './CommBubble'
+import type { AppConfig, ChatMessage, SubagentRun } from '../lib/types'
+import { AgentSay, Divider, OwnerSay, LiveCommProgress } from './CommBubble'
+import SubagentDetailView from './SubagentDetailView'
 
 /**
  * THE HOUSE PARTY TRANSCRIPT — the war room as an actual group chat.
@@ -42,6 +43,7 @@ export default function PartyStream({ config, commanderId = 'speda' }: {
 }) {
   const { state } = useChatContext()
   const [comms, setComms] = useState<AgentCommEntry[]>([])
+  const [openRun, setOpenRun] = useState<SubagentRun | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
@@ -87,6 +89,7 @@ export default function PartyStream({ config, commanderId = 'speda' }: {
       }}
       style={{ flex: 1, overflowY: 'auto', padding: '26px 8px 0' }}
     >
+      {openRun && <SubagentDetailView run={openRun} onClose={() => setOpenRun(null)} />}
       <div style={{
         maxWidth: 900, margin: '0 auto',
         display: 'flex', flexDirection: 'column', gap: 18,
@@ -113,7 +116,14 @@ export default function PartyStream({ config, commanderId = 'speda' }: {
             {/* and the answer, in the voice of whoever gave it */}
             {e.status === 'running' ? (
               <AgentSay id={e.to_agent}>
-                <Working id={e.to_agent} label="working…" />
+                <LiveCommProgress
+                  agent={e.to_agent}
+                  ticket={e.id}
+                  since={e.created_at}
+                  sessionId={e.session_id}
+                  config={config}
+                  onOpenDetail={setOpenRun}
+                />
               </AgentSay>
             ) : e.result ? (
               <AgentSay id={e.to_agent}>

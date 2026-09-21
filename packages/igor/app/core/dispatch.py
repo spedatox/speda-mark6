@@ -260,9 +260,10 @@ class AgentDispatcher:
         # over the orchestrator and turn registry, neither of which exists when
         # the dispatcher is constructed (it precedes the registry).
         self._report_hook = None
+        self._turns = None
 
     def wire(self, *, orchestrator, profiles, session_manager, ws_manager,
-             runs=None) -> None:
+             runs=None, turns=None) -> None:
         """Late-bind the engine refs (they are constructed after the registry).
 
         `runs` is the shared background-run registry. Optional so the many unit
@@ -273,6 +274,7 @@ class AgentDispatcher:
         self._session_manager = session_manager
         self._ws_manager = ws_manager
         self._runs = runs
+        self._turns = turns
 
     def set_report_hook(self, hook) -> None:
         """Install the callback a finished BACKGROUND dispatch fires to report in.
@@ -323,6 +325,8 @@ class AgentDispatcher:
         depth: int = 0,
         cwd: str | None = None,
         origin_session_id: int | None = None,
+        emit=None,
+        tool_call_id: str | None = None,
     ) -> str:
         """
         Run `task` on `to_agent` and return its final text to the caller.
@@ -339,11 +343,22 @@ class AgentDispatcher:
             kind="dispatch", protocol=protocol, task=task,
             origin_session_id=origin_session_id,
         )
+        if self._runs is not None and msg_id is not None:
+            self._runs.register(
+                msg_id, agent=to_agent,
+                label=" ".join(task.split())[:120],
+                room_session_id=origin_session_id or 0,
+            )
+        status = "error"
+        result = ""
+        session_id = None
+        duration_ms = 0
         try:
             result, status, session_id, duration_ms = await self._execute(
                 from_agent=from_agent, to_agent=to_agent, task=task, user_id=user_id,
                 request_id=request_id, depth=depth, protocol=protocol, cwd=cwd,
                 own_msg_id=msg_id, origin_session_id=origin_session_id,
+                emit=emit, tool_call_id=tool_call_id,
             )
         except asyncio.CancelledError:
             # The caller's turn was stopped (owner hit stop, client vanished,
@@ -353,7 +368,13 @@ class AgentDispatcher:
                 msg_id, status="cancelled", session_id=None, duration_ms=0,
                 result="Cancelled — the turn that ordered this dispatch was stopped.",
             )
+            self._finish_run(msg_id, ok=False)
             raise
+        except Exception:
+            self._finish_run(msg_id, ok=False)
+            raise
+        finally:
+            self._finish_run(msg_id, ok=(status == "ok"))
         await self._log_finish(
             msg_id, status=status, result=result, session_id=session_id, duration_ms=duration_ms,
         )
@@ -397,6 +418,7 @@ class AgentDispatcher:
         self, *, from_agent: str, to_agent: str, task: str, user_id: int,
         request_id: str, depth: int, protocol: str, cwd: str | None, own_msg_id: int | None,
         origin_session_id: int | None = None,
+        emit=None, tool_call_id: str | None = None,
     ) -> tuple[str, str, int | None, int]:
         """The dispatch body: external-first routing with in-process fallback.
         Returns (result, status, session_id, duration_ms). Shared by the
@@ -425,6 +447,7 @@ class AgentDispatcher:
                     user_id=user_id, request_id=request_id, depth=depth,
                     house_party=(protocol == "house_party"), own_msg_id=own_msg_id,
                     origin_session_id=origin_session_id,
+                    emit=emit, tool_call_id=tool_call_id,
                 )
         elif profile is not None:
             result, status, session_id = await self._run_in_process(
@@ -432,6 +455,7 @@ class AgentDispatcher:
                 user_id=user_id, request_id=request_id, depth=depth,
                 house_party=(protocol == "house_party"), own_msg_id=own_msg_id,
                 origin_session_id=origin_session_id,
+                emit=emit, tool_call_id=tool_call_id,
             )
         else:
             result, status = await self._run_external(
@@ -666,6 +690,7 @@ class AgentDispatcher:
         self, *, profile, from_agent: str, task: str,
         user_id: int, request_id: str, depth: int, house_party: bool,
         own_msg_id: int | None = None, origin_session_id: int | None = None,
+        emit=None, tool_call_id: str | None = None,
     ) -> tuple[str, str, int | None]:
         """Run the target agent's own orchestrator loop; returns (text, status, session_id)."""
         # House Party = full interactive grade across all agents (D-C4); normal
@@ -701,17 +726,21 @@ class AgentDispatcher:
                     session.title = session_title(from_agent, task)
                     await db.commit()
 
+                # Immediately stamp session_id onto the AgentMessage row so
+                # GET /agents/comms and the comms tray link to this chat while running.
+                if own_msg_id is not None:
+                    from sqlalchemy import update
+                    await db.execute(
+                        update(AgentMessage)
+                        .where(AgentMessage.id == own_msg_id)
+                        .values(session_id=session.id)
+                    )
+                    await db.commit()
+
                 # Persist FIRST, then read the history back — the order chat and
                 # the trigger runner both use. The seed is stamped from its own
                 # created_at rather than by hand, so the transcript the owner
-                # opens is byte-identical to the prompt the model saw. (That
-                # stamp is also how a dispatched agent knows what day it is: the
-                # system prompt carries no clock, and an unstamped turn left
-                # date-scoped tools querying a hallucinated window.)
-                #
-                # `text` in the meta block is what the BUBBLE shows: the task the
-                # caller actually sent, not the routing preamble and the whole
-                # agent-channel scrollback the model needs to read.
+                # opens is byte-identical to the prompt the model saw.
                 await self._session_manager.save_message(db, session.id, "user", [
                     {"type": "text", "text": seed},
                     {
@@ -722,11 +751,14 @@ class AgentDispatcher:
                 ])
                 history = await self._session_manager.load_history(db, session.id)
 
+                turn_request_id = f"dispatch-{uuid.uuid4()}"
+                subagent_id = tool_call_id or f"dispatch-{own_msg_id or uuid.uuid4().hex[:8]}"
+
                 context = AgentContext(
                     agent_id=profile.agent_id,
                     user_id=user_id,
                     session_id=session.id,
-                    request_id=request_id,
+                    request_id=turn_request_id,
                     triggered_by="agent",
                     trigger_payload={"from_agent": from_agent, "task": task},
                     output_mode="silent",
@@ -742,6 +774,8 @@ class AgentDispatcher:
                         # owner is watching, so it must log against the same
                         # origin session instead of the agent's private one.
                         "room_session_id": origin_session_id,
+                        "caller_request_id": request_id,
+                        "ticket_id": own_msg_id,
                     },
                 )
 
@@ -749,14 +783,28 @@ class AgentDispatcher:
                 errors: list[str] = []
                 tools: list[dict] = []
                 files: list[dict] = []
-                chars = 0  # stamped onto each tool as afterChars, so a reloaded
-                # transcript interleaves tool cards where they actually fired
-                # (same contract as TurnRegistry._persist)
-                try:
-                    async for event in self._orchestrator.run(context):
+                chars = 0
+
+                async def _stream_events(ctx: AgentContext):
+                    nonlocal chars
+                    start_ev = {
+                        "id": subagent_id, "phase": "started", "agent": profile.agent_id,
+                        "label": " ".join(task.split())[:120], "prompt": task, "source": "dispatch",
+                    }
+                    if self._runs is not None and own_msg_id is not None:
+                        self._runs.emit(own_msg_id, start_ev)
+                    if emit is not None:
+                        emit(start_ev)
+
+                    async for event in self._orchestrator.run(ctx):
                         if event.type == SSEEventType.CHUNK and isinstance(event.data, str):
                             chunks.append(event.data)
                             chars += len(event.data)
+                            chunk_ev = {"id": subagent_id, "phase": "text", "text": event.data, "source": "dispatch"}
+                            if self._runs is not None and own_msg_id is not None:
+                                self._runs.emit(own_msg_id, chunk_ev)
+                            if emit is not None:
+                                emit(chunk_ev)
                         elif event.type == SSEEventType.ERROR:
                             errors.append(str(event.data))
                         elif event.type == SSEEventType.TOOL:
@@ -765,24 +813,80 @@ class AgentDispatcher:
                                 "id": d.get("id"), "name": d.get("name"),
                                 "input": d.get("input"), "afterChars": chars,
                             })
+                            tool_ev = {
+                                "id": subagent_id, "phase": "tool",
+                                "tool": d.get("name"), "input": d.get("input"),
+                                "tool_call_id": d.get("id"), "source": "dispatch",
+                            }
+                            if self._runs is not None and own_msg_id is not None:
+                                self._runs.emit(own_msg_id, tool_ev)
+                            if emit is not None:
+                                emit(tool_ev)
                         elif event.type == SSEEventType.TOOL_RESULT:
                             d = event.data if isinstance(event.data, dict) else {}
                             for t in tools:
                                 if t.get("id") == d.get("id"):
                                     t["result"] = d.get("result")
                                     break
+                            res_ev = {
+                                "id": subagent_id, "phase": "tool_result",
+                                "tool_call_id": d.get("id"), "result": d.get("result"),
+                                "source": "dispatch",
+                            }
+                            if self._runs is not None and own_msg_id is not None:
+                                self._runs.emit(own_msg_id, res_ev)
+                            if emit is not None:
+                                emit(res_ev)
                         elif event.type == SSEEventType.FILE:
                             files.append(event.data)
-                except BaseException:
-                    # Including cancellation: a run that did real work before it
-                    # broke off must leave the work behind, not an empty session.
-                    await self._save_reply(db, session.id, chunks, tools, files, request_id)
-                    raise
-                await self._save_reply(
-                    db, session.id, chunks, tools, files, request_id, errors=errors,
-                )
+
+                        yield event
+
+                from app.services.errors import friendly_provider_error
+
+                turn_started = False
+                if self._turns is not None:
+                    turn_id = self._turns.start(
+                        context=context,
+                        engine_factory=_stream_events,
+                        format_error=lambda exc: friendly_provider_error(context.model, exc),
+                    )
+                    turn_started = (turn_id is not None)
+
+                if turn_started:
+                    try:
+                        await self._turns.wait(turn_request_id)
+                    except asyncio.CancelledError:
+                        await self._turns.cancel(turn_request_id)
+                        raise
+                else:
+                    try:
+                        async for _ in _stream_events(context):
+                            pass
+                    except BaseException:
+                        await self._save_reply(db, session.id, chunks, tools, files, turn_request_id)
+                        raise
+                    await self._save_reply(
+                        db, session.id, chunks, tools, files, turn_request_id, errors=errors,
+                    )
 
                 text = "".join(chunks).strip()[:MAX_RESULT_CHARS]
+                is_ok = bool(text) and not errors
+                report_text = (
+                    text if is_ok else (
+                        f"{profile.agent_id} failed: {'; '.join(errors)}"
+                        if errors else f"{profile.agent_id} returned an empty response."
+                    )
+                )
+                finish_ev = {
+                    "id": subagent_id, "phase": "finished", "ok": is_ok,
+                    "report": report_text, "source": "dispatch",
+                }
+                if self._runs is not None and own_msg_id is not None:
+                    self._runs.emit(own_msg_id, finish_ev)
+                if emit is not None:
+                    emit(finish_ev)
+
                 if text:
                     return text, "ok", session.id
                 if errors:

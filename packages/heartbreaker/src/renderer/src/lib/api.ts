@@ -320,10 +320,13 @@ export async function fetchMemoryFolders(config: AppConfig): Promise<MemoryFolde
   } catch { return [] }
 }
 
-/** Detached turns the backend is currently running (optionally one session). */
-export async function fetchActiveRuns(config: AppConfig, sessionId?: number): Promise<ActiveRun[]> {
+/** Detached turns the backend is currently running (optionally one session or agent). */
+export async function fetchActiveRuns(config: AppConfig, sessionId?: number, agentId?: string): Promise<ActiveRun[]> {
   try {
-    const q = sessionId != null ? `?session_id=${sessionId}` : ''
+    const params = new URLSearchParams()
+    if (sessionId != null) params.set('session_id', String(sessionId))
+    if (agentId) params.set('agent_id', agentId)
+    const q = params.toString() ? `?${params.toString()}` : ''
     const res = await fetch(`${config.apiBase}/chat/active${q}`, { headers: authHeaders(config) })
     if (!res.ok) return []
     return res.json()
@@ -1326,6 +1329,7 @@ export interface AgentCommEntry {
   status: string        // running | ok | error | timeout | offline | refused
   duration_ms: number | null
   created_at: string
+  session_id?: number | null
 }
 
 /** Recent inter-agent traffic, newest first. after_id polls incrementally. */

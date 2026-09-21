@@ -15,7 +15,7 @@ export function foldLegionEvent(run: SubagentRun | null, event: Record<string, u
   const e = event as {
     id: string; agent?: string; label?: string; phase?: string
     prompt?: string; text?: string; tool?: string; input?: unknown
-    result?: string; error?: string; report?: string; ok?: boolean; source?: 'legion' | 'peer' | 'forge'
+    result?: string; error?: string; report?: string; ok?: boolean; source?: 'legion' | 'peer' | 'forge' | 'dispatch'
     tool_call_id?: string
   }
   const next: SubagentRun = run

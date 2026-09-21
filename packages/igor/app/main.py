@@ -344,6 +344,10 @@ async def lifespan(app: FastAPI):
     welcome_cache = WelcomeCache()
     orchestrator = AgentOrchestrator(registry, llm_client, profiles, memory_cache)
 
+    from app.core.turn_runner import TurnRegistry
+
+    turns = TurnRegistry(session_manager)
+
     # Late-bind the dispatch primitive now that the full engine exists.
     dispatcher.wire(
         orchestrator=orchestrator,
@@ -356,6 +360,7 @@ async def lifespan(app: FastAPI):
         # peer job appears in the tray and attaches over /legion/attach with no
         # second endpoint and no client change.
         runs=registry.legion_runs,
+        turns=turns,
     )
 
     # ── 7.5 Telegram channel — gateway + ingress ───────────────────────────────
@@ -364,14 +369,6 @@ async def lifespan(app: FastAPI):
     # and ingress is started per settings.telegram_mode (webhook sets per-bot
     # webhooks; polling spawns one long-poll task per bot; off = outbound-only).
     from app.telegram.gateway import TelegramGateway
-
-    # The detached turn runner is created HERE, before the gateway and its
-    # pollers start, so /break and steering can find an in-flight turn from the
-    # first message. It is otherwise the same instance the rest of the app uses
-    # via app.state.turns below.
-    from app.core.turn_runner import TurnRegistry
-
-    turns = TurnRegistry(session_manager)
 
     telegram_gateway = TelegramGateway(
         orchestrator=orchestrator,

@@ -139,3 +139,100 @@ async def test_the_ticket_correlation_is_dropped_when_the_job_ends(monkeypatch):
     assert d._external_tickets == {}, (
         "the wire-id → ticket entry must be released with the dispatch"
     )
+
+
+@pytest.mark.asyncio
+async def test_in_process_dispatch_progress_emits_to_run_registry_and_turns(monkeypatch):
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from app.database import Base
+    from app.models.agent_message import AgentMessage
+    from app.schemas.sse import SSEEvent, SSEEventType
+    from app.core.session_manager import SessionManager
+    from app.core.turn_runner import TurnRegistry
+    from app.core import dispatch as dp
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    monkeypatch.setattr(dp, "AsyncSessionLocal", maker)
+
+    runs = LegionRunRegistry()
+    session_mgr = SessionManager()
+    turns = TurnRegistry(session_mgr)
+
+    class _Profile:
+        agent_id = "ultron"
+        dispatch_target = True
+
+        def allocate_model(self, kind):
+            return "test-model"
+
+    class _Profiles:
+        def get(self, aid):
+            return _Profile() if aid == "ultron" else None
+
+        def roster(self):
+            return [_Profile()]
+
+    async def _mock_run(ctx):
+        yield SSEEvent(SSEEventType.START, {}, ctx.session_id, ctx.request_id)
+        yield SSEEvent(
+            SSEEventType.TOOL,
+            {"id": "t1", "name": "arxiv_search", "input": {"q": "ai"}},
+            ctx.session_id,
+            ctx.request_id,
+        )
+        yield SSEEvent(
+            SSEEventType.TOOL_RESULT,
+            {"id": "t1", "result": "done"},
+            ctx.session_id,
+            ctx.request_id,
+        )
+        yield SSEEvent(SSEEventType.CHUNK, "Found papers.", ctx.session_id, ctx.request_id)
+        yield SSEEvent(SSEEventType.DONE, "Found papers.", ctx.session_id, ctx.request_id)
+
+    d = AgentDispatcher()
+    d.wire(
+        orchestrator=type("O", (), {"run": staticmethod(_mock_run)})(),
+        profiles=_Profiles(),
+        session_manager=session_mgr,
+        ws_manager=None,
+        runs=runs,
+        turns=turns,
+    )
+
+    emitted = []
+
+    def on_emit(ev):
+        emitted.append(ev)
+
+    res = await d.dispatch(
+        from_agent="sentinel",
+        to_agent="ultron",
+        task="Search arxiv",
+        user_id=1,
+        request_id="req-p1",
+        emit=on_emit,
+        tool_call_id="call-1",
+    )
+
+    assert "Found papers." in res
+
+    # 1. Verify emit callback received progress phases
+    phases = [e.get("phase") for e in emitted]
+    assert phases == ["started", "tool", "tool_result", "text", "finished"]
+    assert emitted[0]["id"] == "call-1"
+    assert emitted[1]["tool"] == "arxiv_search"
+
+    # 2. Verify AgentMessage in DB has session_id set
+    async with maker() as db:
+        msg = (await db.execute(select(AgentMessage))).scalars().first()
+        assert msg is not None
+        assert msg.session_id is not None
+        assert msg.status == "ok"
+
+    await engine.dispose()
+

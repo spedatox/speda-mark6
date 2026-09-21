@@ -134,26 +134,44 @@ export default function Layout({
   // the conversation list is still one click away. `null` = the chat view.
   const [projectsAt, setProjectsAt] = useState<{ projectId: number | null } | null>(null)
 
-  const handleSelectSession = useCallback(async (sessionId: number, projectId?: number | null) => {
+  const handleSelectSession = useCallback(async (sessionId: number, projectId?: number | null, agentIdOverride?: string) => {
     setDrawerOpen(false)
     setProjectsAt(null)
+    const effectiveAgentId = agentIdOverride || config.agentId
+    const effectiveConfig: AppConfig = { ...config, agentId: effectiveAgentId }
     // Show the cached transcript instantly (also the offline fallback), then let
     // the server refresh it. If the fetch fails (no network), the cache stays.
-    const cached = loadMessages(config.agentId, sessionId)
+    const cached = loadMessages(effectiveAgentId, sessionId)
     dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages: cached ?? [], projectId } })
     if (!cached) setHistoryLoading(true)
     try {
-      const messages = await fetchMessages(config, sessionId)
+      const messages = await fetchMessages(effectiveConfig, sessionId)
       // Server is authoritative when it actually returned the turn; if it came
       // back empty but we have a cached copy (e.g. an answer lost to a mid-turn
       // restart), keep showing the cache rather than blanking the view.
       if (messages.length || !cached) {
         dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages, projectId } })
-        if (messages.length) saveMessages(config.agentId, sessionId, messages)
+        if (messages.length) saveMessages(effectiveAgentId, sessionId, messages)
       }
     } catch { /* offline — keep the cached transcript already shown */ }
     finally { setHistoryLoading(false) }
   }, [config, dispatch])
+
+  useEffect(() => {
+    const onOpenChat = async (e: Event) => {
+      const custom = e as CustomEvent<{ agentId: string; sessionId?: number }>
+      const { agentId, sessionId } = custom.detail || {}
+      if (!agentId) return
+      if (agentId !== config.agentId) {
+        await switchAgent(agentId)
+      }
+      if (sessionId != null) {
+        await handleSelectSession(sessionId, undefined, agentId)
+      }
+    }
+    window.addEventListener('speda:open-chat', onOpenChat)
+    return () => window.removeEventListener('speda:open-chat', onOpenChat)
+  }, [config.agentId, switchAgent, handleSelectSession])
 
   const handleNewChat = useCallback(() => {
     setDrawerOpen(false)

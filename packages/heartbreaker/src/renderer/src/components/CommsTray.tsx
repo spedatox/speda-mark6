@@ -235,7 +235,7 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
             {t.commsTray.noTraffic}
           </p>
         ) : (
-          <CommFeed entries={entries} compact={!wide} />
+          <CommFeed entries={entries} compact={!wide} config={config} onOpenDetail={setOpenRun} />
         )}
       </div>
 

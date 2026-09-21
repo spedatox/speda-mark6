@@ -48,6 +48,7 @@ class AgentCommEntry(BaseModel):
     result: str | None
     status: str
     duration_ms: int | None
+    session_id: int | None = None
     # The chat session this exchange was ordered from — the "room" it belongs to
     # in the group-chat view. None for traffic logged before the column existed.
     origin_session_id: int | None = None

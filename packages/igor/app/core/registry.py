@@ -687,7 +687,14 @@ class CapabilityRegistry:
                         f"Error: the tool '{tool_name}' is restricted and not available "
                         f"to agent '{context.agent_id}'. Do not call it again."
                     )
-                return await skill.execute(args, context)
+                import inspect
+                sig = inspect.signature(skill.execute)
+                kwargs = {}
+                if "emit" in sig.parameters:
+                    kwargs["emit"] = emit
+                if "tool_call_id" in sig.parameters:
+                    kwargs["tool_call_id"] = tool_call_id
+                return await skill.execute(args, context, **kwargs)
 
             if tool_name in self._mcp_tool_map:
                 server_name = self._mcp_tool_map[tool_name]

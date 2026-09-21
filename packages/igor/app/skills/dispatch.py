@@ -98,7 +98,10 @@ class DispatchAgentSkill(Skill):
             "required": ["agent", "task"],
         }
 
-    async def execute(self, args: dict, context: AgentContext) -> str:
+    async def execute(
+        self, args: dict, context: AgentContext, *,
+        emit=None, tool_call_id: str | None = None,
+    ) -> str:
         agent = (args.get("agent") or "").strip().lower()
         task = (args.get("task") or "").strip()
         if not agent or not task:
@@ -137,6 +140,7 @@ class DispatchAgentSkill(Skill):
             from_agent=context.agent_id, to_agent=agent, task=task,
             user_id=context.user_id, request_id=context.request_id,
             depth=depth, cwd=cwd, origin_session_id=room,
+            emit=emit, tool_call_id=tool_call_id,
         )
 
 

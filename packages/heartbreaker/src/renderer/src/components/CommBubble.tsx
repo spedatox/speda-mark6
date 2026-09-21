@@ -5,6 +5,9 @@ import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AgentCommEntry } from '../lib/api'
+import { attachLegionStream } from '../lib/api'
+import type { AppConfig, SubagentRun } from '../lib/types'
+import { foldLegionEvent } from '../lib/subagentFold'
 import { agentColor, fmtCommTime } from '../lib/agents'
 import { hasMark } from '../lib/agentMarks'
 import AgentMark from './AgentMark'
@@ -308,6 +311,8 @@ export interface CommMsg {
   party?: boolean
   broadcast?: boolean
   copyText: string
+  ticket?: number
+  sessionId?: number | null
 }
 
 function epoch(iso: string): number {
@@ -344,6 +349,8 @@ export function commMessages(entries: AgentCommEntry[]): CommMsg[] {
         key: `${e.id}:working`, agent: e.to_agent, text: '',
         at: started, seq: 1, outbound: false,
         running: true, since: e.created_at, copyText: '',
+        ticket: e.id,
+        sessionId: e.session_id ?? null,
       })
     } else if (result || failed) {
       out.push({
@@ -351,6 +358,8 @@ export function commMessages(entries: AgentCommEntry[]): CommMsg[] {
         at: started + (e.duration_ms ?? 0), seq: 1, outbound: false,
         failed, status: e.status, durationMs: e.duration_ms,
         copyText: result || e.status,
+        ticket: e.id,
+        sessionId: e.session_id ?? null,
       })
     }
   }
@@ -366,7 +375,181 @@ function clock(at: number): string {
   return `${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-function CommLine({ m, head, compact }: { m: CommMsg; head: boolean; compact: boolean }) {
+export function LiveCommProgress({
+  agent,
+  ticket,
+  since,
+  sessionId,
+  config,
+  compact = false,
+  onOpenDetail,
+}: {
+  agent: string
+  ticket?: number
+  since?: string
+  sessionId?: number | null
+  config?: AppConfig
+  compact?: boolean
+  onOpenDetail?: (run: SubagentRun) => void
+}) {
+  const [run, setRun] = useState<SubagentRun>({
+    id: ticket ? `dispatch-${ticket}` : `dispatch-${agent}`,
+    agent,
+    label: `${agent} dispatch`,
+    running: true,
+    steps: [],
+    source: 'peer',
+  })
+
+  useEffect(() => {
+    if (!config || !ticket) return
+    const ctrl = new AbortController()
+    ;(async () => {
+      for await (const event of attachLegionStream(config, ticket, ctrl.signal)) {
+        setRun(prev => foldLegionEvent(prev, event))
+      }
+    })().catch(() => { /* stream ended or aborted */ })
+    return () => ctrl.abort()
+  }, [config, ticket])
+
+  const tools = run.steps.filter(s => s.kind === 'tool')
+  const lastTool = tools[tools.length - 1]
+  const isToolRunning = lastTool != null && lastTool.result == null
+
+  const textChunks = run.steps.filter(s => s.kind === 'text')
+  const fullText = textChunks.map(s => s.text ?? '').join('')
+
+  const c = agentColor(agent)
+
+  const handleOpenChat = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    window.dispatchEvent(
+      new CustomEvent('speda:open-chat', {
+        detail: { agentId: agent, sessionId: sessionId ?? undefined },
+      })
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: compact ? 150 : 200 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {lastTool ? (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '2px 8px',
+              borderRadius: 999,
+              background: isToolRunning ? `${c}1f` : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${isToolRunning ? `${c}55` : 'rgba(255,255,255,0.08)'}`,
+              fontSize: '0.75rem',
+              color: isToolRunning ? c : 'var(--hb-text-dim)',
+              fontFamily: 'var(--font-mono, monospace)',
+            }}
+          >
+            {isToolRunning ? (
+              <span
+                style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  border: `1.5px solid ${c}4d`, borderTopColor: c,
+                  animation: 'spin 0.7s linear infinite', flexShrink: 0,
+                }}
+              />
+            ) : (
+              <span style={{ color: 'var(--hb-green, #4ade80)' }}>✓</span>
+            )}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: compact ? 130 : 200 }}>
+              {lastTool.tool || 'tool'}
+            </span>
+          </span>
+        ) : (
+          <Working id={agent} label="dispatched…" />
+        )}
+
+        {since && <LiveElapsed since={since} />}
+      </div>
+
+      {fullText && (
+        <div style={{ marginTop: 2, fontSize: 'inherit', lineHeight: 1.5, maxHeight: 120, overflowY: 'auto' }}>
+          <CommMarkdown text={fullText} size="inherit" />
+        </div>
+      )}
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginTop: 4,
+          paddingTop: 4,
+          borderTop: '1px solid rgba(255,255,255,0.05)',
+          fontSize: '0.72rem',
+          color: 'var(--hb-text-faint)',
+        }}
+      >
+        {run.steps.length > 0 && onOpenDetail && (
+          <button
+            onClick={e => {
+              e.stopPropagation()
+              onOpenDetail(run)
+            }}
+            style={{
+              border: 'none',
+              background: 'rgba(255,255,255,0.06)',
+              padding: '2px 7px',
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontSize: '0.72rem',
+              color: 'var(--hb-text-dim)',
+            }}
+          >
+            {run.steps.length} {run.steps.length === 1 ? 'step' : 'steps'}
+          </button>
+        )}
+        <span style={{ flex: 1 }} />
+        <button
+          onClick={handleOpenChat}
+          title={`Open ${agent}'s chat window`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            border: `1px solid ${c}3d`,
+            background: `${c}14`,
+            padding: '2px 8px',
+            borderRadius: 4,
+            cursor: 'pointer',
+            fontSize: '0.72rem',
+            color: c,
+            fontWeight: 500,
+          }}
+        >
+          <span>Open chat</span>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function CommLine({
+  m,
+  head,
+  compact,
+  config,
+  onOpenDetail,
+}: {
+  m: CommMsg
+  head: boolean
+  compact: boolean
+  config?: AppConfig
+  onOpenDetail?: (run: SubagentRun) => void
+}) {
   const [open, setOpen] = useState(false)
   const c = agentColor(m.agent)
   const clip = compact ? 260 : 520
@@ -413,18 +596,21 @@ function CommLine({ m, head, compact }: { m: CommMsg; head: boolean; compact: bo
       )}
     >
       {m.running ? (
-        <Working id={m.agent} label="working…" />
+        <LiveCommProgress
+          agent={m.agent}
+          ticket={m.ticket}
+          since={m.since}
+          sessionId={m.sessionId}
+          config={config}
+          compact={compact}
+          onOpenDetail={onOpenDetail}
+        />
       ) : m.failed ? (
         <span style={{ color: '#e88a7c' }}>
           {m.status}{m.text && m.text !== m.status ? `: ${body}` : ''}
         </span>
       ) : (
         <CommMarkdown text={body} size="inherit" />
-      )}
-      {m.running && m.since && (
-        <span style={{ marginLeft: 8, color: 'var(--hb-text-faint)' }}>
-          <LiveElapsed since={m.since} />
-        </span>
       )}
     </AgentSay>
   )
@@ -435,9 +621,16 @@ function CommLine({ m, head, compact }: { m: CommMsg; head: boolean; compact: bo
  * chip whenever the room went quiet, so a long scrollback reads as a
  * conversation with pauses in it rather than one undifferentiated column.
  */
-export function CommFeed({ entries, compact = false }: {
+export function CommFeed({
+  entries,
+  compact = false,
+  config,
+  onOpenDetail,
+}: {
   entries: AgentCommEntry[]
   compact?: boolean
+  config?: AppConfig
+  onOpenDetail?: (run: SubagentRun) => void
 }) {
   const msgs = commMessages(entries)
   let prevAgent = ''
@@ -458,7 +651,7 @@ export function CommFeed({ entries, compact = false }: {
             animation: 'hbRise 0.3s ease both',
           }}>
             {chip && <Divider text={clock(m.at)} />}
-            <CommLine m={m} head={head} compact={compact} />
+            <CommLine m={m} head={head} compact={compact} config={config} onOpenDetail={onOpenDetail} />
           </div>
         )
       })}

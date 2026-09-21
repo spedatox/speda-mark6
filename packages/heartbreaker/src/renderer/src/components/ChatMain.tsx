@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import type { SSEEvent } from '../lib/types'
-import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, steerRun, fetchWelcome, answerAsk, newRequestId, AttachGone } from '../lib/api'
+import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, steerRun, fetchWelcome, answerAsk, newRequestId, AttachGone, type ActiveRun } from '../lib/api'
 import { useProfile } from './Sidebar'
 import MessageList from './MessageList'
 import PartyStream from './PartyStream'
@@ -31,7 +31,7 @@ function makeId() {
  *  into the conversation it was ordered from. `/chat/active` reads an in-memory
  *  dict, so this is a cheap question to keep asking; the interval is the delay
  *  between the answer landing and the owner watching it arrive. */
-const WATCH_MS = 4000
+const WATCH_MS = 2500
 
 /** Rebuild API image blocks from a user bubble's display `data:` URLs, so
  *  retrying a turn the backend never received resends its pictures instead of
@@ -48,7 +48,16 @@ function imageBlocksFrom(urls?: string[]): ImageBlock[] | undefined {
   return blocks.length ? blocks : undefined
 }
 
-function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppConfig }) {
+function WelcomeView({
+  config,
+  activeRun,
+  onSelectSession,
+}: {
+  onSend: (msg: string) => void
+  config: AppConfig
+  activeRun?: ActiveRun | null
+  onSelectSession?: (id: number) => Promise<void> | void
+}) {
   const t = useT()
   const profile = useProfile()
   const { settings } = useSettings()
@@ -254,6 +263,38 @@ function WelcomeView({ config }: { onSend: (msg: string) => void; config: AppCon
           {remarkTyped}
         </p>
       )}
+
+      {activeRun && onSelectSession && (
+        <button
+          onClick={() => onSelectSession(activeRun.session_id)}
+          className="glass-round"
+          style={{
+            marginTop: '1.4rem',
+            padding: '10px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            background: 'rgba(var(--hb-accent-rgb),0.12)',
+            border: '1px solid rgba(var(--hb-accent-rgb),0.32)',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            color: 'var(--hb-text)',
+            animation: 'pulse 2s infinite',
+          }}
+        >
+          <span style={{
+            width: 10, height: 10, borderRadius: '50%',
+            border: '2px solid rgba(var(--hb-accent-rgb),0.5)',
+            borderTopColor: 'var(--hb-cyan-bright)',
+            animation: 'spin 0.7s linear infinite',
+            flexShrink: 0,
+          }} />
+          <span>{profile?.name ?? config.agentId} is currently working on a dispatched task ({activeRun.running_s}s)</span>
+          <span style={{ color: 'var(--hb-cyan-bright)', marginLeft: 8, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            View live stream →
+          </span>
+        </button>
+      )}
     </div>
   )
 }
@@ -297,9 +338,7 @@ interface Props {
   historyLoading?: boolean
 }
 
-// `onSelectSession` stays in Props — Layout passes it — but nothing in here
-// reads it any more; session selection moved to the sidebar's own handler.
-export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged, historyLoading }: Props) {
+export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged, historyLoading, onSelectSession }: Props) {
   const t = useT()
   const { state, dispatch } = useChatContext()
   const { settings, update } = useSettings()
@@ -308,6 +347,24 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   // One card at a time: the peer parks the ask inside a single tool dispatch,
   // so a second gated action cannot be raised until this one is answered.
   const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null)
+
+  const [activeAgentRun, setActiveAgentRun] = useState<ActiveRun | null>(null)
+
+  useEffect(() => {
+    if (state.activeSessionId != null || state.isStreaming) {
+      setActiveAgentRun(null)
+      return
+    }
+    let alive = true
+    const check = async () => {
+      const runs = await fetchActiveRuns(config, undefined, config.agentId)
+      if (!alive) return
+      setActiveAgentRun(runs.length > 0 ? runs[0] : null)
+    }
+    check()
+    const id = setInterval(check, 2500)
+    return () => { alive = false; clearInterval(id) }
+  }, [config, state.activeSessionId, state.isStreaming])
 
   /* ── Voice mode ────────────────────────────────────────────────────────── */
   // The session owns an AudioContext, so it is created per TURN (on the click
@@ -1248,7 +1305,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
         // composer, sending, streaming, re-attach — is unchanged underneath.
         ? <PartyStream config={config} />
         : isEmpty
-        ? (historyLoading ? <HistorySkeleton /> : <WelcomeView onSend={send} config={config} />)
+        ? (historyLoading ? <HistorySkeleton /> : <WelcomeView onSend={send} config={config} activeRun={activeAgentRun} onSelectSession={onSelectSession} />)
         : (
           <MessageList
             onDelete={handleDelete}

@@ -49,7 +49,7 @@ export interface SubagentRun {
    *  (Optimus/Scourge, forwarded 1:1 from its chat_event frames) or an
    *  in-process Legion (Task) dispatch. Absent = 'peer', for events emitted
    *  before this field existed. */
-  source?: 'legion' | 'peer' | 'forge'
+  source?: 'legion' | 'peer' | 'forge' | 'dispatch'
 }
 
 export interface ImageBlock {
