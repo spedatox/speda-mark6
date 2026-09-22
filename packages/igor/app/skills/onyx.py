@@ -250,7 +250,10 @@ class OnyxSkill(Skill):
 
         except httpx.ConnectError:
             logger.warning("onyx_unreachable", extra={"url": base_url})
-            return f"Could not connect to Onyx at {base_url}. Ensure the Onyx server is running."
+            hint = ""
+            if "localhost" in base_url or "127.0.0.1" in base_url:
+                hint = " If Speda is running inside Docker on your VPS, 'localhost' refers to the container; set ONYX_API_URL to http://host.docker.internal:3000 (or the container name / public URL) in packages/igor/.env."
+            return f"Could not connect to Onyx at {base_url} — the service is unreachable or not running.{hint}"
         except httpx.HTTPStatusError as exc:
             logger.error("onyx_api_error", extra={"status": exc.response.status_code, "detail": exc.response.text[:200]})
             return f"Onyx API returned HTTP {exc.response.status_code}: {exc.response.text[:200]}"
