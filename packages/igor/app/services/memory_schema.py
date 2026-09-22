@@ -97,9 +97,9 @@ def is_canonical(path: str) -> bool:
     """
     if path in CANONICAL_FILES:
         return True
-    from app.services.memory_spec import collection_for
+    from app.services.memory_spec import collection_for, is_course_path
 
-    return collection_for(path) is not None
+    return is_course_path(path) or collection_for(path) is not None
 
 
 def is_removable(path: str) -> bool:

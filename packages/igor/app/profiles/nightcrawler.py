@@ -44,7 +44,7 @@ class NightCrawlerProfile(AgentProfile):
         "or sentiment metrics as chart windows. Speak the assessment — what this adds up to "
         "and how far it can be trusted — and let the board carry the intelligence"
     )
-    doc_theme = DocTheme(accent="#9165e6")   # signature violet — matches the UI brand
+    doc_theme = DocTheme(accent="#9165e6", pdf_layout="dossier")
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.

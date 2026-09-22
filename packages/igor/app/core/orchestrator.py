@@ -209,6 +209,7 @@ class AgentOrchestrator:
         # derives its PDF/DOCX/PPTX palette from. Profile-owned identity (Rule 10),
         # threaded to the skill via the context exactly like the allowlist above.
         context.extra["doc_accent"] = profile.doc_theme.accent
+        context.extra["doc_pdf_layout"] = profile.doc_theme.pdf_layout
         # …and the name the generated file is signed with — "Sentinel Mark II",
         # the agent that actually made it and its own iteration, never the
         # orchestrator that dispatched it.

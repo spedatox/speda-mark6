@@ -61,7 +61,7 @@ class SPEDAProfile(AgentProfile):
 
     agent_id = "speda"
     domain = "orchestration & general executive assistance"
-    doc_theme = DocTheme(accent="#36abca")   # signature cyan — matches the UI brand
+    doc_theme = DocTheme(accent="#36abca", pdf_layout="executive")
     # None = full registry access. Speda is the orchestrator; it sees every
     # tool. The domain-specialised agents declare narrower allowlists.
     tool_allowlist = None

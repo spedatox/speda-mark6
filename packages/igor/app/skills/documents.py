@@ -251,7 +251,7 @@ def _output_path(title: str, ext: str) -> str:
 # ── Generators ────────────────────────────────────────────────────────────────
 
 def _generate_pptx(title: str, content: str, accent: str = _DEFAULT_ACCENT,
-                   author: str | None = None) -> str:
+                   author: str | None = None, pdf_layout: str = "executive") -> str:
     from pptx import Presentation        # type: ignore[import]
     from pptx.dml.color import RGBColor  # type: ignore[import]
 
@@ -320,7 +320,7 @@ def _generate_pptx(title: str, content: str, accent: str = _DEFAULT_ACCENT,
 
 
 def _generate_docx(title: str, content: str, accent: str = _DEFAULT_ACCENT,
-                   author: str | None = None) -> str:
+                   author: str | None = None, pdf_layout: str = "executive") -> str:
     from docx import Document                 # type: ignore[import]
     from docx.oxml import OxmlElement         # type: ignore[import]
     from docx.oxml.ns import qn               # type: ignore[import]
@@ -393,8 +393,55 @@ def _generate_docx(title: str, content: str, accent: str = _DEFAULT_ACCENT,
     return path
 
 
+def _pdf_layout_css(layout: str, pal: dict) -> str:
+    """Return the profile-selected HTML/CSS composition for a PDF.
+
+    Layout is profile-owned rather than supplied by a chat turn: an agent can
+    make documents that look like its own work without arbitrary CSS becoming
+    an input surface. All variants share the accessible palette and typography
+    below, then alter hierarchy, title treatment, and table composition.
+    """
+    layouts = {
+        "executive": f"""
+            body {{ border-top: 8pt solid {pal['accent']}; padding-top: 13pt; }}
+            h1.doc-title {{ letter-spacing: -0.5pt; }}
+            hr.title-rule {{ width: 42%; border-top-width: 2pt; }}
+        """,
+        "ledger": f"""
+            body {{ border-left: 5pt solid {pal['accent']}; padding-left: 16pt; }}
+            h1.doc-title {{ color: {pal['heading']}; font-variant: small-caps; letter-spacing: .45pt; }}
+            th {{ background: {pal['accent']}; color: white; border-color: {pal['accent']}; }}
+        """,
+        "dossier": f"""
+            .masthead {{ background: {pal['heading']}; color: white; padding: 18pt 20pt 15pt; margin: -2.2cm -2.2cm 18pt; }}
+            h1.doc-title {{ color: white; margin: 0; letter-spacing: .3pt; }}
+            hr.title-rule {{ border-top-color: {pal['accent']}; margin: 8pt 0 0; }}
+            h2 {{ border-left: 3pt solid {pal['accent']}; padding-left: 7pt; }}
+        """,
+        "clinical": f"""
+            body {{ border-top: 3pt solid {pal['accent']}; }}
+            h1.doc-title {{ color: {pal['heading']}; font-size: 20pt; }}
+            h2 {{ background: {pal['header_bg']}; padding: 4pt 7pt; border-radius: 2pt; }}
+            table {{ border-top: 2pt solid {pal['accent']}; }}
+        """,
+        "notebook": f"""
+            body {{ background: linear-gradient(to right, transparent 0, transparent 25pt, {pal['zebra']} 25pt, {pal['zebra']} 26pt, transparent 26pt); }}
+            h1.doc-title {{ color: {pal['heading']}; font-size: 21pt; }}
+            hr.title-rule {{ border-top-width: .6pt; }}
+            h2 {{ text-transform: uppercase; letter-spacing: .6pt; font-size: 11pt; }}
+        """,
+        "operations": f"""
+            body {{ border: .8pt solid {pal['rule']}; padding: 16pt; }}
+            h1.doc-title {{ color: {pal['heading']}; font-size: 18pt; font-family: 'DejaVu Sans Mono', monospace; }}
+            h2 {{ font-family: 'DejaVu Sans Mono', monospace; border-bottom: .8pt solid {pal['accent']}; padding-bottom: 3pt; }}
+            th {{ background: {pal['heading']}; color: white; }}
+        """,
+    }
+    return layouts.get(layout, layouts["executive"])
+
+
 def _generate_pdf(title: str, content: str, accent: str = _DEFAULT_ACCENT,
-                  author: str | None = None) -> str:
+                  author: str | None = None, pdf_layout: str = "executive") -> str:
     from weasyprint import HTML  # type: ignore[import]
 
     pal = _palette(accent)
@@ -444,7 +491,7 @@ def _generate_pdf(title: str, content: str, accent: str = _DEFAULT_ACCENT,
     doc_html = f"""<!DOCTYPE html>
 <html lang="tr"><head><meta charset="utf-8"><title>{html.escape(title)}</title><style>
 {_pdf_font_faces()}
-@page {{ size: A4; margin: 2.2cm; }}
+@page {{ size: A4; margin: 2.2cm 2.2cm 2.5cm; @bottom-right {{ content: "{html.escape(_signature(author))}"; color: {pal['muted']}; font-size: 7pt; font-style: italic; }} }}
 * {{ box-sizing: border-box; }}
 body {{ font-family: 'DejaVu Sans', sans-serif; color: {pal['ink']}; font-size: 10.5pt; line-height: 1.5; margin: 0; }}
 h1.doc-title {{ font-weight: bold; font-size: 22pt; margin: 0 0 4pt; color: {pal['ink']}; }}
@@ -462,14 +509,14 @@ th, td {{ border: 0.4pt solid {pal['rule']}; padding: 5pt 7pt; text-align: left;
 th {{ background: {pal['header_bg']}; border-bottom: 0.8pt solid {pal['muted']}; font-weight: bold; }}
 tbody tr:nth-child(even) td {{ background: {pal['zebra']}; }}
 code {{ font-family: 'DejaVu Sans Mono', monospace; }}
-p.signature {{ margin: 18pt 0 0; padding-top: 6pt; border-top: 0.4pt solid {pal['rule']};
-               color: {pal['muted']}; font-size: 8pt; font-style: italic; }}
+{_pdf_layout_css(pdf_layout, pal)}
 </style></head>
 <body>
+<header class="masthead">
 <h1 class="doc-title">{html.escape(title)}</h1>
 <hr class="title-rule">
+</header>
 {''.join(body)}
-<p class="signature">{html.escape(_signature(author))}</p>
 </body></html>"""
 
     path = _output_path(title, "pdf")
@@ -552,9 +599,10 @@ class DocumentsSkill(Skill):
         accent = context.extra.get("doc_accent", _DEFAULT_ACCENT)
         # …and sign it with that agent's name (prompts/core/13_signature.md).
         author = context.extra.get("doc_author", _DEFAULT_AUTHOR)
+        pdf_layout = context.extra.get("doc_pdf_layout", "executive")
 
         try:
-            path = generator(title, content, accent, author)
+            path = generator(title, content, accent, author, pdf_layout)
             logger.info(
                 "documents_generated",
                 extra={

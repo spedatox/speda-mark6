@@ -51,7 +51,7 @@ class UltronProfile(AgentProfile):
         "grades and workload distributions are chart windows or stat tiles, and papers "
         "are article windows. Speak the strategy and trade-offs, not the syllabus"
     )
-    doc_theme = DocTheme(accent="#9e9e9e")   # signature metal/gray — matches the UI brand
+    doc_theme = DocTheme(accent="#9e9e9e", pdf_layout="notebook")
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.

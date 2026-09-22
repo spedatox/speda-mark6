@@ -170,7 +170,7 @@ CONFIG_GROUPS: list[ConfigGroup] = [
             ConfigField("mcp_enabled", "MCP Servers Enabled", "text",
                         help="Comma-separated MCP servers to connect at startup."),
             ConfigField("always_on_servers", "Always-on Servers", "text",
-                        help="Servers whose tools are always in the prompt prefix."),
+                        help="Servers whose tools are always in the prompt prefix. Keep large toolsets such as Notion out; tool_search loads only the needed schema on demand."),
         ],
     ),
     ConfigGroup(
@@ -304,6 +304,12 @@ CONFIG_GROUPS: list[ConfigGroup] = [
             ConfigField("brave_search_api_key", "Brave Search API Key", "password", secret=True),
             ConfigField("alpha_vantage_api_key", "Alpha Vantage API Key", "password", secret=True),
             ConfigField("github_token", "GitHub Token", "password", secret=True),
+            ConfigField("sec_api_key", "SEC API Key", "password", secret=True,
+                        help="Enables primary SEC filing research through the SEC EDGAR MCP server."),
+            ConfigField("semantic_scholar_api_key", "Semantic Scholar API Key", "password", secret=True,
+                        help="Optional. Enables higher-rate academic paper and citation-graph research."),
+            ConfigField("google_threat_intelligence_api_key", "Google Threat Intelligence API Key", "password", secret=True,
+                        help="Enterprise credential for Google Threat Intelligence / VirusTotal MCP investigations."),
         ],
     ),
     ConfigGroup(

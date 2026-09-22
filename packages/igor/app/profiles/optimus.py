@@ -45,7 +45,7 @@ class OptimusProfile(AgentProfile):
         "trends are chart windows, server/container health are stat tiles, and diffs go "
         "in code windows. Speak the diagnosis and architectural strategy, never read source aloud"
     )
-    doc_theme = DocTheme(accent="#2eb6ac")   # signature teal — matches the UI brand
+    doc_theme = DocTheme(accent="#2eb6ac", pdf_layout="operations")
     external_backend = False
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow

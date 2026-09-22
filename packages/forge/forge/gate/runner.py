@@ -25,6 +25,7 @@ from forge.gate.cellpool import CellPool
 from forge.config import ForgeSettings
 from forge import notify
 from forge.gate.events import EventFan
+from forge.gate.journal import WorkspaceJournal
 from forge.gate.protocol import JobEvent, JobRequest
 from forge.graph.sidecar import GraphSidecar
 from forge.model.base import Model
@@ -112,9 +113,21 @@ async def run_job(
     cfg = registry.get(request.agent)
     signal = signal or asyncio.Event()
 
+    # A request without `repo_path` is not workspace-less: CellFactory gives it
+    # the agent's durable default below FORGE_WORKSPACE_ROOT.  In production
+    # that root is H.İ.S.A.R.'s Forge area, so journal and handoff continuity
+    # must cover this overwhelmingly common server path too.
+    workspace_path = (Path(request.repo_path).resolve() if request.repo_path
+                      else (settings.workspace_root / cfg.agent_id).resolve())
+
     # Seam 4: the transport is one sink among several, and no sink can fail the
     # job. Callers append journals, metrics, notifiers here.
-    fan = EventFan([*(event_sinks or []), emit])
+    # Every repository gets its own durable timeline and latest handoff.  The
+    # transport still receives events live; the journal is an independent,
+    # failure-isolated observer rather than a condition of execution.
+    journal = WorkspaceJournal(workspace_path, task=request.task)
+    journal_sinks = [journal]
+    fan = EventFan([*journal_sinks, *(event_sinks or []), emit])
 
     async def out(etype: str, data=None) -> None:
         await fan(JobEvent(job_id=request.job_id, type=etype, data=data))
@@ -255,6 +268,18 @@ async def run_job(
         # A dispatched job works in the same repository an interactive one
         # does, so it gets the same conventions.
         repo_conventions = conventions.fragment(repo_path) if repo_path else None
+        # A coding job is a continuation of the workspace, not an isolated
+        # chat.  This is deliberately a compact *factual* handoff assembled
+        # before this job's `started` event replaced latest.json; detailed
+        # evidence stays in the daily journal for the worker to inspect.
+        handoff = journal.resume_fragment() if journal else ""
+        handoff_fragment = PromptFragment("workspace-handoff", (
+            "## WORKSPACE HANDOFF\n\n"
+            "This repository has prior Optimus activity. Treat the following "
+            "as the last recorded state, verify it against the files and Git "
+            "before acting, then build on it rather than restarting work:\n\n"
+            f"```json\n{handoff}\n```"
+        )) if handoff else None
         # What Mark VI knows about the owner. Cached to disk on the way past so
         # a standalone run still has it when the backend is unreachable — see
         # forge/agents/owner_memory.py on why that cache is read-only.
@@ -281,6 +306,7 @@ async def run_job(
             *([memory_fragment] if memory_fragment else []),
             *([roster_fragment] if roster_fragment else []),
             *([repo_conventions] if repo_conventions else []),
+            *([handoff_fragment] if handoff_fragment else []),
             *([_UNATTENDED_FRAGMENT] if request.unattended else []),
             *(fragments or []),
         ])

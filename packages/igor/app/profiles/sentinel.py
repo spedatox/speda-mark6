@@ -43,7 +43,7 @@ class SentinelProfile(AgentProfile):
         "period movement is a timeline or table. Say what the numbers MEAN and what to do, "
         "and let the board carry the arithmetic"
     )
-    doc_theme = DocTheme(accent="#d99c44")   # signature gold — matches the UI brand
+    doc_theme = DocTheme(accent="#d99c44", pdf_layout="ledger")
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.

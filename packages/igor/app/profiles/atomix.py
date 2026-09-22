@@ -51,7 +51,7 @@ class AtomixProfile(AgentProfile):
         "workout routines are calendar windows, and dated sequences are timelines. Speak "
         "what changed and what it means for his body, never raw readings aloud"
     )
-    doc_theme = DocTheme(accent="#3fae74")   # signature green — matches the UI brand
+    doc_theme = DocTheme(accent="#3fae74", pdf_layout="clinical")
 
     # Unrestricted — all tools available (same as Speda). Previously a narrow
     # allowlist; broadened so every agent can use every registered capability.

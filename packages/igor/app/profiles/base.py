@@ -10,14 +10,15 @@ from typing import Literal
 class DocTheme:
     """
     Per-agent document branding (Rule 10: identity lives in the profile, never
-    in core). One knob — the agent's signature ``accent`` hex, matching its UI
-    brand colour. The documents skill derives the whole PDF/DOCX/PPTX palette
-    (heading colour, table header tint, rules, zebra striping) from this single
-    value, so a profile only ever sets ``accent``.
+    in core). ``accent`` matches the agent's UI brand colour; ``pdf_layout``
+    selects that agent's HTML/CSS composition when WeasyPrint renders a PDF.
+    This keeps visual authorship with the profile while leaving document
+    content structured and safe for the generator to compose.
     """
 
     accent: str = "#5b6472"   # neutral slate — the engine default for any agent
                               # that does not declare its own brand colour.
+    pdf_layout: Literal["executive", "ledger", "dossier", "clinical", "notebook", "operations"] = "executive"
 
 
 class AgentProfile(ABC):

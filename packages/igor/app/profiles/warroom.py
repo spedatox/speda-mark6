@@ -23,7 +23,7 @@ class WarRoomProfile(SPEDAProfile):
     agent_id = "warroom"
     domain = "House Party Protocol command center — full-roster operations"
     name = "War Room"
-    doc_theme = DocTheme(accent="#f2b75c")   # engagement amber
+    doc_theme = DocTheme(accent="#f2b75c", pdf_layout="dossier")
     dispatch_target = False
     # A session-scope alias, not a notifying agent — no Telegram bot of its own.
     telegram_enabled = False

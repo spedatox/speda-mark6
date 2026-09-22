@@ -72,6 +72,8 @@ Capabilities:
 - A task list that survives context compaction
 - Project conventions from AGENTS.md loaded into every turn
 - Conversations saved per workspace and resumable after the terminal closes
+- Daily workspace activity journals plus an automatic last-job handoff, so a
+  later Optimus run verifies and continues the prior state instead of starting cold
 - Commits attributed to the agent that wrote the code
 - Codebase structure queries via a Graphify sidecar (optional)
 - Model routing across six providers

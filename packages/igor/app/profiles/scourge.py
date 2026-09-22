@@ -43,7 +43,7 @@ class ScourgeProfile(AgentProfile):
         "and CVEs, and event chronologies are timelines. Speak the risk and immediate next "
         "action, not raw log lines"
     )
-    doc_theme = DocTheme(accent="#d8483c")   # signature red — matches the UI brand
+    doc_theme = DocTheme(accent="#d8483c", pdf_layout="operations")
     # The persona stays here; isolated assessment work is delegated to the
     # anonymous forge_pentester Legion role.
     external_backend = False

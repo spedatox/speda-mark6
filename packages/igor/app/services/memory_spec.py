@@ -23,6 +23,7 @@ document turns the verifier into noise, and a noisy verifier gets ignored, which
 is how the store ended up unprotected in the first place.
 """
 
+import re
 from dataclasses import dataclass, field
 
 # ── Kinds (v4 §2) ─────────────────────────────────────────────────────────────
@@ -1103,6 +1104,26 @@ def spec_for(path: str) -> DocumentSpec | None:
     through the collection.
     """
     import re
+    # A course is an entity within a TERM, not a free-form academic topic.
+    # Keeping the term as a directory makes an old semester cheap to browse and
+    # prevents ATA101 notes from two different years becoming one document.
+    if is_course_path(path):
+        code = path.rsplit("/", 1)[-1][:-3].upper()
+        term = path.split("/courses/", 1)[1].rsplit("/", 1)[0]
+        return DocumentSpec(
+            path=path,
+            kind=LEDGER,
+            summary=f"{code} — {term} course record",
+            owner_agent="ultron",
+            sections=("Overview", "Materials", "Assessments", "Lecture Log"),
+            required=("Overview", "Materials", "Assessments", "Lecture Log"),
+            index_pattern=r"^\d{4}-\d{2}-\d{2}$",
+            index_level=3,
+            index_parent="Lecture Log",
+            entry_style="bullets",
+            max_bytes=48_000,
+            notes="One course in one term; dated lecture notes belong under Lecture Log.",
+        )
     if re.fullmatch(r"/memories/events/\d{4}-\d{2}\.md", path):
         return DocumentSpec(path=path, kind=LEDGER, summary="Dated events",
                             index_pattern=r"^\d{4}-\d{2}-\d{2}$", index_level=2,
@@ -1112,6 +1133,36 @@ def spec_for(path: str) -> DocumentSpec | None:
         return exact
     coll = collection_for(path)
     return _member_spec(coll, path) if coll else None
+
+
+_COURSE_TERM = re.compile(r"^\d{4}-\d{4}-(?:spring|summer|fall)$")
+_COURSE_CODE = re.compile(r"^[A-Z]{2,8}\d{2,4}[A-Z]?$")
+
+
+def course_path(term: str, code: str) -> str:
+    """Build the only valid course-memory location.
+
+    Terms are deliberately stable machine slugs (``2026-2027-spring``), while
+    course codes stay uppercase so the path and schedule use the same identity.
+    """
+    clean_term = (term or "").strip().lower().replace(" ", "-")
+    clean_code = (code or "").strip().upper()
+    if not _COURSE_TERM.fullmatch(clean_term):
+        raise ValueError("term must be YYYY-YYYY-spring, YYYY-YYYY-summer, or YYYY-YYYY-fall.")
+    if not _COURSE_CODE.fullmatch(clean_code):
+        raise ValueError("course_code must look like ATA101 or YBS102.")
+    return f"/memories/academic/courses/{clean_term}/{clean_code}.md"
+
+
+def is_course_path(path: str) -> bool:
+    """Whether *path* is a canonical per-course academic memory file."""
+    if not path.startswith("/memories/academic/courses/") or not path.endswith(".md"):
+        return False
+    try:
+        term, filename = path.split("/courses/", 1)[1].rsplit("/", 1)
+    except ValueError:
+        return False
+    return bool(_COURSE_TERM.fullmatch(term) and _COURSE_CODE.fullmatch(filename[:-3]))
 
 
 def normalize(name: str) -> str:

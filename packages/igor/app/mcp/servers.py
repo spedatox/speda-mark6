@@ -23,6 +23,10 @@ Startup registration order (Entry 005 priority):
   12. Playwright     — open-public-web browser automation, full upstream tool
                        parity (MUST run in isolated container; never for the
                        owner's saved logins — that's the browser sidecar)
+  13. Semantic Scholar — academic literature, authors, citations, recommendations
+  14. SEC EDGAR       — primary US public-company filings (credential-gated)
+  15. Google Threat Intelligence — authorized VirusTotal/GTI investigation
+                       (Enterprise credential-gated)
 """
 
 import logging
@@ -117,6 +121,7 @@ def build_notion_client(access_token: str) -> MCPClient:
 RESERVED_SERVER_NAMES = frozenset({
     "notion", "alpha_vantage", "playwright", "brave_search", "fetch", "tavily",
     "exa", "github", "filesystem", "arxiv", "cve_intelligence",
+    "semantic_scholar", "sec_edgar", "gti_agentic",
     "google_gmail", "google_calendar", "google_tasks", "google_drive",
     "google_chat", "google_people", "microsoft_outlook",
 })
@@ -284,6 +289,52 @@ async def register_all_mcp_servers(registry: "CapabilityRegistry") -> None:
         )
     else:
         logger.warning("mcp_skip", extra={"server": "github", "reason": "GITHUB_TOKEN not set"})
+
+    # Semantic Scholar complements arXiv: it provides paper metadata, author
+    # profiles, citation/reference graphs and recommendations. The server works
+    # anonymously at a low rate; a key only raises that rate limit and is passed
+    # through its environment rather than ever appearing in a tool argument.
+    semantic_env: dict[str, str] = {}
+    if settings.semantic_scholar_api_key:
+        semantic_env["SEMANTIC_SCHOLAR_API_KEY"] = settings.semantic_scholar_api_key
+    servers.append(
+        MCPClient(
+            server_name="semantic_scholar",
+            transport="stdio",
+            command=["uvx", "--from", "s2-mcp-server>=1.5.0", "s2-mcp-server"],
+            env=semantic_env,
+        )
+    )
+
+    # SEC API's remote EDGAR MCP is useful for filings, not general price data;
+    # Alpha Vantage remains the market-data source. Do not connect an unauthenticated
+    # endpoint because a key in a model-visible URL would leak into traces.
+    if settings.sec_api_key:
+        servers.append(
+            MCPClient(
+                server_name="sec_edgar",
+                transport="http",
+                url="https://api.sec-api.io/mcp",
+                headers={"X-API-Key": settings.sec_api_key},
+            )
+        )
+    else:
+        logger.warning("mcp_skip", extra={"server": "sec_edgar", "reason": "SEC_API_KEY not set"})
+
+    # This is the vendor-operated GTI Agentic MCP endpoint, not an unvetted
+    # community wrapper. It is Enterprise-only; without the explicit credential
+    # it is unavailable, preventing accidental external threat investigations.
+    if settings.google_threat_intelligence_api_key:
+        servers.append(
+            MCPClient(
+                server_name="gti_agentic",
+                transport="http",
+                url="https://www.virustotal.com/api/v3/agentspace/mcp/",
+                headers={"x-apikey": settings.google_threat_intelligence_api_key},
+            )
+        )
+    else:
+        logger.warning("mcp_skip", extra={"server": "gti_agentic", "reason": "GOOGLE_THREAT_INTELLIGENCE_API_KEY not set"})
 
     # Filesystem — sandboxed to the user's Speda outputs directory
     outputs_dir = str(_DATA_DIR / "outputs")

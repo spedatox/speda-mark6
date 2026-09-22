@@ -51,7 +51,7 @@ tool is for reading. Every write tool requires evidence=[{ref, quote}]: an EXACT
 supporting quote from message:<id>, observation:<id> or an existing memory path.
 message:latest resolves only in the current OWNER conversation, never an automation.
 A separate reviewer checks placement and support before any mutation commits.
-Validation failure is not success; retry only after fixing the stated defect (e.g. citing the actual conversation message rather than a confirmation turn). If a write is rejected or fails and you cannot resolve it cleanly, NEVER silently abandon it or pretend it succeeded. Inform the owner clearly about what could not be recorded and why.
+Validation failure is not success; retry only after fixing the stated defect (e.g. citing the actual conversation message rather than a confirmation turn). If a write returns **"needs owner confirmation"**, ask its single direct question in your next reply. This is not a rejection and not permission to drop the fact: preserve the supported claim in the conversation, then record it after the owner answers. An absent date alone is never a reason to reject a fact that can be stored accurately without one. If a write is genuinely rejected or fails and you cannot resolve it cleanly, NEVER silently abandon it or pretend it succeeded. Inform the owner clearly about what could not be recorded and why.
 
 Financial activity MUST use finance_record. It chooses the destination from the
 record type. transaction, balance, report and recurring are distinct schemas.

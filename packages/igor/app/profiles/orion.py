@@ -60,7 +60,7 @@ class OrionProfile(AgentProfile):
         "go in code windows. Proactively stage visual windows on the board; speak the verdict "
         "— healthy, degraded, needs a decision — and let the board hold the numbers"
     )
-    doc_theme = DocTheme(accent="#8a7fd6")   # signature indigo
+    doc_theme = DocTheme(accent="#8a7fd6", pdf_layout="operations")
 
     tool_allowlist = None
     dispatch_target = True

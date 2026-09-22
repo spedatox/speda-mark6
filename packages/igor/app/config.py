@@ -385,7 +385,10 @@ class Settings(BaseSettings):
     # all tools stay available. Set False to load every connected tool eagerly.
     lazy_tools: bool = True
     # Servers whose tools are always in the prefix (no use_toolset needed).
-    always_on_servers: str = "tavily,notion"
+    # Notion exposes a large MCP surface. Keep its server connected, but defer
+    # individual schemas to tool_search so it does not consume every turn's
+    # prompt prefix. Load the whole server only for a genuinely broad task.
+    always_on_servers: str = "tavily"
 
     # ── Language ─────────────────────────────────────────────────────────────
     # The ONE language the whole system speaks. Not a hint and not a default the
@@ -786,6 +789,11 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     exa_api_key: str = ""
     github_token: str = ""
+    # Optional MCP credentials. Each server remains disconnected until named in
+    # MCP_ENABLED; empty values therefore never degrade startup or expose data.
+    sec_api_key: str = ""
+    semantic_scholar_api_key: str = ""
+    google_threat_intelligence_api_key: str = ""
 
     # ── OSINT / threat-intelligence skills (app/skills/osint.py) ─────────────
     # Most run keyless. AbuseIPDB needs a free key (https://www.abuseipdb.com,

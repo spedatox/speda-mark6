@@ -61,7 +61,12 @@ Estimated 14 weeks from kick-off.
 
 ### PDF
 
-Same Markdown structure as DOCX. Rendered to HTML/CSS and converted with WeasyPrint — supports bold, italic, and `code` inline.
+Same Markdown structure as DOCX. Rendered to HTML/CSS and converted with
+WeasyPrint — supports bold, italic, and `code` inline. The running agent's
+profile selects its own branded PDF composition (for example an executive
+brief, finance ledger, intelligence dossier, clinical sheet, or operations
+report); its brand colour and small page-footer signature are applied by the
+generator, so do not add a signature to the Markdown.
 
 ## Tool call
 

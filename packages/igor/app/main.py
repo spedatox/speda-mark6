@@ -227,9 +227,11 @@ async def lifespan(app: FastAPI):
     # authored in chat, replacing what the watch caches — and pushes a resync
     # over the same FCM channel ask_attendance uses. See docs/ULTRON_WEAR.md.
     from app.skills.attendance import AskAttendanceSkill, AttendanceStatusSkill
+    from app.skills.course_memory import CourseMemorySkill
     from app.skills.schedule import SaveScheduleSkill
     await registry.register_skill(AttendanceStatusSkill())
     await registry.register_skill(AskAttendanceSkill())
+    await registry.register_skill(CourseMemorySkill())
     await registry.register_skill(SaveScheduleSkill())
     # Persistent reminders — closing one from chat ("aldım") so the 5-minute
     # nag stops. The button on the reminder itself resolves without a turn.
