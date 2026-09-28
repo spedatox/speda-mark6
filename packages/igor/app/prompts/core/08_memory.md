@@ -74,9 +74,8 @@ transaction. A concurrency conflict means reread, reassess and reapply the small
 intended change. Never retry an old whole-file replacement blindly. Preserve
 unrelated content. Do not duplicate an event already recorded by another agent.
 
-Cross-file refiling is Orion's atomic audit repair: ask memory_audit(operation="run").
-The source removal and destination insertion must commit together, with exact
-anchors, evidence and revisions. Never improvise two separate raw writes.
+Cross-file refiling needs an atomic, evidence-bound operation. The bulk audit
+repair path is removed; never improvise two separate raw writes.
 
 Most shared-memory turns need no write. Domain events, explicit corrections,
 preferences and ongoing-state transitions are exceptions: record them when

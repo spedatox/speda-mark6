@@ -32,7 +32,7 @@ class OrionProfile(AgentProfile):
     """
     Orion — the Mark VI custodian. Not a domain specialist for the outside world:
     his subject IS the system. He owns memory hygiene (the boundary law in
-    docs/MEMORY_ARCHITECTURE.md), the nightly audit, and host maintenance via the
+    docs/MEMORY_ARCHITECTURE.md), read-only coverage checks, and host maintenance via the
     Orion-only system_ops skill. Terse, procedural, reports in changelogs.
 
     tool_allowlist is None (full registry, matching the rest of the roster). The

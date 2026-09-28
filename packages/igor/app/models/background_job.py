@@ -33,9 +33,6 @@ class BackgroundJob(Base):
 
     __tablename__ = "background_jobs"
     __table_args__ = (
-        Index("uq_active_memory_audit", "user_id", "kind", unique=True,
-              sqlite_where=text("kind = 'memory_audit' AND status IN ('pending','running')"),
-              postgresql_where=text("kind = 'memory_audit' AND status IN ('pending','running')")),
         # The drain's hot path: due, unfinished work in creation order.
         Index("ix_background_jobs_due", "status", "run_after"),
         # Deduplication of an already-queued unit of work.

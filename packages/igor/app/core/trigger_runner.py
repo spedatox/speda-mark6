@@ -115,13 +115,6 @@ def build_seed(payload: dict, output_mode: str) -> str:
     """
     lang = payload.get("language")
     intent = payload.get("intent") or ""
-    if payload.get("job") == "memory_audit" or payload.get("event") == "memory_audit":
-        # Stored n8n intents can predate the running memory architecture. A
-        # scheduler chooses WHEN to audit, never an obsolete implementation.
-        from pathlib import Path
-        procedure = Path(__file__).resolve().parents[1] / "prompts/agents/orion/02_audit.md"
-        intent = procedure.read_text(encoding="utf-8")
-        payload = {**payload, "intent": "Use the current memory custodian procedure above."}
     delivery = {
         "respond": "Your reply streams straight back to the owner.",
         "push": (
@@ -526,9 +519,10 @@ async def start_trigger_turn(
     agent_id = profile.agent_id
     model = profile.allocate_model(triggered_by)
     if agent_id == "orion" and (payload.get("job") == "memory_audit" or payload.get("event") == "memory_audit"):
-        from app.services.memory_audit_worker import enqueue_audit
-        await enqueue_audit(user_id=user_id, model=model, request_id=request_id)
-        return request_id, session_id or 0
+        # An imported legacy n8n workflow may still fire after deployment.
+        # Reject it before allocating a turn or making any provider call.
+        from fastapi import HTTPException
+        raise HTTPException(status_code=410, detail="The Orion nightly memory audit has been removed.")
 
     session = await session_manager.get_or_create(
         db=db,

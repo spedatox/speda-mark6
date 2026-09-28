@@ -214,7 +214,6 @@ def _apply_additive_migrations(sync_conn) -> None:
                 text("ALTER TABLE background_jobs ADD COLUMN unique_key VARCHAR(255) DEFAULT ''")
             )
             logger.info("schema_migrated", extra={"change": "background_jobs.unique_key"})
-        sync_conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_active_memory_audit ON background_jobs (user_id, kind) WHERE kind = 'memory_audit' AND status IN ('pending','running')"))
         sync_conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_background_jobs_unique_key "
             "ON background_jobs (user_id, kind, unique_key, status)"

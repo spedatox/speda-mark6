@@ -70,44 +70,26 @@ New documents or record types require a registered contract. Extending the gramm
 means changing its schema, validator, writer, views and regression tests together.
 Private owner content and migration plans never belong in git.
 
-## Orion executes, measures and repairs
+## Orion memory coverage
 
-Scheduled `memory_audit` triggers enqueue a durable controller directly. An old
-n8n intent cannot substitute a freeform conversation. `memory_audit run/status/scan`
-offers the same workflow during a conversation. Only one pending/running audit per
-owner is allowed; claims use database compare-and-swap and progress renews the lease.
-Restart recovery and the existing n8n drain recover unfinished work.
-
-The controller chooses every changed, never-reviewed, review-expired or unresolved
-document and search observation within configured limits. It supplies complete
-targets, related records and available primary conversation evidence to reviews.
-Missing coverage stays pending; an incomplete provider response is a failure.
-Document reviews are bound to exact content hashes and expire on a configurable
-interval even without edits. A write invalidates the old review automatically.
-
-Repair proposals need unique exact anchors and verifiable evidence. The independent
-admission check evaluates the whole proposed move, and source/destination changes
-commit atomically. A conflict rolls back every part. Repaired documents are reread
-and reviewed again. Observation domain corrections and conservative duplicate
-merges preserve the original record and provenance, with a reversible revision.
-Owner-origin observations are flagged rather than automatically rewritten.
+The nightly bulk audit was removed at the owner's request. `memory_audit scan`
+is a read-only coverage report. Historical review records and audit reports remain
+available, but no scheduled or manual bulk review/repair controller runs. A legacy
+`/trigger/orion` audit request returns HTTP 410 before starting a turn. Existing
+queued audit jobs are retired without provider calls. Deactivate any previously
+imported n8n workflow as well; deleting the repository template cannot remove a
+workflow from a separate n8n instance.
 
 An expired state disappears from the current view without being falsely marked
 completed. Its record remains in the review inbox. Closing or renewing a state
 requires evidence; passage of time alone establishes neither an outcome nor
 continued validity. Metadata and readable state text must agree.
 
-The controller writes `/memories/.audit/runs/<request>.md` with actual review,
-repair, failure, pending and unresolved counts. Manual audit success logs and
-manual clean attestations are disabled. A job finishing is not a declaration that
-all memory is correct: its verdict remains `review_required` while work or
-uncertainty remains. Unresolved factual questions must stay visible.
-
 ## Operations and rollback
 
-All model/budget/timeout/batch/expiry controls appear in the shared backend
-configuration schema, consumed by the clients' settings surfaces. There is no
-hidden second scheduler. Model review availability is now on the agent write path;
+Model review and timeout controls appear in the shared backend configuration
+schema, consumed by the clients' settings surfaces. There is no hidden scheduler.
+Model review availability is on the agent write path;
 an unavailable provider blocks a write explicitly rather than silently accepting it.
 
 Use `scripts/migrate_memory_contract.py` with a private, content-addressed plan.
@@ -120,5 +102,5 @@ not a history rewrite.
 
 Regression coverage includes raw-write rejection, monthly-structure misuse, exact
 source quotes, reviewer outages, stable financial identities, ambiguous decimals,
-unknown values, atomic record/view updates, atomic moves, lifecycle expiry, project
-upsert idempotence, and real versus fabricated audit completion.
+unknown values, atomic record/view updates, lifecycle expiry, project
+upsert idempotence, and retired audit triggers.

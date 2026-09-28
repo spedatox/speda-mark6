@@ -10,7 +10,7 @@ all live in this service, never in the endpoint.
 
 Three write paths feed one audit trail (MemoryRevision):
   - the memory SKILL (an agent writing mid-conversation)  → author = agent_id
-  - Orion's nightly audit                                  → author = "orion"
+  - Historical Orion audit repairs                          → author = "orion"
   - the owner committing from the systems board            → author = "owner"
 
 `record_revision` is the single choke point they all pass through.

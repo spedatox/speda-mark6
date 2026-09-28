@@ -205,20 +205,6 @@ async def test_unmigrated_finance_history_cannot_be_overwritten(sessions, monkey
         assert not (await db.execute(select(MemoryRevision))).scalars().all()
 
 
-async def test_atomic_move_preserves_source_if_destination_invalid(sessions, monkeypatch):
-    from app.services.memory_audit_worker import repair_batch
-    source = "/memories/academic/erasmus.md"
-    async with sessions() as db:
-        db.add(MemoryFile(user_id=1, path=source, content="# Erasmus+\n\nTemplate uses HTML."))
-        await db.commit()
-        with pytest.raises(ValueError):
-            await repair_batch(db, user_id=1, request_id="test", model="test", repairs=[
-                {"path":source, "old":"Template uses HTML.", "new":"", "evidence":[{"ref":source,"quote":"Template uses HTML."}]},
-                {"path":"/memories/../../escape.md", "old":"", "new":"bad", "evidence":[]},
-            ])
-        assert "Template uses HTML." in (await db.execute(select(MemoryFile.content))).scalar_one()
-        assert not (await db.execute(select(MemoryRevision))).scalars().all()
-
 
 async def test_orion_cannot_write_his_own_success_log(sessions):
     async with sessions() as db:
@@ -227,32 +213,6 @@ async def test_orion_cannot_write_his_own_success_log(sessions):
                 after="# Audit\nEverything reviewed, all clean!", author="orion", action="insert", managed=True)
 
 
-async def test_worker_reads_and_records_each_document_instead_of_trusting_scan(sessions, monkeypatch):
-    from app.services import memory_audit_worker as worker
-    from app.models.memory_review import MemoryReview
-    monkeypatch.setattr(worker, "AsyncSessionLocal", sessions)
-    monkeypatch.setattr(worker, "ask_json", AsyncMock(return_value={"findings":[],"rationale":"Read target and checked its subject.","repairs":[]}))
-    async with sessions() as db:
-        db.add_all([MemoryFile(user_id=1, path=f"/memories/projects/{p}.md", content=f"# {p}\n\nProject description.") for p in ("one", "two")])
-        await db.commit()
-    result = await worker.run_audit(None, "worker-test", 1, "test")
-    assert result["reviewed"] == 2 and result["pending"] == 0
-    assert worker.ask_json.await_count == 2
-    async with sessions() as db:
-        assert len((await db.execute(select(MemoryReview))).scalars().all()) == 2
-
-
-async def test_worker_failure_is_not_a_clean_audit(sessions, monkeypatch):
-    from app.services import memory_audit_worker as worker
-    monkeypatch.setattr(worker, "AsyncSessionLocal", sessions)
-    monkeypatch.setattr(worker, "ask_json", AsyncMock(side_effect=TimeoutError("provider down")))
-    async with sessions() as db:
-        db.add(MemoryFile(user_id=1, path="/memories/projects/one.md", content="# One\n\nProject."))
-        await db.commit()
-    with pytest.raises(ValueError, match="reviews failed"):
-        await worker.run_audit(None, "failed-test", 1, "test")
-    async with sessions() as db:
-        assert len((await coverage(db, 1))["pending_review"]) == 1
 
 
 def test_project_upsert_replaces_description_and_keeps_one_log():
@@ -281,51 +241,7 @@ def test_summary_never_double_counts_balance_report_or_repayment_as_spending():
     assert result["latest_reported_balances"][0]["amount"] == "14779.00"
 
 
-async def test_observation_audit_rejects_incomplete_model_coverage(sessions, monkeypatch):
-    from app.services import observation_audit
-    from app.models.observation import Observation
-    from app.models.memory_review import MemoryReview
-    monkeypatch.setattr(observation_audit, "AsyncSessionLocal", sessions)
-    monkeypatch.setattr(observation_audit, "ask_json", AsyncMock(return_value={"reviews":[]}))
-    monkeypatch.setattr("app.services.memory_audit_worker.progress", AsyncMock())
-    async with sessions() as db:
-        o = Observation(user_id=1, observer="speda", content="The owner submitted the application.", domain="event")
-        db.add(o); await db.commit(); ident = o.id
-    result = await observation_audit.audit_observations(1,[f"observation:{ident}"],"test","test")
-    assert result["failed"] == 1 and result["reviewed"] == 0
-    async with sessions() as db:
-        assert not (await db.execute(select(MemoryReview))).scalars().all()
 
-
-async def test_observation_domain_repair_is_revisioned_and_requires_re_review(sessions, monkeypatch):
-    from app.services import observation_audit
-    from app.models.observation import Observation
-    monkeypatch.setattr(observation_audit, "AsyncSessionLocal", sessions)
-    monkeypatch.setattr("app.services.memory_audit_worker.progress", AsyncMock())
-    async with sessions() as db:
-        o = Observation(user_id=1, observer="speda", content="The owner sent the application on 2026-09-09.", domain="state")
-        db.add(o); await db.commit(); ident = o.id
-    monkeypatch.setattr(observation_audit, "ask_json", AsyncMock(side_effect=[
-        {"reviews":[{"id":ident,"findings":["Completed event filed as state"],"rationale":"Dated completed action", "domain":"event", "duplicate_of":None}]},
-        {"allow":True,"reason":"The exact fact is a completed event."},
-    ]))
-    result = await observation_audit.audit_observations(1,[f"observation:{ident}"],"test","test")
-    assert result["repaired"] == 1
-    async with sessions() as db:
-        assert (await db.get(Observation, ident)).domain == "event"
-        assert (await db.execute(select(MemoryRevision))).scalar_one().action == "observation_repair"
-        assert (await coverage(db,1))["pending_review"]
-
-
-async def test_trigger_runs_controller_without_freeform_orion_turn(monkeypatch):
-    from app.core.trigger_runner import start_trigger_turn
-    queued = AsyncMock(return_value={"id":1})
-    monkeypatch.setattr("app.services.memory_audit_worker.enqueue_audit",queued)
-    profile = SimpleNamespace(agent_id="orion", allocate_model=lambda _:"test")
-    result = await start_trigger_turn(db=None, profile=profile, payload={"job":"memory_audit","intent":"fake success"},
-        output_mode="silent", request_id="test", orchestrator=None, turns=None, session_manager=None,telegram_bots=None)
-    assert result == ("test",0)
-    queued.assert_awaited_once()
 
 
 def test_known_month_unknown_day_included_once_and_inconsistent_period_rejected():

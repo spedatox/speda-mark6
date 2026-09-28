@@ -683,12 +683,6 @@ class Settings(BaseSettings):
     memory_review_max_tokens: int = 6000
     memory_review_context_chars: int = 70000
     memory_review_timeout_s: int = 180
-    memory_audit_max_documents: int = 200
-    memory_audit_evidence_messages: int = 500
-    memory_audit_observation_batch: int = 25
-    memory_audit_max_observations: int = 3000
-    memory_audit_repair_rounds: int = 2
-    memory_audit_concurrency: int = 2
     memory_review_valid_days: int = 7
     auto_extract_facts: bool = True
     # Ceiling per turn. A turn that looks like it holds twenty durable facts is

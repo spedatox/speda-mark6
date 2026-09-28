@@ -328,7 +328,7 @@ async def memory_compose(request: Request) -> JSONResponse:
     """
     Rebuild owner.md and current.md from the record with a model.
 
-    Normally part of Orion's nightly audit. Every claim must cite observation ids
+    This owner-invoked operation requires every claim to cite observation ids
     that exist, or the composition is rejected and the previous version stands —
     so a bad run is a no-op, never a corrupted biography.
     """

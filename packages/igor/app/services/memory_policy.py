@@ -76,7 +76,7 @@ def protected_write(path: str, author: str, *, managed: bool = False) -> str | N
     if author == "owner":
         return None
     if path.startswith("/memories/.audit/"):
-        return "Audit reports are system-generated from actual document reviews. Use memory_audit operation=run/status."
+        return "Historical audit reports are system-generated and immutable. Only read-only memory_audit scan remains available."
     if "/." in path and not (author == "orion" and path.startswith("/memories/.audit/")):
         return "Internal archives and system metadata are not agent-writeable. Orion may append its audit under /memories/.audit/."
     spec = spec_for(path)

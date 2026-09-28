@@ -38,9 +38,8 @@ reconnected, flushes the queue as `memory_request` frames carrying
 `RecordObservationSkill` any in-process agent uses — the fact lands in the
 observation record authored as `optimus` (Rule 18 enforcement applies
 identically; Optimus owns no domain folder, so it can never write one via this
-path either), and Orion's regular nightly audit consolidates it exactly like
-any other agent's observation. Nothing here decides what the fact means or
-whether it survives — that judgement stays Orion's, on its own schedule.
+path either). The nightly audit is gone; nothing here consolidates it with
+another agent's observation or decides what the fact means.
 
 **The same skill, deliberately.** Not a reimplementation and not a subset. Path
 validation, the file law, per-document ownership, the revision trail and the

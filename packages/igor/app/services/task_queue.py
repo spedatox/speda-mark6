@@ -107,7 +107,7 @@ def _handlers() -> dict:
         Pure assembly, no model call, and a no-op when nothing changed — so this
         is cheap enough to run every turn, which is what keeps the injected
         memory block agreeing with the record it came from within the same
-        conversation rather than only after the nightly audit.
+        conversation without waiting for scheduled maintenance.
         """
         from app.database import AsyncSessionLocal
         from app.services.memory_render import commit_rendered
@@ -151,11 +151,6 @@ def _handlers() -> dict:
 
         await extract_turn_facts(session_id, request_id, user_id, model)
 
-    from app.services.memory_audit_worker import run_audit
-
-    async def _memory_audit(session_id, request_id, user_id, model, payload):
-        await run_audit(session_id, request_id, user_id, model)
-
     async def _analyze_patterns(session_id, request_id, user_id, model, payload):
         from app.services.pattern_analysis import analyze_patterns
 
@@ -176,7 +171,6 @@ def _handlers() -> dict:
         await evaluate_countermeasure(user_id=user_id, payload=payload)
 
     return {
-        "memory_audit": _memory_audit,
         "extract_facts": _extract_facts,
         "analyze_patterns": _analyze_patterns,
         "analyze_artifact": _analyze_artifact,
@@ -247,8 +241,6 @@ async def enqueue_one(
             await db.commit()
         except IntegrityError:
             await db.rollback()
-            if kind == "memory_audit":
-                return None  # another enqueue won the database uniqueness race
             raise
         await db.refresh(job)
         logger.info("job_enqueued", extra={"kind": kind, "job_id": job.id})
@@ -414,12 +406,19 @@ async def _claim(db: AsyncSession, limit: int) -> list[BackgroundJob]:
     runs, so a second drain overlapping this one cannot pick the same rows up.
     """
     now = datetime.now(timezone.utc)
+    # Retire pre-deployment audit jobs without executing or retrying them.
+    retired = await db.execute(update(BackgroundJob).where(
+        BackgroundJob.kind == "memory_audit",
+        BackgroundJob.status.in_(("pending", "running")),
+    ).values(status="failed", last_error="Nightly memory audit removed by owner",
+             updated_at=now))
     rows = list(
         (
             await db.execute(
                 select(BackgroundJob)
                 .where(
                     BackgroundJob.status == "pending",
+                    BackgroundJob.kind != "memory_audit",
                     BackgroundJob.run_after <= now,
                 )
                 .order_by(BackgroundJob.created_at.asc())
@@ -438,7 +437,7 @@ async def _claim(db: AsyncSession, limit: int) -> list[BackgroundJob]:
           .execution_options(synchronize_session="fetch"))
         if result.rowcount == 1:
             claimed.append(job)
-    if rows:
+    if rows or retired.rowcount:
         await db.commit()
     return claimed
 

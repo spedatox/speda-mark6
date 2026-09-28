@@ -7,16 +7,15 @@ from app.skills.base import Skill
 class MemoryAuditSkill(Skill):
     name = "memory_audit"
     description = (
-        "Orion's measurable memory audit. run queues the durable controller, which reads "
-        "pending/expired/unresolved documents, compares source evidence, applies bounded "
-        "atomic repairs and records exact review fingerprints. status returns real progress, "
-        "failures and remaining work; scan returns structural and semantic coverage. "
-        "Never claim success from a scan alone. Manual success logs/attestations are disabled."
+        "Read-only memory coverage scan. Use it to inspect pending reviews and "
+        "unresolved findings when the owner asks about memory state. It does not "
+        "review, repair or schedule any memory items. It returns structural and "
+        "semantic coverage; never claim a clean store from a partial scan."
     )
     restricted_to = frozenset({"orion"})
-    read_only = False
+    read_only = True
     input_schema = {"type": "object", "properties": {
-        "operation": {"type": "string", "enum": ["scan", "run", "status"]},
+        "operation": {"type": "string", "enum": ["scan"]},
     }, "required": ["operation"], "additionalProperties": False}
 
     async def execute(self, args, context):
@@ -25,11 +24,4 @@ class MemoryAuditSkill(Skill):
             return "Error: only Orion may attest memory reviews."
         if args.get("operation") == "scan":
             return json.dumps(await verify_all(context.db, context.user_id), ensure_ascii=False)
-        if args.get("operation") == "run":
-            from app.services.memory_audit_worker import enqueue_audit
-            return json.dumps(await enqueue_audit(user_id=context.user_id, model=context.model,
-                                                  request_id=context.request_id), ensure_ascii=False)
-        if args.get("operation") == "status":
-            from app.services.task_queue import latest_job
-            return json.dumps(await latest_job("memory_audit", context.user_id), ensure_ascii=False)
-        return "Reviews are recorded by the audit worker after it reads each document. Use operation=run, then status."
+        return "Only the read-only scan operation remains available."

@@ -299,13 +299,8 @@ async def _get_file(db: AsyncSession, user_id: int, path: str) -> "MemoryFile | 
 
 
 # How long a snapshot file may go untouched before this fallback refreshes it.
-# Orion's nightly audit (scripts/n8n/memory_audit.json, Pass 5) is the PRIMARY
-# owner of these two files — this task only steps in when he has been silent for
-# longer than a night, which means either the audit workflow is not imported or
-# it has been failing. Guarding on the file's own updated_at (rather than the old
-# "_Last updated: <today>_" prose stamp) is what makes deference automatic: any
-# writer counts, Orion and in-conversation agent writes alike, so the fallback
-# never overwrites fresher work and never double-writes against the audit.
+# This stale snapshot check belongs to post-turn maintenance. The nightly audit
+# has been removed; keep this separate fallback behavior unchanged.
 _SNAPSHOT_FALLBACK_HOURS = 36
 
 
@@ -329,11 +324,9 @@ async def run_daily_maintenance(
     """
     Fallback composition of the two narrative surfaces (owner.md, current.md).
 
-    Under v3 these are the only memory files a model still writes, and Orion owns
-    them in his nightly audit (docs/MEMORY_ARCHITECTURE_V3.md §4.2). This is the
-    safety net beneath that: it composes only when NEITHER file has been written
-    in _SNAPSHOT_FALLBACK_HOURS, which on a healthy system means never — one
-    cheap SELECT per turn and nothing else.
+    Under v3 these are the only memory files a model still writes. This post-turn
+    fallback composes only when NEITHER file has been written in
+    _SNAPSHOT_FALLBACK_HOURS — one cheap SELECT per turn otherwise.
 
     dossier.md is absent from this function on purpose. It used to be rewritten
     here from recent exchanges; it is now rendered from the preference

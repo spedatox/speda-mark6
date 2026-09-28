@@ -23,7 +23,7 @@ class MemoryEditSkill(Skill):
         "For new topic use version=new, old='', new=complete document. Topic purpose "
         "is enforced independently before commit. Completed actions use ledger_append; "
         "money uses finance_record; current situations use memory_state. For a move, "
-        "ask Orion memory_audit to repair atomically. Never copy into a different domain "
+        "ask the owner for an evidence-bound atomic repair path. Never copy into a different domain "
         "after a refusal. message:latest refers ONLY to this owner conversation."
     )
     input_schema = {"type": "object", "properties": {

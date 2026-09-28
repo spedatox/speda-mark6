@@ -27,7 +27,6 @@ majority of runs.
 | `lifeboat_watch.json` | The host running out of disk, inodes or RAM | the pressure level actually changes |
 | `octavius_backup.json` | *(nothing — it backs up)* | the backup **fails**; a successful one costs nothing |
 | `persistent_reminders.json` | *(nothing — it asks)* | never; asking and answering are free |
-| `memory_audit.json` | *(nothing — it schedules)* | **once a night, by design** |
 | `task_queue_drain.json` | Post-turn work that failed or was orphaned | only when a job actually needs re-running |
 | `ultron_wear_attendance.json` | A lecture ending unanswered | never; it pushes to the watch directly |
 | `onyx_watch.json` | Onyx ticket events (client deliverables) | a ticket event arrives |
@@ -36,25 +35,15 @@ majority of runs.
 half IS the work — Igor snapshots, verifies and uploads the database itself, for
 zero tokens — and the Gate spends a turn only when that FAILS.
 
-`memory_audit.json` is the deliberate exception: you are asking an agent to go
-and do work, so of course it costs a turn. Keep watchers out of it. Anything
-shaped like *"check whether X happened"* belongs in one of the watch templates,
-where checking is free.
-
 **Scheduled briefings no longer live here.** They were a hand-edited JS array in
 `daily_briefings.json`; they are now rows in the `automations` table, each with
 its own workflow and its own real cron, created and edited from Heartbreaker
 under Settings → Automations. `scripts/migrate_briefings.py` performed that move
 and documents it. Add a new briefing from the UI, not by importing a template.
 
-**`memory_audit.json` is not optional.** It is the only thing that fires Orion's
-nightly custodian pass (`docs/MEMORY_ARCHITECTURE.md` §3.3). Without it imported
-and active, the boundary sweep, demotions, dedup, compression, observation
-consolidation and audit report simply never run — memory drifts and nothing
-notices. It has no config node to edit; import and activate it. There is a
-fallback in the backend that refreshes current.md and dossier.md if nothing has
-touched them in 36 hours, but that covers two of the seven passes and exists only
-so an unimported workflow does not go unnoticed forever.
+The Orion nightly memory audit was removed. Deactivate any copy previously
+imported into n8n. Igor rejects legacy audit triggers with HTTP 410 before a
+provider call, and its read-only memory scan remains available on demand.
 
 ---
 
@@ -65,8 +54,7 @@ so an unimported workflow does not go unnoticed forever.
    tells you (`Mail list`, `Domain list`, `Watch list`, `Reminder list`, `Briefing list`,
    `Service list`). `lifeboat_watch.json` also has none — its thresholds live in
    Igor's config, not in the workflow, so there is only ever one copy of them. Everything is a plain JS array of objects at the top of the
-   node; the comment block above it documents every field. (`memory_audit.json`
-   is the exception — it has no config node. Import and activate.)
+   node; the comment block above it documents every field.
 3. **Activate.** All of them are safe to activate with an empty list — they do
    nothing until you add an entry.
 

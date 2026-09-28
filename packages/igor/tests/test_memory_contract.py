@@ -163,12 +163,42 @@ async def test_audit_coverage_cannot_call_unseen_or_changed_memory_clean(session
                                 fingerprint=old, findings=[], rationale="Stale review")
 
 
-def test_old_scheduled_audit_cannot_restore_disabled_architecture():
-    from app.core.trigger_runner import build_seed
-    seed = build_seed({"job":"memory_audit", "intent":"obsolete compose instructions"}, "silent")
-    assert "obsolete compose instructions" not in seed
-    assert "pending_review" in seed
-    assert "memory_audit(operation=" in seed
+async def test_old_scheduled_audit_is_rejected_before_turn_or_provider_call():
+    from fastapi import HTTPException
+    from app.core.trigger_runner import start_trigger_turn
+    with pytest.raises(HTTPException) as exc:
+        await start_trigger_turn(db=None,
+            profile=SimpleNamespace(agent_id="orion", allocate_model=lambda _: "unused"),
+            payload={"job": "memory_audit", "intent": "obsolete compose instructions"},
+            output_mode="silent", request_id="old-audit", orchestrator=None,
+            turns=None, session_manager=None, telegram_bots=None)
+    assert exc.value.status_code == 410
+
+
+async def test_legacy_audit_jobs_are_retired_before_queue_claim(sessions):
+    from app.models.background_job import BackgroundJob
+    from app.services.task_queue import _claim
+    async with sessions() as db:
+        db.add_all([
+            BackgroundJob(user_id=1, kind="memory_audit", request_id="pending-audit", status="pending"),
+            BackgroundJob(user_id=1, kind="memory_audit", request_id="running-audit", status="running",
+                          started_at=datetime.now(timezone.utc)),
+        ])
+        await db.commit()
+        assert await _claim(db, 32) == []
+    async with sessions() as db:
+        jobs = (await db.execute(select(BackgroundJob))).scalars().all()
+        assert {j.status for j in jobs} == {"failed"}
+        assert all("removed by owner" in j.last_error for j in jobs)
+
+
+async def test_memory_audit_skill_is_read_only_scan():
+    from app.skills.memory_audit import MemoryAuditSkill
+    skill = MemoryAuditSkill()
+    assert skill.read_only is True
+    assert skill.input_schema["properties"]["operation"]["enum"] == ["scan"]
+    result = await skill.execute({"operation": "run"}, SimpleNamespace(agent_id="orion"))
+    assert "Only the read-only scan" in result
 
 
 async def test_state_tool_persists_only_with_existing_evidence_and_version(sessions, monkeypatch):

@@ -14,7 +14,7 @@ class MemoryRevision(Base):
     Append-only audit trail for every write to the /memories virtual filesystem.
 
     One row is recorded on EVERY mutation, no matter the author: the memory skill
-    (an agent writing mid-conversation), Orion's nightly audit, and owner commits
+    (an agent writing mid-conversation), historical audit runs, and owner commits
     from the systems board all land here. This is what makes memory recoverable
     and accountable — it answers "who changed this, when, and what did it say
     before?" without depending on prose timestamps inside the files themselves.

@@ -42,8 +42,8 @@ evidence. A past review/end date means **unverified**, never completed. Complete
 records remain in their original path and revision history.
 
 `current.md` is a read-only projection with active, planned and verification
-sections. It is computed at read time using the owner's timezone, so a failed
-nightly audit cannot keep an expired state asserting itself as current. Chat
+sections. It is computed at read time using the owner's timezone, so an expired
+state cannot keep asserting itself as current even without a nightly audit. Chat
 recall, memory views, the knowledge-bank API, welcome context and peer recall use
 the same projection. The cache changes when projected content or the day changes.
 The stored current file is only a migration marker, not an independently editable
