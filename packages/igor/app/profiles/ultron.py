@@ -9,6 +9,7 @@ from app.prompts.loader import assemble, build_skills_manifest, derive_iteration
 # common to every agent and reused from prompts/core/.
 PROMPT_SECTIONS = [
     "agents/ultron/01_identity.md",
+    "agents/ultron/02_course_memory.md",
     "core/02_voice.md",   # shared register — see prompts/core/02_voice.md
     "core/04_decision_policy.md",   # Tavily->Exa search priority + Legion policy
     "core/05_output_policy.md",

@@ -26,7 +26,11 @@ from app.services.relevant_recall import (
     initial_recall_query,
     salient_evidence,
 )
-from app.skills.memory import MemoryRecallCache, recall_for_context, recall_sessions_for_context
+from app.skills.memory import (
+    MemoryRecallCache, recall_for_context, recall_sessions_for_context,
+    document_query_for_history, relevant_files_for_message,
+    today_across_sessions_for_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -185,8 +189,8 @@ class AgentOrchestrator:
         #   1. stable_core   — identity + policies + tool guidance + per-model
         #                      addenda. Stable per model (and caches are
         #                      model-scoped anyway) → cached (biggest block).
-        #   2. memory_block  — owner/current/dossier/history + size-free listing.
-        #                      Changes at most ~daily → cached.
+        #   2. memory_block  — small standing memory + size-free listing.
+        #                      Relevant documents follow in an uncached block.
         #
         # Current time lives in per-message timestamps (stamped from each
         # message's DB created_at), AFTER the cached prefix and byte-stable
@@ -402,6 +406,36 @@ class AgentOrchestrator:
                     extra={"request_id": context.request_id, "error": str(exc)},
                 )
 
+        document_block = ""
+        if context.db is not None:
+            try:
+                document_block = await relevant_files_for_message(
+                    context.user_id, context.db,
+                    document_query_for_history(context.conversation_history),
+                )
+                if document_block:
+                    logger.info("memory_documents_recalled", extra={
+                        "request_id": context.request_id,
+                        "chars": len(document_block),
+                    })
+            except Exception as exc:
+                logger.warning("memory_document_recall_failed", extra={
+                    "request_id": context.request_id, "error": str(exc),
+                })
+
+        today_block = ""
+        if context.db is not None and context.triggered_by == "user":
+            try:
+                today_block = await today_across_sessions_for_context(
+                    context.user_id, context.db, context.agent_id,
+                    context.session_id, scope=profile.episodic_recall_scope,
+                    query=initial_recall_query(context.conversation_history),
+                )
+            except Exception as exc:
+                logger.warning("today_continuity_failed", extra={
+                    "request_id": context.request_id, "error": str(exc),
+                })
+
         # ACE tactical recall is a distinct retrieval product from remembered
         # facts: it ranks evidence-scored models and linked countermeasures for
         # the current objective. It is equally non-fatal and per-turn varying.
@@ -546,6 +580,10 @@ class AgentOrchestrator:
         # breakpoints so it costs nothing but its own tokens.
         if relevant_block:
             system_blocks.append({"type": "text", "text": relevant_block})
+        if document_block:
+            system_blocks.append({"type": "text", "text": document_block})
+        if today_block:
+            system_blocks.append({"type": "text", "text": today_block})
         if tactical_block:
             system_blocks.append({"type": "text", "text": tactical_block})
         # Trailing, uncached, and last on purpose — see the note where it is

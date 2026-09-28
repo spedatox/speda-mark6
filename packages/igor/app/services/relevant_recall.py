@@ -217,7 +217,9 @@ def derived_recall_query(objective: str, evidence: list[str]) -> str:
 async def facts_for_query(user_id: int, db, query: str, request_id: str = "") -> str:
     """Run the existing bounded observation search for an explicit query."""
     from app.config import settings
-    from app.services.observations import format_observation, search_observations
+    from app.services.observations import (
+        format_observation, related_observations, search_observations,
+    )
 
     query = query.strip()[:_MAX_DERIVED_QUERY_CHARS]
     if not settings.relevant_recall_enabled or db is None:
@@ -242,6 +244,30 @@ async def facts_for_query(user_id: int, db, query: str, request_id: str = "") ->
             break
         lines.append(line)
         used += len(line)
+    # A query can hit the event but miss a person mentioned in that same owner
+    # message. Expand only the strongest two hits, and spend the SAME char
+    # budget. This is provenance linkage, never an inferred causal claim.
+    included = {obs.id for obs, _score in scored[:len(lines)]}
+    for obs, _score in scored[:2]:
+        try:
+            related = await related_observations(
+                db, user_id=user_id, observation_id=obs.id, limit=3,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("related_recall_failed", extra={
+                "request_id": request_id, "observation_id": obs.id,
+                "error": str(exc),
+            })
+            continue
+        for neighbour, reasons in related["links"]:
+            if neighbour.id in included:
+                continue
+            line = f"[Related to id:{obs.id} via {', '.join(reasons)}] {format_observation(neighbour)}"
+            if used + len(line) > settings.relevant_recall_max_chars:
+                continue
+            lines.append(line)
+            included.add(neighbour.id)
+            used += len(line)
     if not lines:
         return ""
 

@@ -24,6 +24,7 @@ survives the file being rewritten.
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from app.core.context import AgentContext
@@ -36,6 +37,7 @@ from app.services.observations import (
     format_observation,
     format_observations,
     most_reinforced_observations,
+    related_observations,
     reasoning_chain,
     recent_observations,
     record_observations,
@@ -235,6 +237,8 @@ class RecordObservationSkill(Skill):
         clean = [p for p in proposals if isinstance(p, dict)]
         try:
             for proposal in clean:
+                # Tool arguments cannot declare their own persisted provenance.
+                proposal.pop("_verified_message_ids", None)
                 # The supplied citation remains the preferred, exact proof. It
                 # is not, however, the reviewer's entire world: a browser result
                 # or an earlier owner message in this turn may be the actual
@@ -243,14 +247,20 @@ class RecordObservationSkill(Skill):
                 # `message:latest` after the conversation had moved on.
                 citation_error = ""
                 try:
-                    evidence = await resolve_evidence(
+                    verified_evidence = await resolve_evidence(
                         context.db,
                         context.user_id,
                         proposal.get("evidence"),
                         session_id=context.session_id,
                     )
                 except ValueError as exc:
-                    evidence, citation_error = [], str(exc)
+                    verified_evidence, citation_error = [], str(exc)
+
+                proposal["_verified_message_ids"] = list(dict.fromkeys(
+                    int(match.group(1))
+                    for item in verified_evidence
+                    if (match := re.match(r"^message:(\d+)(?:#image:\d+)?$", item["ref"]))
+                ))
 
                 context_evidence = await session_review_evidence(
                     context.db,
@@ -261,7 +271,7 @@ class RecordObservationSkill(Skill):
                 evidence = list(
                     {
                         e["ref"]: e
-                        for e in [*evidence, *context_evidence]
+                        for e in [*verified_evidence, *context_evidence]
                     }.values()
                 )
 
@@ -476,7 +486,8 @@ class SearchMemorySkill(Skill):
         "verbatim rather than paraphrasing. 'recent' returns the newest facts, "
         "'established' returns those "
         "reinforced most often across conversations, 'chain' traces one observation to its "
-        "premises and to everything derived from it, and — for consolidation work — 'novel' "
+        "premises and conclusions, 'related' finds facts sharing an owner message or "
+        "subject and labels those links without implying causation, and — for consolidation work — 'novel' "
         "surfaces the facts most isolated from everything else in memory while 'duplicates' "
         "surfaces pairs that say the same thing in different words. Returns each fact with "
         "its [id:N], level, observing agent, date and reinforcement count. Narrow with "
@@ -497,6 +508,7 @@ class SearchMemorySkill(Skill):
                     "recent",
                     "established",
                     "chain",
+                    "related",
                     "novel",
                     "duplicates",
                 ],
@@ -516,7 +528,7 @@ class SearchMemorySkill(Skill):
             "observation_id": {
                 "type": "integer",
                 "description": (
-                    "The observation to trace. Required for mode='chain'."
+                    "The observation to trace. Required for mode='chain' or 'related'."
                 ),
             },
             "direction": {
@@ -605,6 +617,25 @@ class SearchMemorySkill(Skill):
         mode = (args.get("mode") or "search").strip().lower()
         limit = min(max(int(args.get("limit", 15) or 15), 1), 40)
         db, user_id = context.db, context.user_id
+
+        if mode == "related":
+            obs_id = args.get("observation_id")
+            if not obs_id:
+                return "mode='related' needs an `observation_id` from an [id:N] tag."
+            related = await related_observations(
+                db, user_id=user_id, observation_id=int(obs_id), limit=limit,
+            )
+            if related["root"] is None:
+                return f"No live observation with id {obs_id}."
+            out = ["Observation:", format_observation(related["root"]), "",
+                   "Related facts (labels describe evidence of linkage, not causation):"]
+            out.extend(
+                f"[{', '.join(reasons)}] {format_observation(row)}"
+                for row, reasons in related["links"]
+            )
+            if not related["links"]:
+                out.append("No recorded one-hop links.")
+            return "\n".join(out)
 
         if mode == "chain":
             obs_id = args.get("observation_id")

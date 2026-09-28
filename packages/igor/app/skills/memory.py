@@ -1,27 +1,17 @@
 # SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Speda Memory Skill — implements Anthropic's agent memory tool pattern.
+"""Virtual owner-memory filesystem and bounded recall context.
 
-Architecture (per Anthropic Memory Tool docs):
-  - Memory is a virtual filesystem: structured markdown files under /memories/
-  - Speda reads its memory directory at the start of every turn (JIT retrieval)
-  - Speda writes and updates memory files when it learns something worth keeping
-  - The agent controls its own memory — passive background extraction supplements this
-    but the primary write path is Speda itself during conversations
-
-Commands (matching Anthropic's spec exactly):
-  view       → list directory or read file with line numbers
-  create     → create new file (error if exists)
-  str_replace → replace a unique string in a file
-  insert     → insert text after a line number
-  delete     → delete a file
+The `memory` tool exposes reads to agents. Durable sourced facts are recorded
+through `record_observation`; managed documents have evidence-bound domain
+writers. Old raw write handlers remain below for compatibility but are not
+advertised or reachable through `MemorySkill.execute`.
 """
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 
 from sqlalchemy import select, delete as sql_delete
 
@@ -244,31 +234,6 @@ def source_file_for(agent_id: str) -> str | None:
     from app.core.runtime_state import get_agent_sources
 
     return get_agent_sources().get(agent_id) or AGENT_SOURCE_DEFAULTS.get(agent_id)
-
-
-def source_preload_for(agent_id: str) -> list[str]:
-    """Which of the agent's own files to put in the prompt every turn.
-
-    Its STANDING context — the profile, the program, the runbook — and never the
-    dated log, which is the one member that grows without bound. Preloading
-    `wellness.md` whole meant Atomix paid 27 KB every turn to be told his own
-    training split, and 14 KB of that was a session log he re-read from the top
-    on every request. The log is one `view` away and he is told its exact path.
-
-    A single-file override (the owner pinning one path) is returned as-is.
-    """
-    from app.services.memory_spec import collection_by_root
-
-    src = source_file_for(agent_id)
-    if not src:
-        return []
-    coll = collection_by_root(src)
-    if coll is None:
-        return [src]
-    return [
-        f"{coll.root}/{m.stem}.md" for m in coll.members
-        if not m.index_pattern      # the dated log stays on demand
-    ]
 
 
 # ── Path validation ───────────────────────────────────────────────────────────
@@ -581,13 +546,25 @@ def elide_middle(path: str, content: str, budget: int) -> str:
     return "\n\n".join(out)
 
 
+def bounded_excerpt(path: str, content: str, budget: int) -> str:
+    """Keep the prompt budget even when one section exceeds the whole cap."""
+    excerpt = elide_middle(path, content, budget)
+    if budget <= 0 or len(excerpt) <= budget:
+        return excerpt
+    marker = f"\n\n_[Excerpt shortened; open `{path}` with `memory` for the full record.]_\n\n"
+    room = max(0, budget - len(marker))
+    if room == 0:
+        return marker[:budget]
+    head = room // 2
+    return excerpt[:head] + marker + excerpt[-(room - head):]
+
+
 async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache: MemoryRecallCache) -> str:
     """
     Load the memory context to prepend to the system prompt.
-    Returns: directory listing (so the agent knows what exists) + the preloaded
-    set (owner/current/dossier/history, plus any per-agent working file such as
-    Atomix's sessions.md). The agent reads the remaining files JIT during the
-    conversation via the memory tool.
+    Returns a directory listing and the small standing-memory set. Relevant
+    narrative and domain records are selected per turn by
+    relevant_files_for_message, or read explicitly with the memory tool.
     """
     await ensure_seeded(user_id, db)
 
@@ -596,8 +573,9 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
     )
     all_files = list(result.scalars().all())
 
-    # The agent's source-of-truth file (owner-configurable) is preloaded up front
-    # AND flagged as its read/write target below.
+    # Keep the stable prefix to standing constraints and the current-state view.
+    # Biography, history, patterns and domain files are retrieved for the actual
+    # user message below, not sent to every agent on every turn.
     source_file = source_file_for(agent_id)
 
     # Watermark: if no file changed since last recall, return the cached block.
@@ -625,10 +603,12 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
     # contributes its members, an unsplit one still contributes itself. Needed
     # HERE, above the watermark, because which files are injected is what
     # decides which files the watermark may watch.
-    preload = preload_paths(set(by_path))
-    for p in source_preload_for(agent_id):
-        if p not in preload:
-            preload.append(p)
+    standing = {
+        "/memories/owner.md", "/memories/current.md", "/memories/dossier.md",
+        "/memories/dossier/prohibitions.md", "/memories/dossier/dislikes.md",
+        "/memories/dossier/wants.md",
+    }
+    preload = [p for p in preload_paths(set(by_path)) if p in standing]
 
     injected = set(preload)
     watermarked = [f for f in all_files if f.path in injected]
@@ -662,7 +642,8 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
     for path in preload:
         f = by_path.get(path)
         if f:
-            sections.append(f"### {path}\n\n{elide_middle(path, f.content, budget)}")
+            cap = min(budget, 1800) if path == "/memories/owner.md" and budget else budget
+            sections.append(f"### {path}\n\n{bounded_excerpt(path, f.content, cap)}")
 
     body = "\n\n".join(sections)
 
@@ -696,22 +677,19 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
                 if dated else ""
             )
             source_directive = (
-                f"\n\n**Your domain is `{coll.root}/` — {members}.** Everything above "
-                f"from that folder is already in your context; do not re-read it."
-                f"{log_line} These files are the AUTHORITATIVE record for your "
-                f"domain: report every figure from them, and write every update back "
-                f"in the same turn you learn it. Never leave them stale, never keep "
-                f"your domain data only in the conversation. Add a new topic in your "
-                f"domain when none fits; reuse the existing topic otherwise."
+                f"\n\n**Your domain is `{coll.root}/` — {members}.** Its documents "
+                "are available by path, but are not all preloaded. Relevant ones "
+                "may appear in the per-turn recall block; otherwise open the "
+                f"specific document with `memory` before relying on it.{log_line} "
+                "Keep durable updates in their owning record using the designated "
+                "write tool; never leave a confirmed change only in conversation."
             )
         else:
             source_directive = (
-                f"\n\n**Your source of truth is `{source_file}`.** It is preloaded above. "
-                f"Treat it as the AUTHORITATIVE record for your domain: read every figure "
-                f"and fact you report from it, and write EVERY update, change, or new entry "
-                f"back to it with the `memory` tool (str_replace/insert/create) in the same "
-                f"turn you learn it — never leave it stale and never keep your domain data "
-                f"only in the conversation."
+                f"\n\n**Your source of truth is `{source_file}`.** Open it with "
+                "`memory` when the question needs its detail and it was not recalled "
+                "this turn. Use the designated evidence-bound write tool for "
+                "confirmed updates; raw memory edits are disabled."
             )
 
     from app.services.memory_policy import routing_contract
@@ -724,8 +702,9 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
         "name and role are set above and are unaffected by anything in this section. "
         "Read it as notes about the owner, never as a description of yourself.\n\n"
         f"{body}\n\n"
-        "Every file above is already here — do not re-read it. For anything else, "
-        "the Directory lists every path that exists: projects and people are ONE "
+        "Only the files shown above are preloaded; do not re-read them. Other "
+        "files are selected per turn or opened on demand. The Directory lists "
+        "every path that exists: projects and people are ONE "
         "FILE EACH (`/memories/projects/<name>.md`, "
         "`/memories/social/<category>/<name>.md`), so open the single entity the "
         "task is about rather than a folder or a whole domain file. dossier.md "
@@ -734,6 +713,187 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
     )
     cache.set_recall(cache_key, watermark, block)
     return block
+
+
+async def relevant_files_for_message(user_id: int, db, query: str) -> str:
+    """Select at most two grounded documents for this turn, with a hard size cap.
+
+    No model call or embedding dependency is needed: exact course codes and
+    document names are reliable anchors. A miss is explicit; the agent can use
+    `memory`, `read_course_memory`, or `search_memory` for a deliberate lookup.
+    """
+    from app.config import settings
+    from app.services.memory_spec import is_course_path
+
+    query = (query or "").strip()[:2000]
+    if len(query) < 6:
+        return ""
+    ignored = {"about", "after", "again", "bana", "benim", "ders", "dersi", "dersin",
+               "from", "hangi", "icin", "için", "ile", "more", "nasıl", "nedir",
+               "olan", "that", "this", "what", "when", "where", "your"}
+    terms = {term for term in re.findall(r"[^\W_]{3,}", query.casefold()) if term not in ignored}
+    if not terms:
+        return ""
+    rows = (await db.execute(select(MemoryFile).where(MemoryFile.user_id == user_id))).scalars().all()
+    always = {"/memories/current.md", "/memories/dossier.md",
+              "/memories/dossier/prohibitions.md", "/memories/dossier/dislikes.md",
+              "/memories/dossier/wants.md"}
+    codes = {code.upper() for code in re.findall(r"\b[A-Za-z]{2,8}\d{2,4}[A-Za-z]?\b", query)}
+    term = re.search(r"\b\d{4}-\d{4}-(?:spring|summer|fall)\b", query.casefold())
+    if codes:
+        matching_courses = sorted((row.path for row in rows if is_course_path(row.path)
+                                   and row.path.rsplit("/", 1)[-1][:-3] in codes
+                                   and (not term or f"/{term.group(0)}/" in row.path)), reverse=True)
+        if len(matching_courses) > 1 and not term:
+            heading = ("## Course record choices\n\nThe same code exists in several terms. "
+                       "Use `read_course_memory` with the correct term before answering:\n")
+            choices = []
+            used = len(heading)
+            for path in matching_courses:
+                if used + len(path) + 1 > 5700:
+                    break
+                choices.append(path)
+                used += len(path) + 1
+            return heading + "\n".join(choices) + (
+                "\nMore terms exist; list them with `read_course_memory`."
+                if len(choices) < len(matching_courses) else ""
+            )
+
+    ranked = []
+    for row in rows:
+        path = row.path
+        if path in always or "/." in path or path == "/memories/log.md":
+            continue
+        path_terms = set(re.findall(r"[^\W_]{3,}", path.casefold()))
+        title = row.content.split("\n", 1)[0].casefold()
+        title_terms = set(re.findall(r"[^\W_]{3,}", title))
+        body_terms = set(re.findall(r"[^\W_]{3,}", row.content[:12000].casefold()))
+        score = 10 * len(terms & path_terms) + 8 * len(terms & title_terms) + min(3, len(terms & body_terms))
+        if path == "/memories/owner.md" and terms & {
+            "biyografi", "çocukluğum", "geçmişim", "kimim", "hayatım", "origins",
+        }:
+            score += 12
+        if path == "/memories/history.md" and terms & {"geçmiş", "eskiden", "önceden", "history"}:
+            score += 12
+        if is_course_path(path) and path.rsplit("/", 1)[-1][:-3] in codes:
+            score += 30
+        if score >= 8:
+            ranked.append((score, path, row.content))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    preamble = ("## Relevant memory documents\n\nThese are retrieved candidates, not proof that "
+                "they answer the question. Check the term, date and source before using them; "
+                "open the exact path with `memory` if the excerpt is incomplete.\n\n")
+    budget = 6000 - len(preamble)
+    sections = []
+    for _score, path, content in ranked[:2]:
+        header = f"### {path}\n\n"
+        gap = 2 if sections else 0
+        available = min(settings.memory_injected_file_max_chars or budget, budget - gap - len(header))
+        if available < 200:
+            break
+        section = header + bounded_excerpt(path, content, available)
+        sections.append(section)
+        budget -= gap + len(section)
+    if not sections:
+        return ""
+    return preamble + "\n\n".join(sections)
+
+
+def document_query_for_history(history) -> str:
+    """Carry a prior course code into a short follow-up without carrying prose."""
+    from app.services.relevant_recall import initial_recall_query
+
+    users = [message for message in history or []
+             if isinstance(message, dict) and message.get("role") == "user"]
+    latest = initial_recall_query(users[-1:])
+    if len(users) < 2 or len(latest) > 100 or re.search(r"\b(?:başka|different|other)\b", latest.casefold()):
+        return latest
+    if re.search(r"\b[A-Za-z]{2,8}\d{2,4}[A-Za-z]?\b", latest):
+        return latest
+    if not re.search(r"\b(?:ders\w*|sınav\w*|notlar?\w*|ödev\w*|course\w*|exam\w*|lecture\w*)\b", latest.casefold()):
+        return latest
+    previous = initial_recall_query(users[:-1])
+    code = re.search(r"\b[A-Za-z]{2,8}\d{2,4}[A-Za-z]?\b", previous)
+    term = re.search(r"\b\d{4}-\d{4}-(?:spring|summer|fall)\b", previous.casefold())
+    return " ".join(part for part in (latest, code.group(0) if code else "",
+                                     term.group(0) if term else "") if part)
+
+
+async def today_across_sessions_for_context(
+    user_id: int, db, agent_id: str, session_id: int, *, scope: str = "own",
+    query: str = "",
+) -> str:
+    """Bounded, live continuity from persisted owner messages, independent of recaps.
+
+    A new chat must see what the owner said earlier today even if recap generation
+    is delayed or fails. This is deliberately queried every turn, not frozen in
+    MemoryRecallCache: messages from another active chat may arrive meanwhile.
+    """
+    from app.core.clock import owner_today, owner_tz, to_owner
+    from app.models.message import Message
+    from app.models.session import Session
+
+    local_start = datetime.combine(owner_today(), time.min, tzinfo=owner_tz())
+    utc_start = local_start.astimezone(timezone.utc).replace(tzinfo=None)
+    conditions = [
+        Session.user_id == user_id,
+        Session.id != session_id,
+        Session.triggered_by == "user",
+        Message.role == "user",
+        Message.created_at >= utc_start,
+    ]
+    if scope != "all":
+        conditions.append(Session.agent_id == agent_id)
+    rows = (await db.execute(
+        select(Message, Session.agent_id)
+        .join(Session, Message.session_id == Session.id)
+        .where(*conditions)
+        .order_by(Message.created_at.desc(), Message.id.desc())
+        .limit(120)
+    )).all()
+    if not rows:
+        return ""
+
+    from app.services.relevant_recall import _extract_text, _strip_stamp
+
+    query_terms = {word for word in re.findall(r"[^\W_]{4,}", query.casefold())
+                   if word not in {"about", "again", "bana", "benim", "hangi", "nasıl", "what"}}
+    candidates = []
+    for rank, (message, source_agent) in enumerate(rows):
+        content = _strip_stamp(_extract_text(message.content)).strip()
+        if not content:
+            continue
+        words = set(re.findall(r"[^\W_]{4,}", content.casefold()))
+        score = sum(any(word.startswith(term) or term.startswith(word)
+                        for word in words) for term in query_terms)
+        candidates.append((score, rank, message, source_agent, content))
+    # Four query matches plus four newest messages give a new chat both the
+    # ongoing thread and a way back to older same-day details.
+    matching = sorted((item for item in candidates if item[0]),
+                      key=lambda item: (-item[0], item[1]))[:4]
+    selected = matching + [item for item in candidates if item not in matching][:8-len(matching)]
+    entries = []
+    used = 0
+    for _score, _rank, message, source_agent, content in selected:
+        content = " ".join(content.split())[:420]
+        stamp = to_owner(message.created_at).strftime("%H:%M")
+        entry = f"[{stamp} {source_agent} message:{message.id}] {content}"
+        if used + len(entry) > 2600:
+            break
+        entries.append(entry)
+        used += len(entry)
+        if len(entries) >= 8:
+            break
+    if not entries:
+        return ""
+    return (
+        "## Today in other conversations\n\n"
+        "Recent owner messages from separate chats today (owner-local date). "
+        "These are source excerpts, not a complete transcript or proof of an "
+        "outcome. Follow their message ids with `recall_conversations` when "
+        "the exact exchange or reply matters. Do not ask the owner to repeat "
+        "what is already here.\n\n" + "\n".join(entries)
+    )
 
 
 # ── Episodic recall: recent-session recaps (used by orchestrator) ─────────────
@@ -836,70 +996,35 @@ async def recall_sessions_for_context(
 
 class MemorySkill(Skill):
     """
-    Speda's persistent memory tool.
-    Implements Anthropic's agent memory pattern: view/create/str_replace/insert/delete.
-    Speda uses this to maintain continuity across sessions without reloading
-    everything into the context window upfront.
+    On-demand reader for persistent owner-memory documents.
+
+    This complements the small standing set and per-turn retrieval without
+    reloading the whole filesystem into every prompt.
     """
 
     name = "memory"
     description = (
-        "Read or write the owner's persistent memory files under /memories. "
-        "owner.md, current.md, dossier.md and history.md are ALREADY in your context every "
-        "turn — never use this tool to read them. Use 'view' only to open a SPECIFIC other "
-        "file when the task needs detail you don't already have: ONE project "
-        "(/memories/projects/<name>.md), ONE person "
-        "(/memories/social/<category>/<name>.md), finance.md, wellness.md, academic.md or "
-        "log.md. The exact filenames are in the directory listing already in your context, so "
-        "read the one entity you need rather than a whole folder — that is the entire reason "
-        "projects and people are one file each. Use 'create'/'str_replace' only to FILE a "
-        "genuinely new, durable fact in the ONE correct file per the routing rules in your "
-        "memory protocol — a new person or project means 'create' on its own path, an active "
-        "life state → current.md. Do not tidy other files; the Orion custodian owns hygiene. "
-        "Every write is versioned. Most turns need no memory operations at all."
+        "Read a specific persisted memory document or list a directory under /memories. "
+        "Use `view` when the small standing block and per-turn recalled documents do not "
+        "contain the detail needed for this task; open the exact course, topic, person or "
+        "project instead of a whole folder when its path is known. "
+        "Do NOT use create, str_replace, insert or delete for agent writes: raw edits are "
+        "disabled, and confirmed changes need their evidence-bound domain tool. "
+        "Returns the document with line numbers or a directory listing; a missing path "
+        "is reported explicitly rather than filled from another record."
     )
-    read_only = False
-    # `view` never mutates and is safe to serve from the per-turn tool memo
-    # like a fully read-only skill (registry.CapabilityRegistry._memoizable) —
-    # every other command writes and must always run for real.
-    memoizable_commands = frozenset({"view"})
+    read_only = True
     input_schema = {
         "type": "object",
         "properties": {
             "command": {
                 "type": "string",
-                "enum": ["view", "create", "str_replace", "insert", "delete"],
-                "description": (
-                    "view: list directory or read file. "
-                    "create: create new file. "
-                    "str_replace: replace unique text in a file. "
-                    "insert: insert text after a line number. "
-                    "delete: delete a file."
-                ),
+                "enum": ["view"],
+                "description": "view: list a directory or read a file, optionally by line range.",
             },
             "path": {
                 "type": "string",
                 "description": "File or directory path. Must start with /memories.",
-            },
-            "file_text": {
-                "type": "string",
-                "description": "File content for the create command.",
-            },
-            "old_str": {
-                "type": "string",
-                "description": "Exact text to replace (must be unique in the file).",
-            },
-            "new_str": {
-                "type": "string",
-                "description": "Replacement text.",
-            },
-            "insert_line": {
-                "type": "integer",
-                "description": "Line number to insert after (0 = before first line).",
-            },
-            "insert_text": {
-                "type": "string",
-                "description": "Text to insert.",
             },
             "view_range": {
                 "type": "array",
@@ -914,29 +1039,17 @@ class MemorySkill(Skill):
 
     async def execute(self, args: dict, context: AgentContext) -> str:
         command = args.get("command", "")
+        if command != "view":
+            return "Raw memory writes are disabled. Use the evidence-bound domain tool or record_observation."
         path = args.get("path", "").rstrip("/")
         db = context.db
         user_id = context.user_id
-
-        # Ensure initial files exist
-        await ensure_seeded(user_id, db)
 
         err = _validate_path(path)
         if err:
             return err
 
-        if command == "view":
-            return await self._view(path, args, user_id, db)
-        elif command == "create":
-            return await self._create(path, args, context)
-        elif command == "str_replace":
-            return await self._str_replace(path, args, context)
-        elif command == "insert":
-            return await self._insert(path, args, context)
-        elif command == "delete":
-            return await self._delete(path, context)
-        else:
-            return f"Error: Unknown command '{command}'. Valid: view, create, str_replace, insert, delete."
+        return await self._view(path, args, user_id, db)
 
     # ── Command handlers ──────────────────────────────────────────────────────
 

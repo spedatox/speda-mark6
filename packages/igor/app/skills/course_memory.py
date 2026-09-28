@@ -13,9 +13,10 @@ from datetime import date
 from sqlalchemy import select
 
 from app.core.context import AgentContext
+from app.core.clock import owner_today
 from app.models.memory_file import MemoryFile
 from app.services.memory_admission import EVIDENCE_SCHEMA, resolve_evidence
-from app.services.memory_spec import course_path
+from app.services.memory_spec import course_path, is_course_path
 from app.services.memory_store import MemoryWriteConflict, mutate_file
 from app.services.memory_write import WriteRejected, ledger_append
 from app.services.memory_schema import MemorySchemaViolation
@@ -46,6 +47,8 @@ def _append_section(text: str, section: str, entry: str) -> str:
     except StopIteration as exc:
         raise WriteRejected(f"Course record has no `{section}` section; restore its standard shape first.") from exc
     end = next((i for i in range(idx + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    if f"- {entry}" in lines[idx + 1:end]:
+        return text
     placeholder = "- _(none recorded)_"
     if placeholder in lines[idx + 1:end]:
         lines.remove(placeholder)
@@ -61,10 +64,18 @@ def _append_section(text: str, section: str, entry: str) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _lecture_entry_exists(text: str, stamp: str, entry: str) -> bool:
+    lines = text.splitlines()
+    try:
+        start = lines.index(f"### {stamp}")
+    except ValueError:
+        return False
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("### ")), len(lines))
+    return f"- {entry}" in lines[start + 1:end]
+
+
 class CourseMemorySkill(Skill):
     name = "record_course_memory"
-    deferred = True
-    search_keywords = "course class lecture notes syllabus assignment exam university academic"
     restricted_to = frozenset({"ultron"})
     description = (
         "Records durable knowledge for one university course in its own term-scoped memory file, "
@@ -109,11 +120,15 @@ class CourseMemorySkill(Skill):
         base = before or _new_course(code, (args.get("course_name") or "").strip())
         try:
             if section == "Lecture Log":
-                stamp = (args.get("date") or date.today().isoformat()).strip()
+                stamp = (args.get("date") or owner_today().isoformat()).strip()
                 date.fromisoformat(stamp)
-                after = ledger_append(base, path=path, key=stamp, lines_in=[entry])
+                after = base if _lecture_entry_exists(base, stamp, entry) else ledger_append(
+                    base, path=path, key=stamp, lines_in=[entry],
+                )
             else:
                 after = _append_section(base, section, entry)
+            if row and after == before:
+                return f"Already recorded in {path}."
             evidence = await resolve_evidence(context.db, context.user_id, args.get("evidence"), session_id=context.session_id)
             await mutate_file(context.db, user_id=context.user_id, path=path,
                               author=context.agent_id, action="course_memory",
@@ -123,3 +138,54 @@ class CourseMemorySkill(Skill):
         except (ValueError, WriteRejected, MemorySchemaViolation, MemoryWriteConflict) as exc:
             return str(exc)
         return f"Recorded in {path}."
+
+
+class ReadCourseMemorySkill(Skill):
+    name = "read_course_memory"
+    restricted_to = frozenset({"ultron"})
+    read_only = True
+    description = (
+        "Read Ultron's saved course records by course code and academic term. "
+        "Use it before answering about a course's earlier lectures, materials, assessments, "
+        "or goals, and before adding a note so you can avoid duplicates. "
+        "With no course code it lists the available records; with one code across multiple "
+        "terms it lists the matching terms instead of guessing. Do NOT use it for today's "
+        "timetable or attendance, which live in the structured academic ledger. "
+        "Returns the exact record and path, a bounded course index, or a clear missing-record result."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "course_code": {"type": "string", "description": "Optional course code, such as ATA101."},
+            "term": {"type": "string", "description": "Optional term, such as 2026-2027-spring; use with course_code to select one record."},
+        },
+        "additionalProperties": False,
+    }
+
+    async def execute(self, args: dict, context: AgentContext) -> str:
+        code = (args.get("course_code") or "").strip().upper()
+        term = (args.get("term") or "").strip()
+        if term and not code:
+            return "Give course_code with term, or omit both to list all course records."
+        if code and term:
+            try:
+                path = course_path(term, code)
+            except ValueError as exc:
+                return str(exc)
+            row = (await context.db.execute(select(MemoryFile).where(
+                MemoryFile.user_id == context.user_id, MemoryFile.path == path,
+            ))).scalar_one_or_none()
+            return f"{path}\n\n{row.content}" if row else f"No course record at {path}."
+
+        rows = (await context.db.execute(select(MemoryFile).where(
+            MemoryFile.user_id == context.user_id,
+            MemoryFile.path.like("/memories/academic/courses/%"),
+        ))).scalars().all()
+        paths = sorted((row.path for row in rows if is_course_path(row.path)
+                        and (not code or row.path.endswith(f"/{code}.md"))), reverse=True)
+        if not paths:
+            return f"No course record found for {code}." if code else "No course records yet."
+        if len(paths) == 1 and code:
+            row = next(row for row in rows if row.path == paths[0])
+            return f"{row.path}\n\n{row.content}"
+        return "Course records (specify course_code and term to open one):\n" + "\n".join(paths[:100])

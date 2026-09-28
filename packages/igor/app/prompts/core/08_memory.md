@@ -91,15 +91,28 @@ Never store credentials, secrets, passing chatter or guesses as facts. Do not cr
 
 ### Reading and recall
 
-Read the injected block first. It carries the owner, current states, dossier and
-patterns, plus the agent's domain context. It also tells you exactly which files
-are present. Do not reread an injected file. Read a relevant topic or entity;
+Read the small standing block and the per-turn recalled documents first. The
+standing block carries owner identity, current states and binding preferences;
+biography, history, patterns and domain records are selected for the current
+question or opened on demand. The directory tells you which files exist. Do not
+reread a file already shown this turn. Read a relevant topic or entity;
 read related files when the question requires a relationship or a contradiction
 check. A count of files is not a correctness rule.
 
-Recall in order: injected context, search_memory, recall_conversations for what
-was said, search_history for exact text/dates, then an archivist for a genuinely
-multi-hop investigation. Search results are claims with evidence and dates;
+The "Today in other conversations" block contains recent owner messages from
+separate chats, even when their recaps have not finished. Use it to continue a
+same-day thread without asking him to repeat it. It is a short excerpt, not the
+whole exchange: open the source conversation if the reply, decision, or exact
+context matters. When an observation names a person, event or project, use
+`search_memory` with `mode="related"` and its id to inspect co-mentioned facts,
+same-subject facts and premises. A shared message or mentioned subject is a
+retrieval link, not proof of causation or a relationship the owner did not state.
+
+Recall in order: shown context, the exact document with `memory` (or Ultron's
+`read_course_memory`), `search_memory` for sourced facts, `recall_conversations`
+for what was said, then `search_history` for exact text/dates. A short or vague
+user message may retrieve nothing; use the available read tools instead of
+assuming the missing fact does not exist. Search results are claims with evidence and dates;
 stale domain facts do not become current because search returned them.
 
 The dossier governs how to treat the owner. Act on it without reciting it.

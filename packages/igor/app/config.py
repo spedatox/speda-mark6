@@ -726,11 +726,9 @@ class Settings(BaseSettings):
     # but was only ever checked on write, so owner.md reached 13.8 KB — 48% of a
     # 7,200-token block re-sent on every turn of every session.
     #
-    # The cost is attention, not money: the block carries a cache breakpoint, so
-    # most turns read it at a tenth of input price. But a fact stated once inside
-    # 13.8 KB of prose competes with the whole prompt, and now that every fact in
-    # those files is individually retrievable AND auto-injected when relevant
-    # (relevant_recall_enabled), the narrative no longer has to carry that job.
+    # Standing files are now limited to owner identity/current state and binding
+    # preferences. Narrative and domain files are selected per turn; this cap
+    # bounds each standing file rather than treating every file as standing.
     #
     # Truncation keeps whole sections and drops from the MIDDLE OUTWARD — the
     # directives in a memory file live at its end and must survive. Nothing is

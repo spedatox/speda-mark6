@@ -470,6 +470,7 @@ async def record_observations(
     rejections: list[str] = []
 
     for proposal in proposals:
+        provenance_ids = message_ids if message_ids is not None else proposal.get("_verified_message_ids")
         try:
             clean = validate_observation(
                 content=proposal.get("content", ""),
@@ -506,15 +507,15 @@ async def record_observations(
         if existing is not None:
             # Retrying one durable extraction job is not independent evidence.
             if ((request_id and existing.request_id == request_id) or
-                    (message_ids and set(message_ids).issubset(set(existing.message_ids or [])))):
+                    (provenance_ids and set(provenance_ids).issubset(set(existing.message_ids or [])))):
                 stored.append(existing)
                 continue
             existing.reinforcement_count += 1
             existing.updated_at = datetime.now(timezone.utc)
             if session_id is not None:
                 existing.session_id = session_id
-            if message_ids:
-                merged = list(existing.message_ids or []) + list(message_ids)
+            if provenance_ids:
+                merged = list(existing.message_ids or []) + list(provenance_ids)
                 # Keep the tail: recent provenance is what recall pulls context from.
                 existing.message_ids = merged[-20:]
             existing.source_ids = list(dict.fromkeys([
@@ -539,7 +540,7 @@ async def record_observations(
             pattern_type=clean["pattern_type"],
             confidence=clean["confidence"],
             session_id=session_id,
-            message_ids=list(message_ids or []),
+            message_ids=list(provenance_ids or []),
             request_id=request_id,
             origin=origin,
             embedding=await _embed_content(clean["content"]),
@@ -985,6 +986,64 @@ async def reasoning_chain(
         ]
 
     return {"root": root, "premises": premises, "conclusions": conclusions}
+
+
+async def related_observations(
+    db: AsyncSession, *, user_id: int, observation_id: int, limit: int = 8,
+) -> dict:
+    """Find one-hop, provenance-backed neighbours without inventing relations.
+
+    Sharing an owner message means co-mentioned, not causally connected. The
+    explicit source_ids graph remains a separate, stronger relationship.
+    """
+    root = (await db.execute(_live(user_id).where(
+        Observation.id == observation_id,
+    ).options(defer(Observation.embedding)))).scalar_one_or_none()
+    if root is None:
+        return {"root": None, "links": []}
+
+    limit = min(max(limit, 1), 20)
+    # A message can mention several people or events; same-subject rows link
+    # facts across messages. Keep the SQL bounded to the owner's recent rows.
+    candidates = list((await db.execute(
+        _live(user_id)
+        .where(Observation.id != observation_id)
+        .order_by(Observation.created_at.desc())
+        .limit(500)
+        .options(defer(Observation.embedding))
+    )).scalars().all())
+    root_messages = {int(i) for i in (root.message_ids or [])}
+    def mentions_subject(content: str, subject: str) -> bool:
+        if subject == "owner" or ":" not in subject:
+            return False
+        name = subject.split(":", 1)[1].strip()
+        return len(name) >= 4 and re.search(
+            rf"(?<!\w){re.escape(name)}(?!\w)", content, re.IGNORECASE,
+        ) is not None
+
+    links = []
+    for row in candidates:
+        reasons = []
+        if row.id in (root.source_ids or []):
+            reasons.append("premise")
+        if root.id in (row.source_ids or []):
+            reasons.append("derived from")
+        if root.superseded_by == row.id:
+            reasons.append("replacement")
+        if row.superseded_by == root.id:
+            reasons.append("replaces")
+        if root_messages & {int(i) for i in (row.message_ids or [])}:
+            reasons.append("same owner message")
+        if root.subject != "owner" and row.subject == root.subject:
+            reasons.append("same subject")
+        if (mentions_subject(root.content, row.subject) or
+                mentions_subject(row.content, root.subject)):
+            reasons.append("mentions subject")
+        if reasons:
+            links.append((row, reasons))
+        if len(links) >= limit:
+            break
+    return {"root": root, "links": links}
 
 
 # ── Self-healing ──────────────────────────────────────────────────────────────
