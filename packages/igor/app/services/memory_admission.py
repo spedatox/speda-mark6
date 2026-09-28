@@ -18,7 +18,7 @@ from app.services.memory_states import version
 
 EVIDENCE_SCHEMA = {"type": "array", "minItems": 1, "items": {
     "type": "object", "properties": {
-        "ref": {"type": "string", "description": "message:<id>, message:latest (this user turn), message:<id>#image:<index> (or latest#image:<index>), observation:<id>, tool_call:<id>, or /memories/...md"},
+        "ref": {"type": "string", "description": "message:<id>, message:latest (quote from this owner session; an earlier matching message is pinned to its ID), message:<id>#image:<index> (or latest#image:<index>), observation:<id>, tool_call:<id>, or /memories/...md"},
         "quote": {"type": "string", "description": "Exact source quotation; for an image reference, transcribe the relevant visible evidence for visual verification."},
     }, "required": ["ref", "quote"], "additionalProperties": False}}
 
@@ -138,10 +138,18 @@ async def resolve_evidence(db, user_id, evidence, *, session_id=None):
         if ref == "message:latest":
             if not session_id:
                 raise ValueError("message:latest requires the current owner session.")
-            msg = (await db.execute(select(Message).join(Session).where(
+            messages = (await db.execute(select(Message).join(Session).where(
                 Session.user_id == user_id, Session.triggered_by == "user",
                 Message.session_id == session_id, Message.role == "user",
-            ).order_by(Message.id.desc()).limit(1))).scalar_one_or_none()
+            ).order_by(Message.id.desc()).limit(50))).scalars().all()
+            msg = messages[0] if messages else None
+            # A retry/confirmation can become the latest message after the
+            # owner supplied the fact. Recover only a literal quote from an
+            # earlier message in this same owner session, then pin its ID in
+            # the receipt. Fuzzy recovery remains limited to the latest turn.
+            if msg and _canonical_quote(text_content(msg.content), quote) is None:
+                msg = next((candidate for candidate in messages[1:]
+                            if quote in text_content(candidate.content)), msg)
             ref = f"message:{msg.id}" if msg else ref
             body = text_content(msg.content) if msg else ""
         elif re.fullmatch(r"message:\d+", ref):

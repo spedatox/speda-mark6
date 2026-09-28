@@ -50,6 +50,11 @@ Raw memory create/insert/str_replace/delete are disabled for agents. The `memory
 tool is for reading. Every write tool requires evidence=[{ref, quote}]: an EXACT
 supporting quote from message:<id>, observation:<id> or an existing memory path.
 message:latest resolves only in the current OWNER conversation, never an automation.
+If the owner asks you to retry after a fact was already recorded as an observation,
+cite that observation's ID and a quote from its content. For a conversation quote,
+prefer the original message:<id>; message:latest can recover an exact quote from an
+earlier message in the same owner session and pins that message's ID in the receipt.
+Never ask the owner to repeat facts merely because their latest message is a retry.
 A separate reviewer checks placement and support before any mutation commits.
 Validation failure is not success; retry only after fixing the stated defect (e.g. citing the actual conversation message rather than a confirmation turn). If a write returns **"needs owner confirmation"**, ask its single direct question in your next reply. This is not a rejection and not permission to drop the fact: preserve the supported claim in the conversation, then record it after the owner answers. An absent date alone is never a reason to reject a fact that can be stored accurately without one. If a write is genuinely rejected or fails and you cannot resolve it cleanly, NEVER silently abandon it or pretend it succeeded. Inform the owner clearly about what could not be recorded and why.
 
