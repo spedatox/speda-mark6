@@ -589,9 +589,9 @@ class Settings(BaseSettings):
     # and from semantic recall (recall_conversations, on-demand).
     episodic_recap_enabled: bool = True
     # How many recent sessions' recaps are injected into a new session.
-    episodic_recall_sessions: int = 5
-    # Hard cap on the injected block (~1.5k tokens) — oldest entries drop first.
-    episodic_recall_max_chars: int = 6000
+    episodic_recall_sessions: int = 2
+    # Hard cap on the injected block — older sessions remain tool-retrievable.
+    episodic_recall_max_chars: int = 1000
     # max_tokens for the per-turn recap generation call.
     episodic_recap_max_tokens: int = 300
 
@@ -704,7 +704,7 @@ class Settings(BaseSettings):
     # teaches the model to skip the section.
     relevant_recall_limit: int = 6
     # Hard ceiling on the injected block, independent of the count.
-    relevant_recall_max_chars: int = 2000
+    relevant_recall_max_chars: int = 1400
     # Messages shorter than this are not searched: "ok", "yes", "devam" carry no
     # retrievable intent and would match on stopwords alone.
     relevant_recall_min_query_chars: int = 12

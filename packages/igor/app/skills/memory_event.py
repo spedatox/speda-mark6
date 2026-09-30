@@ -5,6 +5,7 @@
 
 import json
 import logging
+import hashlib
 from datetime import datetime, date
 from typing import TYPE_CHECKING
 
@@ -25,7 +26,13 @@ logger = logging.getLogger(__name__)
 class MemoryEventSkill(Skill):
     name = "memory_event"
     read_only = False
-    description = "Capture a meaningful personal experience, event, or reference into the owner's memory"
+    description = (
+        "Capture one source-supported personal experience or event in a dated memory record. "
+        "Use it for a completed event without a more specific domain writer, and cite the "
+        "owner's exact message or another verifiable source. Do not use it for an ongoing "
+        "state, a person profile, or a speculative outcome. It returns a stable record ID "
+        "and path that can be revisited through connected memory."
+    )
     
     input_schema = {
         "type": "object",
@@ -77,6 +84,11 @@ class MemoryEventSkill(Skill):
     }
 
     async def execute(self, args: dict, context: "AgentContext") -> str:
+        from sqlalchemy import select
+        from app.models.memory_record_meta import MemoryRecordMeta
+        from app.models.memory_file import MemoryFile
+        from app.services.memory_admission import resolve_evidence
+
         evidence = args.get("evidence", [])
         if not evidence or not all(isinstance(e, dict) and "ref" in e and "quote" in e for e in evidence):
             return "Reject: Missing evidence — you must provide exact supporting quotes with ref and quote."
@@ -93,10 +105,25 @@ class MemoryEventSkill(Skill):
         elif not date_unknown:
             return "Reject: Invalid date — you must provide a 'date' or set 'date_unknown' to true."
 
-        # Deduplication key
+        try:
+            verified_evidence = await resolve_evidence(
+                context.db, context.user_id, evidence,
+                session_id=context.session_id,
+            )
+        except ValueError as exc:
+            return f"Reject: {exc} Nothing saved."
+
+        # One request may capture several events. An exact retry of the same
+        # source and content gets the original ID, including across requests.
         source_id = args.get("source_idempotency_key")
         if not source_id:
-            source_id = context.request_id
+            canonical = json.dumps({
+                "summary": (args.get("summary") or "").strip(),
+                "date": date_str, "kind": args.get("kind", "event"),
+                "evidence": sorted((item["ref"], item["quote"])
+                                   for item in verified_evidence),
+            }, ensure_ascii=False, sort_keys=True)
+            source_id = "event:" + hashlib.sha256(canonical.encode()).hexdigest()
 
         # Use the source message's timestamp as source_timestamp, not the system clock at execution time
         source_timestamp = None
@@ -109,7 +136,7 @@ class MemoryEventSkill(Skill):
 
         candidate = CaptureCandidate(
             source_id=source_id,
-            evidence=evidence,
+            evidence=verified_evidence,
             summary=args.get("summary", ""),
             kind=args.get("kind", "event"),
             title=args.get("title"),
@@ -123,19 +150,32 @@ class MemoryEventSkill(Skill):
         )
 
         job = await create_candidate(context.db, context.user_id, candidate)
-        
-        # Determine routing regardless, as we might need to tell them the existing path
-        routing = await route_candidate(context.db, context.user_id, candidate)
-
+        if job.state == 'committed':
+            record_ids = job.committed_record_ids or []
+            if record_ids:
+                row = (await context.db.execute(
+                    select(MemoryRecordMeta.record_id, MemoryFile.path)
+                    .join(MemoryFile, MemoryRecordMeta.memory_file_id == MemoryFile.id)
+                    .where(MemoryRecordMeta.user_id == context.user_id,
+                           MemoryRecordMeta.record_id == record_ids[0])
+                )).first()
+                if row:
+                    return json.dumps({"path": row.path, "record_id": row.record_id,
+                                       "already_recorded": True})
+            return "Existing capture is marked committed but its record is missing; no new event was written."
         if job.state != 'pending':
-            return f"already recorded at {routing.path}"
+            return f"Capture is {job.state}; no new event was written."
+
+        routing = await route_candidate(context.db, context.user_id, candidate)
 
         result = await commit_candidate(
             db=context.db, 
             user_id=context.user_id, 
             candidate=candidate, 
             routing=routing,
-            author=context.agent_id
+            author=context.agent_id,
+            model=context.model,
+            request_id=context.request_id,
         )
         
         return json.dumps({

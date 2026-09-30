@@ -33,6 +33,7 @@ from app.models.project import Project, ProjectFile
 from app.models.memory_entity import MemoryEntity
 from app.models.memory_record_meta import MemoryRecordMeta
 from app.models.memory_record_link import MemoryRecordLink
+from app.models.memory_graph_edge import MemoryGraphEdge
 from app.models.memory_path_alias import MemoryPathAlias
 from app.models.memory_entity_head import MemoryEntityHead
 from app.models.memory_capture_job import MemoryCaptureJob
@@ -54,7 +55,7 @@ __all__ = [
     "CourseSlot", "TermConfig", "AttendanceEntry", "Device",
     "ReminderCycle", "ReminderDefinition", "RouteGeometry", "PlaceSet",
     "Project", "ProjectFile", "MemoryEntity", "MemoryRecordMeta",
-    "MemoryRecordLink", "MemoryPathAlias", "MemoryEntityHead",
+    "MemoryRecordLink", "MemoryGraphEdge", "MemoryPathAlias", "MemoryEntityHead",
     "MemoryCaptureJob", "MemoryMigrationRun",
     "PatternState", "PatternEvidence", "Countermeasure",
     "CountermeasurePattern", "CountermeasureRun",

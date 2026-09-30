@@ -81,12 +81,13 @@ async def test_standing_context_is_small_and_course_recall_is_selective(sessions
         ])
         await db.commit()
         stable = await recall_for_context(1, db, "ultron", cache=MemoryRecallCache())
+        assert len(stable) < 5000
         assert "Midterm on 2027-03-12" not in stable
         assert "SQL slides" not in stable
         selected = await relevant_files_for_message(1, db, "ATA101 sınavı ne zaman?")
         assert "Midterm on 2027-03-12" in selected
         assert "SQL slides" not in selected and "Private owner's grade" not in selected
-        assert len(selected) <= 6000
+        assert len(selected) <= 2800
         ambiguous = await relevant_files_for_message(1, db, "YBS102 ders notları")
         assert "SQL slides" in ambiguous and "Midterm" not in ambiguous
         biography = await relevant_files_for_message(1, db, "geçmişim hakkında anlat")

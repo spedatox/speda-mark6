@@ -436,6 +436,10 @@ async def supersede(
     old.valid_until = ended or new.valid_from or _date.today()
     old.superseded_by = new.id
     old.updated_at = datetime.now(timezone.utc)
+    from app.services.memory_graph import add_edge
+    await add_edge(db, user_id, f"observation:{old.id}",
+                   f"observation:{new.id}", "superseded_by",
+                   f"observation:{new.id}")
     await db.commit()
     logger.info(
         "observation_superseded",
@@ -549,6 +553,10 @@ async def record_observations(
         stored.append(obs)
 
     if stored:
+        await db.flush()
+        from app.services.memory_graph import index_observation
+        for obs in {row.id: row for row in stored}.values():
+            await index_observation(db, user_id, obs)
         await db.commit()
         for obs in stored:
             await db.refresh(obs)
@@ -1003,15 +1011,40 @@ async def related_observations(
         return {"root": None, "links": []}
 
     limit = min(max(limit, 1), 20)
-    # A message can mention several people or events; same-subject rows link
-    # facts across messages. Keep the SQL bounded to the owner's recent rows.
-    candidates = list((await db.execute(
-        _live(user_id)
-        .where(Observation.id != observation_id)
-        .order_by(Observation.created_at.desc())
-        .limit(500)
-        .options(defer(Observation.embedding))
-    )).scalars().all())
+    from app.models.memory_graph_edge import MemoryGraphEdge
+    from app.services.memory_graph import neighborhood
+
+    indexed = (await db.execute(select(MemoryGraphEdge.id).where(
+        MemoryGraphEdge.user_id == user_id,
+        MemoryGraphEdge.source_ref == f"observation:{observation_id}",
+        MemoryGraphEdge.relation_type == "about",
+    ).limit(1))).scalar_one_or_none()
+    if indexed is not None:
+        # Traversal reaches facts through shared evidence, named entities and
+        # explicit derivation even when the neighbour is years old. The old
+        # recent-500 scan silently lost exactly those long-range connections.
+        edges = await neighborhood(
+            db, user_id, f"observation:{observation_id}", depth=2,
+            max_edges=60,
+        )
+        linked_ids = {int(ref.split(":", 1)[1]) for edge in edges
+                      for ref in (edge.source_ref, edge.target_ref)
+                      if ref.startswith("observation:") and
+                      ref.split(":", 1)[1].isdigit() and
+                      ref != f"observation:{observation_id}"}
+        candidates = list((await db.execute(
+            _live(user_id).where(Observation.id.in_(linked_ids))
+            .order_by(Observation.created_at.desc())
+            .options(defer(Observation.embedding))
+        )).scalars().all()) if linked_ids else []
+    else:
+        # Legacy rows written before the migration remain available while the
+        # idempotent backfill runs; new writes take the indexed path above.
+        candidates = list((await db.execute(
+            _live(user_id).where(Observation.id != observation_id)
+            .order_by(Observation.created_at.desc()).limit(500)
+            .options(defer(Observation.embedding))
+        )).scalars().all())
     root_messages = {int(i) for i in (root.message_ids or [])}
     def mentions_subject(content: str, subject: str) -> bool:
         if subject == "owner" or ":" not in subject:

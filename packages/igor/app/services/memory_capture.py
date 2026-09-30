@@ -26,7 +26,7 @@ from app.services.memory_identity import (
     generate_occurrence_id,
 )
 from app.services.memory_paths import MonthPeriod, build_monthly_path, slugify
-from app.services.memory_store import mutate_file
+from app.services.memory_store import _mutate_in_txn
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ async def create_candidate(db: AsyncSession, user_id: int, candidate: CaptureCan
             MemoryCaptureJob.source_id == candidate.source_id
         )
     )
-    job = result.scalar_first()
+    job = result.scalars().first()
     if job is not None:
         return job
 
@@ -197,10 +197,12 @@ async def commit_candidate(
     user_id: int, 
     candidate: CaptureCandidate, 
     routing: RoutingResult, 
-    author: str = 'speda'
+    author: str = 'speda',
+    model: str = '',
+    request_id: str = '',
 ) -> dict:
     """
-    Use mutate_file to write content, create MemoryRecordMeta, and update job state.
+    Commit the document, ID metadata, and capture state as one transaction.
     """
     content = build_event_markdown(candidate, routing)
     
@@ -209,62 +211,57 @@ async def commit_candidate(
         res = await db.execute(
             select(MemoryFile).where(MemoryFile.user_id == user_id, MemoryFile.path == routing.path)
         )
-        file_obj = res.scalar_first()
+        file_obj = res.scalars().first()
         if file_obj:
             before = file_obj.content
     
-    await mutate_file(
-        db,
-        user_id=user_id,
-        path=routing.path,
-        before=before,
-        after=content,
-        author=author,
-        action='commit',
-        managed=True,
-        record_id=routing.record_id,
-        evidence=candidate.evidence
-    )
-    
-    res = await db.execute(
-        select(MemoryFile.id).where(MemoryFile.user_id == user_id, MemoryFile.path == routing.path)
-    )
-    file_id = res.scalar_one()
+    try:
+        await _mutate_in_txn(
+            db, user_id=user_id, path=routing.path, before=before,
+            after=content, author=author, action='commit', managed=True,
+            record_id=routing.record_id, evidence=candidate.evidence,
+            model=model, request_id=request_id,
+        )
+        res = await db.execute(select(MemoryFile.id).where(
+            MemoryFile.user_id == user_id, MemoryFile.path == routing.path,
+        ))
+        file_id = res.scalar_one()
 
-    meta = MemoryRecordMeta(
-        memory_file_id=file_id,
-        record_id=routing.record_id,
-        user_id=user_id,
-        entity_id=routing.entity_id,
-        occurrence_id=routing.occurrence_id,
-        category=routing.category,
-        kind=candidate.kind or 'event',
-        period=routing.temporal.period,
-        period_basis=routing.temporal.period_basis.value,
-        occurred_on=routing.temporal.occurred_on,
-        occurred_until=routing.temporal.occurred_until,
-        effective_from=routing.temporal.effective_from,
-        effective_until=routing.temporal.effective_until,
-        recorded_at=datetime.now(timezone.utc),
-        source_recorded_at=candidate.source_timestamp,
-        date_precision=routing.temporal.date_precision.value,
-        source_timezone=routing.temporal.source_timezone,
-        schema_version=1,
-        version=1,
-        content_hash=content_hash(content)
-    )
-    db.add(meta)
-    
-    stmt = update(MemoryCaptureJob).where(
-        MemoryCaptureJob.user_id == user_id,
-        MemoryCaptureJob.source_id == candidate.source_id
-    ).values(
-        state='committed',
-        updated_at=datetime.now(timezone.utc)
-    )
-    await db.execute(stmt)
-    
-    await db.flush()
+        meta = MemoryRecordMeta(
+            memory_file_id=file_id,
+            record_id=routing.record_id,
+            user_id=user_id,
+            entity_id=routing.entity_id,
+            occurrence_id=routing.occurrence_id,
+            category=routing.category,
+            kind=candidate.kind or 'event',
+            period=routing.temporal.period,
+            period_basis=routing.temporal.period_basis.value,
+            occurred_on=routing.temporal.occurred_on,
+            occurred_until=routing.temporal.occurred_until,
+            effective_from=routing.temporal.effective_from,
+            effective_until=routing.temporal.effective_until,
+            recorded_at=datetime.now(timezone.utc),
+            source_recorded_at=candidate.source_timestamp,
+            date_precision=routing.temporal.date_precision.value,
+            source_timezone=routing.temporal.source_timezone,
+            schema_version=1,
+            version=1,
+            content_hash=content_hash(content),
+        )
+        db.add(meta)
+        stmt = update(MemoryCaptureJob).where(
+            MemoryCaptureJob.user_id == user_id,
+            MemoryCaptureJob.source_id == candidate.source_id
+        ).values(
+            state='committed', committed_record_ids=[routing.record_id],
+            updated_at=datetime.now(timezone.utc)
+        )
+        await db.execute(stmt)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
     
     return {
         "path": routing.path,

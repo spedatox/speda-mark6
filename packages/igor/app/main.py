@@ -149,6 +149,8 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(NarrativeReviseSkill())
     await registry.register_skill(RecordObservationSkill())
     await registry.register_skill(SearchMemorySkill())
+    from app.skills.memory_graph import ExploreMemorySkill
+    await registry.register_skill(ExploreMemorySkill())
     await registry.register_skill(ForgetObservationSkill())
     await registry.register_skill(InspectPatternsSkill())
     await registry.register_skill(PatternFeedbackSkill())
@@ -458,8 +460,9 @@ async def lifespan(app: FastAPI):
     # "running" at boot died with the last process. Unlike dispatches these are
     # retryable, so they go back on the queue and a detached drain works through
     # them while the app serves requests. See app/services/task_queue.py.
-    from app.services.task_queue import recover_on_startup
+    from app.services.task_queue import enqueue_initial_graph_backfills, recover_on_startup
 
+    await enqueue_initial_graph_backfills()
     reclaimed_jobs = await recover_on_startup()
 
     # ── 12. Re-apply containment if the Lockdown Protocol is engaged ──────────

@@ -220,6 +220,7 @@ speda-mark-vi/
     ├── skills/
     │   ├── base.py              # Skill ABC
     │   ├── memory.py            # Memory tool + recall_for_context/recall_sessions_for_context + MemoryRecallCache
+    │   ├── memory_graph.py      # Bounded, read-only traversal of evidence-linked memory
     │   ├── observations.py      # record_observation / search_memory / forget_observation (the sourced-fact layer)
     │   ├── dispatch.py          # dispatch_agent / house_party tools
     │   ├── osint.py             # NightCrawler's threat-intel lookups (IP/URL/hash/breach/dark-web/crypto)
@@ -248,6 +249,7 @@ speda-mark-vi/
     │   ├── memory.py, memory_store.py           # Post-turn tasks (title/recap/compaction), revision log
     │   ├── memory_schema.py     # Write gate for /memories — refuses hand edits to derived files
     │   ├── observations.py      # THE RECORD: evidence ladder, subject/domain routing, validity, supersession
+    │   ├── memory_graph.py      # Typed graph indexing, traversal and resumable backfill (no model calls)
     │   ├── memory_render.py     # The six derived surfaces — pure function, no model, plus shadow-mode diff
     │   ├── memory_compose.py    # owner.md + current.md — prose from the record, citations verified
     │   ├── memory_reindex.py    # Seed from pre-v3 files + rebuild the record from raw history
@@ -270,7 +272,7 @@ speda-mark-vi/
     │   └── n8n.py, n8n_api.py   # Webhook auth (X-N8N-Secret), n8n REST client
     ├── models/                  # ORM models — one file per table (user, session, message, agent,
     │                            # agent_message, automation, health_sample, memory/memory_file/memory_revision,
-    │                            # message_embedding, observation, background_job,
+    │                            # message_embedding, observation, memory_graph_edge, background_job,
     │                            # news_item/news_quota/news_watch, notification, tool_call,
     │                            # route/place — map payloads the model references by id, never retypes)
     ├── schemas/

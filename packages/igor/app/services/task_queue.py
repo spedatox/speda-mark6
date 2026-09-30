@@ -170,6 +170,12 @@ def _handlers() -> dict:
 
         await evaluate_countermeasure(user_id=user_id, payload=payload)
 
+    async def _memory_graph_reindex(session_id, request_id, user_id, model, payload):
+        from app.services.memory_graph import rebuild_graph_for_user
+
+        result = await rebuild_graph_for_user(user_id)
+        logger.info("memory_graph_reindexed", extra={"user_id": user_id, **result})
+
     return {
         "extract_facts": _extract_facts,
         "analyze_patterns": _analyze_patterns,
@@ -184,6 +190,7 @@ def _handlers() -> dict:
         "embed_observations": _embed_observations,
         "render_surfaces": _render_surfaces,
         "memory_reindex": _memory_reindex,
+        "memory_graph_reindex": _memory_graph_reindex,
         "automation_intent_polish": _automation_intent,
     }
 
@@ -321,6 +328,31 @@ async def latest_job(kind: str, user_id: int) -> dict | None:
         # a long rebuild reports where it is rather than only that it is alive.
         "progress": (job.payload or {}).get("progress"),
     }
+
+
+async def enqueue_initial_graph_backfills() -> int:
+    """Schedule one no-model graph migration per owner with existing memories."""
+    from sqlalchemy import exists, or_
+
+    from app.models.memory_revision import MemoryRevision
+    from app.models.observation import Observation
+    from app.models.user import User
+
+    async with AsyncSessionLocal() as db:
+        user_ids = (await db.execute(select(User.id).where(or_(
+            exists(select(1).where(Observation.user_id == User.id)),
+            exists(select(1).where(MemoryRevision.user_id == User.id)),
+        )))).scalars().all()
+    queued = 0
+    for user_id in user_ids:
+        # A completed job stays completed across restarts. A failed migration is
+        # visible for manual investigation instead of retried on every boot.
+        if await latest_job("memory_graph_reindex", user_id) is None:
+            queued += int((await enqueue_one(
+                kind="memory_graph_reindex", user_id=user_id, model="",
+                request_id="startup-graph-backfill",
+            )) is not None)
+    return queued
 
 
 async def enqueue_post_turn(

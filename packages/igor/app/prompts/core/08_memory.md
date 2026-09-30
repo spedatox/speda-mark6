@@ -94,7 +94,8 @@ Never store credentials, secrets, passing chatter or guesses as facts. Do not cr
 Read the small standing block and the per-turn recalled documents first. The
 standing block carries owner identity, current states and binding preferences;
 biography, history, patterns and domain records are selected for the current
-question or opened on demand. The directory tells you which files exist. Do not
+question or opened on demand. The standing index names roots; list a specific
+folder only when retrieval does not identify the file. Do not
 reread a file already shown this turn. Read a relevant topic or entity;
 read related files when the question requires a relationship or a contradiction
 check. A count of files is not a correctness rule.
@@ -107,6 +108,11 @@ context matters. When an observation names a person, event or project, use
 `search_memory` with `mode="related"` and its id to inspect co-mentioned facts,
 same-subject facts and premises. A shared message or mentioned subject is a
 retrieval link, not proof of causation or a relationship the owner did not state.
+When the question spans an event document, person/project record and a sourced
+fact, call `explore_memory` with an exact `observation:<id>`, `record:<uuid>` or
+`path:<memory path>` address. Follow the labelled links only as far as needed;
+read the original source when a conclusion depends on precise wording. The
+graph returns a bounded neighborhood, so one question never loads the vault.
 
 Recall in order: shown context, the exact document with `memory` (or Ultron's
 `read_course_memory`), `search_memory` for sourced facts, `recall_conversations`

@@ -598,6 +598,8 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
     from app.services.memory_states import project_files
     all_files = project_files(all_files, owner_today())
     by_path = {f.path: f for f in all_files}
+    roots = sorted({f.path.split("/", 3)[2] for f in all_files
+                    if f.path.startswith("/memories/") and f.path.count("/") >= 3})
 
     # Resolved against what actually exists: a split injected document
     # contributes its members, an unsplit one still contributes itself. Needed
@@ -616,7 +618,7 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
         max((f.updated_at.isoformat() for f in watermarked), default="")
         + f"|{source_file or ''}|{owner_today().isoformat()}"
         + "|" + str(hash(tuple((f.path, f.content) for f in all_files if f.path == "/memories/current.md")))
-        + f"|{len(all_files)}|{hash(tuple(sorted(f.path for f in all_files)))}"
+        + f"|{hash(tuple(roots))}"
     )
     cache_key = (user_id, agent_id)
     cached = cache.get_recall(cache_key)
@@ -627,22 +629,28 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
 
     # Size-free listing keeps this recall block byte-stable across turns so the
     # prompt cache holds (file sizes otherwise change every turn as log.md grows).
-    listing = _format_directory(
-        all_files,
-        MEMORY_ROOT,
-        with_sizes=False,
-        collapse=settings.memory_directory_collapse_above,
-    )
+    # A directory of every person, course and project is an unconditional
+    # memory dump. The read tool can list any folder; the standing prefix needs
+    # only the roots so the agent knows where to look when retrieval misses.
+    listing = "/memories/ roots: " + ", ".join(roots[:24])
 
     # Injected files are capped at injection time, not just on write — see
     # elide_middle(). A file that outgrew its budget gives up its middle,
     # keeping the directives at its end.
     budget = settings.memory_injected_file_max_chars
+    standing_caps = {
+        "/memories/owner.md": 800,
+        "/memories/current.md": 550,
+        "/memories/dossier.md": 350,
+        "/memories/dossier/prohibitions.md": 350,
+        "/memories/dossier/dislikes.md": 250,
+        "/memories/dossier/wants.md": 250,
+    }
     sections = [f"### Directory\n\n{listing}"]
     for path in preload:
         f = by_path.get(path)
         if f:
-            cap = min(budget, 1800) if path == "/memories/owner.md" and budget else budget
+            cap = min(budget, standing_caps[path]) if budget else standing_caps[path]
             sections.append(f"### {path}\n\n{bounded_excerpt(path, f.content, cap)}")
 
     body = "\n\n".join(sections)
@@ -692,8 +700,9 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
                 "confirmed updates; raw memory edits are disabled."
             )
 
-    from app.services.memory_policy import routing_contract
-    source_directive += "\n\n" + routing_contract()
+    # The stable core already contains the memory protocol and its routing
+    # rules. Repeating a second full routing contract here costs every agent a
+    # large prefix without adding owner knowledge.
     block = (
         "## Memory\n\n"
         "This is shared knowledge about your OWNER, maintained across all of your "
@@ -704,10 +713,10 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
         f"{body}\n\n"
         "Only the files shown above are preloaded; do not re-read them. Other "
         "files are selected per turn or opened on demand. The Directory lists "
-        "every path that exists: projects and people are ONE "
-        "FILE EACH (`/memories/projects/<name>.md`, "
+        "roots, not every file: list a relevant folder with `memory` if needed. "
+        "Projects and people are ONE FILE EACH (`/memories/projects/<name>.md`, "
         "`/memories/social/<category>/<name>.md`), so open the single entity the "
-        "task is about rather than a folder or a whole domain file. dossier.md "
+        "task is about rather than a whole domain file. dossier.md "
         "shapes how you respond — act on it, never cite it aloud."
         f"{source_directive}"
     )
@@ -783,7 +792,7 @@ async def relevant_files_for_message(user_id: int, db, query: str) -> str:
     preamble = ("## Relevant memory documents\n\nThese are retrieved candidates, not proof that "
                 "they answer the question. Check the term, date and source before using them; "
                 "open the exact path with `memory` if the excerpt is incomplete.\n\n")
-    budget = 6000 - len(preamble)
+    budget = 2800 - len(preamble)
     sections = []
     for _score, path, content in ranked[:2]:
         header = f"### {path}\n\n"
@@ -867,22 +876,22 @@ async def today_across_sessions_for_context(
         score = sum(any(word.startswith(term) or term.startswith(word)
                         for word in words) for term in query_terms)
         candidates.append((score, rank, message, source_agent, content))
-    # Four query matches plus four newest messages give a new chat both the
-    # ongoing thread and a way back to older same-day details.
+    # A small mix of matches and newest messages gives continuity without
+    # flooding every new turn with today's whole conversation history.
     matching = sorted((item for item in candidates if item[0]),
-                      key=lambda item: (-item[0], item[1]))[:4]
-    selected = matching + [item for item in candidates if item not in matching][:8-len(matching)]
+                      key=lambda item: (-item[0], item[1]))[:2]
+    selected = matching + [item for item in candidates if item not in matching][:4-len(matching)]
     entries = []
     used = 0
     for _score, _rank, message, source_agent, content in selected:
-        content = " ".join(content.split())[:420]
+        content = " ".join(content.split())[:260]
         stamp = to_owner(message.created_at).strftime("%H:%M")
         entry = f"[{stamp} {source_agent} message:{message.id}] {content}"
-        if used + len(entry) > 2600:
+        if used + len(entry) > 1200:
             break
         entries.append(entry)
         used += len(entry)
-        if len(entries) >= 8:
+        if len(entries) >= 4:
             break
     if not entries:
         return ""
@@ -964,7 +973,7 @@ async def recall_sessions_for_context(
         date = s.started_at.strftime("%Y-%m-%d") if s.started_at else "?"
         title = (s.title or "Untitled").strip()
         tag = f"[{s.agent_id}] " if scope == "all" else ""
-        entries.append(f"### {date} — {tag}{title}\n{body}")
+        entries.append(f"### {date} — {tag}{title}\n{body[:500]}")
 
     block = ""
     if entries:
@@ -973,7 +982,9 @@ async def recall_sessions_for_context(
         kept: list[str] = []
         used = 0
         for e in entries:
-            if used + len(e) > budget and kept:
+            if used + len(e) > budget:
+                if not kept:
+                    kept.append(e[:budget])
                 break
             kept.append(e)
             used += len(e)

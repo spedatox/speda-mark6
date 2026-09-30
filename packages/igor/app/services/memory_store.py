@@ -58,6 +58,7 @@ async def _mutate_in_txn(db, *, user_id: int, path: str, before: str | None,
     if before == after:
         return notes
     receipt = None
+    resolved = []
     if author != "owner":
         from app.services.memory_admission import resolve_evidence, admit
         from app.models.memory_write_receipt import MemoryWriteReceipt
@@ -86,9 +87,13 @@ async def _mutate_in_txn(db, *, user_id: int, path: str, before: str | None,
             result = await db.execute(statement.execution_options(synchronize_session="fetch"))
             if result.rowcount != 1:
                 raise MemoryWriteConflict(f"Memory changed concurrently at {path}. Reread it and reapply your intended change; nothing was saved.")
-        await record_revision(db, user_id=user_id, path=path, author=author,
-                              action=action, before=before or "", after=after or "",
-                              request_id=request_id, record_id=record_id, migration_id=migration_id)
+        revision = await record_revision(db, user_id=user_id, path=path, author=author,
+                                         action=action, before=before or "", after=after or "",
+                                         request_id=request_id, record_id=record_id,
+                                         migration_id=migration_id)
+        await db.flush()
+        from app.services.memory_graph import index_memory_revision
+        await index_memory_revision(db, user_id, revision, resolved, record_id)
         if receipt is not None:
             db.add(receipt)
         await db.flush()
@@ -270,12 +275,11 @@ async def record_revision(
     request_id: str = "",
     record_id: str | None = None,
     migration_id: str | None = None,
-) -> None:
+) -> MemoryRevision:
     """Append one audit row for a memory mutation. Does NOT commit — the caller
     commits the file change and this row in the same transaction so the trail can
     never drift from the file it describes. Every write path routes through here."""
-    db.add(
-        MemoryRevision(
+    revision = MemoryRevision(
             user_id=user_id,
             path=path,
             author=author,
@@ -286,7 +290,8 @@ async def record_revision(
             record_id=record_id,
             migration_id=migration_id,
         )
-    )
+    db.add(revision)
+    return revision
 
 
 async def _get_file(db: AsyncSession, user_id: int, path: str) -> MemoryFile | None:
