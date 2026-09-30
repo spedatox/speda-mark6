@@ -12,6 +12,7 @@ import pytest
 from app.config import settings
 from app.core.registry import CapabilityRegistry
 from app.legion.roster import (
+    LEGION_ALIASES,
     LEGION_ROSTER,
     TASK_TOOL_DEFINITION,
     WORKER_EXCLUDED_TOOLS,
@@ -215,10 +216,10 @@ def test_tool_definition_wire_name_and_schema():
 
 def test_forge_workers_are_anonymous_execution_backends():
     assert LEGION_ROSTER["autobot"].backend == "forge"
-    assert LEGION_ROSTER["forge_coder"].backend == "forge"
+    assert LEGION_ALIASES["forge_coder"] == "autobot"
     assert LEGION_ROSTER["forge_reviewer"].backend == "forge"
     assert LEGION_ROSTER["decepticon"].backend == "forge"
-    assert LEGION_ROSTER["forge_pentester"].backend == "forge"
+    assert LEGION_ALIASES["forge_pentester"] == "decepticon"
     assert LEGION_ROSTER["forge_reviewer"].read_only is True
 
 
@@ -235,7 +236,7 @@ async def test_forge_worker_uses_selected_workspace(monkeypatch):
             return "implemented and checked"
 
     monkeypatch.setattr("app.execution.forge.ForgeExecutor", _Forge)
-    worker = LEGION_ROSTER["forge_coder"]
+    worker = LEGION_ROSTER["autobot"]
     runner = LegionRunner(object(), CapabilityRegistry(), None)
     context = _ctx()
     context.extra["cwd"] = "/srv/project"
@@ -287,6 +288,78 @@ async def test_autobot_and_decepticon_roles(monkeypatch):
     )
     assert res_decepticon == "done"
     assert calls[1]["role"] == "pentester"
+
+
+async def test_legacy_forge_aliases_resolve_in_execute(monkeypatch):
+    calls = []
+
+    class _Forge:
+        def __init__(self, _client):
+            pass
+
+        async def run(self, **kwargs):
+            calls.append(kwargs)
+            return "alias executed"
+
+    monkeypatch.setattr("app.execution.forge.ForgeExecutor", _Forge)
+    runner = LegionRunner(object(), CapabilityRegistry(), None)
+    context = _ctx()
+    context.extra["cwd"] = "/srv/project"
+
+    res_coder = await runner.run_worker(
+        {"description": "legacy coder", "prompt": "code", "legionnaire": "forge_coder"},
+        context,
+    )
+    assert res_coder == "alias executed"
+    assert calls[0]["role"] == "coder"
+
+    res_pentester = await runner.run_worker(
+        {"description": "legacy pentester", "prompt": "scan", "legionnaire": "forge_pentester"},
+        context,
+    )
+    assert res_pentester == "alias executed"
+    assert calls[1]["role"] == "pentester"
+
+
+async def test_failed_autobot_background_ticket_and_report_are_errors(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    class FailedForge:
+        def __init__(self, _client):
+            pass
+
+        async def run(self, **kwargs):
+            raise RuntimeError("workspace is claimed by an interrupted worker")
+
+    monkeypatch.setattr("app.execution.forge.ForgeExecutor", FailedForge)
+    runner = LegionRunner(object(), CapabilityRegistry(), None)
+    runner._log_start = AsyncMock(return_value=99)
+    runner._log_finish = AsyncMock()
+    hook = AsyncMock()
+    runner.set_report_hook(hook)
+    context = _bg_ctx()
+    context.extra["cwd"] = "/srv/project"
+    await runner.run_worker({"legionnaire": "autobot", "description": "continue", "prompt": "next", "run_in_background": True}, context)
+    await asyncio.gather(*list(runner._background))
+    assert runner._log_finish.call_args.kwargs["status"] == "error"
+    assert hook.call_args.kwargs["status"] == "error"
+    assert hook.call_args.kwargs["workspace"] == "/srv/project"
+    assert hook.call_args.kwargs["execution_id"] == "legion-bg-99"
+    assert "claimed" in hook.call_args.kwargs["result"]
+
+
+def test_engineering_completion_can_continue_next_authorized_milestone():
+    from app.core.trigger_runner import build_seed
+    payload = {"type": "legion_report", "worker": "autobot", "status": "ok",
+               "execution_id": "legion-bg-3", "workspace": "/srv/project", "result": "first milestone tested"}
+    seed = build_seed(payload, "push")
+    assert "NEXT bounded milestone" in seed
+    assert "do NOT repeat this completed assignment" in seed
+    assert "/srv/project" in seed
+    assert "do NOT deploy another legionnaire" not in seed
+    failed = build_seed({**payload, "status": "error"}, "push")
+    assert "NEXT bounded milestone" not in failed
+    assert "This run FAILED" in failed
 
 
 def test_legacy_env_alias(monkeypatch):
@@ -568,3 +641,29 @@ def test_failed_report_seed_forbids_inventing_a_result():
     )
     assert "FAILED" in seed
     assert "Do NOT invent" in seed
+
+
+async def test_legion_models_api_returns_only_canonical_workers_and_supports_alias_set(monkeypatch):
+    from app.routers.agents import legion_models, legion_model_set
+    from app.schemas.agent import LegionModelSet
+    from app.core import runtime_state
+
+    saved = {}
+    monkeypatch.setattr("app.routers.agents.get_legion_models", lambda: dict(saved))
+    monkeypatch.setattr("app.routers.agents.set_legion_model", lambda wid, m: saved.update({wid: m}) if m else saved.pop(wid, None))
+
+    infos = await legion_models()
+    worker_ids = [i.worker_id for i in infos]
+    assert "autobot" in worker_ids
+    assert "decepticon" in worker_ids
+    assert "forge_reviewer" in worker_ids
+    assert "forge_coder" not in worker_ids
+    assert "forge_pentester" not in worker_ids
+
+    # Pinning via legacy alias sets the canonical worker
+    await legion_model_set(LegionModelSet(worker_id="forge_coder", model="test-provider:test-model"))
+    assert saved.get("autobot") == "test-provider:test-model"
+
+    infos_after = await legion_models()
+    autobot_info = next(i for i in infos_after if i.worker_id == "autobot")
+    assert autobot_info.override == "test-provider:test-model"

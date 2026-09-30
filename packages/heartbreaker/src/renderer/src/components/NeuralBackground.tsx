@@ -52,13 +52,17 @@ const containerStyle: React.CSSProperties = {
   position: 'fixed', inset: 0,
   pointerEvents: 'none', zIndex: 0,
   overflow: 'hidden',
+  contain: 'strict',
 }
 
 const blobBase: React.CSSProperties = {
   position: 'absolute',
+  top: 0,
+  left: 0,
   borderRadius: '50%',
   filter: 'blur(80px)',
-  willChange: 'top, left, opacity',
+  willChange: 'transform, opacity',
+  transform: 'translateZ(0)',
 }
 
 const sweepBase: React.CSSProperties = {
@@ -68,30 +72,31 @@ const sweepBase: React.CSSProperties = {
   transformOrigin: '50% 50%',
   filter: 'blur(40px)',
   willChange: 'transform',
+  transform: 'translateZ(0)',
   opacity: 0.7,
 }
 
 const ambientKeyframes = `
 @keyframes ambOrbit1 {
-  0%   { top: -5%; left: -10%; opacity: 0.9; }
-  20%  { top: 20%; left: 55%; opacity: 1; }
-  40%  { top: 55%; left: 60%; opacity: 0.75; }
-  60%  { top: 58%; left: 8%; opacity: 0.85; }
-  80%  { top: 15%; left: -8%; opacity: 1; }
-  100% { top: -5%; left: -10%; opacity: 0.9; }
+  0%   { transform: translate3d(-10vw, -5vh, 0); opacity: 0.9; }
+  20%  { transform: translate3d(55vw, 20vh, 0); opacity: 1; }
+  40%  { transform: translate3d(60vw, 55vh, 0); opacity: 0.75; }
+  60%  { transform: translate3d(8vw, 58vh, 0); opacity: 0.85; }
+  80%  { transform: translate3d(-8vw, 15vh, 0); opacity: 1; }
+  100% { transform: translate3d(-10vw, -5vh, 0); opacity: 0.9; }
 }
 @keyframes ambOrbit2 {
-  0%   { top: 60%; left: 62%; opacity: 0.8; }
-  25%  { top: 8%;  left: 35%; opacity: 1; }
-  50%  { top: -8%; left: -5%; opacity: 0.7; }
-  75%  { top: 42%; left: 2%;  opacity: 0.9; }
-  100% { top: 60%; left: 62%; opacity: 0.8; }
+  0%   { transform: translate3d(62vw, 60vh, 0); opacity: 0.8; }
+  25%  { transform: translate3d(35vw, 8vh, 0); opacity: 1; }
+  50%  { transform: translate3d(-5vw, -8vh, 0); opacity: 0.7; }
+  75%  { transform: translate3d(2vw, 42vh, 0); opacity: 0.9; }
+  100% { transform: translate3d(62vw, 60vh, 0); opacity: 0.8; }
 }
 @keyframes ambOrbit3 {
-  0%   { top: 30%; left: 70%; opacity: 0.7; }
-  33%  { top: 65%; left: 30%; opacity: 1; }
-  66%  { top: 5%;  left: 50%; opacity: 0.8; }
-  100% { top: 30%; left: 70%; opacity: 0.7; }
+  0%   { transform: translate3d(70vw, 30vh, 0); opacity: 0.7; }
+  33%  { transform: translate3d(30vw, 65vh, 0); opacity: 1; }
+  66%  { transform: translate3d(50vw, 5vh, 0); opacity: 0.8; }
+  100% { transform: translate3d(70vw, 30vh, 0); opacity: 0.7; }
 }
 @keyframes ambSweep1 {
   0%   { transform: translateY(-50%) rotate(-15deg); }

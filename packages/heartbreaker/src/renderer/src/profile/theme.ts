@@ -200,10 +200,46 @@ let _partyOn = false
 
 export function isPartyCycling(): boolean { return _partyOn }
 
+/**
+ * Fast-path accent update for the House Party colour cycle.
+ *
+ * During the parade, re-hueing all 38 structural tokens (void, base, text,
+ * lines, glass fills) at 25Hz invalidates the style resolution cache of the
+ * entire DOM tree on every tick, forcing Chromium to recalculate layout and
+ * repaint all backdrop-blurs continuously.
+ *
+ * Instead, the war-room base palette is applied ONCE via applyTheme() when
+ * entering. The parade cycle then only updates the accent tokens that the user
+ * actually sees parading (wordmark, rims, glowing shadows, gradients, and the
+ * ambient aura). The 90% of the UI using structural backgrounds and text remains
+ * completely static on cached GPU layers.
+ */
+export function applyPartyAccent(accent: string): void {
+  const root = document.documentElement
+  const { bright, dim } = deriveAccents(accent)
+  const a = hexToRgb(accent), br = hexToRgb(bright), dm = hexToRgb(dim)
+
+  root.style.setProperty('--hb-cyan', accent)
+  root.style.setProperty('--hb-cyan-bright', bright)
+  root.style.setProperty('--hb-cyan-dim', dim)
+  root.style.setProperty('--accent', accent)
+  root.style.setProperty('--accent-hover', bright)
+  root.style.setProperty('--accent-muted', `rgba(${a.r}, ${a.g}, ${a.b}, 0.15)`)
+  root.style.setProperty('--bg-active', `rgba(${a.r}, ${a.g}, ${a.b}, 0.16)`)
+  root.style.setProperty('--hb-accent-rgb', `${a.r}, ${a.g}, ${a.b}`)
+  root.style.setProperty('--hb-cyan-bright-rgb', `${br.r}, ${br.g}, ${br.b}`)
+  root.style.setProperty('--hb-cyan-dim-rgb', `${dm.r}, ${dm.g}, ${dm.b}`)
+  root.style.setProperty('--hb-bar-cyan', `linear-gradient(180deg, ${bright} 0%, ${accent} 70%, ${dim} 100%)`)
+  root.style.setProperty('--hb-line-bright', `rgba(${br.r}, ${br.g}, ${br.b}, 0.30)`)
+  root.style.setProperty('--hb-edge-bright', `rgba(${br.r}, ${br.g}, ${br.b}, 0.40)`)
+}
+
 export function startPartyCycle(fromAccent: string, msPerStop = MS_PER_STOP): void {
   stopPartyCycle()
   cancelAnimationFrame(_morphRaf)
   _partyOn = true
+  // Apply full theme once to ensure structural palette is resting on warroom base
+  applyTheme(fromAccent)
   const colors = PARTY_COLORS
   const n = colors.length
   const LEAD_MS = 320   // ease out of the current brand into the parade
@@ -216,10 +252,10 @@ export function startPartyCycle(fromAccent: string, msPerStop = MS_PER_STOP): vo
     if (now - last < TICK_MS) return
     last = now
     const el = now - start
-    if (el < LEAD_MS) { applyTheme(mix(fromAccent, colors[0], ease(el / LEAD_MS))); return }
+    if (el < LEAD_MS) { applyPartyAccent(mix(fromAccent, colors[0], ease(el / LEAD_MS))); return }
     const t = (el - LEAD_MS) / msPerStop
     const i = Math.floor(t) % n
-    applyTheme(mix(colors[i], colors[(i + 1) % n], ease(t - Math.floor(t))))
+    applyPartyAccent(mix(colors[i], colors[(i + 1) % n], ease(t - Math.floor(t))))
   }
   _partyRaf = requestAnimationFrame(step)
 }

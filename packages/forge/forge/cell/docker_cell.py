@@ -22,7 +22,7 @@ import shlex
 import uuid
 from pathlib import Path
 
-from forge.cell.base import Cell, CellPolicy, CommandResult
+from forge.cell.base import Cell, CellPolicy, CommandResult, CellCleanupError
 from forge.cell.stream import REAP_GRACE_S as _REAP_GRACE_S, Retained as _Retained, drain as _drain
 
 WORKDIR = "/workspace"
@@ -295,7 +295,9 @@ class DockerCell(Cell):
         await self.start()
 
     async def close(self) -> None:
-        await self._docker("rm", "-f", self.container, timeout=30)
+        code, _out, err = await self._docker("rm", "-f", self.container, timeout=30)
+        if code != 0 and "No such container" not in err.decode("utf-8", "replace"):
+            raise CellCleanupError(f"could not confirm Cell removal: {err.decode('utf-8', 'replace')}")
         self._started = False
 
     @staticmethod

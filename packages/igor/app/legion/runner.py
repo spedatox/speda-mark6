@@ -28,6 +28,7 @@ from app.config import settings
 from app.legion.run_registry import LegionRunRegistry
 from app.legion.roster import (
     DEFAULT_LEGIONNAIRE,
+    LEGION_ALIASES,
     LEGION_ROSTER,
     MAX_LEGION_BACKGROUND,
     MAX_WORKER_RESULT_CHARS,
@@ -89,6 +90,7 @@ class LegionRunner:
         description = args.get("description", "")
         prompt = args.get("prompt", "")
         worker_key = args.get("legionnaire") or DEFAULT_LEGIONNAIRE
+        worker_key = LEGION_ALIASES.get(worker_key, worker_key)
         worker = LEGION_ROSTER.get(worker_key)
         if worker is None:
             return (
@@ -449,14 +451,14 @@ class LegionRunner:
         })
         if not workspace:
             result = (
-                "Forge needs a workspace. Select a Forge workspace in the client "
-                "and deploy this worker again."
+                "Forge needs a workspace. Select a project with workshop_update "
+                "or choose a Forge workspace in the client before deploying the worker."
             )
             self._safe_emit(emit, {
                 "id": run_id, "phase": "finished", "ok": False,
                 "report": result, "source": "forge",
             })
-            return result
+            raise RuntimeError(result)
 
         if self._forge is None:
             self._forge = ForgeExecutor(self._client)
@@ -505,7 +507,9 @@ class LegionRunner:
                 "id": run_id, "phase": "finished", "ok": False,
                 "report": result, "source": "forge",
             })
-            return result
+            # Returning an error string made _launch_background record status=ok
+            # and send a success report to the parent. Preserve failure as failure.
+            raise RuntimeError(result) from exc
         logger.info(
             "forge_execution_finished",
             extra={
@@ -555,6 +559,7 @@ class LegionRunner:
             origin_session_id=room_session_id,
         )
         bg_context = _detached_context(context)
+        background_run_id = f"legion-bg-{msg_id}" if msg_id is not None else f"legion-bg-{uuid.uuid4().hex}"
         if msg_id is not None:
             self.runs.register(
                 msg_id, agent=worker.worker_id, label=description,
@@ -569,7 +574,7 @@ class LegionRunner:
                     worker=worker, model=model, tools=tools,
                     description=description, prompt=prompt,
                     request_id=context.request_id, context=bg_context,
-                    run_id=f"legion-bg-{msg_id}", emit=bg_emit,
+                    run_id=background_run_id, emit=bg_emit,
                 )
                 status = "ok"
             except asyncio.CancelledError:
@@ -627,6 +632,8 @@ class LegionRunner:
                         status=status,
                         ticket=msg_id,
                         room_session_id=room_session_id,
+                        **({"workspace": bg_context.extra.get("cwd"), "execution_id": background_run_id}
+                           if worker.backend == "forge" else {}),
                     )
                 except Exception as e:  # noqa: BLE001 — never break on delivery
                     logger.error(

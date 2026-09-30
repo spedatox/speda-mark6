@@ -74,7 +74,7 @@ function WelcomeView({
   const fullGreeting = (isWarroom
     ? t.welcome.warroomGreeting
     : (displayName ? `${salutation}, ${displayName}` : salutation)
-  ).toLocaleUpperCase(localeTag)
+  ).toLocaleUpperCase(localeTag).replace('SUPERİOR SİX', 'SUPERIOR SIX')
 
   const [typed, setTyped] = useState('')
   const [done, setDone] = useState(false)
@@ -107,18 +107,18 @@ function WelcomeView({
     // is a briefing, not a greeting, and a model-written variant would make
     // the rules of the room look negotiable.
     if (isWarroom) {
-      setRemark('All agents will work on one single task under the leadership of Speda.')
+      setRemark(t.welcome.warroomRemark)
       setRemarkLoading(false)
       return
     }
     let alive = true
-    fetchWelcome(config, profile.agentId).then(t => {
+    fetchWelcome(config, profile.agentId).then(welcomeText => {
       if (!alive) return
-      setRemark(t)
+      setRemark(welcomeText)
       setRemarkLoading(false)
     })
     return () => { alive = false }
-  }, [config, profile?.agentId, isWarroom])
+  }, [config, profile?.agentId, isWarroom, t.welcome.warroomRemark])
   useEffect(() => {
     if (!remark) { setRemarkTyped(''); return }
     let i = 0
@@ -150,7 +150,9 @@ function WelcomeView({
       <p className="hb-num-thin" style={{
         fontSize: 'clamp(1.6rem, 7vw, 4rem)', color: 'var(--hb-text)',
         marginBottom: '0.25rem', whiteSpace: 'nowrap',
-        textShadow: '0 0 44px rgba(var(--hb-accent-rgb), 0.22)',
+        textShadow: '0 0 32px rgba(var(--hb-accent-rgb), 0.22)',
+        transform: 'translateZ(0)',
+        willChange: 'text-shadow',
         animation: 'hbRise 0.5s ease both',
       }}>
         {clock}
@@ -197,7 +199,9 @@ function WelcomeView({
           fontSize: 'clamp(2.4rem, 10vw, 6rem)', fontWeight: 700,
           letterSpacing: '0.14em', textTransform: 'uppercase',
           color: 'var(--hb-cyan)',
-          textShadow: '0 0 60px rgba(var(--hb-accent-rgb), 0.32)',
+          textShadow: '0 0 40px rgba(var(--hb-accent-rgb), 0.32)',
+          transform: 'translateZ(0)',
+          willChange: 'text-shadow, color',
           lineHeight: 1,
         }}>
           {profile?.name}

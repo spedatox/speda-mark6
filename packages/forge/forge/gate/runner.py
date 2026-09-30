@@ -19,7 +19,7 @@ from forge.agents.memory_protocol import memory_protocol_fragment
 from forge.agents.prompt import PromptFragment, compose_system_prompt
 from forge.agents.roster import network_fragment
 from forge.agents.registry import AgentRegistry
-from forge.cell.base import CellPolicy
+from forge.cell.base import CellPolicy, CellCleanupError
 from forge.cell.factory import build_cell
 from forge.gate.cellpool import CellPool
 from forge.config import ForgeSettings
@@ -379,6 +379,9 @@ async def run_job(
                 ok=terminal.reason is StopReason.COMPLETED,
             )
         return terminal
+    except CellCleanupError:
+        # The runtime must retain its durable workspace claim in this case.
+        raise
     except Exception as e:  # noqa: BLE001 — fail loud (§9.5) as a terminal error event
         logger.exception("run_job_failed")
         await out("error", f"{type(e).__name__}: {e}")

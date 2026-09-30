@@ -19,6 +19,7 @@ split follows what the action can destroy:
     exists is that the moment you most need a backup is the moment nobody is
     around to authorise one. A watchdog noticing the disk is dying should be able
     to take one without asking.
+  * `prune` trashes old archives. Only a direct owner request may authorize it.
   * `fetch` stages a restore. It still touches nothing live, but it is the first
     step of overwriting the owner's entire history, and the person deciding to
     roll the brain back to an older copy is the owner. Non-user triggers are
@@ -37,7 +38,7 @@ from app.skills.base import Skill
 
 logger = logging.getLogger(__name__)
 
-_ACTIONS = ("status", "backup", "list", "fetch")
+_ACTIONS = ("status", "backup", "list", "fetch", "prune")
 
 
 class OctaviusProtocolSkill(Skill):
@@ -45,7 +46,8 @@ class OctaviusProtocolSkill(Skill):
     deferred = True
     search_keywords = (
         "octavius backup brain database restore snapshot drive disaster recovery "
-        "migrate move server export dump archive protect data loss"
+        "migrate move server export dump archive protect data loss "
+        "prune cleanup retention older than week trash"
     )
     restricted_to = frozenset({"orion", "optimus"})
     read_only = False
@@ -63,7 +65,9 @@ class OctaviusProtocolSkill(Skill):
         "with the app stopped. Do NOT treat 'backup' as a substitute for the nightly "
         "cron, do NOT attempt the swap yourself with system_ops (this process holds "
         "the database open and replacing it underneath is corruption, not risk), and "
-        "do NOT report a backup as taken without reading the result — a failed run "
+        "use 'prune' only when the owner explicitly requests age-based backup "
+        "cleanup; it trashes matching old archives, which Drive can recover for "
+        "30 days. Do NOT report a backup as taken without reading the result — a failed run "
         "names the stage it stopped at. Returns the sizes, the integrity-check "
         "result, what was uploaded and what old copies were retired."
     )
@@ -76,7 +80,9 @@ class OctaviusProtocolSkill(Skill):
                 "description": (
                     "status: is there a backup worth relying on (asks Drive, "
                     "changes nothing). backup: take one now. list: what Drive "
-                    "holds. fetch: download and stage one for a manual restore."
+                    "holds. fetch: download and stage one for a manual restore. "
+                    "prune: trash Octavius backups older than older_than_days "
+                    "on the owner's direct request."
                 ),
             },
             "file_id": {
@@ -85,6 +91,15 @@ class OctaviusProtocolSkill(Skill):
                     "fetch only. The backup's Drive id, taken verbatim from a "
                     "'list' you ran in this conversation. Omit it to stage the "
                     "newest. Never invent or reconstruct an id."
+                ),
+            },
+            "older_than_days": {
+                "type": "integer",
+                "minimum": 1,
+                "description": (
+                    "prune only. Trash Octavius backups created strictly more "
+                    "than this many days ago. For one week, use 7. This action "
+                    "requires a direct owner request and a newer backup in Drive."
                 ),
             },
         },
@@ -144,6 +159,29 @@ class OctaviusProtocolSkill(Skill):
             logger.warning("octavius_fetch", extra={"request_id": context.request_id,
                                                     "ok": ok})
             return report if ok else f"{report}\n\nNothing was staged."
+
+        if action == "prune":
+            if context.triggered_by != "user":
+                logger.warning("octavius_prune_non_user",
+                               extra={"request_id": context.request_id})
+                return "REFUSED — backup cleanup requires a direct owner request. Nothing was changed."
+            days = args.get("older_than_days")
+            if not isinstance(days, int) or isinstance(days, bool) or days < 1:
+                return "REFUSED — provide older_than_days as a positive whole number. Nothing was changed."
+            ok, report = await octavius.prune_older_than(days)
+            logger.warning("octavius_age_prune",
+                           extra={"request_id": context.request_id, "ok": ok,
+                                  "trashed": len(report.get("trashed", []))})
+            if "error" in report:
+                return f"BACKUP CLEANUP REFUSED — {report['error']}"
+            lines = [f"Backup cleanup: {len(report['trashed'])} archive(s) older than "
+                     f"{days} days moved to Drive trash (recoverable for 30 days).",
+                     f"Recent backups preserved: {report['recent']}."]
+            if report["failed"]:
+                lines.append(f"Could not trash: {', '.join(report['failed'])}.")
+            if report["skipped"]:
+                lines.append(f"Unrecognized or undated files left untouched: {report['skipped']}.")
+            return "\n".join(lines)
 
         # backup — creates, never destroys, so a watchdog may take one unasked.
         ok, report = await octavius.backup()

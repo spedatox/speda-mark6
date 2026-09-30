@@ -140,21 +140,29 @@ async def legion_models():
     Legionnaires are data, not profiles (app/legion/roster.py), so this reads
     the roster directly rather than the profile registry."""
     from app.config import settings
-    from app.legion.roster import LEGION_ROSTER
+    from app.legion.roster import LEGION_ALIASES, LEGION_ROSTER
 
     overrides = get_legion_models()
     pin = settings.legion_model_override or None
-    return [
-        LegionModelInfo(
-            worker_id=w.worker_id,
-            when_to_use=w.when_to_use,
-            effort=w.effort,
-            derived_from=_EFFORT_RULE[w.effort],
-            override=overrides.get(w.worker_id),
-            deployment_pin=pin,
+    items = []
+    for w in LEGION_ROSTER.values():
+        override = overrides.get(w.worker_id)
+        if not override:
+            for legacy_alias, canonical in LEGION_ALIASES.items():
+                if canonical == w.worker_id and overrides.get(legacy_alias):
+                    override = overrides.get(legacy_alias)
+                    break
+        items.append(
+            LegionModelInfo(
+                worker_id=w.worker_id,
+                when_to_use=w.when_to_use,
+                effort=w.effort,
+                derived_from=_EFFORT_RULE[w.effort],
+                override=override,
+                deployment_pin=pin,
+            )
         )
-        for w in LEGION_ROSTER.values()
-    ]
+    return items
 
 
 @router.post("/agents/legion-models", response_model=list[LegionModelInfo])
@@ -162,12 +170,13 @@ async def legion_model_set(body: LegionModelSet):
     """Pin a Legion worker type to a model ref (or clear it with model=null).
     The pin beats the legionnaire's effort policy and the model's own explicit
     choice; only the deployment-wide LEGION_MODEL_OVERRIDE outranks it."""
-    from app.legion.roster import LEGION_ROSTER
+    from app.legion.roster import LEGION_ALIASES, LEGION_ROSTER
 
-    if body.worker_id not in LEGION_ROSTER:
+    worker_id = LEGION_ALIASES.get(body.worker_id, body.worker_id)
+    if worker_id not in LEGION_ROSTER:
         raise HTTPException(
             status_code=404, detail=f"Unknown legionnaire '{body.worker_id}'")
-    set_legion_model(body.worker_id, (body.model or "").strip() or None)
+    set_legion_model(worker_id, (body.model or "").strip() or None)
     return await legion_models()
 
 

@@ -69,18 +69,15 @@ _CONTRACT = (
     "on what you have. Do not greet, apologise, or narrate your process."
 )
 
+LEGION_ALIASES: dict[str, str] = {
+    "forge_coder": "autobot",
+    "forge_pentester": "decepticon",
+}
+
 LEGION_ROSTER: dict[str, LegionnaireDef] = {
     "autobot": LegionnaireDef(
         worker_id="autobot",
         when_to_use="heavy coding work in the selected workspace (Autobot) — inspect, edit, run commands and verify",
-        system_prompt=_CONTRACT,
-        effort="high",
-        max_iterations=30,
-        backend="forge",
-    ),
-    "forge_coder": LegionnaireDef(
-        worker_id="forge_coder",
-        when_to_use="heavy coding work in the selected workspace (Autobot) — inspect, edit, run commands and verify (alias: autobot)",
         system_prompt=_CONTRACT,
         effort="high",
         max_iterations=30,
@@ -98,14 +95,6 @@ LEGION_ROSTER: dict[str, LegionnaireDef] = {
     "decepticon": LegionnaireDef(
         worker_id="decepticon",
         when_to_use="authorized local code and dependency security assessment in an isolated Forge Cell (Decepticon)",
-        system_prompt=_CONTRACT,
-        effort="high",
-        max_iterations=30,
-        backend="forge",
-    ),
-    "forge_pentester": LegionnaireDef(
-        worker_id="forge_pentester",
-        when_to_use="authorized local code and dependency security assessment in an isolated Forge Cell (Decepticon) (alias: decepticon)",
         system_prompt=_CONTRACT,
         effort="high",
         max_iterations=30,
@@ -262,7 +251,13 @@ def resolve_worker_model(
 
     if settings.legion_model_override:
         return settings.legion_model_override
-    pinned = get_legion_models().get(worker.worker_id)
+    legion_models = get_legion_models()
+    pinned = legion_models.get(worker.worker_id)
+    if not pinned:
+        for legacy_alias, canonical in LEGION_ALIASES.items():
+            if canonical == worker.worker_id and legion_models.get(legacy_alias):
+                pinned = legion_models.get(legacy_alias)
+                break
     if pinned:
         return pinned
     if explicit:
@@ -285,9 +280,9 @@ def build_tool_definition() -> dict:
             "Deploys The Legion: isolated, billed worker agents (legionnaires) for "
             "heavy research, synthesis, deep recall, coding, review, and authorized "
             "security assessment. Forge workers are the execution path for work in "
-            "the workspace selected by the owner: use `autobot` (or `forge_coder`) to inspect, edit, "
+            "the workspace selected by the owner: use `autobot` to inspect, edit, "
             "run commands and verify; `forge_reviewer` for deep read-only review; and "
-            "`decepticon` (or `forge_pentester`) for authorized local code and dependency assessment. "
+            "`decepticon` for authorized local code and dependency assessment. "
             "When the owner explicitly asks to use Forge, select the matching Forge "
             "worker. The research workers remain EXPENSIVE and RARE: deploy them only "
             "for a deep report that genuinely needs 6+ independent searches, or use "

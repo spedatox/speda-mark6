@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Callable
 
-from forge.cell.base import Cell, CellPolicy
+from forge.cell.base import Cell, CellPolicy, CellCleanupError
 from forge.cell.docker_cell import DockerCell
 from forge.cell.subprocess_cell import SubprocessCell
 
@@ -81,5 +81,14 @@ async def build_cell(
         # being reshaped to fit a contract nothing else uses yet.
         cell = builder(agent_id=agent_id, workspace=ws, policy=policy, image=image)
 
-    await cell.start()
+    try:
+        await cell.start()
+    except BaseException:
+        # start() can fail after Docker has created the container. Do not lose
+        # our only handle to it and then allow another writer into its mount.
+        try:
+            await cell.close()
+        except BaseException as cleanup_error:
+            raise CellCleanupError("Cell startup failed and cleanup could not be confirmed") from cleanup_error
+        raise
     return cell

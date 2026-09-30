@@ -50,6 +50,25 @@ class FinanceRecordSkill(Skill):
         }, "required": ["id", "type", "description", "status", "evidence"], "additionalProperties": False},
     }, "required": ["operation"], "additionalProperties": False}
 
+    @staticmethod
+    def _drop_empty_foreign_fields(record: dict) -> dict:
+        """Remove only schema placeholders from a discriminated record.
+
+        Tool schemas must expose the union of all financial fields, so some
+        providers return every optional field as ``null`` or ``\"\"``.  Those
+        placeholders carry no claim and should not turn a valid transaction
+        into a retry loop.  A populated field for another record type remains
+        intact and is rejected by ``finance.validate``.
+        """
+        record_type = record.get("type")
+        if record_type not in finance.TYPES:
+            return record
+        allowed = finance.BASE | finance.FIELDS[record_type]
+        return {
+            key: value for key, value in record.items()
+            if key in allowed or value not in (None, "")
+        }
+
     async def execute(self, args, context):
         if context.agent_id not in self.restricted_to:
             return "Write rejected — finance belongs to Sentinel; hand off with source evidence."
@@ -61,7 +80,7 @@ class FinanceRecordSkill(Skill):
                 return json.dumps([{"record": finance.parse(f.content), "version": version(f.content)} for f in files], ensure_ascii=False)
             if args.get("operation") == "summary":
                 return json.dumps(finance.summarize([finance.parse(f.content) for f in files], args.get("month")), ensure_ascii=False)
-            record = dict(args.get("record") or {})
+            record = self._drop_empty_foreign_fields(dict(args.get("record") or {}))
             ident = record.get("id") if args.get("operation") == "put" else args.get("id")
             path = f"{finance.ROOT}{ident}.md"
             file = next((f for f in files if f.path == path), None)

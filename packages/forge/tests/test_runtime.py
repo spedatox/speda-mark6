@@ -3,11 +3,14 @@ from __future__ import annotations
 import asyncio
 
 from forge.model.scripted import ScriptedModel
+from forge.config import ForgeSettings
 from forge.runtime import ExecutionSpec, execute
 
 
 def test_identity_free_runtime_completes_without_persona_services(tmp_path):
     events = []
+    workspace = tmp_path / "project"
+    workspace.mkdir()
 
     async def emit(event):
         events.append(event)
@@ -15,10 +18,11 @@ def test_identity_free_runtime_completes_without_persona_services(tmp_path):
     result = asyncio.run(execute(
         ExecutionSpec(
             job_id="job-1", role="reviewer", task="Review this empty workspace",
-            workspace=tmp_path, model_ref="scripted",
+            workspace=workspace, model_ref="scripted",
         ),
         model=ScriptedModel([lambda _messages: ("No findings.", [])]),
         emit=emit,
+        settings=ForgeSettings(workspace_root=tmp_path / "registry", cell_backend="subprocess"),
     ))
 
     assert result.status == "succeeded"

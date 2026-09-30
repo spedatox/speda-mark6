@@ -34,7 +34,10 @@ from app.skills.memory import (
 
 logger = logging.getLogger(__name__)
 
-MAX_TOOL_ITERATIONS = 200  # Safety guard — Rule 4a
+# This is a runaway-loop guard, not a normal operating budget.  Keep it in
+# lock-step with the architecture contract: an agent that is repeatedly unable
+# to repair a rejected tool call must hand the failure back to the owner.
+MAX_TOOL_ITERATIONS = 30  # Safety guard — Rule 4a
 
 # Cap on what a tool_calls row stores of a result — generous enough for real
 # debugging (unlike the 1500-char SSE preview, which only has to look right in

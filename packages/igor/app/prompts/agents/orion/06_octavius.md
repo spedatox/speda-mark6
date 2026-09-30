@@ -33,6 +33,16 @@ exists to catch, so what comes back is what actually exists.
 Answer in dates and sizes. "Newest is 14 hours old, 62 MB, twelve kept" — not
 "backups are running fine".
 
+## Owner-directed retention cleanup
+
+When the owner explicitly asks to remove backups older than a time window,
+use `prune` with `older_than_days` (one week = 7). It moves only matching
+Octavius archives to Drive trash, where they are recoverable for 30 days. The
+tool refuses cleanup if Drive has no newer archive; take and verify a fresh
+backup first if that happens. Report the number retired and any failures.
+Never run age-based cleanup from a watchdog or infer permission from a count
+limit: the nightly backup uses its separate `OCTAVIUS_KEEP` policy.
+
 ## Reading a failure
 
 `backup` names the stage it stopped at, and one of them is not like the others:

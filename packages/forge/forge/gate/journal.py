@@ -37,14 +37,20 @@ class WorkspaceJournal:
         # That makes the preceding job's last-known state available to the
         # prompt even though this run immediately becomes the latest one.
         self.previous_handoff = self._load_previous()
+        self.git = None
 
     def _load_previous(self) -> dict[str, Any] | None:
         try:
-            raw = (self.directory / "latest.json").read_text(encoding="utf-8")
+            source = self.directory / "latest.json"
+            if source.stat().st_size > 100_000:
+                return {"unavailable": "Previous handoff is oversized; inspect the activity log and current files"}
+            raw = source.read_text(encoding="utf-8")
             value = json.loads(raw)
             return value if isinstance(value, dict) else None
-        except (OSError, json.JSONDecodeError):
+        except FileNotFoundError:
             return None
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return {"unavailable": "Previous handoff could not be read; verify the activity log and current files"}
 
     def resume_fragment(self) -> str:
         """A bounded factual handoff for the next coding job's prompt."""
@@ -80,14 +86,19 @@ class WorkspaceJournal:
         # on every event, including an abrupt error emitted by run_job.  Git
         # inspection is deliberately limited to lifecycle boundaries: streaming
         # a long command may produce hundreds of chunks and must stay cheap.
+        if event.type in {"started", "done", "error"}:
+            self.git = _git_state(self.workspace)
+        data = event.data
+        encoded = json.dumps(data, ensure_ascii=False, default=str)
+        if len(encoded) > 4000:
+            data = {"truncated_preview": encoded[:4000], "full_record": "daily activity JSONL"}
         state: dict[str, Any] = {
             "updated": now.isoformat(),
             "job_id": event.job_id,
-            "task": self.task,
+            "task": self.task[:4000],
             "last_event": event.type,
-            "last_data": event.data,
-            "git": _git_state(self.workspace)
-            if event.type in {"started", "done", "error"} else None,
+            "last_data": data,
+            "git": self.git,
         }
         target = self.directory / "latest.json"
         # Several independently-dispatched jobs can legitimately touch one
@@ -113,7 +124,7 @@ def _git_state(workspace: Path) -> dict[str, str] | None:
         return {
             "head": run("rev-parse", "HEAD"),
             "branch": run("branch", "--show-current"),
-            "status": run("status", "--short"),
+            "status": run("status", "--short")[:4000],
         }
     except (OSError, subprocess.SubprocessError):
         return None

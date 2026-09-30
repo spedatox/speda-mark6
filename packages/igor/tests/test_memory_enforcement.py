@@ -193,6 +193,33 @@ async def test_finance_record_and_views_commit_together_and_duplicate_idempotent
         assert "already exists" in await skill.execute({"operation":"put", "version":"new", "record":duplicate}, ctx)
 
 
+async def test_finance_record_ignores_only_empty_union_schema_placeholders(sessions, monkeypatch):
+    """Providers may send all optional union fields; that must not cause retries."""
+    write = AsyncMock()
+    monkeypatch.setattr("app.skills.finance_record.mutate_file", write)
+    async with sessions() as db:
+        db.add(MemoryFile(user_id=1, path="/memories/projects/evidence.md", content="# Evidence\nPaid 3000 to the card."))
+        await db.commit()
+        ctx = SimpleNamespace(db=db, user_id=1, agent_id="sentinel", request_id="test", model="test", session_id=1)
+        record = transaction()
+        record.update(date=None, reported_on="2026-09-09", period="2026-09",
+                      report_ref="", body="", effective_from="", effective_until="",
+                      balance_kind=None, frequency="", due_day=None)
+        result = json.loads(await FinanceRecordSkill().execute(
+            {"operation":"put", "version":"new", "record":record}, ctx,
+        ))
+        assert result["views"] == "updated atomically"
+        stored = write.await_args.kwargs["after"]
+        assert '"report_ref"' not in stored and '"effective_from"' not in stored
+
+
+def test_finance_record_keeps_populated_foreign_fields_for_strict_rejection():
+    record = transaction(report_ref="not-a-transaction")
+    cleaned = FinanceRecordSkill._drop_empty_foreign_fields(record)
+    with pytest.raises(ValueError, match="do not belong"):
+        finance.validate(cleaned)
+
+
 async def test_unmigrated_finance_history_cannot_be_overwritten(sessions, monkeypatch):
     monkeypatch.setattr("app.services.memory_admission.admit", AsyncMock(return_value="ok"))
     async with sessions() as db:

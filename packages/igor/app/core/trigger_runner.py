@@ -176,6 +176,7 @@ def _completion_seed(payload: dict, delivery: str, lang: str | None = None) -> s
     either re-run the work or narrate the ticket instead of the answer.
     """
     legion = payload.get("type") == "legion_report"
+    engineering = legion and bool(payload.get("execution_id"))
     status = payload.get("status") or "ok"
     failed = status != "ok"
     # Resumed = this turn continues the very conversation the work was ordered
@@ -194,7 +195,8 @@ def _completion_seed(payload: dict, delivery: str, lang: str | None = None) -> s
     if legion:
         who = f"legionnaire: {payload.get('worker') or 'unknown'}"
         opened = "a legionnaire you deployed earlier"
-        again = "do NOT deploy another legionnaire"
+        again = ("do NOT repeat this completed assignment" if engineering
+                 else "do NOT deploy another legionnaire")
         named = "One short line naming which legionnaire ran and what it was asked"
         empty = "(the worker returned nothing)"
     else:
@@ -214,6 +216,17 @@ def _completion_seed(payload: dict, delivery: str, lang: str | None = None) -> s
         f"- Write the owner's message FROM the findings. Lead with the answer, "
         f"not with preamble about who ran it. {named}, then the substance.\n"
         + resumed
+        + (
+            "- This is an engineering milestone report. Inspect the saved project with "
+            "workshop_status and checkpoint the verified progress with workshop_update. "
+            "Only if the project is active and the owner's existing objective authorizes "
+            "further work, select its workspace and deploy the NEXT bounded milestone. "
+            "Do not restart this assignment, revive a paused or blocked project, invent a "
+            "new objective, or treat one worker's success as project completion. "
+            f"Reported workspace: {payload.get('workspace') or '(not supplied)'}. "
+            f"Execution ID: {payload.get('execution_id')}.\n"
+            if engineering and not failed else ""
+        )
         + (
             "- This run FAILED. Say so plainly, give the error, and say what "
             "you would try next. Do NOT invent a result to fill the gap.\n"
@@ -1060,6 +1073,8 @@ def make_legion_reporter(
         status: str,
         ticket: int | None = None,
         room_session_id: int | None = None,
+        workspace: str | None = None,
+        execution_id: str | None = None,
     ) -> None:
         profile = profiles.get(agent_id)
         if profile is None:
@@ -1076,6 +1091,8 @@ def make_legion_reporter(
                 "type": "legion_report",
                 "job": f"{worker_id} report",
                 "worker": worker_id,
+                "workspace": workspace,
+                "execution_id": execution_id,
                 "task": task,
                 "result": result,
                 "status": status,

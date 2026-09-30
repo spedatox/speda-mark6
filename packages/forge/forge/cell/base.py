@@ -11,6 +11,10 @@ OnOutput = Callable[[str, str], None]
 """(stream, text) as a command produces it. "stdout" or "stderr"."""
 
 
+class CellCleanupError(RuntimeError):
+    """Cell shutdown could not be confirmed; its workspace must remain claimed."""
+
+
 @dataclass(frozen=True)
 class CommandResult:
     """The sole return shape of Cell.run (§8)."""

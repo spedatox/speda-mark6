@@ -166,6 +166,14 @@ class ForgeExecutor:
         }
 
         try:
+            from dataclasses import replace
+            from forge.config import ForgeSettings
+            runtime_settings = ForgeSettings.from_env()
+            if settings.forge_workspace_root:
+                runtime_settings = replace(
+                    runtime_settings,
+                    workspace_root=Path(settings.forge_workspace_root).expanduser().resolve(),
+                )
             result = await execute(
                 ExecutionSpec(
                     job_id=job_id,
@@ -180,6 +188,7 @@ class ForgeExecutor:
                 ),
                 model=IgorModelAdapter(self._client, model_ref),
                 emit=forward,
+                settings=runtime_settings,
             )
         finally:
             if inputs and input_dir.is_dir():

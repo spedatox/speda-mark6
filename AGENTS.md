@@ -10,7 +10,7 @@ This is `speda-mark-vi` — **Igor**, the backend core of SPEDA (Specialized Per
 
 **Multi-tenant architecture.** SPEDA and five of the Superior Six — Sentinel, NightCrawler, Ultron, Soundwave, Atomix — are **in-process agent profiles** inside this single backend, alongside **Orion**, the system's own maintenance & memory custodian. Each is an `AgentProfile` subclass with its own identity, model policy, tool allowlist, and prompt directory. They share one event loop, one database, one `CapabilityRegistry`, and one owner's memory. They are addressed by `agent_id` on every request. A separate `warroom` profile (a `SPEDAProfile` subclass) is the **House Party Protocol** command channel — the same brain and tools as SPEDA under a distinct `agent_id` so full-roster operations never bleed into the owner's day-to-day SPEDA session.
 
-**Optimus is the single exception.** Optimus is a standalone, independently deployed framework. It connects back to this backend as an external WebSocket peer via `WebSocketManager`. It is not built here and does not run in-process. (Its in-process `optimus.py` profile is only the proxy/fallback stub: while the external peer is online, `/chat/optimus` turns and inter-agent dispatches route to it external-first.)
+**Optimus is the head of engineering.** Its persona now runs in-process in Mark VI (`external_backend=False`). Forge (`packages/forge`) is its coding harness, invoked through Task/Legion's anonymous Autobot workers. The former server-peer arrangement has been superseded; retain generic external-peer infrastructure for remaining consumers and standalone Forge CLI compatibility. Projects outlive workers: the shared workshop inventory, revisioned handoffs and durable execution claims live in `forge/workshop.py`, exposed through `app/skills/workshop.py`. These are operational project records, not owner-memory facts. n8n remains the only scheduler. See `packages/forge/docs/WORKSHOP_CONTINUITY.md` for recovery and remaining limits.
 
 Deployment target: Contabo Cloud. Production-grade from day one.
 
@@ -160,7 +160,7 @@ speda-mark-vi/
     │   ├── ultron.py            # Ultron — academic research, knowledge synthesis
     │   ├── soundwave.py         # Soundwave — cyber security (owns cve_intelligence)
     │   ├── atomix.py            # Atomix — personal health (the owner's health, not system health)
-    │   ├── optimus.py           # Optimus — proxy/fallback stub for the external Forge peer
+    │   ├── optimus.py           # Optimus — in-process head of engineering; delegates Autobots to Forge
     │   ├── orion.py             # Orion — Mark VI maintenance: memory custodian & host ops
     │   └── warroom.py           # War Room — House Party Protocol session-scope alias (SPEDAProfile subclass)
     ├── prompts/
@@ -232,6 +232,7 @@ speda-mark-vi/
     │   ├── stt.py                # Whisper STT
     │   ├── notifications.py     # Flutter push
     │   ├── legion.py             # The Legion's Task-tool surface
+    │   ├── workshop.py           # Shared engineering project inventory, selection and revisioned handoffs
     │   ├── automations.py, budget.py, health_data.py, read_skill.py, sandbox.py,
     │   │   save_file.py, search_history.py, semantic_search.py, telegram.py,
     │   │   toolsets.py, system.py
@@ -286,6 +287,14 @@ speda-mark-vi/
 ---
 
 ## Capability Tiers
+
+Forge package additions: `packages/forge/forge/workshop.py` owns operational
+project checkpoints, run results and exclusive checkout claims. The anonymous
+runtime in `packages/forge/forge/runtime/__init__.py` acquires a claim before
+starting a Cell and releases it only after confirmed cleanup. Claims surviving
+a crash require operator reconciliation; never expire or steal them on a timer.
+The workspace root's `.forge/workshop.sqlite3` must be on a persistent local
+volume shared by every Igor executor, outside individual worker mounts.
 
 | Tier | Type | When to use |
 |------|------|-------------|

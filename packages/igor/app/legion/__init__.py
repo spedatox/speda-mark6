@@ -16,6 +16,7 @@ the Legion works on every provider the chat works on — never Claude-only.
 """
 
 from app.legion.roster import (
+    LEGION_ALIASES,
     LEGION_ROSTER,
     LegionnaireDef,
     MAX_WORKER_RESULT_CHARS,
@@ -26,6 +27,7 @@ from app.legion.roster import (
 from app.legion.runner import LegionRunner
 
 __all__ = [
+    "LEGION_ALIASES",
     "LEGION_ROSTER",
     "LegionnaireDef",
     "LegionRunner",

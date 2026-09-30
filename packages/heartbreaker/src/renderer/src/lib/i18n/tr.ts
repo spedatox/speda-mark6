@@ -128,7 +128,7 @@ const tr: Dict = {
     goodMorning: 'Günaydın',
     goodAfternoon: 'İyi günler',
     goodEvening: 'İyi akşamlar',
-    warroomGreeting: 'Üstün Altılı toplandı ve hazır.',
+    warroomGreeting: 'Superior Six toplandı ve hazır.',
     warroomRemark: 'Tüm ajanlar, Speda liderliğinde tek bir görev üzerinde çalışacak.',
   },
   chatMain: {

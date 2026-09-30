@@ -76,6 +76,7 @@ import hashlib
 import logging
 import shutil
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -449,6 +450,67 @@ async def backups() -> tuple[list[dict], str]:
         }
         for f in files
     ], ""
+
+
+async def prune_older_than(days: int) -> tuple[bool, dict]:
+    """Trash Octavius archives strictly older than a UTC age cutoff.
+
+    This is an owner-directed cleanup, separate from the nightly count limit.
+    Refuse to retire anything unless Drive shows a newer archive to restore.
+    Unrecognized files and files without a valid creation time are left alone.
+    """
+    if not settings.octavius_protocol_enabled:
+        return False, {"error": "The Octavius Protocol is disabled."}
+    if not isinstance(days, int) or isinstance(days, bool) or days < 1:
+        return False, {"error": "older_than_days must be a positive whole number."}
+    token = await access_token()
+    if not token:
+        return False, {"error": "Google is not connected; nothing was changed."}
+    folder, err = await _folder_id(token)
+    if err:
+        return False, {"error": err}
+    files, err = await _list(token, folder)
+    if err:
+        return False, {"error": err}
+
+    cutoff = utc_now() - timedelta(days=days)
+    eligible: list[dict] = []
+    recent = 0
+    skipped = 0
+    for file in files:
+        name = file.get("name", "")
+        if not (name.startswith("speda-brain-") and name.endswith(".db.gz")):
+            skipped += 1
+            continue
+        try:
+            created = datetime.fromisoformat(file["createdTime"].replace("Z", "+00:00"))
+            if created.tzinfo is None:
+                raise ValueError("timestamp lacks timezone")
+        except (KeyError, TypeError, ValueError):
+            skipped += 1
+            continue
+        if created < cutoff:
+            eligible.append(file)
+        else:
+            recent += 1
+
+    report = {"cutoff": cutoff.isoformat(), "recent": recent,
+              "skipped": skipped, "trashed": [], "failed": []}
+    if eligible and not recent:
+        return False, {**report, "error": (
+            "Drive shows no Octavius backup within the requested retention window; "
+            "nothing was changed. Take and verify a fresh backup first."
+        )}
+    for old in eligible:
+        resp = await _drive("PATCH", f"{_DRIVE}/files/{old['id']}", token,
+                            json={"trashed": True}, params={"fields": "id"})
+        if resp.status_code == 200:
+            report["trashed"].append(old["name"])
+        else:
+            report["failed"].append(old["name"])
+            logger.warning("octavius_age_prune_failed",
+                           extra={"backup_name": old["name"], "status": resp.status_code})
+    return not report["failed"], report
 
 
 async def status() -> dict:

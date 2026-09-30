@@ -24,6 +24,7 @@ So what is pinned here is the chain of proof:
 
 import gzip
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -301,6 +302,50 @@ async def test_old_backups_are_trashed_not_deleted(real_db, drive):
     assert len(remaining) <= octavius.settings.octavius_keep
 
 
+async def test_age_cleanup_trashes_only_old_octavius_archives(drive, monkeypatch):
+    monkeypatch.setattr(octavius, "utc_now",
+                        lambda: datetime(2026, 9, 30, tzinfo=timezone.utc))
+    drive.files.update({
+        "old": {"id": "old", "name": "speda-brain-old.db.gz",
+                "createdTime": "2026-09-22T23:59:59Z"},
+        "recent": {"id": "recent", "name": "speda-brain-recent.db.gz",
+                   "createdTime": "2026-09-23T00:00:00Z"},
+        "other": {"id": "other", "name": "personal-document.txt",
+                  "createdTime": "2026-08-01T00:00:00Z"},
+        "undated": {"id": "undated", "name": "speda-brain-undated.db.gz",
+                    "createdTime": "invalid"},
+    })
+
+    ok, report = await octavius.prune_older_than(7)
+
+    assert ok, report
+    assert report["trashed"] == ["speda-brain-old.db.gz"]
+    assert report["recent"] == 1
+    assert report["skipped"] == 2
+    assert set(drive.files) == {"recent", "other", "undated"}
+
+
+async def test_age_cleanup_refuses_to_trash_the_last_backup(drive, monkeypatch):
+    monkeypatch.setattr(octavius, "utc_now",
+                        lambda: datetime(2026, 9, 30, tzinfo=timezone.utc))
+    drive.files["old"] = {"id": "old", "name": "speda-brain-old.db.gz",
+                          "createdTime": "2026-08-27T00:00:00Z"}
+
+    ok, report = await octavius.prune_older_than(7)
+
+    assert not ok and "fresh backup" in report["error"]
+    assert "old" in drive.files
+    assert not any(method == "PATCH" for method, _ in drive.calls)
+
+
+async def test_age_cleanup_requires_a_direct_owner_turn(drive):
+    result = await OctaviusProtocolSkill().execute(
+        {"action": "prune", "older_than_days": 7}, _ctx(triggered_by="n8n")
+    )
+    assert "REFUSED" in result
+    assert drive.calls == []
+
+
 # ── Status ───────────────────────────────────────────────────────────────────
 
 async def test_status_reports_no_protection_when_drive_is_empty(real_db, drive):
@@ -400,7 +445,7 @@ def test_the_manifest_names_what_the_owner_still_has_to_carry():
 
 def test_there_is_no_flag_that_uploads_secrets():
     schema = OctaviusProtocolSkill().input_schema["properties"]
-    assert set(schema) == {"action", "file_id"}
+    assert set(schema) == {"action", "file_id", "older_than_days"}
 
 
 # ── The gate ─────────────────────────────────────────────────────────────────

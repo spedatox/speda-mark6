@@ -288,6 +288,9 @@ async def lifespan(app: FastAPI):
     # Legion background-ticket retrieval (Tier 0's async mode companion).
     from app.skills.legion import LegionStatusSkill
     await registry.register_skill(LegionStatusSkill())
+    from app.skills.workshop import WorkshopStatusSkill, WorkshopUpdateSkill
+    await registry.register_skill(WorkshopStatusSkill(settings.forge_workspace_root))
+    await registry.register_skill(WorkshopUpdateSkill(settings.forge_workspace_root))
 
     # OSINT / threat-intelligence suite (ip-api, AbuseIPDB, abuse.ch URLhaus/
     # ThreatFox/MalwareBazaar, HIBP Pwned Passwords, Ahmia dark-web search).
