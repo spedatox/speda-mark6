@@ -45,6 +45,26 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_WEB_MCP_SERVERS = frozenset({"tavily", "exa", "brave_search", "fetch", "playwright"})
+_WEB_TOOL_NAMES = frozenset({
+    "browser", "browser_act", "read_article", "tavily_search", "exa_search",
+    "brave_search", "fetch", "search_web",
+})
+
+_MEMORY_TOOL_NAMES = frozenset({
+    "search_memory", "explore_memory", "forget_observation", "record_observation",
+    "search_history", "semantic_search", "recall_conversations", "memory",
+    "memory_state", "memory_audit", "memory_edit", "memory_event",
+    "course_memory", "read_course_memory", "inspect_patterns", "pattern_feedback",
+})
+
+_FS_MCP_SERVERS = frozenset({"filesystem"})
+_FS_TOOL_NAMES = frozenset({
+    "save_file", "deliver_file", "write_file", "edit_file", "create_directory",
+    "list_directory", "directory_tree", "move_file", "search_files",
+    "get_file_info", "list_allowed_directories",
+})
+
 
 class LegionRunner:
     """One instance, owned by the CapabilityRegistry (Tier 0)."""
@@ -168,6 +188,35 @@ class LegionRunner:
 
     # ── Tool scoping ──────────────────────────────────────────────────────────
 
+    def _is_tool_permitted(self, tool_name: str) -> bool:
+        kind, owner = self._registry.tool_owner(tool_name)
+        if not settings.legion_allow_web_search:
+            if kind == "mcp" and owner.lower() in _WEB_MCP_SERVERS:
+                return False
+            if tool_name in _WEB_TOOL_NAMES or tool_name.startswith("browser_"):
+                return False
+        if not settings.legion_allow_memory_read:
+            if tool_name in _MEMORY_TOOL_NAMES:
+                return False
+        if not settings.legion_allow_file_system:
+            if kind == "mcp" and owner.lower() in _FS_MCP_SERVERS:
+                return False
+            if tool_name in _FS_TOOL_NAMES:
+                return False
+        return True
+
+    @staticmethod
+    def _worker_max_iterations(worker: LegionnaireDef) -> int:
+        budgets = {
+            "scout": settings.legion_max_iterations_scout,
+            "researcher": settings.legion_max_iterations_researcher,
+            "analyst": settings.legion_max_iterations_analyst,
+            "judge": settings.legion_max_iterations_judge,
+            "archivist": settings.legion_max_iterations_archivist,
+            "general": settings.legion_max_iterations_general,
+        }
+        return budgets.get(worker.worker_id, worker.max_iterations)
+
     def _worker_tools(self, worker: LegionnaireDef, context: "AgentContext") -> list[dict]:
         """The parent's tool surface, scoped down for this worker. Read-only
         workers keep only read-only Tier-1 skills plus research MCP servers."""
@@ -186,18 +235,31 @@ class LegionRunner:
         # An exact allowlist wins over the read-only bucket and is applied first:
         # a specialist worker should see the handful of tools its job needs, not
         # every read-only tool the parent happened to have loaded.
+        tools = [t for t in tools if self._is_tool_permitted(t["name"])]
+
         if worker.tool_scope is not None:
             return [t for t in tools if t["name"] in worker.tool_scope]
 
-        if not worker.read_only:
+        is_read_only = worker.read_only
+        if worker.worker_id == "general" and not settings.legion_general_allow_mutating:
+            is_read_only = True
+
+        if not is_read_only:
             return tools
+
+        research_servers = {
+            s.strip().lower()
+            for s in settings.legion_research_mcp_servers.split(",")
+            if s.strip()
+        }
+        allowed_mcp = research_servers if worker.mcp_servers else frozenset()
 
         kept = []
         for t in tools:
             kind, owner = self._registry.tool_owner(t["name"])
             if kind == "skill" and self._registry.skill_is_read_only(t["name"]):
                 kept.append(t)
-            elif kind == "mcp" and owner in worker.mcp_servers:
+            elif kind == "mcp" and owner.lower() in allowed_mcp:
                 kept.append(t)
         return kept
 
@@ -259,6 +321,7 @@ class LegionRunner:
         system = worker.system_prompt
         messages[0]["content"] = f"Task: {description}\n\n{prompt}"
         iterations = 0
+        max_iters = self._worker_max_iterations(worker)
         salvage: list[str] = []  # accumulated text, returned on guard trip
         # Per-worker spend. Folded onto the parent turn below so a Legion
         # deployment stops being invisible in the session's token counters.
@@ -266,7 +329,7 @@ class LegionRunner:
                  "cache_read": 0, "cache_write": 0}
 
         while True:
-            if iterations >= worker.max_iterations:
+            if iterations >= max_iters:
                 logger.error(
                     "legion_safety_guard",
                     extra={
@@ -282,8 +345,8 @@ class LegionRunner:
                 partial = "\n".join(s for s in salvage if s.strip())
                 if partial:
                     guard_result = (
-                        f"[PARTIAL — iteration cap ({worker.max_iterations}) reached; "
-                        f"findings gathered so far:]\n{partial}"[:MAX_WORKER_RESULT_CHARS]
+                        f"[PARTIAL — iteration cap ({max_iters}) reached; "
+                        f"findings gathered so far:]\n{partial}"[:settings.legion_max_result_chars]
                     )
                 else:
                     guard_result = (
@@ -332,7 +395,7 @@ class LegionRunner:
                     b.text for b in response.content if hasattr(b, "text") and b.text
                 ]
                 result = ("\n".join(text_parts) or "(the worker returned no text)")
-                result = result[:MAX_WORKER_RESULT_CHARS]
+                result = result[:settings.legion_max_result_chars]
                 logger.info(
                     "legion_worker_done",
                     extra={
@@ -520,9 +583,9 @@ class LegionRunner:
         )
         self._safe_emit(emit, {
             "id": run_id, "phase": "finished", "ok": True,
-            "report": result[:MAX_WORKER_RESULT_CHARS], "source": "forge",
+            "report": result[:settings.legion_max_result_chars], "source": "forge",
         })
-        return result[:MAX_WORKER_RESULT_CHARS]
+        return result[:settings.legion_max_result_chars]
 
     # ── Background mode ───────────────────────────────────────────────────────
 
@@ -537,10 +600,10 @@ class LegionRunner:
         context: "AgentContext",
     ) -> str:
         live = sum(1 for t in self._background if not t.done())
-        if live >= MAX_LEGION_BACKGROUND:
+        if live >= settings.legion_max_background_workers:
             return (
                 f"Refused: already running {live} background legionnaires (max "
-                f"{MAX_LEGION_BACKGROUND}). Wait for one to finish, or run this "
+                f"{settings.legion_max_background_workers}). Wait for one to finish, or run this "
                 "one inline."
             )
 

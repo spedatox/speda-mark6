@@ -183,6 +183,11 @@ class ForgeExecutor:
                     model_ref=model_ref,
                     max_iterations=settings.forge_worker_max_iterations,
                     timeout_s=settings.forge_worker_timeout_s,
+                    allow_network={
+                        "coder": settings.forge_coder_allow_network,
+                        "reviewer": settings.forge_reviewer_allow_network,
+                        "pentester": settings.forge_pentester_allow_network,
+                    }.get(role, False),
                     cell_backend=settings.forge_cell_backend,
                     cell_image=images[role],
                 ),

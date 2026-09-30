@@ -946,6 +946,26 @@ class Settings(BaseSettings):
     forge_pentester_image: str = "forge-cell-scourge:latest"
     forge_worker_max_iterations: int = 30
     forge_worker_timeout_s: int = 120
+    forge_coder_allow_network: bool = True
+    forge_reviewer_allow_network: bool = False
+    forge_pentester_allow_network: bool = False
+
+    # ── The Legion (Sub-Agents) Access & Limits ────────────────────────────────
+    legion_allow_web_search: bool = True
+    legion_allow_memory_read: bool = True
+    legion_allow_file_system: bool = True
+    legion_research_mcp_servers: str = "tavily,exa"
+    legion_general_allow_mutating: bool = True
+
+    legion_max_iterations_scout: int = 6
+    legion_max_iterations_researcher: int = 15
+    legion_max_iterations_analyst: int = 20
+    legion_max_iterations_judge: int = 8
+    legion_max_iterations_archivist: int = 12
+    legion_max_iterations_general: int = 15
+
+    legion_max_background_workers: int = 3
+    legion_max_result_chars: int = 12_000
 
     # ── News desk (two-tier RSS + NewsData.io) ─────────────────────────────────
     # Tier 1 (RSS) is keyless and always on. Tier 2 (NewsData.io) needs a free

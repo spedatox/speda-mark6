@@ -5,6 +5,7 @@ import base64
 import sys
 from types import SimpleNamespace
 
+from app.config import settings
 from app.execution.forge import ForgeExecutor, _load_runtime, _resolve_workspace
 
 
@@ -112,6 +113,7 @@ async def test_pentester_uses_security_cell_image(tmp_path, monkeypatch):
 
     async def _execute(spec, **_kwargs):
         observed["image"] = spec.cell_image
+        observed["allow_network"] = spec.allow_network
         return SimpleNamespace(status="succeeded", report="checked", error=None)
 
     monkeypatch.setattr("app.execution.forge._load_runtime", lambda: (_Spec, _execute))
@@ -122,6 +124,68 @@ async def test_pentester_uses_security_cell_image(tmp_path, monkeypatch):
 
     assert result == "checked"
     assert observed["image"] == "forge-cell-scourge:latest"
+    assert observed["allow_network"] is False
+
+
+async def test_autobot_coder_enables_network_access(tmp_path, monkeypatch):
+    observed = {}
+
+    class _Spec:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    async def _execute(spec, **_kwargs):
+        observed["allow_network"] = spec.allow_network
+        return SimpleNamespace(status="succeeded", report="built", error=None)
+
+    monkeypatch.setattr("app.execution.forge._load_runtime", lambda: (_Spec, _execute))
+    result = await ForgeExecutor(object()).run(
+        job_id="job-autobot-net", role="coder", task="build and test",
+        workspace=str(tmp_path), model_ref="test:model", emit=lambda _event: None,
+    )
+
+    assert result == "built"
+    assert observed["allow_network"] is True
+
+
+async def test_forge_network_access_settings_respected(tmp_path, monkeypatch):
+    observed = {}
+
+    class _Spec:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    async def _execute(spec, **_kwargs):
+        observed["allow_network"] = spec.allow_network
+        return SimpleNamespace(status="succeeded", report="done", error=None)
+
+    monkeypatch.setattr("app.execution.forge._load_runtime", lambda: (_Spec, _execute))
+
+    executor = ForgeExecutor(object())
+
+    # Pentester with network enabled in settings
+    monkeypatch.setattr(settings, "forge_pentester_allow_network", True)
+    await executor.run(
+        job_id="job-pentester-net", role="pentester", task="audit",
+        workspace=str(tmp_path), model_ref="test:model", emit=lambda _: None,
+    )
+    assert observed["allow_network"] is True
+
+    # Reviewer with network enabled in settings
+    monkeypatch.setattr(settings, "forge_reviewer_allow_network", True)
+    await executor.run(
+        job_id="job-reviewer-net", role="reviewer", task="review",
+        workspace=str(tmp_path), model_ref="test:model", emit=lambda _: None,
+    )
+    assert observed["allow_network"] is True
+
+    # Coder with network disabled in settings
+    monkeypatch.setattr(settings, "forge_coder_allow_network", False)
+    await executor.run(
+        job_id="job-coder-no-net", role="coder", task="code",
+        workspace=str(tmp_path), model_ref="test:model", emit=lambda _: None,
+    )
+    assert observed["allow_network"] is False
 
 
 async def test_forge_tool_events_preserve_ids_and_tool_names(tmp_path, monkeypatch):

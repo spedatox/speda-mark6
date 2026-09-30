@@ -73,7 +73,7 @@ class LegionStatusSkill(Skill):
 
 
 def _fmt_worker(row, brief: bool = False) -> str:
-    from app.legion.roster import MAX_WORKER_RESULT_CHARS
+    from app.config import settings
 
     dur = f"{row.duration_ms}ms" if row.duration_ms is not None else "…"
     head = f"#{row.id} → {row.to_agent} [{row.status}] ({dur})"
@@ -82,4 +82,4 @@ def _fmt_worker(row, brief: bool = False) -> str:
     if brief:
         result = " ".join((row.result or "").split())[:160]
         return f"{head}: {result}"
-    return f"{head}\n  task: {row.task[:200]}\n  result:\n{(row.result or '')[:MAX_WORKER_RESULT_CHARS]}"
+    return f"{head}\n  task: {row.task[:200]}\n  result:\n{(row.result or '')[:settings.legion_max_result_chars]}"

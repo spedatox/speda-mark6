@@ -156,6 +156,19 @@ class _DispatchLike(_ReadOnlySkill):
     read_only = False
 
 
+class _WebSkill(_ReadOnlySkill):
+    name = "browser"
+
+
+class _MemorySkill(_ReadOnlySkill):
+    name = "search_memory"
+
+
+class _FsSkill(_ReadOnlySkill):
+    name = "save_file"
+    read_only = False
+
+
 @pytest.fixture
 async def registry():
     r = CapabilityRegistry()
@@ -163,6 +176,9 @@ async def registry():
     await r.register_skill(_ReadOnlySkill())
     await r.register_skill(_WriteSkill())
     await r.register_skill(_DispatchLike())
+    await r.register_skill(_WebSkill())
+    await r.register_skill(_MemorySkill())
+    await r.register_skill(_FsSkill())
     return r
 
 
@@ -192,6 +208,106 @@ async def test_read_only_worker_keeps_only_read_only_skills(registry, monkeypatc
     assert "search_thing" in names
     assert "write_thing" not in names
     assert names.isdisjoint(WORKER_EXCLUDED_TOOLS)
+
+
+async def test_legion_allow_web_search_setting(registry, monkeypatch):
+    from app.core import runtime_state
+    monkeypatch.setattr(runtime_state, "get_budget_mode", lambda: False)
+    runner = LegionRunner(None, registry, None)
+
+    # Enabled by default
+    tools = runner._worker_tools(LEGION_ROSTER["researcher"], _ctx())
+    assert "browser" in {t["name"] for t in tools}
+
+    # Disabled via settings
+    monkeypatch.setattr(settings, "legion_allow_web_search", False)
+    tools = runner._worker_tools(LEGION_ROSTER["researcher"], _ctx())
+    assert "browser" not in {t["name"] for t in tools}
+
+
+async def test_legion_allow_memory_read_setting(registry, monkeypatch):
+    from app.core import runtime_state
+    monkeypatch.setattr(runtime_state, "get_budget_mode", lambda: False)
+    runner = LegionRunner(None, registry, None)
+
+    # Enabled by default
+    tools = runner._worker_tools(LEGION_ROSTER["archivist"], _ctx())
+    assert "search_memory" in {t["name"] for t in tools}
+
+    # Disabled via settings
+    monkeypatch.setattr(settings, "legion_allow_memory_read", False)
+    tools = runner._worker_tools(LEGION_ROSTER["archivist"], _ctx())
+    assert "search_memory" not in {t["name"] for t in tools}
+
+
+async def test_legion_allow_file_system_setting(registry, monkeypatch):
+    from app.core import runtime_state
+    monkeypatch.setattr(runtime_state, "get_budget_mode", lambda: False)
+    runner = LegionRunner(None, registry, None)
+
+    # Enabled by default
+    tools = runner._worker_tools(LEGION_ROSTER["general"], _ctx())
+    assert "save_file" in {t["name"] for t in tools}
+
+    # Disabled via settings
+    monkeypatch.setattr(settings, "legion_allow_file_system", False)
+    tools = runner._worker_tools(LEGION_ROSTER["general"], _ctx())
+    assert "save_file" not in {t["name"] for t in tools}
+
+
+async def test_legion_general_allow_mutating_setting(registry, monkeypatch):
+    from app.core import runtime_state
+    monkeypatch.setattr(runtime_state, "get_budget_mode", lambda: False)
+    runner = LegionRunner(None, registry, None)
+
+    # General allowed mutating by default
+    tools = runner._worker_tools(LEGION_ROSTER["general"], _ctx())
+    assert "write_thing" in {t["name"] for t in tools}
+
+    # When general mutating is disabled, acts as read-only
+    monkeypatch.setattr(settings, "legion_general_allow_mutating", False)
+    tools = runner._worker_tools(LEGION_ROSTER["general"], _ctx())
+    assert "write_thing" not in {t["name"] for t in tools}
+    assert "search_thing" in {t["name"] for t in tools}
+
+
+async def test_legion_dynamic_research_mcp_servers(registry, monkeypatch):
+    from app.core import runtime_state
+    monkeypatch.setattr(runtime_state, "get_budget_mode", lambda: False)
+    runner = LegionRunner(None, registry, None)
+
+    monkeypatch.setattr(registry, "list_tools", lambda **kw: [{"name": "tavily_search"}, {"name": "arxiv_search"}])
+    monkeypatch.setattr(registry, "tool_owner", lambda name: ("mcp", "tavily" if "tavily" in name else "arxiv"))
+
+    monkeypatch.setattr(settings, "legion_research_mcp_servers", "tavily")
+    tools = runner._worker_tools(LEGION_ROSTER["researcher"], _ctx())
+    assert [t["name"] for t in tools] == ["tavily_search"]
+
+    monkeypatch.setattr(settings, "legion_research_mcp_servers", "arxiv")
+    tools = runner._worker_tools(LEGION_ROSTER["researcher"], _ctx())
+    assert [t["name"] for t in tools] == ["arxiv_search"]
+
+
+def test_legion_worker_max_iterations_setting(monkeypatch):
+    monkeypatch.setattr(settings, "legion_max_iterations_scout", 3)
+    monkeypatch.setattr(settings, "legion_max_iterations_researcher", 42)
+    assert LegionRunner._worker_max_iterations(LEGION_ROSTER["scout"]) == 3
+    assert LegionRunner._worker_max_iterations(LEGION_ROSTER["researcher"]) == 42
+
+
+async def test_legion_max_background_workers_setting(monkeypatch):
+    monkeypatch.setattr(settings, "legion_max_background_workers", 1)
+    runner = LegionRunner(object(), CapabilityRegistry(), None)
+    dummy_task = asyncio.create_task(asyncio.sleep(10))
+    runner._background.add(dummy_task)
+    try:
+        msg = await runner._launch_background(
+            worker=LEGION_ROSTER["scout"], model="test", tools=[],
+            description="desc", prompt="prompt", context=_ctx(),
+        )
+        assert "Refused: already running 1 background legionnaires (max 1)" in msg
+    finally:
+        dummy_task.cancel()
 
 
 async def test_unknown_legionnaire_is_corrective(registry):
