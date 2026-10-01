@@ -47,9 +47,9 @@ cutover. No recurring audit or provider-powered corpus sweep is introduced.
 | `app/services/memory_policy.py` | Actual monthly routing and stable-path exceptions; retired monolith write protection. |
 | `app/services/memory_schema.py` | Valid monthly legacy state editions remain writable through the lifecycle tool. |
 | `app/services/memory_states.py` | Linear head selection, freshness, salience, bounded overdue view, shared active projection and archive/alias evidence resolution. |
-| `app/services/memory_owner_review.py` | New immutable sources, before-hash units, atomic owner receipts, optional reviewed timetable name correction and issue resolution. |
+| `app/services/memory_owner_review.py` | New immutable sources with complete raw timestamp spelling, before-hash units, atomic owner receipts, optional reviewed timetable name correction and issue resolution. |
 | `app/skills/course_memory.py` | Explicit confirm_identity; conflicting optional name rejection; preservation of all notes. |
-| `app/skills/memory.py` | Complete labelled state bullets in compact views; paged directories, hidden internal paths and historical/source labels. |
+| `app/skills/memory.py` | Complete labelled state bullets in compact views; paged directories, hidden internal paths and historical/source labels; query-specific automatic recall shares the active catalog and prints actual monthly paths. |
 | `app/skills/memory_state.py` | Bounded list/get, freshness, monthly head resolution and salience input. |
 | `app/prompts/agents/ultron/02_course_memory.md` | Exact names, read-before-write, sourced correction and material-versus-learning distinction. |
 | `scripts/apply_owner_memory_review.py` | New offline CLI, logical backup/source/plan validation, same-file/hardlink rejection, durable resume, integrity checks and optional vault export. |
@@ -62,6 +62,7 @@ new boundaries and explicitly retain unimplemented stages.
 ## Validation and limits
 
 - Incident/cleanup/state group: **58 passed**.
+- Final source-envelope and query-recall follow-up: **40 passed**.
 - Full Igor suite with the workspace Forge import path: **937 passed, 1 failed**.
   The unchanged health test generates a sample one hour ago, then queries today;
   shortly after midnight the sample belongs to yesterday. Existing datetime

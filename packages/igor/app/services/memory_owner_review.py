@@ -10,7 +10,7 @@ then uses the normal memory_store transaction boundary. No provider is called.
 import hashlib
 import json
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.models.memory_file import MemoryFile
 from app.models.memory_source import MemoryIssue, MemorySource
@@ -90,8 +90,11 @@ async def apply_owner_unit(db, *, user_id: int, unit: dict, sources: list[dict],
             record = parse(after)
             await verify_source(db, user_id, record["source"])
         if row:
-            original_row = {"id": row.id, "user_id": row.user_id, "path": row.path,
-                            "content": before, "updated_at": row.updated_at.isoformat()}
+            # Textual SQLite reads retain the original timestamp spelling;
+            # ORM datetime conversion would normalize a space into 'T'.
+            original_row = dict((await db.execute(text(
+                "SELECT * FROM memory_files WHERE id=:id AND user_id=:user_id"
+            ), {"id": row.id, "user_id": user_id})).mappings().one())
             await preserve_source(db, user_id, {
                 "key": f"{plan_id}:before:{row.id}:{version(before)}",
                 "original_path": row.path, "classification": "historical",
@@ -114,8 +117,9 @@ async def apply_owner_unit(db, *, user_id: int, unit: dict, sources: list[dict],
             if actual != unit["schedule_rename"]["before"] or not name:
                 raise MemoryWriteConflict("Schedule changed since owner review; preserve all slots and re-read.")
             for slot in slots:
-                raw = {column.name: getattr(slot, column.name) for column in slot.__table__.columns}
-                raw = {key: value.isoformat() if hasattr(value, "isoformat") else value for key, value in raw.items()}
+                raw = dict((await db.execute(text(
+                    "SELECT * FROM course_slots WHERE id=:id"
+                ), {"id": slot.id})).mappings().one())
                 await preserve_source(db, user_id, {
                     "key": f"{plan_id}:course-slot:{slot.id}:{stable_hash(raw)}",
                     "original_path": f"course-slot:{slot.id}", "classification": "historical",

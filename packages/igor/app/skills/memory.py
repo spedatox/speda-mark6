@@ -786,8 +786,10 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
         "Only the files shown above are preloaded; do not re-read them. Other "
         "files are selected per turn or opened on demand. The Directory lists "
         "roots, not every file: list a relevant folder with `memory` if needed. "
-        "Projects and people are ONE FILE EACH (`/memories/projects/<name>.md`, "
-        "`/memories/social/<category>/<name>.md`), so open the single entity the "
+        "Projects and people have one current entity record "
+        "(`/memories/projects/<MM-YY>/<name>.md`, "
+        "`/memories/social/<MM-YY>/<category>/<name>.md`; old paths resolve as aliases), "
+        "so open the single entity the "
         "task is about rather than a whole domain file. dossier.md "
         "shapes how you respond — act on it, never cite it aloud."
         f"{source_directive}"
@@ -815,7 +817,8 @@ async def relevant_files_for_message(user_id: int, db, query: str) -> str:
     terms = {term for term in re.findall(r"[^\W_]{3,}", query.casefold()) if term not in ignored}
     if not terms:
         return ""
-    rows = (await db.execute(select(MemoryFile).where(MemoryFile.user_id == user_id))).scalars().all()
+    from app.services.memory_catalog import active_corpus_files
+    rows = active_corpus_files((await db.execute(select(MemoryFile).where(MemoryFile.user_id == user_id))).scalars().all())
     always = {"/memories/current.md", "/memories/dossier.md",
               "/memories/dossier/prohibitions.md", "/memories/dossier/dislikes.md",
               "/memories/dossier/wants.md"}

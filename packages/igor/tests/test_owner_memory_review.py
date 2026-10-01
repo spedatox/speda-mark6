@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import app.models
@@ -49,12 +49,13 @@ async def test_owner_correction_preserves_original_and_resumes_without_provider(
         db.add_all([User(id=1, name="Owner", timezone="Europe/Istanbul"),
                     MemoryFile(user_id=1, path=path, content=before)])
         await db.commit()
+        original_row = dict((await db.execute(text("SELECT * FROM memory_files WHERE path=:path"), {"path": path})).mappings().one())
         first = await apply_owner_unit(db, user_id=1, unit=unit, sources=[owner_source()], plan_id="test-plan")
         second = await apply_owner_unit(db, user_id=1, unit=unit, sources=[owner_source()], plan_id="test-plan")
         assert not first["resumed"] and second["resumed"]
         assert first["receipt_id"] == second["receipt_id"]
         originals = (await db.execute(select(MemorySource))).scalars().all()
-        assert any(source.content == before for source in originals)
+        assert any(source.content == before and source.original_row == original_row for source in originals)
         assert len((await db.execute(select(MemoryRevision))).scalars().all()) == 1
         source = next(source for source in originals if source.classification == "owner_confirmation")
         await verify_source(db, 1, f"source:{source.id}")
@@ -267,6 +268,10 @@ async def test_root_tree_and_ui_projection_hide_only_replaced_monoliths(sessions
         assert "/memories/wellness.md" not in tree and "profile.md" in tree and "original.md" not in tree
         exact = await MemorySkill().execute({"command": "view", "path": legacy.path}, ctx)
         assert "Historical legacy document" in exact and "Old unique detail" in exact
+        from app.skills.memory import relevant_files_for_message
+        automatic = await relevant_files_for_message(1, db, "wellness profile")
+        assert legacy.path not in automatic and "Old unique detail" not in automatic
+        assert modern.path in automatic
 
 
 async def test_large_directory_read_has_continuation_and_no_unbounded_payload(sessions):
@@ -304,6 +309,28 @@ def test_mismatched_state_path_is_not_a_current_fact():
     item.path = "/memories/states/another-key.md"
     output = render([item], date(2026, 10, 1))
     assert "Invalid state record" in output and "Remote retainer active" not in output
+
+
+async def test_reviewed_schedule_name_preserves_complete_raw_slot_and_other_fields(sessions):
+    from app.models.academic import CourseSlot
+    path = "/memories/academic/courses/2026-2027-fall/ABC243.md"
+    before = _new_course("ABC243", "Financial Accounting")
+    async with sessions() as db:
+        db.add_all([User(id=1, name="Owner", timezone="Europe/Istanbul"),
+            MemoryFile(user_id=1, path=path, content=before),
+            CourseSlot(id=1,slot_id="abc243-mon-1",code="ABC243",name="Financial Accounting",
+                       day_of_week="MONDAY",start_time="09:00",end_time="10:00")])
+        await db.commit()
+        raw = dict((await db.execute(text("SELECT * FROM course_slots WHERE id=1"))).mappings().one())
+        unit = {"path": path, "before_hash": version(before),
+                "after": before.replace("Financial Accounting", "General Accounting", 1),
+                "evidence": [{"key": owner_source()["key"], "quote": owner_source()["content"]}],
+                "schedule_rename": {"before": [{"id":1,"name":raw["name"],"slot_id":raw["slot_id"]}]}}
+        await apply_owner_unit(db,user_id=1,unit=unit,sources=[owner_source()],plan_id="raw-slot-test")
+        source = (await db.execute(select(MemorySource).where(MemorySource.original_path=="course-slot:1"))).scalar_one()
+        assert source.original_row == raw
+        saved = dict((await db.execute(text("SELECT * FROM course_slots WHERE id=1"))).mappings().one())
+        assert saved == {**raw, "name": "General Accounting"}
 
 
 async def test_offline_review_refuses_source_hardlink(tmp_path):
