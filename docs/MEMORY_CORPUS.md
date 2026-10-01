@@ -90,3 +90,11 @@ units return their original receipt without another provider call. A crash while
 The source database, output database and private reports/exports stay outside
 Git. Deployment requires both compatible code and the validated database; a
 local migration copy does not change the production database.
+
+## Planned evolution
+
+[MEMORY_EVOLUTION_PLAN.md](MEMORY_EVOLUTION_PLAN.md) defines the ordered,
+not-yet-implemented design for everyday episodes, unresolved-state continuity,
+typed organizations/places/relations, learning evidence and shared call budgets.
+It does not replace this deployed contract until each phase is implemented and
+verified. Its implementation checkboxes distinguish design from working behavior.
