@@ -355,7 +355,11 @@ def check_write(
         try:
             record = parse(after)
             if path != f"/memories/states/{record['key']}.md":
-                raise ValueError("State key and path disagree.")
+                legacy = re.fullmatch(r"/memories/states/(\d{2}-\d{2})/" + re.escape(record["key"]) + r"\.md", path)
+                if not legacy:
+                    raise ValueError("State key and path disagree.")
+                from app.services.memory_paths import MonthPeriod
+                MonthPeriod.from_folder(legacy[1])
         except (ValueError, TypeError, KeyError) as exc:
             raise MemorySchemaViolation(str(exc)) from exc
 

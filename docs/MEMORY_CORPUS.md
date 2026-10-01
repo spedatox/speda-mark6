@@ -23,6 +23,11 @@ there is no recurring cleanup, re-review, re-extraction or provider call.
   timestamps, raw row envelopes and SHA-256 hashes. Old archive/audit directories
   leave the active filesystem only after exact preservation. Historical material
   remains retrievable; archival uniqueness is not proof of new/current knowledge.
+- Replaced domain monoliths (such as `wellness.md` beside `wellness/`) are
+  historical sources, excluded from active listings and recall. Exact reads
+  remain available with historical warnings. Offline cleanup retires their live
+  rows only after matching the complete original payload/hash; unique legacy
+  details stay searchable and are never declared reconciled by this operation.
 - `memory_passages` indexes source sections and dated entries mechanically.
   Passage IDs survive line reordering/path moves; changed entries preserve their
   prior passage as retired. A mentioned date does not establish a completed event.
@@ -90,6 +95,28 @@ units return their original receipt without another provider call. A crash while
 The source database, output database and private reports/exports stay outside
 Git. Deployment requires both compatible code and the validated database; a
 local migration copy does not change the production database.
+
+`scripts.apply_owner_memory_review` applies a private, explicit reviewed plan
+to a different offline copy. Each unit binds exact before hashes, literal
+source quotations and complete replacement text. Original documents and changed
+legacy timetable rows become immutable sources; receipts, metadata, passages,
+graph and the correction commit together. Completed units return their durable
+receipts on resumption. Source/plan changes fail closed. Explicit owner writes
+need no model approval; this operator path is never exposed as an agent tool.
+
+Agent course writes preserve exact code, term and heading. A new optional name
+must occur literally with its code in source evidence; otherwise use a neutral
+code-only record. `record_course_memory` operation `confirm_identity` requires
+an explicit owner statement and changes only the heading, preserving all notes.
+Generic edits and note append cannot silently rename or translate a course.
+
+State reads return `current`, `review_due`, `expired_unconfirmed` or `closed`
+separately from stored status. Bounded current views retain a few labelled
+unconfirmed situations rather than only a count. Explicitly central owner
+situations can have high salience; this affects selection, never factual truth.
+State lists page summaries and select one head per key in a single pass; exact
+monthly legacy editions remain updateable. Moved/archived source references
+resolve within the same owner; current/state projections cannot prove a state.
 
 ## Planned evolution
 

@@ -113,6 +113,7 @@ async def resolve_evidence(db, user_id, evidence, *, session_id=None):
         if not isinstance(item, dict) or not isinstance(item.get("ref"), str):
             raise ValueError("Evidence items must contain a string ref and quote.")
         ref, quote = item.get("ref", ""), item.get("quote", "")
+        source_authority = "document"
         if not isinstance(quote, str) or not quote.strip():
             raise ValueError("Each evidence item requires an exact nonempty quote.")
         image_match = re.fullmatch(r"message:(latest|\d+)#image:(\d+)", ref)
@@ -136,6 +137,7 @@ async def resolve_evidence(db, user_id, evidence, *, session_id=None):
                 "source_sha256":digest, "evidence_type":"image", "_image":source})
             continue
         if ref == "message:latest":
+            source_authority = "owner_statement"
             if not session_id:
                 raise ValueError("message:latest requires the current owner session.")
             messages = (await db.execute(select(Message).join(Session).where(
@@ -153,6 +155,7 @@ async def resolve_evidence(db, user_id, evidence, *, session_id=None):
             ref = f"message:{msg.id}" if msg else ref
             body = text_content(msg.content) if msg else ""
         elif re.fullmatch(r"message:\d+", ref):
+            source_authority = "owner_statement"
             msg = (await db.execute(select(Message).join(Session).where(
                 Session.user_id == user_id, Session.triggered_by == "user",
                 Message.id == int(ref.split(":")[1]), Message.role == "user",
@@ -178,6 +181,8 @@ async def resolve_evidence(db, user_id, evidence, *, session_id=None):
                 MemorySource.classification != "system",
             ))).scalar_one_or_none()
             body = source.content if source else ""
+            if source and source.classification == "owner_confirmation":
+                source_authority = "owner_statement"
         elif ref.startswith("/memories/") and ref.endswith(".md") and ".." not in ref:
             body = (await db.execute(select(MemoryFile.content).where(
                 MemoryFile.user_id == user_id, MemoryFile.path == ref,
@@ -200,7 +205,8 @@ async def resolve_evidence(db, user_id, evidence, *, session_id=None):
         canonical = _canonical_quote(body, quote) if body else None
         if canonical is None:
             raise ValueError(f"Quotation is not present in the owner's source {ref}.")
-        entry = {"ref": ref, "quote": canonical, "source_sha256": version(body)}
+        entry = {"ref": ref, "quote": canonical, "source_sha256": version(body),
+                 "source_authority": source_authority}
         # Carry the full source body so the reviewer can judge the quote in
         # context.  Without this the reviewer only sees an isolated fragment
         # and tends to reject writes for "no evidence" when the surrounding

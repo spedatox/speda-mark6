@@ -351,7 +351,7 @@ def _format_directory(
         # every agent a 27 KB superseded copy of a document it should be reading
         # as a 4 KB member, and the listing is precisely where an agent decides
         # what to open. A back office nobody advertises is not a hidden one.
-        if parent.rsplit("/", 1)[-1].startswith("."):
+        if "/." in f.path:
             continue
         groups.setdefault(parent, []).append(f)
 
@@ -580,6 +580,29 @@ def elide_middle(path: str, content: str, budget: int) -> str:
 
 def bounded_excerpt(path: str, content: str, budget: int) -> str:
     """Keep the prompt budget even when one section exceeds the whole cap."""
+    if path == "/memories/current.md" and budget > 0 and len(content) > budget:
+        # States are ordered by explicit salience. Head/tail truncation can
+        # remove the central active situation and retain only boilerplate.
+        # Preserve complete labelled bullets rather than partial assertions.
+        marker = "\n_[More states: memory_state list.]_"
+        result = "# Current — bounded state view\n"
+        if len(result + marker) > budget:
+            return "memory_state list"[:budget]
+        heading = ""
+        for line in content.splitlines():
+            if line.startswith("## "):
+                heading = line
+            if not line.startswith("- ["):
+                continue
+            candidate = f"\n{heading}\n{line}\n"
+            if len(result + candidate + marker) <= budget:
+                result += candidate
+            else:
+                key = line.split("]", 1)[0][3:]
+                hint = f"\n{heading}\n- [{key}] Details require memory_state get.\n"
+                if len(result + hint + marker) <= budget:
+                    result += hint
+        return result + marker
     excerpt = elide_middle(path, content, budget)
     if budget <= 0 or len(excerpt) <= budget:
         return excerpt
@@ -1123,7 +1146,11 @@ class MemorySkill(Skill):
                 MemorySource.user_id == user_id, MemorySource.id == path.split(":",1)[1],
             ))).scalar_one_or_none()
             if source:
-                prefix=f"Historical original {source.original_path}; may be outdated.\n"
+                prefix=(f"Owner confirmation {source.original_path}; see recorded provenance.\n"
+                        if source.classification == "owner_confirmation" else
+                        f"Source document {source.original_path}; see its date and scope.\n"
+                        if source.classification == "document_attachment" else
+                        f"Historical original {source.original_path}; may be outdated.\n")
                 return prefix+_page(path,source.content,args,budget=6500-len(prefix))
             return "No accessible historical source at that address."
 
@@ -1152,8 +1179,9 @@ class MemorySkill(Skill):
                     MemoryFile.path.startswith(prefix),
                 )
             )
-            files = result.scalars().all()
-            return _format_directory(list(files), path)
+            from app.services.memory_catalog import active_corpus_files
+            files = active_corpus_files(result.scalars().all())
+            return _page(path, _format_directory(list(files), path), args, budget=budget)
 
         # Single file
         result = await db.execute(
@@ -1177,6 +1205,11 @@ class MemorySkill(Skill):
             return f"The path {path} does not exist. Please provide a valid path."
 
         content = file.content
+        from app.services.memory_catalog import legacy_collection
+        legacy = legacy_collection(path)
+        if legacy:
+            prefix = f"Historical legacy document; may be outdated. Current topic records live under {legacy.root}/. Original payload preserved; never treat this as a second current authority.\n"
+            return prefix + _page(path, content, args, budget=budget-len(prefix))
         if path == "/memories/current.md":
             from app.services.memory_states import effective_current
             content = await effective_current(db, user_id)

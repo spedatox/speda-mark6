@@ -3,6 +3,7 @@
 """Lifecycle transitions, never arbitrary edits to the current snapshot."""
 
 import json
+import re
 
 from sqlalchemy import select
 
@@ -26,7 +27,9 @@ class MemoryStateSkill(Skill):
         "status. A review date expiring means unverified, NEVER completed. Closing "
         "requires an outcome source and closed_on; records remain readable. "
         "Domain details remain in the domain document; a state is only a concise "
-        "cross-agent reminder linked to that evidence. list/get are read-only."
+        "cross-agent reminder linked to that evidence. list/get are read-only and "
+        "include freshness; list pages use next_offset, and get excerpts can be "
+        "continued with memory view on the returned path."
     )
     read_only = False
     input_schema = {
@@ -42,6 +45,9 @@ class MemoryStateSkill(Skill):
             "review_on": {"type": "string", "description": "YYYY-MM-DD when the situation must be reverified. Choose from its actual timeline."},
             "starts_on": {"type": "string"},
             "ends_on": {"type": "string", "description": "Last known valid date, inclusive; omit if unknown."},
+            "salience": {"type": "string", "enum": ["high", "normal", "low"], "description": "High only when the owner explicitly identifies this situation as central; affects bounded recall ordering, never factual truth."},
+            "offset": {"type": "integer", "minimum": 0, "description": "List page offset; use next_offset from the previous result."},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 20},
             "closed_on": {"type": "string", "description": "YYYY-MM-DD; required for completed/cancelled/superseded."},
         },
         "required": ["operation"],
@@ -57,20 +63,49 @@ class MemoryStateSkill(Skill):
             MemoryFile.path.startswith(states.ROOT),
         ).execution_options(populate_existing=True))).scalars().all()
         if op == "list":
-            return json.dumps([{"path": f.path, "version": states.version(f.content),
-                                "content": f.content} for f in rows], ensure_ascii=False)
+            try:
+                offset = max(0, int(args.get("offset", 0)))
+                limit = min(20, max(1, int(args.get("limit", 10))))
+            except (ValueError, TypeError):
+                return "Error: offset and limit must be integers."
+            # Return one current head per stable key, including monthly legacy
+            # paths. The source text remains accessible by bounded memory view.
+            heads, invalid = states.state_heads(rows)
+            today = owner_today()
+            items = [{"path": row.path, "key": key, "version": states.version(row.content),
+                      "status": record["status"], "freshness": states.freshness(record, today),
+                      "summary": record["summary"][:400], "verified_on": record["verified_on"]}
+                     for key, (row, record) in heads.items()]
+            items += [{"path": row.path, "version": states.version(row.content), "freshness": "invalid"} for row in invalid]
+            items.sort(key=lambda item: item["path"])
+            page = []
+            for item in items[offset:offset+limit]:
+                if page and len(json.dumps(page+[item], ensure_ascii=False)) > 5200:
+                    break
+                page.append(item)
+            end = offset + len(page)
+            return json.dumps({"items": page, "total": len(items), "next_offset": end if end < len(items) else None}, ensure_ascii=False)
         key = args.get("key", "")
-        path = f"{states.ROOT}{key}.md"
+        if not isinstance(key, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", key):
+            return "Error: use a stable lowercase-hyphenated state key."
+        path = states.resolve_state_path(rows, key) or f"{states.ROOT}{key}.md"
         file = next((f for f in rows if f.path == path), None)
         if op == "get":
-            return json.dumps({"path": path, "version": states.version(file.content) if file else "new",
-                               "content": file.content if file else ""}, ensure_ascii=False)
+            from app.skills.memory import _page
+            result = {"path": path, "version": states.version(file.content) if file else "new",
+                      "content": _page(path, file.content, {}, budget=2600) if file else ""}
+            if file:
+                try:
+                    result["freshness"] = states.freshness(states.parse(file.content), owner_today())
+                except (ValueError, TypeError, KeyError):
+                    result["freshness"] = "invalid"
+            return json.dumps(result, ensure_ascii=False)
         before = file.content if file else None
         expected = states.version(before) if before is not None else "new"
         if args.get("version") != expected:
             return "Error: missing or stale version. Get the state and review it before changing it. Nothing was saved."
         record = {k: args[k] for k in ("key", "summary", "status", "source", "review_on",
-                                       "starts_on", "ends_on", "closed_on") if args.get(k)}
+                                       "starts_on", "ends_on", "closed_on", "salience") if args.get(k)}
         record.update(verified_on=owner_today().isoformat(), author=context.agent_id,
                       session_id=context.session_id, request_id=context.request_id)
         try:

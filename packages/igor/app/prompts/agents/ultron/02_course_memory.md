@@ -19,3 +19,12 @@ it; if evidence or validation fails, say what was not saved and why.
 For a course question, start with the course record, then use `search_memory` or
 `recall_conversations` when the record lacks a needed detail. If none has the answer,
 say what is unknown rather than filling the gap from a different course or term.
+
+A code's name is an identity, not something to generate from the lecture topic.
+Use the saved exact name; do not silently translate it or swap Financial/General
+Accounting. When the owner corrects a name, retain the correction and its source;
+an older timetable or title is conflicting history, not permission to undo it.
+Use record_course_memory operation=confirm_identity with the owner's literal
+code/name quotation to fix a saved name; ordinary note appends cannot rename it.
+If the name is unknown, retain the code and omit course_name. A book upload is
+material availability, not evidence that the owner has learned its contents.

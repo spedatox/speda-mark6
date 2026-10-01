@@ -16,10 +16,11 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.services.memory_catalog import canonical_path, declared_aliases, document_identity
+from app.services.memory_catalog import canonical_path, declared_aliases, document_identity, retired_monoliths
 from app.services.memory_paths import parse_monthly_path, slugify
 
 VERSION = "corpus-v3"
+LAYOUT_POLICY = "retire-monoliths-v1"
 
 
 def digest(value: str) -> str:
@@ -90,9 +91,10 @@ def merge_documents(rows: list[dict]) -> str:
 
 
 def build_plan(files: list[dict]) -> list[dict]:
+    retired = retired_monoliths(files)
     groups = defaultdict(list)
     for row in files:
-        if "/." in row["path"]:
+        if "/." in row["path"] or (row["user_id"], row["path"]) in retired:
             continue
         identity = document_identity(row["path"], row["content"])
         path = canonical_path(row["path"], row["updated_at"], row["content"])
@@ -130,12 +132,12 @@ class CorpusCleanup:
         if self.source == self.output or (self.output.exists() and self.source.samefile(self.output)):
             raise ValueError("Source and output must differ; in-place migration is forbidden.")
         self.fingerprint = file_hash(self.source)
-        self.migration_id = VERSION + "-" + self.fingerprint[:16]
+        self.migration_id = VERSION + "-" + LAYOUT_POLICY + "-" + self.fingerprint[:16]
         self.path_mappings = path_mappings or {}
         for old_path,target in self.path_mappings.items():
             if any(not p.startswith("/memories/") or not p.endswith(".md") or ".." in p or "\\" in p for p in (old_path,target)):
                 raise ValueError("Path mappings must contain safe memory document addresses.")
-        self.plan_hash = digest(VERSION+self.fingerprint+json.dumps(self.path_mappings, sort_keys=True))
+        self.plan_hash = digest(VERSION+LAYOUT_POLICY+self.fingerprint+json.dumps(self.path_mappings, sort_keys=True))
         self.original = sqlite3.connect(self.source.as_uri()+"?mode=ro&immutable=1", uri=True)
         self.original.row_factory = sqlite3.Row
         # A supplied snapshot must have no live WAL; immutable mode ignores it.
@@ -306,13 +308,21 @@ class CorpusCleanup:
         return True
 
     def cleanup_history(self):
+        files = [dict(row) for row in self.db.execute("SELECT * FROM memory_files")]
+        retired = retired_monoliths(files)
         with self.db:
-            for row in self.db.execute("SELECT * FROM memory_files WHERE path LIKE '/memories/.%' ").fetchall():
-                capsule = self.db.execute("SELECT content,content_hash FROM memory_sources WHERE user_id=? AND original_path=?", (row["user_id"],row["path"])).fetchone()
+            for row in files:
+                if not row["path"].startswith("/memories/.") and (row["user_id"], row["path"]) not in retired:
+                    continue
+                capsule = self.db.execute("SELECT content,content_hash FROM memory_sources WHERE user_id=? AND original_path=? AND content_hash=?", (row["user_id"],row["path"],digest(row["content"]))).fetchone()
                 if not capsule or capsule[0] != row["content"] or capsule[1] != digest(row["content"]):
                     raise ValueError("An archive changed or was not preserved; retirement aborted.")
                 self.db.execute("DELETE FROM memory_record_meta WHERE memory_file_id=?", (row["id"],))
                 self.db.execute("DELETE FROM memory_files WHERE id=?", (row["id"],))
+                if (row["user_id"], row["path"]) in retired:
+                    self.issue(row["user_id"], "legacy-source:"+row["path"], "legacy_source_retired",
+                               ["path:"+row["path"]],
+                               "Superseded monolith preserved byte-for-byte as an original source, outside the active tree. Unique legacy details remain searchable; no semantic reconciliation or factual deletion is implied.")
             # An orphan embedding may carry the ONLY surviving source text.
             orphaned = self.db.execute("SELECT e.* FROM message_embeddings e LEFT JOIN messages m ON m.id=e.message_id LEFT JOIN sessions s ON s.id=e.session_id WHERE m.id IS NULL OR s.id IS NULL").fetchall()
             for row in orphaned:

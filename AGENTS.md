@@ -256,6 +256,8 @@ speda-mark-vi/
     │   ├── memory_catalog.py    # Common identity, alias, metadata and historical-source read contract
     │   ├── memory_passages.py   # Stable addresses for dated entries and sections; mechanical index
     │   ├── memory_cleanup.py   # Explicit offline, lossless and resumable corpus migration
+    │   ├── memory_owner_review.py # Operator-reviewed, evidence-bound corrections on offline copies
+    │   ├── course_identity.py  # Literal course code/name guard shared by every agent write path
     │   ├── memory_render.py     # The six derived surfaces — pure function, no model, plus shadow-mode diff
     │   ├── memory_compose.py    # owner.md + current.md — prose from the record, citations verified
     │   ├── memory_reindex.py    # Seed from pre-v3 files + rebuild the record from raw history

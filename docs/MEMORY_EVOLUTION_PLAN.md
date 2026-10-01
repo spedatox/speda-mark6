@@ -2,6 +2,13 @@
 
 Tarih: 1 Ekim 2026. Durum: **uygulanacak tasarım**. Bu dosya aşağıdaki özelliklerin tamamlandığı anlamına gelmez. Bugün çalışan sözleşme [MEMORY_CORPUS.md](MEMORY_CORPUS.md); başlangıç kodu `18b14fc`. Bu plan mevcut kayıpsız migration'ın üzerine küçük, doğrulanabilir değişikliklerle uygulanır. Verilen 30 Eylül snapshot'ı üretimdeki en güncel hafızanın yerine geçirilmez.
 
+2 Ekim ara teslimi: taşınmış/arşivlenmiş state kanıtı, routing istisnaları,
+bounded ve freshness etiketli state okuma, ders kimliği koruması ve eski
+monolith'lerin aktif listeden çıkarılması uygulandı. Private operator review
+birim bazında owner teyitlerini kayıpsız işler. P0–P8'in tamamı bitmiş değildir:
+ortak token/request bütçesi, episode/relation modeli ve toplam enjeksiyon
+seçicisi hâlâ aşağıdaki planın parçasıdır.
+
 ## Kullanıcının göreceği sonuç
 
 Yeni sohbet açıldığında SPEDA günün ilgili olaylarını hatırlar. Ultron hangi ders ve konu üzerinde çalışıldığını, hangi kaynakların kullanıldığını ve kanıtlanmış çalışma ilerlemesini bilir. İnsanlar, kurumlar, yerler, projeler ve olaylar kaynaklarıyla birbirine bağlıdır. Bir isim, gün veya ders sorulduğunda ilgili parçalar bulunur; bütün hafıza her mesaja eklenmez.
@@ -224,9 +231,9 @@ Kabul: taşınmış state evidence'ı kabul; yabancı owner kanıtı ret; malfor
 
 Bağımlılık: P0. Öncelik: günlük güvenilirlik.
 
-- [ ] Stored status ile read-time freshness'ı ayır; review_due/expired_unconfirmed hiçbir zaman otomatik completed olmaz.
-- [ ] Current projection'da doğrulanmış active/planned ayrı, konuyla ilgili teyit bekleyen açık işler ayrı ve sınırlı gösterilsin.
-- [ ] `memory_state` get/list freshness ve temel alanları bounded pagination ile döndürsün; bütün state metinlerini tek tool sonucuna yüklemesin.
+- [x] Stored status ile read-time freshness'ı ayır; review_due/expired_unconfirmed hiçbir zaman otomatik completed olmaz.
+- [x] Current projection'da doğrulanmış active/planned ayrı, teyit bekleyen açık işler ayrı ve sınırlı gösterilsin. Query relevance sıralaması P7'de tamamlanacak.
+- [x] `memory_state` get/list freshness ve temel alanları bounded pagination ile döndürsün; bütün state metinlerini tek tool sonucuna yüklemesin.
 - [ ] Normal agent konuyla ilgili state'e ulaştığında mevcut kaynak/yeni owner mesajıyla gerekirse transition yapabilsin. Orion'a özel toplu scan'e bağımlılık kaldırılır; scan optional read-only diagnostics kalır.
 - [ ] Bir state kapanışı varsa episode/outcome link'i eklensin; geçmiş sürüm ve closed record erişimi korunur.
 

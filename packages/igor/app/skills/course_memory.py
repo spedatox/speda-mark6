@@ -86,24 +86,30 @@ class CourseMemorySkill(Skill):
         "courses and semesters never mix. Do NOT use it for attendance or the timetable; those "
         "remain in the structured academic ledger. Returns the exact memory path written, or a "
         "clear validation error without saving anything."
+        " Use operation=confirm_identity only when the owner explicitly corrects "
+        "the code's exact name; it preserves notes and requires literal owner evidence."
     )
     input_schema = {
         "type": "object",
         "properties": {
+            "operation": {"type": "string", "enum": ["append", "confirm_identity"], "description": "Defaults to append. confirm_identity changes only a code's name from explicit owner evidence, preserving all notes and the term."},
             "term": {"type": "string", "description": "Term as YYYY-YYYY-spring, -summer, or -fall; e.g. 2026-2027-spring."},
             "course_code": {"type": "string", "description": "Course code from the timetable, e.g. ATA101."},
-            "course_name": {"type": "string", "description": "Human course name, used when creating the record."},
+            "course_name": {"type": "string", "description": "Optional exact name quoted with the course code in evidence. Never guess or translate; omit when unknown. Existing identities cannot be renamed by this tool."},
             "section": {"type": "string", "enum": ["Overview", "Materials", "Assessments", "Lecture Log"], "description": "Where this knowledge belongs."},
             "entry": {"type": "string", "description": "One factual, concise note to retain."},
             "date": {"type": "string", "description": "Required for Lecture Log: the lecture date as YYYY-MM-DD. Defaults to today for a live user turn."},
             "evidence": EVIDENCE_SCHEMA,
         },
-        "required": ["term", "course_code", "section", "entry", "evidence"],
+        "required": ["term", "course_code", "evidence"],
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
+        operation = args.get("operation", "append")
+        if operation not in ("append", "confirm_identity"):
+            return "operation must be append or confirm_identity."
         section = (args.get("section") or "").strip()
-        if section not in _SECTIONS:
+        if operation == "append" and section not in _SECTIONS:
             return "section must be Overview, Materials, Assessments, or Lecture Log."
         try:
             path = course_path(args.get("term", ""), args.get("course_code", ""))
@@ -112,16 +118,33 @@ class CourseMemorySkill(Skill):
         from app.services.memory_store import resolve_alias
         path = await resolve_alias(context.db,context.user_id,path) or path
         entry = (args.get("entry") or "").strip()
-        if not entry:
+        if operation == "append" and not entry:
             return "entry cannot be empty."
         code = (args.get("course_code") or "").strip().upper()
         row = (await context.db.execute(select(MemoryFile).where(
             MemoryFile.user_id == context.user_id, MemoryFile.path == path
         ))).scalar_one_or_none()
         before = row.content if row else ""
+        if before and args.get("course_name") and operation == "append":
+            from app.services.course_identity import course_heading, normalized_name
+            try:
+                _, existing_name = course_heading(before)
+            except ValueError as exc:
+                return str(exc)
+            if normalized_name(args["course_name"]) != normalized_name(existing_name):
+                return "Course name conflicts with the saved identity. Use confirm_identity only with explicit owner evidence. Nothing saved."
         base = before or _new_course(code, (args.get("course_name") or "").strip())
         try:
-            if section == "Lecture Log":
+            if operation == "confirm_identity":
+                name = (args.get("course_name") or "").strip()
+                if not name or "\n" in name:
+                    raise ValueError("confirm_identity requires the exact nonempty course_name.")
+                # Preserve every note and section; change only the heading.
+                lines = base.splitlines(keepends=True)
+                heading = next(i for i, line in enumerate(lines) if line.startswith("# "))
+                lines[heading] = f"# {code} — {name}\n"
+                after = "".join(lines)
+            elif section == "Lecture Log":
                 stamp = (args.get("date") or owner_today().isoformat()).strip()
                 date.fromisoformat(stamp)
                 after = base if _lecture_entry_exists(base, stamp, entry) else ledger_append(
@@ -133,7 +156,7 @@ class CourseMemorySkill(Skill):
                 return f"Already recorded in {path}."
             evidence = await resolve_evidence(context.db, context.user_id, args.get("evidence"), session_id=context.session_id)
             await mutate_file(context.db, user_id=context.user_id, path=path,
-                              author=context.agent_id, action="course_memory",
+                              author=context.agent_id, action="course_identity_confirmation" if operation == "confirm_identity" else "course_memory",
                               before=before if row else None, after=after,
                               request_id=context.request_id, managed=True,
                               evidence=evidence, model=context.model)

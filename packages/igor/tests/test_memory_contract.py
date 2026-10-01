@@ -43,19 +43,20 @@ def test_states_expire_to_unknown_without_claiming_completion():
     f = file("/memories/states/pending-application.md", encode(state()))
     assert "Application is awaiting" in render([f], date(2026, 9, 12))
     overdue = render([f], date(2026, 9, 13))
-    assert "Application is awaiting" not in overdue
-    assert "unverified records omitted" in overdue
-    assert "pending-application" not in overdue
+    assert "Application is awaiting" in overdue
+    assert "Needs confirmation — not current facts" in overdue
+    assert "Reconfirmation due; last reported" in overdue
+    assert "pending-application" in overdue
     assert parse(f.content)["status"] == "waiting"
 
 
 def test_terminal_states_do_not_enter_current_and_plans_stay_plans():
     r = state()
     r.update(status="completed", closed_on="2026-09-10")
-    assert "Application is awaiting" not in render([file("/memories/states/x.md", encode(r))], date(2026, 9, 10))
+    assert "Application is awaiting" not in render([file("/memories/states/pending-application.md", encode(r))], date(2026, 9, 10))
     r.update(status="planned", starts_on="2026-09-11")
     r.pop("closed_on")
-    view = render([file("/memories/states/x.md", encode(r))], date(2026, 9, 10))
+    view = render([file("/memories/states/pending-application.md", encode(r))], date(2026, 9, 10))
     assert "## Active / waiting\n\n(none recorded)" in view
     assert "status: planned" in view
 

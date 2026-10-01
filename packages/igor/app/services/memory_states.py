@@ -25,36 +25,41 @@ from app.services.memory_paths import MonthPeriod
 def monthly_state_path(key: str, period: MonthPeriod) -> str:
     return f"{ROOT_MONTHLY}{period.folder_name}/{key}.md"
 
-def get_state_head(files, key: str) -> tuple[str, dict] | None:
-    def sort_key(item):
-        path, r = item
-        year, month = 0, 0
-        parts = path[len(ROOT):].split("/")
-        if len(parts) == 2:
-            try:
-                period = MonthPeriod.from_folder(parts[0])
-                year, month = period.year, period.month
-            except ValueError:
-                pass
-        return (r["verified_on"], year, month, path)
+def _head_order(path, record):
+    year, month = 0, 0
+    parts = path[len(ROOT):].split("/")
+    if len(parts) == 2:
+        try:
+            period = MonthPeriod.from_folder(parts[0])
+            year, month = period.year, period.month
+        except ValueError:
+            pass
+    return (record["verified_on"], year, month, path)
 
-    candidates = []
+
+def state_heads(files):
+    """Parse each edition once and choose one head per key in linear time."""
+    heads, invalid = {}, []
     for f in files:
         if not f.path.startswith(ROOT):
             continue
-        if not (f.path == f"{ROOT}{key}.md" or f.path.endswith(f"/{key}.md")):
-            continue
         try:
             r = parse(f.content)
+            if f.path.rsplit("/", 1)[-1] != r["key"] + ".md":
+                raise ValueError("State key and path disagree.")
         except (ValueError, TypeError, KeyError):
+            invalid.append(f)
             continue
-        if r["key"] == key:
-            candidates.append((f.path, r))
-            
-    if not candidates:
-        return None
-        
-    return max(candidates, key=sort_key)
+        key = r["key"]
+        previous = heads.get(key)
+        if previous is None or _head_order(f.path, r) > _head_order(previous[0].path, previous[1]):
+            heads[key] = (f, r)
+    return heads, invalid
+
+
+def get_state_head(files, key: str) -> tuple[str, dict] | None:
+    head = state_heads(files)[0].get(key)
+    return (head[0].path, head[1]) if head else None
 
 def resolve_state_path(files, key: str) -> str | None:
     head = get_state_head(files, key)
@@ -86,6 +91,8 @@ def validate(record: dict) -> None:
         raise ValueError("Use a stable lowercase-hyphenated state key, without dates or paths.")
     if record["status"] not in STATUSES:
         raise ValueError(f"State status must be one of {', '.join(STATUSES)}.")
+    if record.get("salience", "normal") not in ("high", "normal", "low"):
+        raise ValueError("salience must be high, normal or low; use high only for an owner-confirmed central situation.")
     for field in ("review_on", "verified_on", "starts_on", "ends_on", "closed_on"):
         if record.get(field):
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", record[field]):
@@ -115,52 +122,35 @@ def encode(record: dict) -> str:
     )
 
 
+def freshness(record: dict, today: date) -> str:
+    if record["status"] not in OPEN:
+        return "closed"
+    stamp = today.isoformat()
+    if record.get("ends_on") and record["ends_on"] < stamp:
+        return "expired_unconfirmed"
+    if record["review_on"] < stamp:
+        return "review_due"
+    return "current"
+
+
 def render(files, today: date) -> str:
     active, review, planned = [], [], []
-    state_files = []
-    invalid_files = []
-    
-    for f in files:
-        if not f.path.startswith(ROOT):
-            continue
-        try:
-            r = parse(f.content)
-            state_files.append((f, r))
-        except (ValueError, TypeError, KeyError):
-            invalid_files.append(f)
-            
-    def sort_key(item):
-        path, r = item
-        year, month = 0, 0
-        parts = path[len(ROOT):].split("/")
-        if len(parts) == 2:
-            try:
-                period = MonthPeriod.from_folder(parts[0])
-                year, month = period.year, period.month
-            except ValueError:
-                pass
-        return (r["verified_on"], year, month, path)
-
-    heads: dict[str, tuple[str, dict]] = {}
-    for f, r in state_files:
-        k = r["key"]
-        curr = (f.path, r)
-        if k not in heads:
-            heads[k] = curr
-        else:
-            if sort_key(curr) > sort_key(heads[k]):
-                heads[k] = curr
+    heads, invalid_files = state_heads(files)
 
     for f in sorted(invalid_files, key=lambda f: f.path):
         review.append(f"- Invalid state record: {f.path}. Inspect and repair; do not infer its contents.")
 
-    for path, r in sorted(heads.values(), key=lambda t: t[0]):
+    priority = {"high": 0, "normal": 1, "low": 2}
+    for file, r in sorted(heads.values(), key=lambda t: (priority[t[1].get("salience", "normal")], t[0].path)):
+        path = file.path
         if r["status"] not in OPEN:
             continue
         stamp = today.isoformat()
         bullet = f"- [{r['key']}] {r['summary']} (status: {r['status']}; verified {r['verified_on']}; source: {r['source']})"
-        if r["review_on"] < stamp or (r.get("ends_on") and r["ends_on"] < stamp):
-            review.append(f"- [{r['key']}] Review overdue; last verified {r['verified_on']}. Read {path}; do not assume it remains true or has completed.")
+        state_freshness = freshness(r, today)
+        if state_freshness != "current":
+            label = "Known validity ended; outcome unconfirmed" if state_freshness == "expired_unconfirmed" else "Reconfirmation due; last reported"
+            review.append(f"- [{r['key']}] {label}: {r['summary'][:220]} (verified {r['verified_on']}; read {path}). Do not assume current validity or completion.")
         elif r["status"] == "planned" or (r.get("starts_on") and r["starts_on"] > stamp):
             planned.append(bullet)
         else:
@@ -170,7 +160,9 @@ def render(files, today: date) -> str:
     for heading, rows in (("Active / waiting", active), ("Confirmed plans", planned)):
         sections += ["", f"## {heading}", "", *(rows or ["(none recorded)"])]
     if review:
-        sections += ["", f"_{len(review)} unverified records omitted. See memory_audit scan for the review inbox; no outcome has been assumed._"]
+        sections += ["", "## Needs confirmation — not current facts", "", *review[:3]]
+        if len(review) > 3:
+            sections += [f"_{len(review)-3} further records: use memory_state list with pagination. No outcome has been assumed._"]
     return "\n".join(sections) + "\n"
 
 
@@ -180,7 +172,8 @@ def project_files(files, today: date):
     Migration writes a marker into current.md. Until then the legacy snapshot
     remains visible, explicitly labelled unverified; deployment cannot erase it.
     """
-    files = list(files)
+    from app.services.memory_catalog import active_corpus_files
+    files = active_corpus_files(files)
     current = next((f for f in files if f.path == CURRENT), None)
     migrated = current is not None and "<!-- state-projection-v1 -->" in current.content
     if not migrated:
@@ -212,18 +205,33 @@ async def verify_source(db, user_id: int, source: str) -> None:
     from app.models.observation import Observation
     from app.models.message import Message
     from app.models.session import Session
+    from app.models.memory_source import MemorySource
     refs = re.findall(r"/memories/[a-zA-Z0-9_./-]+\.md", source)
+    source_ids = re.findall(r"source:([a-f0-9-]{32,36})(?![a-f0-9-])", source)
     obs_ids = [int(n) for n in re.findall(r"observation:(\d+)", source)]
     msg_ids = [int(n) for n in re.findall(r"message:(\d+)", source)]
-    if not refs and not obs_ids and not msg_ids:
-        raise ValueError("source must cite an existing /memories/...md path, observation:<id>, or message:<id>.")
+    if not refs and not obs_ids and not msg_ids and not source_ids:
+        raise ValueError("source must cite an existing memory path, source:<id>, observation:<id>, or message:<id>.")
     for path in refs:
         if path == CURRENT or path.startswith(ROOT):
             raise ValueError("A state cannot cite the current view or another state as its only evidence; cite the original domain document or conversation.")
         exists = (await db.execute(select(MemoryFile.id).where(
             MemoryFile.user_id == user_id, MemoryFile.path == path))).scalar_one_or_none()
         if exists is None:
-            raise ValueError(f"Evidence file does not exist: {path}")
+            from app.services.memory_catalog import source_for_path
+            from app.services.memory_store import resolve_alias
+            original = await source_for_path(db, user_id, path)
+            target = await resolve_alias(db, user_id, path)
+            if original is None or original.classification == "system":
+                if not target or target == CURRENT or target.startswith(ROOT):
+                    raise ValueError(f"Evidence file does not exist: {path}")
+    for ident in source_ids:
+        original = (await db.execute(select(MemorySource).where(
+            MemorySource.user_id == user_id, MemorySource.id == ident,
+            MemorySource.classification != "system",
+        ))).scalar_one_or_none()
+        if original is None or original.original_path == CURRENT or original.original_path.startswith(ROOT):
+            raise ValueError(f"Evidence source is missing, system-only, or a state projection: {ident}")
     for ident in obs_ids:
         exists = (await db.execute(select(Observation.id).where(
             Observation.user_id == user_id, Observation.id == ident,

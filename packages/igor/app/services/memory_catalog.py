@@ -16,6 +16,38 @@ from app.services.memory_paths import MonthPeriod, parse_monthly_path, slugify
 from app.services.memory_identity import content_hash, find_or_create_entity, generate_record_id
 
 
+def legacy_collection(path: str):
+    """A superseded domain monolith, excluding deliberately stable owner roots."""
+    from app.services.memory_spec import collection_from_monolith
+    if path in ("/memories/owner.md", "/memories/current.md", "/memories/dossier.md",
+                "/memories/history.md", "/memories/patterns.md", "/memories/log.md"):
+        return None
+    return collection_from_monolith(path)
+
+
+def retired_monoliths(files) -> set[tuple[int | None, str]]:
+    """One owner's replacement never hides a different owner's source.
+
+    Partial legacy content is still retrievable by exact path/source; removing
+    a duplicate active authority does not claim complete semantic reconciliation.
+    """
+    files = list(files)
+    def value(row, key, default=None):
+        return row.get(key, default) if isinstance(row, dict) else getattr(row, key, default)
+    paths = {(value(row, "user_id"), value(row, "path")) for row in files}
+    return {(user, path) for user, path in paths if (coll := legacy_collection(path))
+            and any(other_user == user and target.startswith(coll.root + "/") and "/." not in target
+                    for other_user, target in paths)}
+
+
+def active_corpus_files(files):
+    """Read projection only; never delete or mutate a legacy ORM payload."""
+    files = list(files)
+    retired = retired_monoliths(files)
+    return [file for file in files if "/." not in file.path
+            and (getattr(file, "user_id", None), file.path) not in retired]
+
+
 def canonical_path(path: str, recorded_at: str, content: str | None = None) -> str:
     """Recognize every shipped layout; change addresses, never claim dates."""
     state = re.fullmatch(r"/memories/states/(?:\d{2}-\d{2}/)?([^/]+\.md)", path)
@@ -200,11 +232,12 @@ async def search_sources(db, user_id: int, query: str, *, limit: int = 6) -> str
         or_(*filters),
     ).order_by(MemorySource.created_at.desc(), MemorySource.id).limit(min(limit, 6)))).scalars().all()
     # Collapse byte-identical archives, but keep every source in storage.
-    seen, lines = set(), ["Historical originals — may be outdated; not current facts:"]
+    seen, lines = set(), ["Immutable sources — historical originals may be outdated; owner confirmations are separately labelled:"]
     for row in rows:
         if row.content_hash in seen:
             continue
         seen.add(row.content_hash)
         pos = next((row.content.casefold().find(w.casefold()) for w in words if w.casefold() in row.content.casefold()), 0)
-        lines.append(f"source:{row.id} {row.original_path}\n{row.content[max(pos-100,0):pos+550]}")
+        label = "owner confirmation" if row.classification == "owner_confirmation" else "source document" if row.classification == "document_attachment" else "historical original"
+        lines.append(f"source:{row.id} [{label}] {row.original_path}\n{row.content[max(pos-100,0):pos+550]}")
     return "\n\n".join(lines)[:4200]

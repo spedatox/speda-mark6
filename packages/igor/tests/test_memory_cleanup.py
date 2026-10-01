@@ -11,7 +11,7 @@ from app.database import Base
 from app.models.memory_file import MemoryFile
 from app.models.memory_source import MemorySource
 from app.models.memory_record_meta import MemoryRecordMeta
-from app.services.memory_cleanup import CorpusCleanup, file_hash, merge_documents
+from app.services.memory_cleanup import CorpusCleanup, digest, file_hash, merge_documents
 from app.services.memory_catalog import resolve_member
 from app.services.memory_spec import collection_by_root
 from app.services.memory_store import mutate_file, resolve_alias
@@ -77,6 +77,39 @@ def test_merge_does_not_resolve_numeric_conflict():
     rows=[dict(id=i,updated_at=str(i),content=f"# Project\n\n## Log\n- [2026-08-01] Measured {n} kg.\n") for i,n in [(1,40),(2,60)]]
     result=merge_documents(rows)
     assert "40 kg" in result and "60 kg" in result
+
+
+def test_split_domain_monolith_leaves_active_tree_only_after_exact_preservation(snapshot, tmp_path):
+    legacy = "# Wellness\n\n## Old profile\nUnique old detail not copied into the modern profile.\n"
+    with sqlite3.connect(snapshot) as db:
+        db.execute("INSERT INTO memory_files VALUES (6,1,'/memories/wellness.md',?,'2026-09-01')", (legacy,))
+        db.execute("INSERT INTO memory_files VALUES (7,1,'/memories/wellness/09-26/profile.md','# Profile\nCurrent profile.','2026-09-28')")
+        # A prior migration may already have a different edition at this path.
+        db.execute("INSERT INTO memory_sources VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ("a"*32,1,"prior-wellness","/memories/wellness.md","Older edition",
+             digest("Older edition"),"historical","{}","earlier","2026-08-01"))
+    migration = CorpusCleanup(snapshot, tmp_path / "retired.db")
+    try:
+        report = migration.run()
+        assert report["source_unchanged"] and report["foreign_key_violations"] == 0
+        assert not migration.db.execute("SELECT 1 FROM memory_files WHERE path='/memories/wellness.md'").fetchone()
+        original = migration.db.execute("SELECT content FROM memory_sources WHERE original_path='/memories/wellness.md' AND content_hash=?", (digest(legacy),)).fetchone()
+        assert original[0] == legacy
+        assert migration.db.execute("SELECT 1 FROM memory_files WHERE path='/memories/wellness/09-26/profile.md'").fetchone()
+        assert migration.db.execute("SELECT 1 FROM memory_issues WHERE kind='legacy_source_retired'").fetchone()
+    finally:
+        migration.close()
+
+
+def test_unsplit_monolith_is_not_retired_without_a_replacement(snapshot, tmp_path):
+    with sqlite3.connect(snapshot) as db:
+        db.execute("INSERT INTO memory_files VALUES (6,1,'/memories/wellness.md','# Wellness\nOnly surviving information.','2026-09-01')")
+    migration = CorpusCleanup(snapshot, tmp_path / "unsplit.db")
+    try:
+        migration.run()
+        assert migration.db.execute("SELECT 1 FROM memory_files WHERE path='/memories/wellness.md'").fetchone()
+    finally:
+        migration.close()
 
 
 def test_source_less_claim_is_labelled_without_changing_its_content():

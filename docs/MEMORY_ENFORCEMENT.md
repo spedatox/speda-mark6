@@ -84,8 +84,9 @@ queued audit jobs are retired without provider calls. Deactivate any previously
 imported n8n workflow as well; deleting the repository template cannot remove a
 workflow from a separate n8n instance.
 
-An expired state disappears from the current view without being falsely marked
-completed. Its record remains in the review inbox. Closing or renewing a state
+An expired state leaves the confirmed-current section without being falsely
+marked completed. A few overdue open situations remain visible with explicit
+unconfirmed labels; the full record remains in the paginated review list. Closing or renewing a state
 requires evidence; passage of time alone establishes neither an outcome nor
 continued validity. Metadata and readable state text must agree.
 

@@ -59,12 +59,29 @@ async def _mutate_in_txn(db, *, user_id: int, path: str, before: str | None,
         return notes
     receipt = None
     resolved = []
+    if author == "owner" and evidence:
+        from app.services.memory_admission import resolve_evidence
+        from app.models.memory_write_receipt import MemoryWriteReceipt
+        from app.services.memory_states import version
+        resolved = await resolve_evidence(db, user_id, evidence)
+        receipt = MemoryWriteReceipt(user_id=user_id, path=path, author=author,
+            request_id=request_id, before_hash=version(before or ""),
+            after_hash=version(after or ""),
+            evidence=[{k:v for k,v in e.items() if k not in ("_image", "source_body")} for e in resolved],
+            rationale="Explicit owner correction; no provider review.", record_id=record_id,
+            migration_id=migration_id)
     if author != "owner":
         from app.services.memory_admission import resolve_evidence, admit
         from app.models.memory_write_receipt import MemoryWriteReceipt
         from app.services.memory_states import version
         try:
             resolved = await resolve_evidence(db, user_id, evidence)
+        except ValueError as exc:
+            raise MemorySchemaViolation(str(exc)) from exc
+        from app.services.course_identity import check_course_identity
+        try:
+            check_course_identity(path, before, after, resolved,
+                                  allow_name_correction=action == "course_identity_confirmation")
         except ValueError as exc:
             raise MemorySchemaViolation(str(exc)) from exc
         reason = await admit(db, user_id=user_id,
@@ -282,7 +299,10 @@ def is_owner_editable(path: str) -> bool:
     """
     from app.services.memory_compose import COMPOSED_FILES
     from app.services.memory_render import RENDERED_FILES
+    from app.services.memory_catalog import legacy_collection
     import re
+    if legacy_collection(path):
+        return False
     if re.match(r"^/memories/finance/\d{2}-\d{2}/(?:ledger|balances|reports)\.md$", path):
         return False
     if path.startswith(("/memories/finance/records/", "/memories/finance/ledger/")) or path in ("/memories/finance/balances.md", "/memories/finance/reports.md", "/memories/finance/monthly-structure.md"):

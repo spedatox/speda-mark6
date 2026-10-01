@@ -32,11 +32,11 @@ ROUTES = (
           "Do not require it to matter in six months. Do not fabricate details."),
     Route("preference", "/memories/dossier/<topic>.md", "memory_edit",
           "An owner-stated standing preference or prohibition, dated and attributed. Never an inferred psychological claim."),
-    Route("pattern", "/memories/patterns.md", "record_observation + memory",
+    Route("pattern", "/memories/patterns.md", "record_observation; derived pattern service",
           "A fallible inference with cited evidence, confidence and a useful response. Keep separate from owner instructions."),
-    Route("person", "/memories/social/<professional|personal>/<name>.md", "registry_upsert",
+    Route("person", "/memories/social/<MM-YY>/<professional|personal>/<name>.md", "registry_upsert",
           "One person, stable identity and dated events. Reuse the existing path; organisations are context, not categories."),
-    Route("project", "/memories/projects/<name>.md", "registry_upsert",
+    Route("project", "/memories/projects/<MM-YY>/<name>.md", "registry_upsert",
           "One project's description, decisions and event history. Reuse its existing identity."),
     Route("reference", "owning domain's topic file", "memory_edit",
           "Subject decides the domain. Preserve tables, units and relationships. Reissued editions replace the existing topic through its revision trail."),
@@ -52,7 +52,8 @@ def routing_contract() -> str:
     rows += [f"- {c.root}/: {c.owner_agent or 'shared'} — {c.summary}"
              for c in COLLECTIONS if c.owner_agent]
     rows += [
-        "Every category stores documents under <category>/<MM-YY>/<topic>.md.",
+        "Topic/entity editions use <category>/<MM-YY>/<topic>.md; stable IDs and aliases survive month changes.",
+        "Exceptions: states use a stable key; courses use academic/courses/<term>/<code>.md; finance facts use finance/records/<id>.md; root biography/preferences and generated views retain their declared paths.",
         "general/ holds personal events and references without a specialist domain. It is actively used, not limited to recurring documents.",
         "events/ is retired. Unmatched experiences go to general/; specialist events go to their domain.",
         "An ownership refusal means hand off to that domain's owner. It NEVER means put the same fact in current.md, general/, or another shared file.",
@@ -73,6 +74,9 @@ def protected_write(path: str, author: str, *, managed: bool = False) -> str | N
         return "current.md is a computed view. Use memory_state for ongoing situations; ledger_append or registry_upsert for completed events."
     if path.startswith("/memories/states/") and not managed:
         return "State records require memory_state (status, evidence, review date and version). Raw edits would bypass their lifecycle."
+    from app.services.memory_catalog import legacy_collection
+    if coll := legacy_collection(path):
+        return f"Legacy monolith {path} is read-only history; use the owning topic under {coll.root}/. Originals are preserved; do not recreate a second active authority."
     if author == "owner":
         return None
     if path.startswith("/memories/.audit/"):

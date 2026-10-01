@@ -154,6 +154,10 @@ async def index_memory_revision(db, user_id: int, revision,
         if match:
             target = _ref(match.group(1), match.group(2))
             await add_edge(db, user_id, node, target, "evidenced_by", target)
+        elif re.fullmatch(r"source:[a-f0-9-]{32,36}", ref):
+            await add_edge(db, user_id, node, ref, "evidenced_by", ref)
+            if record_id:
+                await add_edge(db, user_id, _ref("record", record_id), ref, "evidenced_by", ref)
 
 
 async def neighborhood(db, user_id: int, start: str, *, depth: int = 2,
@@ -222,7 +226,13 @@ async def describe_ref(db, user_id: int, ref: str) -> str | None:
             MemoryFile.user_id == user_id, MemoryFile.path == ident,
         ))).scalar_one_or_none()
         if row:
-            return f"[{ref}] {' '.join(row.content.split())[:220]}"
+            from app.services.memory_catalog import legacy_collection
+            label = "Historical legacy document (may be outdated): " if legacy_collection(ident) else ""
+            return f"[{ref}] {label}{' '.join(row.content.split())[:220]}"
+        from app.services.memory_catalog import source_for_path
+        source = await source_for_path(db, user_id, ident)
+        if source and source.classification != "system":
+            return f"[{ref}] Historical original source:{source.id} (may be outdated): {' '.join(source.content.split())[:220]}"
     elif kind == "revision" and ident.isdigit():
         row = (await db.execute(select(MemoryRevision).where(
             MemoryRevision.user_id == user_id, MemoryRevision.id == int(ident),
@@ -255,7 +265,10 @@ async def describe_ref(db, user_id: int, ref: str) -> str | None:
             MemorySource.user_id == user_id, MemorySource.id == ident,
         ))).scalar_one_or_none()
         if row:
-            return f"[{ref}] Historical original {row.original_path} (may be outdated): {' '.join(row.content.split())[:220]}"
+            label = ("Owner confirmation" if row.classification == "owner_confirmation" else
+                     "Source document" if row.classification == "document_attachment" else
+                     "Historical original (may be outdated)")
+            return f"[{ref}] {label} {row.original_path}: {' '.join(row.content.split())[:220]}"
     elif kind == "entity":
         from app.models.memory_entity import MemoryEntity
         entity = (await db.execute(select(MemoryEntity).where(

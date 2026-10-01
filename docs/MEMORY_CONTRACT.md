@@ -75,10 +75,11 @@ overwritten through that exception.
 
 Use ledger_append for dated rows, registry_upsert for people/projects,
 narrative_revise for biography chapters, and small anchored edits for references.
-Generic events without a subject-specific log have monthly files under events/.
+Generic events without a subject-specific log have monthly files under general/.
 Dates must be real calendar dates; dated table rows must match their ledger key.
 Compound moves store and verify the destination before removing source text.
-Operator migrations preserve originals under `.archive/` and in revisions.
+Operator migrations preserve originals in immutable source capsules and revisions;
+archive paths are historical compatibility addresses, not a second active tree.
 
 ## Automatic intake
 
