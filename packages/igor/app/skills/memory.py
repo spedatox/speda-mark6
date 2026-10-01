@@ -589,11 +589,17 @@ def bounded_excerpt(path: str, content: str, budget: int) -> str:
         if len(result + marker) > budget:
             return "memory_state list"[:budget]
         heading = ""
+        candidates = []
         for line in content.splitlines():
             if line.startswith("## "):
                 heading = line
             if not line.startswith("- ["):
                 continue
+            central = bool(re.match(r"^- \[[^\]]+\] \[central owner situation\] ", line))
+            candidates.append((not central, heading, line))
+        # Priority applies across freshness sections, not only inside each one.
+        # Keep the section label with the line so overdue never means current.
+        for _, heading, line in sorted(candidates, key=lambda item: item[0]):
             candidate = f"\n{heading}\n{line}\n"
             if len(result + candidate + marker) <= budget:
                 result += candidate

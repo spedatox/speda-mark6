@@ -311,6 +311,16 @@ def test_mismatched_state_path_is_not_a_current_fact():
     assert "Invalid state record" in output and "Remote retainer active" not in output
 
 
+def test_overdue_central_situation_survives_fresh_lower_priority_states():
+    central = state("remote-retainer", salience="high")
+    fresh = [state(f"ordinary-{i}", summary="Other current detail "*4, review_on="2026-10-03") for i in range(10)]
+    result = bounded_excerpt("/memories/current.md",render([central,*fresh],date(2026,10,2)),550)
+    assert "Remote retainer active" in result
+    assert "Needs confirmation — not current facts" in result
+    assert "Reconfirmation due; last reported" in result
+    assert len(result)<=550
+
+
 async def test_reviewed_schedule_name_preserves_complete_raw_slot_and_other_fields(sessions):
     from app.models.academic import CourseSlot
     path = "/memories/academic/courses/2026-2027-fall/ABC243.md"

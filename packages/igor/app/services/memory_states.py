@@ -146,11 +146,12 @@ def render(files, today: date) -> str:
         if r["status"] not in OPEN:
             continue
         stamp = today.isoformat()
-        bullet = f"- [{r['key']}] {r['summary']} (status: {r['status']}; verified {r['verified_on']}; source: {r['source']})"
+        central = "[central owner situation] " if r.get("salience") == "high" else ""
+        bullet = f"- [{r['key']}] {central}{r['summary']} (status: {r['status']}; verified {r['verified_on']}; source: {r['source']})"
         state_freshness = freshness(r, today)
         if state_freshness != "current":
             label = "Known validity ended; outcome unconfirmed" if state_freshness == "expired_unconfirmed" else "Reconfirmation due; last reported"
-            review.append(f"- [{r['key']}] {label}: {r['summary'][:220]} (verified {r['verified_on']}; read {path}). Do not assume current validity or completion.")
+            review.append(f"- [{r['key']}] {central}{label}: {r['summary'][:220]} (verified {r['verified_on']}; read {path}). Do not assume current validity or completion.")
         elif r["status"] == "planned" or (r.get("starts_on") and r["starts_on"] > stamp):
             planned.append(bullet)
         else:

@@ -63,6 +63,7 @@ new boundaries and explicitly retain unimplemented stages.
 
 - Incident/cleanup/state group: **58 passed**.
 - Final source-envelope and query-recall follow-up: **40 passed**.
+- Central overdue state selection across freshness sections: **64 passed**.
 - Full Igor suite with the workspace Forge import path: **937 passed, 1 failed**.
   The unchanged health test generates a sample one hour ago, then queries today;
   shortly after midnight the sample belongs to yesterday. Existing datetime
