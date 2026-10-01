@@ -8,6 +8,8 @@ Yeni sohbet açıldığında SPEDA günün ilgili olaylarını hatırlar. Ultron
 
 Günlük olaylar uzun vadeli biyografi kadar meşru kayıt türüdür. “Altı ay sonra önemli mi?” filtresi günlük yaşam kaydına uygulanmaz. Modelin bilmediği bir ayrıntı, tamamlanmamış bir işin sonucu veya bir kişinin psikolojisi tahmin edilerek kaydedilmez.
 
+**Owner'ın son önceliği: hissiyatı koruyarak otomatik enjeksiyonu mümkün olan en küçük düzeye indirmek.** Küçük enjeksiyon, kullanıcının yeniden anlatması gereken veya sürekli “hatırlamıyorum” diyen bir agent üretirse başarılı sayılmaz. Persona/üslup korunur; günlük devamlılık, tanıdık isimleri çözme ve ilgili eski olaya kendiliğinden bağlanma aynı kabul senaryolarında doğrulanır. Sayısal sınırlar başlangıç tasarımıdır; canlı sistemde bu tur uygulanmadı.
+
 ## Başlangıçta doğrulanan eksikler
 
 | Bulgu | Etkisi | Plan |
@@ -23,6 +25,7 @@ Günlük olaylar uzun vadeli biyografi kadar meşru kayıt türüdür. “Altı 
 | Entity katalogu bugün kişi/proje üzerinden üretiliyor | Kurum, yer, ders ve kavramın kalıcı bağlantıları eksik | P3: typed identity katalogu |
 | Graph daha çok about/mentions/provenance taşır; mevcut edge tek subject/target/type ile unique | Gerçek ilişkinin rolü, zamanı ve birden çok kanıtı temsil edilmiyor | P5: tarihli relation assertion; graph bunun okuma indeksi |
 | Ders kodu/name çelişkisi ve kaynak boşlukları korunmuş | Kanıt olmadan düzeltilemez; yanlış birleşme önlenmeli | P2/P6: unresolved issue; code/term doğrulaması |
+| Orchestrator standing, episodic, relevant facts, documents, today, tactical ve project bloklarını ayrı topluyor | Ayrı blokların sınırları toplam maliyeti sınırlamaz; aynı olay farklı bloklardan tekrar gelebilir | P0/P7: tek toplam seçici ve kaynak dedup; tüm payload maliyeti ölçümü |
 
 Özel örnekler ve tam kaynaklar Git dışındaki `db_migrate/CLEANUP_REPORT.md` ve `redesigned-vault/unresolved-issues.json` içindedir. Bu plan özel kaynak içeriklerini yeniden yayımlamaz.
 
@@ -159,11 +162,13 @@ Mevcut bounded reader/graph korunur. Yeni selector ilgili core identity/constrai
 
 | Sınır | Önerilen başlangıç değeri | Uygulama |
 |---|---:|---|
-| Otomatik owner-memory bağlamı toplamı | 4.800 token, wrappers dahil hard cap | Core, continuity, açık işler ve relevant recall birlikte |
-| Normal core allocation | 1.200 token hedef | Açık owner kurallarına öncelik; kalan bloklar boş bütçeyi paylaşır |
-| Continuity allocation | 600 token hedef | İlgili gün + son session; sabit sayıda rastgele en yeni mesaj yerine relevance |
-| Relevant recall allocation | 2.000 token hedef | Birleşik belge/claim/episode/relation adayları; aynı kaynak dedup |
-| Teyit bekleyen işler | 300 token hedef, genellikle ≤3 kayıt | Konuyla ilgisi/urgency; passive reminder doğrudan provider çağırmaz |
+| Otomatik owner-memory bağlamı toplamı | Normal hedef 350–650 token; wrappers dahil 1.200 token hard cap | Core, continuity, açık işler, facts, documents, tactical ve otomatik project knowledge aynı bütçede |
+| Hafıza gerektirmeyen rutin turn | ≤250 token hedef; konu blokları boş | Selamlaşma/basit araç işi, bütün son session özetlerini yüklemez |
+| Normal core allocation | Yaklaşık 200 token hedef | Birkaç temel owner bilgisi ve kritik tercihler; dosya gövdeleri veya directory dump yok |
+| Continuity allocation | 0–150 token hedef | İlgili son olay/açık konu + doğrulanmış ID; sabit sayıda rastgele en yeni mesaj yok |
+| Relevant recall allocation | 0–300 token hedef | Gerekli birkaç kaynaklı excerpt; kaynakta tarih ve qualifier korunur |
+| Teyit bekleyen işler | 0–100 token hedef, genellikle ≤1 ilgili kayıt | Konuyla ilgisi/urgency; passive reminder doğrudan provider çağırmaz |
+| İhtiyaç üzerine memory retrieval | Turn başına yeni benzersiz içerik için 2.400 token başlangıç bütçesi | İlk sonuç küçük excerpt; ayrıntı gerektiğinde aynı toplam içinde pagination; gerekirse açık sınırlı devam |
 | Exact document/source tool read | Mevcut 6.500 karakter + toplam tool-context token denetimi | Pagination sınırı bypass etmez |
 | Graph | Mevcut ≤60 edge, ≤3 hop, ≤5.800 karakter | Shared owner hub tüm depoyu açmaz |
 | Background origin başına model istekleri | ≤6, bütün alt işler ve retry'lar dahil | Extractor + reviewer + gerekirse embedding aynı rezervasyona tabi |
@@ -172,6 +177,14 @@ Mevcut bounded reader/graph korunur. Yeni selector ilgili core identity/constrai
 | Memory unit denemesi | ≤3 lifetime attempts | Origin ortak budget'ı dolarsa daha erken durabilir |
 
 Değerler önerilen varsayılanlardır; config-schema'da görünür olacak ve ölçümle ayarlanacaktır. Karakter sınırı token sınırı diye raporlanmaz. Core/relevance allocation hedefleri hard total içinde yeniden paylaşılabilir. Açık davranış kuralları bütçe uğruna sessizce düşürülmez; önce optional context azaltılır. Mandatory core kendi başına hard cap'i aşarsa açık overflow sonucu döndürülür; bilgi depoda korunur ve sessiz instruction kaybı olmaz.
+
+Boş relevance sonucu bütçeyi doldurmak için alakasız kayıtla tamamlanmaz. Specialist profile'a bütün domain/course/project geçmişi yüklenmez; aktif ders/proje kimliği ve ilgili kısa kaynak yeterlidir. Otomatik project knowledge bu ortak hafıza bütçesinden muaf değildir. Kullanıcının seçtiği mevcut çalışma dosyası/attachment ile zorunlu profile/project davranış kuralları ayrı kategorilerde ölçülür; persona ve gerekli kurallar hafıza küçültülürken kesilmez. Ayrı kategoriye taşımak otomatik memory cap'i aşmanın yolu olamaz.
+
+Küçük context seçiminde önce local exact/FTS ve mevcut indeksler kullanılır. Sıradan turn'e ikinci bir LLM router, özetleyici veya judge eklenmez. Uygun semantic query embedding bir kez ve cache ile yapılabilir; bozuk provider'da lexical fallback vardır. Kullanıcının ifadesi mevcut kısa subject/episode referanslarıyla çözülemiyorsa agent bounded recall'ı kendisi kullanır; owner'dan kanıtı yeniden yazmasını istemek varsayılan çözüm değildir.
+
+**İlk payload küçük olması tek başına maliyet başarısı değildir.** Her provider iteration'da gönderilen stable prompt, owner-memory, project knowledge, chat history, tool schema ve tool-result/adaptive recall ayrı ölçülür. Aynı kaynak fact/document/episode/tactical/history kanallarında ikinci kez eklenmez. Tool result veya adaptive recall zaten mevcut aynı passage/revision'ı gösteriyorsa yalnız yeni anlamlı içerik eklenir; gerekli evidence ve Anthropic tool-use/result eşleşmeleri korunur. Repeated payload tokenları, unique retrieved tokenlar ve toplam billed input ayrı metriklerdir. Process-local recall cache'i provider billing tasarrufu gibi raporlanmaz; provider cache read/write ve uncached input ayrılır.
+
+Registry'nin mevcut lazy tool loading yolu korunur; aynı araç açıklaması farklı bloklarda tekrarlanmaz ve yüklü araçların session boyunca sınırsız büyümesi ölçülür. Transcript içindeki aktif görevin kanıtı/kararı kaybolmadan context küçültme ayrıca doğrulanır; sırf memory tablosu küçüldü diye büyük history/project/tool payload sorunu çözülmüş sayılmaz. Cold-cache ve warm-cache, tek-call ve çok-call turn'ler birlikte değerlendirilir.
 
 Budget handle `AgentContext` üzerinden verilir; coordinator `app.state` üzerinde, tüketim/reservation durable DB üzerinde yaşar. Manual write ve post-turn intake aynı mesajın aynı olayını işliyorsa aynı origin/occurrence receipt üzerinden dedup edilir; farklı kanaldan bütçe sıfırlanmaz. Farklı agent dispatch'i aynı owner işlemi için yeni sınırsız bütçe açamaz.
 
@@ -200,6 +213,8 @@ Bağımlılık: mevcut corpus contract. **İlk uygulanacak aşama.**
 - [ ] Durable origin budget/reservation ve provider/model config guard'ını bütün memory provider call sınırlarına bağla. Böylece P4 capture genişlemesi korumasız çalışmaz.
 - [ ] Daily/intake adayları için unit result ve reviewer outcome kalıcı olsun; başarılı unit tekrar review edilmesin.
 - [ ] Unsupported/permanent/retryable/unknown sonuçlarını ayır; failed-unit retry, payload/source/version-bound review sertifikası ve crash recovery'yi gerçek provider-call sınırında denetle.
+- [ ] Otomatik enjeksiyon küçültmesini erken teslim olarak başlat: bütün mevcut recall/project knowledge adaylarında tek shared selector, ID/source dedup ve 1.200-token hard cap. Yeni episode/relation özellikleri geldikçe aynı selector'a bağlanır; maliyet azaltımı P7'nin bitmesini beklemez. Önce mevcut hissiyat senaryolarıyla shadow karşılaştırma yap.
+- [ ] İlk release'ten itibaren whole-turn input baseline'ını çıkar: bütün provider iteration'ları, history, tool schema/results, stable prompt, otomatik hafıza ve cached/uncached usage. Sadece ilk system memory bloğunun boyutunu maliyet diye sunma.
 
 Hedef kod: `memory_policy.py`, `memory_states.py`, `memory_admission.py`, `memory_store.py`, `task_queue.py`, `AgentContext`, config/schema ve ilgili profile/skill docs. Budget service/model additive; yeni modül adları uygulandıkları commit'te AGENTS tree'ye eklenir.
 
@@ -286,6 +301,7 @@ Kabul: yeni Ultron chat'i son çalışma ve unresolved soruyu kaynakla bulur; ki
 Bağımlılık: P1–P6. Ölçüm ve küçük smoke cases P0'dan itibaren her release'te vardır; bu aşama birleşik kabulü tamamlar.
 
 - [ ] Tek memory selector: exact identity/date/code → lexical/FTS → uygun cached semantic aday → bounded graph → historical source fallback. Gerektiği kadar derine gider; source/content dedup ve shared token cap uygular.
+- [ ] 350–650-token normal hedef, 1.200-token otomatik hard cap ve ihtiyaç üzerine retrieval bütçesini aynı formatter/token hesabıyla doğrula. İlgisiz turn'de günlük/state/domain ekleri sıfır olsun; kısa konuşma continuity gerektiriyorsa ilgili küçük blok korunur.
 - [ ] Kullanıcı mesajı kısa olduğunda relevant session subject/code bağlamı kullanılabilir; yeni ayrı chat'te konu varsayımı uydurulmaz.
 - [ ] Sıralama sadece recency/vector score değildir: exact subject, doğrulanmış validity, claim qualifier, source authority, unresolved iş ve query relevance birlikte ele alınır.
 - [ ] Agent tool description/profile prompts: doğru domain intake'i, ID reuse, source quotation, old state relevance, source warning ve “kaydedildi” receipt zorunluluğu. Kayıt başarısızken başarı cümlesi yasak.
@@ -293,6 +309,8 @@ Bağımlılık: P1–P6. Ölçüm ve küçük smoke cases P0'dan itibaren her re
 - [ ] Mevcut legacy source gap'i otomatik trust yükseltme nedeni yapma; exact source erişimi kolaylaşır, fakat factual unresolved durumu korunur.
 
 Kabul: aşağıdaki sabit incident suite'in tamamı geçer; budget hard cap aşımı sıfır; deterministic reader/graph/day için provider çağrısı sıfır; kritik source/identity/outcome hatası sıfır. Local retrieval p95 mevcut ölçülmüş baseline'a göre raporlanır; kalite kazanımı için sınırsız latency kabul edilmez.
+
+Hissiyat kabulü: aynı SPEDA/Ultron günlük konuşma örnekleri eski ve yeni context ile karşılaştırılır. İlgili önceki olay/isim/çalışma konusu bulunma oranı gerilemez; kaynakta bulunan bilgiyi yeniden anlatma talebi, yanlış kişi bağlantısı ve yanlış current outcome kritik senaryolarda sıfırdır. Persona/üslup owner review'ıyla korunur. Yeni retrieval yüzünden oluşan ek provider turu, gecikme ve toplam input tasarrufu birlikte raporlanır; küçük ilk enjeksiyonun daha pahalı çok-call davranışa dönüşmesi release'i durdurur. Ölçüm kontrollü test ortamında yapılır, normal her sohbet için ek model değerlendirmesi çalıştırılmaz.
 
 ### P8 — En güncel veriyle kayıpsız canlı geçiş
 
@@ -324,6 +342,9 @@ Bağımlılık: code compatibility, stage testleri ve P7 kabulü.
 | İstek provider'da işlendi mi bilinmeden crash | Unknown spend ve claimed state korunur; kör exactly-once provider vaadi yok |
 | Embedding hizmeti yok / intake backlog var | Lexical/source-message fallback; hafıza yok denmez |
 | Token cap, uzun tek satır, büyük day/list sonucu | Toplam sınırlı; doğru continuation; depoda içerik kaybı yok |
+| Rutin selamlaşma / mevcut konuyu sürdüren kısa mesaj | İlkinde küçük core; ikincisinde ilgili continuity; alakasız recaps/domain dump yok |
+| Aynı kaynak standing/facts/documents/day/tool/adaptive içinde | Source/revision dedup; gerekli evidence kalır, yeni aynı içerik tekrar eklenmez |
+| Cold/warm cache, çok tool turu, büyük project ve transcript | Bütün provider payloadları ölçülür; ilk memory cap'i toplam maliyet sanılmaz |
 | Retry sonrası son mesaj sadece “tekrar dene” | İlk kanıtın pinned ID'si kullanılır; kaynak yeniden yazdırılmaz |
 | Eski nightly n8n audit veya eski queue job | Yeni model döngüsü başlamaz |
 | Farklı user veya operational scope | Owner/entity/evidence izolasyonu korunur |
