@@ -347,9 +347,25 @@ def check_member_title(path: str, text: str, spec: DocumentSpec) -> list[Finding
         return []
 
     stem = path.rsplit("/", 1)[-1][:-3]
+    if coll.entity_noun in ("person","project") and re.fullmatch(r"\d{2}-\d{2}",stem):
+        stem=path.rsplit("/",2)[-2]  # pre-cutover entity-first edition
     h1 = next((t for _, lvl, t in _headings(text) if lvl == 1), None)
     if h1 is None:
         return []          # check_document_frame already reports the missing H1
+    from app.services.memory_paths import parse_monthly_path
+    monthly = parse_monthly_path(path)
+    if monthly and monthly.category == "finance" and monthly.slug == "ledger":
+        # A month ledger is titled by its period, not the generic topic name.
+        if h1 == monthly.period.canonical:
+            return []
+    if monthly and monthly.category == "finance" and monthly.slug.startswith("record-"):
+        from app.services.finance_records import parse
+        try:
+            record = parse(text)
+        except (ValueError, TypeError, KeyError) as exc:
+            return [Finding(path, "financial_record", "error", str(exc))]
+        if monthly.slug == "record-"+record["id"]:
+            return []
 
     # A SECTION collection's member is not an entity: its filename is a chosen
     # short handle (`sessions`) and its title is the declared human name
@@ -374,6 +390,10 @@ def check_member_title(path: str, text: str, spec: DocumentSpec) -> list[Finding
             )]
         return []
 
+    # Open-ended reference titles may be descriptive; their record ID and
+    # topic handle define identity. Persons/projects still require name parity.
+    if coll.entity_noun in ("topic", "document"):
+        return []
     if slugify(h1) != stem:
         return [Finding(
             path, "member_title", "warning",

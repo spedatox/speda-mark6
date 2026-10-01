@@ -79,12 +79,9 @@ logger = logging.getLogger(__name__)
 # WebSocket handshake and speaks for the owner; there is no second user to be.
 _OWNER_USER_ID = 1
 
-_VALID_COMMANDS = frozenset({"view", "create", "str_replace", "insert", "delete"})
+_VALID_COMMANDS = frozenset(MemorySkill.input_schema["properties"]["command"]["enum"])
 
-_ARGUMENT_KEYS = (
-    "command", "path", "file_text", "old_str", "new_str",
-    "insert_line", "insert_text", "view_range",
-)
+_ARGUMENT_KEYS = tuple(MemorySkill.input_schema["properties"])
 """What a memory command may carry. Taken from the frame explicitly rather than
 passed through wholesale: the frame also carries routing fields (request_id,
 chat_id, type) that are Igor's business and not the skill's, and a peer that

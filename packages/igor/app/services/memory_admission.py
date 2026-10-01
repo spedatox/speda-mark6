@@ -18,7 +18,7 @@ from app.services.memory_states import version
 
 EVIDENCE_SCHEMA = {"type": "array", "minItems": 1, "items": {
     "type": "object", "properties": {
-        "ref": {"type": "string", "description": "message:<id>, message:latest (quote from this owner session; an earlier matching message is pinned to its ID), message:<id>#image:<index> (or latest#image:<index>), observation:<id>, tool_call:<id>, or /memories/...md"},
+        "ref": {"type": "string", "description": "message:<id>, message:latest (quote from this owner session; an earlier matching message is pinned to its ID), message:<id>#image:<index> (or latest#image:<index>), observation:<id>, tool_call:<id>, source:<uuid> (historical original, verify currency), or /memories/...md"},
         "quote": {"type": "string", "description": "Exact source quotation; for an image reference, transcribe the relevant visible evidence for visual verification."},
     }, "required": ["ref", "quote"], "additionalProperties": False}}
 
@@ -171,10 +171,30 @@ async def resolve_evidence(db, user_id, evidence, *, session_id=None):
             ))).scalar_one_or_none()
             result = call.tool_result if call and isinstance(call.tool_result, str) else ""
             body = f"Tool `{call.tool_name}` result:\n{result.strip()}" if result.strip() else ""
+        elif re.fullmatch(r"source:[a-f0-9-]{32,36}", ref):
+            from app.models.memory_source import MemorySource
+            source = (await db.execute(select(MemorySource).where(
+                MemorySource.user_id == user_id, MemorySource.id == ref.split(":", 1)[1],
+                MemorySource.classification != "system",
+            ))).scalar_one_or_none()
+            body = source.content if source else ""
         elif ref.startswith("/memories/") and ref.endswith(".md") and ".." not in ref:
             body = (await db.execute(select(MemoryFile.content).where(
                 MemoryFile.user_id == user_id, MemoryFile.path == ref,
             ))).scalar_one_or_none() or ""
+            if not body:
+                from app.services.memory_catalog import source_for_path
+                source = await source_for_path(db, user_id, ref)
+                if source and source.classification != "system":
+                    body, ref = source.content, f"source:{source.id}"
+                else:
+                    from app.services.memory_store import resolve_alias
+                    target = await resolve_alias(db, user_id, ref)
+                    if target:
+                        body = (await db.execute(select(MemoryFile.content).where(
+                            MemoryFile.user_id == user_id, MemoryFile.path == target,
+                        ))).scalar_one_or_none() or ""
+                        ref = target
         else:
             raise ValueError(f"Unsupported evidence reference: {ref}")
         canonical = _canonical_quote(body, quote) if body else None

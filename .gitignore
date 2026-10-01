@@ -11,6 +11,9 @@
 *.sqlite
 *.sqlite3
 
+# Private memory snapshots, migration plans, reports and vault exports
+/db_migrate/
+
 # Python
 __pycache__/
 *.py[cod]

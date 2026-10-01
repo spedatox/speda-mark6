@@ -204,8 +204,8 @@ class RegistryUpsertSkill(Skill):
     name = "registry_upsert"
     description = (
         "Create or update one person or one project. Every person and every project has "
-        "its OWN file (`/memories/social/<category>/<name>.md`, "
-        "`/memories/projects/<name>.md`), and this tool works out which file that is from "
+        "its OWN identity and current file in the monthly social or projects collection, "
+        "and this tool works out which file that is from "
         "the name you give it — you never pass a path, and you never need to know how the "
         "filename is spelled. Use it whenever you learn something about a specific person "
         "or project: `who` sets or replaces their description, `event` adds a dated entry "
@@ -279,7 +279,9 @@ class RegistryUpsertSkill(Skill):
             return "`entity` is required — who or what is this about?"
 
         try:
-            path = member_path(coll, entity, args.get("category") or None)
+            from app.services.memory_catalog import resolve_member
+            path = await resolve_member(context.db, context.user_id, coll, entity,
+                                        args.get("category") or None)
         except ValueError as e:
             return str(e)
 

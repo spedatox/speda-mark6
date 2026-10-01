@@ -1,5 +1,9 @@
 # Memory enforcement
 
+**Current corpus contract:** [Memory corpus](MEMORY_CORPUS.md) supersedes the
+bulk Orion controller described in historical sections below. There is no
+scheduled memory audit, mass repair or automatic replay of legacy capture jobs.
+
 The September 2026 incidents exposed two gaps in the previous contract. A valid
 Markdown table could still contain the wrong kind of fact, and Orion could read
 a scan then write a successful audit narrative without reviewing any documents.

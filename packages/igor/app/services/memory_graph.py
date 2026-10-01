@@ -10,7 +10,7 @@ indexers inside their existing transaction; neither indexer calls a model.
 
 import re
 
-from sqlalchemy import or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import defer
 
 from app.models.memory_graph_edge import MemoryGraphEdge
@@ -82,6 +82,15 @@ async def index_observation(db, user_id: int, obs, *,
                 re.search(rf"(?<!\w){re.escape(name)}(?!\w)", obs.content,
                           re.IGNORECASE)):
             await add_edge(db, user_id, node, _ref("entity", subject), "mentions")
+    from app.models.memory_entity import MemoryEntity
+    from app.services.memory_paths import slugify
+    entities = (await db.execute(select(MemoryEntity).where(MemoryEntity.user_id == user_id))).scalars().all()
+    for entity in entities:
+        names = [entity.canonical_name, *(entity.aliases if isinstance(entity.aliases, list) else [])]
+        if any(slugify(obs.subject.split(":", 1)[-1]) == slugify(n) for n in names):
+            await add_edge(db, user_id, _ref("entity", obs.subject), _ref("entity", entity.id), "same_identity")
+        if any(len(n) >= 4 and re.search(rf"(?<!\w){re.escape(n)}(?!\w)", obs.content, re.IGNORECASE) for n in names):
+            await add_edge(db, user_id, node, _ref("entity", entity.id), "mentions", node)
 
     # When an entity is first learned, connect older events that already named
     # it. This is bounded and indexed by the owner's observation partition.
@@ -106,6 +115,8 @@ async def index_memory_revision(db, user_id: int, revision,
                                 evidence: list[dict] | None,
                                 record_id: str | None) -> None:
     """Index a committed document mutation and its verified citations."""
+    if not revision.path.startswith("/memories/") or "/." in revision.path:
+        return
     node = _ref("revision", revision.id)
     await add_edge(db, user_id, node, _ref("path", revision.path), "changed")
     if revision.after and revision.path.startswith(("/memories/social/", "/memories/projects/")):
@@ -120,6 +131,23 @@ async def index_memory_revision(db, user_id: int, revision,
         await add_edge(db, user_id, _ref("record", record_id), node, "version")
         await add_edge(db, user_id, _ref("record", record_id),
                        _ref("path", revision.path), "stored_at")
+    from app.models.memory_record_meta import MemoryRecordMeta
+    from app.models.memory_entity import MemoryEntity
+    meta = (await db.execute(select(MemoryRecordMeta).where(
+        MemoryRecordMeta.user_id == user_id, MemoryRecordMeta.record_id == record_id,
+    ))).scalar_one_or_none() if record_id else None
+    if meta and meta.entity_id:
+        await add_edge(db, user_id, _ref("record", record_id),
+                       _ref("entity", meta.entity_id), "about")
+    entities = (await db.execute(select(MemoryEntity).where(
+        MemoryEntity.user_id == user_id,
+    ))).scalars().all()
+    for entity in entities:
+        names = [entity.canonical_name, *(entity.aliases if isinstance(entity.aliases, list) else [])]
+        if any(len(name) >= 4 and re.search(rf"(?<!\w){re.escape(name)}(?!\w)", revision.after, re.IGNORECASE)
+               for name in names):
+            await add_edge(db, user_id, _ref("path", revision.path),
+                           _ref("entity", entity.id), "mentions", node)
     for item in evidence or []:
         ref = str(item.get("ref") or "")
         match = re.fullmatch(r"(message|observation):(\d+)(?:#image:\d+)?", ref)
@@ -144,7 +172,8 @@ async def neighborhood(db, user_id: int, start: str, *, depth: int = 2,
             MemoryGraphEdge.user_id == user_id,
             or_(MemoryGraphEdge.source_ref.in_(frontier),
                 MemoryGraphEdge.target_ref.in_(frontier)),
-        ).order_by(MemoryGraphEdge.id.desc()).limit(max_edges * 3))).scalars().all()
+        ).order_by(case((MemoryGraphEdge.relation_type.in_(("changed", "version", "similar_to")), 1), else_=0),
+                   MemoryGraphEdge.id.desc()).limit(max_edges * 3))).scalars().all()
         next_frontier = set()
         for edge in rows:
             if edge.id in seen_edges:
@@ -178,7 +207,8 @@ async def describe_ref(db, user_id: int, ref: str) -> str | None:
         ).options(defer(Observation.embedding)))).scalar_one_or_none()
         if row:
             ended = f" [ended {row.valid_until}]" if row.valid_until else ""
-            return f"[{ref}] {row.content}{ended}"
+            unsourced = " [legacy source unavailable]" if not (row.sources or row.message_ids or row.source_ids or row.premises) else ""
+            return f"[{ref}] {row.content}{ended}{unsourced}"
     elif kind == "message" and ident.isdigit():
         row = (await db.execute(select(Message).join(Session).where(
             Session.user_id == user_id, Message.id == int(ident),
@@ -211,7 +241,28 @@ async def describe_ref(db, user_id: int, ref: str) -> str | None:
         ).order_by(MemoryRevision.id.desc()).limit(1))).scalar_one_or_none()
         if revision:
             return f"[{ref}] {revision.path}"
+    elif kind == "passage":
+        from app.models.memory_passage import MemoryPassage
+        row = (await db.execute(select(MemoryPassage).where(
+            MemoryPassage.user_id == user_id, MemoryPassage.id == ident,
+        ))).scalar_one_or_none()
+        if row:
+            status = "historical edition" if row.retired else "document excerpt; mentioned date is not an outcome"
+            return f"[{ref}] {row.path}:{row.start_line} ({status}) {row.text.strip()[:650]}"
+    elif kind == "source":
+        from app.models.memory_source import MemorySource
+        row = (await db.execute(select(MemorySource).where(
+            MemorySource.user_id == user_id, MemorySource.id == ident,
+        ))).scalar_one_or_none()
+        if row:
+            return f"[{ref}] Historical original {row.original_path} (may be outdated): {' '.join(row.content.split())[:220]}"
     elif kind == "entity":
+        from app.models.memory_entity import MemoryEntity
+        entity = (await db.execute(select(MemoryEntity).where(
+            MemoryEntity.user_id == user_id, MemoryEntity.id == ident,
+        ))).scalar_one_or_none()
+        if entity:
+            return f"[{ref}] {entity.entity_type}: {entity.canonical_name}"
         from app.models.observation import Observation
         exists = (await db.execute(select(Observation.id).where(
             Observation.user_id == user_id, Observation.subject == ident,
@@ -242,15 +293,20 @@ async def build_context(db, user_id: int, start: str, *, depth: int = 2,
     for edge in edges:
         refs.update((edge.source_ref, edge.target_ref))
     labels = {ref: await describe_ref(db, user_id, ref) for ref in refs}
-    lines = ["Connected memory (edge labels describe provenance or association, not causation):"]
-    for ref in sorted(refs):
-        if labels[ref]:
-            lines.append(labels[ref])
-    lines.append("Connections:")
+    lines = ["Connected memory (provenance or association, not causation):", (labels[start] or "")[:600]]
+    shown = {start}
+    used = sum(len(line)+1 for line in lines)
     for edge in edges:
         if labels[edge.source_ref] and labels[edge.target_ref]:
-            lines.append(f"{edge.source_ref} --{edge.relation_type}--> {edge.target_ref}")
-    return "\n".join(lines)[:6000]
+            new = [labels[ref][:260] for ref in (edge.source_ref,edge.target_ref) if ref not in shown]
+            new.append(f"{edge.source_ref} --{edge.relation_type}--> {edge.target_ref}")
+            cost = sum(len(line)+1 for line in new)
+            if used+cost > 5800:
+                continue
+            lines.extend(new)
+            shown.update((edge.source_ref,edge.target_ref))
+            used += cost
+    return "\n".join(lines)
 
 
 async def rebuild_graph_for_user(user_id: int, *, batch_size: int = 100) -> dict:
@@ -264,6 +320,7 @@ async def rebuild_graph_for_user(user_id: int, *, batch_size: int = 100) -> dict
 
     from app.database import AsyncSessionLocal
     from app.models.memory_revision import MemoryRevision
+    from app.models.memory_file import MemoryFile
     from app.models.memory_write_receipt import MemoryWriteReceipt
     from app.models.observation import Observation
     from app.services.memory_states import version
@@ -309,6 +366,11 @@ async def rebuild_graph_for_user(user_id: int, *, batch_size: int = 100) -> dict
             ))
             rows = (await db.execute(select(MemoryRevision).where(
                 MemoryRevision.user_id == user_id, missing,
+                MemoryRevision.path.startswith("/memories/"),
+                ~MemoryRevision.path.contains("/."),
+                MemoryRevision.path.in_(select(MemoryFile.path).where(MemoryFile.user_id == user_id)),
+                MemoryRevision.id.in_(select(func.max(MemoryRevision.id)).where(
+                    MemoryRevision.user_id == user_id).group_by(MemoryRevision.path)),
             ).order_by(MemoryRevision.id).limit(batch_size))).scalars().all()
             for revision in rows:
                 receipt = (await db.execute(select(MemoryWriteReceipt).where(

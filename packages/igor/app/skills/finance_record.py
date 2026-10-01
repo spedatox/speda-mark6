@@ -74,8 +74,9 @@ class FinanceRecordSkill(Skill):
             return "Write rejected — finance belongs to Sentinel; hand off with source evidence."
         try:
             files = (await context.db.execute(select(MemoryFile).where(
-                MemoryFile.user_id == context.user_id, MemoryFile.path.startswith(finance.ROOT),
+                MemoryFile.user_id == context.user_id, MemoryFile.path.startswith("/memories/finance/"),
             ).execution_options(populate_existing=True))).scalars().all()
+            files = [f for f in files if f.path.startswith(finance.ROOT) or finance.MARKER in f.content]
             if args.get("operation") == "list":
                 return json.dumps([{"record": finance.parse(f.content), "version": version(f.content)} for f in files], ensure_ascii=False)
             if args.get("operation") == "summary":
@@ -83,7 +84,9 @@ class FinanceRecordSkill(Skill):
             record = self._drop_empty_foreign_fields(dict(args.get("record") or {}))
             ident = record.get("id") if args.get("operation") == "put" else args.get("id")
             path = f"{finance.ROOT}{ident}.md"
-            file = next((f for f in files if f.path == path), None)
+            file = next((f for f in files if finance.parse(f.content)["id"] == ident), None)
+            if file:
+                path = file.path
             before = file.content if file else None
             expected = version(before) if before is not None else "new"
             if args.get("operation") == "get":

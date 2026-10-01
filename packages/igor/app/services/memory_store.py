@@ -79,6 +79,28 @@ async def _mutate_in_txn(db, *, user_id: int, path: str, before: str | None,
             db.add(MemoryFile(user_id=user_id, path=path, content=after))
             await db.flush()
         else:
+            if after is None:
+                from app.models.memory_record_meta import MemoryRecordMeta
+                from app.models.memory_passage import MemoryPassage
+                from app.models.memory_entity_head import MemoryEntityHead
+                retired_records = select(MemoryRecordMeta.record_id).where(
+                    MemoryRecordMeta.user_id == user_id,
+                    MemoryRecordMeta.memory_file_id.in_(select(MemoryFile.id).where(
+                        MemoryFile.user_id == user_id, MemoryFile.path == path)),
+                )
+                await db.execute(update(MemoryPassage).where(
+                    MemoryPassage.user_id == user_id,
+                    MemoryPassage.record_id.in_(retired_records),
+                ).values(retired=True))
+                await db.execute(delete(MemoryEntityHead).where(
+                    MemoryEntityHead.user_id == user_id,
+                    MemoryEntityHead.current_edition_id.in_(retired_records),
+                ))
+                await db.execute(delete(MemoryRecordMeta).where(
+                    MemoryRecordMeta.user_id == user_id,
+                    MemoryRecordMeta.memory_file_id.in_(select(MemoryFile.id).where(
+                        MemoryFile.user_id == user_id, MemoryFile.path == path)),
+                ))
             predicate = (MemoryFile.user_id == user_id, MemoryFile.path == path,
                          MemoryFile.content == before)
             statement = (delete(MemoryFile).where(*predicate) if after is None else
@@ -87,6 +109,17 @@ async def _mutate_in_txn(db, *, user_id: int, path: str, before: str | None,
             result = await db.execute(statement.execution_options(synchronize_session="fetch"))
             if result.rowcount != 1:
                 raise MemoryWriteConflict(f"Memory changed concurrently at {path}. Reread it and reapply your intended change; nothing was saved.")
+        if after is not None:
+            from app.services.memory_catalog import maintain_record
+            file = await _get_file(db, user_id, path)
+            meta = await maintain_record(db, user_id, file, record_id)
+            if meta:
+                record_id = meta.record_id
+                if receipt:
+                    receipt.record_id = record_id
+            if record_id:
+                from app.services.memory_passages import index_passages
+                await index_passages(db, user_id, record_id, path, after)
         revision = await record_revision(db, user_id=user_id, path=path, author=author,
                                          action=action, before=before or "", after=after or "",
                                          request_id=request_id, record_id=record_id,
@@ -119,7 +152,7 @@ async def mutate_file(db, *, user_id: int, path: str, before: str | None,
             managed=managed, evidence=evidence, model=model,
             record_id=record_id, migration_id=migration_id
         )
-        if path.startswith("/memories/finance/records/"):
+        if path.startswith("/memories/finance/records/") or action == "finance_record":
             from app.services.finance_records import refresh_views
             await db.flush()
             await refresh_views(db, user_id, request_id)
@@ -152,7 +185,7 @@ async def mutate_files_atomic(
                 record_id=ch.get("record_id"), migration_id=ch.get("migration_id")
             )
             all_notes.append(notes)
-            if ch["path"].startswith("/memories/finance/records/"):
+            if ch["path"].startswith("/memories/finance/records/") or ch["action"] == "finance_record":
                 has_finance = True
                 
         if has_finance:
@@ -494,11 +527,28 @@ async def rename_file(
 async def resolve_alias(db: AsyncSession, user_id: int, path: str) -> str | None:
     """Query MemoryPathAlias to resolve old paths to their new canonical location."""
     from app.models.memory_path_alias import MemoryPathAlias
-    result = await db.execute(
-        select(MemoryPathAlias.target_path)
-        .where(
-            MemoryPathAlias.user_id == user_id,
-            MemoryPathAlias.alias_path == path
-        )
-    )
-    return result.scalar_one_or_none()
+    from app.models.memory_record_meta import MemoryRecordMeta
+    from app.models.memory_entity_head import MemoryEntityHead
+    alias = (await db.execute(select(MemoryPathAlias).where(
+        MemoryPathAlias.user_id == user_id, MemoryPathAlias.old_path == path,
+    ))).scalar_one_or_none()
+    if alias is None:
+        return None
+    record_id = alias.target_record_id
+    if alias.target_entity_id:
+        record_id = (await db.execute(select(MemoryEntityHead.current_edition_id).where(
+            MemoryEntityHead.user_id == user_id,
+            MemoryEntityHead.entity_id == alias.target_entity_id,
+        ))).scalar_one_or_none() or record_id
+    resolved = (await db.execute(select(MemoryFile.path).join(
+        MemoryRecordMeta, MemoryRecordMeta.memory_file_id == MemoryFile.id,
+    ).where(MemoryRecordMeta.user_id == user_id,
+            MemoryFile.user_id == user_id,
+            MemoryRecordMeta.record_id == record_id))).scalar_one_or_none()
+    if resolved:
+        return resolved
+    # Old ledger aliases may still point at a revision's former record ID.
+    return (await db.execute(select(MemoryRevision.path).where(
+        MemoryRevision.user_id == user_id, MemoryRevision.record_id == record_id,
+        MemoryRevision.path.in_(select(MemoryFile.path).where(MemoryFile.user_id == user_id)),
+    ).order_by(MemoryRevision.id.desc()).limit(1))).scalar_one_or_none()

@@ -160,3 +160,35 @@ def test_memory_policy():
     assert protected_write("/memories/finance/09-26/ledger.md", "speda") is not None
     assert protected_write("/memories/.views/overview.md", "speda") is not None
     assert protected_write("/memories/general/09-26/istanbul-trip.md", "owner") is None
+
+
+@pytest.mark.parametrize("path", [
+    "/memories/wellness/10-26/sessions.md",
+    "/memories/academic/10-26/calendar.md",
+    "/memories/ops/10-26/runbook.md",
+    "/memories/projects/10-26/speda.md",
+    "/memories/social/10-26/personal/ali.md",
+    "/memories/dossier/10-26/preferences.md",
+])
+def test_new_month_domain_paths_resolve(path):
+    assert collection_for(path) is not None
+    assert spec_for(path) is not None
+    assert collection_for(path.replace("10-26", "13-26")) is None
+
+
+def test_empty_month_rollover_is_declared_and_scoped(monkeypatch):
+    from app.services.memory_spec import declared_folders
+    from app.skills.memory import _format_directory
+
+    for period in (MonthPeriod(9, 2026), MonthPeriod(10, 2026), MonthPeriod(1, 2027)):
+        monkeypatch.setattr(MonthPeriod, "current", classmethod(lambda cls, p=period: p))
+        paths = {f["path"] for f in declared_folders()}
+        folder = f"/memories/general/{period.folder_name}"
+        assert folder in paths
+        assert f"/memories/social/{period.folder_name}/personal" in paths
+        assert f"/memories/states/{period.folder_name}" not in paths
+        listing = _format_directory([], "/memories/general")
+        assert folder + "/" in listing
+        assert "/memories/finance" not in listing
+        assert folder + "/" in _format_directory([], folder)
+        assert folder + "/" in _format_directory([], "/memories")

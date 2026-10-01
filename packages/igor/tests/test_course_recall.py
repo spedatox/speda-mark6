@@ -41,7 +41,7 @@ async def test_ultron_has_course_tools_without_search():
     assert {"read_course_memory", "record_course_memory"} <= ultron
     assert not {"read_course_memory", "record_course_memory"} & speda
     assert "read_course_memory" in UltronProfile().build_system_prompt({})
-    assert MemorySkill.input_schema["properties"]["command"]["enum"] == ["view"]
+    assert MemorySkill.input_schema["properties"]["command"]["enum"] == ["view", "search_sources"]
     assert "Raw memory writes are disabled" in await MemorySkill().execute(
         {"command": "create", "path": "/memories/academic/courses/2026-2027-spring/ATA101.md"},
         SimpleNamespace(),

@@ -1213,6 +1213,8 @@ def format_observation(obs: Observation, *, score: float | None = None) -> str:
         meta.append(f"seen {obs.reinforcement_count}×")
     if score is not None:
         meta.append(f"score {score:.2f}")
+    if not any(getattr(obs, field, None) for field in ("sources", "message_ids", "source_ids", "premises")):
+        meta.append("legacy source unavailable; confirm before treating as verified")
 
     line = f"{head} {obs.content}\n    — {' · '.join(meta)}"
     if obs.source_ids:

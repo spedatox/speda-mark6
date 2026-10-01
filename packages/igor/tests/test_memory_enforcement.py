@@ -57,11 +57,11 @@ def test_reports_and_recurring_rules_cannot_have_transaction_fields():
 def test_unknown_money_never_becomes_zero_and_debt_payments_are_not_expenses():
     r = transaction()
     r["amount"] = None
-    after = finance.views([r])["/memories/finance/ledger/2026-09.md"]
+    after = finance.views([r])["/memories/finance/09-26/ledger.md"]
     assert "unknown" in after and "debt_payment" in after
     assert "Expenses" not in after
     r["status"] = "void"
-    assert "Card repayment" not in finance.views([r])["/memories/finance/ledger/2026-09.md"]
+    assert "Card repayment" not in finance.views([r])["/memories/finance/09-26/ledger.md"]
 
 
 def test_record_render_cannot_drift_from_machine_metadata():
@@ -184,7 +184,7 @@ async def test_finance_record_and_views_commit_together_and_duplicate_idempotent
         skill = FinanceRecordSkill()
         result = json.loads(await skill.execute({"operation":"put", "version":"new", "record":transaction()}, ctx))
         assert result["views"] == "updated atomically"
-        ledger = (await db.execute(select(MemoryFile).where(MemoryFile.path=="/memories/finance/ledger/2026-09.md"))).scalar_one()
+        ledger = (await db.execute(select(MemoryFile).where(MemoryFile.path=="/memories/finance/09-26/ledger.md"))).scalar_one()
         assert "debt_payment" in ledger.content
         assert (await db.execute(select(MemoryWriteReceipt))).scalar_one().evidence[0]["source_sha256"]
         repeat = await skill.execute({"operation":"put", "version":"new", "record":transaction()}, ctx)

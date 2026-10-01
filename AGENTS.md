@@ -59,15 +59,17 @@ Agent name, personality, system prompt template, tool allowlist, and model polic
 **11. Every tool description is a minimum of 3–4 sentences.**
 State: what the tool does, when to use it, when NOT to use it, and what it returns. This is the most critical factor in Codex's tool selection accuracy per Anthropic's own documentation. A one-line description makes a good tool unusable. Enforce this at skill authoring time, not at runtime.
 
-**11a. Memory has ONE write path: the observation record.**
-A durable fact enters via `record_observation` and nowhere else. The markdown
-files under `/memories` are derived — six rendered mechanically
-(`services/memory_render.py`), two composed by Orion with verified citations
-(`services/memory_compose.py`). Never write a memory file directly from a skill,
-service or router; `memory_schema.check_write` refuses it. A fact stops being
-current by acquiring a `valid_until`, never by being moved or deleted, and a
-changed value is linked with `superseded_by` rather than overwritten. Full
-contract: `docs/MEMORY_ARCHITECTURE_V3.md`.
+**11a. Memory writes have one enforced transaction boundary.**
+Shaped document writers use `services/memory_store.py`: policy, evidence,
+validation, compare-and-swap, metadata, passages, graph and revision commit
+together. Search claims enter through `record_observation`; they never regenerate
+the owner's biography or domain documents. Financial views and current states
+are mechanically derived only from their typed records. Preserve originals and
+conflicting editions; expired facts are not erased and changed observation values
+use `valid_until`/`superseded_by`. Identity is a stable entity/record ID, not a
+folder or an inferred date. Sources and passage indexes are not additional agent
+write surfaces. No nightly audit or model-driven bulk rewrite is permitted.
+Full contract: `docs/MEMORY_CORPUS.md` and `docs/MEMORY_CONTRACT.md`.
 
 **12. All endpoints require authentication.**
 `AuthMiddleware` validates the **`X-API-Key`** header on every request before any router logic runs, comparing it in constant time against `SPEDA_API_KEY` (from the environment). The n8n trigger endpoint additionally validates `X-N8N-Secret`. The only unauthenticated paths are `/health` and `/oauth/google/callback`. Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are disabled outside `DEBUG`. There is no public data endpoint.
@@ -251,6 +253,9 @@ speda-mark-vi/
     │   ├── memory_schema.py     # Write gate for /memories — refuses hand edits to derived files
     │   ├── observations.py      # THE RECORD: evidence ladder, subject/domain routing, validity, supersession
     │   ├── memory_graph.py      # Typed graph indexing, traversal and resumable backfill (no model calls)
+    │   ├── memory_catalog.py    # Common identity, alias, metadata and historical-source read contract
+    │   ├── memory_passages.py   # Stable addresses for dated entries and sections; mechanical index
+    │   ├── memory_cleanup.py   # Explicit offline, lossless and resumable corpus migration
     │   ├── memory_render.py     # The six derived surfaces — pure function, no model, plus shadow-mode diff
     │   ├── memory_compose.py    # owner.md + current.md — prose from the record, citations verified
     │   ├── memory_reindex.py    # Seed from pre-v3 files + rebuild the record from raw history
@@ -272,6 +277,8 @@ speda-mark-vi/
     │   ├── telegram.py
     │   └── n8n.py, n8n_api.py   # Webhook auth (X-N8N-Secret), n8n REST client
     ├── models/                  # ORM models — one file per table (user, session, message, agent,
+    │                            # memory_source/memory_passage — immutable originals and addressable excerpts,
+    │                            # memory_capture_payload — complete durable event intake before review,
     │                            # agent_message, automation, health_sample, memory/memory_file/memory_revision,
     │                            # message_embedding, observation, memory_graph_edge, background_job,
     │                            # news_item/news_quota/news_watch, notification, tool_call,

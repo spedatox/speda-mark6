@@ -1,5 +1,10 @@
 # Current implementation
 
+The lossless corpus/identity/source contract and explicit offline cleanup are
+specified in [Memory corpus](MEMORY_CORPUS.md). Orion bulk/nightly auditing and
+document regeneration from observations are retired. Stable aliases, metadata,
+passage indexes and connections are maintained transactionally by ordinary writes.
+
 The enforced writers, typed finance views and durable Orion controller are specified in [Memory enforcement](MEMORY_ENFORCEMENT.md). That document supersedes the earlier voluntary-write/audit procedure below.
 
 # Memory contract

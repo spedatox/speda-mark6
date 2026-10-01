@@ -129,13 +129,11 @@ def views(records, legacy_months=()):
             "Amounts with unknown source values are shown as unknown. Transfers, debt payments and loan proceeds are separate from spending/earned income.\n\n") + table(
             ["Date", "Reported on", "Status", "Kind", "Description", "Amount", "Currency", "Account", "Record"],
             [[r.get("date"), r.get("reported_on", r.get("date")), r["status"], r["movement"], r["description"], r["amount"], r["currency"], r["account"], r["id"]] for r in rows])
-        result[f"/memories/finance/ledger/{month}.md"] = rendered_view
         # Monthly Memory Architecture path: /memories/finance/MM-YY/ledger.md
         mm_yy = f"{month[5:7]}-{month[2:4]}"
         result[f"/memories/finance/{mm_yy}/ledger.md"] = rendered_view
     for month in legacy_months:
         note = f"\nUnreconciled historical source: /memories/finance/legacy/{month}.md. Do not sum that source with reconciled rows above; it can include the same events and outdated classifications.\n"
-        result[f"/memories/finance/ledger/{month}.md"] += note
         mm_yy = f"{month[5:7]}-{month[2:4]}"
         if f"/memories/finance/{mm_yy}/ledger.md" in result:
             result[f"/memories/finance/{mm_yy}/ledger.md"] += note
@@ -221,6 +219,29 @@ async def refresh_views(db, user_id, request_id=""):
             if result.rowcount != 1:
                 raise ValueError("Financial view changed concurrently; retry after rereading.")
         else:
-            db.add(MemoryFile(user_id=user_id, path=path, content=after))
-        await record_revision(db, user_id=user_id, path=path, author="finance_projection",
-                              action="render", before=before, after=after, request_id=request_id)
+            file = MemoryFile(user_id=user_id, path=path, content=after)
+            db.add(file)
+        await db.flush()
+        from app.services.memory_catalog import maintain_record
+        from app.services.memory_passages import index_passages
+        from app.models.memory_path_alias import MemoryPathAlias
+        from app.services.memory_paths import parse_monthly_path
+        meta = await maintain_record(db,user_id,file)
+        await index_passages(db,user_id,meta.record_id,path,after)
+        monthly = parse_monthly_path(path)
+        if monthly and monthly.slug == "ledger":
+            old_path = f"/memories/finance/ledger/{monthly.period.canonical}.md"
+            alias = (await db.execute(select(MemoryPathAlias).where(
+                MemoryPathAlias.user_id==user_id, MemoryPathAlias.old_path==old_path,
+            ))).scalar_one_or_none()
+            if alias:
+                alias.target_record_id=meta.record_id
+                alias.target_entity_id=None
+            else:
+                db.add(MemoryPathAlias(user_id=user_id,old_path=old_path,
+                    target_record_id=meta.record_id,alias_type="moved"))
+        revision = await record_revision(db, user_id=user_id, path=path, author="finance_projection",
+                              action="render", before=before, after=after, request_id=request_id,record_id=meta.record_id)
+        await db.flush()
+        from app.services.memory_graph import index_memory_revision
+        await index_memory_revision(db,user_id,revision,[],meta.record_id)

@@ -41,7 +41,7 @@ class ExploreMemorySkill(Skill):
     async def execute(self, args: dict, context: AgentContext) -> str:
         ref = str(args.get("ref") or "").strip()
         if not ref.startswith(("observation:", "record:", "entity:", "path:",
-                               "revision:", "message:")):
+                               "revision:", "message:", "source:", "passage:")):
             return "Pass an exact typed memory ref, e.g. observation:2336 or record:<uuid>."
         return await build_context(
             context.db, context.user_id, ref,

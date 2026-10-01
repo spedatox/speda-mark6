@@ -66,7 +66,7 @@ async def test_a_command_reaches_the_skill_and_its_answer_goes_back(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_the_peer_is_the_author_of_its_own_writes(monkeypatch):
+async def test_the_peer_keeps_its_own_agent_context(monkeypatch):
     """The load-bearing field. The file law records which agent owns which
     document and `check_write` refuses on the author — so Optimus writing the
     finance ledger has to be refused by the same code that would refuse Ultron.
@@ -76,8 +76,8 @@ async def test_the_peer_is_the_author_of_its_own_writes(monkeypatch):
     _skill(monkeypatch, capture=seen)
 
     await peer_memory.run_memory_command("optimus", {
-        "request_id": "r2", "command": "str_replace",
-        "path": "/memories/finance.md", "old_str": "a", "new_str": "b",
+        "request_id": "r2", "command": "view",
+        "path": "/memories/finance.md",
     })
 
     context = seen[0][1]
@@ -94,12 +94,11 @@ async def test_only_the_skills_own_arguments_are_forwarded(monkeypatch):
 
     await peer_memory.run_memory_command("optimus", {
         "type": "memory_request", "request_id": "r3", "chat_id": "c9",
-        "command": "insert", "path": "/memories/log.md",
-        "insert_line": 3, "insert_text": "note", "surprise": "!!",
+        "command": "search_sources", "query": "cinema visit",
+        "surprise": "!!",
     })
 
-    assert seen[0][0] == {"command": "insert", "path": "/memories/log.md",
-                          "insert_line": 3, "insert_text": "note"}
+    assert seen[0][0] == {"command": "search_sources", "query": "cinema visit"}
 
 
 # ── ok means "it ran", not "you got what you wanted" ─────────────────────────
@@ -132,8 +131,8 @@ async def test_a_command_that_could_not_run_is_a_failure(monkeypatch):
     monkeypatch.setattr(peer_memory, "MemorySkill", _Broken)
 
     response = await peer_memory.run_memory_command("optimus", {
-        "request_id": "r5", "command": "create",
-        "path": "/memories/projects/x.md", "file_text": "...",
+        "request_id": "r5", "command": "view",
+        "path": "/memories/projects/x.md",
     })
 
     assert response["ok"] is False
@@ -169,8 +168,18 @@ async def test_an_unknown_command_is_refused_before_the_database(monkeypatch):
     })
 
     assert response["ok"] is False
-    for valid in ("view", "create", "str_replace", "insert", "delete"):
+    for valid in ("view", "search_sources"):
         assert valid in response["result"]
+
+
+@pytest.mark.asyncio
+async def test_peer_raw_writes_cannot_bypass_shaped_memory_writers(monkeypatch):
+    def never():
+        raise AssertionError("Raw write must be rejected before opening a session")
+    monkeypatch.setattr(peer_memory,"AsyncSessionLocal",never)
+    for command in ("create","str_replace","insert","delete"):
+        result=await peer_memory.run_memory_command("optimus",{"command":command,"path":"/memories/owner.md"})
+        assert result["ok"] is False
 
 
 @pytest.mark.asyncio

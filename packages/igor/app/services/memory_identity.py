@@ -10,7 +10,8 @@ import hashlib
 import uuid
 from datetime import date
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Forward-looking imports for models created in parallel
@@ -68,17 +69,24 @@ async def resolve_entity_by_name(db: AsyncSession, user_id: int, category: str, 
     Look up an existing entity ID by (user_id, category, canonical_name) in memory_entities table.
     Also checks aliases.
     """
-    # SQLite JSON contains workaround using LIKE since aliases is expected to be a JSON array string
-    stmt = select(MemoryEntity.id).where(
+    from app.services.memory_paths import slugify
+    stmt = select(MemoryEntity).where(
         MemoryEntity.user_id == user_id,
         MemoryEntity.category == category,
-        or_(
-            MemoryEntity.canonical_name == canonical_name,
-            MemoryEntity.aliases.like(f'%"{canonical_name}"%')
-        )
     )
-    result = await db.execute(stmt)
-    return result.scalar_first()
+    rows = (await db.execute(stmt)).scalars().all()
+    want = slugify(canonical_name)
+    matches = []
+    for row in rows:
+        aliases = row.aliases
+        if isinstance(aliases, str):  # repair compatibility with double-encoded legacy JSON
+            import json
+            aliases = json.loads(aliases)
+        if want in {slugify(n) for n in [row.canonical_name, *(aliases or [])]}:
+            matches.append(row.id)
+    if len(matches) > 1:
+        raise ValueError("Ambiguous entity identity; inspect existing records instead of creating another.")
+    return matches[0] if matches else None
 
 
 async def find_or_create_entity(db: AsyncSession, user_id: int, category: str, entity_type: str, canonical_name: str) -> tuple[str, bool]:
@@ -96,40 +104,9 @@ async def find_or_create_entity(db: AsyncSession, user_id: int, category: str, e
         category=category,
         entity_type=entity_type,
         canonical_name=canonical_name,
-        aliases="[]"
+        aliases=[]
     )
     db.add(new_entity)
-    await db.flush()
-    return new_id, True
-
-
-async def resolve_occurrence(db: AsyncSession, user_id: int, entity_id: str, period: str, evidence_summary: str | None = None) -> tuple[str, bool]:
-    """
-    Find an existing occurrence of this entity in this period, or create a new one.
-    Two trips to the same city in the same month are DIFFERENT occurrences.
-    """
-    stmt = select(MemoryOccurrence.id).where(
-        MemoryOccurrence.user_id == user_id,
-        MemoryOccurrence.entity_id == entity_id,
-        MemoryOccurrence.period == period,
-    )
-    if evidence_summary is not None:
-        stmt = stmt.where(MemoryOccurrence.evidence_summary == evidence_summary)
-        
-    result = await db.execute(stmt)
-    occurrence_id = result.scalar_first()
-    if occurrence_id is not None:
-        return occurrence_id, False
-
-    new_id = generate_occurrence_id()
-    new_occurrence = MemoryOccurrence(
-        id=new_id,
-        user_id=user_id,
-        entity_id=entity_id,
-        period=period,
-        evidence_summary=evidence_summary
-    )
-    db.add(new_occurrence)
     await db.flush()
     return new_id, True
 
@@ -166,12 +143,12 @@ async def update_entity_head(db: AsyncSession, user_id: int, entity_id: str, new
             current_edition_id=new_edition_id,
             version=1
         )
-        db.add(new_head)
         try:
-            await db.flush()
+            async with db.begin_nested():
+                db.add(new_head)
+                await db.flush()
             return True
-        except Exception:
-            # Integrity error or other issues
+        except IntegrityError:
             return False
     else:
         # Update existing
@@ -197,7 +174,7 @@ async def next_edition_seq(db: AsyncSession, user_id: int, entity_id: str) -> in
         MemoryRecordMeta.entity_id == entity_id
     )
     result = await db.execute(stmt)
-    max_seq = result.scalar_first()
+    max_seq = result.scalar_one_or_none()
     if max_seq is None:
         return 1
     return max_seq + 1

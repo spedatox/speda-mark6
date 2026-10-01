@@ -34,9 +34,12 @@ from app.models.memory_entity import MemoryEntity
 from app.models.memory_record_meta import MemoryRecordMeta
 from app.models.memory_record_link import MemoryRecordLink
 from app.models.memory_graph_edge import MemoryGraphEdge
+from app.models.memory_source import MemorySource, MemoryIssue
+from app.models.memory_passage import MemoryPassage
 from app.models.memory_path_alias import MemoryPathAlias
 from app.models.memory_entity_head import MemoryEntityHead
 from app.models.memory_capture_job import MemoryCaptureJob
+from app.models.memory_capture_payload import MemoryCapturePayload
 from app.models.memory_migration_run import MemoryMigrationRun
 from app.models.pattern import (
     Countermeasure,

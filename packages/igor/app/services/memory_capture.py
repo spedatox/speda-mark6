@@ -8,22 +8,24 @@ Implements §6 of the Monthly Memory Architecture.
 
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+import json
 from datetime import date, datetime, timezone
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import utc_now
+
 from app.models.memory_capture_job import MemoryCaptureJob
+from app.models.memory_capture_payload import MemoryCapturePayload
 from app.models.memory_file import MemoryFile
 from app.models.memory_record_meta import MemoryRecordMeta
 from app.services.memory_calendar import month_for_event, TemporalResolution
 from app.services.memory_identity import (
     content_hash,
-    find_or_create_entity,
     generate_record_id,
     collision_safe_slug,
-    generate_occurrence_id,
 )
 from app.services.memory_paths import MonthPeriod, build_monthly_path, slugify
 from app.services.memory_store import _mutate_in_txn
@@ -68,6 +70,7 @@ class RoutingResult:
     record_id: str
     temporal: TemporalResolution
     is_new_file: bool
+    related_entity_ids: tuple[str, ...] = ()
 
 
 async def create_candidate(db: AsyncSession, user_id: int, candidate: CaptureCandidate) -> MemoryCaptureJob:
@@ -76,6 +79,10 @@ async def create_candidate(db: AsyncSession, user_id: int, candidate: CaptureCan
     If duplicate, return existing job.
     Create new MemoryCaptureJob in 'pending' state.
     """
+    payload = json.loads(json.dumps(asdict(candidate), default=lambda value: value.isoformat()))
+    payload["evidence"] = [{k:v for k,v in item.items() if k not in ("source_body", "_image")} for item in payload["evidence"]]
+    identity = {k:v for k,v in payload.items() if k not in ("source_timestamp", "source_timezone")}
+    identity_hash = content_hash(json.dumps(identity,sort_keys=True,ensure_ascii=False))
     result = await db.execute(
         select(MemoryCaptureJob).where(
             MemoryCaptureJob.user_id == user_id,
@@ -84,6 +91,11 @@ async def create_candidate(db: AsyncSession, user_id: int, candidate: CaptureCan
     )
     job = result.scalars().first()
     if job is not None:
+        stored = await db.get(MemoryCapturePayload,job.id)
+        if stored is None:
+            raise ValueError("Legacy capture has no complete payload; inspect its retained evidence rather than replaying it.")
+        if stored.identity_hash != identity_hash:
+            raise ValueError("Idempotency key already belongs to a different capture. Reuse the key only for its exact original content.")
         return job
 
     job = MemoryCaptureJob(
@@ -99,10 +111,13 @@ async def create_candidate(db: AsyncSession, user_id: int, candidate: CaptureCan
     )
     db.add(job)
     await db.flush()
+    db.add(MemoryCapturePayload(capture_job_id=job.id,user_id=user_id,
+                               payload=payload,identity_hash=identity_hash))
+    await db.flush()
     return job
 
 
-async def route_candidate(db: AsyncSession, user_id: int, candidate: CaptureCandidate) -> RoutingResult:
+async def route_candidate(db: AsyncSession, user_id: int, candidate: CaptureCandidate, *, record_id: str | None = None) -> RoutingResult:
     """
     Resolve the temporal period using month_for_event().
     Determine category, generate slug, check for collisions, resolve entity identity.
@@ -112,22 +127,34 @@ async def route_candidate(db: AsyncSession, user_id: int, candidate: CaptureCand
         occurred_on=candidate.occurred_on,
         occurred_until=candidate.occurred_until,
         effective_from=candidate.effective_from,
-        recorded_at=candidate.source_timestamp,
+        # Source time is provenance, not the time this record is saved. An
+        # undated capture always belongs to the current recording month.
+        recorded_at=utc_now(),
         source_timezone=candidate.source_timezone,
     )
 
     category = candidate.category_hint or 'general'
     
     entity_id = None
+    related_entity_ids = []
     if candidate.related_entities and len(candidate.related_entities) > 0:
-        canonical_name = candidate.related_entities[0]
-        entity_id, _ = await find_or_create_entity(
-            db=db,
-            user_id=user_id,
-            category=category,
-            entity_type='person' if category == 'social' else 'concept',
-            canonical_name=canonical_name
-        )
+        # An event's filing category does not redefine the identity of someone
+        # it mentions. Reuse known people/projects; never invent a second
+        # "general concept" for a person already present in social/.
+        from app.models.memory_entity import MemoryEntity
+        entities = (await db.execute(select(MemoryEntity).where(
+            MemoryEntity.user_id == user_id,
+        ))).scalars().all()
+        for name in candidate.related_entities[:4]:
+            want = slugify(name)
+            matches = [row.id for row in entities if want in {
+                slugify(n) for n in [row.canonical_name, *(row.aliases if isinstance(row.aliases,list) else [])]
+            }]
+            if len(matches)>1:
+                raise ValueError("Ambiguous related entity; inspect existing identities before linking this event.")
+            if len(matches)==1 and matches[0] not in related_entity_ids:
+                related_entity_ids.append(matches[0])
+        entity_id = related_entity_ids[0] if related_entity_ids else None
 
     base_slug = slugify(candidate.title or candidate.summary[:20] or "untitled")
     
@@ -156,12 +183,12 @@ async def route_candidate(db: AsyncSession, user_id: int, candidate: CaptureCand
     slug = collision_safe_slug(base_slug, existing_slugs, candidate.occurred_on)
     path = build_monthly_path(category, period_obj, slug, group=group)
     
-    record_id = generate_record_id()
+    record_id = record_id or generate_record_id()
     is_new_file = path not in existing_paths
     
     occurrence_id = None
-    if candidate.kind == 'event' and entity_id:
-        occurrence_id = generate_occurrence_id()
+    if candidate.kind == 'event':
+        occurrence_id = uuid.uuid5(uuid.NAMESPACE_URL,"memory-event:"+record_id).hex
         
     return RoutingResult(
         category=category,
@@ -172,7 +199,8 @@ async def route_candidate(db: AsyncSession, user_id: int, candidate: CaptureCand
         occurrence_id=occurrence_id,
         record_id=record_id,
         temporal=temporal,
-        is_new_file=is_new_file
+        is_new_file=is_new_file,
+        related_entity_ids=tuple(related_entity_ids),
     )
 
 
@@ -245,11 +273,16 @@ async def commit_candidate(
             source_recorded_at=candidate.source_timestamp,
             date_precision=routing.temporal.date_precision.value,
             source_timezone=routing.temporal.source_timezone,
-            schema_version=1,
+            schema_version=3,
             version=1,
             content_hash=content_hash(content),
         )
         db.add(meta)
+        await db.flush()
+        from app.services.memory_graph import add_edge
+        for linked in routing.related_entity_ids or ((routing.entity_id,) if routing.entity_id else ()):
+            await add_edge(db,user_id,'record:'+routing.record_id,
+                           'entity:'+linked,'mentions')
         stmt = update(MemoryCaptureJob).where(
             MemoryCaptureJob.user_id == user_id,
             MemoryCaptureJob.source_id == candidate.source_id

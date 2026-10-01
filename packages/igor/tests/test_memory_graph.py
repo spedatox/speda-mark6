@@ -179,3 +179,37 @@ async def test_related_fact_survives_more_than_500_unrelated_observations(sessio
         await db.commit()
         linked = await related_observations(db, user_id=1, observation_id=event.id)
         assert [row.id for row, _ in linked["links"]] == [person.id]
+
+
+@pytest.mark.parametrize("recorded_at, expected", [
+    ("2026-09-30T20:59:59+00:00", "09-26"),
+    ("2026-09-30T21:00:00+00:00", "10-26"),
+    ("2026-12-31T21:00:00+00:00", "01-27"),
+])
+async def test_undated_capture_uses_recording_month(sessions, monkeypatch, recorded_at, expected):
+    from datetime import datetime
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr("app.services.memory_admission.admit", AsyncMock(return_value="supported"))
+    monkeypatch.setattr("app.services.memory_capture.utc_now", lambda: datetime.fromisoformat(recorded_at))
+    async with sessions() as db:
+        session = Session(user_id=1, agent_id="speda", triggered_by="user", model_used="test")
+        db.add(session)
+        await db.flush()
+        db.add(Message(session_id=session.id, role="user", content="I visited Istanbul."))
+        await db.commit()
+        context = SimpleNamespace(db=db, user_id=1, session_id=session.id,
+            request_id="undated", agent_id="speda", model="test",
+            trigger_payload={"timestamp": "2026-08-01T00:00:00Z"}, timezone="Europe/Istanbul")
+        args = {"summary": "The owner visited Istanbul.", "title": "Istanbul visit",
+                "evidence": [{"ref": "message:latest", "quote": "I visited Istanbul."}]}
+        skill = MemoryEventSkill()
+        result = json.loads(await skill.execute(args, context))
+        assert result["path"] == f"/memories/general/{expected}/istanbul-visit.md"
+        meta = (await db.execute(select(MemoryRecordMeta))).scalar_one()
+        assert meta.period_basis == "recorded"
+        assert meta.occurred_on is None
+        assert meta.source_recorded_at.month == 8
+        assert "Date: Unknown" in (await db.execute(select(MemoryFile))).scalar_one().content
+        repeated = json.loads(await skill.execute(args, context))
+        assert repeated["already_recorded"]
+        assert repeated["record_id"] == result["record_id"]

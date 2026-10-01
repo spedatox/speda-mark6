@@ -265,8 +265,9 @@ class CollectionSpec:
     # Monthly Memory Architecture (§3): when True, paths in this collection
     # include a `MM-YY` period segment. `collection_for` accounts for the extra
     # depth when routing a path, and `build_member_path` inserts the period.
-    # Defaults to False so existing collections keep working until migrated.
-    monthly: bool = False
+    # Legacy flat paths remain readable during migration. Lifecycle states and
+    # the retired events collection explicitly opt out of monthly folders.
+    monthly: bool = True
 
     @property
     def closed(self) -> bool:
@@ -595,6 +596,7 @@ SECTION_COLLECTIONS: tuple[CollectionSpec, ...] = (
 
 COLLECTIONS = COLLECTIONS + SECTION_COLLECTIONS + (
     CollectionSpec(root="/memories/states", kind=OBSERVATIONS,
+                   monthly=False,
                    summary="Versioned ongoing situations; managed by memory_state",
                    entity_noun="state", max_bytes=6_000),
     # `events` is retired under the Monthly Memory Architecture (§3.2).
@@ -602,11 +604,38 @@ COLLECTIONS = COLLECTIONS + SECTION_COLLECTIONS + (
     # appropriate specialist category. Kept as a collection for compatibility
     # reads; new writes are refused.
     CollectionSpec(root="/memories/events", kind=LEDGER,
+                   monthly=False,
                    summary="RETIRED — unmatched events now go to general/, specialist events to their domain",
                    entity_noun="month", max_bytes=48_000),
 )
 
 _COLLECTIONS_BY_ROOT = {c.root: c for c in COLLECTIONS}
+
+
+def declared_folders() -> list[dict]:
+    """Declare empty current-month folders without writing placeholder records.
+
+    Memory directories are virtual: files are database rows. Recompute the
+    current period on every listing so rollover needs neither restart nor cron.
+    Legacy roots and shard folders remain available during migration.
+    """
+    from app.services.memory_paths import MonthPeriod
+
+    period = MonthPeriod.current().folder_name
+    out = []
+    for coll in COLLECTIONS:
+        roots = [coll.root]
+        if coll.monthly:
+            roots.append(f"{coll.root}/{period}")
+            roots.extend(f"{coll.root}/{period}/{group}" for group in coll.groups)
+        for root in roots:
+            out.append({"path": root, "summary": coll.summary,
+                        "owner_agent": coll.owner_agent, "open": not coll.closed})
+        out.extend({"path": f"{coll.root}/{member.stem}",
+                    "summary": member.summary or member.title,
+                    "owner_agent": coll.owner_agent, "open": True}
+                   for member in coll.members if member.shard)
+    return out
 
 
 # Turkish. `unicodedata` alone is not enough: `ı` and `ğ` have no compatibility
@@ -650,13 +679,32 @@ def collection_for(path: str) -> CollectionSpec | None:
             continue
         rest = path[len(prefix):]
         segments = rest.split("/")
+        # Transitional entity-first editions from the September migration.
+        # They remain readable/writeable until explicit offline cutover.
+        if _re.fullmatch(r"\d{2}-\d{2}\.md", segments[-1]):
+            from app.services.memory_paths import MonthPeriod
+            try:
+                MonthPeriod.from_folder(segments[-1][:-3])
+            except ValueError:
+                return None
+            if coll.root == "/memories/projects" and len(segments)==2:
+                segments=[segments[0]+".md"]
+                rest=segments[0]
+            elif coll.root == "/memories/social" and len(segments)==3:
+                segments=[segments[0],segments[1]+".md"]
+                rest="/".join(segments)
 
         # ── Monthly path detection ────────────────────────────────────────
         # A monthly collection expects root/MM-YY/topic.md (depth+1 segments).
         # We recognise the MM-YY pattern and strip it from depth calculations.
         month_stripped_rest = rest
         is_monthly_path = False
-        if coll.monthly and len(segments) >= 2 and _re.fullmatch(r"\d{2}-\d{2}", segments[0]):
+        if (coll.monthly or coll.root == "/memories/states") and len(segments) >= 2 and _re.fullmatch(r"\d{2}-\d{2}", segments[0]):
+            from app.services.memory_paths import MonthPeriod
+            try:
+                MonthPeriod.from_folder(segments[0])
+            except ValueError:
+                return None
             is_monthly_path = True
             month_stripped_rest = "/".join(segments[1:])
             segments = segments[1:]

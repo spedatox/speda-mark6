@@ -109,6 +109,8 @@ class CourseMemorySkill(Skill):
             path = course_path(args.get("term", ""), args.get("course_code", ""))
         except ValueError as exc:
             return str(exc)
+        from app.services.memory_store import resolve_alias
+        path = await resolve_alias(context.db,context.user_id,path) or path
         entry = (args.get("entry") or "").strip()
         if not entry:
             return "entry cannot be empty."
@@ -172,10 +174,8 @@ class ReadCourseMemorySkill(Skill):
                 path = course_path(term, code)
             except ValueError as exc:
                 return str(exc)
-            row = (await context.db.execute(select(MemoryFile).where(
-                MemoryFile.user_id == context.user_id, MemoryFile.path == path,
-            ))).scalar_one_or_none()
-            return f"{path}\n\n{row.content}" if row else f"No course record at {path}."
+            from app.skills.memory import MemorySkill
+            return await MemorySkill().execute({"command":"view","path":path},context)
 
         rows = (await context.db.execute(select(MemoryFile).where(
             MemoryFile.user_id == context.user_id,
@@ -186,6 +186,6 @@ class ReadCourseMemorySkill(Skill):
         if not paths:
             return f"No course record found for {code}." if code else "No course records yet."
         if len(paths) == 1 and code:
-            row = next(row for row in rows if row.path == paths[0])
-            return f"{row.path}\n\n{row.content}"
+            from app.skills.memory import MemorySkill
+            return await MemorySkill().execute({"command":"view","path":paths[0]},context)
         return "Course records (specify course_code and term to open one):\n" + "\n".join(paths[:100])

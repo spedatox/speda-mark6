@@ -268,10 +268,43 @@ def _schema_note(
     return "\n\nNote:\n  - " + "\n  - ".join(warnings)
 
 
-def _format_file_with_lines(path: str, content: str) -> str:
+def _format_file_with_lines(path: str, content: str, first_line: int = 1) -> str:
     lines = content.splitlines()
-    numbered = "\n".join(f"{i + 1:6}\t{line}" for i, line in enumerate(lines))
+    numbered = "\n".join(f"{i + first_line:6}\t{line}" for i, line in enumerate(lines))
     return f"Here's the content of {path} with line numbers:\n{numbered}"
+
+
+def _page(path: str, content: str, args: dict, *, budget: int = 6500) -> str:
+    """Bound the raw read too; an explicit range never bypasses the ceiling."""
+    lines = content.splitlines()
+    content_budget = max(1, budget-len(path)-200)
+    if args.get("char_range"):
+        start, finish = args["char_range"]
+        if start < 0 or finish <= start:
+            return "char_range requires 0 <= start < end (character offsets)."
+        finish = min(finish, start+min(6000,content_budget), len(content))
+        result = f"{path}, characters {start}:{finish}:\n"+content[start:finish]
+        if finish < len(content):
+            result += f"\nContinue with char_range=[{finish},{finish+6000}]."
+        return result
+    first, end = args.get("view_range") or (1, len(lines))
+    if first < 1 or end < first:
+        return "view_range requires 1 <= start_line <= end_line."
+    selected, used = [], 0
+    for line in lines[first-1:end]:
+        # Includes line-number overhead in the budget.
+        if used+len(line)+9 > content_budget:
+            break
+        selected.append(line)
+        used += len(line)+9
+    if not selected and first <= len(lines):
+        offset = len("\n".join(lines[:first-1]))+(1 if first>1 else 0)
+        return _page(path, content, {"char_range": [offset,offset+6000]},budget=budget)
+    result = _format_file_with_lines(path, "\n".join(selected), first)
+    next_line = first+len(selected)
+    if next_line <= min(end, len(lines)):
+        result += f"\nMore content remains unchanged. Continue with view_range=[{next_line},{min(len(lines), next_line+60)}]."
+    return result
 
 
 def _format_directory(
@@ -299,9 +332,6 @@ def _format_directory(
     Output is a pure function of the sorted path set, which is what keeps the
     injected block byte-stable and therefore cacheable.
     """
-    if not files:
-        return f"Here are the files and directories up to 2 levels deep in {path}:\n(empty)"
-
     def _size(f: MemoryFile) -> str:
         n = len(f.content.encode("utf-8"))
         return f"{n / 1024:.1f}K\t" if n >= 1024 else f"{n}B\t"
@@ -331,11 +361,13 @@ def _format_directory(
     # agents to file such a document there, while this listing is what they
     # trust for what exists. The two disagreeing is how an instruction quietly
     # stops being followed.
-    from app.services.memory_spec import COLLECTIONS
+    from app.services.memory_spec import declared_folders
 
-    for coll in COLLECTIONS:
-        if coll.depth == 1 and not coll.closed:
-            groups.setdefault(coll.root, [])
+    root = path.rstrip("/") or MEMORY_ROOT
+    for folder in declared_folders():
+        declared = folder["path"]
+        if declared == root or declared.startswith(root + "/"):
+            groups.setdefault(declared, [])
 
     lines = [f"Here are the files and directories up to 2 levels deep in {path}:"]
     root = path.rstrip("/") or MEMORY_ROOT
@@ -611,6 +643,22 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
         "/memories/dossier/wants.md",
     }
     preload = [p for p in preload_paths(set(by_path)) if p in standing]
+    # Dossier folders describe editions. Select the most recent edition of
+    # each binding topic; never silently drop constraints after a path move.
+    from app.services.memory_paths import parse_monthly_path
+    standing_names = ("prohibitions", "dislikes", "wants")
+    dossier_caps = {}
+    for name, cap in zip(standing_names, (350, 250, 250)):
+        choices = []
+        for path in by_path:
+            parsed = parse_monthly_path(path)
+            if parsed and parsed.category == "dossier" and parsed.slug == name:
+                choices.append((parsed.period.canonical, path))
+        if choices:
+            selected = max(choices)[1]
+            preload = [p for p in preload if p != f"/memories/dossier/{name}.md"]
+            preload.append(selected)
+            dossier_caps[selected] = cap
 
     injected = set(preload)
     watermarked = [f for f in all_files if f.path in injected]
@@ -646,6 +694,7 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
         "/memories/dossier/dislikes.md": 250,
         "/memories/dossier/wants.md": 250,
     }
+    standing_caps.update(dossier_caps)
     sections = [f"### Directory\n\n{listing}"]
     for path in preload:
         f = by_path.get(path)
@@ -796,6 +845,10 @@ async def relevant_files_for_message(user_id: int, db, query: str) -> str:
     sections = []
     for _score, path, content in ranked[:2]:
         header = f"### {path}\n\n"
+        from app.services.memory_catalog import document_warnings
+        warning = await document_warnings(db,user_id,path)
+        if warning:
+            content = warning+"\n\n"+content
         gap = 2 if sections else 0
         available = min(settings.memory_injected_file_max_chars or budget, budget - gap - len(header))
         if available < 200:
@@ -1021,6 +1074,8 @@ class MemorySkill(Skill):
         "project instead of a whole folder when its path is known. "
         "Do NOT use create, str_replace, insert or delete for agent writes: raw edits are "
         "disabled, and confirmed changes need their evidence-bound domain tool. "
+        "Use search_sources with a specific query to recover immutable historical originals; "
+        "these may be outdated and must not be treated as current facts. "
         "Returns the document with line numbers or a directory listing; a missing path "
         "is reported explicitly rather than filled from another record."
     )
@@ -1028,15 +1083,19 @@ class MemorySkill(Skill):
     input_schema = {
         "type": "object",
         "properties": {
+            "query": {"type": "string", "description": "Specific name/topic for historical-source search."},
             "command": {
                 "type": "string",
-                "enum": ["view"],
+                "enum": ["view", "search_sources"],
                 "description": "view: list a directory or read a file, optionally by line range.",
             },
             "path": {
                 "type": "string",
-                "description": "File or directory path. Must start with /memories.",
+                "description": "File/directory under /memories, or source:<uuid> to read an exact historical original.",
             },
+            "char_range": {"type": "array", "items": {"type": "integer", "minimum": 0},
+                           "minItems": 2, "maxItems": 2,
+                           "description": "Optional [start,end] character offsets for unusually long source lines; each read is capped at 6000 characters."},
             "view_range": {
                 "type": "array",
                 "items": {"type": "integer"},
@@ -1045,16 +1104,28 @@ class MemorySkill(Skill):
                 "description": "Optional [start_line, end_line] range for view.",
             },
         },
-        "required": ["command", "path"],
+        "required": ["command"],
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
         command = args.get("command", "")
+        if command == "search_sources":
+            from app.services.memory_catalog import search_sources
+            return await search_sources(context.db, context.user_id, args.get("query") or "")
         if command != "view":
             return "Raw memory writes are disabled. Use the evidence-bound domain tool or record_observation."
         path = args.get("path", "").rstrip("/")
         db = context.db
         user_id = context.user_id
+        if path.startswith("source:"):
+            from app.models.memory_source import MemorySource
+            source = (await db.execute(select(MemorySource).where(
+                MemorySource.user_id == user_id, MemorySource.id == path.split(":",1)[1],
+            ))).scalar_one_or_none()
+            if source:
+                prefix=f"Historical original {source.original_path}; may be outdated.\n"
+                return prefix+_page(path,source.content,args,budget=6500-len(prefix))
+            return "No accessible historical source at that address."
 
         err = _validate_path(path)
         if err:
@@ -1064,7 +1135,7 @@ class MemorySkill(Skill):
 
     # ── Command handlers ──────────────────────────────────────────────────────
 
-    async def _view(self, path: str, args: dict, user_id: int, db) -> str:
+    async def _view(self, path: str, args: dict, user_id: int, db, *, budget: int = 6500) -> str:
         # Check if it's the root or a directory prefix
         is_dir = path == MEMORY_ROOT or not path.endswith(".md")
 
@@ -1093,19 +1164,31 @@ class MemorySkill(Skill):
         )
         file = result.scalar_one_or_none()
         if file is None:
+            from app.services.memory_store import resolve_alias
+            target = await resolve_alias(db, user_id, path)
+            if target and target != path:
+                prefix=f"Redirected {path} → {target}\n"
+                return prefix + await self._view(target, args, user_id, db,budget=budget-len(prefix))
+            from app.services.memory_catalog import source_for_path
+            source = await source_for_path(db, user_id, path)
+            if source:
+                prefix=f"Historical original source:{source.id}; may be outdated.\n"
+                return prefix + _page(path, source.content, args,budget=budget-len(prefix))
             return f"The path {path} does not exist. Please provide a valid path."
 
         content = file.content
         if path == "/memories/current.md":
             from app.services.memory_states import effective_current
             content = await effective_current(db, user_id)
-        view_range = args.get("view_range")
-        if view_range:
-            lines = content.splitlines()
-            start, end = view_range[0] - 1, view_range[1]
-            content = "\n".join(lines[start:end])
-
-        return _format_file_with_lines(path, content)
+        from app.models.memory_record_meta import MemoryRecordMeta
+        meta = (await db.execute(select(MemoryRecordMeta).where(
+            MemoryRecordMeta.user_id == user_id, MemoryRecordMeta.memory_file_id == file.id,
+        ))).scalar_one_or_none()
+        address = f"record:{meta.record_id}" if meta else f"path:{path}"
+        from app.services.memory_catalog import document_warnings
+        warning = await document_warnings(db,user_id,path)
+        prefix=f"Address: {address}. Use explore_memory for linked entries and original editions.\n{warning}\n"
+        return prefix + _page(path, content, args,budget=budget-len(prefix))
 
     async def _create(self, path: str, args: dict, context: AgentContext) -> str:
         user_id, db = context.user_id, context.db
