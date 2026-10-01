@@ -7,7 +7,7 @@ import type { AppProfile } from '../profile/types'
 import type { Session, AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
-import { deleteSession, renameSession, fetchActiveRuns, fetchProjects } from '../lib/api'
+import { deleteSession, renameSession, exportSession, fetchActiveRuns, fetchProjects } from '../lib/api'
 import type { Project } from '../lib/types'
 import { hasMark } from '../lib/agentMarks'
 import AgentMark from './AgentMark'
@@ -56,6 +56,23 @@ function SessionItem({ session, active, onSelect, config, running }: {
   const [hover, setHover]       = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameVal, setRenameVal] = useState(session.title ?? '')
+  const [exporting, setExporting] = useState(false)
+  const [exportNotice, setExportNotice] = useState('')
+
+  const handleExport = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (exporting) return
+    setExporting(true)
+    setExportNotice('')
+    try {
+      const path = await exportSession(config, session.id)
+      if (path) setExportNotice(t.sidebar.exportSaved)
+    } catch (error) {
+      setExportNotice(`${t.sidebar.exportFailed}: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   // Typewriter on title arrival
   const [displayTitle, setDisplayTitle] = useState(session.title ?? '')
@@ -102,6 +119,7 @@ function SessionItem({ session, active, onSelect, config, running }: {
   const lit = active || hover
 
   return (
+    <>
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -151,7 +169,7 @@ function SessionItem({ session, active, onSelect, config, running }: {
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: 'block',
-            paddingRight: lit ? '3.75rem' : '14px',
+            paddingRight: lit ? '5.5rem' : '14px',
           }}
         >
           {/* A chat that lives in a project says so. It stays in the main
@@ -199,6 +217,11 @@ function SessionItem({ session, active, onSelect, config, running }: {
           position: 'absolute', right: '0.3rem', top: '50%', transform: 'translateY(-50%)',
           display: 'flex', alignItems: 'center', gap: '2px',
         }}>
+          <ActionIcon title={exporting ? t.sidebar.exporting : t.sidebar.exportDebug} onClick={handleExport} hoverColor="var(--hb-cyan-bright)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" />
+            </svg>
+          </ActionIcon>
           <ActionIcon title={t.sidebar.rename} onClick={handleRenameStart} hoverColor="var(--hb-cyan-bright)">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -216,6 +239,8 @@ function SessionItem({ session, active, onSelect, config, running }: {
         </div>
       )}
     </div>
+    {exportNotice && <div role="status" style={{ fontSize: '0.75rem', padding: '0.3rem 0.85rem', color: 'var(--hb-text-dim)', overflowWrap: 'anywhere' }}>{exportNotice}</div>}
+    </>
   )
 }
 

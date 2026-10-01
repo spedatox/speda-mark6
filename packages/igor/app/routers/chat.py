@@ -167,6 +167,19 @@ async def get_messages(
     return rows_from_messages(result.scalars().all())
 
 
+@router.get("/sessions/{session_id}/export")
+async def export_session(session_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    from app.services.chat_history import debug_export
+    if request.app.state.turns.active(session_id=session_id):
+        raise HTTPException(status_code=409, detail="Wait for the running turn to finish before exporting.")
+    payload = await debug_export(db, session_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if request.app.state.turns.active(session_id=session_id):
+        raise HTTPException(status_code=409, detail="A turn started during export. Please retry when it finishes.")
+    return payload
+
+
 @router.get("/sessions")
 async def list_sessions(
     request: Request,

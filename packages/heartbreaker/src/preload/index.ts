@@ -14,6 +14,8 @@ const api = {
   windowMaximize: () => ipcRenderer.send('window-maximize'),
   windowClose: () => ipcRenderer.send('window-close'),
   openExternal: (url: string) => ipcRenderer.send('open-external', url),
+  saveChatExport: (filename: string, content: string): Promise<string | null> =>
+    ipcRenderer.invoke('save-chat-export', filename, content),
   selectDirectory: (current?: string): Promise<string | null> =>
     ipcRenderer.invoke('select-directory', current)
 }

@@ -3,6 +3,7 @@
 
 import { app, BrowserWindow, ipcMain, shell, dialog, net, protocol } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { writeFile } from 'fs/promises'
 import { join, normalize, sep } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -151,6 +152,20 @@ app.whenReady().then(() => {
   })
 
   // Native folder picker — used to choose the Forge workspace for Optimus.
+  ipcMain.handle('save-chat-export', async (e, filename: string, content: string) => {
+    if (typeof filename !== 'string' || typeof content !== 'string') throw new Error('Invalid chat export')
+    const w = BrowserWindow.fromWebContents(e.sender)
+    const opts = {
+      title: 'Export chat debug data',
+      defaultPath: join(app.getPath('downloads'), filename.replace(/[^a-zA-Z0-9._-]/g, '_')),
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    }
+    const result = w ? await dialog.showSaveDialog(w, opts) : await dialog.showSaveDialog(opts)
+    if (result.canceled || !result.filePath) return null
+    await writeFile(result.filePath, content, 'utf-8')
+    return result.filePath
+  })
+
   // Returns the absolute directory path, or null if the dialog was cancelled.
   ipcMain.handle('select-directory', async (e, current?: string) => {
     const w = BrowserWindow.fromWebContents(e.sender)

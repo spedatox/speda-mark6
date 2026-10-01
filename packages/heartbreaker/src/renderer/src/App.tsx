@@ -19,6 +19,7 @@ import NeuralBackground from './components/NeuralBackground'
 import PartyActivation from './components/PartyActivation'
 import LockdownActivation from './components/LockdownActivation'
 import LockScreen from './components/LockScreen'
+import AgentMark from './components/AgentMark'
 import PendingAsksTray from './components/PendingAsksTray'
 import ConnectionSetupModal from './components/ConnectionSetupModal'
 import { Skeleton } from './components/Skeleton'
@@ -70,9 +71,43 @@ function buildProfile(agentId: string): AppProfile {
   return { ...brand, accentHover: deriveAccents(brand.accent).bright }
 }
 
+/** A short identity reveal before the deck takes on the new palette. */
+function AgentArrival({ profile, onReveal, onDone }: {
+  profile: AppProfile; onReveal: () => void; onDone: () => void
+}) {
+  useEffect(() => {
+    const reveal = window.setTimeout(onReveal, 900)
+    const done = window.setTimeout(onDone, 1800)
+    return () => { clearTimeout(reveal); clearTimeout(done) }
+  }, [onReveal, onDone])
+  const name = profile.name.toUpperCase()
+  const model = profile.modelNumber.toUpperCase()
+  return (
+    <div className="agent-arrival" lang="en" role="status" aria-label={`${name} ${model}`}>
+      <div className="agent-arrival-identity" aria-hidden="true">
+        <div className="agent-arrival-logo">
+          <AgentMark agentId={profile.agentId} size={104} color="var(--hb-cyan)" />
+        </div>
+        <div className="agent-arrival-name">
+          {Array.from(name).map((char, i) => (
+            <span key={i} style={{ animationDelay: `${130 + i * 28}ms` }}>{char}</span>
+          ))}
+        </div>
+        <div className="agent-arrival-model">
+          {Array.from(model).map((char, i) => (
+            <span key={i} style={{ animationDelay: `${160 + name.length * 28 + i * 24}ms` }}>{char}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AppInner() {
   const [state, dispatch] = useReducer(chatReducer, initialState)
   const [profile, setProfile] = useState<AppProfile>(DEFAULT_PROFILE)
+  const [arrival, setArrival] = useState<AppProfile | null>(null)
+  const arrivalRef = useRef<AppProfile | null>(null)
   const [config, setConfig] = useState<AppConfig | null>(null)
   // Raised on boot when nothing (env, a build-time bake, or a prior save) chose
   // a real server — see lib/connection.ts. `firstRun` only changes the copy;
@@ -125,7 +160,9 @@ function AppInner() {
 
   // While the party cycle owns the palette, a profile change must not snap
   // the theme back to a single accent.
-  useEffect(() => { if (!isPartyCycling()) applyTheme(profile.accent) }, [profile.accent])
+  useEffect(() => {
+    if (!isPartyCycling() && !arrivalRef.current) applyTheme(profile.accent)
+  }, [profile.accent])
 
   // Mirror each session's transcript to local storage as turns SETTLE (not on
   // every streamed chunk — cheap, and the point is durability, not liveness). A
@@ -189,13 +226,13 @@ function AppInner() {
     dispatch({ type: 'NEW_CHAT' })
     dispatch({ type: 'SESSIONS_LOADING' })
     fetchSessions(cfg)
-      .then(s => dispatch({ type: 'SET_SESSIONS', payload: s }))
-      .catch(() => dispatch({ type: 'SET_SESSIONS', payload: [] }))
+      .then(s => { if (configRef.current?.agentId === agentId) dispatch({ type: 'SET_SESSIONS', payload: s }) })
+      .catch(() => { if (configRef.current?.agentId === agentId) dispatch({ type: 'SET_SESSIONS', payload: [] }) })
   }, [])
 
   /** Open the war room from the UI — branded STANDBY (protocol offline). */
   const enterWarRoom = useCallback(() => {
-    if (warModeRef.current !== 'off' || activationRef.current) return
+    if (warModeRef.current !== 'off' || activationRef.current || arrivalRef.current) return
     pendingRef.current = 'standby'
     setActivation('standby')
   }, [])
@@ -246,7 +283,7 @@ function AppInner() {
     let live = true
     const check = async () => {
       const engaged = await getHouseParty(config)
-      if (!live || activationRef.current) return   // never interrupt a running cinematic
+      if (!live || activationRef.current || arrivalRef.current) return   // never interrupt a running cinematic
       const wm = warModeRef.current
       if (engaged && wm === 'off') engageParty()
       else if (engaged && wm === 'standby') setWar('engaged')   // escalate in place — parade already running
@@ -262,7 +299,7 @@ function AppInner() {
   // for the 4s poll above (which stays as the fallback / stand-down watcher).
   useEffect(() => {
     const onEngaged = () => {
-      if (activationRef.current) return
+      if (activationRef.current || arrivalRef.current) return
       const wm = warModeRef.current
       if (wm === 'off') engageParty()
       else if (wm === 'standby') setWar('engaged')
@@ -310,50 +347,37 @@ function AppInner() {
     setLockdown(sealing)
   }, [])
 
-  const switchAgent = useCallback(async (agentId: string) => {
-    // Leaving the war room by picking a real agent from the switcher: route it
-    // through the stand-down cinematic, returning to the chosen agent.
+  const revealAgent = useCallback(() => {
+    const next = arrivalRef.current
+    if (!next) return
+    const from = getComputedStyle(document.documentElement).getPropertyValue('--hb-cyan').trim()
+    setProfile(next)
+    retarget(next.agentId)
+    if (!isPartyCycling()) void morphTheme(from || profileRef.current.accent, next.accent, 700)
+  }, [retarget])
+
+  const finishArrival = useCallback(() => {
+    arrivalRef.current = null
+    setArrival(null)
+  }, [])
+
+  const switchAgent = useCallback((agentId: string) => {
+    if (arrivalRef.current || activationRef.current || agentId === profileRef.current.agentId) return
     if (agentId !== 'warroom' && warModeRef.current !== 'off') {
       prevAgentRef.current = agentId
       exitWarRoom(true)
       return
     }
     const next = buildProfile(agentId)
-    const prevAccent = profile.accent
-    const root = document.getElementById('root')
     if (agentId !== 'warroom') prevAgentRef.current = agentId
-
-    // 1. Start the color morph (backgrounds, rims, icons, glass — everything).
-    //    Unless the party cycle owns the palette — then it keeps parading.
-    if (!isPartyCycling()) morphTheme(prevAccent, next.accent, 500)
-
-    // 2. Dissolve brand-specific text out (agent name, tagline, prompts).
-    root?.classList.add('agent-morphing')
-
-    // 3. At the morph midpoint (~200ms), the text is invisible — swap the
-    //    profile state so React renders the new name/tagline/prompts, then
-    //    remove the class so the new text fades back in.
-    const nextConfig: AppConfig = {
-      apiBase: config?.apiBase || 'http://localhost:8000',
-      apiKey: config?.apiKey || '',
-      agentId,
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setProfile(next)
+      retarget(next.agentId)
+      return
     }
-    await new Promise(r => setTimeout(r, 200))
-    setProfile(next)
-    setConfig(nextConfig)
-    dispatch({ type: 'SET_CONFIG', payload: nextConfig })
-    dispatch({ type: 'NEW_CHAT' })
-    dispatch({ type: 'SESSIONS_LOADING' })
-    await new Promise(r => setTimeout(r, 30))
-    root?.classList.remove('agent-morphing')
-
-    try {
-      const sessions = await fetchSessions(nextConfig)
-      dispatch({ type: 'SET_SESSIONS', payload: sessions })
-    } catch {
-      dispatch({ type: 'SET_SESSIONS', payload: [] })
-    }
-  }, [config, profile.accent, exitWarRoom])
+    arrivalRef.current = next
+    setArrival(next)
+  }, [retarget, exitWarRoom])
 
   // Built once and rendered in BOTH returns: the deck spends its first moments
   // on the boot skeleton, and a lock that only appears after the connection
@@ -406,6 +430,9 @@ function AppInner() {
           onEnterWarRoom={enterWarRoom}
           onExitWarRoom={() => exitWarRoom(true)}
         />
+        {arrival && (
+          <AgentArrival profile={arrival} onReveal={revealAgent} onDone={finishArrival} />
+        )}
         <PendingAsksTray config={config} />
         {connectionPrompt && (
           <ConnectionSetupModal

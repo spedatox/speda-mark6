@@ -78,23 +78,9 @@ async def list_memory_folders():
     see where a thing WILL go before anything has gone there, and an agent is
     already told the folder exists. Serves the declaration, not the data.
     """
-    from app.services.memory_spec import COLLECTIONS
+    from app.services.memory_spec import declared_folders
 
-    out = [
-        {"path": c.root, "summary": c.summary, "owner_agent": c.owner_agent,
-         "open": not c.closed}
-        for c in COLLECTIONS
-    ]
-    # A SHARDED member is a folder as well, and one whose files are open-ended:
-    # a new month is a new file nobody declares in advance. Declaring the folder
-    # is what lets the board name it for what it holds ("one file per month")
-    # instead of leaving the owner to infer it from whichever months exist.
-    out += [
-        {"path": f"{c.root}/{m.stem}", "summary": m.summary or m.title,
-         "owner_agent": c.owner_agent, "open": True}
-        for c in COLLECTIONS for m in c.members if m.shard
-    ]
-    return out
+    return declared_folders()
 
 
 @router.put("/memory/files")

@@ -16,6 +16,52 @@ renders identically to the live turn that produced it.
 from app.models.message import Message
 
 
+async def debug_export(db, session_id: int) -> dict | None:
+    """Export raw persisted records, bypassing UI folding and context compaction."""
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from app.models.session import Session
+    from app.models.tool_call import ToolCall
+
+    session = await db.get(Session, session_id)
+    if session is None:
+        return None
+
+    def record(row):
+        # Include every stored field, including content blocks and debug metadata.
+        out = {}
+        for column in row.__table__.columns:
+            value = getattr(row, column.name)
+            if isinstance(value, datetime):
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=timezone.utc)
+                value = value.isoformat()
+            out[column.name] = value
+        return out
+
+    messages = (await db.execute(
+        select(Message).where(Message.session_id == session_id)
+        .order_by(Message.created_at, Message.id)
+    )).scalars().all()
+    calls = (await db.execute(
+        select(ToolCall).where(ToolCall.session_id == session_id)
+        .order_by(ToolCall.called_at, ToolCall.id)
+    )).scalars().all()
+    return {
+        "format": "speda.chat-debug",
+        "version": 1,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "session": record(session),
+        "messages": [record(message) for message in messages],
+        "tool_calls": [record(call) for call in calls],
+        "notes": [
+            "Raw persisted records; UI tool previews may be shortened. Use tool_calls for full results.",
+            "Older tool audit results may have been limited to 4000 characters. Missing or truncated historical data cannot be recovered.",
+            "Includes stored attachment content and file references; referenced external files are not bundled.",
+        ],
+    }
+
+
 def _extract_text(content) -> str:
     if isinstance(content, str):
         return content

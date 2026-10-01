@@ -14,6 +14,7 @@ declare global {
       windowMaximize: () => void
       windowClose: () => void
       openExternal: (url: string) => void
+      saveChatExport: (filename: string, content: string) => Promise<string | null>
       selectDirectory: (current?: string) => Promise<string | null>
     }
   }

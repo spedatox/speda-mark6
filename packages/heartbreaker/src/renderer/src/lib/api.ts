@@ -1240,6 +1240,28 @@ export async function deleteSession(config: AppConfig, sessionId: number): Promi
   } catch { /* non-fatal */ }
 }
 
+export async function exportSession(config: AppConfig, sessionId: number): Promise<string | null> {
+  const res = await fetch(`${config.apiBase}/sessions/${sessionId}/export`, {
+    headers: authHeaders(config),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => null)
+    throw new Error(error?.detail || `HTTP ${res.status}`)
+  }
+  const content = JSON.stringify(await res.json(), null, 2)
+  const filename = `chat-${sessionId}-debug-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+  if (window.api?.saveChatExport) return window.api.saveChatExport(filename, content)
+  const url = URL.createObjectURL(new Blob([content], { type: 'application/json;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return filename
+}
+
 export async function renameSession(
   config: AppConfig,
   sessionId: number,

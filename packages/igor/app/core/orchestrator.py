@@ -39,13 +39,6 @@ logger = logging.getLogger(__name__)
 # to repair a rejected tool call must hand the failure back to the owner.
 MAX_TOOL_ITERATIONS = 30  # Safety guard — Rule 4a
 
-# Cap on what a tool_calls row stores of a result — generous enough for real
-# debugging (unlike the 1500-char SSE preview, which only has to look right in
-# the UI), bounded so one tool that returns a page of HTML doesn't make this
-# table the thing that fills the disk.
-_TOOL_RESULT_STORE_CHARS = 4000
-
-
 def _carries_image(history: list[dict]) -> bool:
     """Whether any message in this turn's history holds an image block. Scans
     the WHOLE history, not just the newest message: an image stays in the
@@ -906,7 +899,8 @@ class AgentOrchestrator:
                 if context.db is not None:
                     try:
                         for block, (res, duration_ms) in zip(tool_use_blocks, timed_results):
-                            stored = (res if isinstance(res, str) else str(res))[:_TOOL_RESULT_STORE_CHARS]
+                            # Debug exports need the exact result, beyond the UI preview.
+                            stored = res
                             context.db.add(ToolCall(
                                 session_id=context.session_id,
                                 request_id=context.request_id,
@@ -914,7 +908,7 @@ class AgentOrchestrator:
                                 tool_input=block.input,
                                 tool_result=stored,
                                 duration_ms=duration_ms,
-                                error=stored if stored.startswith("Error") else None,
+                                error=stored if isinstance(stored, str) and stored.startswith("Error") else None,
                             ))
                         await context.db.commit()
                     except Exception as exc:
