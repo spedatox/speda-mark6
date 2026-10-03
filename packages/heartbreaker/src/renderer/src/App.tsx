@@ -19,7 +19,6 @@ import NeuralBackground from './components/NeuralBackground'
 import PartyActivation from './components/PartyActivation'
 import LockdownActivation from './components/LockdownActivation'
 import LockScreen from './components/LockScreen'
-import AgentMark from './components/AgentMark'
 import PendingAsksTray from './components/PendingAsksTray'
 import ConnectionSetupModal from './components/ConnectionSetupModal'
 import { Skeleton } from './components/Skeleton'
@@ -69,38 +68,6 @@ function buildProfile(agentId: string): AppProfile {
   if (agentId === 'warroom') return WARROOM_PROFILE
   const brand = BRANDS[agentId] || BRANDS['speda']
   return { ...brand, accentHover: deriveAccents(brand.accent).bright }
-}
-
-/** A short identity reveal before the deck takes on the new palette. */
-function AgentArrival({ profile, onReveal, onDone }: {
-  profile: AppProfile; onReveal: () => void; onDone: () => void
-}) {
-  useEffect(() => {
-    const reveal = window.setTimeout(onReveal, 900)
-    const done = window.setTimeout(onDone, 1800)
-    return () => { clearTimeout(reveal); clearTimeout(done) }
-  }, [onReveal, onDone])
-  const name = profile.name.toUpperCase()
-  const model = profile.modelNumber.toUpperCase()
-  return (
-    <div className="agent-arrival" lang="en" role="status" aria-label={`${name} ${model}`}>
-      <div className="agent-arrival-identity" aria-hidden="true">
-        <div className="agent-arrival-logo">
-          <AgentMark agentId={profile.agentId} size={104} color="var(--hb-cyan)" />
-        </div>
-        <div className="agent-arrival-name">
-          {Array.from(name).map((char, i) => (
-            <span key={i} style={{ animationDelay: `${130 + i * 28}ms` }}>{char}</span>
-          ))}
-        </div>
-        <div className="agent-arrival-model">
-          {Array.from(model).map((char, i) => (
-            <span key={i} style={{ animationDelay: `${160 + name.length * 28 + i * 24}ms` }}>{char}</span>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
 }
 
 function AppInner() {
@@ -347,19 +314,21 @@ function AppInner() {
     setLockdown(sealing)
   }, [])
 
-  const revealAgent = useCallback(() => {
-    const next = arrivalRef.current
-    if (!next) return
+  // The welcome screen reveals its own identity; only the palette waits.
+  useEffect(() => {
+    if (!arrival) return
     const from = getComputedStyle(document.documentElement).getPropertyValue('--hb-cyan').trim()
-    setProfile(next)
-    retarget(next.agentId)
-    if (!isPartyCycling()) void morphTheme(from || profileRef.current.accent, next.accent, 700)
-  }, [retarget])
-
-  const finishArrival = useCallback(() => {
-    arrivalRef.current = null
-    setArrival(null)
-  }, [])
+    const timer = window.setTimeout(() => {
+      if (!isPartyCycling()) {
+        void morphTheme(from || arrival.accent, arrival.accent, 700)
+      }
+    }, 900)
+    const done = window.setTimeout(() => {
+      arrivalRef.current = null
+      setArrival(null)
+    }, 1700)
+    return () => { clearTimeout(timer); clearTimeout(done) }
+  }, [arrival])
 
   const switchAgent = useCallback((agentId: string) => {
     if (arrivalRef.current || activationRef.current || agentId === profileRef.current.agentId) return
@@ -377,6 +346,8 @@ function AppInner() {
     }
     arrivalRef.current = next
     setArrival(next)
+    setProfile(next)
+    retarget(next.agentId)
   }, [retarget, exitWarRoom])
 
   // Built once and rendered in BOTH returns: the deck spends its first moments
@@ -430,9 +401,6 @@ function AppInner() {
           onEnterWarRoom={enterWarRoom}
           onExitWarRoom={() => exitWarRoom(true)}
         />
-        {arrival && (
-          <AgentArrival profile={arrival} onReveal={revealAgent} onDone={finishArrival} />
-        )}
         <PendingAsksTray config={config} />
         {connectionPrompt && (
           <ConnectionSetupModal

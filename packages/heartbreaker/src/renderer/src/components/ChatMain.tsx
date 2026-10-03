@@ -174,10 +174,11 @@ function WelcomeView({
           agentId={profile.agentId}
           size={104}
           title={profile.name}
+          color="var(--hb-cyan)"
+          className="welcome-agent-logo"
           style={{
             width: 'clamp(64px, 14vw, 104px)', height: 'auto',
             marginBottom: '1.1rem',
-            animation: 'fadeSlideIn 0.5s 0.12s ease both',
           }}
         />
       )}
@@ -188,7 +189,6 @@ function WelcomeView({
       <div data-brand-text lang="en" style={{
         display: 'flex', alignItems: 'baseline', gap: '0.7rem',
         marginBottom: '0.5rem',
-        animation: 'fadeSlideIn 0.5s 0.15s ease both',
       }}>
         {/* The wordmark carries the agent's accent — it IS the brand statement,
             and a white hero reads as generic. (Tried white per the deck; the
@@ -204,7 +204,11 @@ function WelcomeView({
           willChange: 'text-shadow, color',
           lineHeight: 1,
         }}>
-          {profile?.name}
+          <span className="welcome-agent-type" aria-label={profile?.name}>
+            {Array.from(profile?.name || '').map((char, i) => (
+              <span aria-hidden="true" key={i} style={{ animationDelay: `${100 + i * 28}ms` }}>{char}</span>
+            ))}
+          </span>
         </span>
         <span style={{
           fontFamily: "'Rajdhani', sans-serif",
@@ -213,7 +217,11 @@ function WelcomeView({
           color: 'var(--hb-cyan-dim)',
           lineHeight: 1,
         }}>
-          {profile?.modelNumber}
+          <span className="welcome-agent-type" aria-label={profile?.modelNumber}>
+            {Array.from(profile?.modelNumber || '').map((char, i) => (
+              <span aria-hidden="true" key={i} style={{ animationDelay: `${130 + (profile?.name.length || 0) * 28 + i * 24}ms` }}>{char}</span>
+            ))}
+          </span>
         </span>
       </div>
 
@@ -1309,7 +1317,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
         // composer, sending, streaming, re-attach — is unchanged underneath.
         ? <PartyStream config={config} />
         : isEmpty
-        ? (historyLoading ? <HistorySkeleton /> : <WelcomeView onSend={send} config={config} activeRun={activeAgentRun} onSelectSession={onSelectSession} />)
+        ? (historyLoading ? <HistorySkeleton /> : <WelcomeView key={config.agentId} onSend={send} config={config} activeRun={activeAgentRun} onSelectSession={onSelectSession} />)
         : (
           <MessageList
             onDelete={handleDelete}

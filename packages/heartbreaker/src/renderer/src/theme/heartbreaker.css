@@ -495,62 +495,22 @@ body {
 [data-brand-text] {
   transition: opacity 0.18s ease;
 }
-.agent-arrival {
-  position: fixed;
-  inset: 0;
-  z-index: 8000;
-  display: grid;
-  place-items: center;
-  background: var(--bg-primary);
-  animation: hbAgentVeil 1800ms ease both;
-}
-.agent-arrival-identity {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 24px;
-  color: var(--hb-cyan);
-  font-family: 'Rajdhani', sans-serif;
-  text-align: center;
-}
-.agent-arrival-logo {
-  margin-bottom: 24px;
-  animation: hbAgentLogo 600ms cubic-bezier(0.16, 1, 0.3, 1) 650ms both;
-}
-.agent-arrival-name {
-  font-size: clamp(32px, 6vw, 72px);
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  line-height: 1.1;
-  white-space: pre;
-  text-shadow: 0 0 40px rgba(var(--hb-accent-rgb), 0.3);
-}
-.agent-arrival-model {
-  margin-top: 8px;
-  font-size: clamp(18px, 2.5vw, 28px);
-  letter-spacing: 0.22em;
-  white-space: pre;
-  color: var(--hb-text-dim);
-}
-.agent-arrival-name span, .agent-arrival-model span {
-  animation: hbAgentChar 1ms step-end both;
+/* Identity reveals in place on the welcome screen, without covering the deck. */
+.welcome-agent-type { white-space: pre; }
+.welcome-agent-type > span { animation: hbAgentChar 1ms step-end both; }
+.welcome-agent-logo {
+  animation: hbAgentLogo 550ms cubic-bezier(0.16, 1, 0.3, 1) 650ms both;
 }
 @keyframes hbAgentChar {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 @keyframes hbAgentLogo {
-  from { opacity: 0; transform: translateY(10px) scale(0.92); filter: blur(6px); }
+  from { opacity: 0; transform: translateY(8px) scale(0.94); filter: blur(4px); }
   to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
 }
-@keyframes hbAgentVeil {
-  0% { opacity: 0; }
-  7%, 72% { opacity: 1; }
-  100% { opacity: 0; }
-}
 @media (prefers-reduced-motion: reduce) {
-  .agent-arrival, .agent-arrival-logo,
-  .agent-arrival-name span, .agent-arrival-model span { animation: none; }
+  .welcome-agent-type > span, .welcome-agent-logo { animation: none; }
 }
 
 .agent-morphing [data-brand-text] {
