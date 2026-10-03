@@ -78,6 +78,11 @@ Writes compare against the original content and preserve a revision in the same
 transaction. A concurrency conflict means reread, reassess and reapply the small
 intended change. Never retry an old whole-file replacement blindly. Preserve
 unrelated content. Do not duplicate an event already recorded by another agent.
+If a corrected retry returns the same deterministic failure, stop that write
+attempt and report it once. An acknowledgement such as "thanks" or "good" is
+not a request to repeat a save, rewrite another record, or investigate the store.
+Never claim an entire update failed when one destination succeeded: name the
+saved part and the still-unsaved part accurately.
 
 Cross-file refiling needs an atomic, evidence-bound operation. The bulk audit
 repair path is removed; never improvise two separate raw writes.

@@ -278,7 +278,7 @@ def _page(path: str, content: str, args: dict, *, budget: int = 6500) -> str:
     """Bound the raw read too; an explicit range never bypasses the ceiling."""
     lines = content.splitlines()
     content_budget = max(1, budget-len(path)-200)
-    if args.get("char_range"):
+    if args.get("char_range") and args["char_range"] != [0, 0]:
         start, finish = args["char_range"]
         if start < 0 or finish <= start:
             return "char_range requires 0 <= start < end (character offsets)."
@@ -287,7 +287,8 @@ def _page(path: str, content: str, args: dict, *, budget: int = 6500) -> str:
         if finish < len(content):
             result += f"\nContinue with char_range=[{finish},{finish+6000}]."
         return result
-    first, end = args.get("view_range") or (1, len(lines))
+    view_range = args.get("view_range")
+    first, end = (1, len(lines)) if not view_range or view_range == [0, 0] else view_range
     if first < 1 or end < first:
         return "view_range requires 1 <= start_line <= end_line."
     selected, used = [], 0
@@ -1125,15 +1126,15 @@ class MemorySkill(Skill):
                 "type": "string",
                 "description": "File/directory under /memories, or source:<uuid> to read an exact historical original.",
             },
-            "char_range": {"type": "array", "items": {"type": "integer", "minimum": 0},
+            "char_range": {"type": ["array", "null"], "items": {"type": "integer", "minimum": 0},
                            "minItems": 2, "maxItems": 2,
-                           "description": "Optional [start,end] character offsets for unusually long source lines; each read is capped at 6000 characters."},
+                           "description": "Omit or use null for a normal read. Use [start,end] character offsets only for unusually long source lines; each read is capped at 6000 characters."},
             "view_range": {
-                "type": "array",
+                "type": ["array", "null"],
                 "items": {"type": "integer"},
                 "minItems": 2,
                 "maxItems": 2,
-                "description": "Optional [start_line, end_line] range for view.",
+                "description": "Omit or use null for a normal read. Otherwise supply a 1-based [start_line,end_line] range.",
             },
         },
         "required": ["command"],

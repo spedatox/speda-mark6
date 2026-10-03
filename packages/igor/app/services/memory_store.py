@@ -94,7 +94,10 @@ async def _mutate_in_txn(db, *, user_id: int, path: str, before: str | None,
     try:
         if before is None:
             db.add(MemoryFile(user_id=user_id, path=path, content=after))
-            await db.flush()
+            try:
+                await db.flush()
+            except IntegrityError as exc:
+                raise MemoryWriteConflict(f"Memory was created concurrently at {path}. Reread before retrying.") from exc
         else:
             if after is None:
                 from app.models.memory_record_meta import MemoryRecordMeta
@@ -148,7 +151,10 @@ async def _mutate_in_txn(db, *, user_id: int, path: str, before: str | None,
             db.add(receipt)
         await db.flush()
     except IntegrityError as exc:
-        raise MemoryWriteConflict(f"Memory was created concurrently at {path}. Reread before retrying.") from exc
+        raise MemorySchemaViolation(
+            f"Memory index integrity check failed at {path}; the transaction was rolled back. "
+            "Repeating the same write will not fix it; report the indexing failure for repair."
+        ) from exc
     return notes
 
 

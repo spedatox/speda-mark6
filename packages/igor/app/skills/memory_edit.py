@@ -16,6 +16,7 @@ from app.services.memory_schema import MemorySchemaViolation
 class MemoryEditSkill(Skill):
     name = "memory_edit"
     read_only = False
+    memoizable_operations = frozenset({"get"})
     description = (
         "Read a topic's contract/content/version, or apply an EXACT evidenced patch. "
         "Raw memory edits are disabled. get first; put requires that version, an old "

@@ -45,7 +45,14 @@ async def index_passages(db, user_id: int, record_id: str, path: str, content: s
     for row in old:
         row.retired = True
     entities = (await db.execute(select(MemoryEntity).where(MemoryEntity.user_id == user_id))).scalars().all()
+    seen = set()
     for part in passages(record_id, content):
+        # Identical repeated sections share a stable content address. Preserve
+        # every byte in the document, but index that address once, at its first
+        # location. A second pending ORM row with the same ID breaks the write.
+        if part["id"] in seen:
+            continue
+        seen.add(part["id"])
         row = by_id.get(part["id"])
         if row is None:
             row = MemoryPassage(user_id=user_id, record_id=record_id, path=path, retired=False, **part)

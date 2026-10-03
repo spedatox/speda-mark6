@@ -59,7 +59,8 @@ class SearchHistorySkill(Skill):
         "'have we discussed X', 'what did I decide about Y' — use recall_conversations "
         "for that, since it matches by meaning rather than wording. Multi-word queries "
         "match messages containing any of the words, ranked by how many words hit. "
-        "Returns matching exchanges grouped by conversation, newest first."
+        "Returns matching exchanges grouped by conversation, newest first, with "
+        "original message:<id> references for exact source evidence."
     )
     read_only = True
     input_schema = {
@@ -165,7 +166,7 @@ class SearchHistorySkill(Skill):
                 last_sid = sid
             text = _extract_text(message.content).replace("\n", " ").strip()
             snippet = text[:280] + ("…" if len(text) > 280 else "")
-            out.append(f"  [{message.role}] {snippet}")
+            out.append(f"  [{message.role} message:{message.id}] {snippet}")
 
         logger.info(
             "search_history",

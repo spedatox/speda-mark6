@@ -210,7 +210,7 @@ class SemanticSearchSkill(Skill):
         "do NOT use it to look up facts the roster has already distilled, which is "
         "`search_memory`. Returns matching exchanges as snippets that include the turns "
         "either side of each hit, grouped by conversation, each tagged with its session, "
-        "originating agent and date."
+        "originating agent, date and original message:<id> for source evidence."
     )
     read_only = True
     requires_network = True  # calls OpenAI to embed the query
@@ -475,7 +475,7 @@ class SemanticSearchSkill(Skill):
                     # Mark the matched turn so the model can tell the hit from
                     # the context that was pulled in around it.
                     marker = "→" if mid in hit_ids else " "
-                    out.append(f" {marker} [{message.role}] {snippet}")
+                    out.append(f" {marker} [{message.role} message:{message.id}] {snippet}")
             rendered += len(hits)
 
         if not out:

@@ -32,6 +32,7 @@ class MemoryStateSkill(Skill):
         "continued with memory view on the returned path."
     )
     read_only = False
+    memoizable_operations = frozenset({"list", "get"})
     input_schema = {
         "type": "object",
         "properties": {
@@ -41,7 +42,7 @@ class MemoryStateSkill(Skill):
             "version": {"type": "string", "description": "get/list version, or 'new'."},
             "summary": {"type": "string", "description": "Present situation, not a completed action."},
             "status": {"type": "string", "enum": list(states.STATUSES)},
-            "source": {"type": "string", "description": "Evidence reference: memory path, observation id, or conversation message; include what supports this situation/outcome."},
+            "source": {"type": "string", "description": "Evidence reference: memory path, source:<id>, observation:<id>, or message:<id>. message:latest is pinned to the owner message matching the supplied evidence quote; include what supports this situation/outcome."},
             "review_on": {"type": "string", "description": "YYYY-MM-DD when the situation must be reverified. Choose from its actual timeline."},
             "starts_on": {"type": "string"},
             "ends_on": {"type": "string", "description": "Last known valid date, inclusive; omit if unknown."},
@@ -112,8 +113,17 @@ class MemoryStateSkill(Skill):
             if record.get("closed_on", "") > owner_today().isoformat():
                 raise ValueError("A future outcome is a plan, not a completed/closed state.")
             after = states.encode(record)
-            await states.verify_source(context.db, context.user_id, record["source"])
+            pin_latest = bool(re.search(r"message:latest\b", record["source"]))
+            if not pin_latest:
+                await states.verify_source(context.db, context.user_id, record["source"])
             evidence = await resolve_evidence(context.db, context.user_id, args.get("evidence"), session_id=context.session_id)
+            if pin_latest:
+                messages = {item["ref"] for item in evidence if re.fullmatch(r"message:\d+", item["ref"])}
+                if len(messages) != 1:
+                    raise ValueError("message:latest source requires one unambiguous evidenced owner message; supply its explicit message:<id> otherwise.")
+                record["source"] = re.sub(r"message:latest\b", next(iter(messages)), record["source"])
+                after = states.encode(record)
+                await states.verify_source(context.db, context.user_id, record["source"])
             await mutate_file(context.db, user_id=context.user_id, path=path,
                               before=before, after=after, author=context.agent_id,
                               action="state_transition", request_id=context.request_id,

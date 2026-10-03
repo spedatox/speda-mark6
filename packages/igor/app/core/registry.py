@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+import asyncio
 import logging
+from copy import copy
+from dataclasses import is_dataclass, replace
 from typing import TYPE_CHECKING
 
 from app.legion.roster import TASK_TOOL_DEFINITION
@@ -593,15 +596,17 @@ class CapabilityRegistry:
         # so the memo degrades to off rather than making tool execution depend
         # on a field that isn't part of the contract.
         extra = getattr(context, "extra", None)
+        read_only = self._memoizable(tool_name, args)
+        memo_epoch = extra.get("tool_memo_epoch", 0) if extra is not None else 0
         memo_key: tuple[str, str] | None = None
-        if extra is not None and self._memoizable(tool_name, args):
+        if extra is not None and read_only:
             try:
                 import json as _json
 
                 memo = extra.setdefault("tool_memo", {})
                 canonical_args = _json.dumps(args, sort_keys=True, default=str)
                 memo_key = (tool_name, canonical_args)
-                if memo_key in memo:
+                if memo_key in memo and not extra.get("tool_memo_writers", 0):
                     import hashlib
 
                     scope = hashlib.sha256(canonical_args.encode()).hexdigest()[:12]
@@ -617,39 +622,46 @@ class CapabilityRegistry:
                     return memo[memo_key]
             except (TypeError, ValueError):
                 memo_key = None  # unserialisable args — just run it
-        elif extra is not None and tool_name != "Task":
-            # A mutating call invalidates every cached read. Task is exempt: a
-            # legionnaire runs in its own context and cannot mutate this one's.
+        elif extra is not None:
+            # Workers can also change shared owner memory. In-flight reads may
+            # finish after a write; an epoch prevents them restoring stale data.
             extra.pop("tool_memo", None)
+            extra["tool_memo_epoch"] = memo_epoch + 1
+            extra["tool_memo_writers"] = extra.get("tool_memo_writers", 0) + 1
 
-        result = await self._dispatch(tool_name, args, context, tool_call_id=tool_call_id, emit=emit)
+        try:
+            result = await self._dispatch_with_session(
+                tool_name, args, context, read_only=read_only, tool_call_id=tool_call_id, emit=emit,
+            )
+        finally:
+            if extra is not None and not read_only:
+                extra.pop("tool_memo", None)
+                extra["tool_memo_epoch"] = extra.get("tool_memo_epoch", 0) + 1
+                extra["tool_memo_writers"] -= 1
         # Never memoize a failure: a transient error must not be replayed as
         # this tool's answer for the rest of the turn.
-        if memo_key is not None and extra is not None and not result.startswith("Error"):
+        if (memo_key is not None and extra is not None and not result.startswith("Error")
+                and extra.get("tool_memo_epoch", 0) == memo_epoch
+                and not extra.get("tool_memo_writers", 0)):
             extra.setdefault("tool_memo", {})[memo_key] = result
         return result
 
     def _memoizable(self, tool_name: str, args: dict) -> bool:
         """Whether an identical repeat call may be served from the per-turn memo.
 
-        Read-only Tier-1 skills qualify outright — those carry the Rule 9
-        annotation that promises no side effects. A skill that mixes reads and
-        writes under one tool name (MemorySkill is the only one today: `view`
-        never mutates, but `create`/`str_replace`/`insert`/`delete` do) can
-        still offer its safe commands via `memoizable_commands`, checked
-        against this specific call's `command` arg — the coarse `read_only`
-        flag alone would either block memoizing `view` entirely or risk
-        memoizing a write, which would silently skip a second, legitimately
-        intended write. MCP tools and adapters declare neither and are never
-        memoized: nothing in their definitions says a repeat is safe, and
-        guessing wrong on a write is far worse than paying for a duplicate
-        read."""
+        Read-only skills and adapters qualify through their annotation. Mixed
+        skills can declare safe commands or operations; a get/list never makes
+        their put safe to replay. MCP calls qualify only through readOnlyHint.
+        No safety property is inferred from the tool's name.
+        """
         skill = self._skills.get(tool_name)
         if skill is not None:
             if getattr(skill, "read_only", False):
                 return True
             commands = getattr(skill, "memoizable_commands", None)
-            return bool(commands) and args.get("command") in commands
+            operations = getattr(skill, "memoizable_operations", None)
+            return (bool(commands) and args.get("command") in commands
+                    or bool(operations) and args.get("operation") in operations)
         adapter = self._adapters.get(tool_name)
         if adapter is not None:
             return bool(getattr(adapter, "read_only", False))
@@ -660,6 +672,34 @@ class CapabilityRegistry:
     def call_is_read_only(self, tool_name: str, args: dict) -> bool:
         """Return only code-owned read-only facts; never infer from a tool name."""
         return self._memoizable(tool_name, args)
+
+    async def _dispatch_with_session(self, tool_name, args, context, *, read_only, tool_call_id, emit):
+        """Concurrent reads get separate sessions; mutations serialize per session.
+
+        SQLAlchemy AsyncSession is a transaction, not a concurrent connection
+        pool. Sharing it in gather() breaks even read-only tools. The reader is
+        bound to the request's engine; no global session factory or user state
+        is introduced. Pending writes and connection-bound transactions keep
+        their original session under the same lock instead of losing visibility.
+        """
+        from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+
+        db = getattr(context, "db", None)
+        local = tool_name in self._skills or tool_name in self._adapters
+        if not local or not isinstance(db, AsyncSession):
+            return await self._dispatch(tool_name, args, context, tool_call_id=tool_call_id, emit=emit)
+        lock = db.info.setdefault("capability_session_lock", asyncio.Lock())
+        if (read_only and isinstance(db.bind, AsyncEngine)
+                and not (db.new or db.dirty or db.deleted)):
+            async with AsyncSession(bind=db.bind, expire_on_commit=False) as reader:
+                if is_dataclass(context):
+                    tool_context = replace(context, db=reader)
+                else:
+                    tool_context = copy(context)
+                    tool_context.db = reader
+                return await self._dispatch(tool_name, args, tool_context, tool_call_id=tool_call_id, emit=emit)
+        async with lock:
+            return await self._dispatch(tool_name, args, context, tool_call_id=tool_call_id, emit=emit)
 
     async def _dispatch(
         self, tool_name: str, args: dict, context: "AgentContext", *,
