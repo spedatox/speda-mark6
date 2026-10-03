@@ -1,5 +1,25 @@
 # Resume memory work — 2 October 2026
 
+## Completed continuation — 3 October 2026
+
+The pending final offline verifier has now passed at `091217c`, including actual
+parallel registry reads. All 153 documents opened within the limit, source/row
+and binary parity passed, DB hashes remained unchanged and provider calls were
+zero. The initial private verifier had referenced a nonexistent flat wellness
+path; it now checks the actual preserved archive and its source ID. A verifier
+reporting-only ORM access after rollback was also corrected.
+
+The owner then supplied two chat debug exports and asked that their memory/tool
+failures guide the work. The runtime fixes and **949-passed** full Igor suite are
+documented in [MEMORY_TOOL_INCIDENT_FIXES_20261003.md](MEMORY_TOOL_INCIDENT_FIXES_20261003.md).
+The private owner-readable final report is `db_migrate/FINAL_REPORT_20261003.md`;
+the private continuation note starts with the updated status and artifact list.
+
+The steps below describe the original checkpoint and its then-pending work.
+Do not replay owner corrections or migrate the final DB again. The final `v2`
+DB remains offline; it must never overwrite later live conversations. No P0–P8
+redesign or production cutover was performed.
+
 Read AGENTS.md in full first. Then read the detailed private continuation note
 at `db_migrate/CONTINUE_HERE_20261002.md` in this workspace. That ignored file
 contains the exact source/output paths, reviewed data changes and remaining
