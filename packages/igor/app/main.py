@@ -340,6 +340,7 @@ async def lifespan(app: FastAPI):
     from app.core.session_manager import SessionManager
 
     session_manager = SessionManager()
+    telegram_bots.wire(session_manager=session_manager)
 
     # ── 7. Orchestrator (reuses the client already injected into the registry) ──
     # Profiles were constructed at 2.5 — the dispatch skill's schema needed them.

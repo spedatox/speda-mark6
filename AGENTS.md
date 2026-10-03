@@ -278,7 +278,7 @@ speda-mark-vi/
     │   ├── pending_asks.py      # Permission asks relayed from external peers
     │   ├── telegram.py
     │   └── n8n.py, n8n_api.py   # Webhook auth (X-N8N-Secret), n8n REST client
-    ├── models/                  # ORM models — one file per table (user, session, message, agent,
+    ├── models/                  # ORM models — one file per table (user, session, channel_session, message, agent,
     │                            # memory_source/memory_passage — immutable originals and addressable excerpts,
     │                            # memory_capture_payload — complete durable event intake before review,
     │                            # agent_message, automation, health_sample, memory/memory_file/memory_revision,

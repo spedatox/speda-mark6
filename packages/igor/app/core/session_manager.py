@@ -9,6 +9,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.channel_session import ChannelSession
 from app.models.session import Session
 from app.models.message import Message
 
@@ -36,13 +37,6 @@ class SessionManager:
         # of sharing state with the one on app.state.
         self._session_servers: dict[int, set[str]] = {}
 
-        # Sticky channel sessions: a non-"app" channel (Telegram) has no
-        # session_id to pass per turn, so we pin one open session per (user,
-        # agent, channel) and reuse it until /new. Process-local; a restart
-        # re-pins to the newest open DB session for that tuple (see
-        # get_or_create). Keyed by (user_id, agent_id, channel) → session_id.
-        self._channel_sessions: dict[tuple[int, str, str], int] = {}
-
         # Per-session resolved-tool memory, the tool_search analogue of the
         # toolset memory above and load-bearing for the same reason: a tool
         # the model found on turn 1 must still be in the array on turn 9.
@@ -66,14 +60,62 @@ class SessionManager:
         existing = self._session_tools.get(session_id, set())
         self._session_tools[session_id] = existing | tools
 
+    async def _set_channel_session(
+        self, db: AsyncSession, user_id: int, agent_id: str, channel: str,
+        session_id: int | None,
+    ) -> None:
+        # An atomic upsert lets simultaneous first deliveries select a session
+        # without racing to insert the same (user, agent, channel) row.
+        if db.get_bind().dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert
+        else:
+            from sqlalchemy.dialects.sqlite import insert
+        statement = insert(ChannelSession).values(
+            user_id=user_id, agent_id=agent_id, channel=channel,
+            session_id=session_id,
+        )
+        await db.execute(statement.on_conflict_do_update(
+            index_elements=["user_id", "agent_id", "channel"],
+            set_={"session_id": session_id},
+        ))
+
+    async def bind_channel_session(
+        self, db: AsyncSession, channel: str, agent_id: str, session_id: int,
+        user_id: int = 1, *, delivered_text: str = "",
+    ) -> bool:
+        """Select the conversation behind a successfully delivered message.
+
+        Keep its origin channel intact and reject another user's or agent's
+        conversation. Persist the selection so ingress and restarts read the
+        same session, even when the message came from an n8n/app conversation.
+        A tool's delivered text is retained in the same transaction so its
+        follow-up sees both the selected session and the message it answered.
+        """
+        session = (await db.execute(select(Session).where(
+            Session.id == session_id, Session.user_id == user_id,
+            Session.agent_id == agent_id, Session.ended_at.is_(None),
+        ))).scalar_one_or_none()
+        if session is None:
+            return False
+        await self._set_channel_session(db, user_id, agent_id, channel, session_id)
+        if delivered_text:
+            db.add(Message(
+                session_id=session_id, role="assistant",
+                content=[{"type": "text", "text": delivered_text}],
+            ))
+        await db.commit()
+        return True
+
     async def reset_channel_session(
         self, db: AsyncSession, channel: str, agent_id: str, user_id: int = 1
     ) -> None:
-        """Close the sticky session for a channel and drop its pin so the next
-        turn starts a fresh one (the /new command). Marks every still-open session
-        for the tuple ended so the DB-adoption path in get_or_create doesn't just
-        re-adopt it; the old messages are untouched (the transcript survives)."""
-        self._channel_sessions.pop((user_id, agent_id, channel), None)
+        """Clear the selected conversation so the next turn starts fresh.
+
+        Close channel-origin sessions as before; an adopted app/n8n session
+        stays available on its original surface. The persisted NULL selection
+        prevents legacy adoption from undoing /new, including after a restart.
+        """
+        await self._set_channel_session(db, user_id, agent_id, channel, None)
         result = await db.execute(
             select(Session).where(
                 Session.user_id == user_id,
@@ -87,8 +129,7 @@ class SessionManager:
         for sess in result.scalars().all():
             sess.ended_at = now
             closed += 1
-        if closed:
-            await db.commit()
+        await db.commit()
         logger.info(
             "channel_session_reset",
             extra={"agent_id": agent_id, "channel": channel, "closed": closed},
@@ -115,8 +156,8 @@ class SessionManager:
 
         - session_id given → that session (app chat passes it every turn).
         - channel != "app" and no session_id → the STICKY session for
-          (user, agent, channel): the in-process pin, or the newest open session
-          in the DB for that tuple (re-pins across restarts), or a fresh one.
+          (user, agent, channel): the persisted selection, or the newest open
+          channel-origin session on first adoption, or a fresh one.
         - otherwise → always a new session (app default, unchanged).
         """
         if session_id is not None:
@@ -126,30 +167,36 @@ class SessionManager:
                 return existing
 
         if channel != "app":
-            key = (user_id, agent_id, channel)
-            pinned = self._channel_sessions.get(key)
-            if pinned is not None:
-                result = await db.execute(select(Session).where(Session.id == pinned))
-                existing = result.scalar_one_or_none()
-                if existing and existing.ended_at is None:
-                    return existing
-            # No live pin — adopt the newest open session for this tuple if one
-            # exists (survives a restart), else fall through to create.
-            result = await db.execute(
-                select(Session)
-                .where(
-                    Session.user_id == user_id,
-                    Session.agent_id == agent_id,
-                    Session.channel == channel,
-                    Session.ended_at.is_(None),
-                )
-                .order_by(Session.started_at.desc())
-                .limit(1)
+            binding = await db.get(
+                ChannelSession, (user_id, agent_id, channel), populate_existing=True,
             )
-            adopted = result.scalar_one_or_none()
-            if adopted is not None:
-                self._channel_sessions[key] = adopted.id
-                return adopted
+            if binding is not None and binding.session_id is not None:
+                result = await db.execute(select(Session).where(
+                    Session.id == binding.session_id,
+                    Session.user_id == user_id, Session.agent_id == agent_id,
+                    Session.ended_at.is_(None),
+                ))
+                existing = result.scalar_one_or_none()
+                if existing is not None:
+                    return existing
+            # Adopt pre-binding Telegram sessions once for existing installs.
+            # A reset/deleted selection must instead create a fresh session.
+            if binding is None:
+                result = await db.execute(
+                    select(Session)
+                    .where(
+                        Session.user_id == user_id,
+                        Session.agent_id == agent_id,
+                        Session.channel == channel,
+                        Session.ended_at.is_(None),
+                    )
+                    .order_by(Session.started_at.desc(), Session.id.desc())
+                    .limit(1)
+                )
+                adopted = result.scalar_one_or_none()
+                if adopted is not None:
+                    await self.bind_channel_session(db, channel, agent_id, adopted.id, user_id)
+                    return adopted
 
         session = Session(
             user_id=user_id,
@@ -160,10 +207,11 @@ class SessionManager:
             started_at=datetime.utcnow(),
         )
         db.add(session)
+        await db.flush()
+        if channel != "app":
+            await self._set_channel_session(db, user_id, agent_id, channel, session.id)
         await db.commit()
         await db.refresh(session)
-        if channel != "app":
-            self._channel_sessions[(user_id, agent_id, channel)] = session.id
         logger.info(
             "session_created",
             extra={"session_id": session.id, "triggered_by": triggered_by, "channel": channel},

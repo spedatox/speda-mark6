@@ -452,7 +452,8 @@ async def open_ask(
         return {"status": "opened_not_sent", "reminder_id": reminder_id,
                 "cycle_id": cycle.id, "detail": "no usable Telegram bot for this agent"}
     return {"status": "ok", "reminder_id": reminder_id, "cycle_id": cycle.id,
-            "max_asks": cycle.max_asks, "every_minutes": cycle.every_minutes}
+            "max_asks": cycle.max_asks, "every_minutes": cycle.every_minutes,
+            "delivered": bool(cycle.last_message_id)}
 
 
 async def answer(

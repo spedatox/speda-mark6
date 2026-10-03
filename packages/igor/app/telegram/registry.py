@@ -16,6 +16,7 @@ import asyncio
 import logging
 
 from app.config import settings
+from app.core.context import AgentContext
 from app.core.runtime_state import get_telegram_started
 from app.telegram.client import TelegramBot
 
@@ -50,6 +51,20 @@ _TAG = {
 class TelegramBotRegistry:
     def __init__(self) -> None:
         self._bots: dict[str, TelegramBot] = {}
+        self._sessions = None
+
+    def wire(self, *, session_manager) -> None:
+        """Attach session routing after the lifespan constructs SessionManager."""
+        self._sessions = session_manager
+
+    async def bind_session(self, context: AgentContext, text: str = "") -> bool:
+        """Select a delivered tool message's source and retain it for follow-ups."""
+        if self._sessions is None:
+            return False
+        return await self._sessions.bind_channel_session(
+            context.db, "telegram", context.agent_id, context.session_id, context.user_id,
+            delivered_text=text,
+        )
 
     # ── Construction ──────────────────────────────────────────────────────────
 

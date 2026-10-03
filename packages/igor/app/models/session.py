@@ -23,9 +23,9 @@ class Session(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     agent_id: Mapped[str] = mapped_column(String(64), default="speda")
     # Which surface the conversation happened on. "app" (desktop/Flutter) or
-    # "telegram". Scopes the sticky-session lookup so the Telegram thread with an
-    # agent and the app thread with the same agent stay separate, and lets the UI
-    # badge Telegram-originated sessions. A Telegram turn is otherwise a normal
+    # "telegram". Records the origin for the UI badge and legacy session
+    # adoption. channel_sessions selects the conversation Telegram continues,
+    # including an app/n8n conversation delivered there. A Telegram turn is a normal
     # orchestrator turn — same tables, same memory extraction.
     channel: Mapped[str] = mapped_column(String(16), default="app")
     # Which project (workspace) this conversation belongs to, or NULL for a

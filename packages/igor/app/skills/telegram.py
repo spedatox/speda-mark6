@@ -55,6 +55,8 @@ class SendTelegramMessageSkill(Skill):
         if not self._bots.configured:
             return "Telegram isn't configured on this deployment — no bot token is set."
         ok = await self._bots.deliver_message(context.agent_id, text)
+        if ok:
+            await self._bots.bind_session(context, text)
         logger.info(
             "telegram_skill_message",
             extra={"request_id": context.request_id, "agent_id": context.agent_id, "delivered": ok},
@@ -117,6 +119,8 @@ class SendTelegramFileSkill(Skill):
                 "save the file first, then send it by the exact name that was returned."
             )
         ok = await self._bots.deliver_document(context.agent_id, str(path), caption=caption)
+        if ok:
+            await self._bots.bind_session(context, caption or filename)
         logger.info(
             "telegram_skill_file",
             extra={"request_id": context.request_id, "agent_id": context.agent_id, "delivered": ok},

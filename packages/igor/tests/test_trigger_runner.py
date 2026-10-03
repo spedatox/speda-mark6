@@ -80,12 +80,16 @@ def post_turn_calls(monkeypatch):
 
 class _Profile:
     agent_id = "atomix"
+    external_backend = False
 
     def allocate_model(self, triggered_by, is_background=False):
         return "test-model"
 
     def background_model(self, active):
         return "test-bg-model"
+
+    def allocate_telegram_model(self):
+        return "test-model"
 
 
 class _Bots:
@@ -112,7 +116,7 @@ def _engine(text="Slept 7h12m, resting HR 54.", error=False):
 
 
 async def _fire(db, *, payload, output_mode="push", engine=None, bots=None,
-                profile=None, agent_proxy=None, ws_manager=None):
+                profile=None, agent_proxy=None, ws_manager=None, session_manager=None):
     """Fire a triggered turn and return once it has actually settled.
 
     The turn is detached, and everything asserted below — the persisted rows,
@@ -121,7 +125,7 @@ async def _fire(db, *, payload, output_mode="push", engine=None, bots=None,
     which made every assertion a race the test only usually won: the same two
     tests failed at random once the suite had ~170 other tests behind it.
     """
-    sm = SessionManager()
+    sm = session_manager or SessionManager()
     turns = TurnRegistry(sm)
     bots = bots or _Bots()
     started, session_id = await tr.start_trigger_turn(
@@ -319,6 +323,128 @@ async def test_undeliverable_push_falls_back_to_a_notification_row(db):
     assert len(rows) == 1
     assert rows[0].source_agent == "atomix"
     assert "Slept 7h12m" in rows[0].body
+
+
+# Telegram follows the conversation behind the latest delivered push.
+
+async def _telegram_session(sm, db, agent_id="atomix"):
+    return await sm.get_or_create(
+        db=db, user_id=1, triggered_by="user", model_used="test-model",
+        agent_id=agent_id, channel="telegram",
+    )
+
+
+async def test_telegram_followup_continues_the_n8n_conversation(db, maker, monkeypatch):
+    """Real gateway ingress must load the push's history, even with an old pin."""
+    from types import SimpleNamespace
+
+    from app.telegram import gateway as tg
+
+    sm = SessionManager()
+    old = await _telegram_session(sm, db)
+    await sm.save_message(db, old.id, "user", "An unrelated old conversation.")
+    _, pushed_id, _ = await _fire(
+        db, payload={"job": "health_digest"}, session_manager=sm,
+    )
+    seen = {}
+
+    def capture(ctx):
+        seen["session_id"] = ctx.session_id
+        seen["history"] = ctx.conversation_history
+        return _engine("Here is what that means.")(ctx)
+
+    class Bot:
+        async def send_message(self, text, **kwargs):
+            return True
+
+        async def send_chat_action(self, **kwargs):
+            pass
+
+    profile = _Profile()
+    gateway = tg.TelegramGateway(
+        orchestrator=SimpleNamespace(run=capture), session_manager=sm,
+        profiles=SimpleNamespace(get=lambda agent_id: profile),
+        bots=SimpleNamespace(get=lambda agent_id: Bot()),
+        ws_manager=None, agent_proxy=None,
+    )
+    monkeypatch.setattr(tg, "AsyncSessionLocal", maker)
+    monkeypatch.setattr(tg, "get_telegram_owner_id", lambda: "123")
+    await gateway.handle_update("atomix", {
+        "update_id": 1,
+        "message": {"from": {"id": 123}, "chat": {"id": 123},
+                    "text": "What does that mean?"},
+    })
+    assert seen["session_id"] == pushed_id
+    history = str(seen["history"])
+    assert "Slept 7h12m" in history
+    assert "What does that mean?" in history
+    assert "unrelated old conversation" not in history
+    async with maker() as check:
+        rows = list((await check.execute(select(Message).where(
+            Message.session_id == pushed_id,
+        ).order_by(Message.id))).scalars())
+    assert [r.role for r in rows] == ["user", "assistant", "user", "assistant"]
+
+
+async def test_push_selection_survives_restart_without_changing_origin(db):
+    _, pushed_id, _ = await _fire(db, payload={"job": "health_digest"})
+    session = await _telegram_session(SessionManager(), db)
+    assert session.id == pushed_id
+    assert session.channel == "app"
+    assert session.triggered_by == "n8n"
+
+
+async def test_newer_push_replaces_the_selected_conversation(db):
+    sm = SessionManager()
+    _, first, _ = await _fire(db, payload={"job": "first"}, session_manager=sm)
+    assert (await _telegram_session(sm, db)).id == first
+    _, second, _ = await _fire(db, payload={"job": "second"}, session_manager=sm)
+    assert second != first
+    assert (await _telegram_session(sm, db)).id == second
+
+
+@pytest.mark.parametrize("output_mode,ok", [("silent", True), ("push", False)])
+async def test_unseen_trigger_does_not_change_telegram_conversation(db, output_mode, ok):
+    sm = SessionManager()
+    old = await _telegram_session(sm, db)
+    _, triggered_id, _ = await _fire(
+        db, payload={"job": "unseen"}, output_mode=output_mode,
+        bots=_Bots(ok=ok), session_manager=sm,
+    )
+    assert triggered_id != old.id
+    assert (await _telegram_session(sm, db)).id == old.id
+
+
+async def test_new_after_push_starts_fresh_until_another_push(db):
+    sm = SessionManager()
+    _, pushed_id, _ = await _fire(db, payload={"job": "first"}, session_manager=sm)
+    await sm.reset_channel_session(db, "telegram", "atomix")
+    # /new's selection, as well as delivery's selection, must survive restarts.
+    restarted = SessionManager()
+    fresh = await _telegram_session(restarted, db)
+    assert fresh.id != pushed_id
+    assert await restarted.load_history(db, fresh.id) == []
+    assert (await _telegram_session(restarted, db)).id == fresh.id
+    original = (await db.execute(select(Session).where(Session.id == pushed_id))).scalar_one()
+    assert original.ended_at is None
+    _, newer_id, _ = await _fire(db, payload={"job": "second"}, session_manager=restarted)
+    assert (await _telegram_session(restarted, db)).id == newer_id
+
+
+async def test_push_does_not_switch_another_agents_telegram_session(db):
+    sm = SessionManager()
+    other = await _telegram_session(sm, db, "ultron")
+    await _fire(db, payload={"job": "health_digest"}, session_manager=sm)
+    assert (await _telegram_session(sm, db, "ultron")).id == other.id
+
+
+async def test_voice_push_selects_its_conversation_too(db, monkeypatch):
+    async def voice_delivery(**kwargs):
+        return True
+
+    monkeypatch.setattr(tr, "_deliver_voice", voice_delivery)
+    _, pushed_id, _ = await _fire(db, payload={"job": "digest", "voice": True})
+    assert (await _telegram_session(SessionManager(), db)).id == pushed_id
 
 
 # ── Delivery takes the answer, not the narration ────────────────────────────

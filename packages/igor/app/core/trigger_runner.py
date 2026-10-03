@@ -632,6 +632,7 @@ async def start_trigger_turn(
             output_mode=output_mode,
             payload=payload,
             telegram_bots=telegram_bots,
+            session_manager=session_manager,
             status=status,
             profile=profile,
             sanitize_model=bg_model,
@@ -670,6 +671,7 @@ async def _deliver(
     output_mode: str,
     payload: dict,
     telegram_bots,
+    session_manager,
     status: str,
     profile=None,
     sanitize_model: str = "",
@@ -731,7 +733,14 @@ async def _deliver(
                 text = await language.enforce(text, sanitize_model, target=lang)
                 delivered = await telegram_bots.deliver_message(agent_id, text)
                 channel = "text"
-            if not delivered:
+            if delivered:
+                # The next Telegram turn continues the conversation the owner
+                # just received, regardless of its original transport. Silent
+                # runs and notification fallbacks never replace this selection.
+                await session_manager.bind_channel_session(
+                    db, "telegram", agent_id, session_id, user_id,
+                )
+            else:
                 await _store_notification(db, agent_id, user_id, request_id, text, payload)
             logger.info(
                 "trigger_push_delivered" if delivered else "trigger_push_stored",

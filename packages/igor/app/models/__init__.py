@@ -4,6 +4,7 @@
 # Import all models so Base.metadata is fully populated when init_db() calls create_all.
 from app.models.user import User
 from app.models.session import Session
+from app.models.channel_session import ChannelSession
 from app.models.message import Message
 from app.models.memory import Memory
 from app.models.memory_file import MemoryFile
@@ -50,7 +51,7 @@ from app.models.pattern import (
 )
 
 __all__ = [
-    "User", "Session", "Message", "Memory", "MemoryFile", "MemoryRevision", "MemoryReview",
+    "User", "Session", "ChannelSession", "Message", "Memory", "MemoryFile", "MemoryRevision", "MemoryReview",
     "MessageEmbedding", "Observation", "BackgroundJob",
     "AgentRecord", "AgentMessage", "ToolCall", "Notification", "Automation", "AutomationRun",
     "NewsItem", "NewsWatch", "NewsQuota",

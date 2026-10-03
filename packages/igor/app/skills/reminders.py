@@ -129,6 +129,8 @@ class RemindersSkill(Skill):
                 )
             if status != "ok":
                 return f"Could not send the reminder: {result.get('detail', status)}"
+            if result.get("delivered"):
+                await bots.bind_session(context, text)
             logger.info(
                 "reminder_opened_by_agent",
                 extra={"request_id": context.request_id,
