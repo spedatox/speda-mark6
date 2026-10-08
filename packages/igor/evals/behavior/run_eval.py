@@ -115,7 +115,8 @@ def source_identity(app_root):
             "app_sha256": digest(files), "working_tree_diff_sha256": hashlib.sha256(diff).hexdigest()}
 
 
-async def run_cases(model: str, live: bool, case_ids: list[str], config=None, output=None) -> dict:
+async def run_cases(model: str, live: bool, case_ids: list[str], config=None, output=None,
+                    cases_path=None, section_override=None) -> dict:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     import app.models  # noqa: F401
     from app.config import settings
@@ -130,6 +131,7 @@ async def run_cases(model: str, live: bool, case_ids: list[str], config=None, ou
     from app.models.session import Session
     from app.models.user import User
     from app.profiles.optimus import OptimusProfile
+    from app.profiles.atomix import AtomixProfile
     from app.profiles.registry import ProfileRegistry
     from app.profiles.speda import SPEDAProfile
     from app.profiles.ultron import UltronProfile
@@ -242,12 +244,12 @@ async def run_cases(model: str, live: bool, case_ids: list[str], config=None, ou
 
     config = copy.deepcopy(config or local_config(model))
     validate_config(config, model, live)
-    cases_path = Path(__file__).with_name("cases.json")
+    cases_path = Path(cases_path or Path(__file__).with_name("cases.json"))
     cases = json.loads(cases_path.read_text(encoding="utf-8"))["cases"]
     if set(case_ids) - {c["id"] for c in cases}:
         raise ValueError("Unknown case id")
     profiles = ProfileRegistry()
-    for profile in (SPEDAProfile(), OptimusProfile(), UltronProfile()):
+    for profile in (SPEDAProfile(), AtomixProfile(), OptimusProfile(), UltronProfile()):
         profiles.register(profile)
     report = {"source": source_identity(APP_ROOT), "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               "cases_sha256": hashlib.sha256(cases_path.read_bytes()).hexdigest(), "config": config,
@@ -258,12 +260,41 @@ async def run_cases(model: str, live: bool, case_ids: list[str], config=None, ou
                               "No post-turn extraction, compaction or background scheduling is evaluated."],
               "results": []}
 
+    # Evaluation only: replace exactly one instruction group, retaining all
+    # other prompt sections, tools, settings and memory. Never alter disk or
+    # production configuration. Missing targets are errors, not empty sections.
+    replacement = None
+    if section_override:
+        from app.prompts import loader
+        section, replacement_path = section_override
+        target = (loader.PROMPTS_DIR / section).resolve()
+        if not target.is_relative_to(loader.PROMPTS_DIR.resolve()) or not target.is_file():
+            raise ValueError("Prompt override must name an existing section inside app/prompts")
+        replacement = Path(replacement_path).read_text(encoding="utf-8").strip()
+        report["instruction_comparison"] = {
+            "section": section, "original_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "replacement_sha256": hashlib.sha256(replacement.encode()).hexdigest(),
+            "scope": "One section replaced for this isolated evaluation only",
+        }
+
     def checkpoint():
         if output:
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
     with ExitStack() as scope:
+        if section_override:
+            original_load = loader.load_section
+
+            def compared_section(relative_path, context_vars=None):
+                if (loader.PROMPTS_DIR / relative_path).resolve() != target:
+                    return original_load(relative_path, context_vars)
+                text = replacement
+                for key, value in (context_vars or {}).items():
+                    text = text.replace("{" + key + "}", str(value))
+                return text
+
+            scope.enter_context(patch.object(loader, "load_section", compared_section))
         for key, value in config["settings"].items():
             scope.enter_context(patch.object(settings, key, value))
         scope.enter_context(patch.object(runtime_state, "_cache", copy.deepcopy(config["runtime"])))
@@ -361,6 +392,9 @@ def main():
     parser.add_argument("--write-local-config", type=Path, help="Save a template without claiming production equivalence")
     parser.add_argument("--app-root", type=Path, default=APP_ROOT, help="Igor package directory from the revision being evaluated")
     parser.add_argument("--case", action="append", default=[])
+    parser.add_argument("--cases", type=Path, help="Private representative cases; never copied into Git")
+    parser.add_argument("--section-override", nargs=2, metavar=("SECTION", "FILE"),
+                        help="Controlled comparison: replace one prompt section with this file")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     APP_ROOT = args.app_root.resolve()
@@ -373,7 +407,8 @@ def main():
     if not args.output or (args.live and not args.config):
         parser.error("--output is required; --live also requires --config")
     config = json.loads(args.config.read_text(encoding="utf-8")) if args.config else None
-    asyncio.run(run_cases(args.model, args.live, args.case, config, args.output))
+    asyncio.run(run_cases(args.model, args.live, args.case, config, args.output,
+                         args.cases, args.section_override))
 
 
 if __name__ == "__main__":

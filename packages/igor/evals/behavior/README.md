@@ -41,6 +41,23 @@ inventing a result or operating a real account. This evaluates conversational
 use of recorded outcomes; it does not establish current SSH access or live tool
 execution. No post-turn extraction or background scheduling is exercised.
 
+Use `--cases PRIVATE_CASES.json` for representative incident excerpts outside
+Git. The same schema as `cases.json` applies; retained historical tool results
+go in each assistant turn's `tools` array. Atomix is available alongside the
+other evaluation profiles. Keep identical fixture bytes for both revisions.
+Actual incident excerpts and storage fixtures must be labelled separately:
+an isolated, reconstructed memory fixture is not proof of production storage.
+
+For a controlled instruction comparison, use
+`--section-override core/08_memory.md PATH_TO_COMPARISON_SECTION.md`.
+Exactly one existing prompt section is replaced in the evaluation process;
+all other groups, memory, model settings and tool definitions remain unchanged.
+The report retains the original and replacement hashes. Use the same case,
+configuration and application tree for both calls. This option does not alter
+production configuration or source files. Preserve security and authorization
+requirements in the comparison section. Input capture establishes the changed
+instructions; only completed live replies can establish behavioral effects.
+
 Use this same harness, cases and configuration against both application trees:
 
 ```powershell

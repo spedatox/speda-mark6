@@ -103,9 +103,12 @@ class RecordObservationSkill(Skill):
         "`source_ids` it rests on, obtained from `search_memory`; uncited deduction is rejected. "
         "If the available evidence establishes the fact but leaves a material date or "
         "other lifecycle detail unknown, the reviewer returns one owner-confirmation "
-        "question instead of rejecting and losing the fact. Ask that question directly, "
-        "then record the fact with the answer. Returns stored ids, or the exact question "
-        "needed before a record can be made."
+        "question instead of rejecting and losing the fact. Use the conversation to "
+        "check whether the owner already answered it; never demand the same answer again. "
+        "Clarify an unresolved detail once when it matters, without displacing the owner's "
+        "actual request. A held or failed write does not prevent using supported facts in "
+        "this conversation. Returns stored ids, or an unsaved proposal with a clarification "
+        "question; a question is not a successful write."
     )
     read_only = False
     input_schema = {
@@ -311,6 +314,16 @@ class RecordObservationSkill(Skill):
                     "at the proper deductive or inductive level with its required sources. "
                     "Never upgrade inference into owner testimony. "
 
+                    "CONTEXTUAL ANSWERS: An evidence entry may include a labelled "
+                    "preceding_assistant_turn. Use it only to identify what the adjacent "
+                    "owner answer refers to. The assistant's question or assertion is not "
+                    "factual testimony and cannot independently support any claim. A clear "
+                    "owner answer to a specific question can support that exact scope; do "
+                    "not require the owner to repeat the question's words. An ambiguous "
+                    "answer, compound question with unclear scope, or unclear denial does "
+                    "not establish the proposed fact. Check the supplied exchange before "
+                    "requesting a detail that the owner has already answered. "
+
                     "Examples: if the owner says 'the deal is done, minimum wage, no insurance', "
                     "an explicit observation that the owner concluded an agreement for minimum "
                     "wage without insurance is supported. Adding 'remote', 'indefinite', "
@@ -363,14 +376,27 @@ class RecordObservationSkill(Skill):
                 )
 
                 if verdict.get("needs_owner_confirmation") is True:
-                    question = str(verdict.get("question") or "").strip()
-                    if not question:
-                        question = "What is the exact date or timeframe for this?"
+                    question = verdict.get("question")
+                    if not isinstance(question, str) or not question.strip():
+                        return (
+                            "Observation validation failed: the reviewer requested clarification "
+                            "without identifying a question. Nothing saved. Do not invent a "
+                            "missing detail or ask the owner a generic confirmation. Continue "
+                            "answering the owner's actual request using supported context; "
+                            "report the unresolved save once."
+                        )
                     return (
-                        "Observation needs owner confirmation before it can be recorded. "
-                        f"Ask the owner exactly: {question} "
-                        "Do not discard the proposed fact or describe this as a rejection; "
-                        "after the owner answers, record the supported fact with that detail."
+                        "Observation needs owner confirmation before it can be recorded. Nothing saved. "
+                        f"Reviewer question: {question.strip()} "
+                        "Check the conversation first. If the owner already clearly answered "
+                        "that question, do not ask it again; retry only with a concrete evidence "
+                        "or scope correction. If the same hold persists, report the unsaved "
+                        "part once and continue the owner's actual conversation. If the detail "
+                        "is genuinely unresolved and matters, ask one focused question at an "
+                        "appropriate point; do not repeatedly interrupt or press a frustrated "
+                        "owner for nonessential bookkeeping. Do not discard the supported "
+                        "claim: its original owner message remains in the conversation, but "
+                        "it is not a stored observation."
                     )
 
                 if verdict.get("allow") is not True:

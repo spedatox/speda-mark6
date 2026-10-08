@@ -160,6 +160,75 @@ async def test_reviewer_gets_owner_chat_and_successful_tool_trace_from_active_se
     assert resolved_tool[0]["ref"] == tool_ref["ref"]
 
 
+@pytest.mark.parametrize("answer", ["YES I DONT", "No, that is not what I meant."])
+async def test_short_owner_answer_retains_question_without_promoting_assistant_evidence(sessions, answer):
+    from app.models.message import Message
+    from app.models.session import Session
+    from app.services.memory_admission import session_review_evidence
+
+    async with sessions() as db:
+        session = Session(user_id=1, agent_id="atomix", triggered_by="user", model_used="test")
+        private = Session(user_id=2, agent_id="atomix", triggered_by="user", model_used="test")
+        db.add_all([session, private])
+        await db.flush()
+        question = Message(session_id=session.id, role="assistant", content=[
+            {"type": "text", "text": "Do you mean none of asthma, another chronic illness, or a weakened immune system?"},
+            {"type": "_speda_meta", "thinking": "PRIVATE_REASONING", "tools": [{"input": {"secret": "PRIVATE_INPUT"}}]},
+        ])
+        db.add(question)
+        await db.flush()
+        owner = Message(session_id=session.id, role="user", content=answer)
+        db.add_all([owner, Message(session_id=private.id, role="assistant", content="OTHER_OWNER_SECRET")])
+        await db.commit()
+        entries = await session_review_evidence(db, 1, session_id=session.id)
+        assert len(entries) == 1
+        assert entries[0]["ref"] == f"message:{owner.id}"
+        assert entries[0]["quote"] == answer
+        assert entries[0]["source_sha256"] == version(answer)
+        context = entries[0]["preceding_assistant_turn"]
+        assert context["text"] == question.content[0]["text"]
+        assert context["authority"] == "referent_only_not_owner_evidence"
+        assert "PRIVATE_" not in json.dumps(entries) and "OTHER_OWNER_SECRET" not in json.dumps(entries)
+        # A reviewer may interpret an answer, but the agent cannot cite its own
+        # question/assertion as proof the owner actually confirmed that scope.
+        with pytest.raises(ValueError, match="Quotation is not present"):
+            await resolve_evidence(db, 1, [{"ref": context["ref"], "quote": context["text"]}], session_id=session.id)
+        resolved = await resolve_evidence(db, 1, [{"ref": entries[0]["ref"], "quote": answer}], session_id=session.id)
+        assert resolved[0]["source_authority"] == "owner_statement"
+        assert await session_review_evidence(db, 2, session_id=session.id) == []
+
+
+async def test_adjacent_assistant_context_is_bounded_and_not_reused_for_later_owner_messages(sessions):
+    from app.models.message import Message
+    from app.models.session import Session
+    from app.services.memory_admission import session_review_evidence
+
+    async with sessions() as db:
+        session = Session(user_id=1, agent_id="atomix", triggered_by="user", model_used="test")
+        automated = Session(user_id=1, agent_id="atomix", triggered_by="n8n", model_used="test")
+        db.add_all([session, automated])
+        await db.flush()
+        db.add(Message(session_id=session.id, role="assistant", content="Old detail. " * 500 + "Do you confirm this scope?"))
+        await db.flush()
+        db.add(Message(session_id=session.id, role="user", content="Yes."))
+        await db.flush()
+        db.add(Message(session_id=session.id, role="user", content="A separate thought."))
+        await db.flush()
+        db.add(Message(session_id=session.id, role="assistant", content="Another question?"))
+        await db.flush()
+        db.add(Message(session_id=session.id, role="user", content="Long answer. " * 500))
+        await db.commit()
+        entries = await session_review_evidence(db, 1, session_id=session.id)
+        context = entries[0]["preceding_assistant_turn"]
+        assert context["truncated"] and context["text"].endswith("Do you confirm this scope?")
+        assert len(context["text"]) <= 1500
+        assert len(entries[0]["source_body"]) + len(context["text"]) <= 4000
+        assert "preceding_assistant_turn" not in entries[1]
+        assert "preceding_assistant_turn" not in entries[2]
+        assert len(entries[2]["source_body"]) == 4000
+        assert await session_review_evidence(db, 1, session_id=automated.id) == []
+
+
 async def test_validator_rejection_or_outage_saves_nothing(sessions, monkeypatch):
     async with sessions() as db:
         db.add(MemoryFile(user_id=1, path="/memories/projects/evidence.md", content="# Evidence\nPaid 3000 to the card."))
@@ -173,6 +242,53 @@ async def test_validator_rejection_or_outage_saves_nothing(sessions, monkeypatch
                     managed=True, evidence=transaction()["evidence"])
         assert not (await db.execute(select(MemoryRevision))).scalars().all()
         assert not (await db.execute(select(MemoryWriteReceipt))).scalars().all()
+
+
+@pytest.mark.parametrize("answer,verdict", [
+    ("YES I DONT", {"allow": True, "needs_owner_confirmation": False}),
+    ("No, that is not what I meant.", {"allow": False, "reason": "Scope denied"}),
+    ("nope", {"allow": False, "needs_owner_confirmation": True,
+              "question": "Which conditions do you mean?"}),
+])
+async def test_contextual_answers_still_require_review_and_never_store_assistant_testimony(
+        sessions, monkeypatch, answer, verdict):
+    from app.models.message import Message
+    from app.models.session import Session
+    from app.models.observation import Observation
+    from app.skills.observations import RecordObservationSkill
+
+    review = AsyncMock(return_value=verdict)
+    monkeypatch.setattr("app.skills.observations.ask_json", review)
+    monkeypatch.setattr("app.services.observations._embed_content", AsyncMock(return_value=None))
+    async with sessions() as db:
+        session = Session(user_id=1, agent_id="atomix", triggered_by="user", model_used="test")
+        db.add(session)
+        await db.flush()
+        question = "Do you mean none of asthma, another chronic illness, or a weakened immune system?"
+        db.add(Message(session_id=session.id, role="assistant", content=question))
+        await db.flush()
+        owner = Message(session_id=session.id, role="user", content=answer)
+        db.add(owner)
+        await db.commit()
+        ctx = SimpleNamespace(db=db, user_id=1, session_id=session.id, agent_id="atomix",
+                              request_id="contextual-answer", model="test")
+        result = await RecordObservationSkill().execute({"observations": [{
+            "content": "The owner reports no asthma, other chronic illness, or weakened immune system.",
+            "level": "explicit", "domain": "biography",
+            "evidence": [{"ref": f"message:{owner.id}", "quote": answer}],
+        }]}, ctx)
+        review.assert_awaited_once()
+        payload = review.await_args.args[1]
+        entry = next(e for e in payload["evidence"] if e["ref"] == f"message:{owner.id}")
+        assert entry["preceding_assistant_turn"]["text"] == question
+        rows = (await db.execute(select(Observation))).scalars().all()
+        if verdict["allow"]:
+            assert "Recorded 1 observation" in result
+            assert rows[0].message_ids == [owner.id]
+            assert question not in json.dumps(rows[0].sources)
+        else:
+            assert not rows
+            assert "Recorded" not in result
 
 
 async def test_finance_record_and_views_commit_together_and_duplicate_idempotent(sessions, monkeypatch):

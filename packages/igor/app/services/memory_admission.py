@@ -232,7 +232,8 @@ async def session_review_evidence(db, user_id, *, session_id=None):
     are rows already persisted by Igor, scoped to this owner-triggered session,
     and each carries a hash in the eventual write receipt.  The reviewer still
     decides whether they support the claim; this only gives it the material to
-    decide.
+    decide. An adjacent assistant turn supplies the referent for a short owner
+    answer, never authority for the proposed fact or a quotable evidence source.
     """
     if not session_id:
         return []
@@ -249,16 +250,35 @@ async def session_review_evidence(db, user_id, *, session_id=None):
 
     entries = []
     messages = (await db.execute(select(Message).where(
-        Message.session_id == session_id, Message.role == "user",
+        Message.session_id == session_id, Message.role.in_(("user", "assistant")),
     ).order_by(Message.id.asc()))).scalars().all()
+    preceding_assistant = None
     for message in messages:
         body = text_content(message.content).strip()
+        if message.role == "assistant":
+            preceding_assistant = (message.id, body) if body else None
+            continue
         if body:
-            entries.append({
+            entry = {
                 "ref": f"message:{message.id}", "quote": body[:4000],
                 "source_sha256": version(body), "source_body": body[:4000],
                 "evidence_type": "owner_chat_context",
-            })
+            }
+            # Keep the existing per-source 4,000-character context ceiling.
+            # The tail preserves the question when a longer assistant turn
+            # ends with it. Exact owner quotes and their hashes stay unchanged.
+            available = min(1500, 4000 - len(entry["source_body"]))
+            if preceding_assistant and available > 0:
+                ident, assistant_body = preceding_assistant
+                entry["preceding_assistant_turn"] = {
+                    "ref": f"message:{ident}", "role": "assistant",
+                    "authority": "referent_only_not_owner_evidence",
+                    "text": assistant_body[-available:],
+                    "truncated": len(assistant_body) > available,
+                    "source_sha256": version(assistant_body),
+                }
+            entries.append(entry)
+        preceding_assistant = None
 
     calls = (await db.execute(select(ToolCall).where(
         ToolCall.session_id == session_id, ToolCall.error.is_(None),

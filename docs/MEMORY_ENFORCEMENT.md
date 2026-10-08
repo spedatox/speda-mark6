@@ -32,6 +32,22 @@ subject, section, lifecycle, duplication and loss of unrelated knowledge. A time
 malformed result or rejection saves nothing. The model remains fallible: source
 existence and quotations do not mathematically prove factual entailment.
 
+Observation review includes the adjacent persisted assistant turn as labelled,
+bounded context for an owner's short answer. It can identify what a confirmation
+or denial refers to; it is not owner evidence. Assistant messages still cannot
+resolve as `message:<id>` evidence, and their text is not copied into observation
+sources. The reviewer still judges whether the owner's answer supports the
+proposed scope; a short answer never grants automatic admission.
+
+Observation confirmation results identify an unsaved proposal, not a command to
+repeat a question immediately. The conversational model checks the actual
+exchange, clarifies a genuinely missing material detail once, and continues the
+owner's substantive request even when a nonessential save remains unresolved.
+A reviewer that requests confirmation without supplying a question fails
+closed; the tool does not invent a date question. Original owner messages and
+tool audit results remain the existing recovery evidence. This is no automatic
+acceptance, background retry mechanism or guarantee of behavioral recovery.
+
 Document ownership, taxonomy, typed schemas and optimistic concurrency are code
 boundaries. Agent claims about their authority cannot bypass them. Approved writes
 store their evidence hashes and validation rationale in `memory_write_receipts`,

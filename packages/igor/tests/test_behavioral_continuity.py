@@ -160,6 +160,39 @@ def test_behavior_harness_refuses_unverified_configuration():
         harness.validate_config(config, "deepseek:another-model", False)
 
 
+async def test_prompt_comparison_changes_one_group_and_restores_loader(tmp_path, monkeypatch):
+    import json
+    from app.prompts import loader
+
+    path = Path(__file__).resolve().parents[1] / "evals/behavior/run_eval.py"
+    spec = importlib.util.spec_from_file_location("behavior_eval", path)
+    harness = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(harness)
+    monkeypatch.setattr("app.core.registry.CapabilityRegistry.dead_zone_active", AsyncMock(return_value=False))
+    cases = tmp_path / "cases.json"
+    cases.write_text(json.dumps({"cases": [{"id": "atomix_context", "agent": "atomix",
+        "history": [{"role": "assistant", "text": "Which detail?", "tools": [
+            {"name": "record_observation", "result": "Nothing saved; scope remains unclear."}]},
+            {"role": "user", "text": "I already answered that."}], "rubric": "Use the actual answer."}]}))
+    replacement = tmp_path / "memory.md"
+    replacement.write_text("Controlled memory section for {timezone}.")
+    original = loader.load_section
+    before = await harness.run_cases("openai:gpt-6-luna", False, [], cases_path=cases)
+    after = await harness.run_cases("openai:gpt-6-luna", False, [], cases_path=cases,
+                                   section_override=("core/08_memory.md", replacement))
+    assert loader.load_section is original
+    a, b = before["results"][0]["request"], after["results"][0]["request"]
+    assert a["messages"] == b["messages"] and "Nothing saved" in str(b["messages"])
+    assert {k: v for k, v in a.items() if k != "system"} == {k: v for k, v in b.items() if k != "system"}
+    assert a["system"][1:] == b["system"][1:]
+    old = original("core/08_memory.md", {"timezone": "Europe/Istanbul"})
+    assert a["system"][0]["text"].replace(old, "Controlled memory section for Europe/Istanbul.") == b["system"][0]["text"]
+    assert after["instruction_comparison"]["section"] == "core/08_memory.md"
+    with pytest.raises(ValueError, match="existing section"):
+        await harness.run_cases("openai:gpt-6-luna", False, [], cases_path=cases,
+                               section_override=("../../outside.md", replacement))
+
+
 async def test_live_harness_preserves_settings_and_explicit_language(monkeypatch):
     from types import SimpleNamespace
     from app.config import settings
