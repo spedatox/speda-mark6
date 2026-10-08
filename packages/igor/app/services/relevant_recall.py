@@ -57,7 +57,8 @@ logger = logging.getLogger(__name__)
 _MAX_EVIDENCE_ITEMS = 8
 _MAX_EVIDENCE_ITEM_CHARS = 120
 _MAX_DERIVED_QUERY_CHARS = 2000
-_STAMP_RE = re.compile(r"^\[\d{4}-\d{2}-\d{2}[^\]]*\]\s*")
+_STAMP_RE = re.compile(r"^\[(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+)?\d{4}-\d{2}-\d{2}[^\]]*\]\s*")
+_COORD_PAIR_RE = re.compile(r"(?<![\d.])(-?\d{1,3}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})(?![\d.])")
 _DATE_RE = re.compile(
     r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?|"
     r"\d{1,2}:\d{2})\b"
@@ -128,6 +129,12 @@ def initial_recall_query(history) -> str:
     return _strip_stamp(latest_user_message(history))[:_MAX_DERIVED_QUERY_CHARS]
 
 
+def coordinate_anchors(text: str) -> set[tuple[float, float]]:
+    """Exact numeric coordinate pairs for retrieval, not a place inference."""
+    return {(float(lat), float(lng)) for lat, lng in _COORD_PAIR_RE.findall(text or "")
+            if -90 <= float(lat) <= 90 and -180 <= float(lng) <= 180}
+
+
 def _short(value) -> str:
     text = " ".join(str(value).split())
     return text[:_MAX_EVIDENCE_ITEM_CHARS].strip(" ,;:-")
@@ -160,6 +167,11 @@ def salient_evidence(result, *, known_text: str = "") -> list[str]:
         if depth > 4 or len(candidates) >= _MAX_EVIDENCE_ITEMS * 4:
             return
         if isinstance(node, dict):
+            lat = node.get("latitude", node.get("lat"))
+            lng = node.get("longitude", node.get("lng", node.get("lon")))
+            if isinstance(lat, (int, float)) and isinstance(lng, (int, float)):
+                if -90 <= lat <= 90 and -180 <= lng <= 180:
+                    candidates.append(f"coordinates {lat}, {lng}")
             anchor = next(
                 (
                     _short(child)

@@ -34,6 +34,7 @@ from sqlalchemy import select
 from app.database import AsyncSessionLocal
 from app.models.message import Message
 from app.models.session import Session
+from app.services.chat_history import execution_receipts
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,9 @@ def _extract_text(content) -> str:
                 parts.append("[tool result]")
             elif t == "image":
                 parts.append("[image]")
+        receipt = execution_receipts(content)
+        if receipt:
+            parts.append(receipt)
         return " ".join(p for p in parts if p)
     return str(content)
 
@@ -91,6 +95,12 @@ Write a dense, factual summary that preserves:
 - Decisions made, conclusions reached, and any specific facts, names, numbers,
   URLs, file names or code identifiers that may be referenced later
 - Anything still open or in progress
+- Explicit conversational preferences, prohibitions and corrections; the
+  relevant relationship context and how the owner wants to be treated
+- Recorded tool actions and their actual outcomes: attempted, failed, completed
+  or unknown. Execution receipts outrank contradictory assistant prose. Earlier
+  creation does not establish current availability. Never turn a proposal into
+  an action or erase an action merely because a later reply denied it.
 Do NOT add commentary, do NOT include pleasantries, do NOT invent. If a prior
 summary is given, MERGE the new material into it and return ONE updated summary.
 

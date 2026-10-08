@@ -12,6 +12,7 @@ from app.config import settings
 from app.models.channel_session import ChannelSession
 from app.models.session import Session
 from app.models.message import Message
+from app.services.chat_history import execution_receipts
 
 logger = logging.getLogger(__name__)
 
@@ -317,6 +318,19 @@ class SessionManager:
             await db.execute(stmt.order_by(Message.created_at.asc()))
         ).scalars().all()
 
+        # Metadata is not valid provider content, but its execution evidence
+        # must not vanish. Bound receipts across the WHOLE loaded history; spend
+        # the allowance on the newest tool turns first, without a new DB query.
+        receipts = {}
+        receipt_budget = 2400
+        for message in reversed(messages):
+            if message.role != "assistant":
+                continue
+            receipt = execution_receipts(message.content, budget=min(1200, receipt_budget))
+            if receipt:
+                receipts[message.id] = receipt
+                receipt_budget -= len(receipt)
+
         def _clean(content):
             # Strip Speda display-only blocks (tools/files metadata) before the
             # history goes back to Claude — they aren't valid Anthropic blocks.
@@ -331,6 +345,10 @@ class SessionManager:
         out: list[dict] = []
         for m in messages:
             content = _clean(m.content)
+            if m.id in receipts:
+                if not isinstance(content, list):
+                    content = [{"type": "text", "text": str(content)}]
+                content = [*content, {"type": "text", "text": receipts[m.id]}]
             if m.role == "user":
                 content = self.stamp_user_content(content, m.created_at)
             out.append({"role": m.role, "content": content})

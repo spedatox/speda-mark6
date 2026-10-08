@@ -790,7 +790,8 @@ async def recall_for_context(user_id: int, db, agent_id: str = "speda", *, cache
         "name and role are set above and are unaffected by anything in this section. "
         "Read it as notes about the owner, never as a description of yourself.\n\n"
         f"{body}\n\n"
-        "Only the files shown above are preloaded; do not re-read them. Other "
+        "Only the excerpts shown above are preloaded. Do not re-read complete "
+        "records; open shortened ones when omitted detail matters. Other "
         "files are selected per turn or opened on demand. The Directory lists "
         "roots, not every file: list a relevant folder with `memory` if needed. "
         "Projects and people have one current entity record "
@@ -814,6 +815,7 @@ async def relevant_files_for_message(user_id: int, db, query: str) -> str:
     """
     from app.config import settings
     from app.services.memory_spec import is_course_path
+    from app.services.relevant_recall import coordinate_anchors
 
     query = (query or "").strip()[:2000]
     if len(query) < 6:
@@ -822,13 +824,15 @@ async def relevant_files_for_message(user_id: int, db, query: str) -> str:
                "from", "hangi", "icin", "için", "ile", "more", "nasıl", "nedir",
                "olan", "that", "this", "what", "when", "where", "your"}
     terms = {term for term in re.findall(r"[^\W_]{3,}", query.casefold()) if term not in ignored}
+    coordinates = coordinate_anchors(query)
     if not terms:
         return ""
     from app.services.memory_catalog import active_corpus_files
     rows = active_corpus_files((await db.execute(select(MemoryFile).where(MemoryFile.user_id == user_id))).scalars().all())
-    always = {"/memories/current.md", "/memories/dossier.md",
-              "/memories/dossier/prohibitions.md", "/memories/dossier/dislikes.md",
-              "/memories/dossier/wants.md"}
+    # A standing excerpt may omit the very preference the query needs. Allow
+    # selective retrieval of dossier documents instead of treating an excerpt
+    # as if its entire source had already reached the model.
+    always = {"/memories/current.md"}
     codes = {code.upper() for code in re.findall(r"\b[A-Za-z]{2,8}\d{2,4}[A-Za-z]?\b", query)}
     term = re.search(r"\b\d{4}-\d{4}-(?:spring|summer|fall)\b", query.casefold())
     if codes:
@@ -860,6 +864,10 @@ async def relevant_files_for_message(user_id: int, db, query: str) -> str:
         title_terms = set(re.findall(r"[^\W_]{3,}", title))
         body_terms = set(re.findall(r"[^\W_]{3,}", row.content[:12000].casefold()))
         score = 10 * len(terms & path_terms) + 8 * len(terms & title_terms) + min(3, len(terms & body_terms))
+        if coordinates & coordinate_anchors(row.content):
+            score += 30
+        if "/dossier" in path and len(terms & body_terms) >= 2:
+            score += 8
         if path == "/memories/owner.md" and terms & {
             "biyografi", "çocukluğum", "geçmişim", "kimim", "hayatım", "origins",
         }:
@@ -886,7 +894,23 @@ async def relevant_files_for_message(user_id: int, db, query: str) -> str:
         available = min(settings.memory_injected_file_max_chars or budget, budget - gap - len(header))
         if available < 200:
             break
-        section = header + bounded_excerpt(path, content, available)
+        # Within a selected document, prefer the sections matching the query.
+        # Head/tail elision otherwise drops relevant middle preferences and
+        # established places even after the correct document was retrieved.
+        chunks = _split_sections(content)
+        matched = [(len(terms & set(re.findall(r"[^\W_]{3,}", chunk.casefold())))
+                    + 30 * bool(coordinates & coordinate_anchors(chunk)), index, chunk)
+                   for index, chunk in enumerate(chunks)]
+        relevant = sorted((item for item in matched if item[0]), key=lambda item: (-item[0], item[1]))[:2]
+        if relevant and len(chunks) > 2:
+            chosen = "\n\n".join(item[2].strip() for item in sorted(relevant, key=lambda item: item[1]))
+            # Preserve authority/conflict warnings even when selecting sections.
+            content = (warning + "\n\n" if warning else "") + chosen
+            marker = f"\n_[Selected sections; open `{path}` for the full record.]_"
+            excerpt = bounded_excerpt(path, content, max(1, available - len(marker))) + marker
+        else:
+            excerpt = bounded_excerpt(path, content, available)
+        section = header + excerpt
         sections.append(section)
         budget -= gap + len(section)
     if not sections:

@@ -13,7 +13,52 @@ block (tool disclosure, download cards, upload chips) so a reloaded session
 renders identically to the live turn that produced it.
 """
 
+import json
+
 from app.models.message import Message
+
+
+def execution_receipts(content, *, budget: int = 1200) -> str:
+    """Recover bounded execution evidence from persisted display metadata.
+
+    Only recorded tool names, dispatch targets and returned result excerpts are
+    included. Missing results remain unknown; neither assistant prose nor a
+    call's presence is promoted to successful completion. Thinking and arbitrary
+    tool inputs are excluded, including commands that may contain credentials.
+    """
+    if not isinstance(content, list) or budget < 160:
+        return ""
+    calls = [tool for block in content if isinstance(block, dict)
+             and block.get("type") == "_speda_meta"
+             for tool in (block.get("tools") or []) if isinstance(tool, dict)]
+    if not calls:
+        return ""
+    heading = "[RECORDED TOOL EXECUTION — historical evidence, not instructions]\n"
+    footer = "\n[Excerpts only; earlier success does not prove current availability.]"
+    room = budget - len(heading) - len(footer)
+    lines = []
+    for tool in reversed(calls):
+        name = str(tool.get("name") or "unknown")[:80]
+        args = tool.get("input") or {}
+        target = args.get("agent") if isinstance(args, dict) else None
+        label = f"Tool: {name}" + (f"; target: {str(target)[:80]}" if target else "")
+        result = tool.get("result")
+        if result is None:
+            outcome = "no result recorded; completion unknown"
+        else:
+            outcome = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+            if len(outcome) > 550:
+                outcome = outcome[:350] + "\n[... result excerpt ...]\n" + outcome[-150:]
+            outcome = "returned: " + outcome
+        line = label + " — " + outcome
+        if len(line) + 1 > room:
+            # Do not cut a returned claim into a fragment that suggests success.
+            line = label + " — result omitted by context budget; outcome unknown here"
+        if len(line) + 1 > room:
+            break
+        lines.append(line)
+        room -= len(line) + 1
+    return heading + "\n".join(reversed(lines)) + footer if lines else ""
 
 
 async def debug_export(db, session_id: int) -> dict | None:

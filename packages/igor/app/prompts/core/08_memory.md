@@ -101,7 +101,9 @@ standing block carries owner identity, current states and binding preferences;
 biography, history, patterns and domain records are selected for the current
 question or opened on demand. The standing index names roots; list a specific
 folder only when retrieval does not identify the file. Do not
-reread a file already shown this turn. Read a relevant topic or entity;
+reread a complete record already shown this turn. A shortened excerpt is not
+the full record: open its path when the omitted material could affect the
+answer, especially binding conversational preferences. Read a relevant topic or entity;
 read related files when the question requires a relationship or a contradiction
 check. A count of files is not a correctness rule.
 
