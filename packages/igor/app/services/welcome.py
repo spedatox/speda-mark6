@@ -5,9 +5,9 @@
 Welcome remark — a JARVIS-style one-liner for the app's welcome screen.
 
 The home screen already shows a generic "Good morning, <name>". This adds the
-flavour beneath it: a short, contextual remark in the addressed agent's voice,
-drawn from the owner's memory (who they are + what's current) — the kind of
-anticipatory line JARVIS opens with.
+flavour beneath it: a short, contextual remark in the addressed agent's voice.
+Owner memory is available as context; the existing identity and shared voice
+guidance govern how the agent uses it.
 
 Latency is handled by NOT generating per view. A remark is generated once per
 agent per part-of-day (with a short TTL) by the agent's CHEAPEST model and
@@ -138,9 +138,7 @@ async def _generate(profile, part_of_day: str, now_dt: datetime, user_id: int, *
         f"WHO HE IS (memory/owner.md):\n{owner or '(unknown)'}\n\n"
         f"WHAT'S CURRENT (memory/current.md):\n{current or '(nothing noted)'}\n\n"
         "Write ONE short opening remark (8–16 words) to sit under a "
-        f"'Good {part_of_day}' greeting. Make it feel personal to HIM or to your "
-        "domain — you may nod to something real from the memory above if it fits "
-        "naturally, otherwise keep it about the moment. One line only. No quotes, "
+        f"'Good {part_of_day}' greeting. One line only. No quotes, "
         "no emoji, no preamble — just the remark."
     )
     try:
