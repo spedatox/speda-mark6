@@ -15,6 +15,7 @@ import RemindersTab from './RemindersTab'
 import ProtocolsTab from './ProtocolsTab'
 import type { AppConfig } from '../lib/types'
 import ConfigTab from './ConfigTab'
+import PersonalityTab from './PersonalityTab'
 import McpServersPanel from './McpServersPanel'
 import PortalsPanel from './PortalsPanel'
 import GlassSelect from './GlassSelect'
@@ -47,7 +48,7 @@ const RECONNECT_ATTEMPTS = [0, 3, 5, 10, 20]
 /** How long to wait on a silent backend before giving up, in seconds. */
 const DEAD_SECONDS = [120, 300, 600, 1800, 3600]
 
-type Tab = 'general' | 'config' | 'connections' | 'automations' | 'voices' | 'reminders' | 'protocols' | 'interface' | 'data' | 'account'
+type Tab = 'general' | 'personalities' | 'config' | 'connections' | 'automations' | 'voices' | 'reminders' | 'protocols' | 'interface' | 'data' | 'account'
 
 /* ── Rail glyphs ─────────────────────────────────────────────────────────── */
 const ico = { width: 17, height: 17, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 } as const
@@ -401,6 +402,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
   // said once, instead of the owner inferring it from the fields.
   const tabs: { id: Tab; label: string; blurb: string; icon: React.ReactNode }[] = [
     { id: 'general', ...t.settings.tabs.general, icon: <IcoGear /> },
+    { id: 'personalities', ...t.settings.tabs.personalities, icon: <IcoUser /> },
     { id: 'config', ...t.settings.tabs.config, icon: <IcoSliders /> },
     { id: 'connections', ...t.settings.tabs.connections, icon: <IcoLink /> },
     { id: 'automations', ...t.settings.tabs.automations, icon: <IcoBolt /> },
@@ -543,6 +545,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                   <textarea
                     className="hb-tile"
                     value={localPrompt}
+                    maxLength={6000}
                     onChange={e => setLocalPrompt(e.target.value)}
                     placeholder={t.settingsGeneral.systemInstructionPlaceholder}
                     rows={4}
@@ -589,6 +592,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
 
             {/* Configuration tab — every backend setting, API keys included */}
             {tab === 'config' && <ConfigTab config={config} />}
+            {tab === 'personalities' && <PersonalityTab config={config} />}
 
             {/* Connections tab — toggle MCP servers live */}
             {tab === 'connections' && (

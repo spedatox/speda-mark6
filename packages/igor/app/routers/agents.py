@@ -24,6 +24,8 @@ from app.schemas.agent import (
     AgentCommEntry,
     AgentModelInfo,
     AgentModelSet,
+    AgentPersonalityInfo,
+    AgentPersonalitySet,
     AgentRegistration,
     AgentStatus,
     AgentTelegramModelSet,
@@ -40,6 +42,18 @@ from fastapi import Depends, HTTPException
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["agents"])
+
+
+@router.get("/agents/personalities", response_model=list[AgentPersonalityInfo])
+async def agent_personalities(request: Request):
+    from app.services.personality import list_personalities
+    return list_personalities(request.app.state.profiles)
+
+
+@router.post("/agents/personalities", response_model=list[AgentPersonalityInfo])
+async def agent_personality_set(body: AgentPersonalitySet, request: Request):
+    from app.services.personality import save_personality
+    return save_personality(request.app.state.profiles, body)
 
 
 @router.get("/agents", response_model=list[AgentStatus])

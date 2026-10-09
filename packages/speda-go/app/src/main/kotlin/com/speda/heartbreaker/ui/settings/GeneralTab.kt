@@ -58,7 +58,7 @@ fun GeneralTab(config: AppConfig, graph: AppGraph, settings: HbSettings) {
         Panel {
             Hint(t.settingsGeneral.systemPromptHint)
             Spacer(Modifier.height(8.dp))
-            GlassField(prompt, { prompt = it }, t.settingsGeneral.systemPromptPlaceholder, singleLine = false, minHeight = 120.dp)
+            GlassField(prompt, { prompt = it.take(6000) }, t.settingsGeneral.systemPromptPlaceholder, singleLine = false, minHeight = 120.dp)
         }
 
         SectionHeader(t.settingsGeneral.temperature)

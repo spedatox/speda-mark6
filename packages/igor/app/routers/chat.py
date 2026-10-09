@@ -397,7 +397,6 @@ async def _run_chat(
         return StreamingResponse(_compact_ack(), media_type="text/event-stream")
 
     model = body.model or profile.allocate_model("user")
-    system_prompt = body.system_prompt or ""
 
     session = await session_manager.get_or_create(
         db=db,
@@ -476,7 +475,8 @@ async def _run_chat(
         trigger_payload={"message": body.message},
         output_mode="respond",
         model=model,
-        system_prompt=system_prompt,
+        system_prompt="",
+        custom_instructions=body.system_prompt or "",
         conversation_history=history,
         db=db,
         timezone=settings.owner_timezone,

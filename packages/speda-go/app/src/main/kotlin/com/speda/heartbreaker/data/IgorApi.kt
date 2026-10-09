@@ -32,6 +32,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -1486,6 +1487,19 @@ class IgorApi(
                     ?.let { agents -> json.decodeFromJsonElement<List<VoiceAgentInfo>>(agents) }
             }
         }.getOrNull() ?: emptyList()
+    }
+
+    suspend fun fetchAgentPersonalities(config: AppConfig): List<AgentPersonalityInfo> = withContext(Dispatchers.IO) {
+        val body = getString(config, "/agents/personalities") ?: throw IOException("Could not load personalities")
+        json.decodeFromString(body)
+    }
+
+    suspend fun saveAgentPersonality(config: AppConfig, agentId: String, settings: PersonalitySettings): List<AgentPersonalityInfo> = withContext(Dispatchers.IO) {
+        val body = postJson(config, "/agents/personalities", buildJsonObject {
+            put("agent_id", agentId)
+            put("settings", json.encodeToJsonElement(settings))
+        }) ?: throw IOException("Could not save personality")
+        json.decodeFromString(body)
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────

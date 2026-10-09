@@ -55,6 +55,7 @@ import com.speda.heartbreaker.ui.HbText
  */
 private enum class SettingsTab(val info: (AppStrings) -> AppStrings.TabInfo) {
     General({ it.settingsTabs.general }),
+    Personalities({ it.settingsTabs.personalities }),
     Config({ it.settingsTabs.config }),
     Connections({ it.settingsTabs.connections }),
     Automations({ it.settingsTabs.automations }),
@@ -140,6 +141,7 @@ fun SettingsScreen(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {
                 SettingsTab.General -> GeneralTab(config, graph, settings)
+                SettingsTab.Personalities -> PersonalityTab(config, graph)
                 SettingsTab.Config -> ConfigTabView(config, graph)
                 SettingsTab.Connections -> ConnectionsTab(config, graph)
                 SettingsTab.Automations -> AutomationsTab(config, graph)

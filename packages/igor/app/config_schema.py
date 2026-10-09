@@ -453,7 +453,13 @@ CONFIG_GROUPS: list[ConfigGroup] = [
                              "this are shown as a name and a count rather than enumerated. "
                              "/memories/projects alone is 33 entries in a listing re-sent every "
                              "turn; the names stay one `view` away. 0 = list everything."),
-            ConfigField("relevant_recall_enabled", "Inject Relevant Facts Every Turn", "bool",
+            ConfigField("automatic_recall_timeout_ms", "Automatic Recall Time Budget (ms)", "int",
+                        requires_restart=_LIVE,
+                        help="Time budget for relevant facts and past conversations before the first model call. Slow semantic lookup falls back to available local evidence."),
+            ConfigField("automatic_recall_max_chars", "Automatic Recall Character Budget", "int",
+                        requires_restart=_LIVE,
+                        help="Combined ceiling for automatically retrieved facts and conversation excerpts. Standing memory and deliberate recall tools retain their own limits."),
+            ConfigField("relevant_recall_enabled", "Automatic Relevant Memory", "bool",
                         requires_restart=_LIVE,
                         help="Search the record with his own message each turn and put what "
                              "matches in front of the model, instead of waiting for it to "

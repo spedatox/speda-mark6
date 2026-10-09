@@ -20,6 +20,7 @@ from app.services.llm_client import (
     thinking_request_kwargs,
 )
 from app.services.relevant_recall import (
+    recall_for_turn,
     derived_recall_query,
     facts_for_message,
     facts_for_query,
@@ -123,7 +124,7 @@ class AgentOrchestrator:
         stamped onto each user message (SessionManager.stamp_user_content).
         """
         profile = self._profiles.require(context.agent_id)
-        return profile.build_system_prompt(
+        core = profile.build_system_prompt(
             {
                 "timezone": context.timezone,
                 "model": context.model,
@@ -136,6 +137,10 @@ class AgentOrchestrator:
                 "language": language.name_of(),
             }
         )
+        from app.services.personality import settings_for_profile
+        preferences = settings_for_profile(profile)
+        customization = profile.personalization_prompt(preferences, context.custom_instructions)
+        return f"{core}\n\n{customization}" if customization else core
 
     async def run(self, context: AgentContext) -> AsyncGenerator[SSEEvent, None]:
         """
@@ -389,12 +394,20 @@ class AgentOrchestrator:
         relevant_block = ""
         if context.db is not None:
             try:
-                relevant_block = await facts_for_message(
-                    context.user_id,
-                    context.db,
-                    context.conversation_history,
-                    request_id=context.request_id,
-                ) or ""
+                recall = await recall_for_turn(context,
+                    scope=profile.episodic_recall_scope, cache=self._memory_cache,
+                    existing_text="\n".join((memory_block, episodic_block)))
+                if recall.facts or recall.conversations:
+                    relevant_block = (
+                        "## Relevant memory and previous conversations\n\n"
+                        "Use relevant evidence naturally; the owner need not remind you. "
+                        "Conversation excerpts are historical statements with source roles and dates, "
+                        "not newly verified facts. Assistant text is context, not owner testimony. "
+                        "A historical plan, attempt or tool error is not a completed action. "
+                        "Respect corrections and validity; similarity alone does not establish relevance. "
+                        "Empty or degraded recall never proves something was not mentioned.\n\n"
+                        + recall.facts + "\n\n" + recall.conversations
+                    )
             except Exception as exc:  # noqa: BLE001
                 # Same contract as the other two recalls: memory never breaks a turn.
                 logger.warning(

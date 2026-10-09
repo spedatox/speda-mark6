@@ -138,7 +138,7 @@ def build_skills_manifest() -> str:
     lines = [
         "## Installed Skills",
         "",
-        "Use `read_skill` with the skill name to load full instructions before using a skill.",
+        "Use `read_skill` when detailed instructions or output formats are needed. Routine operations can use their tool descriptions directly.",
         "",
     ]
     for name, description in entries:

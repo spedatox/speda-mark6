@@ -28,3 +28,4 @@ class AgentContext:
     db: AsyncSession
     timezone: str = "UTC"
     extra: dict = field(default_factory=dict)  # Arbitrary per-request metadata
+    custom_instructions: str = ""             # Owner's client override, distinct from assembled system_prompt

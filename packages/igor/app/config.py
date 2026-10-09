@@ -699,6 +699,8 @@ class Settings(BaseSettings):
     # makes telling an agent something enough for it to be remembered.
     # See app/services/relevant_recall.py.
     relevant_recall_enabled: bool = True
+    automatic_recall_timeout_ms: int = 1000
+    automatic_recall_max_chars: int = 4000
     # How many facts may be injected per turn. Small on purpose — this is a
     # reminder, not a second memory file, and a long block of near-misses
     # teaches the model to skip the section.

@@ -248,6 +248,7 @@ speda-mark-vi/
     │   ├── gpt_researcher.py
     │   └── shannon.py
     ├── services/
+    │   ├── personality.py       # Owner's per-agent style preferences in the existing runtime store
     │   ├── anthropic_client.py, llm_client.py   # Multi-provider LLM routing (llm_client) + model catalog
     │   ├── memory.py, memory_store.py           # Post-turn tasks (title/recap/compaction), revision log
     │   ├── memory_schema.py     # Write gate for /memories — refuses hand edits to derived files
@@ -266,6 +267,7 @@ speda-mark-vi/
     │   ├── attachments.py       # Upload text extraction + build_user_content (turn content-block assembly)
     │   ├── chat_history.py      # rows_from_messages — stored-message → UI-row shaping
     │   ├── errors.py            # friendly_provider_error — cross-provider error translation
+    │   ├── behavior_config.py   # authenticated, allowlisted evaluation settings and registry snapshot
     │   ├── welcome.py           # Home-screen welcome remark + WelcomeCache
     │   ├── compaction.py, embeddings.py, embedding_indexer.py, history_indexer.py
     │   ├── health.py            # Atomix health-sample ingestion

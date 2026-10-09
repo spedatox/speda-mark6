@@ -33,7 +33,9 @@ without them a semantic hit is frequently unusable:
     running them separately answers neither.
 """
 
+import asyncio
 import logging
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
@@ -71,7 +73,7 @@ async def _vector_watermark(db, user_id: int) -> tuple:
     return (row[0], row[1], str(row[2]))
 
 
-async def _vectors_for(db, user_id: int) -> tuple[dict[int, int], "np.ndarray"]:
+async def _vectors_for(db, user_id: int, cache=None) -> tuple[dict[int, int], "np.ndarray"]:
     """`({message_embedding_id: row index}, matrix)` for this owner, cached.
 
     The matrix is contiguous and L2-normalized (app/services/embeddings.py), so
@@ -80,27 +82,38 @@ async def _vectors_for(db, user_id: int) -> tuple[dict[int, int], "np.ndarray"]:
     survived SQL filtering by plain lookup.
     """
     watermark = await _vector_watermark(db, user_id)
-    cached = _VECTOR_CACHE.get(user_id)
+    cache = _VECTOR_CACHE if cache is None else cache
+    # Include the database identity: isolated evaluations and multiple stores
+    # must never share vectors merely because their owner ids coincide.
+    key = (id(db.get_bind()), user_id) if cache is not _VECTOR_CACHE else user_id
+    cached = cache.get(key)
     if cached is not None and cached[0] == watermark:
         return cached[1], cached[2]
 
-    rows = (
-        await db.execute(
-            select(MessageEmbedding.id, MessageEmbedding.embedding).where(
-                MessageEmbedding.user_id == user_id
-            )
-        )
-    ).all()
+    statement = select(MessageEmbedding.id, MessageEmbedding.embedding).where(MessageEmbedding.user_id == user_id)
+    append_only = bool(cached and cached[0][1] is not None
+                       and watermark[0] > cached[0][0] and watermark[1] > cached[0][1])
+    if append_only:
+        statement = statement.where(MessageEmbedding.id > cached[0][1])
+    rows = (await db.execute(statement)).all()
+    if append_only and len(rows) != watermark[0] - cached[0][0]:
+        rows = (await db.execute(select(MessageEmbedding.id, MessageEmbedding.embedding)
+            .where(MessageEmbedding.user_id == user_id))).all()
+        append_only = False
     usable = [(int(eid), blob) for eid, blob in rows if blob]
     if not usable:
         index: dict[int, int] = {}
         matrix = np.zeros((0, 0), dtype=np.float32)
     else:
-        index = {eid: i for i, (eid, _) in enumerate(usable)}
-        matrix = np.stack([
+        offset = len(cached[1]) if append_only else 0
+        index = dict(cached[1]) if append_only else {}
+        index.update({eid: offset + i for i, (eid, _) in enumerate(usable)})
+        matrix = await asyncio.to_thread(lambda: np.stack([
             np.frombuffer(blob, dtype=np.float32) for _, blob in usable
-        ])
-    _VECTOR_CACHE[user_id] = (watermark, index, matrix)
+        ]))
+        if append_only and cached[2].size:
+            matrix = await asyncio.to_thread(np.concatenate, (cached[2], matrix))
+    cache[key] = (watermark, index, matrix)
     logger.info(
         "recall_vector_cache_filled",
         extra={"user_id": user_id, "rows": len(usable),
@@ -137,6 +150,25 @@ SNIPPET_CHARS = 400       # per-message text budget inside a rendered snippet
 # pass and is still ranked by the lexical half, the same graceful degradation
 # the two-retriever design already has for a row the embedder has not reached.
 _VECTOR_CACHE: dict[int, tuple[tuple, dict[int, int], "np.ndarray"]] = {}
+
+
+def warm_conversation_vectors(context, cache):
+    """Refresh changed index rows in an app-owned task with its own DB reader."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+    key = (id(context.db.get_bind()), context.user_id)
+    pending = cache.conversation_warmups.get(key)
+    if pending is None or pending.done():
+        async def warm():
+            async with AsyncSession(bind=context.db.bind) as reader:
+                return await _vectors_for(reader, context.user_id, cache.conversation_vectors)
+        pending = asyncio.create_task(warm())
+        cache.conversation_warmups[key] = pending
+        def observed(task):
+            if not task.cancelled() and task.exception() is not None:
+                logger.warning("conversation_vector_warmup_failed", extra={
+                    "request_id": context.request_id, "error": type(task.exception()).__name__})
+        pending.add_done_callback(observed)
+    return pending
 
 
 def _parse_date(value: str | None) -> datetime | None:
@@ -254,6 +286,9 @@ class SemanticSearchSkill(Skill):
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
+        return await search_conversations(context, args)
+
+    async def _search(self, args: dict, context: AgentContext) -> str:
         query = (args.get("query") or "").strip()
         if not query:
             return "No query provided — give a topic or question to recall."
@@ -268,26 +303,43 @@ class SemanticSearchSkill(Skill):
         # `embedding` is deferred: the vectors come from the in-process cache
         # above, and loading 126 MB of BLOBs here to rebuild what is already in
         # memory was the six seconds this path used to cost.
-        from sqlalchemy.orm import defer
-
         stmt = (
-            select(MessageEmbedding, Session.title)
-            .options(defer(MessageEmbedding.embedding))
-            .join(Session, MessageEmbedding.session_id == Session.id)
+            select(Message.id, Message.session_id, Message.created_at, Message.role,
+                   Session.title, Session.agent_id, MessageEmbedding.id)
+            .join(Session, Message.session_id == Session.id)
+            .outerjoin(MessageEmbedding, MessageEmbedding.message_id == Message.id)
             .where(
-                MessageEmbedding.user_id == context.user_id,
-                MessageEmbedding.session_id != context.session_id,
+                Session.user_id == context.user_id,
+                Message.session_id != context.session_id,
+                Message.role.in_(("user", "assistant")),
             )
         )
+        if args.get("_owner_sessions_only"):
+            stmt = stmt.where(Session.triggered_by == "user")
         if after:
-            stmt = stmt.where(MessageEmbedding.created_at >= after)
+            stmt = stmt.where(Message.created_at >= after)
         if before:
-            stmt = stmt.where(MessageEmbedding.created_at < before + timedelta(days=1))
+            stmt = stmt.where(Message.created_at < before + timedelta(days=1))
         if agent_filter:
-            stmt = stmt.where(MessageEmbedding.agent_id == agent_filter)
-        stmt = stmt.order_by(MessageEmbedding.created_at.desc()).limit(MAX_CANDIDATES)
+            stmt = stmt.where(Session.agent_id == agent_filter)
+        stmt = stmt.order_by(Message.created_at.desc(), Message.id.desc()).limit(MAX_CANDIDATES)
 
-        rows = (await context.db.execute(stmt)).all()
+        lexical_only = args.get("_lexical_only", False)
+        lexical_ids = None
+        if lexical_only:
+            lexical_ids = await lexical.search(
+                context.db, query=query, limit=limit * 4, index=lexical.MESSAGES,
+                allowed_ids_query=stmt.with_only_columns(Message.id),
+            )
+            if not lexical_ids:
+                return f"No relevant past exchanges found for '{query}'."
+            # The local fallback needs metadata only for its matches. Loading
+            # every message before FTS would consume a short recall deadline.
+            stmt = stmt.where(Message.id.in_(lexical_ids))
+        raw_rows = (await context.db.execute(stmt)).all()
+        rows = [(SimpleNamespace(id=eid, message_id=mid, session_id=sid,
+                    agent_id=agent, created_at=date, role=role), title)
+                for mid, sid, date, role, title, agent, eid in raw_rows]
         if not rows:
             scope = self._describe_scope(after, before, agent_filter)
             if scope:
@@ -296,18 +348,15 @@ class SemanticSearchSkill(Skill):
                     f"drop the agent filter."
                 )
             return (
-                "No indexed conversation history yet. Run POST /admin/index-embeddings "
-                "once to backfill past conversations."
+                "No stored conversation history in the requested scope."
             )
 
         # ── The two retrievers ────────────────────────────────────────────────
         # Words first, and locally: this is the half that actually finds a course
         # code, a person's name or a Turkish word the embedding has smoothed
         # away, and it needs no network, so it still ranks when the query
-        # embedding fails. Note the candidate set is the EMBEDDED messages: a
-        # message the embedder never got to is not reachable from here at all
-        # until the backfill catches it, which is the embedding indexer's job,
-        # not this one's.
+        # embedding fails. Saved messages remain eligible without vectors;
+        # only selected windows load full transcript content.
         # Same cross-lingual step the fact tier applies, and for the same
         # reason: a Turkish question cannot reach English text through either
         # retriever unaided. The transcript is mixed-language rather than
@@ -315,16 +364,19 @@ class SemanticSearchSkill(Skill):
         # the keyword pass — half the corpus is the language it was typed in.
         from app.services import query_translation
 
-        vector_query, lexical_query = await query_translation.expand(query)
+        prepared = args.get("_prepared_query")
+        vector_query, lexical_query = (query, query) if lexical_only else (
+            prepared[:2] if prepared is not None else await query_translation.expand(query))
 
         position = {row.message_id: i for i, (row, _) in enumerate(rows)}
-        lexical_ids = await lexical.search(
-            db=context.db,
-            query=lexical_query,
-            limit=limit * 4,
-            allowed_ids=set(position),
-            index=lexical.MESSAGES,
-        )
+        if lexical_ids is None:
+            lexical_ids = await lexical.search(
+                db=context.db,
+                query=lexical_query,
+                limit=limit * 4,
+                allowed_ids=set(position),
+                index=lexical.MESSAGES,
+            )
         lexical_ranking = [position[m] for m in lexical_ids if m in position]
 
         # The relevance floor, for the same reason it exists on the fact tier
@@ -339,22 +391,43 @@ class SemanticSearchSkill(Skill):
         vector_ranking: list[int] = []
         scores = np.zeros(len(rows), dtype=np.float32)
         try:
-            query_vec = (await embed_texts([vector_query]))[0]
-            index, matrix = await _vectors_for(context.db, context.user_id)
+            if lexical_only:
+                raise _LexicalOnly()
+            query_vec = prepared[2] if prepared is not None else (await embed_texts([vector_query]))[0]
+            recall_cache = context.extra.get("memory_recall_cache")
+            if recall_cache is not None and args.get("_owner_sessions_only"):
+                pending = warm_conversation_vectors(context, recall_cache)
+                # A cold corpus can finish loading after a short recall deadline.
+                # Its task owns a separate reader and no chat transaction.
+                index, matrix = await asyncio.shield(pending)
+            else:
+                index, matrix = await _vectors_for(context.db, context.user_id,
+                    getattr(recall_cache, "conversation_vectors", None))
+            if matrix.size and matrix.shape[1] != len(query_vec):
+                context.extra.setdefault("recall_errors", []).append("incompatible_vector_dimensions")
+                raise ValueError("Stored conversation vectors do not match the query dimensions")
             # Score the whole corpus in one BLAS call, then read off the rows
             # that survived SQL filtering. A row the cache has not seen yet
             # keeps its zero and is ranked by the lexical half alone.
             corpus = matrix @ query_vec if matrix.size else np.zeros(0, dtype=np.float32)
             for i, (row, _) in enumerate(rows):
-                pos = index.get(int(row.id))
+                pos = index.get(int(row.id)) if row.id is not None else None
                 if pos is not None:
                     scores[i] = corpus[pos]
             vector_ranking = [
                 int(i) for i in np.argsort(-scores)[: limit * 4]
                 if float(scores[i]) >= floor
             ]
+        except _LexicalOnly:
+            pass
         except Exception as e:  # noqa: BLE001
             logger.warning("recall_embed_query_failed", extra={"error": str(e)})
+            errors = context.extra.setdefault("recall_errors", [])
+            if isinstance(e, ValueError):
+                if "incompatible_vector_dimensions" not in errors:
+                    errors.append("incompatible_vector_dimensions")
+            else:
+                errors.append("conversation_vector_search_failed:" + type(e).__name__)
             if not lexical_ranking:
                 return "Recall is unavailable right now (the embedding call failed)."
 
@@ -380,7 +453,21 @@ class SemanticSearchSkill(Skill):
             if len(picked) >= limit:
                 break
 
-        return await self._render(context, rows, scores, picked, window, query)
+        context.extra.setdefault("recall_trace", []).append({
+            "stage": "conversations", "query": query,
+            "lexical_only": lexical_only, "candidates": len(rows),
+            "selected_message_ids": [rows[i][0].message_id for i in picked],
+            "vector_hits": len(vector_ranking), "lexical_hits": len(lexical_ranking),
+            "ranked_candidates": [{"message_id": rows[i][0].message_id,
+                "session_id": rows[i][0].session_id, "score": score,
+                "vector_hit": i in vector_ranking, "lexical_hit": i in lexical_ranking}
+                for i, score in fused],
+        })
+        if not picked:
+            return ""
+        return await self._render(context, rows, scores, picked, window, query,
+                                  args.get("_visible_texts", set()), args.get("_existing_text", ""),
+                                  args.get("_receipt_chars", 2800))
 
     @staticmethod
     def _describe_scope(
@@ -403,6 +490,9 @@ class SemanticSearchSkill(Skill):
         picked: list[int],
         window: int,
         query: str,
+        visible_texts=None,
+        existing_text="",
+        receipt_chars=2800,
     ) -> str:
         """Expand each hit into a snippet with its surrounding turns, merging
         hits that land close together in the same session."""
@@ -456,14 +546,13 @@ class SemanticSearchSkill(Skill):
             by_id = {m.id: m for m in messages}
             hit_ids = set(entry["message_ids"])
 
-            out.append(
+            session_header = (
                 f"\n## {entry['title']}  ·  session {session_id}  ·  "
                 f"{entry['agent_id']}  ·  {entry['date'].strftime('%Y-%m-%d')}  "
                 f"(score {entry['best']:.2f})"
             )
             for span_no, (start, end) in enumerate(spans):
-                if span_no:
-                    out.append("   …")
+                excerpt = []
                 for mid in order[start : end + 1]:
                     message = by_id.get(mid)
                     if message is None:
@@ -471,11 +560,22 @@ class SemanticSearchSkill(Skill):
                     text = _extract_text(message.content).replace("\n", " ").strip()
                     if not text:
                         continue
-                    snippet = text[:SNIPPET_CHARS] + ("…" if len(text) > SNIPPET_CHARS else "")
+                    receipts = ""
+                    if message.role == "assistant":
+                        from app.services.chat_history import execution_receipts
+                        receipts = execution_receipts(message.content, budget=receipt_chars)
+                    duplicate = text in (visible_texts or set()) or (existing_text and text in existing_text)
+                    if duplicate and not receipts:
+                        continue
+                    snippet = "[reply text already in context]" if duplicate else text[:SNIPPET_CHARS] + ("…" if len(text) > SNIPPET_CHARS else "")
                     # Mark the matched turn so the model can tell the hit from
                     # the context that was pulled in around it.
                     marker = "→" if mid in hit_ids else " "
-                    out.append(f" {marker} [{message.role} message:{message.id}] {snippet}")
+                    excerpt.append(f" {marker} [{message.role} message:{message.id} {message.created_at.isoformat()}] {snippet}")
+                    if receipts:
+                        excerpt.append(receipts)
+                if excerpt:
+                    out.append(session_header + "\n" + "\n".join(excerpt))
             rendered += len(hits)
 
         if not out:
@@ -495,4 +595,14 @@ class SemanticSearchSkill(Skill):
             f"conversation(s). '→' marks the matched turn; the lines around it are "
             f"context."
         )
+        context.extra["selected_conversation_windows"] = out
         return header + "\n" + "\n".join(out)
+
+
+class _LexicalOnly(Exception):
+    """Internal control flow: no provider request on the local fallback pass."""
+
+
+async def search_conversations(context: AgentContext, args: dict) -> str:
+    """Shared read-only retrieval; both automatic recall and the tool use it."""
+    return await SemanticSearchSkill()._search(args, context)

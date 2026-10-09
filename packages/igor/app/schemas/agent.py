@@ -2,8 +2,31 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class PersonalitySettings(BaseModel):
+    instructions: str = Field(default="", max_length=6000)
+    tone: Literal["default", "familiar", "professional"] = "default"
+    humor: Literal["default", "off", "dry", "playful"] = "default"
+    directness: Literal["default", "gentle", "direct"] = "default"
+    response_length: Literal["default", "brief", "detailed"] = "default"
+
+    model_config = {"extra": "forbid"}
+
+
+class AgentPersonalitySet(BaseModel):
+    agent_id: str
+    settings: PersonalitySettings
+
+
+class AgentPersonalityInfo(BaseModel):
+    agent_id: str
+    name: str
+    domain: str
+    settings: PersonalitySettings
 
 
 class AgentRegistration(BaseModel):

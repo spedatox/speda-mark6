@@ -27,3 +27,7 @@ class WarRoomProfile(SPEDAProfile):
     dispatch_target = False
     # A session-scope alias, not a notifying agent — no Telegram bot of its own.
     telegram_enabled = False
+
+    @property
+    def personality_key(self) -> str:
+        return SPEDAProfile.agent_id

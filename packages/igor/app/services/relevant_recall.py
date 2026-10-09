@@ -48,9 +48,12 @@ person, a date range, the evidence behind a claim, what is well-established
 versus observed once. This is the reflex; the tool is the investigation.
 """
 
+import asyncio
 import json
 import logging
 import re
+import time
+from dataclasses import dataclass, replace
 
 logger = logging.getLogger(__name__)
 
@@ -320,3 +323,205 @@ async def facts_for_message(user_id: int, db, history, request_id: str = "") -> 
         "not here, `search_memory` searches the whole record deliberately.\n\n"
         + facts
     )
+
+
+_FOLLOWUP = re.compile(
+    r"\b(it|that|this|right|again|last conversation|last time|remember|yup|yes|nope|"
+    r"devam|haklı|hakli|evet|hayır|hayir|önceki|onceki|geçen|gecen|o|bu)\b", re.I)
+
+
+@dataclass
+class AutomaticRecall:
+    facts: str = ""
+    conversations: str = ""
+    degraded: bool = False
+
+
+async def recent_exchange(context, *, max_chars=2000, scope="own", existing_text=""):
+    """A referent for a short new-session follow-up, even without a recap/index."""
+    from sqlalchemy import select
+    from app.models.message import Message
+    from app.models.session import Session
+    from app.services.chat_history import execution_receipts
+
+    statement = select(Session).join(Message, Message.session_id == Session.id).where(
+        Session.user_id == context.user_id,
+        Session.id != context.session_id, Session.triggered_by == "user",
+        Message.role == "user",
+    )
+    if scope == "own":
+        statement = statement.where(Session.agent_id == context.agent_id)
+    last = (await context.db.execute(statement.order_by(
+        Message.created_at.desc(), Message.id.desc()).limit(1))).scalar_one_or_none()
+    if last is None:
+        return "", ""
+    head = list((await context.db.execute(select(Message).where(
+        Message.session_id == last.id, Message.role.in_(("user", "assistant")),
+    ).order_by(Message.id).limit(8))).scalars())
+    tail = list((await context.db.execute(select(Message).where(
+        Message.session_id == last.id, Message.role.in_(("user", "assistant")),
+    ).order_by(Message.id.desc()).limit(4))).scalars())
+    messages = sorted({m.id: m for m in head + tail}.values(), key=lambda m: m.id)
+    heading = f"Recent owner conversation · {last.agent_id} · session {last.id} (possible follow-up context)"
+    lines, seed, selected_ids, used = [heading], [], [], len(heading) + 1
+    for message in messages:
+        text = _extract_text(message.content).strip()
+        if not text or "[cancelled by owner]" in text:
+            continue
+        receipt = ""
+        if message.role == "assistant":
+            receipt = execution_receipts(message.content, budget=450)
+        duplicate = len(text) >= 24 and text in existing_text
+        if duplicate and not receipt:
+            continue
+        snippet = "[reply text already in context]" if duplicate else text[:400] + ("…" if len(text) > 400 else "")
+        line = f"[{message.role} message:{message.id} {message.created_at.isoformat()}] {snippet}"
+        if receipt:
+            line += "\n" + receipt
+        if used + len(line) + 1 > max_chars:
+            continue
+        lines.append(line)
+        selected_ids.append(message.id)
+        used += len(line) + 1
+        if message.role == "user" and len(re.findall(r"\w+", text)) >= 3:
+            seed.append(text[:250])
+    context.extra.setdefault("recall_trace", []).append({
+        "stage": "recent_exchange", "session_id": last.id,
+        "candidate_message_ids": [m.id for m in messages], "message_ids": selected_ids,
+    })
+    return ("\n".join(lines) if len(lines) > 1 else ""), " ".join(seed)[:700]
+
+
+async def recall_for_turn(context, *, scope="own", cache=None, existing_text="") -> AutomaticRecall:
+    """Bounded read-only relevance search. Returns data; prompt policy stays in the orchestrator."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.config import settings
+    from app.services import query_translation
+    from app.services.embeddings import embed_texts
+    from app.services.observations import format_observation, search_observations
+    from app.skills.semantic_search import search_conversations, warm_conversation_vectors
+
+    result = AutomaticRecall()
+    if context.db is None or not settings.relevant_recall_enabled:
+        return result
+    query = initial_recall_query(context.conversation_history)
+    if not query:
+        return result
+    meaningful = len(query) >= settings.relevant_recall_min_query_chars
+    followup = len(query) <= 90 and bool(_FOLLOWUP.search(query))
+    if not meaningful and not followup:
+        return result
+    visible = {_strip_stamp(_extract_text(m.get("content"))) for m in context.conversation_history
+               if isinstance(m, dict)}
+    visible_owner = {_strip_stamp(_extract_text(m.get("content"))) for m in context.conversation_history
+                     if isinstance(m, dict) and m.get("role") == "user"}
+    prior = [m for m in context.conversation_history[:-1] if isinstance(m, dict)]
+    if followup and prior:
+        query += " | " + " ".join(_strip_stamp(_extract_text(m.get("content")))[:350]
+                                   for m in prior[-2:])
+    start = time.monotonic()
+    budget = max(0, settings.automatic_recall_max_chars)
+    if not budget:
+        return result
+    deadline = max(1, settings.automatic_recall_timeout_ms) / 1000
+    error = None
+    network = None
+    if cache is not None:
+        # Build/refresh local vectors while provider preparation is in flight.
+        # A cold load may finish beyond this turn's deadline for the next turn.
+        warm_conversation_vectors(context, cache)
+    # Cancellation of a slow read must not invalidate the chat's own DB transaction.
+    async with AsyncSession(bind=context.db.bind, expire_on_commit=False) as db:
+        read_context = replace(context, db=db)
+        read_context.extra["memory_recall_cache"] = cache
+        try:
+            async with asyncio.timeout(deadline):
+                if followup and not prior:
+                    result.conversations, seed = await recent_exchange(read_context, max_chars=min(2000, budget), scope=scope, existing_text=existing_text)
+                    if result.conversations:
+                        read_context.extra["selected_conversation_windows"] = [result.conversations]
+                    if seed:
+                        query += " | " + seed
+                query = query[:2000]
+
+                async def prepare():
+                    vector_text, lexical_text = await query_translation.expand(query)
+                    return vector_text, lexical_text, (await embed_texts([vector_text]))[0]
+
+                arguments = {"query": query, "limit": 3, "context_window": 1,
+                    "_owner_sessions_only": True, "_visible_texts": visible, "_existing_text": existing_text,
+                    "_receipt_chars": 450,
+                    "agent_id": context.agent_id if scope == "own" else None}
+
+                async def retrieve(prepared=None):
+                    scored = await search_observations(db, user_id=context.user_id, query=query,
+                        limit=settings.relevant_recall_limit, lexical_only=prepared is None,
+                        prepared_query=prepared, diagnostics=context.extra)
+                    lines, selected_ids = [], []
+                    for observation, score in scored:
+                        line = format_observation(observation)
+                        if observation.message_ids:
+                            line += "\n    message sources: " + ", ".join(
+                                f"message:{mid}" for mid in observation.message_ids[:8])
+                        body = observation.content.strip()
+                        if body in existing_text or body in visible_owner or line in lines:
+                            continue
+                        if len("\n".join(lines + [line])) <= min(settings.relevant_recall_max_chars, budget):
+                            lines.append(line)
+                            selected_ids.append(observation.id)
+                    if lines:
+                        result.facts = "\n".join(lines)
+                    read_context.extra.setdefault("recall_trace", []).append({
+                        "stage": "facts", "lexical_only": prepared is None,
+                        "candidate_ids": [o.id for o, _ in scored], "selected_ids": selected_ids,
+                    })
+                    text = await search_conversations(read_context, dict(arguments,
+                        _lexical_only=prepared is None, _prepared_query=prepared))
+                    if text and not text.startswith(("No ", "Recall is unavailable")):
+                        result.conversations = text
+
+                # Keep useful local evidence before waiting for any provider call.
+                await retrieve()
+                network = asyncio.create_task(prepare())
+                try:
+                    prepared = await network
+                except Exception as exc:
+                    error = type(exc).__name__
+                    result.degraded = True
+                else:
+                    await retrieve(prepared)
+        except TimeoutError:
+            error, result.degraded = "deadline", True
+        except Exception as exc:
+            error, result.degraded = type(exc).__name__, True
+        finally:
+            if network is not None:
+                if not network.done():
+                    network.cancel()
+                await asyncio.gather(network, return_exceptions=True)
+    if context.extra.get("recall_errors"):
+        result.degraded = True
+        error = error or context.extra["recall_errors"][0]
+    # Keep each exchange and its execution evidence together under the budget.
+    room = max(0, budget - len(result.facts))
+    selected, used = [], 0
+    windows = context.extra.get("selected_conversation_windows", [result.conversations])
+    for window in windows[:3]:
+        if not window.strip() or used + len(window) + 1 > room:
+            continue
+        selected.append(window)
+        used += len(window) + 1
+    result.conversations = "\n".join(selected)
+    elapsed = time.monotonic() - start
+    deadline_missed = elapsed > deadline
+    if deadline_missed:
+        result.degraded = True
+        error = error or "deadline"
+    context.extra["automatic_recall"] = {
+        "query": query, "elapsed_ms": round(elapsed * 1000, 1),
+        "degraded": result.degraded, "error": error,
+        "facts_chars": len(result.facts), "conversation_chars": len(result.conversations),
+        "selected_windows": len(selected), "deadline_missed": deadline_missed,
+    }
+    logger.info("automatic_recall", extra={"request_id": context.request_id, **context.extra["automatic_recall"]})
+    return result

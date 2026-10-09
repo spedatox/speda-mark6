@@ -109,11 +109,12 @@ export function Switch({ on, onChange, disabled, title }: {
 }
 
 /** A pill action — the settings pane's only button shape. */
-export function PillBtn({ onClick, children, tone = 'neutral', title }: {
+export function PillBtn({ onClick, children, tone = 'neutral', title, disabled }: {
   onClick?: () => void
   children: React.ReactNode
   tone?: 'neutral' | 'accent' | 'danger'
   title?: string
+  disabled?: boolean
 }) {
   const skin = tone === 'accent'
     ? { border: '1px solid rgba(var(--hb-accent-rgb),0.32)', background: 'rgba(var(--hb-accent-rgb),0.12)', color: 'var(--hb-cyan-bright)' }
@@ -123,13 +124,14 @@ export function PillBtn({ onClick, children, tone = 'neutral', title }: {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       title={title}
       className="glass-round"
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 8,
         height: 32, padding: '0 14px', flexShrink: 0,
         fontFamily: 'var(--font-read)', fontSize: '0.845rem',
-        cursor: 'pointer', ...skin,
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.4 : 1, ...skin,
       }}
     >
       {children}

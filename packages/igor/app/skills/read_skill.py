@@ -24,7 +24,8 @@ class ReadSkillSkill(Skill):
     name = "read_skill"
     description = (
         "Loads the full usage instructions for an installed skill. "
-        "Call this before using a skill to get detailed workflows, examples, and guidelines. "
+        "Use this for detailed workflows, examples and output formats that the task needs. "
+        "Routine operations already explained by their tool descriptions need no guide call. "
         "Use it when the compact manifest description is not enough to complete the task. "
         "Returns the complete SKILL.md content for the requested skill."
     )
@@ -46,6 +47,8 @@ class ReadSkillSkill(Skill):
     async def execute(self, args: dict, context: AgentContext) -> str:
         skill_name = args.get("skill_name", "").strip()
         skill_path = SKILL_DOCS_DIR / skill_name / "SKILL.md"
+        if not skill_path.resolve().is_relative_to(SKILL_DOCS_DIR.resolve()):
+            return "Skill name must identify an installed skill."
 
         logger.info(
             "read_skill_execute",

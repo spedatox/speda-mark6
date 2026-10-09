@@ -36,7 +36,7 @@ class ToolSearchSkill(Skill):
         "tool. Call it with a few words describing the capability you need (e.g. "
         "'send a telegram message', 'driving route between two places', 'check "
         "gmail') or with an exact tool name, and it returns the matching tools' "
-        "full descriptions and input schemas; those tools then become callable "
+        "names and availability; their full descriptions and input schemas appear in the next tools array. Those tools become callable "
         "for the rest of the conversation. Search ONCE for everything the task "
         "needs — list several capabilities in one query rather than making a "
         "separate call per tool, since each call is a round trip. Do NOT use it "
@@ -60,8 +60,6 @@ class ToolSearchSkill(Skill):
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
-        import json
-
         query = (args.get("query") or "").strip()
         if not query:
             return (
@@ -110,12 +108,9 @@ class ToolSearchSkill(Skill):
         )
 
         # `_keywords` is a search-only marker — never show it to the model.
-        rendered = "\n\n".join(
-            f"### {t['name']}\n{t.get('description', '')}\n\n"
-            f"Input schema:\n```json\n{json.dumps(t.get('input_schema', {}), indent=2)}\n```"
-            for t in matches
-        )
+        rendered = ", ".join(t["name"] for t in matches)
         return (
             f"Loaded {len(matches)} tool(s) — they are now callable and will stay "
-            f"available for the rest of this conversation.\n\n{rendered}"
+            f"available for the rest of this conversation: {rendered}. "
+            "Use their definitions in the next tools array."
         )

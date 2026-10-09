@@ -6,6 +6,13 @@ were cloned outside this repository and inspected without installing dependencie
 or running their applications. The findings below concern source behavior;
 neither application's conversational quality was measured in a live comparison.
 
+This records the initial repair investigation. The owner subsequently authorized
+automatic conversation recall, instruction simplification and editable per-agent
+personalities. The current local candidate and its evaluation limits are recorded
+in [NATURAL_MEMORY_RECOVERY_20261009.md](NATURAL_MEMORY_RECOVERY_20261009.md);
+the earlier instruction counts and "no pruning" statement below describe that
+initial stage.
+
 | Reference | Examined revision | Local checkout |
 |---|---|---|
 | [Open WebUI](https://github.com/open-webui/open-webui/tree/8bd8b4fac5e059578ac0c74b3c18d11139f88b7d) | `8bd8b4fac5e059578ac0c74b3c18d11139f88b7d` | `C:/Users/ahmet/.codex/behavior-restoration/reference-repos/open-webui` |

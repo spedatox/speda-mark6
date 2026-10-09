@@ -231,6 +231,30 @@ class CapabilityRegistry:
 
     # ── Unified interface ──────────────────────────────────────────────────────
 
+    def definition_snapshot(self) -> list[dict]:
+        """Non-secret registration metadata for isolated behavior evaluation.
+
+        No clients, headers, environment, account content or tool handlers are
+        exported. Keeping this here preserves registry ownership of capabilities.
+        """
+        from copy import deepcopy
+        entries = []
+        if self._task_tool_registered:
+            entries.append({"tier": 0, "definition": deepcopy(TASK_TOOL_DEFINITION)})
+        for skill in self._skills.values():
+            entries.append({"tier": 1, "definition": skill.to_tool_definition(),
+                "deferred": getattr(skill, "deferred", False),
+                "requires_network": getattr(skill, "requires_network", False),
+                "restricted_to": sorted(skill.restricted_to) if skill.restricted_to is not None else None,
+                "read_only": skill.read_only, "search_keywords": getattr(skill, "search_keywords", "")})
+        for definition in self._mcp_tool_defs:
+            entries.append({"tier": 2, "definition": deepcopy(definition),
+                "server": self._mcp_tool_map[definition["name"]],
+                "read_only": definition["name"] in self._mcp_read_only})
+        for adapter in self._adapters.values():
+            entries.append({"tier": 3, "definition": adapter.to_tool_definition()})
+        return entries
+
     def _always_on(self) -> set[str]:
         from app.config import settings
         return {s.strip() for s in settings.always_on_servers.split(",") if s.strip()}
@@ -434,7 +458,7 @@ class CapabilityRegistry:
             "These tools exist but their full descriptions are NOT loaded, to keep "
             "this prompt small. You cannot call one until you load it: call "
             "`tool_search` with a few words describing what you need (or the exact "
-            "tool name), read the schemas it returns, then call the tool. Search "
+            "tool name), then use the definitions in your next tools array. Search "
             "once for everything the task needs rather than repeatedly — a search "
             "costs a round trip. Tools already listed in your tools array need no "
             "search.\n\n"

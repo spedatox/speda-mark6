@@ -455,6 +455,17 @@ class MemoryRecallCache:
         self._recall: dict[tuple[int, str], tuple[str, str]] = {}
         self._episodic: dict[int, str] = {}
         self._episodic_max = episodic_max
+        self.conversation_vectors: dict = {}
+        self.conversation_warmups: dict = {}
+
+    async def close(self):
+        import asyncio
+        tasks = list(self.conversation_warmups.values())
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def get_recall(self, key: tuple[int, str]) -> tuple[str, str] | None:
         return self._recall.get(key)

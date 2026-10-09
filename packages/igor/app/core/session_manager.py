@@ -479,6 +479,20 @@ class SessionManager:
             content=content if isinstance(content, list) else [{"type": "text", "text": content}],
         )
         db.add(msg)
+        await db.flush()
+        # This is a deterministic search projection, not fact extraction.
+        # It lets a fresh session find owner words while embeddings are pending.
+        from app.services.embedding_indexer import _extract_text
+        from app.services import lexical
+        indexed = await lexical.index_message(db, msg.id, _extract_text(msg.content))
+        if not indexed and db.get_bind().dialect.name == "sqlite":
+            # Keep the exact failed projection alongside its source message.
+            # A later turn's bounded tail must not age this failure out of retry.
+            from app.models.background_job import BackgroundJob
+            owner = await db.get(Session, session_id)
+            db.add(BackgroundJob(user_id=owner.user_id, session_id=session_id,
+                kind="index_message", unique_key=f"message:{msg.id}",
+                payload={"message_id": msg.id}, request_id=f"index-message:{msg.id}"))
         await db.commit()
         await db.refresh(msg)
         return msg

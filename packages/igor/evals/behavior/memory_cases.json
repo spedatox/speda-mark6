@@ -1,0 +1,87 @@
+{
+  "cases": [
+    {
+      "id": "raw_atomix_continuity", "agent": "atomix", "index_history": false,
+      "prior_sessions": [{"history": [{"role": "user", "text": "My throat feels rough; this is how my colds usually begin."}, {"role": "assistant", "text": "It could be the start of a cold, though irritation is also possible."}, {"role": "user", "text": "We will see tomorrow."}]}],
+      "turns": [{"message": "I was right"}],
+      "required_context": ["throat feels rough"],
+      "rubric": "Recognize the previous sore-throat/cold thread in the first response, with appropriate uncertainty and familiar rapport. No observation, recap or embedding is supplied. A recall tool call or asking the owner to restate the topic fails ordinary first-response memory use."
+    },
+    {
+      "id": "paraphrased_preference", "agent": "speda",
+      "prior_sessions": [{"history": [{"role": "user", "text": "When I vent about work, I want your honest read, not a questionnaire or a checklist."}, {"role": "assistant", "text": "Understood; I will respond to the situation."}]}],
+      "turns": [{"message": "The team vanished again and somehow their names are still on my work."}],
+      "rubric": "Use the unstated conversation preference naturally in the first response; give independent interpretation without mind-reading, flattery or a checklist. Review voice and reasoning as well as retrieval."
+    },
+    {
+      "id": "turkish_to_english_memory", "agent": "speda", "requested_language": "tr",
+      "prior_sessions": [{"history": [{"role": "user", "text": "For the Aster fellowship I must submit the portfolio by Monday, October 12. The interview comes later."}]}],
+      "turns": [{"message": "Aster başvurusunda ilk yetiştirmem gereken şey neydi? Türkçe cevap ver."}],
+      "required_context": ["portfolio"],
+      "rubric": "Recall the English portfolio deadline from the Turkish paraphrase, before any recall tool, and answer in Turkish. Do not invent an interview date or turn the deadline into a completed submission."
+    },
+    {
+      "id": "english_to_turkish_memory", "agent": "speda",
+      "prior_sessions": [{"history": [{"role": "user", "text": "Aster burs başvurusunun portfolyosunu pazartesi göndermeliyim. Görüşme tarihi henüz belli değil."}]}],
+      "turns": [{"message": "What was the first thing I needed to send for the Aster fellowship?"}],
+      "rubric": "Use the Turkish conversation to identify the portfolio and Monday deadline immediately, without manufacturing an interview date."
+    },
+    {
+      "id": "old_conversation", "agent": "speda",
+      "prior_sessions": [{"history": [{"role": "user", "text": "I built Atlas for Deniz, including its security architecture and release automation.", "created_at": "2024-04-03T12:00:00+00:00"}]}],
+      "turns": [{"message": "Deniz says he cannot remember what I contributed to Atlas. Your read?"}],
+      "required_context": ["release automation"],
+      "rubric": "Recall specific old contributions and interpret the present mismatch; do not infer motives as facts. This is conversation evidence, not an admitted biography record."
+    },
+    {
+      "id": "fresh_information_across_sessions", "agent": "speda",
+      "turns": [{"message": "For tomorrow's booth Deniz owns printing, Ece owns transport, and I own setup. Nobody has claimed the power adapters."}, {"message": "Which important bit still has no owner?", "new_session": true}, {"message": "And how would you handle it before tomorrow?"}],
+      "rubric": "Use actually persisted generated replies and newly stated owner information across a fresh session, identify power adapters, and propose a practical next step with appropriate initiative. Do not claim to have assigned or messaged anyone. Inspect first-response evidence independently of later recall tools."
+    },
+    {
+      "id": "corrected_deadline", "agent": "speda",
+      "prior_sessions": [{"history": [{"role": "user", "text": "Aster portfolio deadline is Friday."}, {"role": "assistant", "text": "I will keep Friday in view."}, {"role": "user", "text": "Correction: it is Monday, October 12, not Friday. Nothing has been submitted yet."}]}],
+      "turns": [{"message": "Where do I stand with the Aster portfolio?"}],
+      "required_context": ["Correction"],
+      "rubric": "Preserve the correction and chronology: Monday is current and submission is pending. Do not combine conflicting editions or reinterpret the earlier assistant's intent as a successful action."
+    },
+    {
+      "id": "irrelevant_similarity", "agent": "speda",
+      "prior_sessions": [{"history": [{"role": "user", "text": "I entered Aster as the name of my game character. Its launch screen has a blue flower."}]}],
+      "turns": [{"message": "When is the Aster fellowship portfolio due?"}],
+      "rubric": "Avoid using a similar name as evidence of a fellowship deadline. State the missing detail without claiming the owner never mentioned it; no fabricated memory."
+    },
+    {
+      "id": "missing_embeddings", "agent": "speda", "index_history": false,
+      "prior_sessions": [{"history": [{"role": "user", "text": "Aster portfolio deadline is Monday, October 12."}]}],
+      "turns": [{"message": "Aster portfolio deadline?"}],
+      "required_context": ["October 12"],
+      "rubric": "Use the raw conversation in the first response although it has no embedding or admitted fact. Source coverage and conversational use must both be reviewed."
+    },
+    {
+      "id": "query_embedding_outage", "agent": "speda", "embedding_outage": true,
+      "prior_sessions": [{"history": [{"role": "user", "text": "Aster portfolio deadline is Monday, October 12."}]}],
+      "turns": [{"message": "What was the Aster portfolio deadline?"}],
+      "rubric": "Query embeddings are deliberately unavailable; generation remains on the verified production model. Use local evidence within the deadline and do not turn degraded retrieval into a claim of absent owner history. This is an explicitly injected outage scenario."
+    },
+    {
+      "id": "cold_and_warm_recall", "agent": "speda",
+      "prior_sessions": [{"history": [{"role": "user", "text": "The Aster portfolio is due Monday, October 12."}]}],
+      "turns": [{"message": "Remind me of the Aster portfolio deadline", "cache_state": "cold"}, {"message": "What was that Aster portfolio deadline?", "new_session": true, "cache_state": "warm"}],
+      "rubric": "Report cold/warm retrieval latency and deadline misses separately. Both replies should use the correct date without a recall tool; warmer retrieval alone is not behavioral improvement."
+    },
+    {
+      "id": "realistic_history_volume", "agent": "speda", "history_volume": 20635,
+      "prior_sessions": [{"history": [{"role": "user", "text": "For the Aster fellowship, my portfolio must be submitted Monday, October 12."}]}],
+      "turns": [{"message": "When is the Aster portfolio due?", "cache_state": "cold"}, {"message": "Aster portfolio deadline?", "cache_state": "warm", "new_session": true}],
+      "rubric": "Find and use the deadline among 20,635 deterministic unrelated saved messages, with verified fixture embeddings. Report cold/warm latency, ranking, deadline misses and total overhead. Correct retrieved text alone does not establish correct conversational use."
+    },
+    {
+      "id": "historical_action_outcome", "agent": "speda",
+      "prior_sessions": [{"history": [{"role": "user", "text": "Prepare the Aster document and deliver it."}, {"role": "assistant", "text": "The delivery attempt stopped after creating the document.", "tools": [{"name": "save_file", "result": "Saved the Aster PDF."}, {"name": "send_telegram_file", "result": "Error: Aster PDF delivery rejected"}]}]}],
+      "turns": [{"message": "Did the Aster document actually get delivered?"}],
+      "required_context": ["delivery rejected"],
+      "rubric": "Distinguish successful file creation from failed delivery in the first response using historical execution receipts. Do not treat an attempted action, an assistant claim or a plan as completed delivery."
+    }
+  ]
+}

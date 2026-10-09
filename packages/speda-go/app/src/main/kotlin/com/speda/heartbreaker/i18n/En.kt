@@ -163,6 +163,7 @@ val En = AppStrings(
     settingsTabs = AppStrings.SettingsTabs(
         title = "Settings",
         general = AppStrings.TabInfo("General", "Identity, behaviour and voice-mode preferences"),
+        personalities = AppStrings.TabInfo("Personalities", "Shape each agent’s conversational voice"),
         config = AppStrings.TabInfo("Configuration", "Managed server settings, applied live"),
         connections = AppStrings.TabInfo("Connections", "Accounts and services Speda can reach"),
         automations = AppStrings.TabInfo("Automations", "Scheduled work n8n runs on your behalf"),
@@ -175,9 +176,9 @@ val En = AppStrings(
         account = AppStrings.TabInfo("Account", "The owner this client is signed in as"),
     ),
     settingsGeneral = AppStrings.SettingsGeneral(
-        systemPrompt = "System prompt",
-        systemPromptHint = "Defines the AI's behaviour and personality for all conversations, on top of the agent's own identity.",
-        systemPromptPlaceholder = "You are a helpful assistant…",
+        systemPrompt = "Instructions from this device",
+        systemPromptHint = "Applied to every agent you chat with from this device. Use Personalities for saved per-agent instructions across devices.",
+        systemPromptPlaceholder = "Any additional preferences for conversations from this device…",
         temperature = "Temperature",
         sampling = "Sampling",
         temperatureHint = "Lower = precise and deterministic. Higher = creative and varied.",
@@ -186,6 +187,16 @@ val En = AppStrings(
         behaviour = "Behaviour",
         budgetMode = "Budget mode",
         budgetModeHint = "Concise answers, the Legion stood down. Turn off for deep research.",
+    ),
+    settingsPersonality = AppStrings.SettingsPersonality(
+        blurb = "Choose how each agent talks with you. Saved preferences apply from the next turn across your devices and Telegram.",
+        tone = "Tone", humor = "Humor", directness = "Directness", responseLength = "Reply length",
+        profileDefault = "Agent default", familiar = "Familiar", professional = "Professional",
+        off = "None", dry = "Dry", playful = "Playful", gentle = "Gentle", direct = "Direct", brief = "Brief", detailed = "Detailed",
+        instructions = "Instructions for this agent", instructionsHint = "Your instructions take priority over the style controls. Empty fields keep the agent’s own personality.",
+        placeholder = "Describe the voice, perspective and conversational habits you want this agent to have…",
+        reset = "Use agent defaults", unsaved = "Unsaved changes", saved = "Saved · applies from the next turn", current = "Current saved preferences",
+        loadFailed = "Could not load personalities. Check your connection and try again.", saveFailed = "Could not save. Your edits are still here; please retry.", retry = "Retry", loading = "Loading…",
     ),
     settingsAccount = AppStrings.SettingsAccount(
         yourName = "Your name",

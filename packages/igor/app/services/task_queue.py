@@ -99,6 +99,10 @@ def _handlers() -> dict:
     async def _embed_tail(session_id, request_id, user_id, model, payload):
         await embed_session_tail(session_id, request_id, user_id)
 
+    async def _index_message(session_id, request_id, user_id, model, payload):
+        from app.services.embedding_indexer import index_saved_message
+        await index_saved_message(int(payload["message_id"]), user_id, request_id)
+
     async def _embed_observations(session_id, request_id, user_id, model, payload):
         # Both halves of hybrid recall heal here: the vector index and the
         # lexical one. They are one job because a fact that is searchable by
@@ -196,6 +200,7 @@ def _handlers() -> dict:
         "title": _title,
         "compaction": _compact,
         "embed_tail": _embed_tail,
+        "index_message": _index_message,
         "embed_observations": _embed_observations,
         "render_surfaces": _render_surfaces,
         "memory_reindex": _memory_reindex,

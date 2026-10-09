@@ -16,6 +16,13 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 MAX_AGE_SECONDS = 86400  # 24 hours
 
 
+@router.get("/evals/behavior-config")
+async def behavior_configuration(request: Request) -> JSONResponse:
+    from app.services.behavior_config import behavior_config_snapshot
+
+    return JSONResponse(behavior_config_snapshot(request.app.state.registry, request.app.state.profiles))
+
+
 @router.delete("/outputs")
 async def cleanup_outputs(request: Request) -> JSONResponse:
     """

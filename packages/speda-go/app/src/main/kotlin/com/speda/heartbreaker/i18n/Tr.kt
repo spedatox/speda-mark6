@@ -163,6 +163,7 @@ val Tr = AppStrings(
     settingsTabs = AppStrings.SettingsTabs(
         title = "Ayarlar",
         general = AppStrings.TabInfo("Genel", "Kimlik, davranış ve sesli mod tercihleri"),
+        personalities = AppStrings.TabInfo("Kişilikler", "Her ajanın konuşma tarzını şekillendirin"),
         config = AppStrings.TabInfo("Yapılandırma", "Yönetilen sunucu ayarları, anında uygulanır"),
         connections = AppStrings.TabInfo("Bağlantılar", "Speda'nın erişebildiği hesaplar ve servisler"),
         automations = AppStrings.TabInfo("Otomasyonlar", "n8n'in sizin adınıza yürüttüğü zamanlanmış işler"),
@@ -175,9 +176,9 @@ val Tr = AppStrings(
         account = AppStrings.TabInfo("Hesap", "Bu istemcinin oturum açtığı sahip"),
     ),
     settingsGeneral = AppStrings.SettingsGeneral(
-        systemPrompt = "Sistem talimatı",
-        systemPromptHint = "Ajanın kendi kimliğinin üzerine, tüm konuşmalar için yapay zekânın davranışını ve kişiliğini tanımlar.",
-        systemPromptPlaceholder = "Sen yardımsever bir asistansın…",
+        systemPrompt = "Bu cihazdan gelen talimatlar",
+        systemPromptHint = "Bu cihazdan konuştuğunuz tüm ajanlara uygulanır. Cihazlar arasında paylaşılan ajan talimatları için Kişilikler’i kullanın.",
+        systemPromptPlaceholder = "Bu cihazdan yapılan konuşmalar için ek tercihleriniz…",
         temperature = "Sıcaklık",
         sampling = "Örnekleme",
         temperatureHint = "Düşük = kesin ve tutarlı. Yüksek = yaratıcı ve çeşitli.",
@@ -186,6 +187,16 @@ val Tr = AppStrings(
         behaviour = "Davranış",
         budgetMode = "Tasarruf modu",
         budgetModeHint = "Kısa yanıtlar, Lejyon devre dışı. Derin araştırma için kapatın.",
+    ),
+    settingsPersonality = AppStrings.SettingsPersonality(
+        blurb = "Her ajanın sizinle nasıl konuşacağını seçin. Kaydedilen tercihler sonraki mesajdan itibaren cihazlarınızda ve Telegram’da geçerlidir.",
+        tone = "Üslup", humor = "Mizah", directness = "Açıklık", responseLength = "Yanıt uzunluğu",
+        profileDefault = "Ajanın varsayılanı", familiar = "Samimi", professional = "Profesyonel",
+        off = "Yok", dry = "İnce", playful = "Şakacı", gentle = "Nazik", direct = "Doğrudan", brief = "Kısa", detailed = "Ayrıntılı",
+        instructions = "Bu ajan için talimatlar", instructionsHint = "Talimatlarınız üslup seçimlerinden önce gelir. Boş alanlar ajanın kendi kişiliğini korur.",
+        placeholder = "Bu ajanda istediğiniz üslubu, bakış açısını ve konuşma alışkanlıklarını anlatın…",
+        reset = "Ajanın varsayılanlarını kullan", unsaved = "Kaydedilmemiş değişiklikler", saved = "Kaydedildi · sonraki mesajdan itibaren geçerli", current = "Geçerli kayıtlı tercihler",
+        loadFailed = "Kişilikler yüklenemedi. Bağlantınızı kontrol edip tekrar deneyin.", saveFailed = "Kaydedilemedi. Değişiklikleriniz burada duruyor; tekrar deneyin.", retry = "Tekrar dene", loading = "Yükleniyor…",
     ),
     settingsAccount = AppStrings.SettingsAccount(
         yourName = "Adınız",

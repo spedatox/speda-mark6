@@ -507,6 +507,7 @@ async def lifespan(app: FastAPI):
     await app.state.turns.shutdown()
     await dispatcher.shutdown()
     await registry.legion_shutdown()
+    await app.state.memory_cache.close()
     await sandbox_launcher.stop()
     for task in telegram_poll_tasks:
         task.cancel()

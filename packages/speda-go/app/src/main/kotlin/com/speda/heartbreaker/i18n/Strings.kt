@@ -34,6 +34,7 @@ data class AppStrings(
     val agentSwitcher: AgentSwitcher,
     val settingsTabs: SettingsTabs,
     val settingsGeneral: SettingsGeneral,
+    val settingsPersonality: SettingsPersonality,
     val settingsAccount: SettingsAccount,
     val settingsData: SettingsData,
     val settingsConnections: SettingsConnections,
@@ -243,6 +244,7 @@ data class AppStrings(
     data class SettingsTabs(
         val title: String,
         val general: TabInfo,
+        val personalities: TabInfo,
         val config: TabInfo,
         val connections: TabInfo,
         val automations: TabInfo,
@@ -253,6 +255,17 @@ data class AppStrings(
         val protocols: TabInfo,
         val data: TabInfo,
         val account: TabInfo,
+    )
+
+    data class SettingsPersonality(
+        val blurb: String,
+        val tone: String, val humor: String, val directness: String, val responseLength: String,
+        val profileDefault: String, val familiar: String, val professional: String,
+        val off: String, val dry: String, val playful: String, val gentle: String,
+        val direct: String, val brief: String, val detailed: String,
+        val instructions: String, val instructionsHint: String, val placeholder: String,
+        val reset: String, val unsaved: String, val saved: String, val current: String,
+        val loadFailed: String, val saveFailed: String, val retry: String, val loading: String,
     )
 
     data class SettingsGeneral(

@@ -47,6 +47,29 @@ def get_budget_mode() -> bool:
     return bool(_load().get("budget_mode", settings.budget_mode))
 
 
+def get_agent_personalities() -> dict:
+    """Owner-edited profile preferences; return a copy so callers cannot mutate the cache."""
+    import copy
+    return copy.deepcopy(_load().get("agent_personalities", {}))
+
+
+def set_agent_personality(agent_id: str, preferences: dict) -> None:
+    """Persist through the existing runtime file, acknowledging only a successful write."""
+    global _cache
+    state = dict(_load())
+    personalities = get_agent_personalities()
+    if preferences:
+        personalities[agent_id] = dict(preferences)
+    else:
+        personalities.pop(agent_id, None)
+    state["agent_personalities"] = personalities
+    _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = _STATE_FILE.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(_STATE_FILE)
+    _cache = state
+
+
 def set_budget_mode(value: bool) -> bool:
     """Set budget mode and persist. Returns the new value."""
     state = _load()

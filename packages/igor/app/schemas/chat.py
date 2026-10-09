@@ -3,7 +3,7 @@
 
 import uuid
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class ImageAttachment(BaseModel):
@@ -53,7 +53,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: int | None = None
     model: str | None = None
-    system_prompt: str | None = None
+    system_prompt: str | None = Field(default=None, max_length=6000)
     temperature: float | None = None
     attachments: list[ImageAttachment] = []
     documents: list[DocumentAttachment] = []

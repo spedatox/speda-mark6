@@ -238,7 +238,8 @@ async def test_prompt_comparison_changes_one_group_and_restores_loader(tmp_path,
                                section_override=("../../outside.md", replacement))
 
 
-async def test_live_harness_preserves_settings_and_explicit_language(monkeypatch):
+async def test_live_harness_preserves_settings_and_explicit_language(monkeypatch, tmp_path):
+    import json
     from types import SimpleNamespace
     from app.config import settings
     from app.services.llm_client import LLMClient, TextBlock, Usage
@@ -255,7 +256,14 @@ async def test_live_harness_preserves_settings_and_explicit_language(monkeypatch
         chat_max_output_tokens=8096, llm_fallback_chain="deepseek:another-model")
     config["runtime"]["agent_models"] = {"speda": model}
     config["runtime"]["model_thinking"] = {model: "high"}
-    config["api_by_agent"] = {"speda": "chat_completions"}
+    from app.core.registry import CapabilityRegistry
+    from app.skills.read_skill import ReadSkillSkill
+    from app.profiles.speda import SPEDAProfile
+    registry = CapabilityRegistry()
+    await registry.register_skill(ReadSkillSkill())
+    config["tool_catalog"] = registry.definition_snapshot()
+    config["agents"] = {"speda": {"background_model": SPEDAProfile().background_model(model)}}
+    config["api_by_agent"] = {"speda": "responses"}
     monkeypatch.setattr(harness, "credential_present", lambda _: True)
     calls = []
 
@@ -284,7 +292,12 @@ async def test_live_harness_preserves_settings_and_explicit_language(monkeypatch
 
     monkeypatch.setattr(LLMClient, "stream_message", mock_stream)
     original_language = settings.agent_language
-    report = await harness.run_cases(model, True, ["turkish_draft"], config)
+    cases = json.loads(path.with_name("cases.json").read_text(encoding="utf-8"))
+    selected = next(case for case in cases["cases"] if case["id"] == "turkish_draft")
+    selected.update(post_turn=False, index_history=False)
+    fixture = tmp_path / "cases.json"
+    fixture.write_text(json.dumps({"cases": [selected]}), encoding="utf-8")
+    report = await harness.run_cases(model, True, ["turkish_draft"], config, cases_path=fixture)
     result = report["results"][0]
     assert result["status"] == "completed"
     assert calls[0] == result["request"]

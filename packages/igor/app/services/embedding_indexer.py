@@ -66,19 +66,24 @@ async def _embed_and_store(db, user_id: int, batch: list[tuple[Message, str, str
     from app.services import lexical
 
     for message, _, text in batch:
-        await lexical.index_message(db, message.id, text)
+        if not await lexical.index_message(db, message.id, text):
+            if db.get_bind().dialect.name == "sqlite":
+                raise RuntimeError("Conversation lexical indexing failed; retry required")
     try:
         await db.commit()
     except Exception as e:  # noqa: BLE001
         await db.rollback()
         logger.warning("lexical_batch_failed", extra={"error": str(e), "count": len(batch)})
+        raise
 
     texts = [text for _, _, text in batch]
     try:
         vectors = await embed_texts(texts)
     except Exception as e:
         logger.warning("embed_batch_failed", extra={"error": str(e), "count": len(batch)})
-        return 0
+        raise
+    if len(vectors) != len(batch):
+        raise ValueError("Incomplete embedding batch; retry required")
 
     for (message, agent_id, text), vec in zip(batch, vectors):
         db.add(MessageEmbedding(
@@ -95,7 +100,7 @@ async def _embed_and_store(db, user_id: int, batch: list[tuple[Message, str, str
     except Exception as e:
         await db.rollback()
         logger.warning("embed_store_failed", extra={"error": str(e), "count": len(batch)})
-        return 0
+        raise
     return len(batch)
 
 
@@ -123,10 +128,35 @@ def _rows_to_batch(rows) -> list[tuple[Message, str, str]]:
     return batch
 
 
+async def index_saved_message(message_id: int, user_id: int, request_id: str) -> None:
+    """Retry an exact saved message's local projection through the existing durable queue."""
+    from app.services import lexical
+    async with AsyncSessionLocal() as db:
+        message = (await db.execute(select(Message).join(Session, Message.session_id == Session.id)
+            .where(Message.id == message_id, Session.user_id == user_id))).scalar_one_or_none()
+        if message is None:
+            return  # An explicitly deleted source needs no search projection.
+        if not await lexical.index_message(db, message.id, _extract_text(message.content)):
+            raise RuntimeError("Conversation lexical indexing failed; retry required")
+        await db.commit()
+    logger.info("message_lexical_retry_complete", extra={"request_id": request_id, "message_id": message_id})
+
+
 async def embed_session_tail(session_id: int, request_id: str, user_id: int) -> None:
     """Per-turn hook: embed this session's not-yet-embedded messages (capped)."""
     try:
         async with AsyncSessionLocal() as db:
+            from app.services import lexical
+            # Heal local indexing independently of whether a vector already exists.
+            messages = (await db.execute(select(Message).where(
+                Message.session_id == session_id,
+                Message.role.in_(("user", "assistant")),
+            ).order_by(Message.id.desc()).limit(BATCH_SIZE))).scalars().all()
+            for message in messages:
+                if not await lexical.index_message(db, message.id, _extract_text(message.content)):
+                    if db.get_bind().dialect.name == "sqlite":
+                        raise RuntimeError("Conversation lexical indexing failed; retry required")
+            await db.commit()
             stmt = (
                 _pending_messages_query(user_id)
                 .where(Message.session_id == session_id)
@@ -146,19 +176,11 @@ async def embed_session_tail(session_id: int, request_id: str, user_id: int) -> 
             "embed_session_tail_error",
             extra={"request_id": request_id, "session_id": session_id, "error": str(e)},
         )
+        raise
 
 
 async def backfill_lexical(user_id: int, request_id: str) -> int:
-    """Give every already-embedded message a row in the keyword index.
-
-    backfill_embeddings cannot do this job: it defines "pending" as "has no
-    MessageEmbedding row", and the entire existing corpus HAS one — it was
-    embedded long before recall grew a lexical half. So this walks the other
-    way round, from message_embeddings (whose `text` column is already the exact
-    plain text the vector was built from) into whatever FTS5 is missing.
-
-    Idempotent and safe to re-run, like everything else in this module.
-    """
+    """Index saved text independently of embedding coverage, safely on retry."""
     from app.services import lexical
 
     written = 0
@@ -169,14 +191,17 @@ async def backfill_lexical(user_id: int, request_id: str) -> int:
             known = await lexical.indexed_ids(db, lexical.MESSAGES)
             rows = (
                 await db.execute(
-                    select(MessageEmbedding.message_id, MessageEmbedding.text)
-                    .where(MessageEmbedding.user_id == user_id)
-                    .order_by(MessageEmbedding.created_at.desc())
+                    select(Message.id, Message.content)
+                    .join(Session, Message.session_id == Session.id)
+                    .where(Session.user_id == user_id, Message.role.in_(("user", "assistant")))
+                    .order_by(Message.id.desc())
                 )
             ).all()
-            missing = [(mid, body) for mid, body in rows if mid not in known and body]
+            missing = [(mid, _extract_text(content)) for mid, content in rows
+                       if mid not in known and _extract_text(content).strip()]
             for i, (message_id, body) in enumerate(missing, start=1):
-                await lexical.index_message(db, message_id, body)
+                if not await lexical.index_message(db, message_id, body):
+                    raise RuntimeError("Conversation lexical backfill failed; retry required")
                 written += 1
                 # Commit in chunks: one transaction over tens of thousands of
                 # inserts holds the write lock long enough for a live turn's
@@ -190,6 +215,7 @@ async def backfill_lexical(user_id: int, request_id: str) -> int:
         )
     except Exception as e:  # noqa: BLE001
         logger.error("backfill_lexical_error", extra={"request_id": request_id, "error": str(e)})
+        raise
     return written
 
 

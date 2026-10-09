@@ -105,6 +105,38 @@ class AgentProfile(ABC):
     # (settings.tts_locale) — the voice name does not have to match it.
     voice_id: str = ""
 
+    @property
+    def personality_key(self) -> str:
+        """Profile-owned persistence key; session aliases can share their parent's settings."""
+        return self.agent_id
+
+    def personalization_prompt(self, preferences, client_instructions: str = "") -> str:
+        """Render only the owner's chosen style, leaving profile defaults byte-identical otherwise."""
+        from app.prompts.loader import load_section
+
+        styles = {
+            "tone": {"familiar": "Speak with familiar warmth and an informal register.",
+                     "professional": "Use a composed, professional register."},
+            "humor": {"off": "Avoid jokes and teasing.", "dry": "Use understated, dry humor when appropriate.",
+                      "playful": "Allow playful humor when appropriate to the situation."},
+            "directness": {"gentle": "Express disagreement and difficult conclusions with tact.",
+                           "direct": "State your conclusions and disagreements plainly."},
+            "response_length": {"brief": "Prefer short replies, expanding when the task needs it.",
+                                "detailed": "Explain your reasoning and relevant details when useful."},
+        }
+        selected = [choices[getattr(preferences, field)] for field, choices in styles.items()
+                    if getattr(preferences, field) in choices]
+        sections = []
+        if selected:
+            sections.append("### Selected style\n" + "\n".join(selected))
+        if preferences.instructions.strip():
+            sections.append("### Instructions for this agent\n" + preferences.instructions.strip())
+        if client_instructions.strip():
+            sections.append("### Instructions from the current client\n" + client_instructions.strip())
+        if not sections:
+            return ""
+        return load_section("core/16_personality.md") + "\n\n" + "\n\n".join(sections)
+
     # What this agent PRESENTS when it is speaking — one or two sentences naming
     # the windows its domain lives in, appended to the voice brief
     # (core/surface.py). Identity, like the voice, so it lives here (Rule 10):

@@ -1948,6 +1948,39 @@ export interface AgentModelInfo {
   default_background: string
 }
 
+export interface PersonalitySettings {
+  instructions: string
+  tone: 'default' | 'familiar' | 'professional'
+  humor: 'default' | 'off' | 'dry' | 'playful'
+  directness: 'default' | 'gentle' | 'direct'
+  response_length: 'default' | 'brief' | 'detailed'
+}
+
+export interface AgentPersonalityInfo {
+  agent_id: string
+  name: string
+  domain: string
+  settings: PersonalitySettings
+}
+
+async function personalityRequest(config: AppConfig, body?: { agent_id: string; settings: PersonalitySettings }): Promise<AgentPersonalityInfo[]> {
+  const res = await fetch(`${config.apiBase}/agents/personalities`, {
+    method: body ? 'POST' : 'GET',
+    headers: authHeaders(config, body ? { 'Content-Type': 'application/json' } : {}),
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export function fetchAgentPersonalities(config: AppConfig): Promise<AgentPersonalityInfo[]> {
+  return personalityRequest(config)
+}
+
+export function saveAgentPersonality(config: AppConfig, agentId: string, settings: PersonalitySettings): Promise<AgentPersonalityInfo[]> {
+  return personalityRequest(config, { agent_id: agentId, settings })
+}
+
 export async function fetchAgentModels(config: AppConfig): Promise<AgentModelInfo[]> {
   try {
     const res = await fetch(`${config.apiBase}/agents/models`, { headers: authHeaders(config) })

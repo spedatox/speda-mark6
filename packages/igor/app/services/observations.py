@@ -30,6 +30,7 @@ creating a near-duplicate row. This is what makes "what does he consistently
 want?" answerable — repetition becomes a ranking signal rather than noise.
 """
 
+import asyncio
 import logging
 import re
 from datetime import datetime, timezone
@@ -768,6 +769,9 @@ async def search_observations(
     live_only: bool = False,
     after: datetime | None = None,
     before: datetime | None = None,
+    prepared_query=None,
+    lexical_only: bool = False,
+    diagnostics: dict | None = None,
 ) -> list[tuple[Observation, float]]:
     """
     HYBRID search over observations, newest-biased and optionally filtered.
@@ -822,7 +826,8 @@ async def search_observations(
     # English form and the keyword pass both forms, so the Turkish proper nouns
     # the store legitimately keeps are still matchable. An English query, a
     # disabled setting or a failed call all return the query untouched.
-    vector_query, lexical_query = await query_translation.expand(query)
+    vector_query, lexical_query = (query, query) if lexical_only else (
+        prepared_query[:2] if prepared_query is not None else await query_translation.expand(query))
 
     stmt = _live(user_id)
     if level:
@@ -880,14 +885,23 @@ async def search_observations(
     # ── Meaning ──────────────────────────────────────────────────────────────
     vector_ids: list[int] = []
     floor = float(settings.recall_min_similarity)
-    vectors = await vectors_for(db, user_id)
+    vectors = {} if lexical_only else await vectors_for(db, user_id)
     # Only the candidates that survived the SQL filters, in a stable order, so
     # the matrix rows line up with `embedded` for the argsort below.
     embedded = [o for o in rows if o.id in vectors]
     if embedded:
         try:
-            query_vec = (await embed_texts([vector_query]))[0]
-            matrix = np.stack([vectors[o.id] for o in embedded])
+            query_vec = prepared_query[2] if prepared_query is not None else (await embed_texts([vector_query]))[0]
+            dimensions = {len(vectors[o.id]) for o in embedded}
+            if dimensions != {len(query_vec)}:
+                if diagnostics is not None:
+                    diagnostics.setdefault("recall_errors", []).append("incompatible_vector_dimensions")
+                raise ValueError("Stored observation vector dimensions are incompatible")
+            matrix = await asyncio.to_thread(lambda: np.stack([vectors[o.id] for o in embedded]))
+            if matrix.shape[1] != len(query_vec):
+                if diagnostics is not None:
+                    diagnostics.setdefault("recall_errors", []).append("incompatible_vector_dimensions")
+                raise ValueError("Stored observation vectors do not match the query dimensions")
             scores = matrix @ query_vec
             # Ordered best-first, then cut at the floor. Cutting AFTER the sort
             # rather than masking before it keeps this a single pass and leaves
@@ -921,6 +935,13 @@ async def search_observations(
         return []
 
     fused = lexical.rrf_fuse(vector_ids, lexical_ids, limit=limit)
+    if diagnostics is not None:
+        diagnostics.setdefault("recall_trace", []).append({
+            "stage": "fact_ranking", "lexical_only": lexical_only, "candidates": len(rows),
+            "ranked_candidates": [{"id": i, "score": score, "content": by_id[i].content,
+                "message_ids": by_id[i].message_ids, "vector_hit": i in vector_ids,
+                "lexical_hit": i in lexical_ids} for i, score in fused if i in by_id],
+        })
     return [(by_id[i], score) for i, score in fused if i in by_id]
 
 

@@ -48,9 +48,11 @@ exactly the old vector-only behaviour. Nothing raises.
 """
 
 import logging
+import json
 import re
 
-from sqlalchemy import text
+from sqlalchemy import literal_column, select, table, text
+from sqlalchemy.sql import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -209,12 +211,12 @@ async def ensure_index(db: AsyncSession, index: Index = OBSERVATIONS) -> bool:
 
 async def index_row(
     db: AsyncSession, index: Index, row_id: int, values: dict[str, str]
-) -> None:
+) -> bool:
     """Add or replace one row in a lexical index. Never raises — a fact that
     failed to index is still recorded, still embedded, and still findable by
     meaning; losing the write path over a search index would be the worse bug."""
     if not await ensure_index(db, index):
-        return
+        return False
     try:
         await db.execute(
             text(f"DELETE FROM {index.table} WHERE rowid = :id"), {"id": row_id}
@@ -225,11 +227,13 @@ async def index_row(
             text(f"INSERT INTO {index.table}(rowid, {cols}) VALUES (:id, {binds})"),
             {"id": row_id, **{c: fold(values.get(c) or "") for c in index.columns}},
         )
+        return True
     except Exception as e:  # noqa: BLE001
         logger.warning(
             "fts_index_failed",
             extra={"table": index.table, "row_id": row_id, "error": str(e)},
         )
+        return False
 
 
 async def index_observation(db: AsyncSession, obs) -> None:
@@ -242,10 +246,10 @@ async def index_observation(db: AsyncSession, obs) -> None:
     })
 
 
-async def index_message(db: AsyncSession, message_id: int, body: str) -> None:
+async def index_message(db: AsyncSession, message_id: int, body: str) -> bool:
     """Index one message's plain text, keyed by its message id — the same key
     MessageEmbedding uses, so the two halves of recall address the same rows."""
-    await index_row(db, MESSAGES, message_id, {"text": body})
+    return await index_row(db, MESSAGES, message_id, {"text": body})
 
 
 async def drop_row(db: AsyncSession, index: Index, row_id: int) -> None:
@@ -279,30 +283,50 @@ async def search(
     query: str,
     limit: int = 50,
     allowed_ids: set[int] | None = None,
+    allowed_ids_query: Select | None = None,
     index: Index = OBSERVATIONS,
 ) -> list[int]:
     """Row ids ranked by BM25, best first.
 
-    `allowed_ids` is the candidate set the caller already narrowed by owner,
-    validity, date and every other filter. Filtering here rather than joining
-    keeps this function ignorant of both schemas — it only ever knows rowids —
-    and the candidate set is already bounded by the caller's own scan cap.
+    The caller narrows by owner, validity, date and other filters, using either
+    `allowed_ids` or an ID-only SQL select. Both filter before the ranking limit.
+    The select avoids loading an entire conversation corpus for a local pass;
+    this function still knows only the index's row IDs, not either source schema.
     """
     match = build_match_query(query)
+    if allowed_ids is not None and not allowed_ids:
+        return []
     if not match or not await ensure_index(db, index):
         return []
     try:
         # bm25() returns a NEGATIVE number where more negative is better, so
         # plain ascending ORDER BY is already best-first.
-        rows = await db.execute(
-            text(
+        # Keep MATCH as the FTS driver's predicate. A rowid IN filter can make
+        # SQLite re-run the full-text lookup once per allowed ID (tens of
+        # thousands), even when only one message matches. EXISTS checks scope
+        # only for matches and still applies before the ranking limit.
+        scope = (f" AND EXISTS (SELECT 1 FROM json_each(:allowed) AS eligible "
+                 f"WHERE eligible.value = {index.table}.rowid)") if allowed_ids is not None else ""
+        parameters = {"q": match, "n": limit}
+        if allowed_ids is not None:
+            parameters["allowed"] = json.dumps(sorted(allowed_ids))
+        if allowed_ids_query is not None:
+            eligible = allowed_ids_query.subquery()
+            in_scope = select(1).select_from(eligible).where(
+                eligible.c[0] == literal_column(f"{index.table}.rowid")).exists()
+            statement = (
+                select(literal_column("rowid"), literal_column(index.bm25).label("rank"))
+                .select_from(table(index.table)).where(text(f"{index.table} MATCH :q{scope}"))
+                .where(in_scope)
+                .order_by(literal_column("rank")).limit(limit)
+            )
+        else:
+            statement = text(
                 f"SELECT rowid, {index.bm25} AS rank "
-                f"FROM {index.table} WHERE {index.table} MATCH :q "
+                f"FROM {index.table} WHERE {index.table} MATCH :q{scope} "
                 "ORDER BY rank LIMIT :n"
-            ),
-            # Over-fetch, because the allowed_ids filter runs after the ranking.
-            {"q": match, "n": limit * 4 if allowed_ids else limit},
-        )
+            )
+        rows = await db.execute(statement, parameters)
     except Exception as e:  # noqa: BLE001
         logger.warning("fts_search_failed", extra={"table": index.table, "error": str(e)})
         return []
