@@ -77,6 +77,8 @@ class AgentProfile(ABC):
     house_party_commander: bool = False
 
     name: str
+    # The existing identity section, also used for compact home-screen remarks.
+    identity_section: str = ""
 
     # The agent's own model iteration — "Mark I", "Mark II", … Each agent is
     # versioned independently of the Mark VI system it belongs to: Sentinel is

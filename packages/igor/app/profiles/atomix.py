@@ -38,6 +38,7 @@ class AtomixProfile(AgentProfile):
     name = "Atomix"
     # The agent's own iteration, read off PROMPT_SECTIONS[0] (its identity
     # prompt). Bump the `Iteration:` line there and the signature follows.
+    identity_section = PROMPT_SECTIONS[0]
     mark = derive_iteration(PROMPT_SECTIONS[0])
     domain = "personal health & wellness (the owner's health)"
 

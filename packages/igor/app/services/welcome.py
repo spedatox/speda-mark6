@@ -19,13 +19,16 @@ invisible. Every failure path degrades to "" — the UI just keeps the greeting.
 
 import logging
 import time as _time
+from hashlib import sha256
 from datetime import datetime
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
 from app.config import settings
 from app.core.clock import owner_now
+from app.core.context import AgentContext
 from app.database import AsyncSessionLocal
 from app.models.memory_file import MemoryFile
 
@@ -43,15 +46,15 @@ class WelcomeCache:
     by the router, rather than living as a bare module global."""
 
     def __init__(self) -> None:
-        self._entries: dict[tuple[str, str], tuple[str, float]] = {}
+        self._entries: dict[tuple[str, str, str], tuple[str, float]] = {}
 
-    def get(self, key: tuple[str, str]) -> str | None:
+    def get(self, key: tuple[str, str, str]) -> str | None:
         hit = self._entries.get(key)
         if hit is not None and hit[1] > _time.monotonic():
             return hit[0]
         return None
 
-    def set(self, key: tuple[str, str], text: str) -> None:
+    def set(self, key: tuple[str, str, str], text: str) -> None:
         self._entries[key] = (text, _time.monotonic() + (_TTL_S if text else 120))
 
 
@@ -93,7 +96,7 @@ async def _read_memory(user_id: int) -> tuple[str, str]:
         return "", ""
 
 
-async def get_welcome(agent_id: str, profiles, cache: WelcomeCache, *, user_id: int = 1) -> str:
+async def get_welcome(agent_id: str, profiles, cache: WelcomeCache, *, orchestrator, user_id: int = 1) -> str:
     """Return a cached-or-freshly-generated welcome remark for `agent_id`.
     Returns "" on any failure so the caller simply keeps the static greeting."""
     profile = profiles.get(agent_id)
@@ -102,30 +105,33 @@ async def get_welcome(agent_id: str, profiles, cache: WelcomeCache, *, user_id: 
 
     now_dt = owner_now()
     pod = _part_of_day(now_dt.hour)
-    key = (agent_id, pod)
+    try:
+        model = profile.background_model(profile.allocate_model("user"))
+        context = AgentContext(agent_id=agent_id, user_id=user_id, session_id=0,
+            request_id=str(uuid4()), triggered_by="user", trigger_payload={},
+            output_mode="silent", model=model, system_prompt="", conversation_history=[],
+            db=None, timezone=settings.owner_timezone)
+        system = orchestrator.build_system_prompt(context, identity_only=True)
+    except Exception as error:  # noqa: BLE001 — keep the static greeting on failure
+        logger.warning("welcome_prompt_failed", extra={"agent_id": agent_id, "error": str(error)})
+        return ""
+    # A personality or language edit must not keep serving the previous voice.
+    key = (agent_id, pod, sha256(system.encode()).hexdigest())
     hit = cache.get(key)
     if hit is not None:
         return hit
 
-    text = await _generate(profile, pod, now_dt, user_id)
+    text = await _generate(profile, pod, now_dt, user_id, model=model, system=system)
     # Cache even an empty result briefly so a broken provider isn't hammered on
     # every welcome-screen mount.
     cache.set(key, text)
     return text
 
 
-async def _generate(profile, part_of_day: str, now_dt: datetime, user_id: int) -> str:
+async def _generate(profile, part_of_day: str, now_dt: datetime, user_id: int, *, model: str, system: str) -> str:
     from app.services.llm_client import LLMClient
 
     owner, current = await _read_memory(user_id)
-    model = profile.background_model(profile.allocate_model("user"))
-    system = (
-        f"You are {profile.name}, his {profile.domain} agent. Greet him the way a close "
-        "friend who is very good at this would: warm, dry, quietly anticipatory — "
-        "never fawning, never corny, never deferential. He is a peer, not your "
-        "superior. Use his name, Ahmet Erol, only if it lands naturally; no "
-        "honorifics in any language."
-    )
     context = (
         f"Time: {now_dt.strftime('%A %H:%M')} ({part_of_day}). "
         f"You are the '{profile.domain}' agent.\n\n"

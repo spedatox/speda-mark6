@@ -166,7 +166,7 @@ def source_identity(app_root):
              if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc"}
     try:
         revision = subprocess.check_output(["git", "-C", str(app_root), "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL).strip()
-        diff = subprocess.check_output(["git", "-C", str(app_root), "diff", "--", "packages/igor/app"], stderr=subprocess.DEVNULL)
+        diff = subprocess.check_output(["git", "-C", str(app_root), "diff", "HEAD", "--", "app"], stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError:
         revision, diff = None, b""
     archived_verified = False
@@ -444,7 +444,8 @@ async def run_cases(model: str, live: bool, case_ids: list[str], config=None, ou
         if not hasattr(AgentProfile, "personalization_prompt"):
             raise ValueError("This revision cannot apply the verified personality configuration; comparison invalid")
     cases_path = Path(cases_path or Path(__file__).with_name("cases.json"))
-    cases = json.loads(cases_path.read_text(encoding="utf-8"))["cases"]
+    case_document = json.loads(cases_path.read_text(encoding="utf-8"))
+    cases = case_document["cases"]
     if any(not re.fullmatch(r"[a-zA-Z0-9_-]+", case["id"]) for case in cases):
         raise ValueError("Case ids must be safe, unique filename labels")
     if len({case["id"] for case in cases}) != len(cases):
@@ -462,6 +463,8 @@ async def run_cases(model: str, live: bool, case_ids: list[str], config=None, ou
               "limitations": ["Isolated owner/history fixtures; real external account/host actions remain blocked.",
                               "Only actual completed live replies establish behavior; offline captures are diagnostics."],
               "results": []}
+    if case_document.get("identity_review"):
+        report["identity_review"] = copy.deepcopy(case_document["identity_review"])
 
     # Evaluation only: replace exactly one instruction group, retaining all
     # other prompt sections, tools, settings and memory. Never alter disk or
@@ -542,6 +545,8 @@ async def run_cases(model: str, live: bool, case_ids: list[str], config=None, ou
                     continue
                 case_result = {"id": case["id"], "agent": case["agent"], "rubric": case["rubric"],
                                "fixture": case, "turns": [], "status": "captured"}
+                if case.get("setting"):
+                    case_result["setting"] = case["setting"]
                 report["results"].append(case_result)
                 if live and (auth_failed or not credential_present(model)):
                     case_result.update(status="blocked", error="Matching provider credential unavailable or rejected")
@@ -834,7 +839,7 @@ def main():
     parser.add_argument("--write-local-config", type=Path, help="Save a template without claiming production equivalence")
     parser.add_argument("--app-root", type=Path, default=APP_ROOT, help="Igor package directory from the revision being evaluated")
     parser.add_argument("--case", action="append", default=[])
-    parser.add_argument("--cases", type=Path, help="Private representative cases; never copied into Git")
+    parser.add_argument("--cases", type=Path, help="Built-in or private representative cases; private fixtures stay outside Git")
     parser.add_argument("--embedding-fixture", type=Path, help="Shared indexed fixture vectors for identical revision inputs")
     parser.add_argument("--section-override", nargs=2, metavar=("SECTION", "FILE"),
                         help="Controlled comparison: replace one prompt section with this file")

@@ -130,7 +130,8 @@ async def welcome(agent_id: str, request: Request):
     failure so the client just keeps its static greeting."""
     from app.services.welcome import get_welcome
 
-    text = await get_welcome(agent_id, request.app.state.profiles, request.app.state.welcome_cache)
+    text = await get_welcome(agent_id, request.app.state.profiles, request.app.state.welcome_cache,
+                             orchestrator=request.app.state.orchestrator)
     return {"text": text}
 
 
