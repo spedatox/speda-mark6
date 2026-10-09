@@ -55,6 +55,30 @@ def test_identity_cases_cover_eight_agents_and_four_settings_with_shared_blind_p
     assert all(case["post_turn"] is False for case in cases)
 
 
+@pytest.mark.parametrize("preferences", [{}, {"tone": "familiar", "humor": "dry", "response_length": "brief"}])
+async def test_speda_conversation_contexts_reach_model_with_default_and_saved_style(preferences):
+    """Real prompt/history/memory delivery only; offline captures contain no replies."""
+    from app.prompts.loader import load_section
+    runner = harness()
+    model = "openai:gpt-6-luna"
+    config = runner.local_config(model)
+    config["settings"]["dead_zone_mode"] = "off"
+    config["runtime"]["agent_personalities"] = {"speda": preferences} if preferences else {}
+    cases = Path(__file__).parents[1] / "evals/behavior/speda_conversation_cases.json"
+    report = await runner.run_cases(model, False, [], config, cases_path=cases)
+    identity = load_section(SPEDAProfile().identity_section, {"timezone": "Europe/Istanbul"})
+    voice = load_section("core/02_voice.md", {})
+    assert len(report["results"]) == 6
+    for case in report["results"]:
+        assert case["status"] == "captured"
+        turn = case["turns"][0]
+        assert turn["context_checks"] and all(turn["context_checks"].values())
+        assert "response" not in turn
+        system = turn["request"]["system"][0]["text"]
+        assert system.count(identity) == system.count(voice) == 1
+        assert ("Speak with familiar warmth and an informal register." in system) == bool(preferences)
+
+
 def test_source_identity_detects_staged_app_changes_from_package_directory(tmp_path):
     runner = harness()
     package = tmp_path / "packages/igor"

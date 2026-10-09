@@ -230,7 +230,8 @@ async def test_welcome_delivers_compact_identity_and_refreshes_preferences(chara
     from app.services.llm_client import LLMClient, TextBlock
     from app.prompts.loader import load_section
     from unittest.mock import AsyncMock
-    monkeypatch.setattr(welcome, "_read_memory", AsyncMock(return_value=("", "")))
+    monkeypatch.setattr(welcome, "_read_memory", AsyncMock(return_value=(
+        "Owner fixture: Ahmet Erol Bayrak.", "Context fixture: the club-fair evening ran late.")))
     create = AsyncMock(return_value=SimpleNamespace(content=[TextBlock(text="A fixture opening remark.")]))
     monkeypatch.setattr(LLMClient, "create_message", create)
     engine = AgentOrchestrator(None, None, character_profiles, None)
@@ -242,6 +243,9 @@ async def test_welcome_delivers_compact_identity_and_refreshes_preferences(chara
     identity = load_section(character_profiles.require(agent).identity_section,
         {"timezone": settings.owner_timezone, "model": request["model"], "language": language.name_of()})
     assert identity in request["system"]
+    assert load_section("core/02_voice.md", {}) in request["system"]
+    assert "Owner fixture: Ahmet Erol Bayrak." in request["messages"][0]["content"]
+    assert "Context fixture: the club-fair evening ran late." in request["messages"][0]["content"]
     assert "## Installed Skills" not in request["system"]
     runtime_state.set_agent_personality(agent, {"humor": "off"})
     await welcome.get_welcome(agent, character_profiles, cache, orchestrator=engine)

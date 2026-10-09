@@ -98,8 +98,9 @@ clinical and essential memory boundaries in comparison sections.
 
 For natural memory, voice, reasoning, initiative, preferences/boundaries and
 executed-action awareness, record improved, unchanged, regressed or inconclusive
-with passages from actual replies. Ordinary memory must appear in the first
-response without a recall tool. Review casual, serious and technical voice;
+with passages from actual replies. Relevant ordinary memory must inform the
+first response without a recall tool; an explicit callback is unnecessary.
+Review casual, serious and technical voice;
 catchphrases, keywords and response length do not prove personality.
 
 Separate absent storage, unretrieved evidence, retrieved-but-unused evidence and
@@ -177,3 +178,16 @@ mocked-provider test or masked-review test verifies evaluation infrastructure
 only. A valid live comparison still requires the verified non-secret snapshot
 and normally configured matching credentials; absent those, actual personality
 consistency, improvements and regressions remain unmeasured.
+
+`speda_conversation_cases.json` focuses on Speda's conversational restraint:
+plain greetings with unrelated memory available, recovery from a stacked
+name/honorific greeting, ongoing planning with relevant memory and a correction,
+a serious discussion, technical error correction, and a formal draft that
+genuinely needs the owner's full name. Use the same comparison command with
+this case file. Compare default preferences, then repeat with the same saved
+familiar/dry style on both revisions. Inspect the named responses as well as
+the blind review, whose address masking can hide excessive name or honorific
+usage. Wit, an honorific and an explicit memory reference are optional; their
+absence does not lower the score. Relevant memory use and task accuracy must
+remain intact. Offline runs check delivery only; naturalness requires actual
+completed replies and human assessment.
