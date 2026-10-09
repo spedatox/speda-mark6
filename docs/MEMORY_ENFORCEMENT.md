@@ -29,7 +29,7 @@ never an automated trigger. Image evidence uses message:<id>#image:<index> and a
 transcription checked against the attached original by a vision-capable reviewer.
 Receipts store the source hash, not duplicate image bytes. A separate, tool-free model call checks source support,
 subject, section, lifecycle, duplication and loss of unrelated knowledge. A timeout,
-malformed result or rejection saves nothing. The model remains fallible: source
+malformed result or final rejection saves nothing. The model remains fallible: source
 existence and quotations do not mathematically prove factual entailment.
 
 Observation review includes the adjacent persisted assistant turn as labelled,
@@ -38,6 +38,18 @@ or denial refers to; it is not owner evidence. Assistant messages still cannot
 resolve as `message:<id>` evidence, and their text is not copied into observation
 sources. The reviewer still judges whether the owner's answer supports the
 proposed scope; a short answer never grants automatic admission.
+
+Explicit owner revisions, revocations and scoped exceptions to his own preferences
+outrank the prior stored rule, including rules worded as permanent or NEVER. A
+one-time exception does not repeal the rule generally. Reviewer source context
+labels owner testimony separately from tool results and preserves the exact cited
+quote alongside the adjacent exchange. Prior observation-validator outputs are
+excluded from automatic observation evidence: a refusal is not a fact or a new
+owner restriction. When an explicit observation cites verified owner testimony,
+secondary memory/tool context is present, and review refuses it, the tool performs
+at most one semantic reconsideration before returning. It still requires approval;
+unsupported details, unresolved ambiguity and provider failures remain unsaved.
+Tool-only claims and invalid citations do not qualify for this reconsideration.
 
 Observation confirmation results identify an unsaved proposal, not a command to
 repeat a question immediately. The conversational model checks the actual
