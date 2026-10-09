@@ -110,12 +110,13 @@ class AgentOrchestrator:
         self._profiles = profiles
         self._memory_cache = memory_cache
 
-    def build_system_prompt(self, context: AgentContext) -> str:
+    def build_system_prompt(self, context: AgentContext, *, identity_only: bool = False) -> str:
         """
         Build the full system prompt from the agent's profile template + runtime
         context vars. The profile is resolved per request from context.agent_id
         (Rule 2: prompt construction stays here; it just selects which profile to
-        build from). Only called here — never in a router, never in a service.
+        build from). Construction stays here; identity_only supplies the compact
+        profile and preferences for home-screen remarks without chat tool guidance.
 
         Deliberately NO time-derived vars: a clock anywhere in the system prompt
         changes the request prefix every minute, which silently invalidates
@@ -124,19 +125,24 @@ class AgentOrchestrator:
         stamped onto each user message (SessionManager.stamp_user_content).
         """
         profile = self._profiles.require(context.agent_id)
-        core = profile.build_system_prompt(
-            {
-                "timezone": context.timezone,
-                "model": context.model,
-                # The one language the whole system speaks (services/language.py).
-                # It belongs in the CACHED prefix, not on the user message: it is
-                # a standing fact that changes only when the owner throws the
-                # switch, and the contract in prompts/core/15_language.md has to
-                # be read before the first token, not remembered from a stamp
-                # halfway down the history.
-                "language": language.name_of(),
-            }
-        )
+        context_vars = {
+            "timezone": context.timezone,
+            "model": context.model,
+            # The one language the whole system speaks (services/language.py).
+            # It belongs in the CACHED prefix, not on the user message: it is
+            # a standing fact that changes only when the owner throws the
+            # switch, and the contract in prompts/core/15_language.md has to
+            # be read before the first token, not remembered from a stamp
+            # halfway down the history.
+            "language": language.name_of(),
+        }
+        if identity_only:
+            # Welcome remarks share the real identity/preferences without
+            # paying for the chat's tool guidance and operational policy stack.
+            from app.prompts.loader import assemble
+            core = assemble([profile.identity_section, "core/02_voice.md", "core/15_language.md"], context_vars)
+        else:
+            core = profile.build_system_prompt(context_vars)
         from app.services.personality import settings_for_profile
         preferences = settings_for_profile(profile)
         customization = profile.personalization_prompt(preferences, context.custom_instructions)

@@ -114,3 +114,66 @@ against repaired separately. Keep the candidate off production main until human
 review passes. Deploy the evaluated revision only after acceptance, inspect fresh
 production conversations and retain rollback to the last accepted revision.
 Passing infrastructure tests does not establish behavioral recovery.
+
+## Compact identity consistency evaluation
+
+`identity_cases.json` adds four settings for each of the eight existing agents:
+casual, domain work, difficulty and a generated multi-turn exchange. Casual and
+difficult prompts are identical across agents so recognition cannot rely on a
+different task assignment. Multi-turn cases use real fixture-memory reads and
+corrections; some also seed archived tool/delegation receipts. Those archived
+receipts are synthetic history, never proof of execution during the run. No
+external handler is enabled. Unsupported action attempts remain incomplete.
+Post-turn background work is disabled in this compact suite; the memory suite
+above covers persistence and indexing. Health escalation, security scope,
+financial arithmetic, recovery integrity and engineering verification remain
+explicit parts of the identity rubrics.
+
+Compare the unchanged pre-character baseline with the candidate using the
+existing driver; historical recovery comparisons remain available separately:
+
+```powershell
+python packages/igor/evals/behavior/compare_eval.py `
+  --baseline BASELINE/packages/igor --baseline-ref BASELINE_COMMIT `
+  --candidate CANDIDATE/packages/igor `
+  --model VERIFIED_MODEL --config PRIVATE_PATH/behavior-config.json `
+  --cases packages/igor/evals/behavior/identity_cases.json `
+  --live --output-dir PRIVATE_PATH/comparison-identity
+```
+
+`BASELINE_COMMIT` is the expected baseline Git commit, verified against its
+unchanged app source. The driver alternates baseline/candidate order, defaults
+to three repetitions, and applies the same model, configuration and case file
+to both revisions. Source, harness and input hashes are retained. If agent
+allocations differ, select that agent's four cases with repeated `--case` and
+compare both revisions on its actual configured model/API route; do not
+substitute a model to obtain a score. Nonempty customization on a baseline
+without customization support is refused. Evaluate owner customization on the
+candidate separately and retain the same core-identity rubric.
+
+Start with `blind_identity_review.html` before opening the named comparison or
+`identity-key.json`. It includes only complete, provider-verified conversations,
+in opaque sample order, with names and forms of address masked. Infer the
+speaker from reasoning and delivery; a catchphrase earns no recognition credit.
+Record a speaker guess, passages and six 0–4 scores in `identity-scores.json`:
+recognizable identity, domain competence, contextual adaptation, naturalness,
+independent judgment and excess theatricality. Higher excess theatricality is
+worse. Existing human entries survive incremental review regeneration.
+
+After unblinding, compare guesses and metric scores by agent, setting and
+repetition; report improved, unchanged, regressed or inconclusive with response
+evidence in `identity-comparison.json`. This separate pending worksheet marks
+comparisons valid only when all compared conversations completed on the same
+model, configuration and cases. Scores and outcomes follow evidence hashes so
+changed replies cannot inherit an earlier assessment. Explicitly record safety, factual grounding and authorization
+regressions. Serious-context restraint can be correct even when recognition is
+inconclusive. Inspect actual fixture-handler receipts for tool execution and
+check correction/delegation awareness against the supplied history. No score
+is automatically assigned, and no candidate is automatically accepted.
+
+Without `--live` the same command captures assembled inputs and produces a
+pending review with no behavioral scores. A passing prompt-delivery check,
+mocked-provider test or masked-review test verifies evaluation infrastructure
+only. A valid live comparison still requires the verified non-secret snapshot
+and normally configured matching credentials; absent those, actual personality
+consistency, improvements and regressions remain unmeasured.

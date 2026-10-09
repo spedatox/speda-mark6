@@ -1,5 +1,6 @@
 """Evaluation validity and isolation checks; mock replies are never recovery evidence."""
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,6 +28,149 @@ def harness():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def comparison_harness():
+    path = Path(__file__).parents[1] / "evals/behavior/compare_eval.py"
+    spec = importlib.util.spec_from_file_location("identity_comparison_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_identity_cases_cover_eight_agents_and_four_settings_with_shared_blind_prompts():
+    document = json.loads((Path(__file__).parents[1] / "evals/behavior/identity_cases.json").read_text(encoding="utf-8"))
+    cases = document["cases"]
+    agents = {"speda", "ultron", "optimus", "nightcrawler", "atomix", "scourge", "sentinel", "orion"}
+    settings = {"casual", "domain", "difficult", "multiturn"}
+    assert len(cases) == 32 and len({case["id"] for case in cases}) == 32
+    assert {(case["agent"], case["setting"]) for case in cases} == {(agent, setting) for agent in agents for setting in settings}
+    assert document["identity_review"]["metrics"] == ["recognizable_identity", "domain_competence", "contextual_adaptation", "naturalness", "independent_judgment", "excess_theatricality"]
+    for setting in ("casual", "difficult"):
+        assert len({case["history"][0]["text"] for case in cases if case["setting"] == setting}) == 1
+    for case in cases:
+        if case["setting"] == "multiturn":
+            assert case["memory"] and len(case["turns"]) >= 2
+            assert "memory" in case["turns"][0]["message"].lower()
+    assert all(case["post_turn"] is False for case in cases)
+
+
+def test_source_identity_detects_staged_app_changes_from_package_directory(tmp_path):
+    runner = harness()
+    package = tmp_path / "packages/igor"
+    app = package / "app"
+    app.mkdir(parents=True)
+    identity = app / "identity.md"
+    identity.write_text("baseline", encoding="utf-8")
+    for command in (["git", "init", "--quiet", str(tmp_path)],
+                    ["git", "-C", str(tmp_path), "add", "packages/igor/app/identity.md"],
+                    ["git", "-C", str(tmp_path), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--quiet", "-m", "Fixture baseline"]):
+        runner.subprocess.run(command, check=True, capture_output=True)
+    clean = runner.source_identity(package)
+    assert clean["working_tree_diff_sha256"] == hashlib.sha256(b"").hexdigest()
+    identity.write_text("candidate", encoding="utf-8")
+    runner.subprocess.run(["git", "-C", str(tmp_path), "add", "packages/igor/app/identity.md"], check=True, capture_output=True)
+    staged = runner.source_identity(package)
+    assert staged["working_tree_diff_sha256"] != clean["working_tree_diff_sha256"]
+    assert staged["app_sha256"] != clean["app_sha256"]
+
+
+def test_blind_identity_review_excludes_captures_and_incomplete_conversations(tmp_path):
+    runner = comparison_harness()
+    document = json.loads((Path(__file__).parents[1] / "evals/behavior/identity_cases.json").read_text(encoding="utf-8"))
+    rubric = document["identity_review"]
+    groups = {}
+    for number, (live, status, verified) in enumerate(((True, "completed", True), (False, "captured", False), (True, "incomplete", True), (True, "completed", False))):
+        case = {"id": f"case-{number}", "agent": "optimus", "setting": "multiturn", "status": status,
+                "turns": [{"status": status, "model_identity_verified": verified,
+                           "response": "Optimus: My friend, verify the retry before deployment. Sir, this is Orion's concern too."}]}
+        report = {"live": live, "model": "fixture-model", "config_sha256": "fixture-settings", "cases_sha256": "fixture-cases"}
+        groups[(case["id"], 0)] = {"candidate": (case, report, {"output": str(tmp_path / "candidate.json")})}
+    destination = tmp_path / "blind_identity_review.html"
+    runner.identity_review(groups, destination, rubric)
+    scores = json.loads((tmp_path / "identity-scores.json").read_text(encoding="utf-8"))
+    key = json.loads((tmp_path / "identity-key.json").read_text(encoding="utf-8"))
+    assert len(scores["samples"]) == len(key["samples"]) == 1
+    assert all(value is None for value in scores["samples"][0]["metrics"].values())
+    rendered = destination.read_text(encoding="utf-8")
+    assert "verify the retry before deployment" in rendered
+    assert "Optimus: My friend" not in rendered
+    assert "Orion&#x27;s concern" not in rendered
+    assert "candidate.json" not in rendered and "case-0" not in rendered
+    assert key["samples"][0]["expected_agent"] == "optimus"
+    # Incremental review rendering must not erase a human's pending assessment.
+    scores["samples"][0]["guessed_agent"] = "optimus"
+    scores["samples"][0]["metrics"]["naturalness"] = 3
+    (tmp_path / "identity-scores.json").write_text(json.dumps(scores), encoding="utf-8")
+    runner.identity_review(groups, destination, rubric)
+    assert json.loads((tmp_path / "identity-scores.json").read_text(encoding="utf-8"))["samples"][0]["metrics"]["naturalness"] == 3
+    prior_sample_id = scores["samples"][0]["sample_id"]
+    for change in ("response", "config", "source"):
+        case, report, _ = groups[("case-0", 0)]["candidate"]
+        if change == "response":
+            case["turns"][0]["response"] += " Verify the skipped test too."
+        elif change == "config":
+            report["config_sha256"] = "changed-settings"
+        else:
+            report["source"] = {"app_sha256": "changed-app-source"}
+        runner.identity_review(groups, destination, rubric)
+        current = json.loads((tmp_path / "identity-scores.json").read_text(encoding="utf-8"))["samples"][0]
+        assert current["sample_id"] != prior_sample_id
+        assert current["guessed_agent"] is None and all(value is None for value in current["metrics"].values())
+        prior_sample_id = current["sample_id"]
+
+
+def test_identity_comparison_requires_matching_completed_model_and_configuration(tmp_path):
+    runner = comparison_harness()
+    document = json.loads((Path(__file__).parents[1] / "evals/behavior/identity_cases.json").read_text(encoding="utf-8"))
+    case = {"id": "case", "agent": "speda", "setting": "casual", "status": "completed",
+            "turns": [{"status": "completed", "model_identity_verified": True, "response": "Fixture reply; no behavioral claim."}]}
+    baseline = {"live": True, "model": "fixture", "config_sha256": "same", "cases_sha256": "same"}
+    candidate = baseline.copy()
+    groups = {("case", 0): {"baseline": (case, baseline, {"output": "baseline.json"}),
+                            "candidate": (case, candidate, {"output": "candidate.json"})}}
+    destination = tmp_path / "blind_identity_review.html"
+    runner.identity_review(groups, destination, document["identity_review"])
+    path = tmp_path / "identity-comparison.json"
+    assessment = json.loads(path.read_text(encoding="utf-8"))
+    assert assessment["comparisons"][0]["comparable_completed_evidence"] is True
+    assessment["comparisons"][0]["outcomes"]["independent_judgment"] = "unchanged"
+    path.write_text(json.dumps(assessment), encoding="utf-8")
+    runner.identity_review(groups, destination, document["identity_review"])
+    assert json.loads(path.read_text(encoding="utf-8"))["comparisons"][0]["outcomes"]["independent_judgment"] == "unchanged"
+    candidate["config_sha256"] = "different"
+    runner.identity_review(groups, destination, document["identity_review"])
+    changed = json.loads(path.read_text(encoding="utf-8"))["comparisons"][0]
+    assert changed["comparable_completed_evidence"] is False
+    assert all(value is None for value in changed["outcomes"].values())
+
+
+def test_two_way_comparison_reuses_exact_model_config_cases_and_alternates_order(monkeypatch, tmp_path):
+    runner = comparison_harness()
+    baseline = tmp_path / "baseline/packages/igor"
+    candidate = tmp_path / "candidate/packages/igor"
+    baseline.mkdir(parents=True)
+    candidate.mkdir(parents=True)
+    cases = tmp_path / "cases.json"
+    cases.write_text(json.dumps({"cases": [{"id": "identity_fixture"}]}), encoding="utf-8")
+    config = tmp_path / "config.json"
+    config.write_text("{}", encoding="utf-8")
+    commands = []
+    def capture(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(runner.subprocess, "run", capture)
+    monkeypatch.setattr(runner.sys, "argv", ["compare_eval.py", "--baseline", str(baseline), "--candidate", str(candidate),
+        "--model", "fixture-model", "--config", str(config), "--cases", str(cases),
+        "--repetitions", "2", "--output-dir", str(tmp_path / "outputs")])
+    assert runner.main() == 0
+    assert [command[command.index("--app-root") + 1] for command in commands] == [str(baseline.resolve()), str(candidate.resolve()), str(candidate.resolve()), str(baseline.resolve())]
+    for command in commands:
+        assert command[command.index("--model") + 1] == "fixture-model"
+        assert command[command.index("--config") + 1] == str(config.resolve())
+        assert command[command.index("--cases") + 1] == str(cases.resolve())
+    manifest = json.loads((tmp_path / "outputs/comparison.json").read_text(encoding="utf-8"))
+    assert manifest["revisions"] == ["baseline", "candidate"] and manifest["accepted"] is False
 
 
 async def test_snapshot_requires_auth_and_excludes_credentials(monkeypatch):

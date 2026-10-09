@@ -22,6 +22,20 @@ from app.schemas.chat import ChatRequest
 
 
 @pytest.fixture
+def character_profiles(monkeypatch, tmp_path):
+    import importlib
+    monkeypatch.setattr(runtime_state, "_cache", {})
+    monkeypatch.setattr(runtime_state, "_STATE_FILE", tmp_path / "runtime_state.json")
+    profiles = ProfileRegistry()
+    for agent in ("speda", "ultron", "optimus", "nightcrawler", "atomix", "scourge", "sentinel", "orion"):
+        module = importlib.import_module(f"app.profiles.{agent}")
+        profiles.register(next(value() for value in vars(module).values()
+            if isinstance(value, type) and value.__module__ == module.__name__
+            and hasattr(value, "identity_section")))
+    return profiles
+
+
+@pytest.fixture
 def isolated_personalities(monkeypatch, tmp_path):
     monkeypatch.setattr(runtime_state, "_cache", {})
     monkeypatch.setattr(runtime_state, "_STATE_FILE", tmp_path / "runtime_state.json")
@@ -141,3 +155,104 @@ async def test_http_chat_carries_client_instructions_into_detached_engine(isolat
     await _run_chat(request, "speda", ChatRequest(message="Hello", system_prompt="Use plain, conversational explanations."), BackgroundTasks(), None)
     assert captured[0].custom_instructions == "Use plain, conversational explanations."
     assert "Use plain, conversational explanations." in AgentOrchestrator(None, None, isolated_personalities, None).build_system_prompt(captured[0])
+
+
+@pytest.mark.parametrize("agent", ["speda", "ultron", "optimus", "nightcrawler", "atomix", "scourge", "sentinel", "orion"])
+async def test_character_prefix_survives_tool_loop_and_new_session(character_profiles, agent):
+    """Capture model inputs, not a claim about the mocked model's personality."""
+    from copy import deepcopy
+    from unittest.mock import AsyncMock, MagicMock
+    from app.prompts.loader import load_section
+    from app.services.llm_client import TextBlock, ToolUseBlock
+    from app.services import language
+
+    registry = MagicMock()
+    registry.dead_zone_active = AsyncMock(return_value=False)
+    registry.tool_index.return_value = ""
+    registry.list_tools.return_value = []
+    registry.call_is_read_only.return_value = True
+    registry.execute = AsyncMock(return_value="Fixture evidence: earlier estimate was wrong; verified value is 12.")
+    calls = []
+    responses = [
+        SimpleNamespace(content=[ToolUseBlock(id="fixture-call", name="fixture_read", input={})], stop_reason="tool_use"),
+        SimpleNamespace(content=[TextBlock(text="Corrected using the evidence.")], stop_reason="end_turn"),
+        SimpleNamespace(content=[TextBlock(text="Fresh session.")], stop_reason="end_turn"),
+    ]
+
+    class Stream:
+        def __init__(self, response):
+            self.response = response
+        @property
+        def text_stream(self):
+            async def chunks():
+                if False:
+                    yield ""
+            return chunks()
+        async def get_final_message(self):
+            return self.response
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return False
+
+    class Client:
+        def stream_message(self, **kwargs):
+            calls.append(deepcopy(kwargs))
+            return Stream(responses.pop(0))
+
+    runtime_state.set_agent_personality(agent, {"humor": "off", "response_length": "brief"})
+    engine = AgentOrchestrator(registry, Client(), character_profiles, None)
+    context = AgentContext(agent_id=agent, user_id=1, session_id=1, request_id="fixture",
+        triggered_by="user", trigger_payload={}, output_mode="respond", model="fixture", system_prompt="",
+        conversation_history=[{"role": "assistant", "content": "A worker estimated 10; this is unverified."},
+            {"role": "user", "content": "I remember 12. Check the record and correct the estimate."}], db=None)
+    assert [event async for event in engine.run(context)]
+    identity = load_section(character_profiles.require(agent).identity_section,
+        {"timezone": context.timezone, "model": context.model, "language": language.name_of()})
+    assert identity and identity in calls[0]["system"][0]["text"]
+    assert calls[0]["system"] == calls[1]["system"]
+    assert "verified value is 12" in str(calls[1]["messages"])
+    assert "Avoid jokes and teasing." in calls[1]["system"][0]["text"]
+
+    runtime_state.set_agent_personality(agent, {"tone": "professional"})
+    context.session_id = 2
+    context.conversation_history = [{"role": "user", "content": "Hello again."}]
+    assert [event async for event in engine.run(context)]
+    fresh = calls[2]["system"][0]["text"]
+    assert fresh.count(identity) == 1
+    assert "Use a composed, professional register." in fresh
+    assert "Avoid jokes and teasing." not in fresh
+
+
+@pytest.mark.parametrize("agent", ["speda", "ultron", "optimus", "nightcrawler", "atomix", "scourge", "sentinel", "orion"])
+async def test_welcome_delivers_compact_identity_and_refreshes_preferences(character_profiles, agent, monkeypatch):
+    from app.services import welcome, language
+    from app.services.llm_client import LLMClient, TextBlock
+    from app.prompts.loader import load_section
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr(welcome, "_read_memory", AsyncMock(return_value=("", "")))
+    create = AsyncMock(return_value=SimpleNamespace(content=[TextBlock(text="A fixture opening remark.")]))
+    monkeypatch.setattr(LLMClient, "create_message", create)
+    engine = AgentOrchestrator(None, None, character_profiles, None)
+    cache = welcome.WelcomeCache()
+    await welcome.get_welcome(agent, character_profiles, cache, orchestrator=engine)
+    await welcome.get_welcome(agent, character_profiles, cache, orchestrator=engine)
+    assert create.await_count == 1
+    request = create.call_args.kwargs
+    identity = load_section(character_profiles.require(agent).identity_section,
+        {"timezone": settings.owner_timezone, "model": request["model"], "language": language.name_of()})
+    assert identity in request["system"]
+    assert "## Installed Skills" not in request["system"]
+    runtime_state.set_agent_personality(agent, {"humor": "off"})
+    await welcome.get_welcome(agent, character_profiles, cache, orchestrator=engine)
+    assert create.await_count == 2
+    assert "Avoid jokes and teasing." in create.call_args.kwargs["system"]
+    assert identity in create.call_args.kwargs["system"]
+
+
+async def test_welcome_prompt_failure_keeps_static_greeting(character_profiles):
+    from app.services.welcome import get_welcome, WelcomeCache
+    from unittest.mock import MagicMock
+    engine = MagicMock()
+    engine.build_system_prompt.side_effect = OSError("fixture prompt read failure")
+    assert await get_welcome("speda", character_profiles, WelcomeCache(), orchestrator=engine) == ""
