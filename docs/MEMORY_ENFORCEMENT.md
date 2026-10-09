@@ -48,6 +48,13 @@ closed; the tool does not invent a date question. Original owner messages and
 tool audit results remain the existing recovery evidence. This is no automatic
 acceptance, background retry mechanism or guarantee of behavioral recovery.
 
+Loaded owner-session messages carry their persisted `message:<id>` beside the
+existing timestamp. This lets the model cite visible owner text without another
+history search. The label is not persisted as owner testimony; evidence still
+resolves against the original owner-scoped row and exact quotation. Assistant
+turns, automated sessions and compaction summaries do not receive owner-source
+labels.
+
 Document ownership, taxonomy, typed schemas and optimistic concurrency are code
 boundaries. Agent claims about their authority cannot bypass them. Approved writes
 store their evidence hashes and validation rationale in `memory_write_receipts`,

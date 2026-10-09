@@ -257,7 +257,9 @@ class SessionManager:
             logger.info("session_closed", extra={"session_id": session_id})
 
     @staticmethod
-    def stamp_user_content(content: list | str, created_at: datetime) -> list | str:
+    def stamp_user_content(
+        content: list | str, created_at: datetime, *, owner_message_id: int | None = None,
+    ) -> list | str:
         """
         Prefix a user message with its timestamp, derived from the message's DB
         created_at — minute precision, rendered in the owner's timezone.
@@ -283,13 +285,20 @@ class SessionManager:
         "Monday", then reasoning about "the weekend" or "tomorrow's meeting" from
         that wrong footing. The day of the week is a fact we already hold; it
         costs three tokens to state and removes an entire class of error.
+
+        A persisted owner turn also carries its existing source reference, so
+        memory writes can cite visible text without searching for it again.
+        The reference describes this message only, not any prepended summary.
         """
         aware = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
         try:
             aware = aware.astimezone(ZoneInfo(settings.owner_timezone))
         except Exception:  # unknown/invalid IANA name → leave as UTC
             pass
-        ts = f"[{_WEEKDAYS[aware.weekday()]} " + aware.strftime("%Y-%m-%d %H:%M %Z]")
+        ts = f"[{_WEEKDAYS[aware.weekday()]} " + aware.strftime("%Y-%m-%d %H:%M %Z")
+        if owner_message_id is not None:
+            ts += f" | owner source: message:{owner_message_id}"
+        ts += "]"
         if isinstance(content, str):
             return f"{ts} {content}" if content else ts
         return [{"type": "text", "text": ts}, *content]
@@ -350,7 +359,10 @@ class SessionManager:
                     content = [{"type": "text", "text": str(content)}]
                 content = [*content, {"type": "text", "text": receipts[m.id]}]
             if m.role == "user":
-                content = self.stamp_user_content(content, m.created_at)
+                content = self.stamp_user_content(
+                    content, m.created_at,
+                    owner_message_id=m.id if sess and sess.triggered_by == "user" else None,
+                )
             out.append({"role": m.role, "content": content})
 
         if summary:

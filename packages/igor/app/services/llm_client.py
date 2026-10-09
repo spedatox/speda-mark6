@@ -1228,12 +1228,18 @@ def _to_responses_params(model: str, kwargs: dict) -> dict:
 
     tools = kwargs.get("tools")
     if tools:
+        # Registry/MCP schemas declare genuinely optional arguments. Responses
+        # otherwise attempts strict normalization, unlike Chat Completions,
+        # which can require filling optional filters. Preserve the original
+        # schema contract without changing execution-time authorization or
+        # memory write validation.
         params["tools"] = [
             {
                 "type": "function",
                 "name": t["name"],
                 "description": t.get("description", ""),
                 "parameters": t.get("input_schema", {"type": "object"}),
+                "strict": False,
             }
             for t in tools
         ]

@@ -87,6 +87,15 @@ def _handlers() -> dict:
     async def _title(session_id, request_id, user_id, model, payload):
         await generate_title(session_id, request_id, model)
 
+    async def _session_log(session_id, request_id, user_id, model, payload):
+        await update_session_log(session_id, request_id, user_id, model)
+
+    async def _session_recap(session_id, request_id, user_id, model, payload):
+        await update_session_recap(session_id, request_id, user_id, model)
+
+    async def _daily_maintenance(session_id, request_id, user_id, model, payload):
+        await run_daily_maintenance(session_id, request_id, user_id, model)
+
     async def _embed_tail(session_id, request_id, user_id, model, payload):
         await embed_session_tail(session_id, request_id, user_id)
 
@@ -181,9 +190,9 @@ def _handlers() -> dict:
         "analyze_patterns": _analyze_patterns,
         "analyze_artifact": _analyze_artifact,
         "evaluate_countermeasure": _evaluate_countermeasure,
-        "session_log": update_session_log,
-        "session_recap": update_session_recap,
-        "daily_maintenance": run_daily_maintenance,
+        "session_log": _session_log,
+        "session_recap": _session_recap,
+        "daily_maintenance": _daily_maintenance,
         "title": _title,
         "compaction": _compact,
         "embed_tail": _embed_tail,

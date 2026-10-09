@@ -256,9 +256,13 @@ async def update_session_recap(
                 }],
                 max_tokens=settings.episodic_recap_max_tokens,
             )
-            recap = (resp.content[0].text.strip() if resp.content else "")
+            if resp.stop_reason != "end_turn":
+                raise RuntimeError(f"Session recap did not complete: {resp.stop_reason}")
+            recap = "\n".join(
+                block.text for block in resp.content if block.type == "text"
+            ).strip()
             if not recap:
-                return
+                raise RuntimeError("Session recap returned no text")
 
             session.recap = recap
             session.recap_through_id = max(m.id for m in rows)
@@ -284,6 +288,9 @@ async def update_session_recap(
             "session_recap_error",
             extra={"request_id": request_id, "session_id": session_id, "error": str(e)},
         )
+        # The durable queue owns retries. Returning here marks a failed recap
+        # done and leaves the next conversation permanently without carryover.
+        raise
 
 
 # ── Daily maintenance: current brief + behavioural dossier ───────────────────

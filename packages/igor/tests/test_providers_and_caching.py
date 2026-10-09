@@ -463,7 +463,8 @@ def test_responses_params_shape():
     assert p["max_output_tokens"] == 512
     assert "max_tokens" not in p and "messages" not in p
     assert p["tools"] == [
-        {"type": "function", "name": "get_time", "description": "x", "parameters": {"type": "object"}}
+        {"type": "function", "name": "get_time", "description": "x",
+         "parameters": {"type": "object"}, "strict": False}
     ]
     assert p["input"] == [{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}]
     # "none" is not a legal Responses effort, but dropping it would silently
@@ -475,6 +476,31 @@ def test_responses_params_shape():
     for lvl in ("low", "medium", "high"):
         p_lvl = _to_responses_params("gpt-5.6-terra", {"messages": [], "reasoning_effort": lvl})
         assert p_lvl["reasoning"] == {"effort": lvl}
+
+
+@pytest.mark.parametrize("model", ["gpt-5.6-terra", "gpt-6-luna"])
+def test_responses_preserves_optional_tool_filters_instead_of_normalizing_them(model):
+    schema = {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string"},
+            "time_range": {"type": "string", "enum": ["day", "week", "month", "year"]},
+            "country": {"type": "string"},
+        },
+        "required": ["query"],
+    }
+    original = json.dumps(schema, sort_keys=True)
+    request = _to_responses_params(model, {"messages": [], "tools": [{
+        "name": "search", "description": "Search with optional filters.", "input_schema": schema,
+    }]})
+    # Opt out of the API's automatic required-field normalization. Omission
+    # remains meaningful; the model need not invent a date range or country.
+    tool = request["tools"][0]
+    assert tool["strict"] is False
+    assert tool["parameters"]["required"] == ["query"]
+    assert tool["parameters"]["properties"]["time_range"]["enum"] == ["day", "week", "month", "year"]
+    assert "additionalProperties" not in tool["parameters"]
+    assert json.dumps(schema, sort_keys=True) == original
 
 
 def test_responses_tool_roundtrip_pairs_on_call_id():

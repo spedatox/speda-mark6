@@ -34,6 +34,51 @@ def meta(*tools):
     return [{"type": "_speda_meta", "tools": list(tools), "thinking": "PRIVATE_REASONING"}]
 
 
+async def test_visible_owner_turns_have_exact_citable_sources_without_history_search(db):
+    from app.services.memory_admission import resolve_evidence
+
+    session = Session(user_id=1, agent_id="atomix", triggered_by="user", model_used="test")
+    db.add(session)
+    await db.flush()
+    owner = Message(session_id=session.id, role="user", content=[
+        {"type": "text", "text": "I am waiting for the application result."},
+        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "test"}},
+    ], created_at=datetime(2026, 10, 9, 13, 38))
+    assistant = Message(session_id=session.id, role="assistant", content="You may hear back tomorrow.",
+                        created_at=datetime(2026, 10, 9, 13, 39))
+    db.add_all([owner, assistant])
+    await db.commit()
+    manager = SessionManager()
+    loaded = await manager.load_history(db, session.id)
+    label = loaded[0]["content"][0]["text"]
+    assert f"owner source: message:{owner.id}" in label
+    assert loaded[0]["content"][1:] == owner.content
+    assert loaded[1]["content"] == assistant.content
+    assert await manager.load_history(db, session.id) == loaded
+    assert initial_recall_query([loaded[0]]) == "I am waiting for the application result."
+    evidence = await resolve_evidence(db, 1, [{
+        "ref": f"message:{owner.id}", "quote": owner.content[0]["text"],
+    }], session_id=session.id)
+    assert evidence[0]["ref"] == f"message:{owner.id}"
+    assert evidence[0]["quote"] == owner.content[0]["text"]
+    with pytest.raises(ValueError, match="owner"):
+        await resolve_evidence(db, 1, [{
+            "ref": f"message:{assistant.id}", "quote": assistant.content,
+        }], session_id=session.id)
+    # The transport annotation never becomes part of the stored owner quotation.
+    assert "owner source" not in str(owner.content)
+
+
+@pytest.mark.parametrize("triggered_by", ["n8n", "agent"])
+async def test_automated_history_has_no_owner_citation_labels(db, triggered_by):
+    session = Session(user_id=1, agent_id="atomix", triggered_by=triggered_by, model_used="test")
+    db.add(session)
+    await db.flush()
+    db.add(Message(session_id=session.id, role="user", content="Check pending work."))
+    await db.commit()
+    assert "owner source" not in str(await SessionManager().load_history(db, session.id))
+
+
 async def test_next_turn_has_execution_outcome_even_if_prose_denies_it(db):
     session = Session(user_id=1, agent_id="speda", triggered_by="user", model_used="test")
     db.add(session)
