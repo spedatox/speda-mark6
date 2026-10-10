@@ -1,6 +1,21 @@
 {
   "cases": [
     {
+      "id": "calendar_code_followup",
+      "agent": "speda",
+      "history": [
+        {"role": "user", "text": "Does the workshop clash with my classes?"},
+        {"role": "assistant", "text": "There is a clash with MIS 215 on October 14 at 09:00.", "tools": [
+          {"name": "use_toolset", "result": "Loaded google_calendar."},
+          {"name": "calendar_list_events", "result": "4 event(s):\n- [workshop] 2026-10-14T09:00:00+03:00 — Odoo Technical Workshop @ Third Floor Conference Hall\n- [statistics] 2026-10-14T09:00:00+03:00 — MIS 215 - Statistics I @ Lab 221\n- [algorithms] 2026-10-15T09:00:00+03:00 — MIS 231 - Data Structures and Algorithms @ Room 432\n- [history] 2026-10-15T14:00:00+03:00 — ATA 101 - History of the Turkish Revolution I @ Room 407"},
+          {"name": "calendar_get_event", "result": "Odoo Technical Workshop\nStart: 2026-10-14T09:00:00+03:00\nEnd: 2026-10-15T17:00:00+03:00\nWhere: Third Floor Conference Hall\nTwo days of technical training, practical demonstrations and guided workshop sessions. Registration is confirmed. The confirmation includes venue information and contact details for questions about the timetable. This is the workshop's event record, with the same start and end times as the calendar invitation. It supplies no additional course names."}
+        ]},
+        {"role": "user", "text": "Which class is MIS 215? I haven't memorized all the codes."}
+      ],
+      "rubric": "Answer Statistics I directly from the recorded calendar result. Do not call search_memory, recall_conversations or another calendar lookup to recover a course name already present in context.",
+      "required_context": ["MIS 215 - Statistics I @ Lab 221"]
+    },
+    {
       "id": "known_location",
       "agent": "speda",
       "memory": {"/memories/general/10-26/places.md": "# Established places\n\nThe owner confirmed that 39.95048, 32.88605 is his dormitory, not his classroom."},

@@ -114,9 +114,57 @@ async def test_receipts_are_bounded_across_history_and_ordinary_messages_unchang
     loaded = await SessionManager().load_history(db, session.id)
     receipts = [b["text"] for m in loaded if isinstance(m["content"], list) for b in m["content"]
                 if b["type"] == "text" and b["text"].startswith("[RECORDED TOOL")]
-    assert sum(map(len, receipts)) <= 2400
+    assert sum(map(len, receipts)) <= 14400
     assert "tool_11" in " ".join(receipts)
     assert loaded[-1]["content"] == "Ordinary reply."
+
+
+async def test_calendar_name_survives_followup_without_retrieving_memory(db):
+    session = Session(user_id=1, agent_id="speda", triggered_by="user", model_used="test")
+    db.add(session)
+    await db.flush()
+    # The useful class is in the middle of the list, beyond an old short
+    # excerpt's prefix; a later workshop lookup must not displace that list.
+    calendar = (
+        "4 event(s):\n" + "- Workshop registration and location details.\n" * 10
+        + "- 2026-10-14T09:00:00+03:00 — MIS 215 - Statistics I @ Lab 221\n"
+        + "- Other scheduled classes and locations.\n" * 10
+    )
+    tools = meta(
+        {"name": "use_toolset", "result": "Loaded google_calendar."},
+        {"name": "calendar_list_events", "result": calendar},
+        {"name": "calendar_get_event", "result": "Odoo workshop details. " * 24},
+    )
+    db.add(Message(session_id=session.id, role="assistant", content=[
+        {"type": "text", "text": "There is a clash with MIS 215."}, *tools,
+    ], created_at=datetime(2026, 10, 10, 13, 52)))
+    db.add(Message(session_id=session.id, role="assistant", content="Yes, that is the clash.",
+                   created_at=datetime(2026, 10, 10, 13, 53)))
+    db.add(Message(session_id=session.id, role="user", content="Which class is MIS 215?",
+                   created_at=datetime(2026, 10, 10, 13, 54)))
+    await db.commit()
+    manager = SessionManager()
+    loaded = await manager.load_history(db, session.id)
+    receipt = loaded[0]["content"][-1]["text"]
+    assert calendar in receipt
+    assert "MIS 215 - Statistics I @ Lab 221" in receipt
+    assert "Odoo workshop details." in receipt
+    assert "result omitted" not in receipt
+    assert loaded[1]["content"] == "Yes, that is the clash."
+    assert await manager.load_history(db, session.id) == loaded
+
+
+def test_recent_receipts_still_bound_large_results_and_exclude_private_inputs():
+    content = meta(*[
+        {"name": f"tool_{i}", "input": {"secret": "PRIVATE_INPUT"},
+         "result": f"Result {i}\n" + "x" * 20000 + f"\nError {i}: partial failure"}
+        for i in range(8)
+    ])
+    receipt = execution_receipts(content, budget=12000, result_limit=3000)
+    assert len(receipt) <= 12000
+    assert "Error 7: partial failure" in receipt
+    assert "PRIVATE_INPUT" not in receipt and "PRIVATE_REASONING" not in receipt
+    assert len(execution_receipts(content)) <= 1200
 
 
 async def test_compaction_receives_actions_and_unknowns_instead_of_only_prose(db, monkeypatch):
@@ -186,8 +234,9 @@ async def test_controlled_cases_capture_the_repaired_model_input(monkeypatch):
     from app.config import settings
     # The harness reads local settings for capture and restores its overrides.
     report = await harness.run_cases("openai:gpt-6-luna", False, [
-        "known_location", "atomix_action_awareness", "ssh_action_awareness", "partial_execution"])
-    assert len(report["results"]) == 4
+        "known_location", "atomix_action_awareness", "ssh_action_awareness", "partial_execution",
+        "calendar_code_followup"])
+    assert len(report["results"]) == 5
     for case in report["results"]:
         assert all(case["context_checks"].values()), case["id"]
         assert "response" not in case  # input evidence does not claim live behavior

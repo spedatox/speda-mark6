@@ -18,13 +18,15 @@ import json
 from app.models.message import Message
 
 
-def execution_receipts(content, *, budget: int = 1200) -> str:
+def execution_receipts(content, *, budget: int = 1200, result_limit: int = 550) -> str:
     """Recover bounded execution evidence from persisted display metadata.
 
     Only recorded tool names, dispatch targets and returned result excerpts are
     included. Missing results remain unknown; neither assistant prose nor a
     call's presence is promoted to successful completion. Thinking and arbitrary
     tool inputs are excluded, including commands that may contain credentials.
+    Recent-turn callers can retain larger results; older recall and compaction
+    keep the compact default. The overall budget still bounds the whole receipt.
     """
     if not isinstance(content, list) or budget < 160:
         return ""
@@ -47,8 +49,10 @@ def execution_receipts(content, *, budget: int = 1200) -> str:
             outcome = "no result recorded; completion unknown"
         else:
             outcome = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
-            if len(outcome) > 550:
-                outcome = outcome[:350] + "\n[... result excerpt ...]\n" + outcome[-150:]
+            if len(outcome) > result_limit:
+                head = result_limit * 7 // 11
+                tail = result_limit * 3 // 11
+                outcome = outcome[:head] + "\n[... result excerpt ...]\n" + outcome[-tail:]
             outcome = "returned: " + outcome
         line = label + " — " + outcome
         if len(line) + 1 > room:

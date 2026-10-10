@@ -328,17 +328,26 @@ class SessionManager:
         ).scalars().all()
 
         # Metadata is not valid provider content, but its execution evidence
-        # must not vanish. Bound receipts across the WHOLE loaded history; spend
-        # the allowance on the newest tool turns first, without a new DB query.
+        # must not vanish. Keep the latest tool-bearing turn's results usable
+        # for follow-up questions, even across intervening ordinary replies.
+        # Older turns use a separate compact allowance; the total stays bounded.
         receipts = {}
         receipt_budget = 2400
+        recent_receipt_pending = True
         for message in reversed(messages):
             if message.role != "assistant":
                 continue
-            receipt = execution_receipts(message.content, budget=min(1200, receipt_budget))
+            receipt = execution_receipts(
+                message.content,
+                budget=12000 if recent_receipt_pending else min(1200, receipt_budget),
+                result_limit=3000 if recent_receipt_pending else 550,
+            )
             if receipt:
                 receipts[message.id] = receipt
-                receipt_budget -= len(receipt)
+                if recent_receipt_pending:
+                    recent_receipt_pending = False
+                else:
+                    receipt_budget -= len(receipt)
 
         def _clean(content):
             # Strip Speda display-only blocks (tools/files metadata) before the
