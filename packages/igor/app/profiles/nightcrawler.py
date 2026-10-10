@@ -6,7 +6,6 @@ from app.prompts.loader import assemble, build_skills_manifest, derive_iteration
 
 PROMPT_SECTIONS = [
     "agents/nightcrawler/01_identity.md",
-    "core/02_voice.md",   # shared register — see prompts/core/02_voice.md
     "core/03_capabilities.md",   # News Desk tiering lives here — must precede 04's Tavily priority
     "core/04_decision_policy.md",
     "core/05_output_policy.md",

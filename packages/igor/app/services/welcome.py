@@ -6,8 +6,8 @@ Welcome remark — a JARVIS-style one-liner for the app's welcome screen.
 
 The home screen already shows a generic "Good morning, <name>". This adds the
 flavour beneath it: a short, contextual remark in the addressed agent's voice.
-Owner memory is available as context; the existing identity and shared voice
-guidance govern how the agent uses it.
+Owner memory is available as evidence; the addressed agent's own identity
+governs expression, subject to evidence and authorization requirements.
 
 Latency is handled by NOT generating per view. A remark is generated once per
 agent per part-of-day (with a short TTL) by the agent's CHEAPEST model and

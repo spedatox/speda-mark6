@@ -33,7 +33,6 @@ INITIAL_FILES = {
 
 **Name:** Ahmet Erol Bayrak
 **Codename:** Spedatox
-**How to address him:** Ahmet Erol — by name, sparingly. No honorifics, ever.
 
 _Identity constants above. Below: his biography up to the creation of Mark VI
 (2026-05) — the fixed prior that lets an agent know the man it serves. Updated in

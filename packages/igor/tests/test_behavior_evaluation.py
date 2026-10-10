@@ -96,7 +96,7 @@ async def test_speda_conversation_contexts_reach_model_with_default_and_saved_st
     cases = Path(__file__).parents[1] / "evals/behavior/speda_conversation_cases.json"
     report = await runner.run_cases(model, False, [], config, cases_path=cases)
     identity = load_section(SPEDAProfile().identity_section, {"timezone": "Europe/Istanbul"})
-    voice = load_section("core/02_voice.md", {})
+    evidence = load_section("core/05_output_policy.md", {})
     assert len(report["results"]) == 6
     for case in report["results"]:
         assert case["status"] == "captured"
@@ -104,7 +104,8 @@ async def test_speda_conversation_contexts_reach_model_with_default_and_saved_st
         assert turn["context_checks"] and all(turn["context_checks"].values())
         assert "response" not in turn
         system = turn["request"]["system"][0]["text"]
-        assert system.count(identity) == system.count(voice) == 1
+        assert system.count(identity) == system.count(evidence) == 1
+        assert "Shared conversational requirements" not in system
         assert ("Speak with familiar warmth and an informal register." in system) == bool(preferences)
 
 

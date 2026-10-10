@@ -244,6 +244,21 @@ async def test_seed_never_resurrects_a_migrated_monolith(sessions):
         assert not paths.intersection({"/memories/dossier.md", "/memories/finance.md", "/memories/wellness.md"})
 
 
+async def test_seed_has_no_default_address_policy_and_preserves_existing_owner_preferences(sessions):
+    from app.skills.memory import ensure_seeded
+    original = "# Owner\nMy stated preference: call me Ahmet.\n"
+    async with sessions() as db:
+        db.add(MemoryFile(user_id=1, path="/memories/owner.md", content=original))
+        await db.commit()
+        await ensure_seeded(1, db)
+        await ensure_seeded(2, db)
+        owners = dict((await db.execute(select(MemoryFile.user_id, MemoryFile.content)
+            .where(MemoryFile.path == "/memories/owner.md"))).all())
+        assert owners[1] == original
+        assert "**Name:** Ahmet Erol Bayrak" in owners[2]
+        assert "How to address" not in owners[2] and "No honorifics" not in owners[2]
+
+
 def test_extraction_prompt_requires_owner_quote_and_excludes_assistant():
     from app.services.fact_extraction import _PROMPT, ungrounded_tokens
     prompt = _PROMPT.format(max_facts=5, user_message="I want to travel.")

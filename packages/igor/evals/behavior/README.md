@@ -194,6 +194,12 @@ completed replies and human assessment.
 
 ## Cross-domain identity contrast
 
+There is no shared voice section. Profile identities own conversational behavior;
+shared evidence/execution instructions govern factual claims and permissions,
+formatting sections govern rendering syntax, and owner settings apply only when
+explicitly supplied. Home-screen remarks use the same profile identity and
+evidence requirements without introducing greeting guidance.
+
 `identity_contrast_cases.json` gives all eight profiles identical casual,
 technical, emotional and ambiguous prompts. None requests a character performance,
 names an agent or supplies style cues. Judge attention, interpretation,

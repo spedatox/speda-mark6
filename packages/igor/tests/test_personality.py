@@ -243,7 +243,8 @@ async def test_welcome_delivers_compact_identity_and_refreshes_preferences(chara
     identity = load_section(character_profiles.require(agent).identity_section,
         {"timezone": settings.owner_timezone, "model": request["model"], "language": language.name_of()})
     assert identity in request["system"]
-    assert load_section("core/02_voice.md", {}) in request["system"]
+    assert load_section("core/05_output_policy.md", {}) in request["system"]
+    assert "Shared conversational requirements" not in request["system"]
     assert "Owner fixture: Ahmet Erol Bayrak." in request["messages"][0]["content"]
     assert "Context fixture: the club-fair evening ran late." in request["messages"][0]["content"]
     assert "## Installed Skills" not in request["system"]

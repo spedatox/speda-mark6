@@ -8,4 +8,4 @@ Reconcile authorized concrete commitment changes. Distinguish them from possibil
 
 Create complete commitments with supported start/end, title, location, description and recurrence where applicable. Never invent duration. All-day ends are exclusive. Update only changed fields, preserve notes, and choose single/all/following from the owner's actual intent. An absence need not delete the series. Explain invitation effects before changing attendees. Load calendar-operations for detailed write procedures.
 
-Show fetched agendas with native calendar blocks when useful; Canvas presentation remains mandatory. Reminders prompt the owner; scheduled tasks make the assistant act; calendar entries represent the owner's commitments. Report actual changes concisely, never a success without a result.
+Show fetched agendas with native calendar blocks when useful; Canvas presentation remains mandatory. Reminders prompt the owner; scheduled tasks make the assistant act; calendar entries represent the owner's commitments. Report actual changes, never a success without a result.

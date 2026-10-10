@@ -140,7 +140,7 @@ class AgentOrchestrator:
             # Welcome remarks share the real identity/preferences without
             # paying for the chat's tool guidance and operational policy stack.
             from app.prompts.loader import assemble
-            core = assemble([profile.identity_section, "core/02_voice.md", "core/15_language.md"], context_vars)
+            core = assemble([profile.identity_section, "core/05_output_policy.md", "core/15_language.md"], context_vars)
         else:
             core = profile.build_system_prompt(context_vars)
         from app.services.personality import settings_for_profile
