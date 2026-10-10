@@ -27,7 +27,7 @@ class AutomationsSkill(Skill):
         self._ws_manager = None
 
     def wire(self, *, profiles, orchestrator, turns, session_manager,
-             telegram_bots, agent_proxy=None, ws_manager=None) -> None:
+             telegram_bots, agent_proxy=None, ws_manager=None, **_kwargs) -> None:
         """Called once from main.py's lifespan, at the same point the trigger
         reporters are wired — reuses that exact dependency set (main.py's
         `reporter_deps`), since action='test' needs precisely what a finished
