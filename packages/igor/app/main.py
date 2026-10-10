@@ -198,6 +198,12 @@ async def lifespan(app: FastAPI):
     # keyless). Read-only + network-gated. Clients render the ```aircraft fence.
     from app.skills.aircraft import TrackAircraftSkill
     await registry.register_skill(TrackAircraftSkill())
+
+    # IACON Library Skills (Tier 1)
+    from app.skills.library import ListLibrarySkill, SearchLibrarySkill, ReadLibrarySkill
+    await registry.register_skill(ListLibrarySkill())
+    await registry.register_skill(SearchLibrarySkill())
+    await registry.register_skill(ReadLibrarySkill())
     # Weather desk — current conditions + forecast (Open-Meteo, keyless).
     # Read-only + network-gated.
     from app.skills.weather import WeatherSkill
@@ -509,6 +515,11 @@ async def lifespan(app: FastAPI):
 
     await reconcile_on_startup()
 
+    # ── 13. IACON Library Synchronization ─────────────────────────────────────
+    from app.services.library_indexer import sync_events
+    library_sync_task = asyncio.create_task(sync_events())
+    app.state.library_sync_task = library_sync_task
+
     logger.info(
         "startup_complete",
         extra={
@@ -541,6 +552,8 @@ async def lifespan(app: FastAPI):
     await dispatcher.shutdown()
     await registry.legion_shutdown()
     await app.state.memory_cache.close()
+    if hasattr(app.state, "library_sync_task"):
+        app.state.library_sync_task.cancel()
     await sandbox_launcher.stop()
     for task in telegram_poll_tasks:
         task.cancel()
@@ -646,10 +659,11 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Routers
-    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, media, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar, lifeboat as lifeboat_router, doormat as doormat_router, octavius as octavius_router, skyfall as skyfall_router, legion as legion_router, projects as projects_router
+    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, media, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar, lifeboat as lifeboat_router, doormat as doormat_router, octavius as octavius_router, skyfall as skyfall_router, legion as legion_router, projects as projects_router, library as library_router
 
     app.include_router(health.router)
     app.include_router(chat.router)
+    app.include_router(library_router.router)
     app.include_router(projects_router.router)
     app.include_router(legion_router.router)
     app.include_router(trigger.router)

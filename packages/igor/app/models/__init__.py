@@ -51,6 +51,10 @@ from app.models.pattern import (
     PatternEvidence,
     PatternState,
 )
+from app.models.library import (
+    LibrarySource, LibraryDocument, LibraryRevision, LibraryIndexGeneration,
+    LibraryPassage, LibraryEmbedding, LibraryCitation
+)
 
 __all__ = [
     "User", "Session", "ChannelSession", "Message", "Memory", "MemoryFile", "MemoryRevision", "MemoryReview",
@@ -65,4 +69,6 @@ __all__ = [
     "MemoryCaptureJob", "MemoryMigrationRun",
     "PatternState", "PatternEvidence", "Countermeasure",
     "CountermeasurePattern", "CountermeasureRun",
+    "LibrarySource", "LibraryDocument", "LibraryRevision", "LibraryIndexGeneration",
+    "LibraryPassage", "LibraryEmbedding", "LibraryCitation",
 ]
