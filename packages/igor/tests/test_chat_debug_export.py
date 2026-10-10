@@ -13,6 +13,7 @@ from app.models.project import Project
 from app.models.session import Session
 from app.models.message import Message
 from app.models.tool_call import ToolCall
+from app.models.worker_execution import WorkerExecution, WorkerEvent, WorkerInput, WorkerCompletion
 from app.routers.chat import export_session
 from app.services.chat_history import debug_export
 
@@ -22,7 +23,8 @@ async def test_export_preserves_all_records_and_long_results():
     try:
         async with engine.begin() as conn:
             await conn.run_sync(lambda sync: Base.metadata.create_all(
-                sync, tables=[User.__table__, Project.__table__, Session.__table__, Message.__table__, ToolCall.__table__]
+                sync, tables=[User.__table__, Project.__table__, Session.__table__, Message.__table__, ToolCall.__table__,
+                              WorkerExecution.__table__, WorkerEvent.__table__, WorkerInput.__table__, WorkerCompletion.__table__]
             ))
         async with async_sessionmaker(engine, expire_on_commit=False)() as db:
             db.add(User(id=1, name="Owner"))

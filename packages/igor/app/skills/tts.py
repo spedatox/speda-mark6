@@ -18,7 +18,8 @@ class TTSSkill(Skill):
     deferred = True
     search_keywords = "tts speak voice audio say aloud speech synthesis"
     description = (
-        "Converts text into spoken audio using Azure Speech neural voices and returns it as a "
+        "Converts text into spoken audio using a configured ElevenLabs, Azure or OpenAI voice "
+        "and returns it as a "
         "downloadable MP3 file. Use this when the owner explicitly asks for something to be read "
         "aloud, recorded, or delivered as audio they can keep — a voice note, a spoken summary, a "
         "pronunciation. Do NOT use this to answer normally in voice mode: there, every reply is "
@@ -34,8 +35,8 @@ class TTSSkill(Skill):
             "voice": {
                 "type": "string",
                 "description": (
-                    "Azure voice name, e.g. 'tr-TR-EmelNeural' (female) or 'tr-TR-AhmetNeural' "
-                    "(male). Omit to use the speaking agent's own configured voice."
+                    "Voice reference, e.g. 'elevenlabs:eleven_v4:<voice_id>', or an Azure voice "
+                    "name such as 'tr-TR-EmelNeural'. Omit to use the speaking agent's configured voice."
                 ),
             },
             "title": {

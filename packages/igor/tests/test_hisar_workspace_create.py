@@ -7,20 +7,25 @@ import pytest
 from fastapi import HTTPException
 
 from app.routers.hisar import CreateDirectoryRequest, create_hisar_dir
+from app.services.hisar_workspaces import HisarWorkspaceService
+
+
+def _request(root):
+    service = HisarWorkspaceService(str(root), None, configured=False)
+    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(hisar_workspaces=service)))
 
 
 async def test_create_workspace_directory_and_inherit_root_group(tmp_path, monkeypatch):
     root = tmp_path / "workspaces"
     parent = root / "optimus"
     parent.mkdir(parents=True)
-    monkeypatch.setattr("app.routers.hisar.settings.forge_workspace_root", str(root))
     chowns = []
     monkeypatch.setattr(
-        "app.routers.hisar.os.chown", lambda *args: chowns.append(args), raising=False
+        "app.services.hisar_workspaces.os.chown", lambda *args: chowns.append(args), raising=False
     )
 
     result = await create_hisar_dir(
-        SimpleNamespace(),
+        _request(root),
         CreateDirectoryRequest(path="/Forge/workspaces/optimus", name="big-project"),
     )
 
@@ -39,11 +44,10 @@ async def test_create_workspace_directory_and_inherit_root_group(tmp_path, monke
 async def test_create_workspace_directory_rejects_unsafe_names(tmp_path, monkeypatch, name):
     root = tmp_path / "workspaces"
     root.mkdir()
-    monkeypatch.setattr("app.routers.hisar.settings.forge_workspace_root", str(root))
 
     with pytest.raises(HTTPException) as exc:
         await create_hisar_dir(
-            SimpleNamespace(),
+            _request(root),
             CreateDirectoryRequest(path="/Forge/workspaces", name=name),
         )
 
@@ -53,11 +57,10 @@ async def test_create_workspace_directory_rejects_unsafe_names(tmp_path, monkeyp
 async def test_create_workspace_directory_rejects_non_forge_parent(tmp_path, monkeypatch):
     root = tmp_path / "workspaces"
     root.mkdir()
-    monkeypatch.setattr("app.routers.hisar.settings.forge_workspace_root", str(root))
 
     with pytest.raises(HTTPException) as exc:
         await create_hisar_dir(
-            SimpleNamespace(),
+            _request(root),
             CreateDirectoryRequest(path="/Documents", name="nope"),
         )
 
@@ -68,12 +71,20 @@ async def test_create_workspace_directory_reports_duplicate(tmp_path, monkeypatc
     root = tmp_path / "workspaces"
     root.mkdir()
     (root / "existing").mkdir()
-    monkeypatch.setattr("app.routers.hisar.settings.forge_workspace_root", str(root))
 
     with pytest.raises(HTTPException) as exc:
         await create_hisar_dir(
-            SimpleNamespace(),
+            _request(root),
             CreateDirectoryRequest(path="/Forge/workspaces", name="existing"),
         )
 
     assert exc.value.status_code == 409
+
+
+async def test_create_workspace_directory_refuses_coordinator_metadata(tmp_path):
+    root = tmp_path / "workspaces"
+    (root / ".forge").mkdir(parents=True)
+    with pytest.raises(HTTPException) as exc:
+        await create_hisar_dir(_request(root), CreateDirectoryRequest(path="/Forge/workspaces/.forge", name="nope"))
+    assert exc.value.status_code == 403
+    assert not (root / ".forge" / "nope").exists()

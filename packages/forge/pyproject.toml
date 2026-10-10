@@ -34,7 +34,7 @@ providers = ["openai>=1.40"]
 # and `demo` never read a key — only `forge chat` does, and it degrades to
 # plain input() when this is absent.
 tui = ["prompt_toolkit>=3.0", "rich>=13.0"]
-dev = ["pytest>=8.0", "prompt_toolkit>=3.0", "rich>=13.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24.0", "prompt_toolkit>=3.0", "rich>=13.0"]
 # What a person installing on their own machine wants, spelled once so the
 # install line does not have to enumerate it: `pip install -e ".[all]"`.
 all = ["forge[tui,providers,graph]"]
@@ -50,5 +50,7 @@ build-backend = "hatchling.build"
 packages = ["forge"]
 
 [tool.pytest.ini_options]
-# Async tests wrap asyncio.run themselves, so no pytest-asyncio plugin is needed.
+addopts = "-p no:cacheprovider"
+# Older async tests wrap asyncio.run; lifecycle tests use pytest-asyncio directly.
+asyncio_mode = "auto"
 testpaths = ["tests"]

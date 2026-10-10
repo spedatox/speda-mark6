@@ -252,7 +252,11 @@ class CorpusCleanup:
         identity = document_identity(path, content)
         if identity:
             name = identity[2]
-            entity_id = stable_id(f"entity:{user}:{category}:{slugify(name)}")
+            existing = self.db.execute(
+                "SELECT id FROM memory_entities WHERE user_id=? AND category=? AND canonical_name=?",
+                (user, category, name),
+            ).fetchone()
+            entity_id = existing[0] if existing else stable_id(f"entity:{user}:{category}:{slugify(name)}")
             self.db.execute("INSERT OR IGNORE INTO memory_entities VALUES (?,?,?,?,?,?,?)",
                             (entity_id, user, category, identity[1], name, json.dumps(declared_aliases(name,content)), self.now))
             self.db.execute("UPDATE memory_record_meta SET entity_id=?,edition_seq=1 WHERE record_id=? AND user_id=?", (entity_id, record, user))
@@ -535,6 +539,10 @@ class CorpusCleanup:
         missing_meta = self.db.execute("SELECT count(*) FROM memory_files f LEFT JOIN memory_record_meta m ON m.memory_file_id=f.id AND m.user_id=f.user_id WHERE m.id IS NULL").fetchone()[0]
         if missing_meta:
             raise ValueError("Active documents missing catalog metadata.")
+        dangling_entities = self.db.execute("SELECT count(*) FROM memory_record_meta m LEFT JOIN memory_entities e ON e.id=m.entity_id AND e.user_id=m.user_id WHERE m.entity_id IS NOT NULL AND e.id IS NULL").fetchone()[0]
+        dangling_heads = self.db.execute("SELECT count(*) FROM memory_entity_heads h LEFT JOIN memory_entities e ON e.id=h.entity_id AND e.user_id=h.user_id LEFT JOIN memory_record_meta m ON m.record_id=h.current_edition_id AND m.user_id=h.user_id WHERE e.id IS NULL OR m.id IS NULL OR m.entity_id<>h.entity_id").fetchone()[0]
+        if dangling_entities or dangling_heads:
+            raise ValueError("Catalog entity/head relationship is unresolved.")
         from app.services.memory_verify import verify_document
         structure = [str(finding) for row in self.db.execute("SELECT path,content FROM memory_files")
                      for finding in verify_document(row[0],row[1])]

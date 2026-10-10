@@ -36,7 +36,7 @@ MAX_LEGION_BACKGROUND = 3
 # Tools no legionnaire ever sees: Task blocks recursive spawning; the dispatch
 # surface keeps anonymous workers out of the persona network (a worker is not
 # a roster member and must not talk like one).
-WORKER_EXCLUDED_TOOLS: frozenset = frozenset({"Task", "dispatch_agent", "house_party"})
+WORKER_EXCLUDED_TOOLS: frozenset = frozenset({"Task", "dispatch_agent", "house_party", "legion_control", "legion_inspect"})
 
 
 @dataclass(frozen=True)
@@ -344,6 +344,15 @@ def build_tool_definition() -> dict:
                         "them to the owner then — you do not need to poll, and "
                         "legion_status is only for when he asks before it lands."
                     ),
+                },
+                "workshop_project_id": {
+                    "type": "string", "pattern": "^[a-f0-9]{24}$",
+                    "description": "Registered engineering desk ID. Use the conversation's bound desk; another desk requires a new chat. Omit to inherit the selected desk.",
+                },
+                "input_ids": {
+                    "type": "array", "items": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+                    "uniqueItems": True,
+                    "description": "Optional retained original input IDs for this coding assignment. Omit to supply all available desk inputs; an empty list supplies none. Use a subset for a large desk so one worker stays within 128 MiB of materialized inputs.",
                 },
             },
             "required": ["description", "prompt"],

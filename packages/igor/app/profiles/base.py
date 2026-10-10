@@ -97,7 +97,7 @@ class AgentProfile(ABC):
     #
     # "provider:model:name" (services/tts.py parse_voice_ref) — a bare name
     # means Azure, for refs written before multi-provider support existed.
-    # ElevenLabs ("elevenlabs:eleven_multilingual_v2:<voice_id>") is what gives
+    # ElevenLabs ("elevenlabs:eleven_v4:<voice_id>") is what gives
     # the roster genuinely distinct voices rather than picking from Azure's
     # ~57-voice multilingual set; prefer a multilingual model over an
     # English-only one regardless of provider — Azure's two native Turkish

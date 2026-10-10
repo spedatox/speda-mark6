@@ -88,9 +88,12 @@ for project continuity; an activity journal remains best-effort telemetry.
 
 There is no new internal scheduler. n8n still owns scheduled wakeups through
 the existing trigger route. No new automation is installed or activated by
-this code change. Completion-driven continuation works while Igor is running;
-when no worker or trigger is active, the saved project waits for the next
-authorized turn.
+this code change. Igor now saves background completion receipts with terminal
+worker outcomes and drains them when a parent settles, at startup and through
+the existing n8n task-drain endpoint. The receipt resumes a never-started report
+or delivers its saved terminal response; it does not restart a worker or replay
+a report that may already have performed tools. When no worker, pending report
+or trigger exists, the saved project waits for the next authorized turn.
 
 ## Interrupted execution recovery
 
@@ -144,20 +147,38 @@ and [Codex CLI](https://learn.chatgpt.com/docs/codex/cli).
 
 ## Remaining gaps
 
-- A separate supervised executor, durable completion outbox, leased ownership
+The 2026-10-10 local run-lifecycle increment is documented in
+[Optimus reliability: Codex source references and verification](../../../docs/OPTIMUS_CODEX_RELIABILITY.md).
+It collects cancelled dispatch/provider/CLI tasks, strengthens parent settlement
+and admission, and retains worker inspection views in saved chat history.
+The 2026-10-10 worker-control increment also journals inline/background execution
+IDs, ordered events and queued inputs in Igor. New authenticated execution
+endpoints support durable cursor replay, targeted interruption and live Forge
+steering. Claims remain the authority on potentially live Cells; a saved history
+alone never proves liveness. The recovery gaps below still apply.
+
+- A separate supervised executor, leased ownership
   with real process fencing, and validated transcript checkpoints are still
   needed for automatic recovery across Igor restarts. Jobs currently run in
   Igor's process. Do not claim uninterrupted execution after a server restart.
-- Parent completion delivery can still fail after a worker finishes; the run
-  is inspectable, but no durable outbox retries that delivery automatically.
-- Progress UI replay still uses the existing bounded in-memory registry.
-  Durable workshop reports do not turn it into cursor-based event replay.
+- Parent completion receipts now survive callback failure, busy chats and
+  restart. Started reports without saved terminal evidence are unknown and
+  require explicit follow-up; automatic replay could repeat effects. Telegram
+  push retries are at least once. Recovery currently assumes one Igor report
+  executor; distributed admission/fencing remains open.
+- Existing progress UI/ticket replay still uses the bounded in-memory registry.
+  The new execution API has durable cursor replay; Heartbreaker has not yet
+  been migrated to it. Workers are bounded executions, not resumable child
+  conversations. Follow-up and automatic worktree integration remain open.
 - Current runtime success means the coding loop completed, not that an
   independent verifier proved every acceptance criterion. The parent must
   assess command/test evidence. Cross-worker project cost limits are not yet
   an enforced budget ledger; individual workers retain existing limits.
-- Original uploaded inputs are still temporary, not a durable artifact store.
-  Resuming work that needs those bytes may require the input again.
+- Mark VI now binds chats to workshop desks and retains original engineering
+  uploads in the coordinator's `.forge/artifacts` with authorized Igor references.
+  Disposable input copies are staged and removed while the checkout claim is
+  held. Desk/input backend behavior and remaining client gaps are described in
+  the linked reliability document; standalone Forge does not infer Igor bindings.
 - Docker is the production execution boundary. The subprocess backend remains
   a development convenience, not a security sandbox.
 

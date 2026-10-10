@@ -112,7 +112,10 @@ function VoiceEditor({ agent, voiceOptions, onCancel, onSave, onClearAll }: {
 }) {
   const t = useT()
   const a = t.settingsVoices
-  const [voiceId, setVoiceId] = useState(agent.voice_id ?? '')
+  const [voiceId, setVoiceId] = useState(
+    (agent.voice_id ?? '').replace('elevenlabs:eleven_multilingual_v2:', 'elevenlabs:eleven_v4:'),
+  )
+  const isV4 = (voiceId || agent.default_voice).startsWith('elevenlabs:eleven_v4')
   // The bare ElevenLabs voice id for manual entry — a fallback for when the
   // catalog can't be listed (e.g. the API key lacks the voices_read
   // permission) but synthesis itself still works fine on text_to_speech
@@ -141,7 +144,7 @@ function VoiceEditor({ agent, voiceOptions, onCancel, onSave, onClearAll }: {
   }
   function typeManualId(raw: string) {
     setManualId(raw)
-    setVoiceId(raw.trim() ? `elevenlabs:eleven_multilingual_v2:${raw.trim()}` : '')
+    setVoiceId(raw.trim() ? `elevenlabs:eleven_v4:${raw.trim()}` : '')
   }
 
   async function submit() {
@@ -199,19 +202,23 @@ function VoiceEditor({ agent, voiceOptions, onCancel, onSave, onClearAll }: {
         label={a.similarity} value={similarity} min={0} max={1} step={0.01} onChange={setSimilarity}
         low={a.low} high={a.high} format={v => v.toFixed(2)}
       />
-      <SliderField
-        label={a.style} value={style} min={0} max={1} step={0.01} onChange={setStyle}
-        low={a.none} high={a.exaggerated} format={v => v.toFixed(2)}
-      />
-      <SliderField
-        label={a.speed} value={speed} min={0.7} max={1.2} step={0.01} onChange={setSpeed}
-        low={a.slower} high={a.faster} format={v => v.toFixed(2)}
-      />
+      {!isV4 && (
+        <>
+          <SliderField
+            label={a.style} value={style} min={0} max={1} step={0.01} onChange={setStyle}
+            low={a.none} high={a.exaggerated} format={v => v.toFixed(2)}
+          />
+          <SliderField
+            label={a.speed} value={speed} min={0.7} max={1.2} step={0.01} onChange={setSpeed}
+            low={a.slower} high={a.faster} format={v => v.toFixed(2)}
+          />
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)' }}>{a.speakerBoost}</span>
-        <Switch on={speakerBoost} onChange={setSpeakerBoost} />
-      </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)' }}>{a.speakerBoost}</span>
+            <Switch on={speakerBoost} onChange={setSpeakerBoost} />
+          </div>
+        </>
+      )}
 
       <div style={{ display: 'flex', gap: 10 }}>
         <PillBtn tone="accent" onClick={() => { if (!busy) void submit() }}>

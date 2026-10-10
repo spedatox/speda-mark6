@@ -73,6 +73,30 @@ def test_in_place_cutover_is_forbidden(snapshot):
         CorpusCleanup(snapshot,snapshot)
 
 
+def test_cleanup_reuses_existing_canonical_entity(snapshot, tmp_path):
+    with sqlite3.connect(snapshot) as db:
+        db.execute("INSERT INTO memory_entities VALUES (?,?,?,?,?,?,?)",
+                   ("existing-identity", 1, "social", "person", "Bedirhan", "[]", "2026-09-01"))
+    migration = CorpusCleanup(snapshot, tmp_path / "identities.db")
+    try:
+        migration.run()
+        assert migration.db.execute("SELECT entity_id FROM memory_record_meta WHERE entity_id IS NOT NULL").fetchone()[0] == "existing-identity"
+        assert migration.db.execute("SELECT entity_id FROM memory_entity_heads").fetchone()[0] == "existing-identity"
+    finally:
+        migration.close()
+
+
+def test_seed_provenance_is_not_owner_testimony():
+    from datetime import datetime
+    from app.models.observation import Observation
+    from app.services.observations import format_observation
+    obs = Observation(id=9, origin="seed", observer="owner", content="Historical imported claim.",
+                      level="explicit", subject="owner", domain="biography", created_at=datetime(2026, 9, 1),
+                      reinforcement_count=1, sources=["Merged duplicate observation:8; original retained."])
+    result = format_observation(obs)
+    assert "origin:seed" in result and "legacy source unavailable" in result
+
+
 def test_merge_does_not_resolve_numeric_conflict():
     rows=[dict(id=i,updated_at=str(i),content=f"# Project\n\n## Log\n- [2026-08-01] Measured {n} kg.\n") for i,n in [(1,40),(2,60)]]
     result=merge_documents(rows)

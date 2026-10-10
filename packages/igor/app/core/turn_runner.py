@@ -26,12 +26,14 @@ import asyncio
 import logging
 import time
 from collections import deque
+from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from typing import AsyncIterator, Awaitable, Callable
 
 from app.core.context import AgentContext
 from app.database import AsyncSessionLocal
 from app.schemas.sse import SSEEvent, SSEEventType
+from app.services.chat_history import fold_subagent_event
 
 logger = logging.getLogger(__name__)
 
@@ -75,12 +77,41 @@ class _Turn:
     finished_at: float | None = None
     last_event_at: float = field(default_factory=time.monotonic)
     task: asyncio.Task | None = None
+    status: str = "in_progress"
+    cancel_requested: bool = False
 
 
 class TurnRegistry:
     def __init__(self, session_manager) -> None:
         self._session_manager = session_manager
         self._turns: dict[str, _Turn] = {}
+        self._settled_hook = None
+        self._closing = False
+
+    def set_settled_hook(self, hook) -> None:
+        """Drain saved completion receipts after a session releases its turn."""
+        self._settled_hook = hook
+
+    def reserve(self, *, request_id: str, agent_id: str, session_id: int):
+        """Synchronous admission before report seeds are written to history.
+
+        Codex owns one active turn per thread. A reservation holds that slot
+        during database preparation; its caller must launch or release it.
+        """
+        if self._closing or request_id in self._turns or any(
+            not t.done and t.session_id == session_id for t in self._turns.values()
+        ):
+            return None
+        if sum(not t.done for t in self._turns.values()) >= _MAX_ACTIVE:
+            return None
+        turn = _Turn(request_id=request_id, agent_id=agent_id, session_id=session_id,
+                     started_at=time.monotonic())
+        self._turns[request_id] = turn
+        return turn
+
+    def release(self, reservation) -> None:
+        if self._turns.get(reservation.request_id) is reservation and reservation.task is None:
+            self._turns.pop(reservation.request_id)
 
     # ── Launch ────────────────────────────────────────────────────────────────
 
@@ -92,20 +123,20 @@ class TurnRegistry:
         format_error: Callable[[Exception], str],
         on_complete: Callable[[], Awaitable[None]] | None = None,
         on_settle: Callable[[str], Awaitable[None]] | None = None,
+        reservation=None,
     ) -> str | None:
-        """Launch a detached turn. Returns its request_id, or None if the active
-        cap is hit (the caller surfaces a friendly error to the user)."""
-        active = sum(1 for t in self._turns.values() if not t.done)
-        if active >= _MAX_ACTIVE:
-            logger.warning("turn_registry_full", extra={"active": active})
+        """Reserve and launch a detached turn. Refuse a duplicate ID, a busy
+        session or the active cap; the caller surfaces an admission error."""
+        turn = reservation or self.reserve(request_id=context.request_id,
+                                           agent_id=context.agent_id, session_id=context.session_id)
+        if turn is None:
             return None
-        turn = _Turn(
-            request_id=context.request_id,
-            agent_id=context.agent_id,
-            session_id=context.session_id,
-            started_at=time.monotonic(),
-        )
-        self._turns[context.request_id] = turn
+        if (self._turns.get(context.request_id) is not turn or turn.task is not None
+                or turn.session_id != context.session_id or turn.agent_id != context.agent_id):
+            raise ValueError("Invalid turn reservation")
+        if self._closing:
+            self.release(turn)
+            return None
         turn.task = asyncio.create_task(
             self._run(turn, context, engine_factory, format_error, on_complete, on_settle)
         )
@@ -127,6 +158,8 @@ class TurnRegistry:
         files: list[dict] = []
         thinking_parts: list[str] = []
         thinking_redacted = False
+        subagents: dict[str, dict] = {}
+        terminal: SSEEvent | None = None
         cancelled = False
         failed = False          # a terminal error (graceful or raised) ended the turn
         failure_note: str | None = None  # the error text, stamped into the saved turn
@@ -142,47 +175,63 @@ class TurnRegistry:
             async with AsyncSessionLocal() as db:
                 context.db = db
                 try:
-                    async for event in engine_factory(context):
-                        self._emit(turn, event)
-                        et = event.type
-                        if et in (SSEEventType.DONE, SSEEventType.ERROR):
-                            terminal_seen = True
-                        if et == SSEEventType.ERROR:
-                            # A graceful terminal error from the engine/peer. Note
-                            # it so the partial turn is persisted with a marker
-                            # instead of vanishing from the history.
-                            failed = True
-                            failure_note = str(event.data) if event.data else None
-                        if et == SSEEventType.CHUNK and isinstance(event.data, str):
-                            chunks.append(event.data)
-                            running_len += len(event.data)
-                        elif et == SSEEventType.TOOL:
-                            d = event.data if isinstance(event.data, dict) else {}
-                            tools.append({
-                                "id": d.get("id"), "name": d.get("name"), "input": d.get("input"),
-                                "afterChars": running_len,
-                            })
-                        elif et == SSEEventType.TOOL_RESULT:
-                            d = event.data if isinstance(event.data, dict) else {}
-                            for t in tools:
-                                if t.get("id") == d.get("id"):
-                                    t["result"] = d.get("result")
-                                    break
-                        elif et == SSEEventType.FILE:
-                            files.append(event.data)
-                        elif et == SSEEventType.THINKING:
-                            d = event.data if isinstance(event.data, dict) else {}
-                            if d.get("text"):
-                                thinking_parts.append(d["text"])
-                            if d.get("redacted"):
-                                thinking_redacted = True
+                    if turn.cancel_requested:
+                        raise asyncio.CancelledError
+                    # Codex owns the active task's cleanup. Close the generator
+                    # even if collecting its events raises while it is suspended.
+                    async with AsyncExitStack() as engine_lifetime:
+                        source = engine_factory(context)
+                        close = getattr(source, "aclose", None)
+                        if close is not None:
+                            engine_lifetime.push_async_callback(close)
+                        async for event in source:
+                            et = event.type
+                            if et in (SSEEventType.DONE, SSEEventType.ERROR):
+                                terminal_seen = True
+                                if terminal is None or et == SSEEventType.ERROR:
+                                    terminal = event
+                            else:
+                                self._emit(turn, event)
+                            if et == SSEEventType.ERROR:
+                                # A graceful terminal error from the engine/peer.
+                                failed = True
+                                failure_note = str(event.data) if event.data else None
+                            if et == SSEEventType.CHUNK and isinstance(event.data, str):
+                                chunks.append(event.data)
+                                running_len += len(event.data)
+                            elif et == SSEEventType.TOOL:
+                                d = event.data if isinstance(event.data, dict) else {}
+                                tools.append({
+                                    "id": d.get("id"), "name": d.get("name"), "input": d.get("input"),
+                                    "afterChars": running_len,
+                                })
+                            elif et == SSEEventType.TOOL_RESULT:
+                                d = event.data if isinstance(event.data, dict) else {}
+                                for t in tools:
+                                    if t.get("id") == d.get("id"):
+                                        t["result"] = d.get("result")
+                                        break
+                            elif et == SSEEventType.FILE:
+                                files.append(event.data)
+                            elif et == SSEEventType.THINKING:
+                                d = event.data if isinstance(event.data, dict) else {}
+                                if d.get("text"):
+                                    thinking_parts.append(d["text"])
+                                if d.get("redacted"):
+                                    thinking_redacted = True
+                            elif et == SSEEventType.SUBAGENT and isinstance(event.data, dict):
+                                worker_id = str(event.data.get("id") or "")
+                                if worker_id:
+                                    subagents[worker_id] = fold_subagent_event(
+                                        subagents.get(worker_id), event.data,
+                                    )
                 except asyncio.CancelledError:
                     cancelled = True
                     chunks.append("\n\n_[cancelled by owner]_")
-                    self._emit(turn, SSEEvent(
-                        type=SSEEventType.DONE, data="".join(chunks),
+                    terminal = SSEEvent(
+                        type=SSEEventType.DONE, data={"status": "interrupted"},
                         session_id=turn.session_id, request_id=turn.request_id,
-                    ))
+                    )
                 except Exception as exc:  # noqa: BLE001
                     logger.error(
                         "turn_stream_failed",
@@ -191,27 +240,27 @@ class TurnRegistry:
                     failed = True
                     failure_note = format_error(exc)
                     terminal_seen = True    # we emit ERROR below; no synthetic DONE
-                    self._emit(turn, SSEEvent(
+                    terminal = SSEEvent(
                         type=SSEEventType.ERROR, data=failure_note,
                         session_id=turn.session_id, request_id=turn.request_id,
-                    ))
+                    )
                     # Fall through to persist the partial turn. A turn that died
                     # after doing real work must leave a trace — otherwise the
                     # next turn starts blind, as if the work never happened.
 
-                # Guaranteed terminal: if the engine generator completed without
-                # ever emitting DONE/ERROR (the external-proxy path can), inject
-                # a synthetic DONE so any subscriber — live or reattaching —
-                # always settles instead of hanging on "Reconnecting".
+                # Codex core/src/session/turn.rs rejects stream EOF without a
+                # completion event. Unknown completion must never become success.
                 if not terminal_seen and not cancelled:
                     logger.warning(
                         "turn_missing_terminal",
                         extra={"request_id": turn.request_id},
                     )
-                    self._emit(turn, SSEEvent(
-                        type=SSEEventType.DONE, data={},
+                    failed = True
+                    failure_note = "The response stream ended before completion was confirmed."
+                    terminal = SSEEvent(
+                        type=SSEEventType.ERROR, data=failure_note,
                         session_id=turn.session_id, request_id=turn.request_id,
-                    ))
+                    )
 
                 # A failed turn is stamped so the reloaded transcript shows it
                 # broke off — a half-finished answer must not read as complete,
@@ -222,9 +271,27 @@ class TurnRegistry:
 
                 # Persist the assistant turn (moved verbatim out of the router's
                 # SSE generator — it now runs regardless of who is listening).
-                await self._persist(
-                    db, turn, chunks, tools, files, thinking_parts, thinking_redacted,
-                )
+                turn.status = "interrupted" if cancelled else ("failed" if failed else "completed")
+                for run in subagents.values():
+                    if run.get("running"):
+                        run.update(running=False, ok=False, status="unknown",
+                                   report="The parent ended without a recorded worker outcome.")
+                try:
+                    await self._persist(
+                        db, turn, chunks, tools, files, thinking_parts, thinking_redacted,
+                        subagents=list(subagents.values()),
+                    )
+                except Exception:
+                    failed = True
+                    turn.status = "failed"
+                    terminal = SSEEvent(
+                        type=SSEEventType.ERROR,
+                        data="The turn ended, but its history could not be saved. Partial output remains in this stream.",
+                        session_id=turn.session_id, request_id=turn.request_id,
+                    )
+                    context.extra["turn_persistence_failed"] = True
+                    if hasattr(db, "rollback"):
+                        await db.rollback()
 
                 # Token spend for this turn, on the session's running totals.
                 # Runs on every outcome including a failed or cancelled turn —
@@ -240,6 +307,18 @@ class TurnRegistry:
                     except Exception as e:  # noqa: BLE001
                         logger.warning("turn_usage_persist_failed",
                                        extra={"request_id": turn.request_id, "error": str(e)})
+
+                # Reference: Codex tasks/mod.rs flushes interruption history
+                # before announcing settlement. Igor requires a successful save.
+                if terminal is not None:
+                    if terminal.type == SSEEventType.DONE:
+                        data = terminal.data if isinstance(terminal.data, dict) else {}
+                        terminal = SSEEvent(
+                            type=SSEEventType.DONE,
+                            data={**data, "status": turn.status},
+                            session_id=turn.session_id, request_id=turn.request_id,
+                        )
+                    self._emit(turn, terminal)
 
             # Post-turn work (title/log/compaction/embedding) — detached, after
             # persistence, never blocking the stream (Rule 7). Skipped on cancel
@@ -261,38 +340,54 @@ class TurnRegistry:
                     await on_settle(status)
                 except Exception as e:  # noqa: BLE001
                     logger.warning("turn_on_settle_failed", extra={"request_id": turn.request_id, "error": str(e)})
+        except (Exception, asyncio.CancelledError) as exc:
+            # Opening/closing the DB or persisting cancellation can fail outside
+            # the engine loop. Always settle subscribers with an explicit error.
+            logger.error("turn_settlement_failed", extra={"request_id": turn.request_id,
+                                                        "error": type(exc).__name__})
+            if not turn.buffer or turn.buffer[-1].type not in (SSEEventType.DONE, SSEEventType.ERROR):
+                turn.status = "failed"
+                self._emit(turn, SSEEvent(
+                    type=SSEEventType.ERROR,
+                    data="The turn could not settle its history. Its completion is unconfirmed.",
+                    session_id=turn.session_id, request_id=turn.request_id,
+                ))
         finally:
             await self._finish(turn)
+            # Release the parent before draining. The drain never waits for
+            # this task, and starting a child report cannot deadlock its parent.
+            if self._settled_hook is not None and not self._closing:
+                try:
+                    await self._settled_hook()
+                except Exception as exc:
+                    logger.warning("completion_drain_failed", extra={"request_id": turn.request_id, "error": str(exc)})
 
     async def _persist(
         self, db, turn: _Turn, chunks: list[str], tools: list[dict], files: list[dict],
         thinking_parts: list[str] | None = None, thinking_redacted: bool = False,
+        *, subagents: list[dict] | None = None,
     ) -> None:
         full = "".join(chunks)
         thinking = "".join(thinking_parts) if thinking_parts else ""
         # A turn that ran tools counts as work even with no text — dropping it
         # would erase what the agent did from the next turn's history. Same
         # logic for a turn that only thought out loud and got cut off.
-        if not (full or files or tools or thinking or thinking_redacted):
-            return
         content: list = [{"type": "text", "text": full}]
-        if tools or files or thinking or thinking_redacted:
-            meta: dict = {"type": "_speda_meta", "tools": tools, "files": files}
-            # Display text only, never round-tripped as a real Anthropic
-            # thinking/redacted_thinking block — see IGOR.md's note on why
-            # persisting reasoning across separate top-level turns is display-
-            # only here. _speda_meta is already an internal marker type that
-            # every provider translation layer skips over, so this inherits
-            # the same safety property tools/files already have.
-            if thinking:
-                meta["thinking"] = thinking
-            if thinking_redacted:
-                meta["thinkingRedacted"] = True
-            content.append(meta)
+        meta: dict = {"type": "_speda_meta", "tools": tools, "files": files,
+                      "turn": {"request_id": turn.request_id, "status": turn.status}}
+        if subagents:
+            meta["subagents"] = subagents
+        # Display metadata is excluded from provider conversation content.
+        if thinking:
+            meta["thinking"] = thinking
+        if thinking_redacted:
+            meta["thinkingRedacted"] = True
+        content.append(meta)
         try:
             await self._session_manager.save_message(db, turn.session_id, "assistant", content)
         except Exception as e:  # noqa: BLE001
             logger.error("turn_persist_failed", extra={"request_id": turn.request_id, "error": str(e)})
+            raise
 
     def _emit(self, turn: _Turn, event: SSEEvent) -> None:
         """Buffer an event and fan it out to live subscribers. Synchronous — no
@@ -314,7 +409,11 @@ class TurnRegistry:
 
     async def _evict_later(self, request_id: str) -> None:
         await asyncio.sleep(_GRACE_S)
-        self._turns.pop(request_id, None)
+        turn = self._turns.get(request_id)
+        if turn is not None and turn.task is not None and not turn.task.done():
+            await asyncio.shield(turn.task)
+        if self._turns.get(request_id) is turn:
+            self._turns.pop(request_id, None)
 
     # ── Subscribe (replay + live tail) ────────────────────────────────────────
 
@@ -379,6 +478,7 @@ class TurnRegistry:
                 "session_id": t.session_id,
                 "running_s": round(now - t.started_at, 1),
                 "idle_s": round(now - t.last_event_at, 1),
+                "status": t.status,
             })
         return out
 
@@ -397,7 +497,7 @@ class TurnRegistry:
         turn = self._turns.get(request_id)
         if turn is None:
             return False
-        if turn.task is not None and not turn.done:
+        if turn.task is not None:
             await asyncio.wait_for(asyncio.shield(turn.task), timeout)
         return True
 
@@ -408,13 +508,25 @@ class TurnRegistry:
         turn = self._turns.get(request_id)
         if turn is None or turn.done or turn.task is None:
             return False
-        turn.task.cancel()
+        if turn.status != "in_progress":
+            return False
+        if not turn.cancel_requested:
+            turn.cancel_requested = True
+            # Let a just-created task enter its persistence/finally handlers.
+            await asyncio.sleep(0)
+            if not turn.done and turn.status == "in_progress":
+                turn.task.cancel()
+        # A cancellation response acknowledges settlement, not merely a signal.
+        await asyncio.shield(turn.task)
         return True
 
     async def shutdown(self) -> None:
         """Cancel every in-flight turn on app shutdown."""
-        tasks = [t.task for t in self._turns.values() if t.task is not None and not t.done]
-        for task in tasks:
-            task.cancel()
+        self._closing = True
+        tasks = [t.task for t in self._turns.values() if t.task is not None and not t.task.done()]
+        await asyncio.gather(*(
+            self.cancel(t.request_id) for t in list(self._turns.values())
+            if not t.done and t.status == "in_progress"
+        ), return_exceptions=True)
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)

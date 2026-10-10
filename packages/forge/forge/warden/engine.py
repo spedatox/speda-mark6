@@ -363,10 +363,11 @@ class Warden:
             # continues the turn instead of ending it and making them start
             # another to say the same thing.
             if not turn.tool_uses and self.inbox:
-                claimed = self.inbox.claim()
+                claimed = await self._claim_input()
                 if claimed:
                     state.messages.append(
                         {"role": "user", "content": inbox_mod.render(claimed)})
+                    await self._record_input_boundary(state)
                     await self.emit({"type": "steered",
                                      "data": {"count": len(claimed), "at": "turn_end"}})
                     state.advance(ContinueReason.NEXT_TURN, "operator interjection")
@@ -430,7 +431,7 @@ class Warden:
             # depend on. Appended last so it is the final thing read before the
             # model plans its next move.
             if self.inbox:
-                claimed = self.inbox.claim()
+                claimed = await self._claim_input()
                 if claimed:
                     result_blocks = [*result_blocks,
                                      {"type": "text", "text": inbox_mod.render(claimed)}]
@@ -440,6 +441,7 @@ class Warden:
                                      "data": {"count": len(claimed), "at": "tool_results"}})
 
             state.messages.append({"role": "user", "content": result_blocks})
+            await self._record_input_boundary(state)
 
             # ── Boundary 2: interrupt checked after tools execute (§3). ───────
             if self.signal.is_set():
@@ -452,6 +454,18 @@ class Warden:
             state.advance(ContinueReason.NEXT_TURN)
 
     # ── Noticing a file move underneath the model ────────────────────────────
+    async def _claim_input(self) -> list[str]:
+        # Standalone Forge keeps its synchronous Inbox. An orchestrator may
+        # supply a durable async source, drained at these same legal boundaries.
+        import inspect
+        claimed = self.inbox.claim()
+        return await claimed if inspect.isawaitable(claimed) else claimed
+
+    async def _record_input_boundary(self, state: LoopState) -> None:
+        record = getattr(self.inbox, "record_boundary", None)
+        if record is not None:
+            await record(state.messages)
+
     async def _external_changes(self, tool_uses: list[ToolUseRequest]) -> list[str]:
         """Files the model has read that no longer say what it read.
 

@@ -59,6 +59,16 @@ If a backup did not complete, **he is not backed up**. Say that sentence.
 
 ## Restoring
 
+The owner can restore directly from Heartbreaker or SPEDA GO under
+Settings → Protocols → Octavius: select a snapshot, choose Restore backup,
+and confirm. An independent host job stops Igor, preserves the original database
+with its journals, installs the verified snapshot and restarts Igor. It rolls
+back if startup fails. Progress survives the restart; no manual shell commands
+are needed on a deployment with the SSH host bridge and systemd configured.
+Explain that chats and memories return to the chosen snapshot, and newer changes
+remain only in the preserved original. Do not launch the owner-only HTTP restore
+action through system_ops or an agent tool.
+
 `fetch` downloads a backup, checks its hash against what was recorded at upload,
 gunzips it, runs an integrity check, and stages it beside the live database. It
 changes nothing live and it needs him in the conversation.

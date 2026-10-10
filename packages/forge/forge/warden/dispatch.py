@@ -282,9 +282,17 @@ async def _call_bounded(tool: Tool, args: Any, ctx: ToolContext,
         done, _pending = await asyncio.wait(
             waiters, timeout=None if limit == SELF_BOUNDED else limit,
             return_when=asyncio.FIRST_COMPLETED)
+    except BaseException:
+        # Codex core/src/tools/parallel.rs owns dispatch handles on cancellation.
+        # Outer task cancellation must collect the tool just like our deadline.
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise
     finally:
-        if watch is not None and not watch.done():
-            watch.cancel()
+        if watch is not None:
+            if not watch.done():
+                watch.cancel()
+            await asyncio.gather(watch, return_exceptions=True)
 
     if task in done:
         return task.result()

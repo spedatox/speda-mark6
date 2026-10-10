@@ -85,7 +85,7 @@ def _compile_glob(pattern: str) -> tuple["re.Pattern", bool]:
     return re.compile("".join(out)), "/" not in pattern
 
 
-def _walk(root: Path, glob: str | None) -> Iterator[tuple[Path, str]]:
+def _walk(root: Path, glob: str | None, *, boundary: Path | None = None) -> Iterator[tuple[Path, str]]:
     """Yield (path, workspace-relative posix path) for candidate files under
     `root`, pruning noise directories *during* the walk — pruning after the fact
     still pays to descend into node_modules.
@@ -94,6 +94,7 @@ def _walk(root: Path, glob: str | None) -> Iterator[tuple[Path, str]]:
     thing anyone would ask for, and refusing it sent the caller away to re-read
     the whole file instead."""
     matcher = basename_only = None
+    boundary = (boundary or root).resolve()
     if glob is not None:
         matcher, basename_only = _compile_glob(glob)
 
@@ -105,6 +106,10 @@ def _walk(root: Path, glob: str | None) -> Iterator[tuple[Path, str]]:
         dirnames[:] = [d for d in dirnames if d not in PRUNED_DIRS]
         for name in filenames:
             path = Path(dirpath) / name
+            try:
+                path.resolve().relative_to(boundary)
+            except (ValueError, OSError, RuntimeError):
+                continue  # never open a symlink leading outside the workspace
             rel = path.relative_to(root).as_posix()
             if matcher is not None and not matcher.match(name if basename_only else rel):
                 continue
@@ -176,6 +181,10 @@ class Grep(Tool):
             return ToolResult(f"Invalid regular expression {args.pattern!r}: {e}", is_error=True)
 
         base = (root / args.path).resolve()
+        try:
+            base.relative_to(root.resolve())
+        except ValueError:
+            return ToolResult("Search path escapes the workspace.", is_error=True)
         if not base.exists():
             return ToolResult(
                 f"No such path in the workspace: {args.path}", is_error=True)
@@ -191,7 +200,7 @@ class Grep(Tool):
         total = 0
         capped = False
 
-        for path, _ in _walk(base, args.glob):
+        for path, _ in _walk(base, args.glob, boundary=root):
             text = _readable_text(path)
             if text is None:
                 continue
@@ -267,6 +276,10 @@ class Glob(Tool):
         if root is None:
             return _no_workspace()
         base = (root / args.path).resolve()
+        try:
+            base.relative_to(root.resolve())
+        except ValueError:
+            return ToolResult("Search path escapes the workspace.", is_error=True)
         if base.is_file():
             # Unlike grep, globbing a single file is a category error rather
             # than a narrower search — say which it is instead of "not a
@@ -282,7 +295,7 @@ class Glob(Tool):
 
     def _glob(self, root: Path, base: Path, pattern: str) -> ToolResult:
         found: list[tuple[float, str]] = []
-        for path, _ in _walk(base, pattern):
+        for path, _ in _walk(base, pattern, boundary=root):
             try:
                 found.append((path.stat().st_mtime, path.relative_to(root).as_posix()))
             except OSError:

@@ -650,6 +650,7 @@ all = [
 dev = [
     { name = "prompt-toolkit" },
     { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "rich" },
 ]
 graph = [
@@ -676,6 +677,7 @@ requires-dist = [
     { name = "prompt-toolkit", marker = "extra == 'tui'", specifier = ">=3.0" },
     { name = "pydantic", specifier = ">=2.6" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "rich", marker = "extra == 'dev'", specifier = ">=13.0" },
     { name = "rich", marker = "extra == 'tui'", specifier = ">=13.0" },
     { name = "websockets", specifier = ">=12.0" },

@@ -5,8 +5,9 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   getHouseParty, setHouseParty, getLockdown, standDownLockdown,
   getLifeboat, getDoormat, getOctavius, runOctaviusBackup,
+  getOctaviusBackups, getOctaviusRestore, restoreOctavius,
 } from '../lib/api'
-import type { LockdownState, LifeboatState, DoormatState, OctaviusState } from '../lib/api'
+import type { BackupEntry, OctaviusRestoreState, LockdownState, LifeboatState, DoormatState, OctaviusState } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import { SettingsSection, SettingsRow, PillBtn } from './settingsUI'
 import SkyfallProjects from './SkyfallProjects'
@@ -20,7 +21,7 @@ import { useT } from '../lib/i18n'
  *
  *   Lockdown   engaged through an authorization modal, stood down with a button
  *   Lifeboat   read-only here; reclamation is owner-led THROUGH Orion
- *   Octavius   read-only plus one button, because "back up now" cannot lose anything
+ *   Octavius   backup and owner-confirmed restore through an independent host job
  *   Doormat    read-only here; a domain move is a conversation, not a form
  *   Skyfall    the owner's own launch rail — the one pane that CONFIGURES
  *   House Party  owner voice only
@@ -63,6 +64,13 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
   const [arc, setArc] = useState<OctaviusState | null>(null)
   const [hostLoaded, setHostLoaded] = useState(false)
   const [backing, setBacking] = useState(false)
+  const [archives, setArchives] = useState<BackupEntry[]>([])
+  const [selected, setSelected] = useState('')
+  const [restore, setRestore] = useState<OctaviusRestoreState | null>(null)
+  const [confirmRestore, setConfirmRestore] = useState(false)
+  const [restoreBusy, setRestoreBusy] = useState(false)
+  const [archiveError, setArchiveError] = useState(false)
+  const restoring = restoreBusy || (!!restore && !['idle', 'complete', 'failed'].includes(restore.phase))
 
   const refresh = useCallback(async () => {
     try {
@@ -81,6 +89,14 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
         getLifeboat(config), getDoormat(config), getOctavius(config),
       ])
       setBoat(b); setDoor(d); setArc(a)
+      if (a.reachable && a.enabled) {
+        try {
+          const found = await getOctaviusBackups(config)
+          setArchives(found)
+          setSelected(id => found.some(f => f.id === id) ? id : found[0]?.id || '')
+          setArchiveError(false)
+        } catch { setArchiveError(true); setArchives([]); setSelected('') }
+      }
     } finally {
       setHostLoaded(true)
     }
@@ -95,6 +111,26 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
   }, [refresh])
 
   useEffect(() => { refreshHost() }, [refreshHost])
+
+  useEffect(() => {
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout>
+    const poll = async () => {
+      const state = await getOctaviusRestore(config, restore?.job_id)
+      if (cancelled) return
+      if (state) setRestore(state)
+      timer = setTimeout(poll, 3000)
+    }
+    poll()
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [config, restore?.job_id])
+
+  const restoreNow = async () => {
+    if (restoring || backing || !selected) return
+    setRestoreBusy(true); setConfirmRestore(false)
+    try { setRestore(await restoreOctavius(config, selected)) }
+    finally { setRestoreBusy(false) }
+  }
 
   const standDown = async () => {
     setBusy(true); setNote(null)
@@ -264,7 +300,8 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
           {arc?.reachable && arc.enabled ? (
             <PillBtn
               tone={arc.stale ? 'danger' : 'neutral'}
-              onClick={backing ? undefined : backUpNow}
+              onClick={backUpNow}
+              disabled={backing || restoring}
               title={t.protocolsTab.backupNowTitle}
             >
               {backing ? t.protocolsTab.backingUp : t.protocolsTab.backupNow}
@@ -275,6 +312,45 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
             </span>
           )}
         </SettingsRow>
+      )}
+
+      {((arc?.reachable && arc.enabled) || (restore && restore.phase !== 'idle')) && (
+        <Readout title={t.protocolsTab.restoreBackup}>
+          <div style={{ fontSize: '0.8125rem', lineHeight: 1.6 }}>{t.protocolsTab.restoreHint}</div>
+          {archiveError && <div>{t.protocolsTab.restoreListFailed}</div>}
+          <select aria-label={t.protocolsTab.restoreBackup} value={selected}
+            disabled={restoring || backing || confirmRestore || archives.length === 0}
+            onChange={e => setSelected(e.target.value)}
+            style={{ width: '100%', padding: 8, color: 'var(--hb-text)', background: 'var(--hb-bg)' }}>
+            {archives.map(f => <option key={f.id} value={f.id}>{f.name} · {f.mb} MB · {f.created}</option>)}
+          </select>
+          {confirmRestore ? (
+            <>
+              <div style={{ color: '#e5897c', lineHeight: 1.6 }}>
+                {t.protocolsTab.restoreConfirm(archives.find(f => f.id === selected)?.name || selected)}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <PillBtn tone="danger" onClick={restoreNow} disabled={restoring || backing}>
+                  {t.protocolsTab.restoreConfirmButton}
+                </PillBtn>
+                <PillBtn onClick={() => setConfirmRestore(false)}>{t.protocolsTab.restoreCancel}</PillBtn>
+              </div>
+            </>
+          ) : (
+            <PillBtn tone="danger" onClick={() => setConfirmRestore(true)}
+              disabled={!selected || restoring || backing}>
+              {restoring ? t.protocolsTab.restoring : t.protocolsTab.restoreBackup}
+            </PillBtn>
+          )}
+          {restore && restore.phase !== 'idle' && <div role="status" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+            {restore.phase === 'complete' ? t.protocolsTab.restoreDone
+              : restore.phase === 'failed' || restore.phase === 'recovery_required'
+                ? t.protocolsTab.restoreFailed(restore.error || '', !!restore.rolled_back)
+                : t.protocolsTab.restoring}
+            {restore.error && !['failed', 'recovery_required'].includes(restore.phase) && <div>{restore.error}</div>}
+            {restore.rollback_path && <div>{t.protocolsTab.restorePreserved}: {restore.rollback_path}</div>}
+          </div>}
+        </Readout>
       )}
 
       {/* ── DOORMAT ──────────────────────────────────────────────────────── */}

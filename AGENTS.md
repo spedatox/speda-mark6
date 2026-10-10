@@ -2,6 +2,17 @@
 
 Read this file in full before touching a single file. This is not optional.
 
+## Keep the Working Tree Free of Test Caches
+
+The owner does not want generated test folders in the project explorer.
+Pytest's cache provider is disabled in the workspace and package configs; keep it disabled.
+Never place `--basetemp`, `cache_dir`, bytecode caches, or dated `.pytest-*`
+folders inside this checkout. Let pytest use the OS temporary directory.
+For Python commands, set `PYTHONDONTWRITEBYTECODE=1` or point
+`PYTHONPYCACHEPREFIX` outside the checkout (Windows: local app data;
+other platforms: an OS temporary/cache directory). Keep test scratch files
+outside the checkout as well.
+
 ---
 
 ## What This Repo Is
@@ -185,6 +196,7 @@ speda-mark-vi/
     │   └── files.py             # Generated-file bookkeeping under /tmp/speda_outputs/
     ├── legion/                  # The Legion (D-SA1–D-SA5) — Tier 0, registered before all other tiers
     │   ├── roster.py            # Legionnaire definitions (scout/researcher/analyst/judge/general)
+    │   ├── run_registry.py      # Legacy background ticket tray; bounded in-memory compatibility replay
     │   └── runner.py
     ├── news/                    # NightCrawler's briefing pipeline
     │   ├── collector.py
@@ -201,6 +213,7 @@ speda-mark-vi/
     │   ├── composer.py
     │   └── manager.py
     ├── routers/
+    │   ├── legion.py            # Worker execution inspection, cursor replay and targeted controls; legacy ticket tray
     │   ├── chat.py              # POST /chat[/{agent_id}] (SSE), WS /ws — Flutter user-facing
     │   ├── trigger.py           # POST /trigger/{agent_id} — n8n webhook
     │   ├── agents.py            # GET /agents, House Party toggle, agent WebSocket presence
@@ -230,7 +243,7 @@ speda-mark-vi/
     │   ├── news.py
     │   ├── system_ops.py
     │   ├── documents.py         # PPTX / DOCX / PDF generation
-    │   ├── tts.py                # Kokoro TTS
+    │   ├── tts.py                # Agent voice audio files — ElevenLabs v4 / Azure / OpenAI
     │   ├── stt.py                # Whisper STT
     │   ├── notifications.py     # Flutter push
     │   ├── legion.py             # The Legion's Task-tool surface
@@ -248,6 +261,9 @@ speda-mark-vi/
     │   ├── gpt_researcher.py
     │   └── shannon.py
     ├── services/
+    │   ├── octavius.py          # Verified SQLite snapshots in the owner's Drive; manual restore staging
+    │   ├── octavius_restore.py  # Owner-selected restore jobs and durable status on app.state
+    │   ├── octavius_restore_host.py # Standalone host worker; stops Igor, swaps, restarts, rolls back
     │   ├── personality.py       # Owner's per-agent style preferences in the existing runtime store
     │   ├── anthropic_client.py, llm_client.py   # Multi-provider LLM routing (llm_client) + model catalog
     │   ├── memory.py, memory_store.py           # Post-turn tasks (title/recap/compaction), revision log
@@ -277,15 +293,21 @@ speda-mark-vi/
     │   │                        #   find_places result sets. Served by routers/navigation.py
     │   │                        #   as GET /navigation/{route,places}/{id}; the fence carries the id.
     │   ├── forge_peer.py, sandbox_launcher.py   # External backend (Forge) process/session bridge
+    │   ├── workspaces.py       # Owner/agent-scoped, immutable session-to-workshop desk binding
+    │   ├── hisar_workspaces.py # App-owned vault picker and confined workspace creation
+    │   ├── engineering_inputs.py # Authorized, hashed originals outside worker mounts
+    │   ├── worker_control.py    # Durable execution/event/input journal, live interruption and legal Forge input boundaries
+    │   ├── completion_recovery.py # Atomic background completion outbox, parent admission and saved-response delivery recovery
     │   ├── pending_asks.py      # Permission asks relayed from external peers
     │   ├── telegram.py
     │   └── n8n.py, n8n_api.py   # Webhook auth (X-N8N-Secret), n8n REST client
     ├── models/                  # ORM models — one file per table (user, session, channel_session, message, agent,
     │                            # memory_source/memory_passage — immutable originals and addressable excerpts,
     │                            # memory_capture_payload — complete durable event intake before review,
-    │                            # agent_message, automation, health_sample, memory/memory_file/memory_revision,
+    │                            # agent_message, engineering_input, automation, health_sample, memory/memory_file/memory_revision,
     │                            # message_embedding, observation, memory_graph_edge, background_job,
     │                            # news_item/news_quota/news_watch, notification, tool_call,
+    │                            # worker_execution — operational executions, ordered events, queued input and completion receipts;
     │                            # route/place — map payloads the model references by id, never retypes)
     ├── schemas/
     │   ├── chat.py, sse.py, agent.py, trigger.py, health.py
@@ -299,6 +321,14 @@ speda-mark-vi/
 
 ## Capability Tiers
 
+Offline memory reconstruction entry point: `packages/igor/scripts/reconstruct_memory_snapshot.py`.
+It operates only on isolated snapshots, emits all-record disposition artifacts, and
+rehearses cutover/rollback in staging. It never activates the resulting dataset.
+Follow-up entry point: `packages/igor/scripts/verify_memory_followup.py` audits
+quarantined links on a fresh offline copy, carries the complete disposition ledger
+forward, and runs real configured-provider retrieval checks. It has no production
+connection or cutover operation.
+
 Forge package additions: `packages/forge/forge/workshop.py` owns operational
 project checkpoints, run results and exclusive checkout claims. The anonymous
 runtime in `packages/forge/forge/runtime/__init__.py` acquires a claim before
@@ -306,6 +336,22 @@ starting a Cell and releases it only after confirmed cleanup. Claims surviving
 a crash require operator reconciliation; never expire or steal them on a timer.
 The workspace root's `.forge/workshop.sqlite3` must be on a persistent local
 volume shared by every Igor executor, outside individual worker mounts.
+`packages/forge/forge/artifacts.py` retains verified original engineering inputs
+under the coordinator's `.forge/artifacts`; Igor owns the authorized input
+references. Originals are separate from generated temporary outputs. Worker
+copies are staged and cleaned up inside the checkout claim. The coordinator's
+`.forge` directory must never be registered or mounted as a worker desk.
+
+Background worker terminal outcomes and `worker_completions` receipts commit
+together. `services/completion_recovery.py` drains at worker completion, parent
+turn settlement, startup and the existing n8n `/admin/tasks/drain` call; it has
+no scheduler. Admission precedes a report history write. A report seed and its
+ready receipt are atomic; a running marker commits before the report engine.
+Never automatically replay a started report without saved terminal evidence,
+redirect a completion from a missing/closed chat, or use this outbox to restart
+workers/reconcile workshop claims. Recovery assumes one Igor report executor;
+multi-process fencing is still required. External push retries are at least
+once; the desktop notification fallback commits with its receipt.
 
 | Tier | Type | When to use |
 |------|------|-------------|
@@ -421,6 +467,14 @@ The Legion is the sub-agent worker system (`app/legion/`). Wire name of the tool
 - Worker models resolve provider-agnostically: low/medium effort → `profile.background_model(parent_model)` (cheap tier, same provider); high/inherit → the parent model. Never hardcode worker model IDs in core (Rule 10). `LEGION_MODEL_OVERRIDE` (legacy alias `SUB_AGENT_MODEL`) pins all workers when set.
 - The judge legionnaire runs on briefings and reports only. Not on routine actions.
 - When legionnaires are deployed, SPEDA informs the user which workers ran. One sentence per worker.
+- Every production Legion worker, inline or background, is admitted to the
+  operational `worker_executions` journal before model/Cell work. UUID execution
+  IDs address controls; tool IDs and background tickets are display correlations,
+  never interchangeable execution targets. The workshop remains authoritative
+  about checkout claims. Missing live executors are unknown, never automatically
+  resumed or declared successful. Queued input and `boundary_recorded` receipts
+  are distinct; neither proves the model acted on a message. Workers cannot
+  execute tools outside their supplied allowlist or control other workers.
 
 ---
 

@@ -36,7 +36,7 @@ class NightCrawlerProfile(AgentProfile):
     # ElevenLabs "Arnold" (crisp, alert) — verify this id exists in the
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
-    voice_id = "elevenlabs:eleven_multilingual_v2:VR6AewLTigWG4xSOukaG"
+    voice_id = "elevenlabs:eleven_v4:VR6AewLTigWG4xSOukaG"
     canvas_brief = (
         "Presenting research: authoring visual windows is mandatory — put the evidence "
         "on the wall. One window per source (article), persons or entities as cards with photo, "

@@ -23,7 +23,7 @@ calling node a generous timeout. Nothing else runs meanwhile that would care.
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.schemas.octavius import (
     BackupEntry,
@@ -31,6 +31,9 @@ from app.schemas.octavius import (
     FetchRequest,
     FetchResult,
     OctaviusStatus,
+    RestoreRequest,
+    RestoreResult,
+    RestoreState,
 )
 from app.services import octavius
 
@@ -88,3 +91,15 @@ async def fetch(body: FetchRequest):
     if not ok:
         raise HTTPException(status_code=409, detail=report)
     return FetchResult(ok=ok, report=report)
+
+
+@router.post("/restore", response_model=RestoreResult)
+async def restore(body: RestoreRequest, request: Request):
+    """Owner-selected restore; an independent host job stops and restarts Igor."""
+    return await request.app.state.octavius_restore.start(body.file_id, body.job_id)
+
+
+@router.get("/restore", response_model=RestoreState)
+async def restore_status(request: Request, job_id: str = Query(default="", pattern=r"^(?:[0-9a-f]{32})?$")):
+    """Durable restore progress, independent of Drive and the restored database."""
+    return request.app.state.octavius_restore.status(job_id)

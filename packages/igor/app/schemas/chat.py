@@ -85,9 +85,10 @@ class ChatRequest(BaseModel):
     # that window — the client can attach to its own id from the instant it
     # hits send, even in a brand-new chat with no session_id yet.
     #
-    # Rejected if malformed or already in flight, so a client cannot hijack or
-    # collide with another turn; the server falls back to minting its own.
+    # Malformed IDs are rejected; known IDs conflict so retries cannot launch
+    # different work under a silently generated ID.
     request_id: str | None = None
+    workshop_project_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{24}$")
 
     @field_validator("request_id")
     @classmethod
@@ -107,10 +108,10 @@ class ChatRequest(BaseModel):
     keep_messages: int | None = None  # delete all but the first N messages, then proceed
     regenerate: bool = False          # re-run on existing history; do NOT add a new user message
 
-    # Working directory for an external-backend agent (the Forge / Optimus). It
-    # lands in context.extra["cwd"] → the peer's chat_request.cwd → the Cell
-    # workspace + Graphify root. Ignored by in-process agents. None = the peer's
-    # own default workspace.
+    # Initial engineering desk selection. Persisted for a new conversation when
+    # a Forge root is configured, then the stored desk wins over the global picker.
+    # Task workers and standalone peers receive its canonical cwd. Older unbound
+    # conversations require an explicit workshop selection instead of inference.
     cwd: str | None = None
 
     @field_validator("cwd")

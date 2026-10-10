@@ -59,6 +59,8 @@ async def index_passages(db, user_id: int, record_id: str, path: str, content: s
             db.add(row)
         else:
             row.retired, row.path = False, path
+            row.text, row.kind = part["text"], part["kind"]
+            row.mentioned_on = part["mentioned_on"]
             row.start_line, row.end_line = part["start_line"], part["end_line"]
         ref = "passage:"+part["id"]
         await add_edge(db, user_id, ref, "record:"+record_id, "part_of")

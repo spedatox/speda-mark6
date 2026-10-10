@@ -19,15 +19,18 @@ Runs against a real in-memory SQLite so the unique constraint and the upsert
 path are genuinely exercised, not mocked.
 """
 
+from contextlib import asynccontextmanager
 from datetime import date, datetime
 
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.context import AgentContext
 from app.database import Base
 from app.models.academic import AttendanceEntry, CourseSlot
 from app.services import academic as ac
+from app.skills import attendance as attendance_skills
 
 # 2026-09-21 is a Monday — week 1 of the term.
 TERM_START = date(2026, 9, 21)
@@ -280,3 +283,179 @@ async def test_occurrence_just_ended_returns_none_outside_window(db):
     await _seed(db)
     # An hour later the question is stale; the watch's local fallback owns it.
     assert await ac.occurrence_just_ended(db, datetime(2026, 9, 21, 11, 30)) is None
+
+
+# ── Recovery of unanswered hours ────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_pending_and_summary_use_owner_clock_at_the_bell(db, monkeypatch):
+    await _seed(db)
+    # The schedule is owner-local. At UTC+03, 09:50 UTC would be three hours late.
+    monkeypatch.setattr(ac, "owner_now", lambda: datetime(2026, 9, 21, 9, 50))
+
+    summary = (await ac.summarise(db))[0]
+    pending = await ac.pending_occurrences(db)
+
+    assert summary["unanswered_hours"] == 1
+    assert [p["slot_id"] for p in pending] == ["phys101_mon_0900"]
+
+
+@pytest.mark.asyncio
+async def test_recovery_keeps_only_missing_elapsed_teaching_hours(db):
+    courses = await _seed(db, weeks=3, hours=4, holidays=["2026-09-28"])
+    # A partially answered course: every settled status must stay settled.
+    for index, status in [(0, "attended"), (1, "absent"), (3, "cancelled")]:
+        await _answer(db, courses[index]["id"], TERM_START, status)
+
+    now = datetime(2026, 9, 29, 12, 0)
+    pending = await ac.pending_occurrences(db, now)
+
+    # Week 2 is a holiday, week 3 is still future, and only one week-1 hour is missing.
+    assert [(p["slot_id"], p["date"], p["time"]) for p in pending] == [
+        (courses[2]["id"], "2026-09-21", "11:00 - 11:50")
+    ]
+    assert await ac.occurrence_just_ended(db, now) is None
+
+
+@pytest.mark.asyncio
+async def test_pending_occurrences_can_target_one_hour_and_date(db):
+    courses = await _seed(db, weeks=2, hours=2)
+    now = datetime(2026, 9, 29, 12, 0)
+
+    pending = await ac.pending_occurrences(
+        db, now, course_code="PHYS101", on_date=date(2026, 9, 28),
+        slot_id=courses[1]["id"],
+    )
+    assert [(p["slot_id"], p["date"]) for p in pending] == [
+        (courses[1]["id"], "2026-09-28")
+    ]
+    assert await ac.pending_occurrences(db, now, course_code="OTHER101") == []
+    assert await ac.pending_occurrences(db, now, slot_id="missing-slot") == []
+    # Matching weekday outside the term is not an attendance occurrence.
+    assert await ac.pending_occurrences(db, now, on_date=date(2026, 9, 14)) == []
+    assert await ac.pending_occurrences(db, now, on_date=date(2026, 10, 5)) == []
+
+
+@pytest.mark.asyncio
+async def test_pending_order_is_oldest_end_then_stable_slot_id(db):
+    courses = await _seed(db, weeks=2, hours=1)
+    # Timetable sorting puts this slot first by start time, but both end at 09:50.
+    # A stable end-time tie must therefore use the occurrence's slot identity.
+    courses.append({**courses[0], "id": "z_parallel_slot", "startTime": "08:50"})
+    await ac.replace_schedule(db, courses)
+
+    pending = await ac.pending_occurrences(db, datetime(2026, 9, 29, 12, 0))
+    assert [(p["date"], p["slot_id"]) for p in pending] == [
+        ("2026-09-21", courses[0]["id"]),
+        ("2026-09-21", "z_parallel_slot"),
+        ("2026-09-28", courses[0]["id"]),
+        ("2026-09-28", "z_parallel_slot"),
+    ]
+
+
+@pytest.fixture
+def ask_environment(db, monkeypatch):
+    """Exercise the real skill and SQLite selection, replacing only clock and FCM."""
+    @asynccontextmanager
+    async def session_factory():
+        yield db
+
+    sent = []
+
+    async def send_ask(fid, occurrence, token=None):
+        sent.append((fid, occurrence, token))
+        return True, "delivered"
+
+    monkeypatch.setattr(attendance_skills, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(
+        attendance_skills, "owner_now", lambda: datetime(2026, 9, 29, 12, 0)
+    )
+    monkeypatch.setattr(attendance_skills.fcm, "send_attendance_ask", send_ask)
+    context = AgentContext(
+        agent_id="ultron", user_id=1, session_id=1, request_id="attendance-recovery-test",
+        triggered_by="user", trigger_payload={}, output_mode="respond", model="test",
+        system_prompt="", conversation_history=[], db=db, timezone="Europe/Istanbul",
+    )
+    return context, sent
+
+
+@pytest.mark.asyncio
+async def test_manual_empty_ask_resends_oldest_without_settling_it(db, ask_environment):
+    courses = await _seed(db, weeks=1, hours=2)
+    await ac.register_device(db, "watch", "wear", "watch-fid", "watch-token")
+    context, sent = ask_environment
+    skill = attendance_skills.AskAttendanceSkill()
+
+    result = await skill.execute({}, context)
+    await skill.execute({}, context)
+
+    assert len(sent) == 2
+    assert all(p[1]["slot_id"] == courses[0]["id"] for p in sent)
+    assert sent[0][2] == "watch-token"
+    assert "2026-09-21" in result and "09:00 - 09:50" in result
+    assert "submitted" in result.lower()
+    assert await ac.list_attendance(db) == []
+
+    # Only a real answer advances recovery to the next hour.
+    await _answer(db, courses[0]["id"], TERM_START, "attended")
+    await skill.execute({}, context)
+    assert sent[-1][1]["slot_id"] == courses[1]["id"]
+
+
+@pytest.mark.asyncio
+async def test_manual_ask_selectors_target_the_requested_occurrence(db, ask_environment):
+    courses = await _seed(db, weeks=2, hours=2)
+    await ac.register_device(db, "watch", "wear", "watch-fid")
+    context, sent = ask_environment
+
+    await attendance_skills.AskAttendanceSkill().execute(
+        {"course_code": "PHYS101", "date": "2026-09-28", "slot_id": courses[1]["id"]},
+        context,
+    )
+
+    assert len(sent) == 1
+    assert sent[0][1]["slot_id"] == courses[1]["id"]
+    assert sent[0][1]["date"] == "2026-09-28"
+
+
+@pytest.mark.asyncio
+async def test_n8n_ask_does_not_replay_historical_backlog(db, ask_environment):
+    await _seed(db, weeks=1)
+    await ac.register_device(db, "watch", "wear", "watch-fid")
+    context, sent = ask_environment
+    context.triggered_by = "n8n"
+
+    await attendance_skills.AskAttendanceSkill().execute({}, context)
+
+    assert sent == []
+    assert len(await ac.pending_occurrences(db, datetime(2026, 9, 29, 12, 0))) == 3
+
+
+@pytest.mark.asyncio
+async def test_manual_ask_without_watch_leaves_missing_hour_recoverable(db, ask_environment):
+    await _seed(db, weeks=1, hours=1)
+    context, sent = ask_environment
+
+    result = await attendance_skills.AskAttendanceSkill().execute({}, context)
+
+    assert sent == []
+    assert "no active watch" in result.lower()
+    assert await ac.list_attendance(db) == []
+    assert len(await ac.pending_occurrences(db, datetime(2026, 9, 29, 12, 0))) == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_manual_delivery_leaves_hour_recoverable(db, ask_environment, monkeypatch):
+    await _seed(db, weeks=1, hours=1)
+    await ac.register_device(db, "watch", "wear", "watch-fid")
+    context, _ = ask_environment
+
+    async def unavailable(*args, **kwargs):
+        return False, "transport unavailable"
+
+    monkeypatch.setattr(attendance_skills.fcm, "send_attendance_ask", unavailable)
+    result = await attendance_skills.AskAttendanceSkill().execute({}, context)
+
+    assert "transport unavailable" in result
+    assert await ac.list_attendance(db) == []
+    assert len(await ac.pending_occurrences(db, datetime(2026, 9, 29, 12, 0))) == 1

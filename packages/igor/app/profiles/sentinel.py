@@ -35,7 +35,7 @@ class SentinelProfile(AgentProfile):
     # ElevenLabs "Antoni" (even, professional) — verify this id exists in the
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
-    voice_id = "elevenlabs:eleven_multilingual_v2:ErXwobaYiN019PkySvjV"
+    voice_id = "elevenlabs:eleven_v4:ErXwobaYiN019PkySvjV"
     canvas_brief = (
         "Presenting finance: never speak a figure you could show — authoring visual "
         "windows is a mandatory rule. Every headline number is a stat tile with change, "

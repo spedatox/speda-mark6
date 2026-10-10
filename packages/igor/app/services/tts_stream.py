@@ -2,7 +2,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-Live streaming synthesis — ElevenLabs' stream-input WebSocket.
+Live streaming synthesis — ElevenLabs' Text to Dialogue WebSocket for v4.
+
+v4 uses /v1/text-to-dialogue/stream-input, registered voices, inputs[] and
+snake_case final markers. Older Flash models retain the Text to Speech socket.
+The dialogue socket has a fixed 20-second receive timeout, so a per-connection
+keep-alive runs during tool pauses and stops as soon as input ends or the
+connection is released. This is transport maintenance, not a job scheduler.
+Protocol: https://elevenlabs.io/docs/eleven-api/guides/how-to/websockets/realtime-tdd
 
 Why this exists alongside `services/tts.py`:
 
@@ -43,34 +50,38 @@ in front of a socket that will never speak.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from urllib.parse import urlencode
 
 from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException
 
 from app.config import settings
+from app.services.tts import ELEVENLABS_DEFAULT_MODEL, elevenlabs_voice_settings
 
 logger = logging.getLogger(__name__)
 
 _STREAM_URL = "wss://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream-input"
+_DIALOGUE_STREAM_URL = "wss://api.elevenlabs.io/v1/text-to-dialogue/stream-input"
 
 # 24 kHz signed 16-bit little-endian mono. The client rebuilds AudioBuffers from
 # this and MUST agree on all four facts, so they are stated once, here.
 PCM_SAMPLE_RATE = 24000
 _OUTPUT_FORMAT = f"pcm_{PCM_SAMPLE_RATE}"
 
-# How many characters ElevenLabs buffers before generating each successive
-# chunk. Their documented default, kept deliberately: a smaller first value
+# For the legacy TTS socket only: how many characters ElevenLabs buffers before
+# each chunk. Their documented default, kept deliberately: a smaller first value
 # would shave latency off the first word at the cost of the model seeing less
 # context before it commits to a contour — and context is the entire reason this
 # path exists. The overlap that hides the remaining latency is the client's job.
 _CHUNK_SCHEDULE = [120, 160, 250, 290]
 
-# The socket closes itself after this long with no text. The default is 20s,
+# The legacy TTS socket closes itself after this long with no text. The default is 20s,
 # which a turn routinely exceeds while a tool call runs mid-reply — that would
 # drop the stream in the middle of an answer. 180 is the documented maximum.
 _INACTIVITY_TIMEOUT = 180
@@ -104,8 +115,10 @@ class SpeechStream:
     being written.
     """
 
-    def __init__(self, ws) -> None:
+    def __init__(self, ws, dialogue_voice: str | None = None) -> None:
         self._ws = ws
+        self._dialogue_voice = dialogue_voice
+        self._input_ended = asyncio.Event()
 
     async def send_text(self, text: str) -> None:
         """Feed the next piece of the reply.
@@ -119,7 +132,12 @@ class SpeechStream:
         payload = text.rstrip()
         if not payload:
             return
-        await self._ws.send(json.dumps({"text": payload + " "}))
+        frame: dict = {"text": payload + " "}
+        if self._dialogue_voice:
+            frame = {"inputs": [{
+                "text": payload + " ", "voice_id": self._dialogue_voice, "new_turn": False,
+            }]}
+        await self._ws.send(json.dumps(frame))
 
     async def flush(self) -> None:
         """Generate whatever is buffered without ending the stream.
@@ -129,16 +147,28 @@ class SpeechStream:
         off a prosodic unit, which is the per-sentence behaviour this path
         exists to stop doing.
         """
-        await self._ws.send(json.dumps({"text": " ", "flush": True}))
+        frame = {"flush": True} if self._dialogue_voice else {"text": " ", "flush": True}
+        await self._ws.send(json.dumps(frame))
 
     async def end_input(self) -> None:
         """The turn is over. Generation of the tail begins; audio still follows."""
-        await self._ws.send(json.dumps({"text": ""}))
+        self._input_ended.set()
+        frame = {"close_socket": True} if self._dialogue_voice else {"text": ""}
+        await self._ws.send(json.dumps(frame))
+
+    async def keep_alive(self) -> None:
+        """Dialogue sockets have a fixed 20s timeout, including tool pauses."""
+        while not self._input_ended.is_set():
+            try:
+                await asyncio.wait_for(self._input_ended.wait(), timeout=10)
+            except TimeoutError:
+                await self._ws.send(json.dumps({"keep_alive": True}))
 
     async def audio(self) -> AsyncIterator[bytes]:
         """Yield PCM frames until the turn's audio is complete.
 
-        Ends on `isFinal`. A frame with no audio is a bare alignment update and
+        Ends on `is_final` (dialogue) or `isFinal` (legacy TTS).
+        A frame with no audio is a bare alignment update and
         is skipped rather than yielded as an empty buffer the client would have
         to guard against.
         """
@@ -148,10 +178,13 @@ class SpeechStream:
             except (TypeError, ValueError):
                 logger.warning("tts_stream_bad_frame")
                 continue
+            if frame.get("error"):
+                logger.warning("tts_stream_upstream_error", extra={"error": frame["error"]})
+                raise SpeechStreamError("ElevenLabs rejected streaming voice generation.")
             chunk = frame.get("audio")
             if chunk:
                 yield base64.b64decode(chunk)
-            if frame.get("isFinal"):
+            if frame.get("isFinal") or frame.get("is_final"):
                 return
 
 
@@ -174,21 +207,27 @@ async def open_stream(
     if not settings.elevenlabs_api_key:
         raise SpeechStreamError("Streaming voice needs ELEVENLABS_API_KEY.")
 
-    params = [
-        f"model_id={model or 'eleven_multilingual_v2'}",
-        f"output_format={_OUTPUT_FORMAT}",
-        f"inactivity_timeout={_INACTIVITY_TIMEOUT}",
-    ]
+    model = ELEVENLABS_DEFAULT_MODEL if model in ("", "eleven_multilingual_v2") else model
+    dialogue = model.startswith(("eleven_v3", "eleven_v4"))
+    params = {"model_id": model, "output_format": _OUTPUT_FORMAT}
+    if not dialogue:
+        params["inactivity_timeout"] = _INACTIVITY_TIMEOUT
     # Only the two-letter subtag: the API wants "tr", not the "tr-TR" the rest
     # of this codebase passes around.
     if language:
-        params.append(f"language_code={language.split('-')[0].lower()}")
-    url = _STREAM_URL.format(voice_id=voice_id) + "?" + "&".join(params)
+        params["language_code"] = language.split('-')[0].lower()
+    endpoint = _DIALOGUE_STREAM_URL if dialogue else _STREAM_URL.format(voice_id=voice_id)
+    url = endpoint + "?" + urlencode(params)
 
     opening: dict = {
         "text": " ",
         "generation_config": {"chunk_length_schedule": _CHUNK_SCHEDULE},
     }
+    if dialogue:
+        opening = {"voices": [voice_id]}
+    voice_settings = elevenlabs_voice_settings(model, voice_settings)
+    if model.startswith("eleven_v3") and voice_settings:
+        voice_settings = {k: v for k, v in voice_settings.items() if k == "stability"}
     if voice_settings:
         opening["voice_settings"] = voice_settings
 
@@ -207,7 +246,14 @@ async def open_stream(
                 "tts_stream_open",
                 extra={"model": model, "voice": voice_id, "language": language or ""},
             )
-            yield SpeechStream(ws)
+            speech = SpeechStream(ws, voice_id if dialogue else None)
+            heartbeat = asyncio.create_task(speech.keep_alive()) if dialogue else None
+            try:
+                yield speech
+            finally:
+                if heartbeat is not None:
+                    heartbeat.cancel()
+                    await asyncio.gather(heartbeat, return_exceptions=True)
     except WebSocketException as exc:
         logger.warning(
             "tts_stream_failed",

@@ -37,6 +37,117 @@ class _Profile:
         return self.background_models.get(provider, active_model_ref)
 
 
+async def test_background_admission_reserves_before_ticket_creation(monkeypatch):
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr(settings, "legion_max_background_workers", 2)
+    runner = LegionRunner(object(), CapabilityRegistry(), None)
+    two_admitted, release_tickets = asyncio.Event(), asyncio.Event()
+    admitted = 0
+
+    async def log_start(**kwargs):
+        nonlocal admitted
+        admitted += 1
+        ticket = admitted
+        if admitted == 2:
+            two_admitted.set()
+        await release_tickets.wait()
+        return ticket
+
+    async def held_loop(**kwargs):
+        await asyncio.Event().wait()
+
+    runner._log_start = log_start
+    runner._log_finish = AsyncMock()
+    runner._loop = held_loop
+    starts = [asyncio.create_task(runner.run_worker(
+        {"description": "work", "prompt": "go", "run_in_background": True}, _bg_ctx(),
+    )) for _ in range(4)]
+    await asyncio.wait_for(two_admitted.wait(), 5)
+    assert admitted == 2
+    release_tickets.set()
+    results = await asyncio.gather(*starts)
+    assert sum("deployed:" in result for result in results) == 2
+    assert sum("Refused:" in result for result in results) == 2
+    assert runner._worker_count() == 2
+    await runner.shutdown()
+    assert runner._worker_count() == 0
+
+
+async def test_ticket_failure_does_not_start_an_untracked_worker(monkeypatch):
+    from unittest.mock import AsyncMock
+    runner = LegionRunner(object(), CapabilityRegistry(), None)
+    runner._log_start = AsyncMock(return_value=None)
+    runner._loop = AsyncMock()
+    result = await runner.run_worker({"prompt": "go", "run_in_background": True}, _bg_ctx())
+    assert "No background execution was started" in result
+    runner._loop.assert_not_awaited()
+    assert runner._worker_count() == 0
+
+
+async def test_inline_and_background_share_execution_capacity(monkeypatch):
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr(settings, "legion_max_background_workers", 1)
+    runner = LegionRunner(object(), CapabilityRegistry(), None)
+    running, release = asyncio.Event(), asyncio.Event()
+
+    async def held_loop(**kwargs):
+        running.set()
+        await release.wait()
+        return "done"
+
+    runner._loop = held_loop
+    runner._log_start = AsyncMock(return_value=1)
+    inline = asyncio.create_task(runner.run_worker({"prompt": "go"}, _bg_ctx()))
+    await asyncio.wait_for(running.wait(), 5)
+    result = await runner.run_worker({"prompt": "go", "run_in_background": True}, _bg_ctx())
+    assert result.startswith("Refused:") and "share this limit" in result
+    runner._log_start.assert_not_awaited()
+    release.set()
+    assert await asyncio.wait_for(inline, 5) == "done"
+    assert runner._worker_count() == 0
+
+
+async def test_cancelled_ticket_admission_releases_capacity():
+    runner = LegionRunner(object(), CapabilityRegistry(), None)
+    admitting = asyncio.Event()
+
+    async def held_ticket(**kwargs):
+        admitting.set()
+        await asyncio.Event().wait()
+
+    runner._log_start = held_ticket
+    launch = asyncio.create_task(runner.run_worker({"prompt": "go", "run_in_background": True}, _bg_ctx()))
+    await asyncio.wait_for(admitting.wait(), 5)
+    assert runner._worker_count() == 1
+    launch.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(launch, 5)
+    assert runner._worker_count() == 0 and not runner._background
+
+
+async def test_shutdown_joins_background_cleanup():
+    runner = LegionRunner(object(), CapabilityRegistry(), None)
+    entered, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    async def held():
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaning.set()
+            await release.wait()
+
+    worker = asyncio.create_task(held())
+    runner._background.add(worker)
+    await asyncio.wait_for(entered.wait(), 5)
+    closing = asyncio.create_task(runner.shutdown())
+    await asyncio.wait_for(cleaning.wait(), 5)
+    assert not closing.done()
+    release.set()
+    await asyncio.wait_for(closing, 5)
+    assert worker.done() and not runner._background
+
+
 @pytest.fixture(autouse=True)
 def _no_override(monkeypatch):
     """Isolate worker-model resolution from the deployment it runs on.
@@ -305,7 +416,7 @@ async def test_legion_max_background_workers_setting(monkeypatch):
             worker=LEGION_ROSTER["scout"], model="test", tools=[],
             description="desc", prompt="prompt", context=_ctx(),
         )
-        assert "Refused: already running 1 background legionnaires (max 1)" in msg
+        assert "Refused: already using 1 worker slots (max 1)" in msg
     finally:
         dummy_task.cancel()
 
@@ -348,7 +459,7 @@ async def test_forge_worker_uses_selected_workspace(monkeypatch):
 
         async def run(self, **kwargs):
             calls.append(kwargs)
-            kwargs["emit"]({"phase": "text", "text": "working", "source": "forge"})
+            await kwargs["emit"]({"phase": "text", "text": "working", "source": "forge"})
             return "implemented and checked"
 
     monkeypatch.setattr("app.execution.forge.ForgeExecutor", _Forge)
@@ -507,6 +618,7 @@ def _bg_ctx():
         request_id="req", agent_id="speda", model="zai:glm-4.6",
         user_id=1, session_id=42, triggered_by="user",
         timezone="Europe/Istanbul",
+        workshop_project_id=None,
         extra={"tool_allowlist": None},
     )
 
@@ -680,6 +792,9 @@ async def test_parallel_tool_results_keep_their_invocation_ids(registry, monkeyp
     """A starts, B starts, B completes, A completes without positional pairing."""
     from app.core import runtime_state
     monkeypatch.setattr(runtime_state, "get_budget_mode", lambda: False)
+    class OtherSearch(_ReadOnlySkill):
+        name = "other_search"
+    await registry.register_skill(OtherSearch())
 
     calls = {"n": 0}
 
@@ -690,7 +805,7 @@ async def test_parallel_tool_results_keep_their_invocation_ids(registry, monkeyp
                 return SimpleNamespace(
                     content=[
                         SimpleNamespace(type="tool_use", id="call-a", name="search_thing", input={"q": "a"}),
-                        SimpleNamespace(type="tool_use", id="call-b", name="write_thing", input={"q": "b"}),
+                        SimpleNamespace(type="tool_use", id="call-b", name="other_search", input={"q": "b"}),
                     ],
                     stop_reason="tool_use", usage=None,
                 )
@@ -719,8 +834,8 @@ async def test_parallel_tool_results_keep_their_invocation_ids(registry, monkeyp
     ]
     assert lifecycle == [
         ("tool", "call-a", "search_thing", None),
-        ("tool", "call-b", "write_thing", None),
-        ("tool_result", "call-b", "write_thing", "result-b"),
+        ("tool", "call-b", "other_search", None),
+        ("tool_result", "call-b", "other_search", "result-b"),
         ("tool_result", "call-a", "search_thing", "result-a"),
     ]
 

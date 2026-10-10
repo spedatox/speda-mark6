@@ -55,13 +55,12 @@ integrations by hand.
 Instead every backup carries a manifest naming those files and where they live,
 so a restore knows what it still has to fetch the hard way. See `MANIFEST`.
 
-RESTORING IS HALF A JOB ON PURPOSE
-----------------------------------
-`fetch` downloads a backup, verifies it end to end, and stages it beside the live
-database — then stops and prints the swap. It does not perform the swap, because
-Igor is the process holding that file open: replacing a database under a running
-SQLAlchemy engine is not a risky operation, it is a corrupt one. The swap needs
-the app stopped, which means it cannot be the app that does it.
+RESTORING REQUIRES THE APP TO BE STOPPED
+---------------------------------------
+`fetch` stages a verified backup for a manual swap. The owner-facing restore
+action uses services/octavius_restore.py to launch an independent host worker.
+That worker stops Igor before replacing the database and preserves the original
+with its journals for rollback. Igor never swaps its own open database.
 
 The stale `-wal` / `-shm` sidecars in that swap are not decoration. Left beside a
 restored file they are read as that database's journal, and a journal from a
@@ -192,7 +191,9 @@ def _integrity(path: Path) -> str:
             conn.close()
     except sqlite3.Error as e:
         return f"unreadable: {e}"
-    return str(rows[0][0]) if rows else "no result"
+    if rows == [("ok",)]:
+        return "ok"
+    return next((str(row[0]) for row in rows if row[0] != "ok"), "no result")
 
 
 def _compress(src: Path, dest: Path) -> dict:
@@ -555,12 +556,9 @@ async def status() -> dict:
     return out
 
 
-async def fetch(file_id: str = "") -> tuple[bool, str]:
-    """Download a backup, verify it end to end, and stage it for a manual swap.
-
-    Deliberately stops short of installing it — see the module docstring. The
-    swap instructions it prints are the ones in MANIFEST, with real paths.
-    """
+async def stage_backup(file_id: str, staged: Path | None = None,
+                       *, require_hash: bool = False) -> tuple[bool, dict | str]:
+    """Download and validate one archive; never install it into the live engine."""
     if not settings.octavius_protocol_enabled:
         return False, "The Octavius Protocol is disabled on this deployment."
 
@@ -579,9 +577,19 @@ async def fetch(file_id: str = "") -> tuple[bool, str]:
         return False, (f"No backup with id {file_id}. Run list first and use an id "
                        "from it verbatim.")
 
-    _RESTORE_DIR.mkdir(parents=True, exist_ok=True)
-    archive = _WORK / chosen["name"]
-    staged = _RESTORE_DIR / chosen["name"].replace(".db.gz", ".db")
+    # Drive filenames are external input, never arbitrary local paths.
+    name = chosen["name"]
+    if (Path(name).name != name or "/" in name or "\\" in name
+            or not name.startswith("speda-brain-") or not name.endswith(".db.gz")):
+        return False, "REFUSED — this is not an Octavius archive filename."
+    if require_hash and not chosen["sha256"]:
+        return False, "REFUSED — automatic restore requires a recorded SHA-256 hash."
+    staged = staged or _RESTORE_DIR / name.replace(".db.gz", ".db")
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    # Unique scratch prevents a restore download colliding with a nightly backup.
+    from uuid import uuid4
+    archive = _WORK / f"restore-{uuid4().hex}.gz"
+    verified = False
 
     try:
         _WORK.mkdir(parents=True, exist_ok=True)
@@ -609,11 +617,24 @@ async def fetch(file_id: str = "") -> tuple[bool, str]:
                 f"REFUSED — the restored database failed its integrity check "
                 f"({integrity}). Nothing was staged. Try an older backup."
             )
+        verified = True
     except Exception as e:  # noqa: BLE001
         logger.error("octavius_fetch_failed", extra={"error": str(e)})
         return False, f"The restore staging failed: {str(e)[:300]}"
     finally:
         archive.unlink(missing_ok=True)
+        if not verified:
+            staged.unlink(missing_ok=True)
+
+    return True, {**chosen, "path": str(staged)}
+
+
+async def fetch(file_id: str = "") -> tuple[bool, str]:
+    """Stage a verified backup and return the existing manual swap instructions."""
+    ok, chosen = await stage_backup(file_id)
+    if not ok:
+        return False, chosen
+    staged = Path(chosen["path"])
 
     host_dir = "/opt/speda"
     logger.warning("octavius_fetched", extra={"backup_name": chosen["name"]})

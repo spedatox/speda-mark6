@@ -11,6 +11,71 @@ same table dispatch uses, so the comms tray shows them too.
 
 from app.core.context import AgentContext
 from app.skills.base import Skill
+from app.services.workspaces import WorkspaceError
+
+
+class LegionInspectSkill(Skill):
+    name = "legion_inspect"
+    read_only = True
+    memoize = False
+    description = (
+        "Lists saved inline and background worker executions for this chat, or inspects one execution and its progress events. "
+        "Use it to find an Autobot's execution_id, result, original input references, interrupt state and queued message receipts. "
+        "Do not treat executor_unavailable or unknown as completion, and do not replay an uncertain job. "
+        "Returns durable records and a sequence cursor; pass after to retrieve only newer events."
+    )
+    input_schema = {"type": "object", "properties": {
+        "execution_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "after": {"type": "integer", "minimum": 0},
+    }, "additionalProperties": False}
+
+    def __init__(self, service):
+        self._service = service
+
+    async def execute(self, args, context):
+        import json
+        scope = {"user_id": context.user_id, "agent_id": context.agent_id}
+        try:
+            if args.get("execution_id"):
+                result = await self._service.events(args["execution_id"], after=args.get("after", 0), **scope)
+                result["execution"] = await self._service.inspect(args["execution_id"], **scope)
+            else:
+                result = await self._service.list(session_id=context.session_id, **scope)
+            return json.dumps(result, ensure_ascii=False)
+        except WorkspaceError as exc:
+            return f"Error: {exc}"
+
+
+class LegionControlSkill(Skill):
+    name = "legion_control"
+    description = (
+        "Interrupts one live worker execution or queues a steering message for a live Forge Autobot. "
+        "Use the exact execution_id from legion_inspect or the Task progress events, and reuse message_id when retrying the same message. "
+        "Do not target a ticket number, guess an ID, restart an uncertain execution, or treat a queued acknowledgment as model consumption. "
+        "Returns acceptance and saved receipts; messages enter at a legal tool or turn boundary, while interruption settles after cleanup."
+    )
+    input_schema = {"type": "object", "properties": {
+        "execution_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "action": {"type": "string", "enum": ["interrupt", "message"]},
+        "text": {"type": "string", "minLength": 1, "maxLength": 16000},
+        "message_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    }, "required": ["execution_id", "action"], "additionalProperties": False}
+
+    def __init__(self, service):
+        self._service = service
+
+    async def execute(self, args, context):
+        import json
+        scope = {"user_id": context.user_id, "agent_id": context.agent_id}
+        try:
+            if args["action"] == "interrupt":
+                result = await self._service.interrupt(args["execution_id"], **scope)
+            else:
+                result = await self._service.message(args["execution_id"], args.get("text", ""),
+                                                     message_id=args.get("message_id"), **scope)
+            return json.dumps(result, ensure_ascii=False)
+        except WorkspaceError as exc:
+            return f"Error: {exc}"
 
 
 class LegionStatusSkill(Skill):
@@ -31,6 +96,7 @@ class LegionStatusSkill(Skill):
         "result text once finished."
     )
     read_only = True
+    memoize = False
     input_schema = {
         "type": "object",
         "properties": {

@@ -35,7 +35,7 @@ class ScourgeProfile(AgentProfile):
     # ElevenLabs "Sam" (raspy, serious) — verify this id exists in the
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
-    voice_id = "elevenlabs:eleven_multilingual_v2:yoZ06aMxZJJ28mfd3POQ"
+    voice_id = "elevenlabs:eleven_v4:yoZ06aMxZJJ28mfd3POQ"
     canvas_brief = (
         "Presenting security: authoring visual windows is mandatory. Attack vectors, "
         "network perimeters and threat paths go in svg windows, vulnerability breakdowns "

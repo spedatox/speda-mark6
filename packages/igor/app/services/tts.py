@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-Text-to-speech synthesis — Azure Speech.
+Text-to-speech synthesis — ElevenLabs v4, Azure Speech and OpenAI.
 
 Voice mode speaks every reply, so synthesis is a TRANSPORT concern: the router
 calls it on text the orchestrator already produced. It is deliberately NOT
@@ -277,7 +277,7 @@ def build_ssml(text: str, voice: str, locale: str | None = None) -> str:
 #
 #     azure:neural:en-US-BrianMultilingualNeural
 #     openai:gpt-4o-mini-tts:nova
-#     elevenlabs:eleven_multilingual_v2:21m00Tcm4TlvDq8ikWAM
+#     elevenlabs:eleven_v4:21m00Tcm4TlvDq8ikWAM
 #
 # A BARE name means Azure, so every ref written before OpenAI existed — the
 # profiles' voice_id, tts_default_voice — keeps working untouched.
@@ -286,11 +286,9 @@ _OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech"
 _ELEVENLABS_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 _ELEVENLABS_VOICES_URL = "https://api.elevenlabs.io/v1/voices"
 
-# ElevenLabs' current multilingual model — the only one worth defaulting to
-# here, since a per-agent voice speaking Turkish (tts_locale) needs one model
-# that actually supports it rather than an English-only model silently
-# mangling the pronunciation.
-ELEVENLABS_DEFAULT_MODEL = "eleven_multilingual_v2"
+# Eleven v4 supports Turkish as well as the roster's other spoken languages.
+# https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4
+ELEVENLABS_DEFAULT_MODEL = "eleven_v4"
 
 # OpenAI's TTS models. gpt-4o-mini-tts is the current one and the only one that
 # accepts `instructions`; tts-1 is faster and cheaper, tts-1-hd cleaner.
@@ -316,12 +314,16 @@ def parse_voice_ref(ref: str) -> tuple[str, str, str]:
     Accepts the bare Azure voice names that predate multi-provider support, so
     an unqualified "tr-TR-EmelNeural" still resolves to Azure rather than
     becoming an error the owner has to go and fix in three places.
+    Saved ElevenLabs Multilingual v2 references upgrade to v4, retaining the
+    same voice ID. Other explicitly selected models keep their own routing.
     """
     parts = (ref or "").split(":")
     if len(parts) >= 3 and parts[0] == "openai":
         return "openai", parts[1], ":".join(parts[2:])
     if len(parts) >= 3 and parts[0] == "elevenlabs":
-        return "elevenlabs", parts[1], ":".join(parts[2:])
+        # Upgrade the former default in saved pins without changing the voice.
+        model = ELEVENLABS_DEFAULT_MODEL if parts[1] in ("", "eleven_multilingual_v2") else parts[1]
+        return "elevenlabs", model, ":".join(parts[2:])
     if len(parts) >= 2 and parts[0] == "azure":
         return "azure", "neural", ":".join(parts[1:])
     return "azure", "neural", ref
@@ -361,24 +363,39 @@ def resolve_voice(
     UNPINNED agent falls back to.
     """
     if explicit:
-        return explicit
+        return _current_voice_ref(explicit)
     if agent_id:
         from app.core.runtime_state import get_voice_overrides
 
         pinned = get_voice_overrides().get(agent_id, {}).get("voice_id")
         if pinned:
-            return pinned
+            return _current_voice_ref(pinned)
         p = profile if profile is not None else (profiles.get(agent_id) if profiles is not None else None)
         if p is not None and p.voice_id:
-            return p.voice_id
-    return settings.tts_default_voice
+            return _current_voice_ref(p.voice_id)
+    return _current_voice_ref(settings.tts_default_voice)
+
+
+def _current_voice_ref(ref: str) -> str:
+    """Keep saved ElevenLabs voice identities while upgrading the old default."""
+    if ref.startswith("elevenlabs:"):
+        provider, model, voice = parse_voice_ref(ref)
+        return f"{provider}:{model}:{voice}"
+    return ref
 
 
 # The ElevenLabs voice_settings this module knows how to tune from Settings →
-# Voices. Anything else in their API (language_code, output_format, …) is
-# either not applicable to the pinned multilingual model or already fixed
-# elsewhere (composer/trigger_runner always want MP3 for sendAudio).
+# Voices. v4 only accepts stability and similarity_boost; the remaining keys
+# stay available for older models and in saved settings for those models.
 VOICE_SETTINGS_KEYS = ("stability", "similarity_boost", "style", "speed", "use_speaker_boost")
+
+
+def elevenlabs_voice_settings(model: str, voice_settings: dict | None) -> dict | None:
+    """Only forward controls the selected model supports; preserve unset defaults."""
+    if not voice_settings:
+        return None
+    keys = ("stability", "similarity_boost") if model.startswith("eleven_v4") else VOICE_SETTINGS_KEYS
+    return {k: voice_settings[k] for k in keys if k in voice_settings} or None
 
 
 def resolve_voice_settings(agent_id: str | None) -> dict | None:
@@ -414,8 +431,9 @@ async def synthesize(
     regional variant; only when both are empty does build_ssml fall back to
     guessing from the voice name.
 
-    `voice_settings` (resolve_voice_settings()) tunes ElevenLabs'
-    stability/similarity_boost/style/speed/use_speaker_boost for THIS call.
+    `voice_settings` (resolve_voice_settings()) tunes ElevenLabs for THIS call.
+    v4 uses stability/similarity_boost; older models can also use style, speed
+    and use_speaker_boost. Unsupported controls are omitted from the request.
     Azure and OpenAI ignore it silently — they have no equivalent knob, and a
     caller resolving settings once for whichever provider is active should
     not have to branch on provider itself.
@@ -485,7 +503,7 @@ async def synthesize_prepared(
     if provider == "openai":
         return await _openai_synthesize(spoken, model, name, spoken_locale)
     if provider == "elevenlabs":
-        return await _elevenlabs_synthesize(spoken, model, name, voice_settings)
+        return await _elevenlabs_synthesize(spoken, model, name, voice_settings, spoken_locale)
     return await _azure_synthesize(spoken, name, spoken_locale)
 
 
@@ -551,14 +569,13 @@ async def _openai_synthesize(
 
 async def _elevenlabs_synthesize(
     spoken: str, model: str, voice_id: str, voice_settings: dict | None = None,
+    locale: str | None = None,
 ) -> bytes:
     """ElevenLabs' speech endpoint. Plain text in a JSON field, same reasoning
     as OpenAI's path for why nothing here needs escaping: there is no document
     for model-authored text to break out of, only a string value.
 
-    No `locale` parameter — ElevenLabs' multilingual models detect the
-    language from the text itself and have no per-request language hint to
-    give them, unlike OpenAI's `instructions` field.
+    v4 accepts a language hint; use the same spoken locale as the live stream.
 
     `voice_settings` is omitted from the body entirely when None/empty — NOT
     sent as `{}` or as zeroed defaults. ElevenLabs falls back to the voice's
@@ -575,6 +592,9 @@ async def _elevenlabs_synthesize(
         "text": spoken,
         "model_id": model or ELEVENLABS_DEFAULT_MODEL,
     }
+    if locale and body["model_id"].startswith("eleven_v4"):
+        body["language_code"] = locale.split("-")[0].lower()
+    voice_settings = elevenlabs_voice_settings(body["model_id"], voice_settings)
     if voice_settings:
         body["voice_settings"] = voice_settings
     url = _ELEVENLABS_TTS_URL.format(voice_id=voice_id)

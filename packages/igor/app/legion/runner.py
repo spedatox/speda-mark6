@@ -18,6 +18,7 @@ request context, never the request-scoped db session.
 """
 
 import asyncio
+import inspect
 import logging
 import time
 import uuid
@@ -66,6 +67,10 @@ _FS_TOOL_NAMES = frozenset({
 })
 
 
+class WorkerInterrupted(RuntimeError):
+    """A child was interrupted without cancelling the supervising parent turn."""
+
+
 class LegionRunner:
     """One instance, owned by the CapabilityRegistry (Tier 0)."""
 
@@ -74,11 +79,20 @@ class LegionRunner:
         client: "LLMClient",
         registry: "CapabilityRegistry",
         profiles: "ProfileRegistry | None",
+        workspace_service=None,
+        input_service=None,
+        worker_control=None,
     ) -> None:
         self._client = client
         self._registry = registry
         self._profiles = profiles
+        self._workspaces = workspace_service
+        self._inputs = input_service
+        self._control = worker_control
         self._background: set[asyncio.Task] = set()
+        self._admitting = 0
+        self._inline = 0
+        self._closing = False
         # Set late in the lifespan (see set_report_hook): the orchestrator and
         # turn registry it closes over do not exist yet at Tier-0 registration.
         self._report_hook = None
@@ -127,6 +141,24 @@ class LegionRunner:
         )
         tools = self._worker_tools(worker, context)
 
+        if args.get("workshop_project_id"):
+            from app.services.workspaces import WorkspaceError
+            if self._workspaces is None or context.db is None:
+                return "Refused: durable desk selection is unavailable in this execution context."
+            try:
+                await self._workspaces.prepare(context, project_id=args["workshop_project_id"], explicit=True)
+                if self._inputs is not None:
+                    await self._inputs.prepare(context)
+            except WorkspaceError as exc:
+                return f"Refused: {exc}"
+
+        selection = args.get("input_ids")
+        if selection is not None:
+            available = {item.get("input_id") for item in context.extra.get("forge_inputs", [])}
+            if not isinstance(selection, list) or any(not isinstance(value, str) or value not in available for value in selection):
+                return "Refused: an input ID is unavailable in this conversation's engineering desk."
+        context.extra["forge_input_selection"] = selection
+
         if args.get("run_in_background"):
             return await self._launch_background(
                 worker=worker, model=model, tools=tools,
@@ -139,12 +171,22 @@ class LegionRunner:
         # no separate id scheme. Only synthetic callers without one (tests,
         # a worker's own nested tool calls never reach here) need the fallback.
         run_id = tool_call_id or f"legion-{uuid.uuid4().hex[:10]}"
-        return await self._loop(
-            worker=worker, model=model, tools=tools,
-            description=description, prompt=prompt,
-            request_id=context.request_id, context=context,
-            run_id=run_id, emit=emit,
-        )
+        if self._closing or self._worker_count() >= settings.legion_max_background_workers:
+            return "Refused: worker execution capacity is unavailable. Wait for a running worker to finish."
+        self._inline += 1
+        try:
+            return await self._controlled_loop(
+                worker=worker, model=model, tools=tools,
+                description=description, prompt=prompt,
+                request_id=context.request_id, context=context,
+                run_id=uuid.uuid4().hex if self._control else run_id,
+                ui_run_id=run_id, emit=emit, background=False,
+            )
+        finally:
+            self._inline -= 1
+
+    def _worker_count(self) -> int:
+        return self._admitting + self._inline + sum(not t.done() for t in self._background)
 
     def _resolve_profile(self, agent_id: str):
         """Parent agent's profile — its per-provider cheap tiers drive worker
@@ -266,15 +308,110 @@ class LegionRunner:
     # ── The worker loop ───────────────────────────────────────────────────────
 
     @staticmethod
-    def _safe_emit(emit, event: dict) -> None:
+    async def _safe_emit(emit, event: dict) -> None:
         """Push one progress event to the live panel. Best-effort: a UI-side
         callback must never break a worker over telemetry it doesn't need."""
         if emit is None:
             return
         try:
-            emit(event)
+            published = emit(event)
+            if inspect.isawaitable(published):
+                await published
         except Exception as e:  # noqa: BLE001
+            if getattr(emit, "_durable", False):
+                raise
             logger.warning("legion_emit_failed", extra={"error": str(e)})
+
+    async def _controlled_loop(self, *, ui_run_id, background, ticket_id=None, pre_admitted=False, **kwargs):
+        if self._control is None:
+            return await self._loop(**kwargs)
+        from app.execution.forge import ForgeInterrupted
+        from app.services.worker_control import WorkerInbox
+
+        execution_id = kwargs["run_id"]
+        context, worker = kwargs["context"], kwargs["worker"]
+        if not pre_admitted:
+            await self._control.begin(execution_id, context=context, worker=worker,
+                model=kwargs["model"], task=f"{kwargs['description']}\n\n{kwargs['prompt']}",
+                ui_run_id=ui_run_id, background=background, ticket_id=ticket_id)
+        original_emit = kwargs.pop("emit", None)
+        terminal = None
+
+        async def publish(event):
+            nonlocal terminal
+            event = {**event, "id": ui_run_id, "execution_id": execution_id,
+                     "parent_request_id": context.request_id}
+            if event.get("phase") == "finished":
+                terminal = event
+                return
+            sequence = await self._control.append(execution_id, event)
+            await self._safe_emit(original_emit, {**event, "sequence": sequence})
+        # Persistence errors must propagate; optional UI callback errors do not.
+        publish._durable = True
+
+        signal = asyncio.Event()
+        task = asyncio.create_task(self._loop(**kwargs, emit=publish, signal=signal,
+            inbox=WorkerInbox(self._control, execution_id) if worker.backend == "forge" else None))
+        self._control.bind(execution_id, task, signal, worker.backend)
+        status, result = "unknown", "Worker execution did not settle."
+        settled_status = None
+        try:
+            result = await task
+            status = "failed" if terminal and terminal.get("ok") is False else "completed"
+            if status == "failed":
+                raise RuntimeError(result)
+            return result
+        except ForgeInterrupted as exc:
+            status, result = "interrupted", str(exc)
+            raise
+        except asyncio.CancelledError:
+            # Hard task cancellation does not prove a Forge Cell is gone. Its
+            # runtime keeps the claim; a signal-driven stop above is definitive.
+            status = "unknown" if worker.backend == "forge" else "interrupted"
+            result = "Worker interrupted; reconcile its Cell before retrying." if status == "unknown" else "Worker interrupted."
+            if not asyncio.current_task().cancelling():
+                raise WorkerInterrupted(result)
+            raise
+        except Exception as exc:
+            status, result = "failed", str(exc)
+            raise
+        finally:
+            async def settle():
+                nonlocal settled_status
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                try:
+                    final_status = await self._control.settlement_status(execution_id, worker.backend, status)
+                    # A failed journal/event write cannot be upgraded to success
+                    # by the workshop's clean Cell teardown alone.
+                    if status != "completed" and final_status == "completed":
+                        final_status = status
+                    settled_status = final_status
+                    sequence = await self._control.finish(execution_id, final_status, result)
+                    await self._safe_emit(original_emit, {
+                        **(terminal or {}), "id": ui_run_id, "execution_id": execution_id,
+                        "parent_request_id": context.request_id, "phase": "finished",
+                        "status": final_status, "ok": final_status == "completed", "report": result,
+                        "sequence": sequence, "source": worker.backend,
+                    })
+                finally:
+                    await self._control.executor_stopped(execution_id)
+            # Codex tasks/mod.rs owns interruption cleanup. Repeated cancellation
+            # must not interrupt our owned join or journal commit either.
+            cleanup = asyncio.create_task(settle())
+            cancelled_during_cleanup = False
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError:
+                    cancelled_during_cleanup = True
+                    continue
+            cleanup.result()
+            if cancelled_during_cleanup:
+                raise asyncio.CancelledError
+            if status == "completed" and settled_status != "completed":
+                raise RuntimeError(f"Worker outcome is {settled_status}; inspect execution {execution_id} before continuing.")
 
     async def _loop(
         self,
@@ -288,16 +425,18 @@ class LegionRunner:
         context: "AgentContext",
         run_id: str | None = None,
         emit=None,
+        signal=None,
+        inbox=None,
     ) -> str:
         if worker.backend == "forge":
             return await self._forge_loop(
                 worker=worker, model=model, description=description, prompt=prompt,
-                context=context, run_id=run_id, emit=emit,
+                context=context, run_id=run_id, emit=emit, signal=signal, inbox=inbox,
             )
         from app.services.llm_client import blocks_to_dicts
 
         started = time.monotonic()
-        self._safe_emit(emit, {
+        await self._safe_emit(emit, {
             "id": run_id, "agent": worker.worker_id, "label": description,
             "phase": "started", "prompt": prompt, "source": "legion",
         })
@@ -313,6 +452,7 @@ class LegionRunner:
         )
 
         messages: list[dict] = [{"role": "user", "content": prompt}]
+        permitted_names = {tool["name"] for tool in tools} - WORKER_EXCLUDED_TOOLS
         # Task framing rides the first USER message, not the system prompt. Every
         # worker of a given type then shares one byte-identical system block, so
         # the provider's cache (explicit on Anthropic, implicit on the rest) can
@@ -353,8 +493,8 @@ class LegionRunner:
                         f"Legion safety guard triggered after {iterations} tool iterations "
                         "with no salvageable output. Task incomplete."
                     )
-                self._safe_emit(emit, {
-                    "id": run_id, "phase": "finished", "ok": bool(partial),
+                await self._safe_emit(emit, {
+                    "id": run_id, "phase": "finished", "ok": False,
                     "report": guard_result, "source": "legion",
                 })
                 return guard_result
@@ -412,7 +552,7 @@ class LegionRunner:
                         "output": spend["output"],
                     },
                 )
-                self._safe_emit(emit, {
+                await self._safe_emit(emit, {
                     "id": run_id, "phase": "finished", "ok": True,
                     "report": result, "source": "legion",
                 })
@@ -432,43 +572,54 @@ class LegionRunner:
                             "tool_id": block.id,
                         },
                     )
-                    self._safe_emit(emit, {
+                    await self._safe_emit(emit, {
                         "id": run_id, "phase": "tool", "tool": block.name,
                         "tool_call_id": block.id, "input": block.input,
                         "source": "legion",
                     })
 
-                # Execute all tools in parallel (research skills are read-only
-                # annotated — Rule 9 makes this safe).
+                # Codex tools/parallel.rs gates parallelism on capability facts.
+                # Even when general workers may mutate, writes form barriers.
                 async def _execute_indexed(index, block):
+                    if block.name not in permitted_names:
+                        return index, f"Error: tool '{block.name}' is outside this worker's allowed tools."
                     return index, await self._registry.execute(
                         block.name, block.input, context,
                     )
 
-                exec_tasks = [
-                    asyncio.create_task(_execute_indexed(index, block))
-                    for index, block in enumerate(tool_use_blocks)
-                ]
                 results = [None] * len(tool_use_blocks)
-                try:
-                    for completed in asyncio.as_completed(exec_tasks):
-                        index, res = await completed
-                        results[index] = res
-                        block = tool_use_blocks[index]
-                        preview = res if isinstance(res, str) else str(res)
-                        event = {
-                            "id": run_id, "phase": "tool_result",
-                            "tool_call_id": block.id, "tool": block.name,
-                            "result": preview[:1500], "source": "legion",
-                        }
-                        if preview.startswith("Error"):
-                            event["error"] = preview[:1500]
-                        self._safe_emit(emit, event)
-                finally:
-                    for task in exec_tasks:
-                        if not task.done():
-                            task.cancel()
-                    await asyncio.gather(*exec_tasks, return_exceptions=True)
+
+                async def execute_group(indices):
+                    exec_tasks = [asyncio.create_task(_execute_indexed(index, tool_use_blocks[index])) for index in indices]
+                    try:
+                        for completed in asyncio.as_completed(exec_tasks):
+                            index, res = await completed
+                            results[index] = res
+                            block = tool_use_blocks[index]
+                            preview = res if isinstance(res, str) else str(res)
+                            event = {
+                                "id": run_id, "phase": "tool_result",
+                                "tool_call_id": block.id, "tool": block.name,
+                                "result": preview[:1500], "source": "legion", "full_result": res,
+                            }
+                            if preview.startswith("Error"):
+                                event["error"] = preview[:1500]
+                            await self._safe_emit(emit, event)
+                    finally:
+                        for task in exec_tasks:
+                            if not task.done():
+                                task.cancel()
+                        await asyncio.gather(*exec_tasks, return_exceptions=True)
+
+                reads = []
+                for index, block in enumerate(tool_use_blocks):
+                    if self._registry.call_is_read_only(block.name, block.input):
+                        reads.append(index)
+                    else:
+                        await execute_group(reads)
+                        reads = []
+                        await execute_group([index])
+                await execute_group(reads)
 
                 tool_results = [
                     {
@@ -495,7 +646,7 @@ class LegionRunner:
                     },
                 )
                 unknown_result = f"Worker stopped unexpectedly (reason: {stop_reason})."
-                self._safe_emit(emit, {
+                await self._safe_emit(emit, {
                     "id": run_id, "phase": "finished", "ok": False,
                     "report": unknown_result, "source": "legion",
                 })
@@ -503,12 +654,12 @@ class LegionRunner:
 
     async def _forge_loop(
         self, *, worker: LegionnaireDef, model: str, description: str,
-        prompt: str, context: "AgentContext", run_id: str | None, emit=None,
+        prompt: str, context: "AgentContext", run_id: str | None, emit=None, signal=None, inbox=None,
     ) -> str:
-        from app.execution.forge import ForgeExecutor
+        from app.execution.forge import ForgeExecutor, ForgeInterrupted
 
         workspace = str(context.extra.get("cwd") or "").strip()
-        self._safe_emit(emit, {
+        await self._safe_emit(emit, {
             "id": run_id, "agent": worker.worker_id, "label": description,
             "phase": "started", "prompt": prompt, "source": "forge",
         })
@@ -517,7 +668,7 @@ class LegionRunner:
                 "Forge needs a workspace. Select a project with workshop_update "
                 "or choose a Forge workspace in the client before deploying the worker."
             )
-            self._safe_emit(emit, {
+            await self._safe_emit(emit, {
                 "id": run_id, "phase": "finished", "ok": False,
                 "report": result, "source": "forge",
             })
@@ -543,8 +694,8 @@ class LegionRunner:
             },
         )
 
-        def forward(event: dict) -> None:
-            self._safe_emit(emit, {"id": run_id, **event})
+        async def forward(event: dict) -> None:
+            await self._safe_emit(emit, {"id": run_id, **event})
 
         try:
             result = await self._forge.run(
@@ -553,9 +704,14 @@ class LegionRunner:
                 task=f"{description}\n\n{prompt}",
                 workspace=workspace,
                 model_ref=model,
-                inputs=list(context.extra.get("forge_inputs") or []),
+                inputs=[item for item in context.extra.get("forge_inputs", [])
+                        if context.extra.get("forge_input_selection") is None
+                        or item.get("input_id") in context.extra["forge_input_selection"]],
                 emit=forward,
+                **({"signal": signal, "inbox": inbox} if signal is not None else {}),
             )
+        except ForgeInterrupted:
+            raise
         except Exception as exc:  # noqa: BLE001
             logger.error(
                 "forge_execution_finished",
@@ -566,7 +722,7 @@ class LegionRunner:
                 },
             )
             result = f"Forge worker failed: {exc}"
-            self._safe_emit(emit, {
+            await self._safe_emit(emit, {
                 "id": run_id, "phase": "finished", "ok": False,
                 "report": result, "source": "forge",
             })
@@ -581,7 +737,7 @@ class LegionRunner:
                 "backend": "forge", "status": "completed",
             },
         )
-        self._safe_emit(emit, {
+        await self._safe_emit(emit, {
             "id": run_id, "phase": "finished", "ok": True,
             "report": result[:settings.legion_max_result_chars], "source": "forge",
         })
@@ -599,14 +755,32 @@ class LegionRunner:
         prompt: str,
         context: "AgentContext",
     ) -> str:
-        live = sum(1 for t in self._background if not t.done())
+        live = self._worker_count()
+        if self._closing:
+            return "Refused: the worker executor is shutting down."
         if live >= settings.legion_max_background_workers:
             return (
-                f"Refused: already running {live} background legionnaires (max "
-                f"{settings.legion_max_background_workers}). Wait for one to finish, or run this "
-                "one inline."
+                f"Refused: already using {live} worker slots (max "
+                f"{settings.legion_max_background_workers}). Wait for a worker to finish. "
+                "Inline and background workers share this limit."
             )
 
+        # Codex agent/control/execution.rs reserves capacity before asynchronous
+        # startup and releases its permit on every outcome. No await before this.
+        self._admitting += 1
+        try:
+            return await self._start_background(
+                worker=worker, model=model, tools=tools,
+                description=description, prompt=prompt, context=context,
+            )
+        finally:
+            self._admitting -= 1
+
+    async def _start_background(
+        self, *, worker: LegionnaireDef, model: str, tools: list[dict],
+        description: str, prompt: str, context: "AgentContext",
+    ) -> str:
+        from app.execution.forge import ForgeInterrupted
         # Capture plain values only — the request-scoped db/context must not
         # outlive the request. The loop needs a context solely for tool
         # execution routing, so hand it a detached shallow stand-in.
@@ -621,8 +795,26 @@ class LegionRunner:
             task=f"{description} — {prompt}",
             origin_session_id=room_session_id,
         )
+        if msg_id is None:
+            return "Refused: the worker ticket could not be saved. No background execution was started."
+        if self._closing:
+            await self._log_finish(msg_id, status="cancelled", result="Executor shut down during admission.", duration_ms=0)
+            return "Refused: the worker executor is shutting down."
         bg_context = _detached_context(context)
         background_run_id = f"legion-bg-{msg_id}" if msg_id is not None else f"legion-bg-{uuid.uuid4().hex}"
+        background_execution_id = uuid.uuid4().hex if self._control else background_run_id
+        if self._control:
+            try:
+                await self._control.begin(background_execution_id, context=bg_context, worker=worker,
+                    model=model, task=f"{description}\n\n{prompt}", ui_run_id=background_run_id,
+                    background=True, ticket_id=msg_id)
+            except Exception as exc:
+                await self._log_finish(msg_id, status="error", result=f"Admission failed: {exc}", duration_ms=0)
+                return "Refused: the worker execution could not be saved. No background execution was started."
+            if self._closing:
+                await self._control.finish(background_execution_id, "interrupted", "Executor shut down during admission.")
+                await self._log_finish(msg_id, status="cancelled", result="Executor shut down during admission.", duration_ms=0)
+                return "Refused: the worker executor is shutting down."
         if msg_id is not None:
             self.runs.register(
                 msg_id, agent=worker.worker_id, label=description,
@@ -633,13 +825,17 @@ class LegionRunner:
         async def _run_and_finish() -> None:
             started = time.monotonic()
             try:
-                result = await self._loop(
+                result = await self._controlled_loop(
                     worker=worker, model=model, tools=tools,
                     description=description, prompt=prompt,
                     request_id=context.request_id, context=bg_context,
-                    run_id=background_run_id, emit=bg_emit,
+                    run_id=background_execution_id, ui_run_id=background_run_id,
+                    background=True, ticket_id=msg_id, emit=bg_emit,
+                    pre_admitted=bool(self._control),
                 )
                 status = "ok"
+            except (WorkerInterrupted, ForgeInterrupted) as exc:
+                result, status = str(exc), "cancelled"
             except asyncio.CancelledError:
                 # Shutdown cancelled the worker. Close the ticket here — nothing
                 # else will, and a ticket left "running" claims to be working
@@ -680,11 +876,11 @@ class LegionRunner:
             if msg_id is not None:
                 self.runs.finish(msg_id, ok=(status == "ok"))
 
-            # Report in. The ticket is written FIRST so the result is durable
-            # even if the reporting turn cannot start (registry at capacity,
-            # provider down) — the owner can still retrieve it with
-            # legion_status. Cancellation is not reported: that path is a
-            # shutdown, not a finding, and it returns above before reaching here.
+            # The controlled loop committed its terminal result and completion
+            # receipt together. This callback only wakes a bounded outbox drain;
+            # failure cannot lose that receipt. Legacy callers without a
+            # control service still use their ticket callback. Shutdown returns
+            # above, leaving any saved receipt for startup/n8n recovery.
             if self._report_hook is not None:
                 try:
                     await self._report_hook(
@@ -695,7 +891,10 @@ class LegionRunner:
                         status=status,
                         ticket=msg_id,
                         room_session_id=room_session_id,
-                        **({"workspace": bg_context.extra.get("cwd"), "execution_id": background_run_id}
+                        **({"execution_id": background_execution_id} if self._control else {}),
+                        **({"workspace": bg_context.extra.get("cwd"),
+                            **({"execution_id": background_execution_id} if not self._control else {}),
+                            "workshop_project_id": bg_context.workshop_project_id}
                            if worker.backend == "forge" else {}),
                     )
                 except Exception as e:  # noqa: BLE001 — never break on delivery
@@ -714,7 +913,7 @@ class LegionRunner:
         ticket = f"#{msg_id}" if msg_id else "(untracked)"
         return (
             f"Background legionnaire deployed: {worker.worker_id} on '{description}' "
-            f"— ticket {ticket}. The result is NOT available yet, so never guess or "
+            f"— ticket {ticket}, execution {background_execution_id}. The result is NOT available yet, so never guess or "
             "fabricate it. When the worker finishes you will be woken with its "
             "findings and you will deliver them to the owner then — so tell him it "
             "is running and that you will report back, and do NOT promise to check "
@@ -724,9 +923,13 @@ class LegionRunner:
 
     async def shutdown(self) -> None:
         """Cancel in-flight background workers on app shutdown."""
-        for task in list(self._background):
+        self._closing = True
+        await asyncio.sleep(0)  # enter newly created workers' cleanup handlers
+        tasks = list(self._background)
+        for task in tasks:
             if not task.done():
                 task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         self._background.clear()
 
     # ── Tickets (agent_messages, kind="legion") ───────────────────────────────
@@ -797,10 +1000,12 @@ def _detached_context(context: "AgentContext"):
         conversation_history=[],
         db=None,
         timezone=context.timezone,
+        workshop_project_id=context.workshop_project_id,
         extra={"tool_allowlist": context.extra.get("tool_allowlist"),
                "active_servers": set(context.extra.get("active_servers", set())),
                "cwd": context.extra.get("cwd"),
                "forge_inputs": list(context.extra.get("forge_inputs") or []),
+               "forge_input_selection": context.extra.get("forge_input_selection"),
                # Its own tally: a detached worker outlives the parent turn's
                # counter, so it accumulates here and is logged on completion.
                "token_usage": {"input": 0, "output": 0, "billable_input": 0,

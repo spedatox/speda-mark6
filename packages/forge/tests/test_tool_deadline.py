@@ -28,6 +28,7 @@ from forge.tools.claude_code import ClaudeCode
 from forge.tools.shell import RunCommand, RunCommandArgs
 from forge.tools.task import TaskTool
 from forge.warden.dispatch import dispatch_tool
+from forge.warden.dispatch import _call_bounded
 from forge.warden.filestate import FileStateCache
 from forge.warden.permissions import PermissionEngine
 from forge.warden.tool import (
@@ -65,6 +66,29 @@ class Wedged(Tool):
             self.cancelled = True
             raise
         return ToolResult("unreachable")
+
+
+async def test_outer_cancellation_joins_tool_cleanup():
+    """Codex owned dispatch handles also cover cancellation of the caller."""
+    entered, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    class HeldTool:
+        async def call(self, args, ctx):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaning.set()
+                await release.wait()
+
+    task = asyncio.create_task(_call_bounded(HeldTool(), None, None, 60))
+    await asyncio.wait_for(entered.wait(), 5)
+    task.cancel()
+    await asyncio.wait_for(cleaning.wait(), 5)
+    assert not task.done(), "caller must wait for its tool's cleanup"
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, 5)
 
 
 # ── the deadline fires, and says something usable ────────────────────────────

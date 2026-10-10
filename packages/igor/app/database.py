@@ -119,6 +119,9 @@ def _apply_additive_migrations(sync_conn) -> None:
         if "project_id" not in scols:
             sync_conn.execute(text("ALTER TABLE sessions ADD COLUMN project_id INTEGER"))
             logger.info("schema_migrated", extra={"change": "sessions.project_id"})
+        if "workshop_project_id" not in scols:
+            sync_conn.execute(text("ALTER TABLE sessions ADD COLUMN workshop_project_id VARCHAR(24)"))
+            logger.info("schema_migrated", extra={"change": "sessions.workshop_project_id"})
         sync_conn.execute(
             text(
                 "CREATE INDEX IF NOT EXISTS ix_sessions_user_agent_started "
@@ -131,6 +134,12 @@ def _apply_additive_migrations(sync_conn) -> None:
                 "ON sessions (user_id, agent_id, project_id, started_at)"
             )
         )
+
+    if "projects" in tables:
+        pcols = {c["name"] for c in insp.get_columns("projects")}
+        if "workshop_project_id" not in pcols:
+            sync_conn.execute(text("ALTER TABLE projects ADD COLUMN workshop_project_id VARCHAR(24)"))
+            logger.info("schema_migrated", extra={"change": "projects.workshop_project_id"})
 
     # Which chat session (room) an inter-agent exchange was ordered from — what
     # lets the war room render the whole roster's traffic as one group chat.

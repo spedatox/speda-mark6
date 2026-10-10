@@ -176,9 +176,11 @@ def _completion_seed(payload: dict, delivery: str, lang: str | None = None) -> s
     either re-run the work or narrate the ticket instead of the answer.
     """
     legion = payload.get("type") == "legion_report"
-    engineering = legion and bool(payload.get("execution_id"))
+    engineering = legion and bool(payload.get("execution_id")) and (
+        payload.get("backend") == "forge" or (not payload.get("backend") and bool(payload.get("workspace"))))
     status = payload.get("status") or "ok"
     failed = status != "ok"
+    uncertain = status == "unknown"
     # Resumed = this turn continues the very conversation the work was ordered
     # from, so the thread above is the agent's own. Everything the owner said
     # there — constraints, what they actually care about, what they already
@@ -207,13 +209,24 @@ def _completion_seed(payload: dict, delivery: str, lang: str | None = None) -> s
         named = f"One short line naming {target} and what it was asked"
         empty = "(the agent returned nothing)"
 
-    return (
+    introduction = (
+        f"BACKGROUND WORK OUTCOME UNCONFIRMED — {opened} lost a confirmed outcome. "
+        "Report the saved evidence and the uncertainty; do not assume completion or restart this assignment.\n\n"
+        if uncertain else
         f"BACKGROUND WORK COMPLETE — {opened} has finished and the owner has not "
         "seen the result yet. No human is waiting in this turn; your job is to "
         "deliver the finding.\n\n"
+    )
+    work_constraint = (
+        "- Do NOT re-run this uncertain assignment. Preserve any checkout claim; "
+        "operator reconciliation is required before that checkout can be reused.\n"
+        if uncertain else
         "- The work is ALREADY DONE. Do NOT re-run the research, do NOT repeat "
         f"the tool calls it made, and {again}. Everything you need is below.\n"
-        f"- Write the owner's message FROM the findings. Lead with the answer, "
+    )
+    return (
+        introduction + work_constraint
+        + f"- Write the owner's message FROM the findings. Lead with the answer, "
         f"not with preamble about who ran it. {named}, then the substance.\n"
         + resumed
         + (
@@ -228,6 +241,9 @@ def _completion_seed(payload: dict, delivery: str, lang: str | None = None) -> s
             if engineering and not failed else ""
         )
         + (
+            "- Completion is UNCONFIRMED. State what is known and what remains uncertain; "
+            "do not label the assignment successful or failed without evidence.\n"
+            if uncertain else
             "- This run FAILED. Say so plainly, give the error, and say what "
             "you would try next. Do NOT invent a result to fill the gap.\n"
             if failed else
@@ -511,6 +527,10 @@ async def start_trigger_turn(
     user_id: int = 1,
     triggered_by: str = "n8n",
     session_id: int | None = None,
+    workspace_service=None,
+    input_service=None,
+    completion_recovery=None,
+    completion_id: str | None = None,
 ) -> tuple[str | None, int]:
     """Launch an automated turn as a detached, persisted chat turn.
 
@@ -537,14 +557,16 @@ async def start_trigger_turn(
         from fastapi import HTTPException
         raise HTTPException(status_code=410, detail="The Orion nightly memory audit has been removed.")
 
-    session = await session_manager.get_or_create(
-        db=db,
-        user_id=user_id,
-        triggered_by=triggered_by,
-        model_used=model,
-        agent_id=agent_id,
-        session_id=session_id,
-    )
+    if completion_recovery is not None:
+        worker, session = await completion_recovery._origin(db, completion_id)
+        if worker.user_id != user_id or worker.agent_id != agent_id or worker.session_id != session_id:
+            from app.services.workspaces import WorkspaceError
+            raise WorkspaceError("Completion cannot move to another owner, agent or chat")
+    else:
+        session = await session_manager.get_or_create(
+            db=db, user_id=user_id, triggered_by=triggered_by,
+            model_used=model, agent_id=agent_id, session_id=session_id,
+        )
     if session_id is not None and session.agent_id != agent_id:
         # Wrong room. Sessions are scoped by (user_id, agent_id), so appending
         # here would put this agent's turn in ANOTHER agent's transcript and
@@ -565,6 +587,44 @@ async def start_trigger_turn(
             model_used=model,
             agent_id=agent_id,
         )
+    context = AgentContext(
+        agent_id=agent_id, user_id=user_id, session_id=session.id,
+        request_id=request_id, triggered_by=triggered_by,
+        trigger_payload=format_trigger_context(payload), output_mode=output_mode,
+        model=model, system_prompt="", conversation_history=[], db=db,
+        timezone=settings.owner_timezone,
+    )
+    if workspace_service is not None:
+        desk_id = payload.get("workshop_project_id")
+        await workspace_service.prepare(context, project_id=desk_id, explicit=bool(desk_id))
+    if input_service is not None:
+        await input_service.restore(context)
+    if getattr(session, "project_id", None) is not None:
+        context.extra["project_id"] = session.project_id
+    reservation = turns.reserve(request_id=request_id, agent_id=agent_id, session_id=session.id)
+    if reservation is None:
+        return None, session.id
+    try:
+        return await _launch_trigger_turn(
+            db=db, session=session, context=context, profile=profile, payload=payload,
+            output_mode=output_mode, request_id=request_id, orchestrator=orchestrator,
+            turns=turns, session_manager=session_manager, telegram_bots=telegram_bots,
+            agent_proxy=agent_proxy, ws_manager=ws_manager, user_id=user_id,
+            completion_recovery=completion_recovery, completion_id=completion_id,
+            reservation=reservation,
+        )
+    finally:
+        # No-op once launched; an exception during preparation releases the
+        # session/capacity slot without starting an engine or losing its receipt.
+        turns.release(reservation)
+
+
+async def _launch_trigger_turn(
+    *, db, session, context, profile, payload, output_mode, request_id,
+    orchestrator, turns, session_manager, telegram_bots, agent_proxy, ws_manager,
+    user_id, completion_recovery, completion_id, reservation,
+):
+    agent_id, model = context.agent_id, context.model
     if session.title is None:
         session.title = session_title(payload)
         await db.commit()
@@ -580,31 +640,14 @@ async def start_trigger_turn(
         # the agent needed to write the reply — and rendering it as a message
         # from the owner is both a lie and a wall of text over the answer.
         seed_block["text"] = report_headline(meta["report"])
-    await session_manager.save_message(
-        db,
-        session.id,
-        "user",
-        [
-            {"type": "text", "text": build_seed(payload, output_mode)},
-            seed_block,
-        ],
-    )
+    content = [{"type": "text", "text": build_seed(payload, output_mode)}, seed_block]
+    if completion_recovery is not None:
+        await completion_recovery.save_seed(db, completion_id, session_manager, session.id, content)
+    else:
+        await session_manager.save_message(db, session.id, "user", content)
     history = await session_manager.load_history(db, session.id)
 
-    context = AgentContext(
-        agent_id=agent_id,
-        user_id=user_id,
-        session_id=session.id,
-        request_id=request_id,
-        triggered_by=triggered_by,
-        trigger_payload=format_trigger_context(payload),
-        output_mode=output_mode,
-        model=model,
-        system_prompt="",
-        conversation_history=history,
-        db=db,  # replaced with the runner's own session before the engine runs
-        timezone=settings.owner_timezone,
-    )
+    context.conversation_history = history
     # Toolsets loaded in an earlier turn of this session stay loaded, exactly as
     # in chat — otherwise every run re-calls use_toolset and rewrites the cache.
     loaded_servers = set(session_manager.get_loaded_servers(session.id))
@@ -624,6 +667,11 @@ async def start_trigger_turn(
         await run_post_turn_tasks(session.id, request_id, user_id, bg_model)
 
     async def on_settle(status: str) -> None:
+        if completion_recovery is not None:
+            # Report history is the evidence of consumption. Push retries use
+            # that exact saved response and never start this model turn again.
+            await completion_recovery.settle(completion_id)
+            return
         await _deliver(
             agent_id=agent_id,
             session_id=session.id,
@@ -636,6 +684,10 @@ async def start_trigger_turn(
             status=status,
             profile=profile,
             sanitize_model=bg_model,
+            text_override=(
+                "This run ended, but its response could not be saved. Completion is unconfirmed."
+                if context.extra.get("turn_persistence_failed") else None
+            ),
         )
 
     # Engine selection, identical to chat: an agent whose real backend is a
@@ -649,15 +701,17 @@ async def start_trigger_turn(
         and ws_manager.is_connected(agent_id)
     )
 
+    selected_engine = (lambda ctx: agent_proxy.run(ctx)) if use_external else (lambda ctx: orchestrator.run(ctx))
+    engine_factory = selected_engine
+    if completion_recovery is not None:
+        engine_factory = lambda ctx: completion_recovery.run_report(completion_id, ctx, selected_engine)
     started = turns.start(
         context=context,
-        engine_factory=(
-            (lambda ctx: agent_proxy.run(ctx)) if use_external
-            else (lambda ctx: orchestrator.run(ctx))
-        ),
+        engine_factory=engine_factory,
         format_error=lambda exc: f"Automated run failed: {exc}",
         on_complete=on_complete,
         on_settle=on_settle,
+        reservation=reservation,
     )
     return started, session.id
 
@@ -675,6 +729,8 @@ async def _deliver(
     status: str,
     profile=None,
     sanitize_model: str = "",
+    text_override: str | None = None,
+    completion_id: str | None = None,
 ) -> None:
     """Post-run delivery: stamp the automation, record what happened, then
     push if asked.
@@ -697,7 +753,8 @@ async def _deliver(
         # nothing through this function (the reminders tool does its own
         # delivery mid-turn, or there is simply nothing to push), but the run
         # history below still wants to know what the turn actually produced.
-        text = await _last_assistant_text(db, session_id)
+        # A failed save must not deliver an older turn from this session.
+        text = text_override if text_override is not None else await _last_assistant_text(db, session_id)
         delivered = False
         channel = "silent"
 
@@ -741,7 +798,8 @@ async def _deliver(
                     db, "telegram", agent_id, session_id, user_id,
                 )
             else:
-                await _store_notification(db, agent_id, user_id, request_id, text, payload)
+                await _store_notification(db, agent_id, user_id, request_id, text, payload,
+                                          completion_id=completion_id)
             logger.info(
                 "trigger_push_delivered" if delivered else "trigger_push_stored",
                 extra={"request_id": request_id, "chars": len(text), "status": status},
@@ -841,19 +899,32 @@ async def _last_assistant_text(db: AsyncSession, session_id: int) -> str:
 async def _store_notification(
     db: AsyncSession, agent_id: str, user_id: int, request_id: str,
     text: str, payload: dict,
+    *, completion_id: str | None = None,
 ) -> None:
     """Fallback when no Telegram bot could deliver (unconfigured / unlinked):
     persist the push as a Notification row so the desktop app surfaces it on next
-    open. Best-effort — a storage failure must not crash the task."""
+    open. Completion receipts commit with that fallback and propagate storage
+    failures for retry; legacy trigger callers retain best-effort behavior."""
     try:
         from app.models.notification import Notification
+
+        if completion_id is not None:
+            from sqlalchemy import update
+            from app.models.worker_execution import WorkerCompletion
+            accepted = (await db.execute(update(WorkerCompletion).where(
+                WorkerCompletion.execution_id == completion_id,
+                WorkerCompletion.delivery_status == "sending")
+                .values(delivery_status="delivered", last_error=None)
+                .returning(WorkerCompletion.execution_id))).scalar_one_or_none()
+            if accepted is None:
+                raise RuntimeError("Completion notification is not awaiting delivery")
 
         title = str(payload.get("event") or payload.get("job") or "Update")[:255]
         db.add(
             Notification(
                 user_id=user_id,
                 source_agent=agent_id,
-                triggered_by="n8n",
+                triggered_by="agent" if completion_id is not None else "n8n",
                 title=title,
                 body=text,
                 priority=str(payload.get("priority", "normal")),
@@ -866,6 +937,10 @@ async def _store_notification(
             "trigger_notification_store_failed",
             extra={"request_id": request_id, "error": str(e)},
         )
+        if completion_id is not None:
+            # Receipt + fallback notification are atomic, and an unsuccessful
+            # save leaves delivery pending rather than acknowledging a loss.
+            raise
 
 
 # ── Background completion reports ────────────────────────────────────────────
@@ -881,8 +956,8 @@ _ROOM_WAIT_S = 300.0
 async def _await_free_room(turns, session_id: int | None) -> int | None:
     """The room to report into, once nothing else is talking in it.
 
-    Two turns writing one session interleave — TurnRegistry has no per-session
-    lock — so a report that lands while the owner is mid-conversation waits for
+    The registry admits one turn per session, so a legacy report that lands
+    while the owner is mid-conversation waits for
     that turn to settle instead of cutting into it. Returns None when there is
     no room to go back to, or when the wait ran out: the caller then opens a
     fresh session, which costs the thread's context but never the report.
@@ -924,6 +999,8 @@ async def _start_report_turn(
     ws_manager,
     user_id: int,
     room_session_id: int | None = None,
+    workspace_service=None,
+    input_service=None,
 ) -> None:
     """Wake `profile`'s agent with a finished background result, as a push turn.
 
@@ -960,6 +1037,8 @@ async def _start_report_turn(
             user_id=user_id,
             triggered_by="agent",
             session_id=room,
+            workspace_service=workspace_service,
+            input_service=input_service,
         )
     logger.info(
         f"{kind}_report_started" if started else f"{kind}_report_refused",
@@ -984,6 +1063,8 @@ def make_dispatch_reporter(
     agent_proxy=None,
     ws_manager=None,
     user_id: int = 1,
+    workspace_service=None,
+    input_service=None,
 ):
     """Build the callback a finished BACKGROUND dispatch fires to report in.
 
@@ -1036,6 +1117,8 @@ def make_dispatch_reporter(
             agent_proxy=agent_proxy,
             ws_manager=ws_manager,
             user_id=user_id,
+            workspace_service=workspace_service,
+            input_service=input_service,
         )
 
     return report
@@ -1051,6 +1134,9 @@ def make_legion_reporter(
     agent_proxy=None,
     ws_manager=None,
     user_id: int = 1,
+    workspace_service=None,
+    input_service=None,
+    completion_service=None,
 ):
     """Build the callback a finished BACKGROUND legionnaire fires to report in.
 
@@ -1084,7 +1170,13 @@ def make_legion_reporter(
         room_session_id: int | None = None,
         workspace: str | None = None,
         execution_id: str | None = None,
+        workshop_project_id: str | None = None,
     ) -> None:
+        if completion_service is not None and execution_id is not None:
+            # The terminal transaction already created the receipt. This is a
+            # bounded wake-up only; a busy parent leaves it pending for recovery.
+            await completion_service.drain()
+            return
         profile = profiles.get(agent_id)
         if profile is None:
             logger.warning(
@@ -1102,6 +1194,7 @@ def make_legion_reporter(
                 "worker": worker_id,
                 "workspace": workspace,
                 "execution_id": execution_id,
+                "workshop_project_id": workshop_project_id,
                 "task": task,
                 "result": result,
                 "status": status,
@@ -1114,6 +1207,8 @@ def make_legion_reporter(
             agent_proxy=agent_proxy,
             ws_manager=ws_manager,
             user_id=user_id,
+            workspace_service=workspace_service,
+            input_service=input_service,
         )
 
     return report

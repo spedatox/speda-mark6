@@ -34,7 +34,7 @@ _OWNER_USER_ID = 1  # single-user system (CLAUDE.md)
 
 class TelegramGateway:
     def __init__(self, orchestrator, session_manager, profiles, bots, ws_manager, agent_proxy,
-                 dispatcher=None, turns=None) -> None:
+                 dispatcher=None, turns=None, workspace_service=None, input_service=None) -> None:
         self._orchestrator = orchestrator
         self._sessions = session_manager
         self._profiles = profiles
@@ -49,6 +49,8 @@ class TelegramGateway:
         # steering (route a mid-turn message into a running external turn rather
         # than starting a second one). Optional for the same reason as above.
         self._turns = turns
+        self._workspaces = workspace_service
+        self._inputs = input_service
         # De-dupe across webhook retries AND poll/webhook overlap: last update_id
         # seen per (agent). Poll also persists a watermark; this is the in-process
         # guard that covers the webhook path and rapid retries.
@@ -270,6 +272,17 @@ class TelegramGateway:
                 db=db,
                 timezone=settings.owner_timezone,
             )
+            if self._workspaces is not None:
+                from app.services.workspaces import WorkspaceError
+                try:
+                    await self._workspaces.prepare(context)
+                except WorkspaceError as exc:
+                    await bot.send_message(str(exc), chat_id=chat_id)
+                    return
+            if getattr(session, "project_id", None) is not None:
+                context.extra["project_id"] = session.project_id
+            if self._inputs is not None:
+                await self._inputs.restore(context)
             context.extra["active_servers"] = self._sessions.get_loaded_servers(session.id)
 
             # Optimus (or any external_backend agent) proxies to its peer when

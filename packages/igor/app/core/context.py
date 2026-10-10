@@ -29,3 +29,4 @@ class AgentContext:
     timezone: str = "UTC"
     extra: dict = field(default_factory=dict)  # Arbitrary per-request metadata
     custom_instructions: str = ""             # Owner's client override, distinct from assembled system_prompt
+    workshop_project_id: str | None = None    # Durable shared desk; cwd remains the Forge bridge

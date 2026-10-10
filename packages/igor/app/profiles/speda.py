@@ -85,7 +85,7 @@ class SPEDAProfile(AgentProfile):
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
     # Was Azure "en-US-BrianMultilingualNeural" before the ElevenLabs move.
-    voice_id = "elevenlabs:eleven_multilingual_v2:pNInz6obpgDQGcFmaJgB"
+    voice_id = "elevenlabs:eleven_v4:pNInz6obpgDQGcFmaJgB"
     canvas_brief = (
         "Presenting as the orchestrator: proactively stage visual windows on the board "
         "— a person or place as a card with photo, routes/locations as map windows, "

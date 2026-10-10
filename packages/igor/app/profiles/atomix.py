@@ -44,7 +44,7 @@ class AtomixProfile(AgentProfile):
     # ElevenLabs "Bella" (warm, soft) — verify this id exists in the
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
-    voice_id = "elevenlabs:eleven_multilingual_v2:EXAVITQu4vr4xnSDxMaL"
+    voice_id = "elevenlabs:eleven_v4:EXAVITQu4vr4xnSDxMaL"
     canvas_brief = (
         "Presenting health: authoring visual windows is mandatory. Every metric reading "
         "is a stat tile with direction, every biometric/macro/weight trend is a chart window, "

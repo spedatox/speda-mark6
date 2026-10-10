@@ -71,9 +71,10 @@ class Workshop:
     def _register(self, db, workspace: Path) -> str:
         if not workspace.is_dir():
             raise ValueError(f"Workspace is unavailable: {workspace}")
-        if self.path.is_relative_to(workspace.resolve()):
+        candidate = workspace.resolve()
+        if self.path.is_relative_to(candidate) or candidate.is_relative_to(self.path.parent):
             raise ValueError("Select an individual project, not the workshop root or its parent; "
-                             "the execution database must stay outside the worker's mount")
+                             "the execution database and coordinator metadata must stay outside the worker's mount")
         key, path = self.identity(workspace)
         db.execute("INSERT OR IGNORE INTO projects(id,path,updated) VALUES(?,?,?)",
                    (key, path, self._now()))

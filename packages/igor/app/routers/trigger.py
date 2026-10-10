@@ -50,6 +50,8 @@ async def trigger(
         telegram_bots=request.app.state.telegram_bots,
         agent_proxy=request.app.state.agent_proxy,
         ws_manager=request.app.state.ws_manager,
+        workspace_service=getattr(request.app.state, "workspaces", None),
+        input_service=getattr(request.app.state, "engineering_inputs", None),
     )
 
     logger.info(

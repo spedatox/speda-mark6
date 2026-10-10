@@ -48,6 +48,9 @@ class Skill(ABC):
     # larger prefix. Only meaningful on deferred skills; ignored otherwise.
     search_keywords: str = ""
     read_only: bool = False  # Set True for research/retrieval skills (Rule 9)
+    # Live status reads remain safe to parallelize, but must not be served from
+    # a turn's earlier snapshot. This is independent of read_only.
+    memoize: bool = True
     # Set True for skills that need an INTERNET uplink (not just a local
     # service) — they are filtered out under the Dead Zone Protocol.
     requires_network: bool = False

@@ -131,7 +131,7 @@ async def test_http_chat_carries_client_instructions_into_detached_engine(isolat
     captured = []
     class Sessions:
         async def get_or_create(self, **kwargs):
-            return SimpleNamespace(id=1, project_id=None)
+            return SimpleNamespace(id=1, project_id=None, user_id=1, agent_id="speda")
         async def save_message(self, *args):
             pass
         async def load_history(self, *args):
@@ -142,6 +142,8 @@ async def test_http_chat_carries_client_instructions_into_detached_engine(isolat
             return set()
     class Turns:
         def is_live(self, _):
+            return False
+        def knows(self, _):
             return False
         def start(self, **kwargs):
             captured.append(kwargs["context"])

@@ -9,7 +9,7 @@ surface over it, per Rule 1 and Rule 5.
 """
 
 import logging
-from datetime import datetime
+from datetime import date as date_cls
 
 from app.core.clock import owner_now
 from app.core.context import AgentContext
@@ -107,17 +107,19 @@ class AttendanceStatusSkill(Skill):
 class AskAttendanceSkill(Skill):
     name = "ask_attendance"
     deferred = True
-    search_keywords = "class lecture school attendance university course ask prompt present absent"
+    search_keywords = "class lecture school attendance university course ask prompt resend missed unanswered present absent"
     requires_network = True
     description = (
-        "Pushes a 'derse girdin mi?' question to the owner's watch for a teaching hour that has "
-        "just ended, so he can answer with one tap and the ledger stays accurate. This is normally "
-        "invoked by the n8n per-lecture trigger rather than chosen conversationally; use it "
-        "directly only when he asks you to re-send a question he missed or dismissed. Do NOT use "
-        "it to send a general reminder (use send_push_notification), and do NOT use it for a class "
-        "that has not finished yet — the question only makes sense after the bell. Returns which "
-        "occurrence was asked about and how many devices it reached, or an explanation when there "
-        "is nothing to ask, which is the normal outcome most of the time it runs."
+        "Re-sends a 'derse girdin mi?' question to the owner's watch for an ended, unanswered "
+        "teaching hour, including missed questions from earlier days or weeks in the active term. "
+        "Use it when he asks to resend a missed or dismissed attendance question; optionally "
+        "target a course, date or slot, otherwise it selects the oldest unanswered hour and "
+        "sends one question per call. n8n-triggered calls retain the recent-lecture window; "
+        "manual recovery does not expire when that window closes. Do NOT use it for a general "
+        "reminder, an unfinished lecture, an already answered hour, or to record attendance "
+        "yourself — only the owner answers. Returns the exact course, date and time, how many "
+        "pushes FCM accepted and any remaining matching hours or delivery failure; push "
+        "acceptance does not prove the watch displayed a notification."
     )
     input_schema = {
         "type": "object",
@@ -125,31 +127,61 @@ class AskAttendanceSkill(Skill):
             "window_minutes": {
                 "type": "integer",
                 "default": 20,
+                "minimum": 1,
+                "maximum": 1440,
                 "description": (
-                    "How long after a lecture ends it is still worth asking about. "
-                    "Beyond this the question is stale and the watch's local fallback "
-                    "will have raised it already."
+                    "Recent-lecture window for n8n-triggered calls only. "
+                    "Manual resends search all ended, unanswered hours in the active term."
                 ),
-            }
+            },
+            "course_code": {
+                "type": "string",
+                "description": "Optional course code to recover (e.g. ATA101).",
+            },
+            "date": {
+                "type": "string",
+                "format": "date",
+                "description": "Optional occurrence date in YYYY-MM-DD, in the owner's timezone.",
+            },
+            "slot_id": {
+                "type": "string",
+                "description": "Optional exact teaching-hour slot ID; combine with date to target one occurrence.",
+            },
         },
     }
 
     async def execute(self, args: dict, context: AgentContext) -> str:
-        window = int(args.get("window_minutes") or 20)
+        try:
+            on_date = date_cls.fromisoformat(args["date"]) if args.get("date") else None
+            window = int(args.get("window_minutes", 20))
+        except (TypeError, ValueError):
+            return "Use a date in YYYY-MM-DD and a window_minutes integer between 1 and 1440."
+        if not 1 <= window <= 1440:
+            return "window_minutes must be between 1 and 1440."
 
         async with AsyncSessionLocal() as db:
-            occurrence = await academic_service.occurrence_just_ended(
-                # Wall-clock comparison against the timetable — see core/clock.py.
-                db, owner_now(), window_minutes=window
+            pending = await academic_service.pending_occurrences(
+                db, owner_now(),
+                course_code=(args.get("course_code") or "").strip(),
+                on_date=on_date,
+                slot_id=(args.get("slot_id") or "").strip(),
+                window_minutes=window if context.triggered_by == "n8n" else None,
             )
-            if occurrence is None:
-                return "No lecture has just ended without an answer, so there is nothing to ask."
+            if not pending:
+                if context.triggered_by == "n8n":
+                    return "No lecture has just ended without an answer, so there is nothing to ask."
+                return "No ended, unanswered teaching hour matches in the active term, so nothing was sent."
+            occurrence = pending[0]
+            label = (
+                f"{occurrence['course_name']} ({occurrence['course_code']}, "
+                f"{occurrence['date']}, {occurrence['time']}; slot_id={occurrence['slot_id']})"
+            )
 
             devices = await academic_service.active_devices(db, platform="wear")
             if not devices:
                 return (
-                    "A lecture just ended but no watch is registered, so the question cannot be "
-                    "delivered. The watch will ask locally from its cached schedule instead."
+                    f"No active watch is registered, so the question about {label} was not sent. "
+                    "It remains unanswered; it can also be resolved in the watch's attendance history."
                 )
 
             delivered = 0
@@ -171,14 +203,19 @@ class AskAttendanceSkill(Skill):
             extra={
                 "request_id": context.request_id,
                 "slot_id": occurrence["slot_id"],
+                "date": occurrence["date"],
                 "delivered": delivered,
             },
         )
 
-        label = f"{occurrence['course_name']} ({occurrence['time']}, {occurrence['date']})"
         if delivered:
-            return f"Asked about {label} on {delivered} device(s)."
+            result = f"Submitted the attendance question about {label} to FCM for {delivered} device(s)."
+            if failures:
+                result += f" Other device deliveries failed: {'; '.join(failures)}."
+            if len(pending) > 1:
+                result += f" {len(pending) - 1} other matching teaching hour(s) remain unanswered."
+            return result
         return (
-            f"Could not deliver the question about {label}. {'; '.join(failures)} "
-            "The watch's local fallback will ask instead."
+            f"Could not deliver the question about {label}. {'; '.join(failures)}. "
+            "It remains unanswered and can be retried or resolved in the watch's attendance history."
         )

@@ -56,6 +56,43 @@ def test_grep_finds_files_and_prunes_noise(ctx):
     assert ".git" not in out
 
 
+@pytest.mark.parametrize("absolute", [False, True])
+@pytest.mark.parametrize("tool,args_type", [(Grep, GrepArgs), (Glob, GlobArgs)])
+def test_search_refuses_outside_root_before_reading(ctx, ws, monkeypatch, absolute, tool, args_type):
+    outside = ws.parent / "outside-search"
+    outside.mkdir(exist_ok=True)
+    (outside / "private.txt").write_text("private needle", encoding="utf-8")
+    path = str(outside) if absolute else "../outside-search"
+    opened = []
+    monkeypatch.setattr("forge.tools.search._readable_text", lambda p: opened.append(p) or "private needle")
+    kwargs = {"path": path, "pattern": "needle" if tool is Grep else "**/*"}
+    result = _call(tool(), args_type(**kwargs), ctx)
+    assert result.is_error and "escapes the workspace" in result.content
+    assert opened == []
+
+
+def test_search_does_not_read_or_list_external_symlink_files(ctx, ws, monkeypatch):
+    outside = ws.parent / "outside-private.txt"
+    outside.write_text("private needle", encoding="utf-8")
+    link = ws / "outside-link.txt"
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+    opened = []
+    from forge.tools import search
+    original = search._readable_text
+
+    def read(path):
+        opened.append(path)
+        return original(path)
+
+    monkeypatch.setattr(search, "_readable_text", read)
+    assert "outside-link" not in _call(Grep(), GrepArgs(pattern="needle"), ctx).content
+    assert link not in opened
+    assert "outside-link" not in _call(Glob(), GlobArgs(pattern="**/*"), ctx).content
+
+
 def test_grep_skips_binary_files(ctx):
     out = _call(Grep(), GrepArgs(pattern="binary"), ctx).content
     assert "logo.bin" not in out

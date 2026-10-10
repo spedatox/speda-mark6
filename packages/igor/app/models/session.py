@@ -37,6 +37,9 @@ class Session(Base):
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id"), nullable=True, default=None
     )
+    # Shared engineering desk identity, separate from the private chat project.
+    # Snapshot once; moving the global picker cannot reinterpret this history.
+    workshop_project_id: Mapped[str | None] = mapped_column(String(24), nullable=True, default=None)
     triggered_by: Mapped[str] = mapped_column(String(32))  # user | n8n | agent
     model_used: Mapped[str] = mapped_column(String(64))
     title: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)

@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     logger.info("startup_begin", extra={"version": "0.1.0"})
 
     # ── 1. Database ────────────────────────────────────────────────────────────
-    from app.database import close_db, init_db
+    from app.database import AsyncSessionLocal, close_db, init_db
 
     await init_db()
     logger.info("startup_db_ready")
@@ -78,12 +78,18 @@ async def lifespan(app: FastAPI):
     # ── 3. Capability Registry ─────────────────────────────────────────────────
     from app.core.registry import CapabilityRegistry
 
+    from app.services.workspaces import WorkspaceService
+    workspaces = WorkspaceService(settings.forge_workspace_root)
+    from app.services.engineering_inputs import EngineeringInputService
+    engineering_inputs = EngineeringInputService(settings.forge_workspace_root, workspaces)
+    from app.services.worker_control import WorkerControlService
+    worker_control = WorkerControlService(AsyncSessionLocal, artifact_root=settings.forge_workspace_root)
     registry = CapabilityRegistry(client=llm_client, profiles=profiles)
 
     # Tier 0 — The Legion (wire name "Task", MUST be registered first).
     # Provider-agnostic workers: model resolution routes through the parent
     # agent's profile, so the Legion runs on whatever provider the chat does.
-    registry.register_legion()
+    registry.register_legion(workspace_service=workspaces, input_service=engineering_inputs, worker_control=worker_control)
 
     # Tier 1 — Python Skills
     # read_skill is the progressive-disclosure meta-tool (registered first so it's
@@ -164,7 +170,12 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(DocumentsSkill())
     await registry.register_skill(SaveFileSkill())
     await registry.register_skill(GenerateDailyTrainingProgramSkill())   # Atomix-only (restricted_to)
-    await registry.register_skill(HisarSkill())
+    hisar_client = HisarSkill()
+    await registry.register_skill(hisar_client)
+    from app.services.hisar_workspaces import HisarWorkspaceService
+    hisar_workspaces = HisarWorkspaceService(
+        settings.forge_workspace_root, hisar_client, configured=bool(settings.hisar_machine_token),
+    )
     from app.skills.onyx import OnyxSkill
     await registry.register_skill(OnyxSkill())
     await registry.register_skill(SystemSkill())
@@ -286,11 +297,15 @@ async def lifespan(app: FastAPI):
 
     await registry.register_skill(SkyfallProtocolSkill())
     # Legion background-ticket retrieval (Tier 0's async mode companion).
-    from app.skills.legion import LegionStatusSkill
+    from app.skills.legion import LegionStatusSkill, LegionInspectSkill, LegionControlSkill
     await registry.register_skill(LegionStatusSkill())
+    await registry.register_skill(LegionInspectSkill(worker_control))
+    await registry.register_skill(LegionControlSkill(worker_control))
     from app.skills.workshop import WorkshopStatusSkill, WorkshopUpdateSkill
     await registry.register_skill(WorkshopStatusSkill(settings.forge_workspace_root))
-    await registry.register_skill(WorkshopUpdateSkill(settings.forge_workspace_root))
+    await registry.register_skill(WorkshopUpdateSkill(
+        settings.forge_workspace_root, workspace_service=workspaces, input_service=engineering_inputs,
+    ))
 
     # OSINT / threat-intelligence suite (ip-api, AbuseIPDB, abuse.ch URLhaus/
     # ThreatFox/MalwareBazaar, HIBP Pwned Passwords, Ahmia dark-web search).
@@ -388,6 +403,8 @@ async def lifespan(app: FastAPI):
         agent_proxy=agent_proxy,
         dispatcher=dispatcher,
         turns=turns,
+        workspace_service=workspaces,
+        input_service=engineering_inputs,
     )
     telegram_poll_tasks = await telegram_bots.start(telegram_gateway)
 
@@ -402,6 +419,13 @@ async def lifespan(app: FastAPI):
     app.state.welcome_cache = welcome_cache
     app.state.ws_manager = ws_manager
     app.state.session_manager = session_manager
+    app.state.workspaces = workspaces
+    app.state.engineering_inputs = engineering_inputs
+    app.state.worker_control = worker_control
+    app.state.hisar_workspaces = hisar_workspaces
+    from app.services.octavius_restore import OctaviusRestore
+
+    app.state.octavius_restore = OctaviusRestore()
     app.state.profiles = profiles
     app.state.dispatcher = dispatcher
     app.state.telegram_bots = telegram_bots
@@ -417,10 +441,9 @@ async def lifespan(app: FastAPI):
 
     # Background legionnaires report in when they finish. Wired HERE, not at
     # Tier-0 registration: the callback closes over the orchestrator, the turn
-    # registry and the session manager, and none of those exist yet when the
-    # Legion is registered first. A completed worker now starts a real push turn
-    # on the agent that deployed it instead of leaving the result sitting in a
-    # ticket until someone thinks to ask.
+    # registry and session manager, which do not exist at Tier-0 registration.
+    # Saved completion receipts wait for their original chat's turn slot and
+    # survive callback failure/restart. The drain never restarts a worker.
     from app.core.trigger_runner import make_dispatch_reporter, make_legion_reporter
 
     reporter_deps = {
@@ -431,8 +454,16 @@ async def lifespan(app: FastAPI):
         "telegram_bots": telegram_bots,
         "agent_proxy": agent_proxy,
         "ws_manager": ws_manager,
+        "workspace_service": workspaces,
+        "input_service": engineering_inputs,
     }
-    registry.set_legion_report_hook(make_legion_reporter(**reporter_deps))
+    from app.services.completion_recovery import CompletionRecoveryService
+
+    completion_recovery = CompletionRecoveryService(AsyncSessionLocal)
+    completion_recovery.wire(**reporter_deps)
+    app.state.completion_recovery = completion_recovery
+    app.state.turns.set_settled_hook(completion_recovery.drain)
+    registry.set_legion_report_hook(make_legion_reporter(**reporter_deps, completion_service=completion_recovery))
     # Same dependency set, same reason: action='test' on manage_automations
     # needs to start a real trigger turn, and this is the first point in
     # startup where everything it needs actually exists.
@@ -468,6 +499,7 @@ async def lifespan(app: FastAPI):
 
     await enqueue_initial_graph_backfills()
     reclaimed_jobs = await recover_on_startup()
+    await completion_recovery.recover_on_startup()
 
     # ── 12. Re-apply containment if the Lockdown Protocol is engaged ──────────
     # Firewall rules live in the kernel, not on disk. A restart during an
@@ -502,6 +534,7 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ───────────────────────────────────────────────────────────────
     logger.info("shutdown_begin")
+    completion_recovery.close()
     if loop_watch is not None:
         loop_watch.cancel()
     await app.state.turns.shutdown()
@@ -583,6 +616,12 @@ def create_app() -> FastAPI:
         if origin in origins or (allow_origin_regex and LOCAL_ORIGIN_RE.match(origin)):
             return {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
         return {}
+
+    from app.services.workspaces import WorkspaceError
+
+    @app.exception_handler(WorkspaceError)
+    async def _workspace_error(request, exc):
+        return _JSONResponse(status_code=exc.status_code, content={"detail": str(exc)}, headers=_cors_headers(request))
 
     @app.exception_handler(Exception)
     async def _unhandled(request, exc):  # noqa: ANN001

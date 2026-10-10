@@ -138,6 +138,17 @@ data class OctaviusBackupResult(
     val error: String? = null,
 )
 
+@Serializable
+data class OctaviusRestoreState(
+    val ok: Boolean = false,
+    @SerialName("job_id") val jobId: String = "",
+    val name: String = "",
+    val phase: String = "idle",
+    val error: String = "",
+    @SerialName("rolled_back") val rolledBack: Boolean = false,
+    @SerialName("rollback_path") val rollbackPath: String = "",
+)
+
 /** POST /agents/lockdown {engaged:false} — standing containment down. */
 @Serializable
 data class LockdownActionResult(

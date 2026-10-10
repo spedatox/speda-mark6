@@ -848,6 +848,31 @@ class IgorApi(
         }.getOrNull() ?: DoormatState()
     }
 
+    suspend fun fetchOctaviusBackups(config: AppConfig): List<BackupEntry>? = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/admin/octavius/backups")?.let { json.decodeFromString<List<BackupEntry>>(it) }
+        }.getOrNull()
+    }
+
+    suspend fun fetchOctaviusRestore(config: AppConfig, jobId: String = ""): OctaviusRestoreState? = withContext(Dispatchers.IO) {
+        runCatching {
+            getString(config, "/admin/octavius/restore?job_id=${java.net.URLEncoder.encode(jobId, "UTF-8")}")
+                ?.let { json.decodeFromString<OctaviusRestoreState>(it) }
+        }.getOrNull()
+    }
+
+    suspend fun restoreOctavius(config: AppConfig, fileId: String): OctaviusRestoreState = withContext(Dispatchers.IO) {
+        val jobId = java.util.UUID.randomUUID().toString().replace("-", "")
+        runCatching {
+            postJson(config, "/admin/octavius/restore", buildJsonObject {
+                put("file_id", fileId)
+                put("job_id", jobId)
+            })
+                ?.let { json.decodeFromString<OctaviusRestoreState>(it) }
+                ?.let { if (!it.ok && it.jobId.isBlank()) it.copy(phase = "failed", jobId = jobId) else it }
+        }.getOrNull() ?: OctaviusRestoreState(phase = "unknown", jobId = jobId)
+    }
+
     // ── Skyfall ─────────────────────────────────────────────────────────────
 
     suspend fun fetchSkyfallProjects(config: AppConfig): List<SkyfallProject> =

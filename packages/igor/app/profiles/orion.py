@@ -53,7 +53,7 @@ class OrionProfile(AgentProfile):
     # ElevenLabs "Elli" (calm, thoughtful) — verify this id exists in the
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
-    voice_id = "elevenlabs:eleven_multilingual_v2:MF3mGyEYCl7XYWbV9V6O"
+    voice_id = "elevenlabs:eleven_v4:MF3mGyEYCl7XYWbV9V6O"
     canvas_brief = (
         "Presenting maintenance: host, memory and service metrics are stat tiles or "
         "chart windows, maintenance sequences are timelines, and logs or configuration "

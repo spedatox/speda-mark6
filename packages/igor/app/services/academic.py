@@ -35,6 +35,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import owner_now
 from app.models.academic import AttendanceEntry, CourseSlot, Device, TermConfig
 
 logger = logging.getLogger(__name__)
@@ -218,7 +219,7 @@ async def list_attendance(db: AsyncSession) -> list[AttendanceEntry]:
 
 async def summarise(db: AsyncSession, now: datetime | None = None) -> list[dict]:
     """Per-subject attendance verdicts. The single source Ultron quotes from."""
-    now = now or datetime.utcnow()
+    now = now or owner_now()
     term = await get_active_term(db)
     if term is None:
         return []
@@ -246,7 +247,7 @@ async def summarise(db: AsyncSession, now: datetime | None = None) -> list[dict]
                     occ["date"],
                     datetime.strptime(occ["slot"].end_time, "%H:%M").time(),
                 )
-                if end < now:
+                if end <= now:
                     unanswered += 1
                 continue
             if entry.status == "attended":
@@ -350,29 +351,40 @@ async def deactivate_device(db: AsyncSession, fid: str) -> None:
 
 # ── The ask ─────────────────────────────────────────────────────────────────
 
-async def occurrence_just_ended(
-    db: AsyncSession, now: datetime, window_minutes: int = 20
-) -> dict | None:
+async def pending_occurrences(
+    db: AsyncSession,
+    now: datetime | None = None,
+    *,
+    course_code: str | None = None,
+    on_date: date_cls | None = None,
+    slot_id: str | None = None,
+    window_minutes: int | None = None,
+) -> list[dict]:
     """
-    The teaching hour that ended within the last [window_minutes] and has no
-    answer yet — what n8n's per-lecture trigger asks Igor to push about.
+    Ended, unanswered teaching hours in the active term, oldest first.
 
-    Returns None when there is nothing to ask, which is the common case and must
-    stay cheap: n8n fires this on a schedule, not only when a class exists.
+    Manual recovery has no age cutoff. Automatic polling supplies a window so
+    an old backlog does not become a stream of scheduled notifications. Sending
+    a question never settles an occurrence; only an owner's answer does that.
     """
+    now = now or owner_now()
     term = await get_active_term(db)
     if term is None:
-        return None
+        return []
     slots = await list_slots(db)
+    if course_code:
+        slots = [s for s in slots if s.code.upper() == course_code.strip().upper()]
+    if slot_id:
+        slots = [s for s in slots if s.slot_id == slot_id]
     if not slots:
-        return None
+        return []
 
     entries = await list_attendance(db)
     answered = {f"{e.slot_id}@{e.date.isoformat()}" for e in entries}
 
-    today = now.date()
+    candidates: list[tuple[datetime, dict]] = []
     for occ in occurrences(slots, term):
-        if occ["date"] != today:
+        if on_date is not None and occ["date"] != on_date:
             continue
         if occ["key"] in answered:
             continue
@@ -380,14 +392,30 @@ async def occurrence_just_ended(
             occ["date"],
             datetime.strptime(occ["slot"].end_time, "%H:%M").time(),
         )
-        if end <= now <= end + timedelta(minutes=window_minutes):
-            slot = occ["slot"]
-            return {
-                "slot_id": slot.slot_id,
-                "course_code": slot.code,
-                "course_name": slot.name,
-                "date": occ["date"].isoformat(),
-                "time": f"{slot.start_time} - {slot.end_time}",
-                "room": slot.room,
-            }
-    return None
+        if end > now:
+            continue
+        if window_minutes is not None and now > end + timedelta(minutes=window_minutes):
+            continue
+        slot = occ["slot"]
+        candidates.append((end, {
+            "slot_id": slot.slot_id,
+            "course_code": slot.code,
+            "course_name": slot.name,
+            "date": occ["date"].isoformat(),
+            "time": f"{slot.start_time} - {slot.end_time}",
+            "room": slot.room,
+        }))
+    candidates.sort(key=lambda item: (item[0], item[1]["slot_id"]))
+    return [occurrence for _, occurrence in candidates]
+
+
+async def occurrence_just_ended(
+    db: AsyncSession, now: datetime, window_minutes: int = 20
+) -> dict | None:
+    """The oldest unanswered hour ending within the automatic polling window.
+
+    Unlike manual recovery, n8n must leave older unanswered hours alone. A
+    window can cross midnight; occurrence identity still includes its date.
+    """
+    pending = await pending_occurrences(db, now, window_minutes=window_minutes)
+    return pending[0] if pending else None

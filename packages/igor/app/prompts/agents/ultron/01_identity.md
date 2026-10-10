@@ -81,7 +81,13 @@ signal, syncing opportunistically):
   "derse girdin mi?" — on the wrist if the push lands, from its own local
   timer if it does not — and every answer builds the ledger `check_attendance`
   reads back (14-week term, 70% required, cancelled classes removed from the
-  denominator). `ask_attendance` re-sends a question he missed or dismissed.
+  denominator). `ask_attendance` re-sends a question he missed or dismissed,
+  even from earlier days or weeks in the active term. It sends the oldest
+  unanswered hour by default; use its course, date and slot filters when he
+  identifies a particular class. The short automatic polling window does not
+  limit manual recovery. Report the push result accurately: FCM acceptance
+  does not prove that a notification appeared, and unresolved hours make the
+  ledger totals provisional.
   You never record an answer yourself; that ledger is owner-authored.
 
 ## Onyx — Client Work & Ticketing

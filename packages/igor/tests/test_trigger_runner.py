@@ -116,7 +116,8 @@ def _engine(text="Slept 7h12m, resting HR 54.", error=False):
 
 
 async def _fire(db, *, payload, output_mode="push", engine=None, bots=None,
-                profile=None, agent_proxy=None, ws_manager=None, session_manager=None):
+                profile=None, agent_proxy=None, ws_manager=None, session_manager=None,
+                workspace_service=None, input_service=None, session_id=None):
     """Fire a triggered turn and return once it has actually settled.
 
     The turn is detached, and everything asserted below — the persisted rows,
@@ -133,12 +134,56 @@ async def _fire(db, *, payload, output_mode="push", engine=None, bots=None,
         request_id="req-1", orchestrator=type("O", (), {"run": staticmethod(engine or _engine())})(),
         turns=turns, session_manager=sm, telegram_bots=bots,
         agent_proxy=agent_proxy, ws_manager=ws_manager,
+        workspace_service=workspace_service, input_service=input_service, session_id=session_id,
     )
     assert started is not None, "registry refused the turn — nothing ran"
     # Bounded only so a genuinely hung turn fails loudly instead of hanging the
     # suite; it is not a settling budget, and a slow machine cannot exhaust it.
     assert await turns.wait(started, timeout=30)
     return started, session_id, bots
+
+
+async def test_worker_report_restores_durable_desk_private_project_and_originals(db, tmp_path):
+    import base64
+    from app.core.context import AgentContext
+    from app.models.project import Project
+    from app.services.workspaces import WorkspaceService
+    from app.services.engineering_inputs import EngineeringInputService
+
+    root = tmp_path / "workspaces"
+    desk = root / "desk"
+    desk.mkdir(parents=True)
+    service = WorkspaceService(str(root))
+    inputs = EngineeringInputService(str(root), service)
+    project = Project(user_id=1, agent_id="atomix", name="Private context")
+    db.add(project)
+    await db.commit()
+    session = await SessionManager().get_or_create(db, 1, "user", "test-model", "atomix")
+    session.project_id = project.id
+    await db.commit()
+    context = AgentContext(
+        agent_id="atomix", user_id=1, session_id=session.id, request_id="initial",
+        triggered_by="user", trigger_payload={}, output_mode="respond", model="test-model",
+        system_prompt="", conversation_history=[], db=db,
+    )
+    chosen = await service.prepare(context, workspace=str(desk))
+    await inputs.accept(context, [{"name": "requirements", "data": base64.b64encode(b"accepted specification").decode()}])
+    expected_inputs = context.extra["forge_inputs"]
+    seen = []
+
+    async def resumed(ctx):
+        seen.append((ctx.workshop_project_id, ctx.extra["cwd"], ctx.extra["project_id"], ctx.extra["forge_inputs"]))
+        async for event in _engine("report reviewed")(ctx):
+            yield event
+
+    _, returned_session, _ = await _fire(
+        db, payload={"type": "legion_report", "worker": "autobot", "task": "build", "result": "done",
+                     "status": "completed", "workshop_project_id": chosen.project_id},
+        engine=resumed, session_id=session.id,
+        workspace_service=WorkspaceService(str(root)), input_service=inputs,
+    )
+    assert returned_session == session.id
+    assert seen == [(chosen.project_id, str(desk.resolve()), project.id, expected_inputs)]
 
 
 # ── The seed ─────────────────────────────────────────────────────────────────
@@ -519,6 +564,27 @@ async def test_push_keeps_the_failure_marker_a_broken_turn_was_stamped_with(db):
     )
     assert bots.sent, "a failed turn still delivers what it had"
     assert "Partial answer." in bots.sent[-1][1]
+
+
+async def test_failed_history_save_delivers_failure_instead_of_an_older_answer(db, monkeypatch):
+    """Codex's explicit failed outcome must survive trigger delivery as well."""
+    sm = SessionManager()
+    save_message = sm.save_message
+
+    async def fail_assistant_save(db, session_id, role, content):
+        if role == "assistant":
+            raise RuntimeError("history storage unavailable")
+        return await save_message(db, session_id, role, content)
+
+    async def prior_answer(db, session_id):
+        return "Old successful answer from an earlier run"
+
+    monkeypatch.setattr(sm, "save_message", fail_assistant_save)
+    monkeypatch.setattr(tr, "_last_assistant_text", prior_answer)
+    _, _, bots = await _fire(db, payload={"job": "x"}, session_manager=sm)
+    assert bots.sent
+    assert "could not be saved" in bots.sent[-1][1]
+    assert "Old successful" not in bots.sent[-1][1]
 
 
 def test_language_clause_honors_explicit_language():

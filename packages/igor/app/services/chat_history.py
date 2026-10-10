@@ -18,6 +18,49 @@ import json
 from app.models.message import Message
 
 
+def fold_subagent_event(run: dict | None, event: dict) -> dict:
+    """Save the same worker view as Heartbreaker's foldLegionEvent.
+
+    Codex retains child identities and tool items in rollouts. This projection
+    keeps Igor's existing SUBAGENT inspection available after chat reload, while
+    leaving these records out of provider conversation content.
+    """
+    out = {**run, "steps": [dict(step) for step in run.get("steps", [])]} if run else {
+        "id": str(event["id"]), "agent": event.get("agent", ""),
+        "label": event.get("label", ""), "running": True, "steps": [],
+    }
+    if event.get("source"):
+        out["source"] = event["source"]
+    for key in ("execution_id", "parent_request_id", "sequence"):
+        if event.get(key) is not None:
+            out[key] = event[key]
+    phase = event.get("phase")
+    if phase == "started":
+        out.update(prompt=event.get("prompt"), running=True)
+    elif phase == "text" and event.get("text"):
+        steps = out["steps"]
+        if steps and steps[-1].get("kind") == "text":
+            steps[-1]["text"] += event["text"]
+        else:
+            steps.append({"kind": "text", "text": event["text"]})
+    elif phase == "tool" and event.get("tool_call_id"):
+        out["steps"].append({"kind": "tool", "tool": event.get("tool"),
+                             "input": event.get("input"), "toolCallId": event["tool_call_id"]})
+    elif phase == "tool_result" and event.get("tool_call_id"):
+        for step in out["steps"]:
+            if step.get("toolCallId") == event["tool_call_id"]:
+                step["result"] = event.get("error") or event.get("result")
+                break
+    elif phase == "finished":
+        outcome = event.get("ok")
+        out.update(running=False, ok=outcome is True, report=event.get("report"),
+                   status="completed" if outcome is True else ("failed" if outcome is False else "unknown"))
+        if event.get("status") in {"completed", "failed", "interrupted", "unknown"}:
+            out["status"] = event["status"]
+            out["ok"] = outcome is True and event["status"] == "completed"
+    return out
+
+
 def execution_receipts(content, *, budget: int = 1200, result_limit: int = 550) -> str:
     """Recover bounded execution evidence from persisted display metadata.
 
@@ -71,6 +114,7 @@ async def debug_export(db, session_id: int) -> dict | None:
     from sqlalchemy import select
     from app.models.session import Session
     from app.models.tool_call import ToolCall
+    from app.models.worker_execution import WorkerExecution, WorkerEvent, WorkerInput, WorkerCompletion
 
     session = await db.get(Session, session_id)
     if session is None:
@@ -96,6 +140,16 @@ async def debug_export(db, session_id: int) -> dict | None:
         select(ToolCall).where(ToolCall.session_id == session_id)
         .order_by(ToolCall.called_at, ToolCall.id)
     )).scalars().all()
+    workers = (await db.execute(select(WorkerExecution).where(
+        WorkerExecution.session_id == session_id, WorkerExecution.user_id == session.user_id,
+        WorkerExecution.agent_id == session.agent_id).order_by(WorkerExecution.created_at, WorkerExecution.id))).scalars().all()
+    ids = [worker.id for worker in workers]
+    worker_events = (await db.execute(select(WorkerEvent).where(WorkerEvent.execution_id.in_(ids))
+                                     .order_by(WorkerEvent.execution_id, WorkerEvent.sequence))).scalars().all() if ids else []
+    worker_inputs = (await db.execute(select(WorkerInput).where(WorkerInput.execution_id.in_(ids))
+                                     .order_by(WorkerInput.created_at, WorkerInput.id))).scalars().all() if ids else []
+    completions = (await db.execute(select(WorkerCompletion).where(WorkerCompletion.execution_id.in_(ids))
+                                   .order_by(WorkerCompletion.created_at, WorkerCompletion.execution_id))).scalars().all() if ids else []
     return {
         "format": "speda.chat-debug",
         "version": 1,
@@ -103,10 +157,15 @@ async def debug_export(db, session_id: int) -> dict | None:
         "session": record(session),
         "messages": [record(message) for message in messages],
         "tool_calls": [record(call) for call in calls],
+        "worker_executions": [record(worker) for worker in workers],
+        "worker_events": [record(event) for event in worker_events],
+        "worker_inputs": [record(item) for item in worker_inputs],
+        "worker_completions": [record(item) for item in completions],
         "notes": [
             "Raw persisted records; UI tool previews may be shortened. Use tool_calls for full results.",
             "Older tool audit results may have been limited to 4000 characters. Missing or truncated historical data cannot be recovered.",
             "Includes stored attachment content and file references; referenced external files are not bundled.",
+            "Worker records include durable event cursors and message receipts. Stored running status is not proof of a live executor.",
         ],
     }
 
@@ -149,6 +208,8 @@ def _extract_meta(content) -> dict:
                 'uploads': block.get('uploads', []),
                 'thinking': block.get('thinking', ''),
                 'thinkingRedacted': block.get('thinkingRedacted', False),
+                'subagents': block.get('subagents', []),
+                'turn': block.get('turn', {}),
                 # Provenance for a turn the owner did not write — an n8n
                 # automation, or another agent dispatching a task, opening a
                 # session. The UI attributes the bubble to the sender instead of
@@ -244,7 +305,7 @@ def rows_from_messages(messages: list[Message]) -> list[dict]:
             'content': content_text,
             'tools': meta.get('tools', []),
             'isStreaming': False,
-            'isError': False,
+            'isError': meta.get('turn', {}).get('status') == 'failed',
             # UTC, ISO-8601 with the Z the naive DB value implies. The war room
             # merges these against inter-agent traffic timestamps to rebuild one
             # group-chat timeline, so a reloaded room reads in the right order.
@@ -262,6 +323,10 @@ def rows_from_messages(messages: list[Message]) -> list[dict]:
             row['thinking'] = meta['thinking']
         if meta.get('thinkingRedacted'):
             row['thinkingRedacted'] = True
+        if meta.get('subagents'):
+            row['subagents'] = meta['subagents']
+        if meta.get('turn'):
+            row['turn'] = meta['turn']
         # A seed waits for the reply that consumes it. Anything else arriving
         # first means nothing ever will — release it in place, so it is still
         # in the transcript and still in the right order.

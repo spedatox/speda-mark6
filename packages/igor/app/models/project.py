@@ -37,6 +37,9 @@ class Project(Base):
     # docstring on why there is no shared project.
     agent_id: Mapped[str] = mapped_column(String(64), default="speda")
 
+    # Optional shared filesystem desk. Instructions/files remain agent-private.
+    workshop_project_id: Mapped[str | None] = mapped_column(String(24), nullable=True, default=None)
+
     name: Mapped[str] = mapped_column(String(200))
     # The one-line blurb under the name on the card. Purely descriptive — it is
     # NOT sent to the model; `instructions` is.

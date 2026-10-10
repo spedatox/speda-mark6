@@ -54,6 +54,7 @@ def _serialize(p: Project, chats: int = 0, files: int = 0) -> dict:
     return {
         "id": p.id,
         "agent_id": p.agent_id,
+        "workshop_project_id": p.workshop_project_id,
         "name": p.name,
         "description": p.description or "",
         "instructions": p.instructions or "",

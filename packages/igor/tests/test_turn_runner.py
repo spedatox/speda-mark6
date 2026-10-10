@@ -4,6 +4,9 @@
 """Unit tests for the detached TurnRegistry (BgOps Phase 1)."""
 
 import asyncio
+import json
+from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -294,3 +297,219 @@ async def test_a_client_named_turn_is_attachable_before_its_first_event():
 
     replay = await _collect(reg, "client-chosen")
     assert any("late" in s for s in replay)
+
+
+def _events(wire):
+    return [json.loads(frame.removeprefix("data: ")) for frame in wire]
+
+
+async def test_missing_terminal_is_failed_and_never_runs_success_hook():
+    """Codex session/turn.rs: transport EOF is not successful completion."""
+    async def partial(ctx):
+        yield SSEEvent(SSEEventType.CHUNK, "partial", ctx.session_id, ctx.request_id)
+
+    sm, completed = _FakeSM(), []
+    reg = turn_runner.TurnRegistry(sm)
+    rid = reg.start(context=_ctx("missing"), engine_factory=partial, format_error=str,
+                    on_complete=lambda: _set(completed))
+    events = _events(await _collect(reg, rid))
+    assert [e["type"] for e in events] == ["chunk", "error"]
+    assert completed == []
+    assert "partial" in sm.saved[0][2][0]["text"]
+    assert sm.saved[0][2][-1]["turn"]["status"] == "failed"
+
+
+async def test_done_is_withheld_until_history_save_finishes():
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    class HeldSave(_FakeSM):
+        async def save_message(self, *args):
+            entered.set()
+            await release.wait()
+            await super().save_message(*args)
+
+    sm = HeldSave()
+    reg = turn_runner.TurnRegistry(sm)
+    rid = reg.start(context=_ctx("save-gate"), engine_factory=_tool_only_engine, format_error=str)
+    await asyncio.wait_for(entered.wait(), 5)
+    assert not any(e.type == SSEEventType.DONE for e in reg._turns[rid].buffer)
+    release.set()
+    events = _events(await _collect(reg, rid))
+    assert events[-1]["data"]["status"] == "completed"
+    assert len(sm.saved) == 1
+
+
+async def test_save_failure_replaces_done_with_error_and_skips_success_hook():
+    class BrokenSave(_FakeSM):
+        async def save_message(self, *args):
+            raise OSError("storage unavailable")
+
+    sm, completed = BrokenSave(), []
+    reg = turn_runner.TurnRegistry(sm)
+    rid = reg.start(context=_ctx("broken-save"), engine_factory=_tool_only_engine, format_error=str,
+                    on_complete=lambda: _set(completed))
+    events = _events(await _collect(reg, rid))
+    assert events[-1]["type"] == "error"
+    assert "could not be saved" in events[-1]["data"]
+    assert not any(e["type"] == "done" for e in events)
+    assert completed == [] and sm.saved == []
+
+
+async def test_worker_inspection_survives_saved_chat_reload():
+    from app.services.chat_history import rows_from_messages
+
+    async def worker(ctx):
+        for data in [
+            {"id": "child", "phase": "started", "agent": "autobot", "label": "Build", "source": "forge"},
+            {"id": "child", "phase": "tool", "tool_call_id": "cmd", "tool": "run_command", "input": {}},
+            {"id": "child", "phase": "tool_result", "tool_call_id": "cmd", "result": "3 tests passed"},
+            {"id": "child", "phase": "finished", "ok": True, "report": "Verified"},
+        ]:
+            yield SSEEvent(SSEEventType.SUBAGENT, data, ctx.session_id, ctx.request_id)
+        yield SSEEvent(SSEEventType.DONE, {}, ctx.session_id, ctx.request_id)
+
+    sm = _FakeSM()
+    reg = turn_runner.TurnRegistry(sm)
+    rid = reg.start(context=_ctx("child-history"), engine_factory=worker, format_error=str)
+    await reg.wait(rid, timeout=5)
+    rows = rows_from_messages([SimpleNamespace(id=1, role="assistant", content=sm.saved[0][2],
+                                              created_at=datetime.now())])
+    child = rows[0]["subagents"][0]
+    assert child["id"] == "child" and child["running"] is False and child["ok"] is True
+    assert child["steps"][0]["result"] == "3 tests passed"
+    assert rows[0]["turn"]["request_id"] == rid
+
+
+async def test_immediate_cancel_persists_and_settles_without_starting_engine():
+    sm = _FakeSM()
+    reg = turn_runner.TurnRegistry(sm)
+    entered = []
+
+    async def engine(ctx):
+        entered.append(True)
+        yield SSEEvent(SSEEventType.DONE, {}, ctx.session_id, ctx.request_id)
+
+    rid = reg.start(context=_ctx("immediate"), engine_factory=engine, format_error=str)
+    assert await reg.cancel(rid)
+    assert not entered
+    assert len(sm.saved) == 1 and "cancelled by owner" in sm.saved[0][2][0]["text"]
+    assert _events(await _collect(reg, rid))[-1]["data"]["status"] == "interrupted"
+
+
+async def test_failed_db_open_still_emits_terminal_error(monkeypatch):
+    class NoDatabase(_DummyCtx):
+        async def __aenter__(self):
+            raise OSError("database unavailable")
+
+    monkeypatch.setattr(turn_runner, "AsyncSessionLocal", NoDatabase)
+    reg = turn_runner.TurnRegistry(_FakeSM())
+    rid = reg.start(context=_ctx("db-open"), engine_factory=_slow_engine, format_error=str)
+    assert _events(await _collect(reg, rid))[-1]["type"] == "error"
+    assert not reg.is_live(rid)
+
+
+async def test_session_admission_is_atomic_and_distinct_sessions_can_run():
+    release = asyncio.Event()
+
+    async def held(ctx):
+        await release.wait()
+        yield SSEEvent(SSEEventType.DONE, {}, ctx.session_id, ctx.request_id)
+
+    reg = turn_runner.TurnRegistry(_FakeSM())
+    a, b, c = _ctx("a"), _ctx("b"), _ctx("c")
+    c.session_id = 8
+    assert reg.start(context=a, engine_factory=held, format_error=str) == "a"
+    assert reg.start(context=b, engine_factory=held, format_error=str) is None
+    assert reg.start(context=c, engine_factory=held, format_error=str) == "c"
+    release.set()
+    await reg.shutdown()
+
+
+async def test_repeated_cancel_does_not_interrupt_cancellation_persistence():
+    engine_entered, saving, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    async def held(ctx):
+        engine_entered.set()
+        await asyncio.Event().wait()
+        yield SSEEvent(SSEEventType.DONE, {}, ctx.session_id, ctx.request_id)
+
+    class HeldSave(_FakeSM):
+        async def save_message(self, *args):
+            saving.set()
+            await release.wait()
+            await super().save_message(*args)
+
+    sm = HeldSave()
+    reg = turn_runner.TurnRegistry(sm)
+    rid = reg.start(context=_ctx("double-cancel"), engine_factory=held, format_error=str)
+    await asyncio.wait_for(engine_entered.wait(), 5)
+    cancelling = asyncio.create_task(reg.cancel(rid))
+    await asyncio.wait_for(saving.wait(), 5)
+    assert not cancelling.done()
+    assert await reg.cancel(rid) is False
+    release.set()
+    assert await asyncio.wait_for(cancelling, 5)
+    assert len(sm.saved) == 1
+
+
+def test_worker_finish_without_an_explicit_outcome_remains_unknown():
+    from app.services.chat_history import fold_subagent_event
+    run = fold_subagent_event(None, {"id": "worker", "phase": "started", "label": "build"})
+    ended = fold_subagent_event(run, {"id": "worker", "phase": "finished"})
+    assert ended["status"] == "unknown" and ended["ok"] is False
+    assert ended["running"] is False and run["running"] is True
+
+
+async def test_event_collection_failure_closes_engine_before_settlement(monkeypatch):
+    """A failure in the parent collector still owns the suspended generator."""
+    cleaning, release = asyncio.Event(), asyncio.Event()
+
+    async def engine(ctx):
+        try:
+            yield SSEEvent(SSEEventType.SUBAGENT, {"id": "child"}, ctx.session_id, ctx.request_id)
+            await asyncio.Event().wait()
+        finally:
+            cleaning.set()
+            await release.wait()
+
+    def failed_collector(*args):
+        raise RuntimeError("worker projection failed")
+
+    monkeypatch.setattr(turn_runner, "fold_subagent_event", failed_collector)
+    context = _ctx("collector-failure")
+    source = engine(context)  # retain a reference so GC cannot provide cleanup
+    sm = _FakeSM()
+    registry = turn_runner.TurnRegistry(sm)
+    rid = registry.start(context=context, engine_factory=lambda _: source, format_error=str)
+    await asyncio.wait_for(cleaning.wait(), 5)
+    assert not sm.saved and not registry._turns[rid].task.done()
+    release.set()
+    assert await registry.wait(rid, timeout=5)
+    assert _events(await _collect(registry, rid))[-1]["type"] == "error"
+    assert len(sm.saved) == 1
+
+
+async def test_wait_and_shutdown_join_settled_completion_drain():
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def engine(ctx):
+        yield SSEEvent(SSEEventType.DONE, {}, ctx.session_id, ctx.request_id)
+
+    async def drain():
+        entered.set()
+        await release.wait()
+
+    registry = turn_runner.TurnRegistry(_FakeSM())
+    registry.set_settled_hook(drain)
+    rid = registry.start(context=_ctx("owned-drain"), engine_factory=engine, format_error=str)
+    await asyncio.wait_for(entered.wait(), 5)
+    assert not registry.active()  # slot released, task still owns the drain
+    waiting = asyncio.create_task(registry.wait(rid, timeout=5))
+    shutting_down = asyncio.create_task(registry.shutdown())
+    await asyncio.sleep(0)
+    assert not waiting.done() and not shutting_down.done()
+    release.set()
+    assert await waiting
+    await shutting_down
+    assert registry._turns[rid].task.done()
+    assert registry.reserve(request_id="closed", agent_id="speda", session_id=7) is None

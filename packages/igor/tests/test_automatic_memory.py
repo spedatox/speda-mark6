@@ -31,6 +31,22 @@ async def db(monkeypatch):
     await engine.dispose()
 
 
+@pytest.fixture
+async def concurrent_db(monkeypatch, tmp_path):
+    # A cancelled foreground reader and a detached warmup need independent
+    # connections. In-memory SQLite's StaticPool shares one connection, whose
+    # cancellation invalidates the other reader; the deployed store is a file.
+    url = "sqlite+aiosqlite:///" + (tmp_path / "concurrent-recall.db").as_posix()
+    engine = create_async_engine(url)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    monkeypatch.setattr(settings, "database_url", url)
+    monkeypatch.setattr(settings, "recall_translate_queries", False)
+    async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+        yield session
+    await engine.dispose()
+
+
 async def context(db, text, agent="atomix"):
     session = Session(user_id=1, agent_id=agent, triggered_by="user", model_used="test")
     db.add(session)
@@ -390,7 +406,8 @@ async def test_failed_local_index_retains_exact_retry_even_after_message_leaves_
     assert job.status == "done"
 
 
-async def test_cold_matrix_finishes_after_deadline_and_next_recall_uses_warm_vectors(db, monkeypatch):
+async def test_cold_matrix_finishes_after_deadline_and_next_recall_uses_warm_vectors(concurrent_db, monkeypatch):
+    db = concurrent_db
     from app.skills import semantic_search
     vector = np.array([1., 0., 0.], dtype=np.float32)
     await past(db, [("user", "I prefer explanations that get directly to the point.")], vector=vector)

@@ -2,4 +2,5 @@
 members = ["packages/igor", "packages/forge", "packages/orion-spark"]
 
 [tool.pytest.ini_options]
+addopts = "-p no:cacheprovider"
 asyncio_mode = "auto"

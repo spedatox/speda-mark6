@@ -7,7 +7,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import inspect
 import shutil
+from contextlib import asynccontextmanager
 from pathlib import Path, PurePosixPath
 from typing import AsyncIterator, Callable
 
@@ -19,13 +21,14 @@ def _load_runtime():
     return ExecutionSpec, execute
 
 
-def _resolve_workspace(value: str) -> Path:
+def _resolve_workspace(value: str, *, allowed_root: str | None = None) -> Path:
     """Map a Hisar picker path and enforce the configured execution boundary."""
     raw = Path(value).expanduser()
-    if not settings.forge_workspace_root:
+    configured_root = settings.forge_workspace_root if allowed_root is None else allowed_root
+    if not configured_root:
         return raw.resolve()
 
-    root = Path(settings.forge_workspace_root).expanduser().resolve()
+    root = Path(configured_root).expanduser().resolve()
     wire = PurePosixPath(value)
     prefix = ("/", "Forge", "workspaces")
     if wire.parts[:3] == prefix:
@@ -56,13 +59,26 @@ class IgorModelAdapter:
             return
         from forge.model.base import TextDelta, ToolUseRequest, TurnEnd, UsageReport
 
-        response = await self._client.create_message(
+        call = asyncio.create_task(self._client.create_message(
             model=self.model_id,
             system=system,
             messages=messages,
             tools=tools,
             max_tokens=settings.chat_max_output_tokens,
-        )
+        ))
+        watch = asyncio.create_task(signal.wait())
+        try:
+            # Codex tools/parallel.rs: cancellation owns the in-flight operation,
+            # rather than waiting for the next model/tool boundary to notice it.
+            await asyncio.wait({call, watch}, return_when=asyncio.FIRST_COMPLETED)
+            if signal.is_set():
+                return
+            response = call.result()
+        finally:
+            for pending in (call, watch):
+                if not pending.done():
+                    pending.cancel()
+            await asyncio.gather(call, watch, return_exceptions=True)
         for block in response.content:
             if signal.is_set():
                 return
@@ -87,6 +103,10 @@ class IgorModelAdapter:
         yield TurnEnd(reason=getattr(response, "stop_reason", None))
 
 
+class ForgeInterrupted(RuntimeError):
+    """Signal-driven interruption completed Cell teardown and released its claim."""
+
+
 class ForgeExecutor:
     def __init__(self, client) -> None:
         self._client = client
@@ -94,6 +114,7 @@ class ForgeExecutor:
     async def run(
         self, *, job_id: str, role: str, task: str, workspace: str,
         model_ref: str, emit: Callable[[dict], None], inputs: list[dict] | None = None,
+        signal: asyncio.Event | None = None, inbox=None,
     ) -> str:
         ExecutionSpec, execute = _load_runtime()
 
@@ -106,22 +127,45 @@ class ForgeExecutor:
             raise ValueError("Forge input directory escapes the selected workspace") from exc
         input_dir = input_root / safe_job
         materialized: list[str] = []
+        decoded: list[tuple[Path, bytes]] = []
+        total_bytes = 0
         if inputs:
-            input_dir.mkdir(parents=True, exist_ok=False)
             try:
                 for index, item in enumerate(inputs, 1):
-                    name = Path(str(item.get("name") or f"input-{index}")).name
+                    name = PurePosixPath(str(item.get("name") or f"input-{index}").replace("\\", "/")).name
                     if name in {"", ".", ".."}:
                         name = f"input-{index}"
                     destination = input_dir / name
-                    if destination.exists():
+                    if destination in {entry[0] for entry in decoded}:
                         destination = input_dir / f"{index}-{name}"
-                    data = base64.b64decode(str(item.get("data") or ""), validate=True)
-                    destination.write_bytes(data)
+                        while destination in {entry[0] for entry in decoded}:
+                            destination = input_dir / ("_" + destination.name)
+                    if item.get("artifact_hash"):
+                        from forge.artifacts import ArtifactStore
+                        if not settings.forge_workspace_root:
+                            raise ValueError("Persistent original input storage is not configured")
+                        data = await asyncio.to_thread(
+                            ArtifactStore(Path(settings.forge_workspace_root)).read, item["artifact_hash"],
+                        )
+                    else:
+                        data = base64.b64decode(str(item.get("data") or ""), validate=True)
+                    total_bytes += len(data)
+                    if len(data) > 64 * 1024 * 1024 or total_bytes > 128 * 1024 * 1024:
+                        raise ValueError("Too many retained input bytes for one worker; select fewer Task input_ids")
+                    decoded.append((destination, data))
                     materialized.append(str(destination.relative_to(workspace_path)))
             except (ValueError, binascii.Error, OSError) as exc:
-                shutil.rmtree(input_dir, ignore_errors=True)
-                raise ValueError(f"could not materialize uploaded file {name}") from exc
+                raise ValueError(f"could not materialize uploaded file {name}: {exc}") from exc
+
+        @asynccontextmanager
+        async def setup_inputs():
+            input_dir.mkdir(parents=True, exist_ok=False)
+            try:
+                for destination, data in decoded:
+                    destination.write_bytes(data)
+                yield
+            finally:
+                shutil.rmtree(input_dir)
 
         if materialized:
             task = (
@@ -131,16 +175,21 @@ class ForgeExecutor:
 
         tool_names: dict[str, str] = {}
 
+        async def publish(payload):
+            published = emit(payload)
+            if inspect.isawaitable(published):
+                await published
+
         async def forward(event) -> None:
             data = event.data
             if event.type == "chunk" and data:
-                emit({"phase": "text", "text": str(data), "source": "forge"})
+                await publish({"phase": "text", "text": str(data), "source": "forge"})
             elif event.type == "tool" and isinstance(data, dict):
                 call_id = data.get("id")
                 tool_name = data.get("name")
                 if call_id and tool_name:
                     tool_names[str(call_id)] = str(tool_name)
-                emit({
+                await publish({
                     "phase": "tool", "tool": tool_name,
                     "tool_call_id": call_id, "input": data.get("input"),
                     "source": "forge",
@@ -154,10 +203,13 @@ class ForgeExecutor:
                     "tool_call_id": call_id,
                     "tool": data.get("name") or tool_names.get(str(call_id)),
                     "result": preview, "source": "forge",
+                    "full_result": content,
                 }
                 if data.get("is_error"):
                     forwarded["error"] = preview
-                emit(forwarded)
+                await publish(forwarded)
+            elif event.type in {"steered", "usage", "compact", "error"}:
+                await publish({"phase": event.type, "data": data, "source": "forge"})
 
         images = {
             "coder": settings.forge_coder_image,
@@ -165,16 +217,15 @@ class ForgeExecutor:
             "pentester": settings.forge_pentester_image,
         }
 
-        try:
-            from dataclasses import replace
-            from forge.config import ForgeSettings
-            runtime_settings = ForgeSettings.from_env()
-            if settings.forge_workspace_root:
-                runtime_settings = replace(
-                    runtime_settings,
-                    workspace_root=Path(settings.forge_workspace_root).expanduser().resolve(),
-                )
-            result = await execute(
+        from dataclasses import replace
+        from forge.config import ForgeSettings
+        runtime_settings = ForgeSettings.from_env()
+        if settings.forge_workspace_root:
+            runtime_settings = replace(
+                runtime_settings,
+                workspace_root=Path(settings.forge_workspace_root).expanduser().resolve(),
+            )
+        result = await execute(
                 ExecutionSpec(
                     job_id=job_id,
                     role=role,
@@ -194,10 +245,12 @@ class ForgeExecutor:
                 model=IgorModelAdapter(self._client, model_ref),
                 emit=forward,
                 settings=runtime_settings,
+                **({"signal": signal} if signal is not None else {}),
+                **({"inbox": inbox} if inbox is not None else {}),
+                **({"workspace_setup": setup_inputs} if inputs else {}),
             )
-        finally:
-            if inputs and input_dir.is_dir():
-                shutil.rmtree(input_dir)
+        if result.status == "cancelled":
+            raise ForgeInterrupted(result.report or "Forge execution interrupted")
         if result.status != "succeeded":
             raise RuntimeError(result.error or result.report or f"Forge job {result.status}")
         return result.report or "(Forge completed without a text report)"

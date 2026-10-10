@@ -18,9 +18,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+import posixpath
 import shlex
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from forge.cell.base import Cell, CellPolicy, CommandResult, CellCleanupError
 from forge.cell.stream import REAP_GRACE_S as _REAP_GRACE_S, Retained as _Retained, drain as _drain
@@ -97,6 +98,11 @@ class DockerCell(Cell):
                 proc.kill()
                 await proc.wait()
                 return 124, b"", b"docker call timed out"
+            except BaseException:
+                if proc.returncode is None:
+                    proc.kill()
+                await proc.wait()
+                raise
             return proc.returncode if proc.returncode is not None else 1, out, err
 
         # Streamed, and for the same reason SubprocessCell is: output collected
@@ -119,6 +125,17 @@ class DockerCell(Cell):
             except (asyncio.TimeoutError, TimeoutError, ProcessLookupError):
                 pass
             return 124, out_buf.raw(), err_buf.raw() + b"\ndocker call timed out"
+        except BaseException:
+            # Codex tools/parallel.rs owns the operation after cancellation.
+            # Reap the CLI and output readers; Cell teardown stops its commands.
+            if proc.returncode is None:
+                proc.kill()
+            await proc.wait()
+            raise
+        finally:
+            if not drain.done():
+                drain.cancel()
+            await asyncio.gather(drain, return_exceptions=True)
         code = proc.returncode if proc.returncode is not None else 1
         return code, out_buf.raw(), err_buf.raw()
 
@@ -266,24 +283,48 @@ class DockerCell(Cell):
     def _guard(self, path: str) -> str:
         # Resolve inside the ACTIVE workdir and refuse traversal outside it —
         # inside a worktree the boundary tightens with it.
-        root = self._workdir
+        root = posixpath.normpath(self._workdir)
         p = path if path.startswith("/") else f"{root}/{path}"
-        norm = str(Path(p).as_posix())
+        norm = posixpath.normpath(p)
+        if not (root == WORKDIR or root.startswith(WORKDIR + "/")):
+            raise PermissionError("active directory escapes the Cell workspace")
         if not (norm == root or norm.startswith(root + "/")):
             raise PermissionError(f"path escapes the Cell workspace: {path!r}")
         return norm
 
-    async def write(self, path: str, content: str) -> None:
+    async def _checked_path(self, path: str) -> str:
+        """Resolve symlinks inside the Cell, including parents of new files.
+
+        Workspace isolation follows Codex's explicit execution boundary. Host
+        realpath cannot resolve container-absolute symlinks, so check here and
+        fail closed if the image cannot perform the confinement check.
+        """
         target = self._guard(path)
+        code, out, err = await self._docker(
+            "exec", self.container, "realpath", "-zm", "--", self._workdir, target, timeout=15,
+        )
+        parts = out.split(b"\0")
+        if code != 0 or len(parts) != 3 or parts[-1] != b"":
+            raise DockerError("could not verify Cell path containment: " + err.decode("utf-8", "replace"))
+        root, resolved = (PurePosixPath(p.decode("utf-8")) for p in parts[:2])
+        try:
+            root.relative_to(PurePosixPath(WORKDIR))
+            resolved.relative_to(root)
+        except ValueError as exc:
+            raise PermissionError(f"symlink escapes the Cell workspace: {path!r}") from exc
+        return str(resolved)
+
+    async def write(self, path: str, content: str) -> None:
+        target = await self._checked_path(path)
         b64 = base64.b64encode(content.encode("utf-8")).decode("ascii")
-        parent = str(Path(target).parent.as_posix())
+        parent = str(PurePosixPath(target).parent)
         cmd = f"mkdir -p {shlex.quote(parent)} && echo {b64} | base64 -d > {shlex.quote(target)}"
         code, _out, err = await self._docker("exec", self.container, "sh", "-c", cmd, timeout=30)
         if code != 0:
             raise DockerError(f"Cell write failed: {err.decode('utf-8', 'replace')}")
 
     async def read(self, path: str) -> str:
-        target = self._guard(path)
+        target = await self._checked_path(path)
         code, out, err = await self._docker("exec", self.container, "cat", target, timeout=30)
         if code != 0:
             raise FileNotFoundError(err.decode("utf-8", "replace") or f"cannot read {path!r}")
@@ -302,6 +343,7 @@ class DockerCell(Cell):
 
     @staticmethod
     async def available() -> bool:
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 "docker", "info",
@@ -309,3 +351,12 @@ class DockerCell(Cell):
             return await asyncio.wait_for(proc.wait(), timeout=8) == 0
         except (OSError, asyncio.TimeoutError):
             return False
+        finally:
+            # Readiness probes own their process too; a stalled daemon must not
+            # leave a CLI behind after the timeout or caller cancellation.
+            if proc is not None and proc.returncode is None:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+                await proc.wait()

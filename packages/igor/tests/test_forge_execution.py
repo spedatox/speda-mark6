@@ -4,6 +4,7 @@
 import base64
 import sys
 from types import SimpleNamespace
+import pytest
 
 from app.config import settings
 from app.execution.forge import ForgeExecutor, _load_runtime, _resolve_workspace
@@ -61,9 +62,10 @@ async def test_existing_upload_is_materialized_for_forge_then_removed(tmp_path, 
 
     async def _execute(spec, **_kwargs):
         uploaded = spec.workspace / ".forge" / "inputs" / "job-1" / "notes.txt"
-        observed["task"] = spec.task
-        observed["bytes"] = uploaded.read_bytes()
-        observed["image"] = spec.cell_image
+        async with _kwargs["workspace_setup"]():
+            observed["task"] = spec.task
+            observed["bytes"] = uploaded.read_bytes()
+            observed["image"] = spec.cell_image
         return SimpleNamespace(status="succeeded", report="done", error=None)
 
     monkeypatch.setattr("app.execution.forge._load_runtime", lambda: (_Spec, _execute))
@@ -89,7 +91,8 @@ async def test_upload_filename_cannot_escape_workspace(tmp_path, monkeypatch):
             self.__dict__.update(kwargs)
 
     async def _execute(spec, **_kwargs):
-        assert (spec.workspace / ".forge" / "inputs" / "job-2" / "escape.txt").is_file()
+        async with _kwargs["workspace_setup"]():
+            assert (spec.workspace / ".forge" / "inputs" / "job-2" / "escape.txt").is_file()
         return SimpleNamespace(status="succeeded", report="safe", error=None)
 
     monkeypatch.setattr("app.execution.forge._load_runtime", lambda: (_Spec, _execute))
@@ -102,6 +105,42 @@ async def test_upload_filename_cannot_escape_workspace(tmp_path, monkeypatch):
         }],
     )
     assert not (tmp_path.parent / "escape.txt").exists()
+
+
+async def test_retained_original_is_staged_under_claim_and_survives_cleanup(tmp_path, monkeypatch):
+    from forge.artifacts import ArtifactStore
+    from forge.runtime import ExecutionResult
+    from forge.workshop import Workshop
+
+    workspace = tmp_path / "desk"
+    workspace.mkdir()
+    monkeypatch.setattr(settings, "forge_workspace_root", str(tmp_path))
+    store = Workshop(tmp_path)
+    artifacts = ArtifactStore(tmp_path)
+    digest = artifacts.put(b"permanent original")
+
+    async def claimed(spec, **kwargs):
+        assert store.run_status(spec.job_id)["status"] == "running"
+        assert (workspace / ".forge" / "inputs" / spec.job_id / "spec.txt").read_bytes() == b"permanent original"
+        return ExecutionResult(spec.job_id, "succeeded", "checked")
+
+    monkeypatch.setattr("forge.runtime._execute_claimed", claimed)
+    await ForgeExecutor(object()).run(
+        job_id="original", role="coder", task="use spec", workspace=str(workspace),
+        model_ref="test:model", emit=lambda event: None,
+        inputs=[{"name": "spec.txt", "artifact_hash": digest}],
+    )
+    assert not (workspace / ".forge" / "inputs" / "original").exists()
+    assert artifacts.read(digest) == b"permanent original"
+    store.claim(workspace, "live", "another writer")
+    with pytest.raises(ValueError, match="claimed"):
+        await ForgeExecutor(object()).run(
+            job_id="refused", role="coder", task="use spec", workspace=str(workspace),
+            model_ref="test:model", emit=lambda event: None,
+            inputs=[{"name": "spec.txt", "artifact_hash": digest}],
+        )
+    assert not (workspace / ".forge" / "inputs" / "refused").exists()
+    assert artifacts.read(digest) == b"permanent original"
 
 
 async def test_pentester_uses_security_cell_image(tmp_path, monkeypatch):
@@ -269,3 +308,34 @@ async def test_igor_model_adapter_propagates_thought_signature_to_assistant_mess
         "google": {"thought_signature": "SIG_GEMINI_ROUNDTRIP_123"}
     }
 
+
+@pytest.mark.parametrize("cancel_parent", [False, True])
+async def test_model_adapter_collects_blocked_provider_on_abort(cancel_parent):
+    import asyncio
+    from app.execution.forge import IgorModelAdapter
+
+    entered, cleaned, signal = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    class Client:
+        async def create_message(self, **kwargs):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaned.set()
+
+    async def consume():
+        return [e async for e in IgorModelAdapter(Client(), "fixture").stream(
+            system="", messages=[], tools=[], signal=signal,
+        )]
+
+    task = asyncio.create_task(consume())
+    await asyncio.wait_for(entered.wait(), 5)
+    if cancel_parent:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, 5)
+    else:
+        signal.set()
+        assert await asyncio.wait_for(task, 5) == []
+    assert cleaned.is_set()

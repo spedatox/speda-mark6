@@ -202,15 +202,11 @@ async def test_a_root_listing_has_no_nameless_directory(monkeypatch):
     taking every line ending in "/" — but the header line of a root listing is
     "/", which also ends in one. Structure now comes from the data.
     """
-    from app.routers.hisar import HISAR
-
     skill = _skill(monkeypatch, lambda *a: _resp(json={"entries": [
         {"name": "Desktop", "kind": "dir"},
         {"name": "Speda", "kind": "dir"},
         {"name": "Timeline 1.mov", "kind": "file", "size": 22681894},
     ]}))
-    monkeypatch.setattr(HISAR, "_client_marker", None, raising=False)
-
     entries = await skill.entries("/")
     dirs = [e["name"] for e in entries if skill.is_dir(e) and e.get("name")]
 
@@ -226,6 +222,20 @@ async def test_files_are_not_offered_as_directories(monkeypatch):
     ]}))
     entries = await skill.entries("/Documents")
     assert [e for e in entries if skill.is_dir(e)] == []
+
+
+async def test_directory_router_uses_injected_client_and_returns_sorted_data(monkeypatch):
+    from types import SimpleNamespace
+    from app.routers.hisar import hisar_dirs
+    from app.services.hisar_workspaces import HisarWorkspaceService
+
+    skill = _skill(monkeypatch, lambda *a: _resp(json={"entries": [
+        {"name": "Desktop", "kind": "dir"}, {"name": "Forge", "kind": "dir"},
+        {"name": "notes.md", "kind": "file"}, {"name": "", "kind": "dir"},
+    ]}))
+    service = HisarWorkspaceService("", skill, configured=True)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(hisar_workspaces=service)))
+    assert await hisar_dirs(request, path=" / ") == {"path": "/", "dirs": ["Forge", "Desktop"]}
 
 
 @pytest.mark.parametrize("entry,expected", [

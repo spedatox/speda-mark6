@@ -74,6 +74,9 @@ async def drain_background_jobs(request: Request) -> JSONResponse:
     result = await drain()
     result["reclaimed"] = reclaimed
     result["queue"] = await queue_stats()
+    completions = getattr(request.app.state, "completion_recovery", None)
+    if completions is not None:
+        result["completions"] = await completions.drain()
     logger.info("admin_tasks_drained", extra=result)
     return JSONResponse(result)
 

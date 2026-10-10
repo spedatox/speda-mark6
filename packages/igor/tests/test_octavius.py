@@ -403,6 +403,36 @@ async def test_fetch_refuses_a_download_that_does_not_match_its_hash(real_db, dr
     assert not (octavius._RESTORE_DIR.exists() and list(octavius._RESTORE_DIR.iterdir()))
 
 
+async def test_automatic_staging_requires_a_recorded_hash(real_db, drive, tmp_path):
+    _, report = await octavius.backup()
+    drive.files[report["file_id"]]["appProperties"].pop("sha256")
+    target = tmp_path / "restore-target.db"
+    ok, error = await octavius.stage_backup(report["file_id"], target, require_hash=True)
+    assert not ok and "recorded SHA-256" in error
+    assert not target.exists()
+
+
+async def test_staging_rejects_a_drive_filename_with_path_traversal(real_db, drive, tmp_path):
+    _, report = await octavius.backup()
+    drive.files[report["file_id"]]["name"] = "../speda-brain-evil.db.gz"
+    ok, error = await octavius.stage_backup(report["file_id"], tmp_path / "target.db")
+    assert not ok and "filename" in error
+
+
+async def test_invalid_gzip_leaves_no_partially_staged_database(real_db, drive, tmp_path):
+    import hashlib
+
+    _, report = await octavius.backup()
+    fid = report["file_id"]
+    payload = b"invalid gzip"
+    drive.blobs[fid] = payload
+    drive.files[fid]["appProperties"]["sha256"] = hashlib.sha256(payload).hexdigest()
+    target = tmp_path / "target.db"
+    ok, error = await octavius.stage_backup(fid, target)
+    assert not ok and "staging failed" in error
+    assert not target.exists()
+
+
 async def test_the_swap_instructions_delete_the_stale_journal(real_db, drive):
     """A leftover -wal is read as the NEW database's journal: silent corruption."""
     await octavius.backup()

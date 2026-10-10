@@ -38,7 +38,7 @@ class OptimusProfile(AgentProfile):
     # ElevenLabs "Domi" (confident, strong) — verify this id exists in the
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
-    voice_id = "elevenlabs:eleven_multilingual_v2:AZnzlk1XvdvUeBnXmlld"
+    voice_id = "elevenlabs:eleven_v4:AZnzlk1XvdvUeBnXmlld"
     canvas_brief = (
         "Presenting systems: authoring visual windows is mandatory. Architecture, data "
         "flow, and topologies go in svg or html windows, system performance and latency "

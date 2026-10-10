@@ -213,6 +213,7 @@ async def list_sessions(
             "title": s.title,
             "started_at": s.started_at.isoformat(),
             "project_id": s.project_id,
+            "workshop_project_id": s.workshop_project_id,
             "project_name": names.get(s.project_id) if s.project_id else None,
             # Running token spend for the session. NULL on every session that
             # predates the counter — reported as 0 rather than omitted so the
@@ -314,11 +315,11 @@ async def _run_chat(
 
     # The client may name the turn (see ChatRequest.request_id) so it can
     # re-attach from the instant it hits send rather than from the first START
-    # event. Refuse an id that already names a live turn — two runs sharing an
-    # id would fan out into each other's subscribers — and mint one otherwise.
+    # event. A duplicate must not silently launch different work. Codex addresses
+    # turns explicitly; a known ID can be inspected/attached instead of replayed.
     request_id = body.request_id or str(uuid.uuid4())
-    if request.app.state.turns.is_live(request_id):
-        request_id = str(uuid.uuid4())
+    if request.app.state.turns.knows(request_id):
+        raise HTTPException(status_code=409, detail="This request ID already exists. Attach to it or use a new ID for new work.")
     user_id = 1
 
     # /bg <task> — background-dispatch THIS agent and return immediately,
@@ -408,6 +409,9 @@ async def _run_chat(
         session_id=body.session_id,
     )
 
+    if session.agent_id != profile.agent_id or session.user_id != user_id:
+        raise HTTPException(status_code=404, detail="No conversation for this owner and agent.")
+
     # Project (workspace) binding. A chat's project is fixed at birth — see
     # ChatRequest.project_id — so this only ever writes on a session that has
     # none yet, and the stored value wins on every later turn.
@@ -424,7 +428,7 @@ async def _run_chat(
         proj = (
             await db.execute(_select(Project).where(Project.id == body.project_id))
         ).scalar_one_or_none()
-        if proj is None or proj.agent_id != profile.agent_id:
+        if proj is None or proj.agent_id != profile.agent_id or proj.user_id != user_id:
             raise HTTPException(
                 status_code=404,
                 detail=f"No project {body.project_id} for agent '{profile.agent_id}'",
@@ -432,6 +436,34 @@ async def _run_chat(
         session.project_id = proj.id
         proj.last_activity_at = datetime.now(timezone.utc)
         await db.commit()
+
+    context = AgentContext(
+        agent_id=profile.agent_id, user_id=user_id, session_id=session.id,
+        request_id=request_id, triggered_by="user", trigger_payload={"message": body.message},
+        output_mode="respond", model=model, system_prompt="",
+        custom_instructions=body.system_prompt or "", conversation_history=[],
+        db=db, timezone=settings.owner_timezone,
+    )
+    workspaces = getattr(request.app.state, "workspaces", None)
+    if workspaces is not None:
+        from app.services.workspaces import WorkspaceError
+        try:
+            await workspaces.prepare(
+                context, workspace=body.cwd, project_id=body.workshop_project_id,
+                explicit=bool(body.workshop_project_id),
+            )
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    elif body.cwd:
+        context.extra["cwd"] = body.cwd
+
+    input_service = getattr(request.app.state, "engineering_inputs", None)
+    if input_service is not None:
+        from app.services.workspaces import WorkspaceError
+        try:
+            await input_service.accept_chat(context, images=body.attachments, documents=body.documents)
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     # Regenerate / edit: truncate the stored history to the kept prefix BEFORE
     # anything else, so the model can't be re-fed its own previous answer.
@@ -467,21 +499,7 @@ async def _run_chat(
     # what presenting looks like for THIS agent rather than only the generic how.
     annotate_last_user(history, body.client_context, getattr(profile, "canvas_brief", ""))
 
-    context = AgentContext(
-        agent_id=profile.agent_id,
-        user_id=user_id,
-        session_id=session.id,
-        request_id=request_id,
-        triggered_by="user",
-        trigger_payload={"message": body.message},
-        output_mode="respond",
-        model=model,
-        system_prompt="",
-        custom_instructions=body.system_prompt or "",
-        conversation_history=history,
-        db=db,
-        timezone=settings.owner_timezone,
-    )
+    context.conversation_history = history
 
     # Pre-populate active_servers from the session's loaded-toolset memory so
     # tools loaded via use_toolset on a prior turn stay in the tool array — no
@@ -495,21 +513,11 @@ async def _run_chat(
 
     context.extra["active_servers"] = session_manager.get_loaded_servers(session.id)
     # Forge is a Legion execution backend, so it consumes the upload Mark VI
-    # already accepted rather than owning another upload route/protocol. Keep
-    # originals only on this live turn; background workers copy the plain data
-    # into their detached context before the request closes.
-    if body.attachments or body.documents:
-        context.extra["forge_inputs"] = [
-            {
-                "name": f"image-{i}.{att.media_type.rsplit('/', 1)[-1] or 'bin'}",
-                "media_type": att.media_type,
-                "data": att.data,
-            }
-            for i, att in enumerate(body.attachments, 1)
-        ] + [
-            {"name": doc.name, "media_type": doc.media_type, "data": doc.data}
-            for doc in body.documents
-        ]
+    # already accepted rather than owning another upload route/protocol. The
+    # app-owned service keeps verified originals outside the worker mount.
+    if input_service is None and (body.attachments or body.documents):
+        from app.services.engineering_inputs import EngineeringInputService
+        context.extra["forge_inputs"] = EngineeringInputService.uploads(body.attachments, body.documents)
     # Same for individually resolved tools (tool_search): seed from the session
     # so a tool found earlier in the conversation is still callable, and give the
     # skill a callback to record new ones without handing it the SessionManager.
@@ -524,10 +532,8 @@ async def _run_chat(
     # tasks and the UI are identical either way; peer offline → normal path.
     # user_model carries the owner's EXPLICIT model pick (None = peer's choice).
     context.extra["user_model"] = body.model
-    # Working directory for an external-backend agent (the Forge). The external
-    # proxy forwards it as chat_request.cwd; in-process agents ignore it.
-    if body.cwd:
-        context.extra["cwd"] = body.cwd
+    # WorkspaceService restored the conversation's durable desk before history
+    # writes. The same canonical cwd reaches Task and any standalone peer.
     # Exact live coordinates for the navigation skills (get_route / find_places),
     # so they can default the origin without parsing the prose location line.
     # Not persisted — lives only on this turn's context, like the surface line.
@@ -712,11 +718,6 @@ async def websocket_chat(websocket: WebSocket):
                     session_id=session_id_req,
                 )
 
-                # Save first; load_history returns the new message already
-                # timestamp-stamped from its DB created_at (cache-stable).
-                await session_manager.save_message(db, session.id, "user", message)
-                history = await session_manager.load_history(db, session.id)
-
                 context = AgentContext(
                     agent_id=profile.agent_id,
                     user_id=user_id,
@@ -727,10 +728,25 @@ async def websocket_chat(websocket: WebSocket):
                     output_mode="respond",
                     model=profile.allocate_model("user"),
                     system_prompt="",
-                    conversation_history=history,
+                    conversation_history=[],
                     db=db,
                     timezone=settings.owner_timezone,
                 )
+                workspaces = getattr(websocket.app.state, "workspaces", None)
+                if workspaces is not None:
+                    from app.services.workspaces import WorkspaceError
+                    try:
+                        await workspaces.prepare(context)
+                    except WorkspaceError as exc:
+                        await websocket.send_text(json.dumps({"type": "error", "data": str(exc)}))
+                        continue
+                if getattr(session, "project_id", None) is not None:
+                    context.extra["project_id"] = session.project_id
+                input_service = getattr(websocket.app.state, "engineering_inputs", None)
+                if input_service is not None:
+                    await input_service.restore(context)
+                await session_manager.save_message(db, session.id, "user", message)
+                context.conversation_history = await session_manager.load_history(db, session.id)
 
                 collected_chunks: list[str] = []
 

@@ -1,8 +1,8 @@
 """Shared engineering inventory and project handoffs through the normal registry.
 
 These are operational records, not owner-memory facts or agent-scoped chat
-projects. Every agent can discover the same workshop; selecting a checkout only
-changes the current AgentContext, which Task already carries into its workers.
+projects. Every agent can discover the same workshop; selecting a checkout binds
+the conversation to a durable desk, which Task carries into its workers.
 """
 from __future__ import annotations
 
@@ -34,8 +34,10 @@ class WorkshopStatusSkill(Skill):
         }, "additionalProperties": False,
     }
 
-    def __init__(self, root: str = ""):
+    def __init__(self, root: str = "", workspace_service=None, input_service=None):
         self._root = root
+        self._workspaces = workspace_service
+        self._inputs = input_service
 
     def _store(self, readonly=False):
         from forge.config import ForgeSettings
@@ -62,11 +64,12 @@ class WorkshopUpdateSkill(WorkshopStatusSkill):
     read_only = False
     description = (
         "Discovers repositories under the configured Forge root, selects a registered project "
-        "for this turn's Task workers, or saves a durable project checkpoint. Use select before "
+        "for this conversation's Task workers, or saves a durable project checkpoint. Use select before "
         "deploying an Autobot and checkpoint after evaluating its report, retaining the objective, "
         "acceptance criteria, progress, next steps, blockers and check evidence. Do not use it to "
         "change owner memory, release an interrupted worker, schedule jobs, or declare completion "
-        "with outstanding work. Returns the project and new revision; checkpoint requires the "
+        "with outstanding work. A bound conversation cannot switch desks; start a new chat for another desk. "
+        "Returns the project and new revision; checkpoint requires the "
         "revision read by workshop_status so concurrent updates cannot silently overwrite work."
     )
     input_schema = {
@@ -100,13 +103,22 @@ class WorkshopUpdateSkill(WorkshopStatusSkill):
                 raise ValueError("Unknown workshop action")
             if args.get("project_id"):
                 project = await asyncio.to_thread(store.inspect, args["project_id"])
-                workspace = _resolve_workspace(project["path"])
+                workspace = _resolve_workspace(project["path"], allowed_root=self._root or None)
             else:
                 value = args.get("workspace") or context.extra.get("cwd")
                 if not value:
                     raise ValueError("Select a project ID or supply an existing workspace")
-                workspace = _resolve_workspace(str(value))
+                workspace = _resolve_workspace(str(value), allowed_root=self._root or None)
             if action == "select":
+                if self._workspaces is not None and self._root:
+                    binding = await self._workspaces.prepare(
+                        context, project_id=args.get("project_id"), workspace=str(workspace), explicit=True,
+                    )
+                    if self._inputs is not None:
+                        await self._inputs.prepare(context)
+                    result = await asyncio.to_thread(store.inspect, binding.project_id)
+                    result["selected_for_session"] = context.session_id
+                    return json.dumps(result, ensure_ascii=False)
                 result = await asyncio.to_thread(store.register, workspace)
                 context.extra["cwd"] = str(workspace)
                 result["selected_for_this_turn"] = True

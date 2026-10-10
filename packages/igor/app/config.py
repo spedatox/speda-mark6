@@ -419,21 +419,18 @@ class Settings(BaseSettings):
     # false positives become a nuisance in a language pair added later.
     language_leak_tolerance: int = 1
 
-    # ── Voice / TTS (Azure Speech) ───────────────────────────────────────────
+    # ── Voice / TTS (ElevenLabs, Azure, OpenAI) ──────────────────────────────
     # Voice mode speaks EVERY reply, so synthesis is a transport concern, not a
-    # tool the model chooses to call (see services/tts.py). Azure Speech is the
-    # engine: native Turkish neural voices (tr-TR-EmelNeural, tr-TR-AhmetNeural),
-    # billed per character with 0.5M free/month, and fast enough to synthesize
-    # sentence-by-sentence while the previous sentence is still playing.
-    # An empty key disables voice mode and nothing else — the rest of the app is
-    # unaffected.
+    # tool the model chooses to call (see services/tts.py). Agent profiles use
+    # ElevenLabs v4; Azure and OpenAI remain selectable alternatives. Azure's
+    # key also enables speech recognition. An empty key disables that provider;
+    # the rest of the app is unaffected.
     azure_speech_key: str = ""
     azure_speech_region: str = "westeurope"
     # A third TTS engine, alongside Azure and OpenAI — same voice-ref shape
-    # ("elevenlabs:eleven_multilingual_v2:<voice_id>"), same degrade-on-empty
-    # contract as the other two (see services/tts.py). Picked for automation
-    # voice replies over Azure/OpenAI where a distinctive per-agent voice
-    # matters more than raw cost.
+    # ("elevenlabs:eleven_v4:<voice_id>"), same degrade-on-empty
+    # contract as the other two (see services/tts.py). Both live and automation
+    # voice replies use the profile's identity and the owner's voice overrides.
     elevenlabs_api_key: str = ""
     # Fallback voice for any agent whose profile does not name one. The per-agent
     # voice is IDENTITY and lives in app/profiles/*.py (Rule 10); this is only the
@@ -568,6 +565,9 @@ class Settings(BaseSettings):
     # literal on the orchestrator's stream_message call; pulled out here so a
     # thinking budget above has something real to stay under.
     chat_max_output_tokens: int = 8096
+    # Safety guards for repeated truncation/server pauses, not tool iterations.
+    chat_max_continuations: int = 3
+    chat_recovery_max_output_tokens: int = 32768
 
     # ── Conversation compaction ──────────────────────────────────────────────
     # On a long chat, older turns are summarized (background, Haiku) so the model

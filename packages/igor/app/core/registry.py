@@ -102,14 +102,17 @@ class CapabilityRegistry:
 
     # ── Tier 0 — The Legion ───────────────────────────────────────────────────
 
-    def register_legion(self) -> None:
+    def register_legion(self, workspace_service=None, input_service=None, worker_control=None) -> None:
         """Register The Legion (wire name "Task"). Must be called FIRST.
 
         Always registered, but hidden at runtime when budget mode is on (see
         list_tools) — so budget mode can be toggled live without a restart."""
         from app.legion.runner import LegionRunner
 
-        self._legion = LegionRunner(self._client, self, self._profiles)
+        self._legion = LegionRunner(
+            self._client, self, self._profiles, workspace_service=workspace_service, input_service=input_service,
+            worker_control=worker_control,
+        )
         self._task_tool_registered = True
         logger.info(
             "registry_register",
@@ -623,7 +626,7 @@ class CapabilityRegistry:
         read_only = self._memoizable(tool_name, args)
         memo_epoch = extra.get("tool_memo_epoch", 0) if extra is not None else 0
         memo_key: tuple[str, str] | None = None
-        if extra is not None and read_only:
+        if extra is not None and read_only and getattr(self._skills.get(tool_name), "memoize", True):
             try:
                 import json as _json
 
@@ -646,7 +649,7 @@ class CapabilityRegistry:
                     return memo[memo_key]
             except (TypeError, ValueError):
                 memo_key = None  # unserialisable args — just run it
-        elif extra is not None:
+        elif extra is not None and not read_only:
             # Workers can also change shared owner memory. In-flight reads may
             # finish after a write; an epoch prevents them restoring stale data.
             extra.pop("tool_memo", None)

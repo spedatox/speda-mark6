@@ -45,7 +45,7 @@ class UltronProfile(AgentProfile):
     # ElevenLabs "Josh" (younger, direct) — verify this id exists in the
     # owner's ElevenLabs voice library (GET /voice/voices) and swap it
     # if not; premade voice ids can vary by plan/account.
-    voice_id = "elevenlabs:eleven_multilingual_v2:TxGEqnHWrfWFTfGW9XjX"
+    voice_id = "elevenlabs:eleven_v4:TxGEqnHWrfWFTfGW9XjX"
     canvas_brief = (
         "Presenting academic work: authoring visual windows is mandatory. Coursework "
         "schedules and exam dates MUST be calendar windows, historical dates are timelines, "

@@ -35,6 +35,21 @@ def state(**kwargs):
                 source="/memories/academic/erasmus.md", **kwargs)
 
 
+async def test_passage_reindex_refreshes_exact_whitespace_without_changing_identity(sessions):
+    from app.models.memory_passage import MemoryPassage
+    from app.services.memory_passages import index_passages
+    async with sessions() as db:
+        await index_passages(db, 1, "stable-record", "/memories/general/09-26/topic.md", "## Topic\nDetail.\n")
+        await db.commit()
+        original = (await db.execute(select(MemoryPassage))).scalar_one()
+        ident = original.id
+        await index_passages(db, 1, "stable-record", "/memories/general/10-26/topic.md", "## Topic\nDetail.\n\n")
+        await db.commit()
+        refreshed = (await db.execute(select(MemoryPassage))).scalar_one()
+        assert refreshed.id == ident and refreshed.text == "## Topic\nDetail.\n\n"
+        assert refreshed.path == "/memories/general/10-26/topic.md" and not refreshed.retired
+
+
 def file(path, content):
     return SimpleNamespace(path=path, content=content, updated_at=datetime.now(timezone.utc))
 

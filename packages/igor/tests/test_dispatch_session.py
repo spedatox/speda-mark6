@@ -289,6 +289,12 @@ class _Turns:
         self.started.append(context)
         return context.request_id
 
+    def reserve(self, **kwargs):
+        return SimpleNamespace(**kwargs)
+
+    def release(self, reservation):
+        pass
+
     def active(self, *, agent_id=None, session_id=None):
         return list(self._busy)
 

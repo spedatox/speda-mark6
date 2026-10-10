@@ -75,3 +75,23 @@ class FetchRequest(BaseModel):
 class FetchResult(BaseModel):
     ok: bool
     report: str
+
+
+class RestoreRequest(BaseModel):
+    # An explicit selection prevents "latest" changing between display and click.
+    file_id: str = Field(min_length=1, max_length=128)
+    job_id: str = Field(default="", pattern=r"^(?:[0-9a-f]{32})?$")
+
+
+class RestoreState(BaseModel):
+    job_id: str = ""
+    file_id: str = ""
+    name: str = ""
+    phase: str = "idle"
+    error: str = ""
+    rolled_back: bool = False
+    rollback_path: str = ""
+
+
+class RestoreResult(RestoreState):
+    ok: bool

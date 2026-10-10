@@ -1619,6 +1619,46 @@ export async function runOctaviusBackup(
   }
 }
 
+export interface OctaviusRestoreState {
+  job_id?: string
+  phase: string
+  name?: string
+  error?: string
+  rolled_back?: boolean
+  rollback_path?: string
+}
+
+export async function getOctaviusBackups(config: AppConfig): Promise<BackupEntry[]> {
+  const res = await fetch(`${config.apiBase}/admin/octavius/backups`, { headers: authHeaders(config) })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function getOctaviusRestore(config: AppConfig, jobId = ''): Promise<OctaviusRestoreState | null> {
+  try {
+    const res = await fetch(`${config.apiBase}/admin/octavius/restore?job_id=${encodeURIComponent(jobId)}`, { headers: authHeaders(config) })
+    return res.ok ? await res.json() : null
+  } catch { return null }
+}
+
+export async function restoreOctavius(config: AppConfig, fileId: string): Promise<OctaviusRestoreState> {
+  const jobId = Array.from(crypto.getRandomValues(new Uint8Array(16)),
+    byte => byte.toString(16).padStart(2, '0')).join('')
+  try {
+    const res = await fetch(`${config.apiBase}/admin/octavius/restore`, {
+      method: 'POST', headers: { ...authHeaders(config), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: fileId, job_id: jobId }),
+    })
+    if (!res.ok) return { phase: 'failed', job_id: jobId, error: `HTTP ${res.status}` }
+    const body = await res.json()
+    return body.ok || body.job_id ? body : { phase: 'failed', job_id: jobId, error: body.error }
+  } catch {
+    // A lost response can mean the host worker has already stopped Igor.
+    // Read durable status; never automatically POST again.
+    return { phase: 'unknown', job_id: jobId }
+  }
+}
+
 
 /* ── Skyfall ───────────────────────────────────────────────────────────────
  *

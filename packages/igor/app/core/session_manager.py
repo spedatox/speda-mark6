@@ -479,6 +479,7 @@ class SessionManager:
         session_id: int,
         role: str,
         content: list | str,
+        *, commit: bool = True,
     ) -> Message:
         """Persist a message and return it (callers need created_at so the
         in-request stamp matches what load_history will reconstruct next turn)."""
@@ -502,6 +503,7 @@ class SessionManager:
             db.add(BackgroundJob(user_id=owner.user_id, session_id=session_id,
                 kind="index_message", unique_key=f"message:{msg.id}",
                 payload={"message_id": msg.id}, request_id=f"index-message:{msg.id}"))
-        await db.commit()
-        await db.refresh(msg)
+        if commit:
+            await db.commit()
+            await db.refresh(msg)
         return msg

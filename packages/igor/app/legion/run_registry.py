@@ -14,8 +14,9 @@ it is what lets a spawned Optimus job appear in the tray and attach over
 
 Mirrors `app/core/turn_runner.py`'s `TurnRegistry` — a ring buffer per run plus
 subscriber queues, snapshot-then-tail semantics on attach — but scoped to
-Legion tickets. A legionnaire is not an LLM turn: it has no cancel/steer
-target and no db-backed persistence, so it must not share `TurnRegistry`'s
+Legion tickets. A legionnaire is not a parent LLM turn: durable worker
+identities, controls and events now live in WorkerControlService, while this
+compatibility tray must not share `TurnRegistry`'s
 semantics or its client-facing endpoints. INLINE legionnaires need none of
 this at all — their SUBAGENT events are just more `SSEEvent`s on the parent
 turn's own `TurnRegistry` buffer, replayed for free by the existing

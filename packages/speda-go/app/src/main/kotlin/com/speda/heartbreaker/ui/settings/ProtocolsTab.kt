@@ -35,6 +35,8 @@ import com.speda.heartbreaker.data.DoormatState
 import com.speda.heartbreaker.data.LifeboatState
 import com.speda.heartbreaker.data.LockdownState
 import com.speda.heartbreaker.data.OctaviusState
+import com.speda.heartbreaker.data.BackupEntry
+import com.speda.heartbreaker.data.OctaviusRestoreState
 import com.speda.heartbreaker.data.SkyfallArm
 import com.speda.heartbreaker.data.SkyfallProject
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
@@ -43,6 +45,7 @@ import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 /**
  * PROTOCOLS, on the phone — the same six the desktop shows, and one of them is
@@ -50,7 +53,7 @@ import kotlinx.coroutines.launch
  *
  *   Lockdown    engage (passphrase) / stand down — both work from the phone
  *   Lifeboat    read-only; reclamation is owner-led THROUGH Orion
- *   Octavius    read-only plus "back up now", which can only create
+ *   Octavius    backup and owner-confirmed restore through a host job
  *   Doormat     read-only; a domain move is a conversation, not a form
  *   Skyfall     the launch rail — pick a project, get the countdown
  *   House Party DESKTOP ONLY, and visibly so
@@ -90,6 +93,12 @@ fun ProtocolsTab(
     var projects by remember { mutableStateOf<List<SkyfallProject>?>(null) }
     var busy by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
+    var backups by remember { mutableStateOf<List<BackupEntry>?>(null) }
+    var selectedBackup by remember { mutableStateOf<BackupEntry?>(null) }
+    var restore by remember { mutableStateOf<OctaviusRestoreState?>(null) }
+    var restoreBusy by remember { mutableStateOf(false) }
+    var confirmRestore by remember { mutableStateOf(false) }
+    val restoring = restoreBusy || (restore != null && restore?.phase !in listOf("idle", "complete", "failed"))
     // Lockdown engage — inline, never a nested modal (same rule as the rest of
     // this pane). The passphrase never touches the transcript or a log line.
     var engaging by remember { mutableStateOf(false) }
@@ -101,11 +110,19 @@ fun ProtocolsTab(
         lockdown = graph.api.fetchLockdown(config)
         lifeboat = graph.api.fetchLifeboat(config)
         octavius = graph.api.fetchOctavius(config)
+        backups = graph.api.fetchOctaviusBackups(config)
+        selectedBackup = backups?.firstOrNull { it.id == selectedBackup?.id } ?: backups?.firstOrNull()
         doormat = graph.api.fetchDoormat(config)
         projects = graph.api.fetchSkyfallProjects(config)
     }
 
     LaunchedEffect(config) { refresh() }
+    LaunchedEffect(config, restore?.jobId) {
+        while (true) {
+            graph.api.fetchOctaviusRestore(config, restore?.jobId.orEmpty())?.let { restore = it }
+            delay(3000)
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 40.dp),
@@ -280,8 +297,6 @@ fun ProtocolsTab(
             },
         ) {
             if (arc != null && arc.reachable && arc.enabled) {
-                // The one action worth a button: it can only create. The worst a
-                // stray press does is spend some bandwidth and add a file.
                 SettingsButton(
                     if (busy) p.backingUp else p.backupNow,
                     onClick = {
@@ -293,8 +308,55 @@ fun ProtocolsTab(
                             busy = false
                         }
                     },
-                    enabled = !busy,
+                    enabled = !busy && !restoring,
                 )
+            }
+        }
+
+        if ((arc != null && arc.reachable && arc.enabled) || (restore != null && restore?.phase != "idle")) {
+            Hint(p.restoreHint)
+            if (backups == null) Hint(p.restoreListFailed)
+            backups?.forEach { backup ->
+                SettingsRow(
+                    title = backup.name,
+                    desc = "${backup.mb} MB · ${backup.created}",
+                ) {
+                    SettingsButton(
+                        if (selectedBackup?.id == backup.id) "✓" else p.restoreSelect,
+                        enabled = !restoring && !busy && !confirmRestore,
+                        onClick = { selectedBackup = backup },
+                    )
+                }
+            }
+            if (confirmRestore) {
+                Hint(p.restoreConfirm(selectedBackup?.name.orEmpty()))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SettingsButton(p.restoreConfirmButton, enabled = !restoring && !busy, onClick = {
+                        val backup = selectedBackup ?: return@SettingsButton
+                        confirmRestore = false
+                        restoreBusy = true
+                        scope.launch {
+                            try { restore = graph.api.restoreOctavius(config, backup.id) }
+                            finally { restoreBusy = false }
+                        }
+                    })
+                    SettingsButton(p.restoreCancel, onClick = { confirmRestore = false })
+                }
+            } else {
+                SettingsButton(
+                    if (restoring) p.restoring else p.restoreBackup,
+                    enabled = selectedBackup != null && !restoring && !busy,
+                    onClick = { confirmRestore = true },
+                )
+            }
+            restore?.takeIf { it.phase != "idle" }?.let { state ->
+                Hint(when (state.phase) {
+                    "complete" -> p.restoreDone
+                    "failed", "recovery_required" -> p.restoreFailed(state.error, state.rolledBack)
+                    else -> p.restoring
+                })
+                if (state.rollbackPath.isNotBlank()) Hint("${p.restorePreserved}: ${state.rollbackPath}")
+                if (state.error.isNotBlank() && state.phase !in listOf("failed", "recovery_required")) Hint(state.error)
             }
         }
 
