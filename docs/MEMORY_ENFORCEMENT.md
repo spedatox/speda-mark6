@@ -46,8 +46,11 @@ labels owner testimony separately from tool results and preserves the exact cite
 quote alongside the adjacent exchange. Prior observation-validator outputs are
 excluded from automatic observation evidence: a refusal is not a fact or a new
 owner restriction. When an explicit observation cites verified owner testimony,
-secondary memory/tool context is present, and review refuses it, the tool performs
-at most one semantic reconsideration before returning. It still requires approval;
+secondary memory/tool context or a cited preference's adjacent assistant referent
+is present, and review refuses it, the tool performs at most one semantic
+reconsideration before returning. A clear 'don't do that again' refers to the
+identifiable response behavior; it does not require a separate approval question
+or establish a broader ban. The write still requires semantic approval;
 unsupported details, unresolved ambiguity and provider failures remain unsaved.
 Tool-only claims and invalid citations do not qualify for this reconsideration.
 

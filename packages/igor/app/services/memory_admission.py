@@ -362,7 +362,17 @@ than that owner's subsequent explicit revision, revocation or scoped exception.
 Accept a faithful record of the newer decision without demanding confirmation of
 what he has already clearly said. A one-time exception is not a permanent repeal.
 Use adjacent conversation to resolve 'that', 'drop it', or 'make an exception';
-do not require magic words if the referent and scope are clear. A statement about
+do not require magic words if the referent and scope are clear. This also applies
+to unsolicited feedback: 'don't do that again' following a specific assistant
+response is an explicit preference against that response behavior. The owner need
+not restate it as a formal policy or answer an approval question. Use the preceding
+assistant turn only to identify the behavior being objected to, not as factual
+testimony. Naming that behavior in a faithful paraphrase is not an agent inference
+merely because its name occurs in the preceding response rather than the owner's
+brief instruction. An emphatic or frustrated tone does not make a clear preference
+ambiguous. An insult or expression of annoyance WITHOUT an identifiable behavior
+and instruction does not establish a durable preference. Do not turn a scoped
+objection into a blanket ban or add an unsupported motive. A statement about
 leaving a workplace alone does not establish revocation or ending all employment.
 Do not infer effective dates or broader permissions than the evidence supports.
 Tool retrieval time is not the effective time of the memories it retrieves.

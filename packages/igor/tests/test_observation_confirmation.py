@@ -211,10 +211,11 @@ async def test_context_excerpt_does_not_replace_exact_owner_citation(monkeypatch
         "content": "The owner revoked the nickname rule.", "level": "explicit", "domain": "preference",
         "evidence": [owner],
     }]}, ctx)
-    review.assert_awaited_once()
-    entry = review.await_args.args[1]["evidence"][0]
-    assert entry["quote"] == owner["quote"]
-    assert entry["preceding_assistant_turn"]["text"] == "Which nickname rule?"
+    assert review.await_count == 2
+    for call in review.await_args_list:
+        entry = call.args[1]["evidence"][0]
+        assert entry["quote"] == owner["quote"]
+        assert entry["preceding_assistant_turn"]["text"] == "Which nickname rule?"
 
 
 async def test_invalid_owner_citation_cannot_trigger_reconsideration(monkeypatch):
@@ -236,3 +237,77 @@ async def test_invalid_owner_citation_cannot_trigger_reconsideration(monkeypatch
     review.assert_awaited_once()
     assert review.await_args.args[1]["proposal"]["_verified_message_ids"] == []
     record.assert_not_awaited()
+
+
+@pytest.mark.parametrize("first_verdict,expected_calls", [
+    ({"allow": True, "needs_owner_confirmation": False}, 1),
+    ({"allow": False, "needs_owner_confirmation": True,
+      "question": "Please confirm: avoid unsolicited warning lists during illness venting?"}, 2),
+    ({"allow": False, "reason": "The owner did not literally name the warning list."}, 2),
+])
+async def test_contextual_feedback_preference_needs_no_tool_trace_or_repeated_approval(
+        sessions, monkeypatch, first_verdict, expected_calls):
+    review = AsyncMock(side_effect=[first_verdict, {"allow": True, "needs_owner_confirmation": False}])
+    monkeypatch.setattr(observation_skill, "ask_json", review)
+    monkeypatch.setattr("app.services.observations._embed_content", AsyncMock(return_value=None))
+    async with sessions() as db:
+        session = Session(user_id=1, agent_id="speda", triggered_by="user", model_used="test")
+        db.add(session)
+        await db.flush()
+        db.add(Message(session_id=session.id, role="user", content="I feel awful. Just venting."))
+        await db.flush()
+        reply = "Here is an unsolicited boilerplate emergency-warning checklist for your illness."
+        db.add(Message(session_id=session.id, role="assistant", content=reply))
+        await db.flush()
+        owner = Message(session_id=session.id, role="user",
+                        content="IM NOT STUPID DONT PULL THIS SHIT ON ME AGAIN")
+        db.add(owner)
+        await db.commit()
+        claim = "The owner does not want unsolicited boilerplate emergency-warning lists during ordinary illness venting."
+        ctx = SimpleNamespace(db=db, user_id=1, session_id=session.id, model="test",
+                              request_id="contextual-feedback", agent_id="speda")
+        result = await RecordObservationSkill().execute({"observations": [{
+            "content": claim, "level": "explicit", "domain": "preference",
+            "evidence": [{"ref": f"message:{owner.id}", "quote": owner.content}],
+        }]}, ctx)
+        assert "Recorded 1 observation" in result
+        assert review.await_count == expected_calls
+        for call in review.await_args_list:
+            evidence = call.args[1]["evidence"]
+            assert not any(e["ref"].startswith("tool_call:") for e in evidence)
+            entry = next(e for e in evidence if e["ref"] == f"message:{owner.id}")
+            assert entry["preceding_assistant_turn"]["text"] == reply
+            assert entry["preceding_assistant_turn"]["authority"] == "referent_only_not_owner_evidence"
+        row = (await db.execute(select(Observation))).scalar_one()
+        assert row.content == claim and row.message_ids == [owner.id]
+        assert not any(reply in source for source in row.sources)
+
+
+@pytest.mark.parametrize("final_verdict", [
+    {"allow": False, "reason": "The objection does not establish a ban on all health advice."},
+    {"allow": False, "needs_owner_confirmation": True, "question": "Which behavior do you mean?"},
+    None,
+])
+async def test_contextual_feedback_recheck_still_holds_unsupported_or_ambiguous_scope(
+        monkeypatch, final_verdict):
+    owner = {"ref": "message:1", "quote": "Don't pull that again.", "source_authority": "owner_statement"}
+    monkeypatch.setattr(observation_skill, "resolve_evidence", AsyncMock(return_value=[owner]))
+    monkeypatch.setattr(observation_skill, "session_review_evidence", AsyncMock(return_value=[{
+        **owner, "preceding_assistant_turn": {"text": "A warning list and several unrelated suggestions.",
+                                              "authority": "referent_only_not_owner_evidence"},
+    }]))
+    review = AsyncMock(side_effect=[
+        {"allow": False, "needs_owner_confirmation": True, "question": "Do you mean all health advice?"},
+        final_verdict if final_verdict is not None else TimeoutError(),
+    ])
+    monkeypatch.setattr(observation_skill, "ask_json", review)
+    record = AsyncMock()
+    monkeypatch.setattr(observation_skill, "record_observations", record)
+    ctx = SimpleNamespace(db=object(), user_id=1, session_id=1, model="test", request_id="r1", agent_id="speda")
+    result = await RecordObservationSkill().execute({"observations": [{
+        "content": "The owner never wants any health advice or warnings in any circumstances.",
+        "level": "explicit", "domain": "preference", "evidence": [owner],
+    }]}, ctx)
+    assert review.await_count == 2
+    record.assert_not_awaited()
+    assert "Recorded" not in result

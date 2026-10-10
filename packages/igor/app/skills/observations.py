@@ -389,23 +389,36 @@ class RecordObservationSkill(Skill):
                     model=context.model,
                 )
 
-                # One bounded reconsideration protects explicit owner claims
-                # from a refusal anchored to retrieved old rules. Still require
-                # semantic approval; never auto-accept a quote or retry outages.
+                # One bounded reconsideration handles both stale-rule conflicts
+                # and preferences expressed as feedback on an adjacent response.
+                # Still require approval; never auto-accept or retry outages.
                 owner_cited = any(
                     e.get("source_authority") == "owner_statement" for e in verified_evidence
                 )
                 has_secondary_context = any(
                     e.get("source_authority") != "owner_statement" for e in evidence
                 )
+                has_preference_referent = (
+                    proposal.get("domain") == "preference" and any(
+                        e.get("source_authority") == "owner_statement"
+                        and by_ref[e["ref"]].get("preceding_assistant_turn")
+                        for e in verified_evidence
+                    )
+                )
                 refused = (
                     isinstance(verdict, dict) and verdict.get("allow") is False
-                    and isinstance(verdict.get("reason"), str) and bool(verdict["reason"].strip())
+                    and (
+                        (isinstance(verdict.get("reason"), str) and bool(verdict["reason"].strip()))
+                        or (verdict.get("needs_owner_confirmation") is True
+                            and isinstance(verdict.get("question"), str)
+                            and bool(verdict["question"].strip()))
+                    )
                 )
                 if (refused and proposal.get("level") == "explicit"
-                        and owner_cited and has_secondary_context and not citation_error):
+                        and owner_cited and (has_secondary_context or has_preference_referent)
+                        and not citation_error):
                     logger.info(
-                        "Reconsidering owner observation against secondary memory context",
+                        "Reconsidering owner observation against persisted context",
                         extra={"request_id": context.request_id},
                     )
                     verdict = await ask_json(
@@ -414,6 +427,11 @@ class RecordObservationSkill(Skill):
                         "scope. The previous verdict is fallible feedback, not evidence. "
                         "If it merely gave an older owner preference priority over his clear "
                         "new decision, allow the faithful observation without another question. "
+                        "For a preference expressed as feedback, identify the specific behavior "
+                        "in the preceding assistant turn. A clear instruction not to repeat "
+                        "that behavior already supplies confirmation; do not request approval "
+                        "to record it. Reject unsupported generalizations instead of turning "
+                        "them into redundant confirmation questions. "
                         "Keep rejecting unsupported additions and genuinely ambiguous scope.",
                         {**review_payload, "previous_verdict": verdict}, model=context.model,
                     )
