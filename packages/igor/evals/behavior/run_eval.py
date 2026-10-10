@@ -17,7 +17,7 @@ import tempfile
 import subprocess
 import sys
 import time
-from contextlib import ExitStack
+from contextlib import ExitStack, closing
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -399,7 +399,7 @@ async def run_cases(model: str, live: bool, case_ids: list[str], config=None, ou
                     raise RuntimeError("Input capture does not call supporting providers")
                 try:
                     response = await value(*args, **kwargs)
-                except Exception as exc:
+                except (Exception, asyncio.CancelledError) as exc:
                     trace.update(error=type(exc).__name__, http_status=getattr(exc, "status_code", None))
                     raise
                 finally:
@@ -817,8 +817,8 @@ async def run_cases(model: str, live: bool, case_ids: list[str], config=None, ou
                         import sqlite3
                         storage = output.with_name(output.stem + "-" + case["id"] + ".sqlite3")
                         def preserve_storage():
-                            with sqlite3.connect(Path(isolated) / "evaluation.db") as source:
-                                with sqlite3.connect(storage) as destination:
+                            with closing(sqlite3.connect(Path(isolated) / "evaluation.db")) as source:
+                                with closing(sqlite3.connect(storage)) as destination:
                                     source.backup(destination)
                         await asyncio.to_thread(preserve_storage)
                         case_result["persisted_storage"] = {"path": str(storage),
