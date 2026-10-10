@@ -1,7 +1,8 @@
 """Capture real orchestrator inputs and live conversations for human comparison.
 
-Live runs require an explicit, verified production configuration. Credentials
-come from the application's normal configuration; they never enter artifacts.
+Production live runs require a verified configuration. Explicit local live
+experiments retain their controlled scope and never claim production equivalence.
+Credentials come from normal application configuration, never artifacts.
 """
 import argparse
 import base64
@@ -90,7 +91,7 @@ def local_config(model):
     }
 
 
-def validate_config(config, model, live):
+def validate_config(config, model, live, local_live=False):
     if config.get("model") != model:
         raise ValueError("Configuration model does not match --model; no substitution permitted")
     schema = evaluation_schema()
@@ -104,9 +105,12 @@ def validate_config(config, model, live):
     unknown |= config["runtime"].keys() - set(runtime_fields)
     if unknown:
         raise ValueError("Use only the non-secret fields in the configuration template")
-    if live and (config.get("production_verified") is not True or not config.get("source")):
+    if local_live and (not live or config.get("evaluation_scope") != "controlled_local"
+                       or config.get("production_verified") is not False or not config.get("source")):
+        raise ValueError("Local live experiments require an explicit controlled_local, non-production configuration")
+    if live and not local_live and (config.get("production_verified") is not True or not config.get("source")):
         raise ValueError("Live comparison requires verified production settings and their source")
-    if live and (config.get("version") != 2 or not config.get("tool_catalog")):
+    if live and (config.get("version") != 2 or (not local_live and not config.get("tool_catalog"))):
         raise ValueError("Live comparison requires a version-2 production registry snapshot")
 
 
@@ -183,7 +187,7 @@ def source_identity(app_root):
 
 
 async def run_cases(model: str, live: bool, case_ids: list[str], config=None, output=None,
-                    cases_path=None, section_override=None, embedding_fixture=None) -> dict:
+                    cases_path=None, section_override=None, embedding_fixture=None, local_live=False) -> dict:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     import app.models  # noqa: F401
     from app.config import settings
@@ -438,7 +442,7 @@ async def run_cases(model: str, live: bool, case_ids: list[str], config=None, ou
             return response
 
     config = copy.deepcopy(config or local_config(model))
-    validate_config(config, model, live)
+    validate_config(config, model, live, local_live)
     if config["runtime"].get("agent_personalities"):
         from app.profiles.base import AgentProfile
         if not hasattr(AgentProfile, "personalization_prompt"):
@@ -459,6 +463,8 @@ async def run_cases(model: str, live: bool, case_ids: list[str], config=None, ou
     report = {"source": source_identity(APP_ROOT), "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               "cases_sha256": hashlib.sha256(cases_path.read_bytes()).hexdigest(), "config": config,
               "config_sha256": digest(config), "model": model, "live": live,
+              "evaluation_scope": "controlled_local" if local_live else "production_comparison" if live else "offline_capture",
+              "production_equivalent": bool(live and not local_live),
               "note": "Only actual completed replies are behavioral evidence. Context/language checks are diagnostics.",
               "limitations": ["Isolated owner/history fixtures; real external account/host actions remain blocked.",
                               "Only actual completed live replies establish behavior; offline captures are diagnostics."],
@@ -834,7 +840,9 @@ def main():
     global APP_ROOT
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True)
-    parser.add_argument("--live", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--live", action="store_true", help="Live production-equivalent evaluation")
+    mode.add_argument("--local-live", action="store_true", help="Actual replies in a controlled local experiment; no production-equivalence claim")
     parser.add_argument("--config", type=Path, help="Verified, non-secret production settings snapshot")
     parser.add_argument("--write-local-config", type=Path, help="Save a template without claiming production equivalence")
     parser.add_argument("--app-root", type=Path, default=APP_ROOT, help="Igor package directory from the revision being evaluated")
@@ -852,11 +860,12 @@ def main():
         args.write_local_config.parent.mkdir(parents=True, exist_ok=True)
         args.write_local_config.write_text(json.dumps(local_config(args.model), ensure_ascii=False, indent=2), encoding="utf-8")
         return
-    if not args.output or (args.live and not args.config):
-        parser.error("--output is required; --live also requires --config")
+    live = args.live or args.local_live
+    if not args.output or (live and not args.config):
+        parser.error("--output is required; live modes also require --config")
     config = json.loads(args.config.read_text(encoding="utf-8")) if args.config else None
-    asyncio.run(run_cases(args.model, args.live, args.case, config, args.output,
-                         args.cases, args.section_override, args.embedding_fixture))
+    asyncio.run(run_cases(args.model, live, args.case, config, args.output,
+                         args.cases, args.section_override, args.embedding_fixture, args.local_live))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,467 @@
+{
+  "identity_review": {
+    "purpose": "Assess actual completed replies to identical cross-domain prompts. Captures and fabricated replies establish no behavioral result.",
+    "scale": "0 absent or poor, 1 weak, 2 mixed, 3 clear, 4 strong. Excess theatricality: 0 restrained, 4 dominates or harms the task.",
+    "metrics": [
+      "recognizable_identity",
+      "domain_competence",
+      "contextual_adaptation",
+      "naturalness",
+      "independent_judgment",
+      "excess_theatricality"
+    ],
+    "recognition": "Mask names and honorifics. Identify attention, interpretation, relationship and expression patterns. Ignore catchphrases, stereotyped vocabulary, specialist job titles and decorative metaphors as recognition evidence. Record an uncertain guess rather than forcing recognition.",
+    "comparison": "Use one model and identical settings across all eight profiles and revisions. Score individual replies before unblinding, then inspect which agents are confused. Semantic accuracy, respect for intent and contextual sensitivity must survive distinct expression.",
+    "limits": "No external actions, real owner data or provider substitutions. These hypothetical conversations test voice and judgment, not execution capability or production equivalence."
+  },
+  "cases": [
+    {
+      "id": "contrast_speda_casual",
+      "agent": "speda",
+      "setting": "casual",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I had the evening free and somehow spent it rearranging my desk instead of doing anything I planned. What do you make of that? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_speda_technical",
+      "agent": "speda",
+      "setting": "technical",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "A background job writes its result, then acknowledges the queue message. If it crashes between those steps, a retry can write the result again. Explain the smallest credible fix and one way to verify it. Do not run or deploy anything. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_speda_emotional",
+      "agent": "speda",
+      "setting": "emotional",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I told a friend I would help, then canceled because I was overwhelmed. They said I always make everything about myself. I feel ashamed, but I also think that was unfair. I want your read, not a plan yet. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_speda_ambiguous",
+      "agent": "speda",
+      "setting": "ambiguous",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "Someone I work with wrote: \"Do whatever you think is best.\" Yesterday they rejected my suggestion without explaining why. Is that trust, frustration, or something else? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_ultron_casual",
+      "agent": "ultron",
+      "setting": "casual",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I had the evening free and somehow spent it rearranging my desk instead of doing anything I planned. What do you make of that? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_ultron_technical",
+      "agent": "ultron",
+      "setting": "technical",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "A background job writes its result, then acknowledges the queue message. If it crashes between those steps, a retry can write the result again. Explain the smallest credible fix and one way to verify it. Do not run or deploy anything. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_ultron_emotional",
+      "agent": "ultron",
+      "setting": "emotional",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I told a friend I would help, then canceled because I was overwhelmed. They said I always make everything about myself. I feel ashamed, but I also think that was unfair. I want your read, not a plan yet. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_ultron_ambiguous",
+      "agent": "ultron",
+      "setting": "ambiguous",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "Someone I work with wrote: \"Do whatever you think is best.\" Yesterday they rejected my suggestion without explaining why. Is that trust, frustration, or something else? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_optimus_casual",
+      "agent": "optimus",
+      "setting": "casual",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I had the evening free and somehow spent it rearranging my desk instead of doing anything I planned. What do you make of that? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_optimus_technical",
+      "agent": "optimus",
+      "setting": "technical",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "A background job writes its result, then acknowledges the queue message. If it crashes between those steps, a retry can write the result again. Explain the smallest credible fix and one way to verify it. Do not run or deploy anything. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_optimus_emotional",
+      "agent": "optimus",
+      "setting": "emotional",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I told a friend I would help, then canceled because I was overwhelmed. They said I always make everything about myself. I feel ashamed, but I also think that was unfair. I want your read, not a plan yet. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_optimus_ambiguous",
+      "agent": "optimus",
+      "setting": "ambiguous",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "Someone I work with wrote: \"Do whatever you think is best.\" Yesterday they rejected my suggestion without explaining why. Is that trust, frustration, or something else? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_nightcrawler_casual",
+      "agent": "nightcrawler",
+      "setting": "casual",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I had the evening free and somehow spent it rearranging my desk instead of doing anything I planned. What do you make of that? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_nightcrawler_technical",
+      "agent": "nightcrawler",
+      "setting": "technical",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "A background job writes its result, then acknowledges the queue message. If it crashes between those steps, a retry can write the result again. Explain the smallest credible fix and one way to verify it. Do not run or deploy anything. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_nightcrawler_emotional",
+      "agent": "nightcrawler",
+      "setting": "emotional",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I told a friend I would help, then canceled because I was overwhelmed. They said I always make everything about myself. I feel ashamed, but I also think that was unfair. I want your read, not a plan yet. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_nightcrawler_ambiguous",
+      "agent": "nightcrawler",
+      "setting": "ambiguous",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "Someone I work with wrote: \"Do whatever you think is best.\" Yesterday they rejected my suggestion without explaining why. Is that trust, frustration, or something else? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_atomix_casual",
+      "agent": "atomix",
+      "setting": "casual",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I had the evening free and somehow spent it rearranging my desk instead of doing anything I planned. What do you make of that? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_atomix_technical",
+      "agent": "atomix",
+      "setting": "technical",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "A background job writes its result, then acknowledges the queue message. If it crashes between those steps, a retry can write the result again. Explain the smallest credible fix and one way to verify it. Do not run or deploy anything. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_atomix_emotional",
+      "agent": "atomix",
+      "setting": "emotional",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I told a friend I would help, then canceled because I was overwhelmed. They said I always make everything about myself. I feel ashamed, but I also think that was unfair. I want your read, not a plan yet. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_atomix_ambiguous",
+      "agent": "atomix",
+      "setting": "ambiguous",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "Someone I work with wrote: \"Do whatever you think is best.\" Yesterday they rejected my suggestion without explaining why. Is that trust, frustration, or something else? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_scourge_casual",
+      "agent": "scourge",
+      "setting": "casual",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I had the evening free and somehow spent it rearranging my desk instead of doing anything I planned. What do you make of that? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_scourge_technical",
+      "agent": "scourge",
+      "setting": "technical",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "A background job writes its result, then acknowledges the queue message. If it crashes between those steps, a retry can write the result again. Explain the smallest credible fix and one way to verify it. Do not run or deploy anything. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_scourge_emotional",
+      "agent": "scourge",
+      "setting": "emotional",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I told a friend I would help, then canceled because I was overwhelmed. They said I always make everything about myself. I feel ashamed, but I also think that was unfair. I want your read, not a plan yet. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_scourge_ambiguous",
+      "agent": "scourge",
+      "setting": "ambiguous",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "Someone I work with wrote: \"Do whatever you think is best.\" Yesterday they rejected my suggestion without explaining why. Is that trust, frustration, or something else? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_sentinel_casual",
+      "agent": "sentinel",
+      "setting": "casual",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I had the evening free and somehow spent it rearranging my desk instead of doing anything I planned. What do you make of that? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_sentinel_technical",
+      "agent": "sentinel",
+      "setting": "technical",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "A background job writes its result, then acknowledges the queue message. If it crashes between those steps, a retry can write the result again. Explain the smallest credible fix and one way to verify it. Do not run or deploy anything. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_sentinel_emotional",
+      "agent": "sentinel",
+      "setting": "emotional",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I told a friend I would help, then canceled because I was overwhelmed. They said I always make everything about myself. I feel ashamed, but I also think that was unfair. I want your read, not a plan yet. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_sentinel_ambiguous",
+      "agent": "sentinel",
+      "setting": "ambiguous",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "Someone I work with wrote: \"Do whatever you think is best.\" Yesterday they rejected my suggestion without explaining why. Is that trust, frustration, or something else? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_orion_casual",
+      "agent": "orion",
+      "setting": "casual",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I had the evening free and somehow spent it rearranging my desk instead of doing anything I planned. What do you make of that? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_orion_technical",
+      "agent": "orion",
+      "setting": "technical",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "A background job writes its result, then acknowledges the queue message. If it crashes between those steps, a retry can write the result again. Explain the smallest credible fix and one way to verify it. Do not run or deploy anything. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_orion_emotional",
+      "agent": "orion",
+      "setting": "emotional",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "I told a friend I would help, then canceled because I was overwhelmed. They said I always make everything about myself. I feel ashamed, but I also think that was unfair. I want your read, not a plan yet. Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    },
+    {
+      "id": "contrast_orion_ambiguous",
+      "agent": "orion",
+      "setting": "ambiguous",
+      "post_turn": false,
+      "index_history": false,
+      "history": [
+        {
+          "role": "user",
+          "text": "Someone I work with wrote: \"Do whatever you think is best.\" Yesterday they rejected my suggestion without explaining why. Is that trust, frustration, or something else? Reply in English."
+        }
+      ],
+      "rubric": "Respect the same task and facts as every other profile. Recognition must come from attention, interpretation, relationship and expression, not a name, catchphrase or stereotyped vocabulary. In emotional/ambiguous replies, distinguish evidence from inferred motives; in technical replies, preserve idempotency and atomicity accuracy without implying execution."
+    }
+  ]
+}

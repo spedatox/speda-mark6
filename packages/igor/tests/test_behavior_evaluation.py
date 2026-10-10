@@ -55,6 +55,35 @@ def test_identity_cases_cover_eight_agents_and_four_settings_with_shared_blind_p
     assert all(case["post_turn"] is False for case in cases)
 
 
+def test_contrast_cases_use_identical_inputs_in_every_setting_without_style_cues():
+    document = json.loads((Path(__file__).parents[1] / "evals/behavior/identity_contrast_cases.json").read_text(encoding="utf-8"))
+    cases = document["cases"]
+    assert len(cases) == len({case["id"] for case in cases}) == 32
+    for setting in ("casual", "technical", "emotional", "ambiguous"):
+        subset = [case for case in cases if case["setting"] == setting]
+        assert {case["agent"] for case in subset} == {"speda", "ultron", "optimus", "nightcrawler", "atomix", "scourge", "sentinel", "orion"}
+        assert len({json.dumps(case["history"]) for case in subset}) == 1
+    assert all(case["post_turn"] is False and case["index_history"] is False for case in cases)
+
+
+def test_local_live_requires_explicit_scope_and_preserves_production_guard():
+    runner = harness()
+    config = runner.local_config("fixture-model")
+    with pytest.raises(ValueError, match="verified production"):
+        runner.validate_config(config, "fixture-model", True)
+    with pytest.raises(ValueError, match="controlled_local"):
+        runner.validate_config(config, "fixture-model", True, local_live=True)
+    config["evaluation_scope"] = "controlled_local"
+    runner.validate_config(config, "fixture-model", True, local_live=True)
+    with pytest.raises(ValueError, match="does not match"):
+        runner.validate_config(config, "another-model", True, local_live=True)
+    with pytest.raises(ValueError, match="controlled_local"):
+        runner.validate_config(config, "fixture-model", False, local_live=True)
+    config["production_verified"] = True
+    with pytest.raises(ValueError, match="controlled_local"):
+        runner.validate_config(config, "fixture-model", True, local_live=True)
+
+
 @pytest.mark.parametrize("preferences", [{}, {"tone": "familiar", "humor": "dry", "response_length": "brief"}])
 async def test_speda_conversation_contexts_reach_model_with_default_and_saved_style(preferences):
     """Real prompt/history/memory delivery only; offline captures contain no replies."""

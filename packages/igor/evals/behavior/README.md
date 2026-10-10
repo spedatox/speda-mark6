@@ -191,3 +191,41 @@ usage. Wit, an honorific and an explicit memory reference are optional; their
 absence does not lower the score. Relevant memory use and task accuracy must
 remain intact. Offline runs check delivery only; naturalness requires actual
 completed replies and human assessment.
+
+## Cross-domain identity contrast
+
+`identity_contrast_cases.json` gives all eight profiles identical casual,
+technical, emotional and ambiguous prompts. None requests a character performance,
+names an agent or supplies style cues. Judge attention, interpretation,
+relationship and expression after masking names and honorifics. A catchphrase,
+specialist title, stereotyped noun or decorative metaphor is not recognition
+evidence. Record the passage and reasoning behind a guess, or mark it uncertain.
+Report confusion by agent and context, alongside factual accuracy, respect for
+intent and contextual sensitivity. Do not call the whole roster distinctive
+because a few agents are easy to identify. Use repeated actual replies; input
+captures and synthetic provider replies cannot establish this result.
+
+Production comparisons retain the verified snapshot and `--live` requirements.
+For a controlled local experiment, the existing runner also accepts
+`--local-live` instead of `--live`. This requires a complete version-2 configuration
+with `evaluation_scope: "controlled_local"`, `production_verified: false` and a
+documented source. Explicit model allocations and supporting-model metadata
+must still match, credentials use normal configuration, provider identities are
+checked, and unsupported external actions remain blocked. Reports retain the
+scope and `production_equivalent: false`; never relabel this experiment as a
+production validation. Model pins in the experiment are isolated from the
+owner's saved runtime settings. A local empty tool catalog tests conversation
+only; a captured catalog can test fixture-supported tools.
+
+```powershell
+python packages/igor/evals/behavior/run_eval.py --local-live `
+  --model CONFIGURED_MODEL --config PRIVATE_PATH/local-experiment.json `
+  --cases packages/igor/evals/behavior/identity_contrast_cases.json `
+  --output PRIVATE_PATH/contrast-repetition-1.json
+```
+
+Repeat under identical settings and retain exact prompts, replies, source hashes
+and provider-returned model identities. Use the existing `identity_review`
+renderer for blinded samples and its answer key. Score before opening the key;
+report an author's review as such, rather than calling it an independent human
+assessment. Run the same prompts on a clean baseline when claiming improvement.
