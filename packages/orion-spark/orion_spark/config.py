@@ -78,6 +78,11 @@ class SparkConfig:
     recovery_cooldown_seconds: float = 60.0
     max_restart_attempts: int = 1
     max_rollback_attempts: int = 1
+    # How many historically verified-good revisions to retain for cascading
+    # rollback. If the current LKG also fails health checks after rollback,
+    # Spark will quarantine it and try the next one in the stack, down to
+    # lkg_stack_depth levels deep before escalating to critical.
+    lkg_stack_depth: int = 5
 
     # Storage
     state_dir: Path = field(default_factory=_find_default_state_dir)
@@ -160,6 +165,7 @@ class SparkConfig:
             recovery_cooldown_seconds=float(get_val("recovery_cooldown_seconds", 60.0)),
             max_restart_attempts=int(get_val("max_restart_attempts", 1)),
             max_rollback_attempts=int(get_val("max_rollback_attempts", 1)),
+            lkg_stack_depth=int(get_val("lkg_stack_depth", 5)),
             state_dir=state_dir,
             telegram_bot_token=str(get_val("telegram_bot_token", "")),
             telegram_chat_id=str(get_val("telegram_chat_id", "")),

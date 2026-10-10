@@ -6,7 +6,7 @@ Deployment state and Last Known Good (LKG) manager for Orion Spark.
 
 Manages:
 - Active deployed revision
-- Last Known Good (LKG) verified revision
+- Last Known Good (LKG) verified revision stack (newest first, depth-capped)
 - Candidate revisions undergoing trial in the stability window
 - Quarantined failed revisions preventing deployment loops
 - Outage state, consecutive failure tracking, and recovery limits
@@ -28,7 +28,11 @@ logger = logging.getLogger("orion_spark.state")
 @dataclass
 class DeploymentState:
     active_revision: str | None = None
-    last_known_good: str | None = None
+    # Ordered stack of verified-good revisions, newest first.
+    # lkg_stack[0] is the current LKG; lkg_stack[1] is the previous one, etc.
+    # Replaces the old single `last_known_good` string — state.json files that
+    # still carry the old key are migrated on first load (see DeploymentStateManager.load).
+    lkg_stack: list[str] = field(default_factory=list)
     candidate_revision: str | None = None
     candidate_healthy_since: float | None = None
     quarantined_revisions: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -43,11 +47,17 @@ class DeploymentState:
     restart_attempts_count: int = 0
     rollback_attempts_count: int = 0
 
+    @property
+    def last_known_good(self) -> str | None:
+        """Current (newest) LKG — top of the stack. None if stack is empty."""
+        return self.lkg_stack[0] if self.lkg_stack else None
+
 
 class DeploymentStateManager:
-    def __init__(self, state_dir: Path | str) -> None:
+    def __init__(self, state_dir: Path | str, lkg_stack_depth: int = 5) -> None:
         self.state_dir = Path(state_dir)
         self.state_file = self.state_dir / "state.json"
+        self.lkg_stack_depth = lkg_stack_depth
         self.state = DeploymentState()
         self._ensure_dir()
         self.load()
@@ -63,8 +73,23 @@ class DeploymentStateManager:
             try:
                 with open(self.state_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    self.state = DeploymentState(**data)
-                    logger.debug(f"Loaded state from {self.state_file}")
+
+                # ── Backward-compat migration ──────────────────────────────
+                # Old state.json had `last_known_good: str | null` instead of
+                # `lkg_stack: list[str]`. Migrate transparently on first load.
+                if "last_known_good" in data and "lkg_stack" not in data:
+                    old_lkg = data.pop("last_known_good")
+                    data["lkg_stack"] = [old_lkg] if old_lkg else []
+                    logger.info(
+                        "Migrated legacy last_known_good → lkg_stack: %s",
+                        data["lkg_stack"],
+                    )
+                else:
+                    # Remove stale key if both happen to be present (shouldn't happen).
+                    data.pop("last_known_good", None)
+
+                self.state = DeploymentState(**data)
+                logger.debug(f"Loaded state from {self.state_file}")
             except Exception as e:
                 logger.error(f"Failed to load state from {self.state_file}: {e}")
         return self.state
@@ -74,6 +99,10 @@ class DeploymentStateManager:
         tmp_file = self.state_file.with_suffix(".tmp")
         try:
             data = asdict(self.state)
+            # `last_known_good` is a property, not a dataclass field, so asdict
+            # won't include it — but guard anyway so we never accidentally persist
+            # both the old key and the new stack.
+            data.pop("last_known_good", None)
             with open(tmp_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
             tmp_file.replace(self.state_file)
@@ -114,17 +143,17 @@ class DeploymentStateManager:
             self.state.active_revision = active_rev
 
             # If no LKG exists yet, bootstrap it immediately
-            if not self.state.last_known_good:
-                self.state.last_known_good = active_rev
+            if not self.state.lkg_stack:
+                self._push_lkg(active_rev)
                 promoted_revision = active_rev
                 logger.info(f"Initial Last Known Good (LKG) set to active revision: {active_rev}")
 
-            # If active matches LKG, clear any candidate
-            elif active_rev == self.state.last_known_good:
+            # If active matches current LKG, clear any pending candidate
+            elif active_rev == self.state.lkg_stack[0]:
                 self.state.candidate_revision = None
                 self.state.candidate_healthy_since = None
 
-            # Active is different from LKG -> evaluate candidate
+            # Active is different from LKG → evaluate as candidate
             else:
                 if self.state.candidate_revision != active_rev:
                     self.state.candidate_revision = active_rev
@@ -137,7 +166,7 @@ class DeploymentStateManager:
                     # Candidate has been healthy for some duration
                     healthy_duration = now - (self.state.candidate_healthy_since or now)
                     if healthy_duration >= stability_window_seconds:
-                        self.state.last_known_good = active_rev
+                        self._push_lkg(active_rev)
                         promoted_revision = active_rev
                         self.state.candidate_revision = None
                         self.state.candidate_healthy_since = None
@@ -184,7 +213,8 @@ class DeploymentStateManager:
     # ── Quarantine & Revision Controls ───────────────────────────────────────
 
     def quarantine(self, revision: str, reason: str) -> None:
-        """Quarantines a defective build so it cannot be deployed again."""
+        """Quarantines a defective build so it cannot be deployed again.
+        Also removes it from the LKG stack so it is never used as a rollback target."""
         short_rev = revision[:7] if len(revision) >= 7 else revision
         timestamp = datetime.now(timezone.utc).isoformat()
         self.state.quarantined_revisions[short_rev] = {
@@ -195,6 +225,11 @@ class DeploymentStateManager:
         if self.state.candidate_revision in (revision, short_rev):
             self.state.candidate_revision = None
             self.state.candidate_healthy_since = None
+        # Remove from LKG stack so it is never used as a rollback target again.
+        self.state.lkg_stack = [
+            r for r in self.state.lkg_stack
+            if r != revision and r[:7] != short_rev
+        ]
         logger.warning(f"Revision {short_rev} QUARANTINED: {reason}")
         self.save()
 
@@ -219,12 +254,29 @@ class DeploymentStateManager:
         return removed
 
     def set_lkg(self, revision: str) -> None:
-        self.state.last_known_good = revision
+        self._push_lkg(revision)
         if self.state.candidate_revision == revision:
             self.state.candidate_revision = None
             self.state.candidate_healthy_since = None
         logger.info(f"Last Known Good manually set to {revision}")
         self.save()
+
+    def pop_lkg(self) -> str | None:
+        """Remove and return the current (top) LKG, exposing the previous one.
+        Used by the Defibrillator when rolling back to the current LKG also fails."""
+        if not self.state.lkg_stack:
+            return None
+        popped = self.state.lkg_stack.pop(0)
+        logger.info(
+            f"LKG {popped[:7]} exhausted/failed. "
+            f"Remaining stack depth: {len(self.state.lkg_stack)}"
+        )
+        self.save()
+        return popped
+
+    def lkg_stack_revisions(self) -> list[str]:
+        """Return a copy of the full LKG stack (newest first)."""
+        return list(self.state.lkg_stack)
 
     # ── Defibrillation Rate Limiting & Bounds ─────────────────────────────────
 
@@ -244,7 +296,7 @@ class DeploymentStateManager:
     def can_attempt_rollback(self, max_attempts: int, cooldown_seconds: float) -> bool:
         if self.state.rollback_attempts_count >= max_attempts:
             return False
-        if not self.state.last_known_good:
+        if not self.state.lkg_stack:
             return False
         now = time.time()
         if self.state.last_recovery_at and (now - self.state.last_recovery_at < cooldown_seconds):
@@ -260,3 +312,16 @@ class DeploymentStateManager:
         self.state.restart_attempts_count = 0
         self.state.rollback_attempts_count = 0
         self.save()
+
+    # ── Internal helpers ──────────────────────────────────────────────────────
+
+    def _push_lkg(self, revision: str) -> None:
+        """Push a new LKG onto the front of the stack, deduplicating and capping depth."""
+        # Remove if already present anywhere (avoid duplicates)
+        self.state.lkg_stack = [r for r in self.state.lkg_stack if r != revision]
+        self.state.lkg_stack.insert(0, revision)
+        # Cap to configured depth
+        if len(self.state.lkg_stack) > self.lkg_stack_depth:
+            dropped = self.state.lkg_stack[self.lkg_stack_depth:]
+            self.state.lkg_stack = self.state.lkg_stack[:self.lkg_stack_depth]
+            logger.debug(f"LKG stack depth capped; dropped oldest: {[r[:7] for r in dropped]}")

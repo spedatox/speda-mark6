@@ -47,7 +47,7 @@ def cmd_check(config: SparkConfig) -> int:
 
 def cmd_status(config: SparkConfig) -> int:
     """Displays deployment state, LKG, and quarantined revisions."""
-    state_mgr = DeploymentStateManager(config.state_dir)
+    state_mgr = DeploymentStateManager(config.state_dir, lkg_stack_depth=config.lkg_stack_depth)
     state = state_mgr.state
     store = IncidentStore(config.state_dir)
     recent = store.get_recent(5)
@@ -55,7 +55,13 @@ def cmd_status(config: SparkConfig) -> int:
     print("\n================ ORION SPARK STATUS ================")
     print(f"State File:          {state_mgr.state_file}")
     print(f"Active Revision:     {state.active_revision or 'none'}")
-    print(f"Last Known Good:     {state.last_known_good or 'none'}")
+    lkg_stack = state_mgr.lkg_stack_revisions()
+    if lkg_stack:
+        print(f"Last Known Good:     {lkg_stack[0]} (current)")
+        for i, rev in enumerate(lkg_stack[1:], 2):
+            print(f"  LKG [{i}] (fallback): {rev}")
+    else:
+        print("Last Known Good:     none")
     print(f"Candidate Revision:  {state.candidate_revision or 'none'}")
     if state.candidate_revision and state.candidate_healthy_since:
         healthy_secs = time.time() - state.candidate_healthy_since
@@ -86,7 +92,7 @@ def cmd_status(config: SparkConfig) -> int:
 
 def cmd_defibrillate(config: SparkConfig, reason: str = "Manual defibrillation") -> int:
     """Manually triggers the defibrillation protocol."""
-    state_mgr = DeploymentStateManager(config.state_dir)
+    state_mgr = DeploymentStateManager(config.state_dir, lkg_stack_depth=config.lkg_stack_depth)
     store = IncidentStore(config.state_dir)
     notifier = Notifier(config)
     monitor = HealthMonitor(config)
@@ -125,7 +131,7 @@ def cmd_incidents(config: SparkConfig, limit: int = 15) -> int:
 
 def cmd_lkg(config: SparkConfig, set_rev: str | None) -> int:
     """View or set Last Known Good revision."""
-    state_mgr = DeploymentStateManager(config.state_dir)
+    state_mgr = DeploymentStateManager(config.state_dir, lkg_stack_depth=config.lkg_stack_depth)
     if set_rev:
         state_mgr.set_lkg(set_rev)
         print(f"Last Known Good updated to: {set_rev}")
@@ -136,7 +142,7 @@ def cmd_lkg(config: SparkConfig, set_rev: str | None) -> int:
 
 def cmd_quarantine(config: SparkConfig, add_rev: str | None, reason: str, remove_rev: str | None) -> int:
     """Manage quarantined revisions."""
-    state_mgr = DeploymentStateManager(config.state_dir)
+    state_mgr = DeploymentStateManager(config.state_dir, lkg_stack_depth=config.lkg_stack_depth)
     if add_rev:
         state_mgr.quarantine(add_rev, reason or "Manual quarantine")
         print(f"Revision {add_rev} added to quarantine.")
@@ -167,7 +173,7 @@ def cmd_run(config: SparkConfig) -> int:
     logger.info(f"Stability Window: {config.stability_window_seconds}s")
     logger.info(f"State Dir: {config.state_dir}")
 
-    state_mgr = DeploymentStateManager(config.state_dir)
+    state_mgr = DeploymentStateManager(config.state_dir, lkg_stack_depth=config.lkg_stack_depth)
     store = IncidentStore(config.state_dir)
     notifier = Notifier(config)
     monitor = HealthMonitor(config)

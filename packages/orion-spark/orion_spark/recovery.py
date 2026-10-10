@@ -57,7 +57,6 @@ class Defibrillator:
         logger.info(f"=== INITIATING DEFIBRILLATION PROTOCOL ({reason}) ===")
         state = self.state_manager.state
         active_rev = state.active_revision or self.monitor.get_current_revision()
-        lkg_rev = state.last_known_good
 
         start_time = state.outage_started_at or time.time()
 
@@ -70,8 +69,8 @@ class Defibrillator:
                 f"Restart attempt suppressed: attempts={state.restart_attempts_count}/"
                 f"{self.config.max_restart_attempts}, cooldown={self.config.recovery_cooldown_seconds}s"
             )
-            # If restart attempts exhausted, jump to rollback check or critical
-            return self._attempt_rollback_phase(active_rev, lkg_rev, start_time, "Restart attempts exhausted")
+            # If restart attempts exhausted, jump straight to stack-walking rollback.
+            return self._attempt_rollback_phase(active_rev, start_time, "Restart attempts exhausted")
 
         # ── Step 1: Restart Speda ────────────────────────────────────────────
         logger.info(f"Defibrillation Step 1: Restarting Speda service '{self.config.docker_service}'...")
@@ -104,92 +103,99 @@ class Defibrillator:
 
         logger.warning(f"Restart verification FAILED: {probe_result.details}")
 
-        # ── Step 3: Check Deployment & Restore LKG ───────────────────────────
-        return self._attempt_rollback_phase(active_rev, lkg_rev, start_time, probe_result.details)
+        # ── Step 3: Walk the LKG stack ────────────────────────────────────────
+        return self._attempt_rollback_phase(active_rev, start_time, probe_result.details)
+
 
     def _attempt_rollback_phase(
         self,
         active_rev: str | None,
-        lkg_rev: str | None,
         start_time: float,
         failure_details: str,
     ) -> bool:
         logger.info("Defibrillation Step 3: Evaluating deployment rollback...")
 
-        if not lkg_rev:
-            logger.error("No Last Known Good (LKG) revision available to roll back to. CRITICAL.")
-            self._escalate_critical(
-                active_rev=active_rev,
-                lkg_rev=None,
-                start_time=start_time,
-                details=f"Restart failed and no LKG revision is known. ({failure_details})",
-            )
-            return False
+        # Walk the LKG stack from newest to oldest.  Each iteration:
+        #   - Quarantines the revision that just failed (removes it from the stack).
+        #   - Peeks at the next candidate (now at stack[0] after quarantine removed the old top).
+        #   - Rolls back to it and checks health.
+        #   - On success → done.  On failure → quarantine and try the next one.
+        # The loop runs until a revision passes health or the stack is empty.
 
-        if active_rev and active_rev == lkg_rev:
-            logger.error(f"Active revision {active_rev[:7]} is already the Last Known Good. Cannot rollback to self. CRITICAL.")
-            self._escalate_critical(
-                active_rev=active_rev,
-                lkg_rev=lkg_rev,
-                start_time=start_time,
-                details=f"Active revision is already LKG and failed to recover. ({failure_details})",
-            )
-            return False
-
-        if not self.state_manager.can_attempt_rollback(
-            self.config.max_rollback_attempts,
-            self.config.recovery_cooldown_seconds,
-        ):
-            logger.error("Rollback attempts limit reached or within cooldown. CRITICAL.")
-            self._escalate_critical(
-                active_rev=active_rev,
-                lkg_rev=lkg_rev,
-                start_time=start_time,
-                details=f"Rollback attempts exhausted ({self.state_manager.state.rollback_attempts_count}). ({failure_details})",
-            )
-            return False
-
-        # Quarantine candidate
+        # Quarantine the active (broken) revision first, which also strips it from
+        # the stack if it happened to be there.
         if active_rev:
             self.state_manager.quarantine(active_rev, f"Failed health probes during defibrillation: {failure_details}")
 
-        logger.info(f"Restoring Last Known Good (LKG) revision: {lkg_rev[:7]} (from failed {active_rev[:7] if active_rev else 'unknown'})...")
-        self.state_manager.record_rollback_attempt()
-        rollback_ok = self._execute_rollback(lkg_rev)
-        if not rollback_ok:
-            logger.error("Rollback execution returned an error.")
+        while True:
+            target_rev = self.state_manager.state.last_known_good  # top of stack
 
-        # ── Step 4: Verify Health Again ──────────────────────────────────────
-        logger.info(f"Defibrillation Step 4: Verifying health after rollback to {lkg_rev[:7]}...")
-        probe_result = self._wait_for_health(timeout_seconds=self.config.startup_grace_period_seconds)
+            if not target_rev:
+                logger.error("LKG stack exhausted — no revision left to roll back to. CRITICAL.")
+                self._escalate_critical(
+                    active_rev=active_rev,
+                    lkg_rev=None,
+                    start_time=start_time,
+                    details=f"All LKG revisions exhausted after cascading rollback failures. ({failure_details})",
+                )
+                return False
 
-        if probe_result.healthy:
-            logger.info("Rollback recovery SUCCEEDED. Speda is healthy.")
-            downtime = max(1, int(time.time() - start_time))
-            record = IncidentRecord(
-                service="speda",
-                type="deployment_failure",
-                failed_revision=active_rev,
-                restored_revision=lkg_rev,
-                recovery="rollback",
-                result="success",
-                downtime_seconds=downtime,
-                details=f"Automatic rollback to LKG {lkg_rev[:7]} succeeded after restart failed.",
+            if not self.state_manager.can_attempt_rollback(
+                self.config.max_rollback_attempts,
+                self.config.recovery_cooldown_seconds,
+            ):
+                logger.error("Rollback attempts limit reached or within cooldown. CRITICAL.")
+                self._escalate_critical(
+                    active_rev=active_rev,
+                    lkg_rev=target_rev,
+                    start_time=start_time,
+                    details=f"Rollback attempts exhausted ({self.state_manager.state.rollback_attempts_count}). ({failure_details})",
+                )
+                return False
+
+            logger.info(
+                f"Rolling back to LKG revision: {target_rev[:7]} "
+                f"(stack depth remaining: {len(self.state_manager.lkg_stack_revisions())})"
             )
-            self.incident_store.record(record)
-            self.notifier.send(self.notifier.format_recovery_message(record))
-            self.state_manager.record_probe_success(lkg_rev, self.config.stability_window_seconds)
-            return True
+            self.state_manager.record_rollback_attempt()
+            rollback_ok = self._execute_rollback(target_rev)
+            if not rollback_ok:
+                logger.error(f"Rollback execution to {target_rev[:7]} returned an error.")
 
-        # Rollback failed too -> CRITICAL
-        logger.error(f"Rollback health verification FAILED: {probe_result.details}")
-        self._escalate_critical(
-            active_rev=active_rev,
-            lkg_rev=lkg_rev,
-            start_time=start_time,
-            details=f"Restart failed. Rollback to {lkg_rev[:7]} failed health probe ({probe_result.details}).",
-        )
-        return False
+            logger.info(f"Defibrillation: Verifying health after rollback to {target_rev[:7]}...")
+            probe_result = self._wait_for_health(timeout_seconds=self.config.startup_grace_period_seconds)
+
+            if probe_result.healthy:
+                logger.info(f"Rollback recovery SUCCEEDED at revision {target_rev[:7]}. Speda is healthy.")
+                downtime = max(1, int(time.time() - start_time))
+                record = IncidentRecord(
+                    service="speda",
+                    type="deployment_failure",
+                    failed_revision=active_rev,
+                    restored_revision=target_rev,
+                    recovery="rollback",
+                    result="success",
+                    downtime_seconds=downtime,
+                    details=f"Automatic rollback to {target_rev[:7]} succeeded after restart failed.",
+                )
+                self.incident_store.record(record)
+                self.notifier.send(self.notifier.format_recovery_message(record))
+                self.state_manager.record_probe_success(target_rev, self.config.stability_window_seconds)
+                return True
+
+            # This LKG also failed — quarantine it and try the next one in the stack.
+            logger.warning(
+                f"Rollback to {target_rev[:7]} FAILED health verification: {probe_result.details}. "
+                f"Quarantining and trying next LKG..."
+            )
+            self.state_manager.quarantine(
+                target_rev,
+                f"Failed health probes after rollback attempt: {probe_result.details}",
+            )
+            # Reset rollback counter so we can attempt the next revision.
+            self.state_manager.state.rollback_attempts_count = 0
+            self.state_manager.save()
+
 
     def _escalate_critical(
         self,
