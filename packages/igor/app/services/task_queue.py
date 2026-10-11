@@ -454,7 +454,7 @@ async def enqueue_post_turn(
 
 # ── Claim / complete ──────────────────────────────────────────────────────────
 
-async def _claim(db: AsyncSession, limit: int) -> list[BackgroundJob]:
+async def _claim(db: AsyncSession, limit: int, *, kinds=None, user_id=None, source_id=None) -> list[BackgroundJob]:
     """Take up to `limit` due jobs and mark them running in one transaction.
 
     Single-writer deployment, so this needs no row-level locking beyond the
@@ -476,6 +476,9 @@ async def _claim(db: AsyncSession, limit: int) -> list[BackgroundJob]:
                     BackgroundJob.status == "pending",
                     BackgroundJob.kind != "memory_audit",
                     BackgroundJob.run_after <= now,
+                    *([BackgroundJob.kind.in_(kinds)] if kinds else []),
+                    *([BackgroundJob.user_id == user_id] if user_id is not None else []),
+                    *([BackgroundJob.payload["source_id"].as_string() == source_id] if source_id else []),
                 )
                 .order_by(BackgroundJob.created_at.asc())
                 .limit(limit)
@@ -555,7 +558,7 @@ async def _run_one(job_id: int, kind: str, session_id, user_id: int, model: str,
 
 # ── Drain ─────────────────────────────────────────────────────────────────────
 
-async def drain(limit: int = DEFAULT_DRAIN_LIMIT) -> dict:
+async def drain(limit: int = DEFAULT_DRAIN_LIMIT, *, kinds=None, user_id=None, source_id=None) -> dict:
     """
     Execute due jobs. Returns a summary — the shape the admin endpoint reports.
 
@@ -565,7 +568,7 @@ async def drain(limit: int = DEFAULT_DRAIN_LIMIT) -> dict:
     `return_exceptions=True` collected failures into a list nobody read.
     """
     async with AsyncSessionLocal() as db:
-        claimed = await _claim(db, limit)
+        claimed = await _claim(db, limit, kinds=kinds, user_id=user_id, source_id=source_id)
         # Read the fields out before the session closes — the handlers open their
         # own sessions and must not touch these instances.
         work = [

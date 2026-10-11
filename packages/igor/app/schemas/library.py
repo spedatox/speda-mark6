@@ -1,5 +1,17 @@
 """Evidence and readiness returned by the Hall of Records."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr, ConfigDict
+
+
+class LibrarySettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    semantic_enabled: bool
+    ocr_enabled: bool
+    ocr_languages: str = Field(default="tur+eng", pattern=r"^[a-z]{3}(?:\+[a-z]{3}){0,4}$")
+    embedding_api_key: SecretStr | None = Field(default=None, max_length=512)
+
+
+class LibraryProgressRequest(BaseModel):
+    document_ids: list[str] = Field(max_length=100)
 
 
 class LibrarySearchResult(BaseModel):

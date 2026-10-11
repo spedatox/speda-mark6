@@ -28,6 +28,7 @@ class LibraryService:
         self.client = indexer.client
         self.sessions = indexer.sessions
         self.n8n_secret = n8n_secret
+        self.drain_lock = asyncio.Lock()
 
     def _owner(self, context):
         if context.user_id != self.indexer.owner_user_id:
@@ -207,10 +208,13 @@ class LibraryService:
                                      query_date=query_date, search_mode=mode, results=results, warnings=warnings)
 
     async def _semantic(self, db, query, eligible, generations, warnings):
+        embedder = self.indexer.embedder
+        if embedder is None:
+            return None
         cap = self.indexer.semantic_max_passages
         rows = (await db.execute(select(LibraryPassage, LibraryEmbedding).join(LibraryEmbedding).where(
             LibraryPassage.revision_id.in_(eligible), LibraryPassage.generation_id.in_(generations),
-            LibraryEmbedding.model_fingerprint == self.indexer.embedder.fingerprint,
+            LibraryEmbedding.model_fingerprint == embedder.fingerprint,
         ).order_by(LibraryPassage.id).limit(cap + 1))).all()
         if not rows:
             warnings.append("Semantic indexing is pending; keyword retrieval remains available")
@@ -220,7 +224,7 @@ class LibraryService:
             return None
         try:
             from app.services.library_embeddings import normalized
-            response = await self.indexer.embedder.embed([query])
+            response = await embedder.embed([query])
             if len(response) != 1:
                 raise ValueError("Semantic query embedding omitted an input")
             query_vector = normalized(response[0])
@@ -311,4 +315,9 @@ class LibraryService:
 
     async def drain_jobs(self):
         from app.services.task_queue import drain
-        await drain()
+        async with self.drain_lock:
+            while True:
+                result = await drain(limit=4, kinds=("library_index", "library_embed"),
+                                     user_id=self.indexer.owner_user_id, source_id=self.indexer.source_id)
+                if not result["claimed"]:
+                    return

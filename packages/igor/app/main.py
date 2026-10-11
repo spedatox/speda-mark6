@@ -206,6 +206,8 @@ async def lifespan(app: FastAPI):
     library_service = LibraryService(library_indexer, n8n_secret=settings.n8n_secret)
     app.state.library = library_service
     app.state.library_indexer = library_indexer
+    from app.services.library_controls import LibraryControls
+    app.state.library_controls = LibraryControls(library_indexer, settings)
     from app.skills.library import ListLibrarySkill, SearchLibrarySkill, ReadLibrarySkill
     await registry.register_skill(ListLibrarySkill(library_service))
     await registry.register_skill(SearchLibrarySkill(library_service))
@@ -525,8 +527,7 @@ async def lifespan(app: FastAPI):
     async def reconcile_library_on_startup():
         try:
             await library_indexer.reconcile(full=True)
-            from app.services.task_queue import drain
-            await drain()
+            await library_service.drain_jobs()
         except Exception:
             logger.exception("library_startup_reconciliation_failed")
     library_sync_task = asyncio.create_task(reconcile_library_on_startup())

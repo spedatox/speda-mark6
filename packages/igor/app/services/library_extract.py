@@ -41,7 +41,7 @@ def chunk_text(text: str, max_length: int = 2000) -> list[str]:
 
 def extract_document_bytes(blob: bytes, mime_type: str, *, max_bytes: int = 25 * 1024**2,
                            max_pages: int = 200, max_characters: int = 2_000_000,
-                           ocr=None) -> list[ExtractedPassage]:
+                           ocr=None, progress=None) -> list[ExtractedPassage]:
     if not blob or len(blob) > max_bytes:
         raise ExtractionError("Original is empty or exceeds the extraction size limit")
     passages = []
@@ -57,6 +57,8 @@ def extract_document_bytes(blob: bytes, mime_type: str, *, max_bytes: int = 25 *
                 raise ExtractionError("PDF exceeds the page limit")
             total = 0
             for number, page in enumerate(reader.pages, 1):
+                if progress:
+                    progress("extracting", number - 1, len(reader.pages), "pages")
                 text = page.extract_text() or ""
                 total += len(text)
                 if total > max_characters:
@@ -64,14 +66,20 @@ def extract_document_bytes(blob: bytes, mime_type: str, *, max_bytes: int = 25 *
                 if not text.strip():
                     if ocr is None:
                         raise ExtractionError(f"Page {number} has no extractable text; OCR or owner review is required")
+                    if progress:
+                        progress("ocr", number - 1, len(reader.pages), "pages")
                     text = ocr.pdf_page(blob, number)
                     total += len(text)
                     if total > max_characters or not text.strip():
                         raise ExtractionError(f"Page {number} OCR is empty or exceeds the text limit")
                     passages.extend(ExtractedPassage(c, page=number, section="OCR transcription", needs_review=True)
                                     for c in chunk_text(text))
+                    if progress:
+                        progress("extracting", number, len(reader.pages), "pages")
                     continue
                 passages.extend(ExtractedPassage(c, page=number) for c in chunk_text(text))
+                if progress:
+                    progress("extracting", number, len(reader.pages), "pages")
         except ExtractionError:
             raise
         except Exception as exc:

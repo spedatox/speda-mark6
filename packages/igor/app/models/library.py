@@ -60,6 +60,7 @@ class LibraryIndexGeneration(Base):
     status = Column(String, nullable=False)  # pending, processing, completed, failed
     fingerprint = Column(String, nullable=False) # e.g. text_extractor_v1 + embedding_model
     failure_details = Column(String, nullable=True)
+    progress = Column(JSON, default=dict, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), nullable=False)
     completed_at = Column(DateTime, nullable=True)
 

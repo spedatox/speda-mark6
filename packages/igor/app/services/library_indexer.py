@@ -37,6 +37,26 @@ class LibraryIndexer:
         self.semantic_max_passages = semantic_max_passages
         self.semantic_min_similarity = semantic_min_similarity
         self.lock = asyncio.Lock()
+        self.retired_embedders = []
+
+    async def progress(self, generation_id, stage, completed=None, total=None, unit=None):
+        async with self.sessions() as db:
+            generation = await db.get(LibraryIndexGeneration, generation_id)
+            if generation is not None:
+                generation.progress = {"stage": stage, "completed": completed, "total": total,
+                                       "unit": unit, "updated_at": dt.datetime.now(dt.timezone.utc).isoformat()}
+                await db.commit()
+
+    def configure(self, settings):
+        from app.services.library_ocr import LocalOCR
+        from app.services.library_embeddings import LibraryEmbeddings
+        if self.embedder is not None:
+            self.retired_embedders.append(self.embedder)
+        key = settings.library_embedding_api_key or settings.openai_api_key
+        self.embedder = LibraryEmbeddings(api_key=key, model=settings.embedding_model) if settings.library_semantic_enabled and key else None
+        languages, timeout = settings.library_ocr_languages, settings.library_ocr_timeout_seconds
+        self.ocr_factory = (lambda: LocalOCR(languages=languages, timeout=timeout)) if settings.library_ocr_enabled else None
+        self.fingerprint = f"iacon-extract-v3:ocr={languages if self.ocr_factory else 'off'}"
 
     def generation_id(self, revision_id):
         return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{self.source_id}:{revision_id}:{self.fingerprint}"))
@@ -108,8 +128,20 @@ class LibraryIndexer:
             generation_id = self.generation_id(revision["id"])
             async with self.sessions() as db:
                 generation = await db.get(LibraryIndexGeneration, generation_id)
+                if generation and generation.status == "processing":
+                    continue
                 if generation and retry and revision["id"] == doc["active_revision_id"]:
+                    from app.models.background_job import BackgroundJob
+                    running = await db.scalar(select(BackgroundJob.id).where(
+                        BackgroundJob.user_id == self.owner_user_id,
+                        BackgroundJob.kind.in_(("library_index", "library_embed")), BackgroundJob.status == "running",
+                        BackgroundJob.payload["source_id"].as_string() == self.source_id,
+                        BackgroundJob.payload["revision_id"].as_string() == revision["id"],
+                    ).limit(1))
+                    if running is not None:
+                        continue
                     generation.status = "pending"
+                    generation.progress = {"stage": "queued"}
                     await db.commit()
                 if generation and generation.status in {"ready_keyword", "ready_ocr", "needs_review"}:
                     if generation.status in {"ready_keyword", "ready_ocr"}:
@@ -126,7 +158,7 @@ class LibraryIndexer:
             job = await enqueue(kind="library_index", unique_key=generation_id,
                                 user_id=self.owner_user_id,
                                 payload={"document_id": doc["id"], "revision_id": revision["id"],
-                                         "source_id": self.source_id})
+                                         "source_id": self.source_id, "extractor_fingerprint": self.fingerprint})
             queued += int(job is not None)
         return queued
 
@@ -199,14 +231,21 @@ class LibraryIndexer:
             await db.commit()
         try:
             await self.client.report_index_receipt(document_id, revision_id, "processing")
+            await self.progress(generation_id, "downloading")
             blob = await self.client.download_revision_blob(revision_id)
             if len(blob) != revision["size_bytes"] or hashlib.sha256(blob).hexdigest() != revision["blob_sha256"]:
                 raise ValueError("Original failed size or SHA-256 verification")
+            await self.progress(generation_id, "extracting")
+            loop = asyncio.get_running_loop()
+            def report(stage, completed, total, unit):
+                asyncio.run_coroutine_threadsafe(self.progress(generation_id, stage, completed, total, unit), loop).result()
             passages = await asyncio.to_thread(
                 extract_document_bytes, blob, revision["mime_type"],
                 max_bytes=self.client.max_bytes, max_pages=self.max_pages,
                 ocr=self.ocr_factory() if self.ocr_factory else None,
+                progress=report,
             )
+            await self.progress(generation_id, "publishing", len(passages), len(passages), "passages")
             # All evidence + readiness publish together. Retry uses stable passage identities.
             async with self.sessions() as db:
                 keyword = await self.ensure_keyword_index(db)
@@ -242,6 +281,7 @@ class LibraryIndexer:
                 readiness = "ready_ocr" if any(p.needs_review for p in passages) else "ready_keyword"
                 generation.status = readiness
                 generation.failure_details = None
+                generation.progress = {"stage": "ready", "completed": len(passages), "total": len(passages), "unit": "passages"}
                 generation.completed_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
                 await db.commit()
         except Exception as exc:
@@ -249,6 +289,7 @@ class LibraryIndexer:
                 generation = await db.get(LibraryIndexGeneration, generation_id)
                 generation.status = "needs_review" if isinstance(exc, ExtractionError) else "failed"
                 generation.failure_details = str(exc)[:500] if isinstance(exc, (ExtractionError, ValueError)) else type(exc).__name__
+                generation.progress = {"stage": generation.status}
                 generation.completed_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
                 await db.commit()
             if isinstance(exc, ExtractionError):
@@ -281,11 +322,13 @@ class LibraryIndexer:
         key = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{generation_id}:{self.embedder.fingerprint}"))
         job = await enqueue(kind="library_embed", unique_key=key, user_id=self.owner_user_id,
                             payload={"document_id": document_id, "revision_id": revision_id,
-                                     "source_id": self.source_id, "embedding_fingerprint": self.embedder.fingerprint})
+                                     "source_id": self.source_id, "extractor_fingerprint": self.fingerprint,
+                                     "embedding_fingerprint": self.embedder.fingerprint})
         return int(job is not None)
 
     async def embed_revision(self, document_id, revision_id):
-        if self.embedder is None:
+        embedder = self.embedder
+        if embedder is None:
             raise ValueError("Library semantic indexing is disabled or unconfigured")
         record = await self.client.get_document(document_id)
         if record["document"]["is_tombstone"] or record["document"]["is_archived"]:
@@ -299,13 +342,16 @@ class LibraryIndexer:
                 raise ValueError("Text extraction is not ready for semantic indexing")
             passages = list((await db.scalars(select(LibraryPassage).outerjoin(LibraryEmbedding).where(
                 LibraryPassage.generation_id == generation_id,
-                (LibraryEmbedding.passage_id.is_(None)) | (LibraryEmbedding.model_fingerprint != self.embedder.fingerprint),
+                (LibraryEmbedding.passage_id.is_(None)) | (LibraryEmbedding.model_fingerprint != embedder.fingerprint),
             ).order_by(LibraryPassage.position))).all())
+            total = await db.scalar(select(func.count()).select_from(LibraryPassage).where(LibraryPassage.generation_id == generation_id))
+        done = total - len(passages)
+        await self.progress(generation_id, "embedding", done, total, "passages")
         # Each completed batch persists independently; a restart resumes missing vectors.
         from app.services.library_embeddings import normalized
         for offset in range(0, len(passages), 32):
             batch = passages[offset:offset + 32]
-            vectors = await self.embedder.embed([p.content for p in batch])
+            vectors = await embedder.embed([p.content for p in batch])
             if len(vectors) != len(batch):
                 raise ValueError("Embedding response omitted an input")
             vectors = [normalized(vector) for vector in vectors]
@@ -322,15 +368,20 @@ class LibraryIndexer:
                     embedding = await db.get(LibraryEmbedding, passage.id)
                     if embedding is None:
                         db.add(LibraryEmbedding(passage_id=passage.id, vector=vector,
-                                                model_fingerprint=self.embedder.fingerprint))
+                                                model_fingerprint=embedder.fingerprint))
                     else:
-                        embedding.vector, embedding.model_fingerprint = vector, self.embedder.fingerprint
+                        embedding.vector, embedding.model_fingerprint = vector, embedder.fingerprint
                 await db.commit()
+            done += len(batch)
+            await self.progress(generation_id, "embedding", done, total, "passages")
+        await self.progress(generation_id, "ready", total, total, "passages")
 
     async def aclose(self):
         await self.client.aclose()
         if self.embedder is not None:
             await self.embedder.aclose()
+        for embedder in self.retired_embedders:
+            await embedder.aclose()
 
 
 def indexer_from_settings():
@@ -340,8 +391,9 @@ def indexer_from_settings():
     from app.services.library_ocr import LocalOCR
     from app.services.library_embeddings import LibraryEmbeddings
     embedder = None
-    if settings.library_semantic_enabled and settings.openai_api_key:
-        embedder = LibraryEmbeddings(api_key=settings.openai_api_key, model=settings.embedding_model)
+    key = settings.library_embedding_api_key or settings.openai_api_key
+    if settings.library_semantic_enabled and key:
+        embedder = LibraryEmbeddings(api_key=key, model=settings.embedding_model)
     ocr_factory = None
     if settings.library_ocr_enabled:
         ocr_factory = lambda: LocalOCR(languages=settings.library_ocr_languages, timeout=settings.library_ocr_timeout_seconds)
@@ -357,6 +409,8 @@ async def run_index_job(user_id, payload):
     try:
         if user_id != indexer.owner_user_id or payload.get("source_id") != indexer.source_id:
             raise ValueError("Index job belongs to a different owner or source")
+        if payload.get("extractor_fingerprint", indexer.fingerprint) != indexer.fingerprint:
+            return  # A settings change queued a new immutable generation.
         await indexer.index_revision(payload["document_id"], payload["revision_id"])
     finally:
         await indexer.aclose()
@@ -365,9 +419,11 @@ async def run_index_job(user_id, payload):
 async def run_embedding_job(user_id, payload):
     indexer = indexer_from_settings()
     try:
-        if (user_id != indexer.owner_user_id or payload.get("source_id") != indexer.source_id
-                or indexer.embedder is None or payload.get("embedding_fingerprint") != indexer.embedder.fingerprint):
-            raise ValueError("Embedding job belongs to a different owner, source or model")
+        if user_id != indexer.owner_user_id or payload.get("source_id") != indexer.source_id:
+            raise ValueError("Embedding job belongs to a different owner or source")
+        if (indexer.embedder is None or payload.get("embedding_fingerprint") != indexer.embedder.fingerprint
+                or payload.get("extractor_fingerprint", indexer.fingerprint) != indexer.fingerprint):
+            return  # Disabled/reconfigured work is superseded, not retried forever.
         await indexer.embed_revision(payload["document_id"], payload["revision_id"])
     finally:
         await indexer.aclose()

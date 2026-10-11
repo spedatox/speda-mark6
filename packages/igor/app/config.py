@@ -4,6 +4,8 @@
 import logging
 import logging.config
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -81,7 +83,15 @@ def write_managed_env(updates: dict[str, str | None]) -> None:
     ]
     for key in sorted(current):
         lines.append(f"{key}={_dq(current[key])}")
-    _MANAGED_ENV.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    descriptor, temporary = tempfile.mkstemp(dir=_DATA_DIR, prefix=".managed-", suffix=".tmp")
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write("\n".join(lines) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, _MANAGED_ENV)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
 
 class _ManagedEnvSource(PydanticBaseSettingsSource):
@@ -290,6 +300,7 @@ class Settings(BaseSettings):
     library_ocr_languages: str = Field(default="tur+eng", pattern=r"^[a-z]{3}(?:\+[a-z]{3}){0,4}$")
     library_ocr_timeout_seconds: int = Field(default=300, ge=1, le=600)
     library_semantic_enabled: bool = False
+    library_embedding_api_key: str = ""
     library_semantic_max_passages: int = Field(default=5000, ge=1, le=10000)
     library_semantic_min_similarity: float = Field(default=0.25, ge=0, le=1)
 

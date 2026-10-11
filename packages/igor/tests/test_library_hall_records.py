@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.context import AgentContext
 from app.database import Base
+from app.models.background_job import BackgroundJob
 from app.models.library import (
     LibrarySource, LibraryDocument, LibraryRevision, LibraryIndexGeneration,
     LibraryPassage, LibraryEmbedding, LibraryCitation,
@@ -106,6 +107,7 @@ async def hall(tmp_path):
     tables = [model.__table__ for model in (
         LibrarySource, LibraryDocument, LibraryRevision, LibraryIndexGeneration,
         LibraryPassage, LibraryEmbedding, LibraryCitation,
+        BackgroundJob,
     )]
     async with engine.begin() as db:
         await db.run_sync(lambda conn: Base.metadata.create_all(conn, tables=tables))
@@ -125,6 +127,122 @@ async def index_all(hall):
     for record in hall.client.records.values():
         for rev in record["revisions"]:
             await hall.indexer.index_revision(record["document"]["id"], rev["id"])
+
+
+def control_settings(**updates):
+    values = dict(n8n_secret="isolated-n8n", library_semantic_enabled=False, library_ocr_enabled=False,
+                  library_ocr_languages="tur+eng", library_ocr_timeout_seconds=300,
+                  library_embedding_api_key="", openai_api_key="", embedding_model="isolated-model",
+                  library_max_pages=200, library_max_bytes=25 * 1024**2)
+    return SimpleNamespace(**{**values, **updates})
+
+
+async def test_settings_are_persisted_live_and_secrets_never_returned(hall, monkeypatch):
+    from app.services.library_controls import LibraryControls
+    from app.schemas.library import LibrarySettingsUpdate
+    saved = []
+    settings = control_settings()
+    controls = LibraryControls(hall.indexer, settings, writer=saved.append)
+    # No network call: test only the authenticated settings transaction here.
+    result = await controls.save("isolated-n8n", LibrarySettingsUpdate(
+        semantic_enabled=False, ocr_enabled=False, embedding_api_key="test-secret-only"))
+    assert result["saved"] and result["embedding_key_configured"]
+    assert "test-secret-only" not in str(result)
+    assert saved[0]["LIBRARY_EMBEDDING_API_KEY"] == "test-secret-only"
+    assert settings.library_embedding_api_key == "test-secret-only"
+    assert hall.indexer.embedder is None
+    with pytest.raises(HTTPException) as denied:
+        await controls.snapshot("wrong")
+    assert denied.value.status_code == 401
+    with pytest.raises(HTTPException):
+        await LibraryControls(hall.indexer, control_settings(), writer=saved.append).save("isolated-n8n",
+            LibrarySettingsUpdate(semantic_enabled=True, ocr_enabled=False))
+    assert len(saved) == 1
+    monkeypatch.setattr(controls, "ocr_runtime", lambda: {"available": False, "languages": []})
+    with pytest.raises(HTTPException) as missing:
+        await controls.save("isolated-n8n", LibrarySettingsUpdate(semantic_enabled=False, ocr_enabled=True))
+    assert missing.value.status_code == 422 and len(saved) == 1
+
+
+def test_pdf_progress_counts_actual_pages():
+    writer = PdfWriter()
+    writer.add_blank_page(100, 100); writer.add_blank_page(100, 100)
+    blob = io.BytesIO(); writer.write(blob)
+    events = []
+    class OCR:
+        def pdf_page(self, blob, number):
+            return f"Read page {number}"
+    result = extract_document_bytes(blob.getvalue(), "application/pdf", ocr=OCR(), progress=lambda *event: events.append(event))
+    assert len(result) == 2
+    assert ("ocr", 0, 2, "pages") in events
+    assert events[-1] == ("extracting", 2, 2, "pages")
+
+
+async def test_progress_tracks_semantic_batches_and_filters_other_owner(hall):
+    from app.services.library_controls import LibraryControls
+    doc, rev = hall.client.add("Large reference", "Long reference passage. " * 3500)
+    await index_all(hall)
+    controls = LibraryControls(hall.indexer, control_settings())
+    checkpoints = []
+    class Embedder:
+        fingerprint = "test-batch-progress"
+        async def embed(self, texts):
+            info = (await controls.progress("isolated-n8n", [doc]))["records"][0]
+            checkpoints.append(info["semantic"]["indexed"])
+            return [[1.0, 0.0] for _ in texts]
+    hall.indexer.embedder = Embedder()
+    await hall.indexer.embed_revision(doc, rev)
+    assert checkpoints[0] == 0 and checkpoints[1] == 32
+    result = await controls.progress("isolated-n8n", [doc, "other-owner-document"])
+    info = result["records"][0]
+    assert info["progress"]["stage"] == "ready"
+    assert info["semantic"]["indexed"] == info["semantic"]["total"] > 32
+    assert result["records"][1] == {"document_id": "other-owner-document", "state": "not_synced", "progress": {"stage": "awaiting_sync"}}
+
+
+async def test_library_drain_does_not_claim_unrelated_jobs(hall, monkeypatch):
+    from app.services import task_queue
+    import datetime as dt
+    async with hall.sessions() as db:
+        for kind, owner, source in [("title", 1, ""), ("library_index", 2, hall.indexer.source_id),
+                                     ("library_index", 1, "other-source"), ("library_index", 1, hall.indexer.source_id)]:
+            db.add(BackgroundJob(kind=kind, user_id=owner, unique_key=str(uuid.uuid4()),
+                                 payload={"source_id": source}, status="pending", run_after=dt.datetime.now(dt.timezone.utc)))
+        await db.commit()
+    monkeypatch.setattr(task_queue, "AsyncSessionLocal", hall.sessions)
+    async def run(job_id, *args):
+        await task_queue._finish(job_id, error=None)
+        return True
+    monkeypatch.setattr(task_queue, "_run_one", run)
+    await hall.service.drain_jobs()
+    async with hall.sessions() as db:
+        jobs = list((await db.scalars(select(BackgroundJob).order_by(BackgroundJob.id))).all())
+    assert [job.status for job in jobs] == ["pending", "pending", "pending", "done"]
+
+
+async def test_old_failure_cannot_hide_completed_retry(hall):
+    from app.services.library_controls import LibraryControls
+    doc, rev = hall.client.add("Reference", "Indexed text")
+    await index_all(hall)
+    async with hall.sessions() as db:
+        for state in ["failed", "done"]:
+            db.add(BackgroundJob(kind="library_index", user_id=1, unique_key=hall.indexer.generation_id(rev),
+                                 payload={"source_id": hall.indexer.source_id, "revision_id": rev}, status=state))
+            await db.commit()
+    info = (await LibraryControls(hall.indexer, control_settings()).progress("isolated-n8n", [doc]))["records"][0]
+    assert info["state"] == "ready_keyword"
+
+
+async def test_retry_does_not_reset_running_semantic_work(hall):
+    doc, rev = hall.client.add("Reference", "Text ready while semantic work runs")
+    await index_all(hall)
+    async with hall.sessions() as db:
+        db.add(BackgroundJob(kind="library_embed", user_id=1, unique_key="isolated-vector-job",
+                             payload={"source_id": hall.indexer.source_id, "revision_id": rev}, status="running"))
+        await db.commit()
+    assert await hall.indexer._accept(hall.client.records[doc], retry=True) == 0
+    async with hall.sessions() as db:
+        assert (await db.get(LibraryIndexGeneration, hall.indexer.generation_id(rev))).status == "ready_keyword"
 
 
 async def test_upload_index_search_read_and_resolve_real_evidence(hall):

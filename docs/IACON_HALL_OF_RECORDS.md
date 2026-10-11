@@ -132,8 +132,14 @@ the LIBRARY_OCR_LANGUAGES language packs installed; the Igor container definitio
 now includes tur/eng. LIBRARY_OCR_TIMEOUT_SECONDS defaults 300 for the whole
 edition. OCR runtime errors leave needs_review, never invented text.
 
-LIBRARY_SEMANTIC_ENABLED defaults false. Enabling it uses the existing
-OPENAI_API_KEY and EMBEDDING_MODEL: source passage text and search queries are
+The Hall's Settings screen persists OCR and semantic search options in Igor's
+managed environment and applies them immediately. It checks for the OCR runtime
+and selected language packs and refuses unavailable options. The embedding key
+is write-only; snapshots expose only whether a key exists. A dedicated
+LIBRARY_EMBEDDING_API_KEY overrides the shared OPENAI_API_KEY for Iacon only.
+
+LIBRARY_SEMANTIC_ENABLED defaults false. Enabling it uses that key and
+EMBEDDING_MODEL: source passage text and search queries are
 sent to that provider. Clients are app-owned and closed on shutdown.
 LIBRARY_SEMANTIC_MAX_PASSAGES defaults 5000; narrow document_ids when the eligible
 vector corpus exceeds it. LIBRARY_SEMANTIC_MIN_SIMILARITY defaults 0.25, and is a
@@ -146,7 +152,18 @@ The importable n8n template is packages/igor/scripts/n8n/iacon_reconcile.json.
 It does deterministic full reconciliation only, without an agent turn. Existing
 queue-drain workflows handle retries.
 
-Existing table names and IDs are retained. Igor adds only the position column
+Owner retry saves an index_requested event, then waits for Igor's acceptance.
+An unavailable delivery connection returns an explicit 503; the original and
+retry event remain stored. Acceptance does not mean extraction is complete.
+Iacon-specific drains repeatedly claim only due library jobs for the configured
+owner and source. The open Hall polls a read-only progress endpoint every three
+seconds and pauses requests while the browser is hidden. Progress comes from
+generation stages, actual PDF page counts, persisted embedding batches and queue
+state; unknown totals use an indeterminate bar. Explicit owner retry makes pending
+library work immediately eligible. n8n still owns scheduled recovery.
+
+Existing table names and IDs are retained. Igor adds a JSON progress column to
+library_index_generations and the position column
 to library_passages. Older index generations are excluded by the current
 fingerprint (v3 plus OCR language configuration) and rebuilt from authoritative
 originals. Hisar normalizes old

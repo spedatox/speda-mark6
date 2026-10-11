@@ -268,6 +268,7 @@ speda-mark-vi/
     │   ├── library_extract.py   # Bounded text/PDF/Office extraction and labeled OCR; honest review states
     │   ├── library_ocr.py       # Local Tesseract/Poppler with bounded pixels, deadline and labeled transcription
     │   ├── library_embeddings.py # App-owned optional embedding transport; validated normalized vectors
+    │   ├── library_controls.py # Owner settings, capability checks and durable indexing progress
     │   ├── hisar_library_client.py # App-owned scoped catalog client and size-limited original downloads
     │   ├── octavius.py          # Verified SQLite snapshots in the owner's Drive; manual restore staging
     │   ├── octavius_restore.py  # Owner-selected restore jobs and durable status on app.state

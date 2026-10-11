@@ -103,6 +103,48 @@ async def verify(hisar_checkout):
                 await indexer.reconcile()
                 assert (await task_queue.drain())["succeeded"] == 1
                 assert "25 Ocak" in (await service.search(context, "sinav")).results[0].content
+                # Exercise the actual owner -> Hisar proxy -> authenticated Igor
+                # control routes, including durable retry and saved settings.
+                from fastapi import FastAPI
+                from types import SimpleNamespace
+                from app.routers.library import router as library_router
+                from app.services.library_controls import LibraryControls
+                from app.middleware.auth import AuthMiddleware
+                from app.config import settings as igor_settings
+                igor_settings.speda_api_key = "isolated-control-key"
+                options = SimpleNamespace(n8n_secret="isolated-control-secret", library_semantic_enabled=False,
+                    library_ocr_enabled=False, library_ocr_languages="tur+eng", library_ocr_timeout_seconds=300,
+                    library_embedding_api_key="", openai_api_key="", embedding_model="isolated-model",
+                    library_max_pages=200, library_max_bytes=25 * 1024**2)
+                persisted = []
+                igor = FastAPI()
+                igor.add_middleware(AuthMiddleware)
+                igor.include_router(library_router)
+                service.n8n_secret = options.n8n_secret
+                igor.state.library = service
+                igor.state.library_controls = LibraryControls(indexer, options, writer=persisted.append)
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=igor), base_url="http://isolated-igor") as control:
+                    assert (await control.get("/library/settings")).status_code == 401
+                    assert (await control.get("/library/settings", headers={"X-API-Key": "isolated-control-key"})).status_code == 401
+                delivery = hisar.state.library_delivery
+                await delivery.http.aclose()
+                delivery.http = httpx.AsyncClient(transport=httpx.ASGITransport(app=igor), base_url="http://isolated-igor")
+                delivery.url = "http://isolated-igor"
+                delivery.headers = {"X-API-Key": "isolated-control-key", "X-N8N-Secret": options.n8n_secret}
+                snapshot = await owner.get("/library/settings")
+                assert snapshot.status_code == 200 and not snapshot.json()["embedding_key_configured"], snapshot.text
+                rejected = await owner.put("/library/settings", json={"semantic_enabled": True, "ocr_enabled": False})
+                assert rejected.status_code == 422 and not persisted, rejected.text
+                saved = await owner.put("/library/settings", json={"semantic_enabled": False, "ocr_enabled": False,
+                    "embedding_api_key": "isolated-key-never-send-to-provider"})
+                assert saved.status_code == 200 and saved.json()["saved"], saved.text
+                assert "isolated-key-never-send-to-provider" not in saved.text
+                assert persisted[0]["LIBRARY_EMBEDDING_API_KEY"] == "isolated-key-never-send-to-provider"
+                retry = await owner.post(f"/library/documents/{document_id}/retry")
+                assert retry.status_code == 200 and retry.json()["status"] == "accepted", retry.text
+                progress = await owner.post("/library/progress", json={"document_ids": [document_id]})
+                assert progress.status_code == 200 and progress.json()["records"][0]["state"] == "ready_keyword", progress.text
+                assert (await service.citation_source(result["results"][0]["citation_id"]))["content"] == "Final sınavları 18 Ocak tarihinde başlar."
                 current = (await owner.get("/library/documents")).json()["records"][0]
                 revoked = await owner.patch(f"/library/documents/{document_id}", json={
                     "expected_version": current["document"]["metadata_version"], "access_policy": {"allowed_agents": []}})
@@ -111,6 +153,7 @@ async def verify(hisar_checkout):
                 assert (await owner.get(f"/library/revisions/{old_revision}/download")).status_code == 200
         print("PASS: real upload -> durable queue -> restart -> hash-verified index -> Turkish search -> citation.")
         print("PASS: current-edition replacement, retained original/history, live access revocation and UI readiness receipt.")
+        print("PASS: owner settings, write-only key, both control credentials, real retry delivery and durable progress.")
         print(f"Disposable verification artifacts: {scratch}")
     finally:
         await indexer.client.aclose()
