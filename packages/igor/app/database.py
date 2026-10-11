@@ -71,6 +71,11 @@ def _apply_additive_migrations(sync_conn) -> None:
     insp = inspect(sync_conn)
     tables = set(insp.get_table_names())
 
+    if "library_passages" in tables:
+        cols = {c["name"] for c in insp.get_columns("library_passages")}
+        if "position" not in cols:
+            sync_conn.execute(text("ALTER TABLE library_passages ADD COLUMN position INTEGER NOT NULL DEFAULT 0"))
+
     # Multi-tenant: which agent owns/voices a watcher. New column on an existing
     # table — create_all won't add it, so ALTER it in when missing.
     if "automations" in tables:

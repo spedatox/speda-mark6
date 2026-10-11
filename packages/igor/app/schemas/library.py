@@ -1,50 +1,56 @@
+"""Evidence and readiness returned by the Hall of Records."""
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-from datetime import datetime
 
-class LibraryCitationInfo(BaseModel):
-    id: str
-    document_title: str
-    document_id: str
-    revision_id: str
-    issue_date: Optional[str]
-    page: Optional[int]
-    section: Optional[str]
 
 class LibrarySearchResult(BaseModel):
     passage_id: str
     document_title: str
-    document_type: Optional[str]
+    document_type: str | None = None
     document_id: str
     revision_id: str
     content: str
-    page: Optional[int]
-    section: Optional[str]
-    issue_date: Optional[str]
-    score: float
+    page: int | None = None
+    section: str | None = None
+    issue_date: str | None = None
+    coverage_start: str | None = None
+    coverage_end: str | None = None
+    score: float = 0
     citation_id: str
+    citation_url: str
+    historical: bool = False
+
 
 class LibrarySearchResponse(BaseModel):
     status: str
     query_date: str
-    search_mode: str
-    results: List[LibrarySearchResult]
-    warnings: List[str] = Field(default_factory=list)
+    search_mode: str = "keyword"
+    results: list[LibrarySearchResult] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
 
 class LibraryListResult(BaseModel):
     id: str
     title: str
-    category: Optional[str]
-    type: Optional[str]
-    active_revision_id: Optional[str]
-    index_status: Optional[str]
+    category: str | None = None
+    type: str | None = None
+    active_revision_id: str | None = None
+    index_status: str
+    issue_date: str | None = None
+    coverage_start: str | None = None
+    coverage_end: str | None = None
+
 
 class LibraryListResponse(BaseModel):
-    documents: List[LibraryListResult]
+    documents: list[LibraryListResult] = Field(default_factory=list)
+    has_more: bool = False
+
 
 class LibraryReadResponse(BaseModel):
     document_id: str
-    revision_id: str
-    passages: List[str]
-    citation_ids: List[str]
+    revision_id: str | None = None
+    passages: list[str] = Field(default_factory=list)
+    citation_ids: list[str] = Field(default_factory=list)
+    results: list[LibrarySearchResult] = Field(default_factory=list)
     status: str
+    next_offset: int | None = None
+    warnings: list[str] = Field(default_factory=list)

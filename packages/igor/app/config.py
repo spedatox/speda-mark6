@@ -281,6 +281,11 @@ class Settings(BaseSettings):
     # vault and write only under /Speda and /Forge (server/auth.py there).
     hisar_base_url: str = "http://hisar:8600"
     hisar_machine_token: str = ""
+    hisar_library_sync_token: str = ""
+    hisar_library_reader_token: str = ""
+    library_owner_user_id: int = Field(default=1, ge=1)
+    library_max_bytes: int = Field(default=25 * 1024**2, ge=1, le=100 * 1024**2)
+    library_max_pages: int = Field(default=200, ge=1, le=1000)
 
     # Onyx — internal ticket tracking platform (client work, e-commerce, automations)
     onyx_api_url: str = "http://localhost:3000"

@@ -223,6 +223,7 @@ speda-mark-vi/
     │   ├── connections.py       # OAuth connections (Google, Notion)
     │   ├── files.py
     │   ├── import_chats.py
+    │   ├── library.py           # Iacon citation resolution and n8n-authenticated reconciliation
     │   ├── mail.py              # POST /mail/watch/{scan,seen} — n8n's LLM-free Gmail probe
     │   ├── web_watch.py         # POST /web/watch/{scan,ack} — n8n's LLM-free page-change probe
     │   │                        #   + GET /web/watch, DELETE /web/watch/{id} — owner-facing list/reset
@@ -236,6 +237,7 @@ speda-mark-vi/
     │   ├── base.py              # Skill ABC
     │   ├── memory.py            # Memory tool + recall_for_context/recall_sessions_for_context + MemoryRecallCache
     │   ├── memory_graph.py      # Bounded, read-only traversal of evidence-linked memory
+    │   ├── library.py           # Iacon Hall of Records: list/search/read bounded, cited reference evidence
     │   ├── observations.py      # record_observation / search_memory / forget_observation (the sourced-fact layer)
     │   ├── dispatch.py          # dispatch_agent / house_party tools
     │   ├── osint.py             # NightCrawler's threat-intel lookups (IP/URL/hash/breach/dark-web/crypto)
@@ -261,6 +263,10 @@ speda-mark-vi/
     │   ├── gpt_researcher.py
     │   └── shannon.py
     ├── services/
+    │   ├── library.py           # Owner/source-scoped retrieval, live authority checks and citation resolution
+    │   ├── library_indexer.py   # Replayable Hisar catalog sync and durable library_index jobs (no scheduler)
+    │   ├── library_extract.py   # Bounded UTF-8/CSV/text-PDF extraction; honest review states, no fake evidence
+    │   ├── hisar_library_client.py # App-owned scoped catalog client and size-limited original downloads
     │   ├── octavius.py          # Verified SQLite snapshots in the owner's Drive; manual restore staging
     │   ├── octavius_restore.py  # Owner-selected restore jobs and durable status on app.state
     │   ├── octavius_restore_host.py # Standalone host worker; stops Igor, swaps, restarts, rolls back
@@ -309,7 +315,10 @@ speda-mark-vi/
     │                            # news_item/news_quota/news_watch, notification, tool_call,
     │                            # worker_execution — operational executions, ordered events, queued input and completion receipts;
     │                            # route/place — map payloads the model references by id, never retypes)
+    │                            # library — Iacon sources, documents, immutable revisions, generations,
+    │                            # passages and hashed citations (reference corpus, separate from memory)
     ├── schemas/
+    │   ├── library.py          # Edition provenance, bounded evidence, readiness and continuation contracts
     │   ├── chat.py, sse.py, agent.py, trigger.py, health.py
     ├── websocket/
     │   ├── manager.py           # WebSocketManager — Optimus/Forge external peer connections ONLY

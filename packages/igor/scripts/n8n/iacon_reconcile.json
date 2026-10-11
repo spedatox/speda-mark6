@@ -1,0 +1,81 @@
+{
+  "name": "Iacon — Hall of Records reconciliation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "7,22,37,52 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "iacon-cron",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "n8n is the sole scheduler. This is a deterministic reconciliation request, not an agent trigger. Unchanged state spends zero model tokens."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://app:8000/library/reconcile?full=true",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.SPEDA_API_KEY }}"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "={{ $env.N8N_SECRET }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "iacon-reconcile",
+      "name": "Igor: reconcile Hall catalog",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 30000,
+      "notes": "Verify internal Igor URL and n8n environment credentials before activation. Requires X-API-Key plus X-N8N-Secret. Acceptance means every delivered event was mirrored and index work was durably queued; it does not mean extraction completed. The source cursor advances only after queue acceptance. Full manifest reconciliation repairs catalog drift and missed archive/revoke changes. The endpoint starts a background queue drain; the existing hourly task_queue_drain workflow handles later retries. No /trigger call or assistant message is needed."
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Igor: reconcile Hall catalog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "pinData": {},
+  "active": false
+}

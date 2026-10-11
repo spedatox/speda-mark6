@@ -28,6 +28,7 @@ majority of runs.
 | `octavius_backup.json` | *(nothing — it backs up)* | the backup **fails**; a successful one costs nothing |
 | `persistent_reminders.json` | *(nothing — it asks)* | never; asking and answering are free |
 | `task_queue_drain.json` | Post-turn work that failed or was orphaned | only when a job actually needs re-running |
+| `iacon_reconcile.json` | Missed Hall of Records catalog events and editions | never; reconciliation and keyword indexing use no model |
 | `ultron_wear_attendance.json` | A lecture ending unanswered | never; it pushes to the watch directly |
 | `onyx_watch.json` | Onyx ticket events (client deliverables) | a ticket event arrives |
 

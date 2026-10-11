@@ -199,11 +199,17 @@ async def lifespan(app: FastAPI):
     from app.skills.aircraft import TrackAircraftSkill
     await registry.register_skill(TrackAircraftSkill())
 
-    # IACON Library Skills (Tier 1)
+    # Iacon Hall of Records — app-owned catalog client, indexer and retrieval.
+    from app.services.library_indexer import indexer_from_settings
+    from app.services.library import LibraryService
+    library_indexer = indexer_from_settings()
+    library_service = LibraryService(library_indexer, n8n_secret=settings.n8n_secret)
+    app.state.library = library_service
+    app.state.library_indexer = library_indexer
     from app.skills.library import ListLibrarySkill, SearchLibrarySkill, ReadLibrarySkill
-    await registry.register_skill(ListLibrarySkill())
-    await registry.register_skill(SearchLibrarySkill())
-    await registry.register_skill(ReadLibrarySkill())
+    await registry.register_skill(ListLibrarySkill(library_service))
+    await registry.register_skill(SearchLibrarySkill(library_service))
+    await registry.register_skill(ReadLibrarySkill(library_service))
     # Weather desk — current conditions + forecast (Open-Meteo, keyless).
     # Read-only + network-gated.
     from app.skills.weather import WeatherSkill
@@ -515,9 +521,15 @@ async def lifespan(app: FastAPI):
 
     await reconcile_on_startup()
 
-    # ── 13. IACON Library Synchronization ─────────────────────────────────────
-    from app.services.library_indexer import sync_events
-    library_sync_task = asyncio.create_task(sync_events())
+    # One startup reconciliation, backed by durable jobs; n8n owns later timing.
+    async def reconcile_library_on_startup():
+        try:
+            await library_indexer.reconcile(full=True)
+            from app.services.task_queue import drain
+            await drain()
+        except Exception:
+            logger.exception("library_startup_reconciliation_failed")
+    library_sync_task = asyncio.create_task(reconcile_library_on_startup())
     app.state.library_sync_task = library_sync_task
 
     logger.info(
@@ -554,6 +566,8 @@ async def lifespan(app: FastAPI):
     await app.state.memory_cache.close()
     if hasattr(app.state, "library_sync_task"):
         app.state.library_sync_task.cancel()
+        await asyncio.gather(app.state.library_sync_task, return_exceptions=True)
+    await library_indexer.client.aclose()
     await sandbox_launcher.stop()
     for task in telegram_poll_tasks:
         task.cancel()

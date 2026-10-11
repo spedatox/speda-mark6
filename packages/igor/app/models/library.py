@@ -11,7 +11,7 @@ class LibrarySource(Base):
     id = Column(String, primary_key=True)  # Usually the owner's ID
     hisar_url = Column(String, nullable=False)
     sync_cursor = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), nullable=False)
 
 class LibraryDocument(Base):
     """Authoritative catalog mirror in Igor."""
@@ -60,7 +60,7 @@ class LibraryIndexGeneration(Base):
     status = Column(String, nullable=False)  # pending, processing, completed, failed
     fingerprint = Column(String, nullable=False) # e.g. text_extractor_v1 + embedding_model
     failure_details = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), nullable=False)
     completed_at = Column(DateTime, nullable=True)
 
 class LibraryPassage(Base):
@@ -71,12 +71,13 @@ class LibraryPassage(Base):
     generation_id = Column(String, ForeignKey("library_index_generations.id"), nullable=False)
     revision_id = Column(String, ForeignKey("library_revisions.id"), nullable=False)
     content = Column(String, nullable=False)
+    position = Column(Integer, default=0, nullable=False)
     page = Column(Integer, nullable=True)
     section = Column(String, nullable=True)
     coverage_start = Column(String, nullable=True)
     coverage_end = Column(String, nullable=True)
     needs_review = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), nullable=False)
 
 class LibraryEmbedding(Base):
     """Embeddings for passages."""
@@ -93,4 +94,4 @@ class LibraryCitation(Base):
     id = Column(String, primary_key=True)
     passage_id = Column(String, ForeignKey("library_passages.id"), nullable=False)
     excerpt_hash = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), nullable=False)

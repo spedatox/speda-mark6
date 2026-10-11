@@ -1,6 +1,10 @@
 # Hisar document library for SPEDA Mark VI
 
-Design proposal · 10 October 2026 · No runtime implementation or deployment in this change.
+Design proposal · 10 October 2026. The source implementation has since been
+rebuilt as **Iacon Hall of Records**. See [the implemented contract and verified
+limits](IACON_HALL_OF_RECORDS.md). The remainder of this document preserves the
+original design proposal; its OCR, vector, layout and UI plans are not a claim
+that those features shipped. Production deployment remains unverified.
 
 ## Decision
 

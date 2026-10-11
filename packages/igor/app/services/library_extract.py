@@ -1,77 +1,92 @@
+"""Bounded deterministic extraction for Iacon Hall of Records.
+
+Original text is evidence. Parser errors and unsupported OCR are never passages.
+"""
+import csv
 import io
-import re
-from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
 
-try:
-    import pypdf
-except ImportError:
-    pypdf = None
 
-# Reusing `services/attachments.py` logic where appropriate.
+class ExtractionError(ValueError):
+    pass
 
+
+@dataclass(frozen=True)
 class ExtractedPassage:
-    def __init__(self, content: str, page: Optional[int] = None, section: Optional[str] = None):
-        self.content = content
-        self.page = page
-        self.section = section
-        self.needs_review = False
+    content: str
+    page: int | None = None
+    section: str | None = None
+    needs_review: bool = False
 
-def chunk_text(text: str, max_length: int = 2000) -> List[str]:
-    """Very naive chunking by paragraphs/length."""
-    paragraphs = text.split("\n\n")
+
+def chunk_text(text: str, max_length: int = 2000) -> list[str]:
+    """Keep paragraph/line boundaries where possible; enforce the hard bound."""
+    if max_length < 64:
+        raise ValueError("Chunk limit must be at least 64 characters")
+    text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
     chunks = []
-    current = ""
-    for p in paragraphs:
-        if len(current) + len(p) > max_length:
-            if current:
-                chunks.append(current.strip())
-            current = p
-        else:
-            current += "\n\n" + p if current else p
-    if current:
-        chunks.append(current.strip())
+    while text:
+        end = min(len(text), max_length)
+        if end < len(text):
+            boundary = max(text.rfind("\n", 0, end), text.rfind(" ", 0, end))
+            if boundary >= end // 2:
+                end = boundary
+        chunk = text[:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        text = text[end:].lstrip()
     return chunks
 
-def extract_document_bytes(blob: bytes, mime_type: str) -> List[ExtractedPassage]:
-    """
-    Extracts text from bytes based on mime type, yielding bounded passages.
-    """
-    passages = []
-    
-    if mime_type == "text/plain" or mime_type.startswith("text/"):
-        text = blob.decode("utf-8", errors="replace")
-        chunks = chunk_text(text)
-        for chunk in chunks:
-            passages.append(ExtractedPassage(content=chunk))
-            
-    elif mime_type == "application/pdf":
-        if pypdf:
-            try:
-                reader = pypdf.PdfReader(io.BytesIO(blob))
-                for page_num, page in enumerate(reader.pages, start=1):
-                    page_text = page.extract_text() or ""
-                    if not page_text.strip():
-                        continue
-                    # Chunk large pages to avoid giant single passages
-                    chunks = chunk_text(page_text)
-                    for chunk in chunks:
-                        passages.append(ExtractedPassage(content=chunk, page=page_num))
-            except Exception as e:
-                p = ExtractedPassage(content=f"[PDF Extraction Failed: {e}]", page=1)
-                p.needs_review = True
-                passages.append(p)
-        else:
-            passages.append(ExtractedPassage(content="[PDF Content Extracted: pypdf not available]", page=1))
-        
-    elif mime_type in ["image/jpeg", "image/png"]:
-        # Stub for OCR
-        p = ExtractedPassage(content="[OCR Extracted Text from Image]")
-        p.needs_review = True
-        passages.append(p)
-        
-    else:
-        # Fallback
-        p = ExtractedPassage(content=f"Unsupported or binary format: {mime_type}")
-        passages.append(p)
 
+def extract_document_bytes(blob: bytes, mime_type: str, *, max_bytes: int = 25 * 1024**2,
+                           max_pages: int = 200, max_characters: int = 2_000_000) -> list[ExtractedPassage]:
+    if not blob or len(blob) > max_bytes:
+        raise ExtractionError("Original is empty or exceeds the extraction size limit")
+    passages = []
+    if mime_type == "application/pdf":
+        from pypdf import PdfReader
+        try:
+            if not blob.startswith(b"%PDF-"):
+                raise ExtractionError("Original is not a PDF")
+            reader = PdfReader(io.BytesIO(blob))
+            if reader.is_encrypted:
+                raise ExtractionError("Encrypted PDFs cannot be indexed")
+            if len(reader.pages) > max_pages:
+                raise ExtractionError("PDF exceeds the page limit")
+            total = 0
+            for number, page in enumerate(reader.pages, 1):
+                text = page.extract_text() or ""
+                total += len(text)
+                if total > max_characters:
+                    raise ExtractionError("Extracted text exceeds the character limit")
+                if not text.strip():
+                    raise ExtractionError(f"Page {number} has no extractable text; OCR or owner review is required")
+                passages.extend(ExtractedPassage(c, page=number) for c in chunk_text(text))
+        except ExtractionError:
+            raise
+        except Exception as exc:
+            raise ExtractionError("PDF could not be parsed") from exc
+    elif mime_type in {"text/plain", "text/markdown", "text/csv"}:
+        try:
+            text = blob.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ExtractionError("Text must be UTF-8 encoded") from exc
+        if "\x00" in text:
+            raise ExtractionError("Binary content cannot be indexed as text")
+        if len(text) > max_characters:
+            raise ExtractionError("Extracted text exceeds the character limit")
+        if mime_type == "text/csv":
+            rows = csv.reader(io.StringIO(text))
+            header = next(rows, [])
+            for number, row in enumerate(rows, 2):
+                line = " | ".join(f"{header[i] if i < len(header) else i + 1}: {v}" for i, v in enumerate(row))
+                passages.extend(ExtractedPassage(c, section=f"Row {number}") for c in chunk_text(line))
+        else:
+            passages.extend(ExtractedPassage(c) for c in chunk_text(text))
+    else:
+        raise ExtractionError(f"Extraction unavailable for {mime_type}; original retained")
+    if not passages:
+        raise ExtractionError("Original contains no extractable text")
+    if sum(len(p.content) for p in passages) > max_characters:
+        raise ExtractionError("Extracted text exceeds the character limit")
     return passages
