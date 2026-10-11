@@ -4,16 +4,18 @@ The catalog owns authority; Igor owns derived passages. Library material is
 untrusted source content and never becomes instructions or personal memory.
 """
 import datetime as dt
+import asyncio
+import math
 import hashlib
 import hmac
 import uuid
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from sqlalchemy import bindparam, or_, select, text
+from sqlalchemy import bindparam, func, or_, select, text
 
 from app.core.context import AgentContext
-from app.models.library import LibraryDocument, LibraryRevision, LibraryIndexGeneration, LibraryPassage, LibraryCitation
+from app.models.library import LibraryDocument, LibraryRevision, LibraryIndexGeneration, LibraryPassage, LibraryCitation, LibraryEmbedding
 from app.schemas.library import (
     LibraryListResult, LibraryListResponse, LibrarySearchResult, LibrarySearchResponse, LibraryReadResponse,
 )
@@ -105,6 +107,7 @@ class LibraryService:
             section=passage.section, issue_date=rev.issue_date, coverage_start=rev.coverage_start,
             coverage_end=rev.coverage_end, score=score, citation_id=citation_id,
             citation_url=f"/library/sources/{citation_id}", historical=historical,
+            needs_review=passage.needs_review,
         )
 
     async def search(self, context, query_text, doc_ids=None, *, category=None, doc_type=None,
@@ -142,7 +145,7 @@ class LibraryService:
                         warnings.append(f"{doc['title']}: edition does not cover {query_date}")
                         continue
                 status = await self._status(db, rid)
-                if status != "ready_keyword":
+                if status not in {"ready_keyword", "ready_ocr"}:
                     warnings.append(f"{doc['title']}: {status}")
                     continue
                 eligible[rid] = (doc, rev)
@@ -159,11 +162,11 @@ class LibraryService:
                     "ORDER BY rank, passage_id LIMIT :limit"
                 ).bindparams(bindparam("revisions", expanding=True), bindparam("generations", expanding=True))
                 rows = (await db.execute(statement, {"match": match, "revisions": list(eligible),
-                                                    "generations": generations, "limit": limit})).all()
+                                                    "generations": generations, "limit": min(32, limit * 4)})).all()
                 passage_ids = [r[0] for r in rows]
                 scores = {r[0]: -float(r[1]) for r in rows}
                 passages = list((await db.scalars(select(LibraryPassage).where(
-                    LibraryPassage.id.in_(passage_ids), LibraryPassage.needs_review.is_(False),
+                    LibraryPassage.id.in_(passage_ids),
                 ))).all())
                 passages.sort(key=lambda p: passage_ids.index(p.id))
                 mode = "keyword_bm25"
@@ -173,11 +176,27 @@ class LibraryService:
                 passages = list((await db.scalars(select(LibraryPassage).where(
                     LibraryPassage.revision_id.in_(eligible),
                     LibraryPassage.generation_id.in_(generations),
-                    LibraryPassage.needs_review.is_(False),
                     or_(*(LibraryPassage.content.ilike(f"%{t}%", escape="\\") for t in terms)),
                 ).order_by(LibraryPassage.id).limit(limit))).all())
                 mode = "literal_fallback"
                 warnings.append("BM25 is unavailable on this database; literal search only")
+            if self.indexer.embedder is not None:
+                ranked = await self._semantic(db, query_text, eligible, generations, warnings)
+                if ranked is not None:
+                    # Reciprocal ranks compare modalities without conflating BM25 and cosine scales.
+                    fused = {}
+                    candidates = {p.id: p for p in passages}
+                    for rank, passage in enumerate(passages, 1):
+                        fused[passage.id] = 1 / (60 + rank)
+                    for rank, (passage, similarity) in enumerate(ranked, 1):
+                        candidates[passage.id] = passage
+                        fused[passage.id] = fused.get(passage.id, 0) + 1 / (60 + rank)
+                    passages = sorted(candidates.values(), key=lambda p: (-fused[p.id], p.id))
+                    scores = fused
+                    mode = "hybrid_rrf"
+            passages = passages[:limit]
+            if any(p.needs_review for p in passages):
+                warnings.append("OCR transcription requires verification against the original; it can contain recognition errors")
             results = []
             for passage in passages:
                 doc, rev = eligible[passage.revision_id]
@@ -186,6 +205,46 @@ class LibraryService:
             await db.commit()
         return LibrarySearchResponse(status="success" if results else "no_matches",
                                      query_date=query_date, search_mode=mode, results=results, warnings=warnings)
+
+    async def _semantic(self, db, query, eligible, generations, warnings):
+        cap = self.indexer.semantic_max_passages
+        rows = (await db.execute(select(LibraryPassage, LibraryEmbedding).join(LibraryEmbedding).where(
+            LibraryPassage.revision_id.in_(eligible), LibraryPassage.generation_id.in_(generations),
+            LibraryEmbedding.model_fingerprint == self.indexer.embedder.fingerprint,
+        ).order_by(LibraryPassage.id).limit(cap + 1))).all()
+        if not rows:
+            warnings.append("Semantic indexing is pending; keyword retrieval remains available")
+            return None
+        if len(rows) > cap:
+            warnings.append("Narrow the document scope for semantic search; keyword retrieval remains available")
+            return None
+        try:
+            from app.services.library_embeddings import normalized
+            response = await self.indexer.embedder.embed([query])
+            if len(response) != 1:
+                raise ValueError("Semantic query embedding omitted an input")
+            query_vector = normalized(response[0])
+
+            def rank_vectors():
+                ranked = []
+                for passage, embedding in rows:
+                    vector = normalized(embedding.vector)
+                    if len(vector) != len(query_vector):
+                        raise ValueError("Embedding dimensions changed")
+                    score = math.fsum(a * b for a, b in zip(vector, query_vector))
+                    if score >= self.indexer.semantic_min_similarity:
+                        ranked.append((passage, score))
+                return sorted(ranked, key=lambda row: (-row[1], row[0].id))[:32]
+
+            ranked = await asyncio.to_thread(rank_vectors)
+            count = await db.scalar(select(func.count()).select_from(LibraryPassage).where(
+                LibraryPassage.revision_id.in_(eligible), LibraryPassage.generation_id.in_(generations)))
+            if len(rows) < count:
+                warnings.append("Some authorized passages await semantic indexing; keyword results remain included")
+            return ranked
+        except Exception:
+            warnings.append("Semantic retrieval is unavailable; keyword retrieval remains available")
+            return None
 
     async def read_passage(self, context, document_id, page=None, *, revision_id=None, offset=0, limit=8):
         records = await self._catalog(context, document_ids=[document_id], include_archived=bool(revision_id))
@@ -200,11 +259,10 @@ class LibraryService:
                 return LibraryReadResponse(document_id=document_id, revision_id=rid,
                                            status="pending" if rid == doc["active_revision_id"] else "not_found",
                                            warnings=["Edition metadata has not synchronized"])
-            if status != "ready_keyword":
+            if status not in {"ready_keyword", "ready_ocr"}:
                 return LibraryReadResponse(document_id=document_id, revision_id=rid, status=status)
             query = select(LibraryPassage).where(
                 LibraryPassage.revision_id == rid, LibraryPassage.generation_id == self.indexer.generation_id(rid),
-                LibraryPassage.needs_review.is_(False),
             )
             if page is not None:
                 query = query.where(LibraryPassage.page == page)
@@ -215,7 +273,9 @@ class LibraryService:
             await db.commit()
         return LibraryReadResponse(document_id=document_id, revision_id=rid, status="success" if results else "no_matches",
                                    passages=[r.content for r in results], citation_ids=[r.citation_id for r in results],
-                                   results=results, next_offset=offset+limit if len(passages) > limit else None)
+                                   results=results, next_offset=offset+limit if len(passages) > limit else None,
+                                   warnings=["OCR transcription requires verification against the original"]
+                                   if any(p.needs_review for p in passages[:limit]) else [])
 
     async def citation_source(self, citation_id):
         async with self.sessions() as db:
@@ -237,6 +297,7 @@ class LibraryService:
             return {"citation_id": citation.id, "document_id": doc.id, "document_title": metadata["title"],
                     "revision_id": revision.id, "issue_date": revision.issue_date,
                     "content": passage.content, "page": passage.page, "section": passage.section,
+                    "needs_review": passage.needs_review,
                     "historical": revision.id != metadata["active_revision_id"],
                     "archived": metadata["is_archived"]}
 

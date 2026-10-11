@@ -193,8 +193,13 @@ def _handlers() -> dict:
         from app.services.library_indexer import run_index_job
         await run_index_job(user_id, payload)
 
+    async def _library_embed(session_id, request_id, user_id, model, payload):
+        from app.services.library_indexer import run_embedding_job
+        await run_embedding_job(user_id, payload)
+
     return {
         "library_index": _library_index,
+        "library_embed": _library_embed,
         "extract_facts": _extract_facts,
         "analyze_patterns": _analyze_patterns,
         "analyze_artifact": _analyze_artifact,

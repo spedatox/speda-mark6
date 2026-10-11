@@ -567,7 +567,7 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, "library_sync_task"):
         app.state.library_sync_task.cancel()
         await asyncio.gather(app.state.library_sync_task, return_exceptions=True)
-    await library_indexer.client.aclose()
+    await library_indexer.aclose()
     await sandbox_launcher.stop()
     for task in telegram_poll_tasks:
         task.cancel()

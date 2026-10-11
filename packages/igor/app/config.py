@@ -286,6 +286,12 @@ class Settings(BaseSettings):
     library_owner_user_id: int = Field(default=1, ge=1)
     library_max_bytes: int = Field(default=25 * 1024**2, ge=1, le=100 * 1024**2)
     library_max_pages: int = Field(default=200, ge=1, le=1000)
+    library_ocr_enabled: bool = False
+    library_ocr_languages: str = Field(default="tur+eng", pattern=r"^[a-z]{3}(?:\+[a-z]{3}){0,4}$")
+    library_ocr_timeout_seconds: int = Field(default=300, ge=1, le=600)
+    library_semantic_enabled: bool = False
+    library_semantic_max_passages: int = Field(default=5000, ge=1, le=10000)
+    library_semantic_min_similarity: float = Field(default=0.25, ge=0, le=1)
 
     # Onyx — internal ticket tracking platform (client work, e-commerce, automations)
     onyx_api_url: str = "http://localhost:3000"

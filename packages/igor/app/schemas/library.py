@@ -18,6 +18,7 @@ class LibrarySearchResult(BaseModel):
     citation_id: str
     citation_url: str
     historical: bool = False
+    needs_review: bool = False
 
 
 class LibrarySearchResponse(BaseModel):
