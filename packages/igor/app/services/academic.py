@@ -36,9 +36,9 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.clock import owner_now
+from app.core.clock import owner_now, utc_now
 from app.models.academic import AttendanceEntry, CourseSlot, Device, TermConfig
-from app.schemas.academic import CourseOut, ScheduleOut, TermOut
+from app.schemas.academic import CourseOut, OwnerAttendanceRequest, ScheduleOut, TermOut
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +243,67 @@ async def ingest_attendance(
 async def list_attendance(db: AsyncSession) -> list[AttendanceEntry]:
     result = await db.execute(select(AttendanceEntry).order_by(AttendanceEntry.date))
     return list(result.scalars().all())
+
+
+async def record_owner_attendance(
+    db: AsyncSession, request: OwnerAttendanceRequest, *, now: datetime | None = None,
+) -> dict:
+    """Validate the complete owner-directed batch, then use the watch's upsert path.
+
+    Slot identity and subject code come from the current timetable. Conflicting
+    answers require an explicit correction; matching retries do not create a
+    newer timestamp that could mask a later watch answer.
+    """
+    now = now or owner_now()
+    term = await get_active_term(db)
+    if term is None:
+        raise ValueError("No active term is configured. Read the timetable before recording attendance.")
+    slots = await list_slots(db)
+    by_key = {occ["key"]: occ for occ in occurrences(slots, term)}
+    existing = {f"{e.slot_id}@{e.date.isoformat()}": e for e in await list_attendance(db)}
+    seen: set[str] = set()
+    changes: list[dict] = []
+    receipts: list[dict] = []
+    recorded_at = int(utc_now().timestamp() * 1000)
+    for record in request.records:
+        key = f"{record.slot_id}@{record.date.isoformat()}"
+        if key in seen:
+            raise ValueError(f"Duplicate occurrence {key}. Pass each teaching hour only once.")
+        seen.add(key)
+        occurrence = by_key.get(key)
+        if occurrence is None:
+            raise ValueError(f"{key} is not a scheduled teaching hour in the active term (including holidays).")
+        slot = occurrence["slot"]
+        start = datetime.combine(record.date, datetime.strptime(slot.start_time, "%H:%M").time())
+        if record.status != "cancelled" and start > now:
+            raise ValueError(f"{key} has not started. A plan to attend or skip is not an attendance answer.")
+        previous = existing.get(key)
+        if previous and previous.status != record.status and not request.correct_existing:
+            raise ValueError(
+                f"{key} already says {previous.status}. Use correct_existing only if the owner "
+                "explicitly asked to correct that answer."
+            )
+        unchanged = previous is not None and previous.status == record.status
+        receipts.append({
+            "slot_id": slot.slot_id, "course_code": slot.code, "course_name": slot.name,
+            "date": record.date.isoformat(), "time": f"{slot.start_time} - {slot.end_time}",
+            "status": record.status, "result": "unchanged" if unchanged else "saved",
+        })
+        if not unchanged:
+            changes.append({
+                "slot_id": slot.slot_id, "course_code": slot.code, "date": record.date,
+                "status": record.status,
+                "recorded_at": max(recorded_at, previous.recorded_at + 1) if previous else recorded_at,
+            })
+    if changes:
+        accepted = await ingest_attendance(db, changes, source="owner_chat")
+        if len(accepted) != len(changes):
+            accepted_keys = set(accepted)
+            for receipt in receipts:
+                key = f"{receipt['slot_id']}@{receipt['date']}"
+                if receipt["result"] == "saved" and key not in accepted_keys:
+                    receipt["result"] = "not_saved_newer_answer"
+    return {"records": receipts, "watch_sync": "Available to the watch on its next attendance sync."}
 
 
 # ── The verdict ─────────────────────────────────────────────────────────────

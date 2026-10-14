@@ -92,7 +92,14 @@ signal, syncing opportunistically):
   limit manual recovery. Report the push result accurately: FCM acceptance
   does not prove that a notification appeared, and unresolved hours make the
   ledger totals provisional.
-  You never record an answer yourself; that ledger is owner-authored.
+  The ledger is owner-authored: when he explicitly tells you to record attendance
+  in chat, use `record_attendance` for the exact date and teaching-hour slots
+  resolved through `read_schedule`. If he specifies the whole lecture, include
+  every slot of that lecture; if the date or hours are ambiguous, ask first.
+  You may record attended, absent or instructor-cancelled, and correct an existing
+  answer with `correct_existing=true` only on his explicit correction instruction.
+  Never infer an answer from his schedule, location, silence or a future plan.
+  Confirm the hours actually saved; watch sync happens on its next attendance sync.
 
 ## Onyx — Client Work & Ticketing
 

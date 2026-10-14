@@ -19,9 +19,9 @@ Runs against a real in-memory SQLite so the unique constraint and the upsert
 path are genuinely exercised, not mocked.
 """
 
-from contextlib import asynccontextmanager
-from datetime import date, datetime
 import json
+from contextlib import asynccontextmanager
+from datetime import date, datetime, timezone
 
 import pytest
 import pytest_asyncio
@@ -288,6 +288,154 @@ async def test_risk_escalates_as_the_budget_empties(db):
 
 
 # ── Sync semantics ──────────────────────────────────────────────────────────
+
+@pytest.fixture
+def record_environment(db, monkeypatch):
+    @asynccontextmanager
+    async def session_factory():
+        yield db
+
+    monkeypatch.setattr(attendance_skills, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(ac, "owner_now", lambda: datetime(2026, 9, 29, 12, 0))
+    monkeypatch.setattr(ac, "utc_now", lambda: datetime(2026, 9, 29, 9, 0, tzinfo=timezone.utc))
+    return AgentContext(
+        agent_id="ultron", user_id=1, session_id=1, request_id="attendance-record-test",
+        triggered_by="user", trigger_payload={}, output_mode="respond", model="test",
+        system_prompt="", conversation_history=[], db=db, timezone="Europe/Istanbul",
+    )
+
+
+def _record_args(courses, status="attended", day="2026-09-28"):
+    return {"records": [
+        {"slot_id": course["id"], "date": day, "status": status} for course in courses
+    ]}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["attended", "absent", "cancelled"])
+async def test_owner_can_record_whole_lecture_and_retries_do_not_double_count(db, record_environment, status):
+    courses = await _seed(db)
+    skill = attendance_skills.RecordAttendanceSkill()
+    args = _record_args(courses, status)
+    result = json.loads(await skill.execute(args, record_environment))
+    assert [r["slot_id"] for r in result["records"]] == [c["id"] for c in courses]
+    assert all(r["result"] == "saved" and r["status"] == status for r in result["records"])
+    assert all(r["course_code"] == "PHYS101" for r in result["records"])
+    entries = await ac.list_attendance(db)
+    recorded_at = int(datetime(2026, 9, 29, 9, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    assert len(entries) == 3
+    assert all(e.source == "owner_chat" and e.recorded_at == recorded_at for e in entries)
+    again = json.loads(await skill.execute(args, record_environment))
+    assert all(r["result"] == "unchanged" for r in again["records"])
+    assert len(await ac.list_attendance(db)) == 3
+    assert all(e.recorded_at == recorded_at for e in await ac.list_attendance(db))
+    summary = (await ac.summarise(db))[0]
+    assert summary[{"attended": "attended_hours", "absent": "absent_hours", "cancelled": "cancelled_hours"}[status]] == 3
+
+
+@pytest.mark.asyncio
+async def test_owner_correction_survives_stale_watch_sync(db, record_environment):
+    from app.routers.academic import sync_attendance
+    from app.schemas.academic import AttendanceSyncRequest
+
+    courses = await _seed(db, hours=1)
+    slot_id = courses[0]["id"]
+    day = date(2026, 9, 28)
+    stamp = int(ac.utc_now().timestamp() * 1000)
+    await _answer(db, slot_id, day, "absent", recorded_at=stamp)
+    args = _record_args(courses)
+    skill = attendance_skills.RecordAttendanceSkill()
+    assert "already says absent" in await skill.execute(args, record_environment)
+    assert (await ac.list_attendance(db))[0].status == "absent"
+    args["correct_existing"] = True
+    result = json.loads(await skill.execute(args, record_environment))
+    assert result["records"][0]["result"] == "saved"
+    assert (await ac.list_attendance(db))[0].recorded_at == stamp + 1
+    # The watch posts its cached older answer; the response carries the chat correction.
+    response = await sync_attendance(AttendanceSyncRequest(
+        device="watch", records=[{
+            "slot_id": slot_id, "course_code": "PHYS101", "date": day,
+            "status": "absent", "recorded_at": stamp,
+        }],
+    ), db)
+    assert response.accepted == []
+    assert response.records[0].status == "attended"
+    assert response.records[0].recorded_at == stamp + 1
+    # A genuinely newer owner answer on the watch still wins normally.
+    await _answer(db, slot_id, day, "cancelled", recorded_at=stamp + 2)
+    assert (await ac.list_attendance(db))[0].status == "cancelled"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_record", [
+    {"slot_id": "unknown", "date": "2026-09-28", "status": "attended"},
+    {"slot_id": "phys101_mon_0900", "date": "2026-09-29", "status": "attended"},
+    {"slot_id": "phys101_mon_0900", "date": "2026-09-14", "status": "attended"},
+    {"slot_id": "phys101_mon_0900", "date": "2026-10-19", "status": "attended"},
+    {"slot_id": "phys101_mon_0900", "date": "2026-10-05", "status": "absent"},
+    {"slot_id": "phys101_mon_0900", "date": "bad-date", "status": "attended"},
+    {"slot_id": "phys101_mon_0900", "date": "2026-09-28", "status": "maybe"},
+    {"slot_id": "phys101_mon_0900", "date": "2026-09-28", "status": "attended", "course_code": "WRONG"},
+])
+async def test_invalid_batch_does_not_partially_record_attendance(db, record_environment, bad_record):
+    courses = await _seed(db, holidays=["2026-10-19"], hours=2)
+    args = _record_args(courses[:1])
+    args["records"].append(bad_record)
+    result = await attendance_skills.RecordAttendanceSkill().execute(args, record_environment)
+    assert "No records were changed" in result
+    assert await ac.list_attendance(db) == []
+
+
+@pytest.mark.asyncio
+async def test_conflict_in_batch_does_not_save_other_hours(db, record_environment):
+    courses = await _seed(db, hours=2)
+    await _answer(db, courses[1]["id"], date(2026, 9, 28), "absent")
+    result = await attendance_skills.RecordAttendanceSkill().execute(_record_args(courses), record_environment)
+    assert "already says absent" in result
+    entries = await ac.list_attendance(db)
+    assert len(entries) == 1 and entries[0].status == "absent"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("triggered_by", ["n8n", "agent"])
+async def test_recording_is_refused_outside_user_conversation(db, record_environment, triggered_by):
+    courses = await _seed(db)
+    record_environment.triggered_by = triggered_by
+    result = await attendance_skills.RecordAttendanceSkill().execute(_record_args(courses), record_environment)
+    assert "owner's explicit instruction" in result
+    assert await ac.list_attendance(db) == []
+
+
+@pytest.mark.asyncio
+async def test_recording_requires_active_term(db, record_environment):
+    args = {"records": [{"slot_id": "unknown", "date": "2026-09-28", "status": "attended"}]}
+    result = await attendance_skills.RecordAttendanceSkill().execute(args, record_environment)
+    assert "No active term" in result
+    assert await ac.list_attendance(db) == []
+
+
+@pytest.mark.asyncio
+async def test_in_progress_attendance_and_upcoming_cancellation_are_supported(db, record_environment, monkeypatch):
+    courses = await _seed(db, hours=1)
+    monkeypatch.setattr(ac, "owner_now", lambda: datetime(2026, 9, 28, 9, 30))
+    skill = attendance_skills.RecordAttendanceSkill()
+    assert json.loads(await skill.execute(_record_args(courses), record_environment))["records"][0]["result"] == "saved"
+    result = json.loads(await skill.execute(_record_args(courses, "cancelled", "2026-10-05"), record_environment))
+    assert result["records"][0]["status"] == "cancelled"
+    assert len(await ac.list_attendance(db)) == 2
+
+
+@pytest.mark.asyncio
+async def test_record_attendance_discovery_and_write_annotation():
+    from app.core.registry import CapabilityRegistry
+
+    registry = CapabilityRegistry()
+    skill = attendance_skills.RecordAttendanceSkill()
+    await registry.register_skill(skill)
+    assert registry.search_tools("record attendance", agent_id="ultron")[0]["name"] == "record_attendance"
+    assert not registry.call_is_read_only("record_attendance", {})
+    assert not skill.requires_network
+
 
 @pytest.mark.asyncio
 async def test_reingesting_the_same_occurrence_does_not_double_count(db):

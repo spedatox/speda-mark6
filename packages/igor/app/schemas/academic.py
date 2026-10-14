@@ -11,8 +11,9 @@ because everything keeps working until the timetable changes.
 """
 
 from datetime import date as date_cls
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ── Schedule (Igor → watch) ─────────────────────────────────────────────────
@@ -65,6 +66,21 @@ class AttendanceRecordOut(BaseModel):
     date: str
     status: str
     recorded_at: int
+
+
+class OwnerAttendanceRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slot_id: str = Field(min_length=1, max_length=96)
+    date: date_cls
+    status: Literal["attended", "absent", "cancelled"]
+
+
+class OwnerAttendanceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    records: list[OwnerAttendanceRecord] = Field(min_length=1, max_length=200)
+    correct_existing: bool = False
 
 
 class AttendanceSyncResponse(BaseModel):

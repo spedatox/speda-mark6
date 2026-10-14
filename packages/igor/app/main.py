@@ -250,19 +250,21 @@ async def lifespan(app: FastAPI):
         from app.skills.transit import BusArrivalsSkill
         await registry.register_skill(BusArrivalsSkill())
 
-    # Academic desk — Ultron's course attendance ledger, written from the watch
-    # (Ultron Wear) and read back here. check_attendance is read-only and
+    # Academic desk — Ultron's course attendance ledger, written from Ultron Wear
+    # or an explicit owner answer in chat via record_attendance, and read back
+    # here. check_attendance is read-only and
     # unrestricted so Speda can answer "kaç hakkım kaldı" without a dispatch;
     # ask_attendance is the push side, normally driven by the n8n per-lecture
     # trigger. read_schedule exposes the complete current timetable and stable
     # slot IDs before edits. save_schedule is the other direction — the owner's timetable,
     # authored in chat, replacing what the watch caches — and pushes a resync
     # over the same FCM channel ask_attendance uses. See docs/ULTRON_WEAR.md.
-    from app.skills.attendance import AskAttendanceSkill, AttendanceStatusSkill
+    from app.skills.attendance import AskAttendanceSkill, AttendanceStatusSkill, RecordAttendanceSkill
     from app.skills.course_memory import CourseMemorySkill, ReadCourseMemorySkill
     from app.skills.schedule import ReadScheduleSkill, SaveScheduleSkill
     await registry.register_skill(AttendanceStatusSkill())
     await registry.register_skill(AskAttendanceSkill())
+    await registry.register_skill(RecordAttendanceSkill())
     await registry.register_skill(CourseMemorySkill())
     await registry.register_skill(ReadCourseMemorySkill())
     await registry.register_skill(ReadScheduleSkill())
