@@ -27,7 +27,8 @@ def check_course_identity(path: str, before: str | None, after: str | None, evid
     An owner correction may change an old heading. Agent notes cannot rename
     the course or silently translate its name. A new optional name must appear
     literally beside the code in supporting evidence; otherwise use a neutral
-    code-only record. The admission reviewer still checks semantic support.
+    code-only record. Filling that neutral name preserves the code and notes.
+    The admission reviewer still checks semantic support.
     """
     if not is_course_path(path):
         return
@@ -37,7 +38,9 @@ def check_course_identity(path: str, before: str | None, after: str | None, evid
     expected = path.rsplit("/", 1)[-1][:-3]
     if code != expected:
         raise ValueError("Course heading and path code disagree. Nothing saved; resolve the code from owner evidence.")
-    if allow_name_correction:
+    previous = course_heading(before) if before else None
+    naming_neutral_record = previous is None or previous[1] in ("", "Course record")
+    if allow_name_correction and not naming_neutral_record:
         owner_quotes = [item for item in evidence if item.get("source_authority") == "owner_statement"]
         if not name or not any(
             re.search(rf"(?<!\w){re.escape(code)}(?!\w)", str(item.get("quote", "")), re.IGNORECASE)
@@ -46,11 +49,11 @@ def check_course_identity(path: str, before: str | None, after: str | None, evid
         ):
             raise ValueError("A name correction requires the code and exact new name in a literal owner statement; legacy course documents cannot authorize it.")
     if before:
-        previous = course_heading(before)
         if (code, name) != previous:
-            if previous[0] != code or not allow_name_correction:
+            filling_name = previous[0] == code and previous[1] in ("", "Course record") and bool(name)
+            if previous[0] != code or (not allow_name_correction and not filling_name):
                 raise ValueError("Course identity is fixed for notes. Use record_course_memory operation=confirm_identity with explicit owner evidence; do not rename or translate it while appending notes.")
-    elif name and name != "Course record":
+    if name and name != "Course record" and naming_neutral_record:
         supported = any(
             re.search(rf"(?<!\w){re.escape(code)}(?!\w)", str(item.get("quote", "")), re.IGNORECASE)
             and normalized_name(name) in normalized_name(str(item.get("quote", "")))

@@ -125,6 +125,57 @@ async def test_near_verbatim_message_quote_is_canonicalized_to_source(sessions):
     assert evidence[0]["quote"] == body
 
 
+async def test_named_tool_evidence_is_session_scoped_pinned_and_never_uses_stale_matches(sessions):
+    from app.models.session import Session
+    from app.models.tool_call import ToolCall
+    async with sessions() as db:
+        owner = Session(user_id=1, agent_id="ultron", triggered_by="user", model_used="test")
+        other_chat = Session(user_id=1, agent_id="ultron", triggered_by="user", model_used="test")
+        private = Session(user_id=2, agent_id="ultron", triggered_by="user", model_used="test")
+        automated = Session(user_id=1, agent_id="ultron", triggered_by="n8n", model_used="test")
+        db.add_all([owner, other_chat, private, automated])
+        await db.flush()
+        def call(session, result, **kwargs):
+            return ToolCall(session_id=session.id, request_id="r", tool_name="read_schedule",
+                            tool_input={}, tool_result=result, **kwargs)
+        latest = call(owner, "MIS231 Data Structures; instructor Current Teacher.")
+        db.add_all([call(owner, "MIS231 Old Course; instructor Former Teacher."), latest,
+                    call(owner, "Error: missing schedule", error="failed"),
+                    call(other_chat, "Other chat course"), call(private, "Private course"),
+                    call(automated, "Automated course")])
+        await db.commit()
+        evidence = [{"ref": "tool_call:read_schedule", "quote": "Current Teacher"}]
+        resolved = await resolve_evidence(db, 1, evidence, session_id=owner.id)
+        assert resolved[0]["ref"] == f"tool_call:{latest.id}"
+        assert resolved[0]["source_authority"] == "tool_result"
+        assert (await resolve_evidence(db, 1, resolved))[0]["source_sha256"] == resolved[0]["source_sha256"]
+        for quote in ("Former Teacher", "Other chat course", "Private course", "Invented course"):
+            with pytest.raises(ValueError, match="Quotation is not present"):
+                await resolve_evidence(db, 1, [{"ref": "tool_call:read_schedule", "quote": quote}], session_id=owner.id)
+        for user_id, session_id in ((1, None), (1, private.id), (2, owner.id), (1, automated.id)):
+            with pytest.raises(ValueError):
+                await resolve_evidence(db, user_id, evidence, session_id=session_id)
+
+
+async def test_code_only_course_cannot_receive_an_unsupported_name(sessions, monkeypatch):
+    from app.skills.course_memory import CourseMemorySkill, _new_course
+    reviewer = AsyncMock(return_value="approved")
+    monkeypatch.setattr("app.services.memory_admission.admit", reviewer)
+    async with sessions() as db:
+        path = "/memories/academic/courses/2026-2027-fall/MIS231.md"
+        before = _new_course("MIS231", "")
+        db.add(MemoryFile(user_id=1, path=path, content=before))
+        await db.commit()
+        ctx = SimpleNamespace(db=db, user_id=1, session_id=1, agent_id="ultron", request_id="r", model="test")
+        result = await CourseMemorySkill().execute({"term": "2026-2027-fall", "course_code": "MIS231",
+            "course_name": "Invented course", "section": "Overview", "entry": "Course details.",
+            "evidence": [{"ref": path, "quote": "MIS231"}]}, ctx)
+        assert "literal evidence" in result
+        assert (await db.execute(select(MemoryFile.content).where(MemoryFile.path == path))).scalar_one() == before
+        assert not (await db.execute(select(MemoryWriteReceipt))).scalars().all()
+    reviewer.assert_not_called()
+
+
 async def test_reviewer_gets_owner_chat_and_successful_tool_trace_from_active_session(sessions):
     """A stale/incorrect `message:latest` citation must not hide the real trace."""
     from app.models.message import Message

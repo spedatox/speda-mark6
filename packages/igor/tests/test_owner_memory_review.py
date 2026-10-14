@@ -282,12 +282,17 @@ async def test_large_directory_read_has_continuation_and_no_unbounded_payload(se
         assert len(result) <= 6500 and "Continue with view_range" in result
 
 
-def test_confirmation_requires_owner_authority_even_for_new_course():
+def test_confirmation_requires_owner_authority_for_renames_but_not_first_names():
     from app.services.course_identity import check_course_identity
+    path = "/memories/academic/courses/2026-2027-fall/ABC243.md"
+    evidence = [{"quote": "ABC243 General Accounting", "source_authority": "tool_result"}]
+    for before in (None, _new_course("ABC243", "")):
+        check_course_identity(path, before, _new_course("ABC243", "General Accounting"),
+                              evidence, allow_name_correction=True)
     with pytest.raises(ValueError, match="literal owner statement"):
-        check_course_identity("/memories/academic/courses/2026-2027-fall/ABC243.md",
-            None, _new_course("ABC243", "General Accounting"),
-            [{"quote": "ABC243 General Accounting", "source_authority": "document"}],
+        check_course_identity(path,
+            _new_course("ABC243", "Financial Accounting"), _new_course("ABC243", "General Accounting"),
+            evidence,
             allow_name_correction=True)
 
 

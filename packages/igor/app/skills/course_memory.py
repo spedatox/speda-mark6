@@ -86,16 +86,20 @@ class CourseMemorySkill(Skill):
         "courses and semesters never mix. Do NOT use it for attendance or the timetable; those "
         "remain in the structured academic ledger. Returns the exact memory path written, or a "
         "clear validation error without saving anything."
-        " Use operation=confirm_identity only when the owner explicitly corrects "
-        "the code's exact name; it preserves notes and requires literal owner evidence."
+        " For course names and instructors already in the timetable, read_schedule is valid "
+        "evidence: cite tool_call:read_schedule with the exact result quotation. A code-only "
+        "record can receive its evidenced name while appending an Overview note."
+        " Use operation=confirm_identity for a name-only update; filling a code-only "
+        "heading accepts retrieved evidence, while changing an already named identity "
+        "requires the owner's explicit correction. It preserves all notes."
     )
     input_schema = {
         "type": "object",
         "properties": {
-            "operation": {"type": "string", "enum": ["append", "confirm_identity"], "description": "Defaults to append. confirm_identity changes only a code's name from explicit owner evidence, preserving all notes and the term."},
+            "operation": {"type": "string", "enum": ["append", "confirm_identity"], "description": "Defaults to append. confirm_identity changes only the heading, preserving notes and term. Filling a code-only heading accepts retrieved evidence; renaming an already named course requires explicit owner evidence."},
             "term": {"type": "string", "description": "Term as YYYY-YYYY-spring, -summer, or -fall; e.g. 2026-2027-spring."},
             "course_code": {"type": "string", "description": "Course code from the timetable, e.g. ATA101."},
-            "course_name": {"type": "string", "description": "Optional exact name quoted with the course code in evidence. Never guess or translate; omit when unknown. Existing identities cannot be renamed by this tool."},
+            "course_name": {"type": "string", "description": "Optional exact name quoted with the course code in evidence. Can fill a code-only record from read_schedule evidence. Never guess or translate; named identities require confirm_identity to change."},
             "section": {"type": "string", "enum": ["Overview", "Materials", "Assessments", "Lecture Log"], "description": "Where this knowledge belongs."},
             "entry": {"type": "string", "description": "One factual, concise note to retain."},
             "date": {"type": "string", "description": "Required for Lecture Log: the lecture date as YYYY-MM-DD. Defaults to today for a live user turn."},
@@ -108,6 +112,8 @@ class CourseMemorySkill(Skill):
         operation = args.get("operation", "append")
         if operation not in ("append", "confirm_identity"):
             return "operation must be append or confirm_identity."
+        if "\n" in (args.get("course_name") or "") or "\r" in (args.get("course_name") or ""):
+            return "course_name must be the exact single-line course name."
         section = (args.get("section") or "").strip()
         if operation == "append" and section not in _SECTIONS:
             return "section must be Overview, Materials, Assessments, or Lecture Log."
@@ -125,16 +131,22 @@ class CourseMemorySkill(Skill):
             MemoryFile.user_id == context.user_id, MemoryFile.path == path
         ))).scalar_one_or_none()
         before = row.content if row else ""
+        existing_name = ""
         if before and args.get("course_name") and operation == "append":
             from app.services.course_identity import course_heading, normalized_name
             try:
                 _, existing_name = course_heading(before)
             except ValueError as exc:
                 return str(exc)
-            if normalized_name(args["course_name"]) != normalized_name(existing_name):
+            if existing_name not in ("", "Course record") and normalized_name(args["course_name"]) != normalized_name(existing_name):
                 return "Course name conflicts with the saved identity. Use confirm_identity only with explicit owner evidence. Nothing saved."
         base = before or _new_course(code, (args.get("course_name") or "").strip())
         try:
+            if before and operation == "append" and args.get("course_name") and existing_name in ("", "Course record"):
+                lines = base.splitlines(keepends=True)
+                heading = next(i for i, line in enumerate(lines) if line.startswith("# "))
+                lines[heading] = f"# {code} — {args['course_name'].strip()}\n"
+                base = "".join(lines)
             if operation == "confirm_identity":
                 name = (args.get("course_name") or "").strip()
                 if not name or "\n" in name:

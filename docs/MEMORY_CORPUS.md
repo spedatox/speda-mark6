@@ -107,8 +107,20 @@ need no model approval; this operator path is never exposed as an agent tool.
 Agent course writes preserve exact code, term and heading. A new optional name
 must occur literally with its code in source evidence; otherwise use a neutral
 code-only record. `record_course_memory` operation `confirm_identity` requires
-an explicit owner statement and changes only the heading, preserving all notes.
+an explicit owner statement to rename an already named course and changes only
+the heading, preserving all notes.
 Generic edits and note append cannot silently rename or translate a course.
+A code-only heading may receive its first literal, code-bound name from source
+evidence while preserving the record's notes, including through `confirm_identity`;
+owner-only correction evidence is required for changing an already named identity.
+A successful `read_schedule` result is valid evidence for the names and
+instructors it contains, not for
+lecture content or assessments. `tool_call:<name>` resolves only the latest
+successful call of that tool in the current owner session and is pinned to its
+numeric ID in the write receipt; it never searches older results for a match.
+Retrieved calendars, timetables, emails and documents support the facts they
+contain without an additional owner restatement. Scheduled entries support
+plans and their recorded details, not attendance, completion or omitted results.
 
 State reads return `current`, `review_due`, `expired_unconfirmed` or `closed`
 separately from stored status. Bounded current views retain a few labelled
