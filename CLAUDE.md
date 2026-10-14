@@ -51,15 +51,20 @@ hand-stripped fork of this repo — one agent, no Legion, no peer bridge, no nam
 protocols, all **deleted** rather than flagged off.
 
 Every push to `main` here runs [`.github/workflows/sync-to-core.yml`](.github/workflows/sync-to-core.yml),
-which replays the new commits onto a branch in Core, strips the paths Core's own
-`.github/sync-exclude` lists, and opens a pull request there. It never pushes to
-Core's `main`.
+which replays the new commits onto a branch in Core and strips the paths Core's
+own `.github/sync-exclude` lists. A dedicated Core-only deploy key is stored as
+`CORE_SYNC_SSH_KEY`; Core's `receive-core-sync` workflow opens the pull request
+with its own short-lived GitHub token. `CORE_SYNC_TOKEN` remains supported for
+older installations. Neither workflow pushes to Core's `main`.
 
 You do not need to do anything for a change to reach Core. You DO need to review
 the PR it opens, because the strip is mechanical: it removes the packages Core
 does not have, and cannot tell whether a change to shared code still means
 anything in a build with one agent. A conflicting commit stops the replay and is
-named in the PR for hand-carrying.
+named in a draft PR for hand-carrying. Missing credentials and blocked carries
+fail visibly instead of showing a green run that did no work. Merging the PR
+advances Core's cursor; closing it does not. Replays carry merge commits once as
+first-parent changes, and also publish cursor-only advances for excluded changes.
 
 Nothing carries back the other way.
 
