@@ -842,8 +842,8 @@ async def _deliver_voice(
     """
     from app.services import tts
 
-    voice_ref = tts.resolve_voice(None, agent_id, profile=profile)
-    voice_settings = tts.resolve_voice_settings(agent_id)
+    voice_ref = tts.resolve_voice(None, agent_id, profile=profile, locale=language)
+    voice_settings = tts.resolve_voice_settings(agent_id, language)
     try:
         spoken = await tts.prepare_speech_text(text, locale=language, sanitize_model=sanitize_model)
         audio = await tts.synthesize_prepared(spoken, voice_ref, locale=language, voice_settings=voice_settings)

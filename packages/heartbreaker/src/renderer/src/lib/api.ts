@@ -2074,6 +2074,16 @@ export interface VoiceAgentInfo {
   /** What will actually speak right now — voice_id if set, else default_voice. */
   effective_voice: string
   voice_settings: VoiceSettings | null
+  languages?: Record<'tr' | 'en', {
+    voice_id: string | null
+    effective_voice: string
+    voice_settings: VoiceSettings | null
+    effective_voice_settings: VoiceSettings | null
+  }>
+}
+
+export type VoiceAgentPatch = { language?: 'tr' | 'en'; voice_id?: string | null } & {
+  [K in keyof VoiceSettings]?: VoiceSettings[K] | null
 }
 
 /** One voice from GET /voice/voices — spans every configured engine. */
@@ -2111,7 +2121,7 @@ export async function fetchVoiceOptions(config: AppConfig): Promise<VoiceOption[
  */
 export async function saveVoiceAgent(
   config: AppConfig, agentId: string,
-  patch: { voice_id?: string | null } & VoiceSettings,
+  patch: VoiceAgentPatch,
 ): Promise<VoiceAgentInfo[]> {
   try {
     const res = await fetch(`${config.apiBase}/voice/agents/${agentId}`, {
@@ -2119,22 +2129,14 @@ export async function saveVoiceAgent(
       headers: authHeaders(config, { 'Content-Type': 'application/json' }),
       body: JSON.stringify(patch),
     })
-    if (!res.ok) return []
+    if (!res.ok) throw new Error('Voice settings could not be saved')
     return (await res.json()).agents ?? []
-  } catch { return [] }
+  } catch { throw new Error('Voice settings could not be saved') }
 }
 
-/** Clear every override for this agent in one call — back to the profile default. */
-export async function clearVoiceAgent(config: AppConfig, agentId: string): Promise<VoiceAgentInfo[]> {
-  try {
-    const res = await fetch(`${config.apiBase}/voice/agents/${agentId}`, {
-      method: 'PUT',
-      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({}),
-    })
-    if (!res.ok) return []
-    return (await res.json()).agents ?? []
-  } catch { return [] }
+/** Reset only the selected language, or the shared fallback if omitted. */
+export async function clearVoiceAgent(config: AppConfig, agentId: string, language?: 'tr' | 'en'): Promise<VoiceAgentInfo[]> {
+  return saveVoiceAgent(config, agentId, language ? { language } : {})
 }
 
 /** Pin an agent to a Telegram-specific model; null clears (falls back to desktop model). */

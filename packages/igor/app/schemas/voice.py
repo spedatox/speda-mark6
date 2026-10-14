@@ -3,9 +3,25 @@
 
 """Wire schemas for voice input and output (routers/voice.py)."""
 
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.services.tts import MAX_CHARS
+
+
+class VoiceAgentPatch(BaseModel):
+    """Partial override; null clears a field, an empty patch resets its scope."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language: Literal["tr", "en"] | None = None
+    voice_id: str | None = Field(default=None, max_length=96)
+    stability: float | None = Field(default=None, ge=0, le=1)
+    similarity_boost: float | None = Field(default=None, ge=0, le=1)
+    style: float | None = Field(default=None, ge=0, le=1)
+    speed: float | None = Field(default=None, ge=0.7, le=1.2)
+    use_speaker_boost: bool | None = None
 
 
 class SpeakRequest(BaseModel):

@@ -275,6 +275,7 @@ speda-mark-vi/
     │   ├── gpt_researcher.py
     │   └── shannon.py
     ├── services/
+    │   ├── voice_preferences.py # Shared and Turkish/English voice pins and tuning
     │   ├── solus/              # Exact money, card calendars, journals, reports, imports,
     │   │                       # reconciliation, cost lots, projections and browser security
     │   ├── solus_accounting.py # Retained prototype compatibility; no automatic migration

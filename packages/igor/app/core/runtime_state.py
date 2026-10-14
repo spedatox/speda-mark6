@@ -304,14 +304,19 @@ def get_voice_overrides() -> dict[str, dict]:
 def set_voice_override(agent_id: str, override: dict | None) -> None:
     """`override` is the full per-agent record (voice_id + whichever tuning
     keys are set) or None to clear it back to the profile default entirely."""
-    state = _load()
+    global _cache
+    state = dict(_load())
     overrides = dict(state.get("voice_overrides", {}))
     if override:
         overrides[agent_id] = dict(override)
     else:
         overrides.pop(agent_id, None)
     state["voice_overrides"] = overrides
-    _save()
+    _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = _STATE_FILE.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(_STATE_FILE)
+    _cache = state
     logger.info(
         "voice_override_set",
         extra={"agent_id": agent_id, "has_override": bool(override)},

@@ -345,9 +345,10 @@ def providers() -> list[str]:
 
 def resolve_voice(
     profiles, agent_id: str | None, explicit: str | None = None, profile=None,
+    locale: str | None = None,
 ) -> str:
-    """Explicit request wins, then the owner's own pin (Settings → Voices),
-    then the agent's profile, then the engine default. Shared by /voice/speak
+    """Explicit request wins, then the spoken language's pin, then the shared
+    pin, the agent's profile, and the engine default. Shared by /voice/speak
     (routers/voice.py) and automation voice delivery (core/trigger_runner.py)
     so the two paths can never resolve a different voice for the same agent —
     a per-agent identity, not a per-caller preference, and it belongs here
@@ -367,7 +368,9 @@ def resolve_voice(
     if agent_id:
         from app.core.runtime_state import get_voice_overrides
 
-        pinned = get_voice_overrides().get(agent_id, {}).get("voice_id")
+        override = get_voice_overrides().get(agent_id, {})
+        code = language.normalize(language.tts_locale(locale))
+        pinned = override.get("languages", {}).get(code, {}).get("voice_id") or override.get("voice_id")
         if pinned:
             return _current_voice_ref(pinned)
         p = profile if profile is not None else (profiles.get(agent_id) if profiles is not None else None)
@@ -398,8 +401,8 @@ def elevenlabs_voice_settings(model: str, voice_settings: dict | None) -> dict |
     return {k: voice_settings[k] for k in keys if k in voice_settings} or None
 
 
-def resolve_voice_settings(agent_id: str | None) -> dict | None:
-    """The owner's tuning override for this agent's voice, or None to leave
+def resolve_voice_settings(agent_id: str | None, locale: str | None = None) -> dict | None:
+    """Shared tuning overlaid with the spoken language's tuning, or None to leave
     ElevenLabs on that voice's own dashboard defaults — the correct behaviour
     for a knob nobody has touched from here. Only meaningful for the
     ElevenLabs provider; Azure/OpenAI ignore it (see synthesize())."""
@@ -409,6 +412,9 @@ def resolve_voice_settings(agent_id: str | None) -> dict | None:
 
     override = get_voice_overrides().get(agent_id, {})
     out = {k: override[k] for k in VOICE_SETTINGS_KEYS if k in override}
+    code = language.normalize(language.tts_locale(locale))
+    scoped = override.get("languages", {}).get(code, {})
+    out.update({k: scoped[k] for k in VOICE_SETTINGS_KEYS if k in scoped})
     return out or None
 
 

@@ -99,6 +99,31 @@ def _elevenlabs(monkeypatch, stream: _FakeStream | None = None):
 VOICE = "elevenlabs:eleven_multilingual_v2:abc123"
 
 
+@pytest.mark.parametrize("locale,expected,stability", [("tr-TR", "turkish", 0.2), ("en-US", "english", 0.8)])
+def test_stream_uses_the_spoken_languages_pin_and_tuning(monkeypatch, locale, expected, stability):
+    from app.core import runtime_state
+
+    monkeypatch.setattr(runtime_state, "get_voice_overrides", lambda: {
+        "test-agent": {"languages": {
+            "tr": {"voice_id": "elevenlabs:eleven_v4:turkish", "stability": 0.2},
+            "en": {"voice_id": "elevenlabs:eleven_v4:english", "stability": 0.8},
+        }},
+    })
+    monkeypatch.setattr(voice_router.settings, "speda_api_key", "test-key")
+    monkeypatch.setattr(voice_router.tts_stream, "streaming_available", lambda: True)
+
+    @asynccontextmanager
+    async def open_stream(voice_id, model, tuning, speech_locale):
+        assert (voice_id, model, tuning, speech_locale) == (expected, "eleven_v4", {"stability": stability}, locale)
+        yield _FakeStream()
+
+    monkeypatch.setattr(voice_router.tts_stream, "open_stream", open_stream)
+    ws = _FakeWS([{"type": "auth", "key": "test-key", "agent_id": "test-agent", "locale": locale},
+                  {"type": "end"}])
+    asyncio.run(voice_router.stream(ws))
+    assert "ready" in ws.kinds
+
+
 def test_a_wrong_key_is_closed_before_anything_is_synthesized(monkeypatch):
     monkeypatch.setattr(voice_router.settings, "speda_api_key", "test-key")
     ws = _FakeWS([{"type": "auth", "key": "not-the-key", "voice": VOICE}])
