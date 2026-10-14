@@ -10,7 +10,6 @@ nothing here is exempt, unlike the `/health` liveness probe.
 """
 
 import logging
-import time
 from datetime import date as date_cls
 from datetime import datetime
 
@@ -23,11 +22,9 @@ from app.schemas.academic import (
     AttendanceRecordOut,
     AttendanceSyncRequest,
     AttendanceSyncResponse,
-    CourseOut,
     DeviceRegisterRequest,
     ScheduleOut,
     ScheduleUpsertRequest,
-    TermOut,
 )
 from app.services import academic as academic_service
 from app.services import fcm
@@ -40,30 +37,7 @@ router = APIRouter(tags=["academic"])
 @router.get("/academic/schedule", response_model=ScheduleOut)
 async def get_schedule(db: AsyncSession = Depends(get_db)) -> ScheduleOut:
     """The timetable the watch caches and renders offline."""
-    term = await academic_service.get_active_term(db)
-    slots = await academic_service.list_slots(db)
-    return ScheduleOut(
-        term=TermOut(
-            start_date=term.start_date.isoformat(),
-            total_weeks=term.total_weeks,
-            required_rate=term.required_rate,
-            holidays=term.holiday_list,
-        ) if term else None,
-        courses=[
-            CourseOut(
-                id=s.slot_id,
-                code=s.code,
-                name=s.name,
-                instructor=s.instructor,
-                roomNumber=s.room,
-                dayOfWeek=s.day_of_week,
-                startTime=s.start_time,
-                endTime=s.end_time,
-            )
-            for s in slots
-        ],
-        updated_at=int(time.time()),
-    )
+    return await academic_service.get_schedule(db)
 
 
 @router.put("/academic/schedule")

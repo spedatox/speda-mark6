@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from datetime import date as date_cls
 from datetime import datetime, timedelta
 
@@ -37,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import owner_now
 from app.models.academic import AttendanceEntry, CourseSlot, Device, TermConfig
+from app.schemas.academic import CourseOut, ScheduleOut, TermOut
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,34 @@ async def list_slots(db: AsyncSession) -> list[CourseSlot]:
     # sort it alphabetically (FRIDAY before MONDAY).
     slots.sort(key=lambda s: (_WEEKDAY_INDEX.get(s.day_of_week, 9), s.start_time))
     return slots
+
+
+async def get_schedule(db: AsyncSession) -> ScheduleOut:
+    """Complete current timetable in the watch/save wire shape, without writes."""
+    term = await get_active_term(db)
+    slots = await list_slots(db)
+    return ScheduleOut(
+        term=TermOut(
+            start_date=term.start_date.isoformat(),
+            total_weeks=term.total_weeks,
+            required_rate=term.required_rate,
+            holidays=term.holiday_list,
+        ) if term else None,
+        courses=[
+            CourseOut(
+                id=s.slot_id,
+                code=s.code,
+                name=s.name,
+                instructor=s.instructor,
+                roomNumber=s.room,
+                dayOfWeek=s.day_of_week,
+                startTime=s.start_time,
+                endTime=s.end_time,
+            )
+            for s in slots
+        ],
+        updated_at=int(time.time()),
+    )
 
 
 async def replace_schedule(db: AsyncSession, courses: list[dict]) -> int:

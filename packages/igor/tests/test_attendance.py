@@ -21,6 +21,7 @@ path are genuinely exercised, not mocked.
 
 from contextlib import asynccontextmanager
 from datetime import date, datetime
+import json
 
 import pytest
 import pytest_asyncio
@@ -31,6 +32,7 @@ from app.database import Base
 from app.models.academic import AttendanceEntry, CourseSlot
 from app.services import academic as ac
 from app.skills import attendance as attendance_skills
+from app.skills import schedule as schedule_skills
 
 # 2026-09-21 is a Monday — week 1 of the term.
 TERM_START = date(2026, 9, 21)
@@ -78,6 +80,100 @@ async def _answer(db, slot_id, day, status, recorded_at=1):
             "recorded_at": recorded_at,
         }],
     )
+
+
+@pytest.fixture
+def schedule_environment(db, monkeypatch):
+    @asynccontextmanager
+    async def session_factory():
+        yield db
+
+    monkeypatch.setattr(schedule_skills, "AsyncSessionLocal", session_factory)
+    return AgentContext(
+        agent_id="ultron", user_id=1, session_id=1, request_id="schedule-read-test",
+        triggered_by="user", trigger_payload={}, output_mode="respond", model="test",
+        system_prompt="", conversation_history=[], db=db, timezone="Europe/Istanbul",
+    )
+
+
+@pytest.mark.asyncio
+async def test_read_schedule_reports_unconfigured_without_creating_defaults(db, schedule_environment):
+    result = json.loads(await schedule_skills.ReadScheduleSkill().execute({}, schedule_environment))
+    assert result["term"] is None
+    assert result["courses"] == []
+    assert isinstance(result["updated_at"], int)
+    assert await ac.get_active_term(db) is None
+    assert await ac.list_slots(db) == []
+
+
+@pytest.mark.asyncio
+async def test_read_schedule_can_edit_without_losing_slots_term_or_attendance(db, schedule_environment):
+    courses = await _seed(db, weeks=12, rate=0.8, holidays=["2026-10-19"], hours=2)
+    courses.append({
+        "id": "math101_fri_1400", "code": "MATH101", "name": "Matematik I",
+        "instructor": "", "roomNumber": "D-102", "dayOfWeek": "FRIDAY",
+        "startTime": "14:00", "endTime": "14:50",
+    })
+    await ac.replace_schedule(db, courses)
+    await _answer(db, courses[0]["id"], TERM_START, "absent")
+    reader = schedule_skills.ReadScheduleSkill()
+    original = json.loads(await reader.execute({}, schedule_environment))
+    assert original["courses"] == courses
+    assert original["term"] == {
+        "start_date": TERM_START.isoformat(), "total_weeks": 12,
+        "required_rate": 0.8, "holidays": ["2026-10-19"],
+    }
+    # A room change uses the actual read result as the writer's input.
+    original["courses"][0]["roomNumber"] = "B-201"
+    await schedule_skills.SaveScheduleSkill().execute(original, schedule_environment)
+    current = json.loads(await reader.execute({}, schedule_environment))
+    assert current["term"] == original["term"]
+    assert current["courses"] == original["courses"]
+    entries = await ac.list_attendance(db)
+    assert len(entries) == 1
+    assert entries[0].slot_id == courses[0]["id"]
+    assert entries[0].status == "absent"
+
+
+@pytest.mark.asyncio
+async def test_read_schedule_keeps_term_settings_when_no_slots_exist(db, schedule_environment):
+    await _seed(db, weeks=12, rate=0.8, holidays=["2026-10-19"], hours=0)
+    result = json.loads(await schedule_skills.ReadScheduleSkill().execute({}, schedule_environment))
+    assert result["courses"] == []
+    assert result["term"] == {
+        "start_date": TERM_START.isoformat(), "total_weeks": 12,
+        "required_rate": 0.8, "holidays": ["2026-10-19"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_schedule_read_matches_watch_and_excludes_inactive_rows(db, schedule_environment):
+    from app.routers.academic import get_schedule
+
+    courses = await _seed(db, hours=2)
+    slots = await ac.list_slots(db)
+    slots[0].active = False
+    await db.commit()
+    result = json.loads(await schedule_skills.ReadScheduleSkill().execute({}, schedule_environment))
+    watch = (await get_schedule(db)).model_dump()
+    assert result["term"] == watch["term"]
+    assert result["courses"] == watch["courses"] == courses[1:]
+    assert slots[0].active is False
+
+
+@pytest.mark.asyncio
+async def test_schedule_reader_is_discoverable_read_only_and_fresh():
+    from app.core.registry import CapabilityRegistry
+
+    registry = CapabilityRegistry()
+    reader = schedule_skills.ReadScheduleSkill()
+    await registry.register_skill(reader)
+    await registry.register_skill(schedule_skills.SaveScheduleSkill())
+    tools = registry.search_tools("timetable watch configuration", agent_id="ultron")
+    assert "read_schedule" in {tool["name"] for tool in tools}
+    assert registry.call_is_read_only("read_schedule", {})
+    assert reader.memoize is False
+    assert reader.requires_network is False
 
 
 # ── The denominator ─────────────────────────────────────────────────────────

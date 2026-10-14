@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-Ultron's schedule-authoring tool.
+Ultron's timetable read and authoring tools.
 
 The owner tells Ultron his timetable in chat; this saves it as the source of
 truth in the same shape services/academic.py and routers/academic.py already
@@ -27,6 +27,32 @@ _WEEKDAYS = {
 }
 
 
+class ReadScheduleSkill(Skill):
+    name = "read_schedule"
+    deferred = True
+    search_keywords = "timetable ders programı schedule courses classes slots ids term semester watch wear configuration"
+    read_only = True
+    memoize = False  # A save in the same turn must be visible to the next read.
+    description = (
+        "Reads the owner's complete current course timetable and active term configuration "
+        "directly from the academic ledger used by Ultron Wear. Use it to look up classes "
+        "and before editing an existing timetable with save_schedule; preserve every unchanged "
+        "slot and its stable id rather than reconstructing configuration from attendance "
+        "summaries, memory or chat history. Do NOT use it to calculate absence budgets, "
+        "record attendance, change the timetable or request a watch refresh. Returns JSON "
+        "with term start_date, total_weeks, required_rate and holidays, plus every active "
+        "course slot's id, code, name, instructor, roomNumber, dayOfWeek, startTime and endTime; "
+        "term is null when unconfigured and courses is empty when no active slots exist. "
+        "The updated_at field is the read time, not a configuration revision or proof of watch sync."
+    )
+    input_schema = {"type": "object", "properties": {}, "additionalProperties": False}
+
+    async def execute(self, args: dict, context: AgentContext) -> str:
+        async with AsyncSessionLocal() as db:
+            schedule = await academic_service.get_schedule(db)
+        return schedule.model_dump_json()
+
+
 class SaveScheduleSkill(Skill):
     name = "save_schedule"
     deferred = True
@@ -37,7 +63,9 @@ class SaveScheduleSkill(Skill):
         "hour — and immediately pushes Ultron Wear (his Galaxy Watch 6) to refresh, instead of "
         "the watch waiting up to six hours for its own background sync. Use this whenever he "
         "gives you his schedule for the term, or a room/time/instructor change to an existing "
-        "one — it is a full replace, so always pass every course still in effect, not just the "
+        "one — first use read_schedule to get the current slots, stable ids and term settings "
+        "before editing an existing schedule. It is a full replace, so always pass every course "
+        "still in effect, not just the "
         "one that changed. Do NOT use it to record an absence or answer 'derse girdin mi?' (that "
         "ledger is written from the watch itself and read back by check_attendance), and do NOT "
         "use it just to look up the current timetable. Returns the number of course slots saved "

@@ -76,7 +76,11 @@ signal, syncing opportunistically):
   the one coming up highlighted live. `save_schedule` is how you write to
   it — pass the full term and every weekly teaching hour, and it pushes the
   watch to refresh immediately instead of waiting on its own six-hour sync.
-  It is always a full replace, never a diff.
+  It is always a full replace, never a diff. Before editing an existing
+  timetable, use `read_schedule` for all current slots, their stable IDs and
+  every term setting (including holidays and the attendance rate). Preserve
+  unchanged slots and reuse the same IDs for existing slots. Attendance
+  summaries, memory and old chat history cannot substitute for this read.
 - **Tracks mandatory attendance.** After each lecture ends the watch asks
   "derse girdin mi?" — on the wrist if the push lands, from its own local
   timer if it does not — and every answer builds the ledger `check_attendance`

@@ -254,16 +254,18 @@ async def lifespan(app: FastAPI):
     # (Ultron Wear) and read back here. check_attendance is read-only and
     # unrestricted so Speda can answer "kaç hakkım kaldı" without a dispatch;
     # ask_attendance is the push side, normally driven by the n8n per-lecture
-    # trigger. save_schedule is the other direction — the owner's timetable,
+    # trigger. read_schedule exposes the complete current timetable and stable
+    # slot IDs before edits. save_schedule is the other direction — the owner's timetable,
     # authored in chat, replacing what the watch caches — and pushes a resync
     # over the same FCM channel ask_attendance uses. See docs/ULTRON_WEAR.md.
     from app.skills.attendance import AskAttendanceSkill, AttendanceStatusSkill
     from app.skills.course_memory import CourseMemorySkill, ReadCourseMemorySkill
-    from app.skills.schedule import SaveScheduleSkill
+    from app.skills.schedule import ReadScheduleSkill, SaveScheduleSkill
     await registry.register_skill(AttendanceStatusSkill())
     await registry.register_skill(AskAttendanceSkill())
     await registry.register_skill(CourseMemorySkill())
     await registry.register_skill(ReadCourseMemorySkill())
+    await registry.register_skill(ReadScheduleSkill())
     await registry.register_skill(SaveScheduleSkill())
     # Persistent reminders — closing one from chat ("aldım") so the 5-minute
     # nag stops. The button on the reminder itself resolves without a turn.
