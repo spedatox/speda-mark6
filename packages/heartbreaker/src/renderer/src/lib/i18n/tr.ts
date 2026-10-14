@@ -409,6 +409,8 @@ const tr: Dict = {
     standingBy: 'BEKLEMEDE',
     dragToPlace: 'Yerleştirmek için sürükle · boyutlandırmak için kaydır · YENİDEN DÜZENLE sıfırlar',
     stopSpeaking: 'Konuşmayı durdur',
+    replayAnswer: 'Bu sesli yanıtı tekrar oynat',
+    replay: 'TEKRAR OYNAT',
     stop: 'DURDUR',
     typeOrTalk: (agentName: string) => `Aşağıya yazın ya da mikrofona basıp konuşun — ${agentName} sesli yanıtlar.`,
     voiceNotEnabled: "Sesi etkinleştirmek için sunucuda AZURE_SPEECH_KEY ayarlayın.",

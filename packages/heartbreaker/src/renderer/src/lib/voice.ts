@@ -328,6 +328,7 @@ class PcmPlayer {
     private ctx: AudioContext,
     private dest: AudioNode,
     private rate: number,
+    private onBuffer: (buffer: AudioBuffer) => void = () => {},
   ) {}
 
   /** True once anything has been scheduled and not yet finished playing. */
@@ -365,6 +366,11 @@ class PcmPlayer {
     const view = new DataView(raw.buffer, raw.byteOffset, usable)
     for (let i = 0; i < samples; i++) channel[i] = view.getInt16(i * 2, true) / 32768
 
+    this.onBuffer(buffer)
+    this.pushBuffer(buffer)
+  }
+
+  pushBuffer(buffer: AudioBuffer): void {
     const src = this.ctx.createBufferSource()
     src.buffer = buffer
     src.connect(this.dest)
@@ -392,6 +398,13 @@ class PcmPlayer {
 /* ── Session ──────────────────────────────────────────────────────────────── */
 
 export type VoiceState = 'idle' | 'thinking' | 'speaking'
+
+/** Completed audio, retained in memory only. AudioBuffers can be reused by a new context. */
+export interface VoiceRecording {
+  buffers: readonly AudioBuffer[]
+  bytes: number
+  text: string
+}
 
 /** How the session ended up delivering speech. `pending` while the socket is
  *  still being negotiated — text is held, never dropped, until it resolves. */
@@ -449,13 +462,20 @@ export class VoiceSession {
   /** The engine sent every sample it owed — a close after this is not a failure. */
   private streamComplete = false
   private idleTimer: number | null = null
+  private recorded: AudioBuffer[] = []
+  private recordedBytes = 0
+  private recordingTooLarge = false
+  private recordingPublished = false
+  private originalText = ''
 
   /** Notified on every state change so the orb can react. */
   onState: (s: VoiceState) => void = () => {}
+  onRecording: (recording: VoiceRecording) => void = () => {}
 
   constructor(
     private config: AppConfig,
     private opts: { agentId?: string; locale?: string; voice?: string } = {},
+    recording?: VoiceRecording,
   ) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const Ctor = window.AudioContext || (window as any).webkitAudioContext
@@ -471,7 +491,33 @@ export class VoiceSession {
     this.gain.connect(this.ctx.destination)
     this.samples = new Uint8Array(new ArrayBuffer(this.analyser.fftSize))
     this.freq = new Uint8Array(new ArrayBuffer(this.analyser.frequencyBinCount))
-    this.openStream()
+    if (recording) {
+      this.delivery = 'stream'
+      this.ended = this.streamComplete = true
+      this.pcm = new PcmPlayer(this.ctx, this.analyser, 24000)
+      for (const buffer of recording.buffers) this.pcm.pushBuffer(buffer)
+      this.armIdle()
+    } else {
+      this.openStream()
+    }
+  }
+
+  private capture(buffer: AudioBuffer): void {
+    if (this.recordingTooLarge) return
+    this.recordedBytes += buffer.length * buffer.numberOfChannels * 4
+    // Bound an unusually long answer, as well as the cache owned by the view.
+    if (this.recordedBytes > 32 * 1024 * 1024) {
+      this.recordingTooLarge = true
+      this.recorded = []
+      return
+    }
+    this.recorded.push(buffer)
+  }
+
+  private publishRecording(): void {
+    if (this.recordingPublished || this.recordingTooLarge || !this.recorded.length) return
+    this.recordingPublished = true
+    this.onRecording({ buffers: this.recorded.slice(), bytes: this.recordedBytes, text: this.originalText })
   }
 
   /* ── Negotiating the streaming path ───────────────────────────────────────
@@ -517,10 +563,11 @@ export class VoiceSession {
       let msg: { type?: string; sample_rate?: number }
       try { msg = JSON.parse(ev.data as string) } catch { return }
       if (msg.type === 'ready') {
-        this.pcm = new PcmPlayer(this.ctx, this.analyser, msg.sample_rate || 24000)
+        this.pcm = new PcmPlayer(this.ctx, this.analyser, msg.sample_rate || 24000, buffer => this.capture(buffer))
         this.settle('stream')
       } else if (msg.type === 'done') {
         this.streamComplete = true
+        this.publishRecording()
         this.finishStreamAudio()
       } else {
         // `unsupported` (wrong engine) and `error` (the engine died) are the
@@ -616,7 +663,10 @@ export class VoiceSession {
     const tail = this.buf.trim()
     this.buf = ''
     if (tail) this.enqueue(tail)
-    if (!this.jobs.length) this.onState('idle')
+    if (!this.draining && this.playIndex >= this.jobs.length) {
+      this.publishRecording()
+      this.onState('idle')
+    }
   }
 
   /** Current loudness, 0..1 — drives the orb. Reads the live analyser rather
@@ -680,6 +730,7 @@ export class VoiceSession {
    */
   feed(delta: string): void {
     if (this.stopped || this.ended) return
+    this.originalText += delta
     this.raw += delta
 
     const nl = this.raw.lastIndexOf('\n')
@@ -881,7 +932,10 @@ export class VoiceSession {
       if (!this.stopped) {
         // More may have arrived while the last clip played.
         if (this.playIndex < this.jobs.length) void this.drain()
-        else this.onState(this.ended ? 'idle' : 'thinking')
+        else {
+          if (this.ended) this.publishRecording()
+          this.onState(this.ended ? 'idle' : 'thinking')
+        }
       }
     }
   }
@@ -892,6 +946,7 @@ export class VoiceSession {
         raw.slice(0),
         buffer => {
           if (this.stopped) return resolve()
+          this.capture(buffer)
           const src = this.ctx.createBufferSource()
           src.buffer = buffer
           src.connect(this.analyser)
@@ -919,6 +974,8 @@ export class VoiceSession {
     this.pcm = null
     this.closeSocket()
     this.jobs = []
+    this.recorded = []
+    this.originalText = ''
     this.buf = ''
     this.raw = ''
     this.spokenHead = 0

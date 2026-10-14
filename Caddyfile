@@ -9,5 +9,9 @@
 import /etc/caddy/sites/*.caddy
 
 {$DOMAIN} {
+    @solus_api path /solus/api/v1/*
+    request_body @solus_api {
+        max_size 2MB
+    }
 	reverse_proxy app:8000
 }

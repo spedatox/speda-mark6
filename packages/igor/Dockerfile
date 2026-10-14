@@ -3,6 +3,13 @@
 # docker-compose sets context: . and dockerfile: packages/igor/Dockerfile.
 FROM node:20-slim AS node_bin
 
+FROM node:24-slim AS solus_ui
+WORKDIR /solus
+COPY packages/solus/package.json packages/solus/package-lock.json ./
+RUN npm ci
+COPY packages/solus ./
+RUN npm run build
+
 FROM python:3.11-slim
 
 # openssh-client: the system_ops host bridge — the containerized backend SSHes
@@ -46,6 +53,7 @@ COPY packages/orion-spark/pyproject.toml ./packages/orion-spark/pyproject.toml
 COPY packages/orion-spark/README.md ./packages/orion-spark/README.md
 COPY packages/orion-spark/orion_spark ./packages/orion-spark/orion_spark
 COPY packages/igor/app ./packages/igor/app
+COPY --from=solus_ui /igor/app/static/solus ./packages/igor/app/static/solus
 COPY packages/igor/scripts ./packages/igor/scripts
 
 RUN uv sync --frozen --no-dev
@@ -53,6 +61,7 @@ RUN uv sync --frozen --no-dev
 RUN mkdir -p /tmp/speda_outputs
 
 ENV PATH="/app/.venv/bin:$PATH"
+ENV FORWARDED_ALLOW_IPS="127.0.0.1"
 
 # Run from the API package so `app.main:app` resolves.
 WORKDIR /app/packages/igor

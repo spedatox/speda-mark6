@@ -26,6 +26,8 @@ services:
       # with it; a second store that nothing writes to is how "which database is
       # the real one" became a question worth an afternoon.
       DATABASE_URL: sqlite+aiosqlite:////root/.speda/speda.db
+      # deploy.sh resolves the TLS proxy's actual address; never trust '*'.
+      FORWARDED_ALLOW_IPS: ${SPEDA_TRUSTED_PROXY_IPS:-127.0.0.1}
       # The browser sidecar (packages/browser) — Playwright behind a small HTTP
       # surface, for anything touching one of the owner's saved logins.
       # BROWSER_TOKEN comes from packages/igor/.env — the sidecar holds the

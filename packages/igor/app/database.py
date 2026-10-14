@@ -281,6 +281,9 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        from app.services.solus.guards import install_guards
+        if conn.dialect.name == "sqlite":
+            await conn.run_sync(install_guards)
         await conn.run_sync(_apply_additive_migrations)
 
     await _seed_default_user()

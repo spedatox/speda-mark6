@@ -68,6 +68,7 @@ node_modules/
 packages/*/out/
 packages/*/.vite/
 packages/*/*.tsbuildinfo
+packages/igor/app/static/solus/
 
 # Proprietary fonts — kept local, not redistributed in this public repo
 Samsung*.ttf

@@ -38,9 +38,12 @@ import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.ToolBadge
 import com.speda.heartbreaker.domain.captionOf
 import com.speda.heartbreaker.domain.splitBoardPanels
+import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.prose.ChartPanel
 import com.speda.heartbreaker.ui.prose.FenceBlock
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * Voice mode — the phone's presentation surface.
@@ -92,7 +95,7 @@ fun VoiceModeScreen(
     /** True while the reply is still arriving. */
     streaming: Boolean,
     state: VoiceSpeaker.State,
-    level: Float,
+    level: StateFlow<Float>,
     /** How many caption lines stay on screen — from Settings → Canvas, so the
      *  phone and the desktop are tuned in one place. */
     captionLines: Int,
@@ -107,9 +110,13 @@ fun VoiceModeScreen(
     answerIndex: Int,
     answerCount: Int,
     onAnswer: (Int) -> Unit,
+    canReplay: Boolean,
+    onReplay: () -> Unit,
+    onStopSpeaking: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalHbPalette.current
+    val strings = LocalStrings.current.voiceMode
 
     // The staged windows and the narration, cut from the same text. Recomputed as
     // it streams, which is what makes a window appear at the point in the
@@ -200,7 +207,7 @@ fun VoiceModeScreen(
                 .aspectRatio(1f),
             contentAlignment = Alignment.Center,
         ) {
-            VoiceOrb(state = state, level = level, modifier = Modifier.fillMaxSize())
+            MeteredOrb(state, level, Modifier.fillMaxSize())
         }
 
         // ── The spoken words, with no board ─────────────────────────────────
@@ -242,7 +249,7 @@ fun VoiceModeScreen(
         // off the newest unpins the board; stepping back onto it re-pins, so a
         // live turn keeps arriving unless the owner has deliberately gone
         // looking at an older one.
-        if (answerCount > 1) {
+        if (answerCount > 1 || canReplay || state != VoiceSpeaker.State.IDLE) {
             Row(
                 Modifier
                     .align(Alignment.TopEnd)
@@ -250,18 +257,29 @@ fun VoiceModeScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                StepButton("‹", answerIndex > 0) { onAnswer(answerIndex - 1) }
-                BasicText(
-                    AnnotatedString("${answerIndex + 1}/$answerCount"),
-                    style = HbType.label.copy(
-                        fontSize = 10.sp,
-                        color = if (answerIndex == answerCount - 1) palette.accent else palette.amber,
-                    ),
-                )
-                StepButton("›", answerIndex < answerCount - 1) { onAnswer(answerIndex + 1) }
+                if (canReplay) StepButton(strings.replay, true, onReplay)
+                if (state != VoiceSpeaker.State.IDLE) StepButton(strings.stop, true, onStopSpeaking)
+                if (answerCount > 1) {
+                    StepButton("‹", answerIndex > 0) { onAnswer(answerIndex - 1) }
+                    BasicText(
+                        AnnotatedString("${answerIndex + 1}/$answerCount"),
+                        style = HbType.label.copy(
+                            fontSize = 10.sp,
+                            color = if (answerIndex == answerCount - 1) palette.accent else palette.amber,
+                        ),
+                    )
+                    StepButton("›", answerIndex < answerCount - 1) { onAnswer(answerIndex + 1) }
+                }
             }
         }
     }
+}
+
+/** Keep the audio meter's frequent emissions inside the orb's own scope. */
+@Composable
+private fun MeteredOrb(state: VoiceSpeaker.State, levels: StateFlow<Float>, modifier: Modifier) {
+    val level by levels.collectAsStateWithLifecycle()
+    VoiceOrb(state = state, level = level, modifier = modifier)
 }
 
 /** One step of the answer stepper. Flat and small — it is navigation chrome on a

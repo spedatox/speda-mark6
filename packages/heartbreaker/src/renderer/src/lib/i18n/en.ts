@@ -419,6 +419,8 @@ const en = {
     standingBy: 'STANDING BY',
     dragToPlace: 'Drag to place · scroll to size · REFLOW resets',
     stopSpeaking: 'Stop speaking',
+    replayAnswer: 'Replay this voice response',
+    replay: 'REPLAY',
     stop: 'STOP',
     typeOrTalk: (agentName: string) => `Type below, or hit the mic and just talk — ${agentName} answers out loud.`,
     voiceNotEnabled: 'Set AZURE_SPEECH_KEY on the backend to enable voice.',

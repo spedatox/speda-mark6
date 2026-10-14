@@ -25,6 +25,8 @@ async def lifespan(app: FastAPI):
 
     # ── 1. Database ────────────────────────────────────────────────────────────
     from app.database import AsyncSessionLocal, close_db, init_db
+    from app.services.solus.http import SolusHTTP
+    app.state.solus_http = SolusHTTP(AsyncSessionLocal)
 
     await init_db()
     logger.info("startup_db_ready")
@@ -144,6 +146,8 @@ async def lifespan(app: FastAPI):
     await registry.register_skill(MemoryEventSkill())
     from app.skills.finance_record import FinanceRecordSkill
     await registry.register_skill(FinanceRecordSkill())
+    from app.skills.solus import SolusAccountingSkill
+    await registry.register_skill(SolusAccountingSkill())
     # The observation tier — the sourced, addressable facts beneath the memory
     # files. Registered next to the memory tool because they are one capability
     # with two layers: the file is what gets read, the observation is what can be
@@ -673,8 +677,7 @@ def create_app() -> FastAPI:
     app.add_middleware(AuthMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
 
-    # Routers
-    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, media, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar, lifeboat as lifeboat_router, doormat as doormat_router, octavius as octavius_router, skyfall as skyfall_router, legion as legion_router, projects as projects_router, library as library_router
+    from app.routers import admin, agents, automations, browser as browser_router, chat, health, trigger, import_chats, files, media, connections, mail, outlook, memory, navigation, aircraft, reminders, telegram, news, academic, web_watch, voice, config as config_router, hisar, lifeboat as lifeboat_router, doormat as doormat_router, octavius as octavius_router, skyfall as skyfall_router, legion as legion_router, projects as projects_router, library as library_router, solus as solus_router
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -709,6 +712,7 @@ def create_app() -> FastAPI:
     app.include_router(voice.router)
     app.include_router(config_router.router)
     app.include_router(hisar.router)
+    app.include_router(solus_router.router)
 
     return app
 

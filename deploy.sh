@@ -220,7 +220,25 @@ say "Building app container (code updates)…"
 docker compose "${PROFILE[@]}" build app
 
 say "Starting the stack…"
+# Scope trusted forwarding to the actual TLS proxy, so Secure Solus cookies and
+# HTTPS-only financial routes see the correct scheme without trusting strangers.
+if [[ -n "${DOMAIN}" ]]; then
+  solus_proxy_id="$(docker compose "${PROFILE[@]}" ps -q caddy 2>/dev/null || true)"
+  solus_proxy_ips=""
+  if [[ -n "${solus_proxy_id}" ]]; then
+    solus_proxy_ips="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}' "${solus_proxy_id}" | paste -sd ',' -)"
+  fi
+  export SPEDA_TRUSTED_PROXY_IPS="127.0.0.1${solus_proxy_ips:+,${solus_proxy_ips}}"
+fi
 docker compose "${PROFILE[@]}" up -d
+if [[ -n "${DOMAIN}" ]]; then
+  solus_proxy_id="$(docker compose "${PROFILE[@]}" ps -q caddy)"
+  solus_proxy_ips="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}' "${solus_proxy_id}" | paste -sd ',' -)"
+  if [[ -n "${solus_proxy_ips}" && "127.0.0.1,${solus_proxy_ips}" != "${SPEDA_TRUSTED_PROXY_IPS}" ]]; then
+    export SPEDA_TRUSTED_PROXY_IPS="127.0.0.1,${solus_proxy_ips}"
+    docker compose "${PROFILE[@]}" up -d --no-deps app
+  fi
+fi
 
 # Editing a mounted Caddyfile does not recreate the container, so a config
 # change (a new peer site block) needs an explicit reload. Harmless no-op when

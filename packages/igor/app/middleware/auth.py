@@ -58,6 +58,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
+        # Financial credentials/data require TLS outside a loopback dev host.
+        # Uvicorn must trust only the actual TLS proxy's address, never '*'.
+        if path.startswith("/solus/api/") and request.url.scheme != "https" and (not request.client or request.client.host not in {"127.0.0.1", "::1"}):
+            return JSONResponse(status_code=403, content={"detail":"Use HTTPS for Solus."})
 
         if path in UNPROTECTED_PATHS or request.method == "OPTIONS":
             return await call_next(request)
@@ -72,6 +76,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
         api_key = request.headers.get("X-API-Key", "")
         if api_key and hmac.compare_digest(api_key, settings.speda_api_key):
             return await call_next(request)
+
+        # The static shell carries no financial data. Browser credentials are
+        # confined to this API and cannot authorize any other Igor endpoint.
+        if request.method in {"GET", "HEAD"} and (path in {"/solus", "/solus/"} or path.startswith("/solus/assets/")):
+            return await call_next(request)
+        service = getattr(request.app.state, "solus_http", None)
+        if service and ((path == "/solus/api/v1/login" and request.method == "POST") or
+                        (path == "/solus/api/v1/auth-status" and request.method == "GET") or
+                        (path == "/solus/api/v1/setup" and request.method == "POST")):
+            return await call_next(request)
+        if path.startswith("/solus/api/v1/") and not (path == "/solus/api/v1/session" and request.method == "POST"):
+            if service and await service.authenticate(request):
+                return await call_next(request)
 
         logger.warning(
             "auth_rejected",

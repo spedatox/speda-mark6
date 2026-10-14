@@ -109,6 +109,11 @@ fun HtmlBlock(raw: String, modifier: Modifier = Modifier) {
                     }
                 }
             },
+            onRelease = { web ->
+                web.stopLoading()
+                web.removeJavascriptInterface("HbWidget")
+                web.destroy()
+            },
             update = { web ->
                 // AndroidView#update fires on every recomposition; reloading each
                 // time would restart the widget's own scripts mid-stream.

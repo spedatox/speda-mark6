@@ -12,6 +12,7 @@ import com.speda.heartbreaker.domain.spokenFragment
 import com.speda.heartbreaker.domain.splitSentences
 import com.speda.heartbreaker.domain.undecidedLineStart
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
@@ -69,6 +70,8 @@ class VoiceSpeaker(
      *  whole conversation rather than being rebuilt per sentence. See
      *  [VoiceLevels]. */
     private val audioSessionId: Int,
+    private val replayAudio: List<ByteArray>? = null,
+    private val onRecording: (String, List<ByteArray>) -> Unit = { _, _ -> },
     /** Called as the turn moves between silence, generating and speaking, so the
      *  surface can show which of the three is happening. */
     private val onState: (State) -> Unit = {},
@@ -81,6 +84,7 @@ class VoiceSpeaker(
     /** The utterances of this turn, in order, each resolving to its audio (or to
      *  null where synthesis failed and the sentence is simply skipped). */
     private val queue = Channel<Deferred<ByteArray?>>(Channel.UNLIMITED)
+    private val synthesisJobs = mutableListOf<Deferred<ByteArray?>>()
 
     private val filter = SpeakableFilter()
 
@@ -97,7 +101,20 @@ class VoiceSpeaker(
 
     private var player: MediaPlayer? = null
     private var stopped = false
+    private var ended = false
+    private val originalText = StringBuilder()
+    private val recorded = mutableListOf<ByteArray>()
+    private var recordedBytes = 0
+    private var recordingTooLarge = false
     private val drain: Job = scope.launch { playInOrder() }
+
+    init {
+        if (replayAudio != null) {
+            replayAudio.forEach { queue.trySend(CompletableDeferred(it)) }
+            ended = true
+            queue.close()
+        }
+    }
 
     /**
      * Take the next piece of the reply.
@@ -108,7 +125,8 @@ class VoiceSpeaker(
      * begin on the first sentence rather than the first newline.
      */
     fun feed(delta: String) {
-        if (stopped) return
+        if (stopped || ended) return
+        originalText.append(delta)
         partialLine += delta
 
         val cut = partialLine.lastIndexOf('\n')
@@ -155,7 +173,8 @@ class VoiceSpeaker(
      * sentence, which is most of them.
      */
     fun finish() {
-        if (stopped) return
+        if (stopped || ended) return
+        ended = true
         // Only what is LEFT of it: the head may already have gone out a sentence
         // at a time while the line was still being written.
         if (partialLine.length > spokenHead) {
@@ -175,6 +194,8 @@ class VoiceSpeaker(
         stopped = true
         queue.close()
         drain.cancel()
+        synthesisJobs.forEach { it.cancel() }
+        synthesisJobs.clear()
         releasePlayer()
         onState(State.IDLE)
     }
@@ -197,6 +218,7 @@ class VoiceSpeaker(
         val job = scope.async {
             inflight.withPermit { api.speak(config, clean, agentId) }
         }
+        synthesisJobs.add(job)
         // The channel is unbounded, so this cannot suspend or fail here; a closed
         // channel (the turn was stopped) just drops the job.
         if (queue.trySend(job).isFailure) job.cancel()
@@ -218,16 +240,30 @@ class VoiceSpeaker(
                 } catch (e: Exception) {
                     null
                 }
+                synthesisJobs.remove(job)
                 if (stopped) return
                 // A sentence that failed to synthesise is skipped, not retried
                 // and not announced: the reply is on screen regardless, and a
                 // spoken apology for a missing sentence is worse than the gap.
                 if (audio == null || audio.isEmpty()) continue
+                if (replayAudio == null && !recordingTooLarge) {
+                    recordedBytes += audio.size
+                    if (recordedBytes > 16 * 1024 * 1024) {
+                        recordingTooLarge = true
+                        recorded.clear()
+                    } else {
+                        recorded.add(audio)
+                    }
+                }
                 onState(State.SPEAKING)
                 playClip(audio)
             }
         } finally {
             releasePlayer()
+            if (!stopped && ended && !recordingTooLarge && recorded.isNotEmpty()) {
+                onRecording(originalText.toString(), recorded.toList())
+            }
+            recorded.clear()
             if (!stopped) onState(State.IDLE)
         }
     }

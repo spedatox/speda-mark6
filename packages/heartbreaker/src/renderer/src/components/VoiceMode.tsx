@@ -132,6 +132,8 @@ interface Props {
   onClose: () => void
   /** Cut playback without leaving the mode. */
   onStopSpeaking: () => void
+  onReplay: () => void
+  canReplay: boolean
   /** Mic state, owned by the composer's mic button. Reported here so the status
    *  line distinguishes an open mic from one that is actually hearing speech —
    *  identical-looking states are why people talk to a muted machine. */
@@ -150,7 +152,7 @@ interface Props {
 export default function VoiceMode({
   state, amplitude, spectrum, inputLevel, reply, streaming, tools, prompt,
   answerIndex, answerCount, onAnswer, language, onLanguage,
-  onClose, onStopSpeaking, micState, configured, agentName, canvas, dock, onDock,
+  onClose, onStopSpeaking, onReplay, canReplay, micState, configured, agentName, canvas, dock, onDock,
 }: Props) {
   const t = useT()
   const visible = useMemo(() => renderable(reply, streaming), [reply, streaming])
@@ -620,7 +622,21 @@ export default function VoiceMode({
           {label}
         </div>
 
-        {state === 'speaking' && (
+        <div style={{ display: 'flex', gap: '0.5rem', pointerEvents: 'auto' }}>
+        {canReplay && (
+          <button
+            className="hb-btn"
+            onClick={onReplay}
+            title={t.voiceMode.replayAnswer}
+            style={{ ...chip, height: 26, padding: '0 0.75rem', gap: '0.4rem' }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 11a9 9 0 1 1 3 8M3 4v7h7" />
+            </svg>
+            {t.voiceMode.replay}
+          </button>
+        )}
+        {(state === 'speaking' || state === 'thinking') && (
           <button
             className="hb-btn"
             onClick={onStopSpeaking}
@@ -633,6 +649,7 @@ export default function VoiceMode({
             {t.voiceMode.stop}
           </button>
         )}
+        </div>
 
         {!hasText && (
           <div style={{

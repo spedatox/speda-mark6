@@ -85,6 +85,16 @@ Full contract: `docs/MEMORY_CORPUS.md` and `docs/MEMORY_CONTRACT.md`.
 **12. All endpoints require authentication.**
 `AuthMiddleware` validates the **`X-API-Key`** header on every request before any router logic runs, comparing it in constant time against `SPEDA_API_KEY` (from the environment). The n8n trigger endpoint additionally validates `X-N8N-Secret`. The only unauthenticated paths are `/health` and `/oauth/google/callback`. Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are disabled outside `DEBUG`. There is no public data endpoint.
 
+Solus browser access is a deliberately scoped alternative: its static shell and
+compiled assets contain no owner data. Only its password login, initial setup and
+configured-status endpoints are public; setup requires the owner API key or a
+hashed, expiring, single-use setup token. `/solus/api/v1/` financial endpoints
+require the service key or a hashed, revocable, expiring browser session. Browser
+sessions never authorize another Igor API. Cookie-authenticated writes require
+CSRF validation and same-origin checks; non-loopback access requires HTTPS.
+Trust only the actual TLS proxy address, never arbitrary forwarded headers.
+Password changes require the current password and revoke all Solus sessions.
+
 ---
 
 ## Transport Channels
@@ -213,6 +223,7 @@ speda-mark-vi/
     │   ├── composer.py
     │   └── manager.py
     ├── routers/
+    │   ├── solus.py             # Thin Solus commands/reports/login/static UI adapters
     │   ├── legion.py            # Worker execution inspection, cursor replay and targeted controls; legacy ticket tray
     │   ├── chat.py              # POST /chat[/{agent_id}] (SSE), WS /ws — Flutter user-facing
     │   ├── trigger.py           # POST /trigger/{agent_id} — n8n webhook
@@ -234,6 +245,7 @@ speda-mark-vi/
     │   ├── telegram.py
     │   └── health.py
     ├── skills/
+    │   ├── solus.py             # Evidence-bound accounting commands and scoped reports
     │   ├── base.py              # Skill ABC
     │   ├── memory.py            # Memory tool + recall_for_context/recall_sessions_for_context + MemoryRecallCache
     │   ├── memory_graph.py      # Bounded, read-only traversal of evidence-linked memory
@@ -263,6 +275,9 @@ speda-mark-vi/
     │   ├── gpt_researcher.py
     │   └── shannon.py
     ├── services/
+    │   ├── solus/              # Exact money, card calendars, journals, reports, imports,
+    │   │                       # reconciliation, cost lots, projections and browser security
+    │   ├── solus_accounting.py # Retained prototype compatibility; no automatic migration
     │   ├── library.py           # Owner/source-scoped retrieval, live authority checks and citation resolution
     │   ├── library_indexer.py   # Replayable Hisar catalog sync and durable library_index jobs (no scheduler)
     │   ├── library_extract.py   # Bounded text/PDF/Office extraction and labeled OCR; honest review states
@@ -311,6 +326,10 @@ speda-mark-vi/
     │   ├── telegram.py
     │   └── n8n.py, n8n_api.py   # Webhook auth (X-N8N-Secret), n8n REST client
     ├── models/                  # ORM models — one file per table (user, session, channel_session, message, agent,
+    │                            # solus_ledger — books, accounts, immutable events/postings,
+    │                            # schedules/settlements, receipts, statements, imports,
+    │                            # reconciliations, lots, valuations and browser credentials;
+    │                            # solus — retained prototype transaction/installment tables;
     │                            # memory_source/memory_passage — immutable originals and addressable excerpts,
     │                            # memory_capture_payload — complete durable event intake before review,
     │                            # agent_message, engineering_input, automation, health_sample, memory/memory_file/memory_revision,
@@ -321,6 +340,7 @@ speda-mark-vi/
     │                            # library — Iacon sources, documents, immutable revisions, generations,
     │                            # passages and hashed citations (reference corpus, separate from memory)
     ├── schemas/
+    │   ├── solus.py            # Strict accounting command union and credential DTOs
     │   ├── library.py          # Edition provenance, bounded evidence, readiness and continuation contracts
     │   ├── chat.py, sse.py, agent.py, trigger.py, health.py
     ├── websocket/
@@ -328,6 +348,15 @@ speda-mark-vi/
     │   └── protocol.py          # WebSocket message type definitions (no startup step)
     └── templates/               # (currently empty)
 ```
+
+`packages/solus/` contains the standalone Vue/Vite accounting UI and browser
+acceptance tests. Its compiled assets are built into Igor's image under
+`app/static/solus/`; generated bundles are not tracked. Solus commands commit
+through `memory_store.run_financial_command`: SQL effects, source evidence,
+computed memory passages/graph/revision and the retry receipt commit together.
+The owner handles historical migration and explicitly authorizes legacy
+retirement. Retain legacy `finance_record` writes until that instruction; never
+dual-write an occurrence or add legacy totals to a Solus report.
 
 ---
 

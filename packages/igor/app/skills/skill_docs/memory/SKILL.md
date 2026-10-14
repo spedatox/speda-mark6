@@ -81,7 +81,7 @@ A subject's ownership does not change when your write is refused. Dispatch to
 its owner. NEVER use current.md, general/, projects/ or shared notes as a workaround
 for a refused domain write. `general/` holds personal events and references without a specialist domain. Capture what the owner reported — even ordinary trips, outings, and milestones. Do not require it to matter in six months. Do not fabricate details. It is actively used. It is NOT limited to recurring documents.
 Owners can extend their own domain with a new topic; reuse an existing topic if
-it already answers the question. Monthly categories store documents under `<category>/<MM-YY>/<topic>.md`. The backend determines the month from an evidenced occurrence date, or automatically from the current recording time in the owner's timezone when date is omitted. Do not supply a date or date_unknown merely to make a save succeed; neither is required. For example, use `general/10-26/istanbul-trip.md`. Month folders are virtual and appear automatically, even when empty; no mkdir or folder-creation tool is needed. Shaped writers create the document at its destination, including months absent from the listing. Continue using `memory_state` for stable state keys and `finance_record` for computed financial views. System logs and archived originals are protected.
+it already answers the question. Monthly categories store documents under `<category>/<MM-YY>/<topic>.md`. The backend determines the month from an evidenced occurrence date, or automatically from the current recording time in the owner's timezone when date is omitted. Do not supply a date or date_unknown merely to make a save succeed; neither is required. For example, use `general/10-26/istanbul-trip.md`. Month folders are virtual and appear automatically, even when empty; no mkdir or folder-creation tool is needed. Shaped writers create the document at its destination, including months absent from the listing. Continue using `memory_state` for stable state keys, `solus_accounting` for explicitly selected Solus books, and `finance_record` for retained legacy financial views. System logs and archived originals are protected.
 
 ### Evidence and safe writing
 
@@ -115,7 +115,18 @@ then continue the substantive conversation. Another owner acknowledgment is not
 an instruction to retry or reopen the same clarification. Retry only when new
 evidence or a concrete correction addresses the defect, or the owner requests it.
 
-Financial activity MUST use finance_record. It chooses the destination from the
+Choose the financial authority before writing. Use solus_accounting for an
+explicitly selected Solus book: read books/accounts first, supply original
+evidence, exact amount strings, actual dates and stable command/occurrence keys.
+Posted corrections use reversal and replacement. Card dates are configured by
+the owner in Solus; purchases, billed installments and actual payments are
+different views, and forecasts never confirm a payment. Unknown amounts,
+accounts or occurrence dates cannot be guessed into a journal. Solus projections
+are computed and cannot be hand edited.
+
+The owner handles historical migration and will explicitly authorize legacy
+retirement. Never dual-write an occurrence or combine legacy and Solus totals.
+For retained legacy activity, finance_record chooses the destination from the
 record type. transaction, balance, report and recurring are distinct schemas.
 monthly-structure holds computed recurring rules ONLY. ledger/YYYY-MM holds
 computed actual transactions. Never write this month's activity to standing rules.

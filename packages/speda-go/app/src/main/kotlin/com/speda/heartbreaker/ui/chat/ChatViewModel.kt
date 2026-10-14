@@ -89,6 +89,44 @@ class ChatViewModel(
     /** The speaker for the turn in flight. One per turn: it holds the fence
      *  state of the reply it is filtering, so it can never be reused. */
     private var speaker: VoiceSpeaker? = null
+    private data class VoiceRecording(val text: String, val clips: List<ByteArray>)
+    private val voiceRecordings = linkedMapOf<String, VoiceRecording>()
+
+    private fun rememberVoice(id: String, text: String, clips: List<ByteArray>) {
+        voiceRecordings.remove(id)
+        voiceRecordings[id] = VoiceRecording(text, clips)
+        var bytes = voiceRecordings.values.sumOf { recording -> recording.clips.sumOf { it.size } }
+        while (bytes > 32 * 1024 * 1024 && voiceRecordings.isNotEmpty()) {
+            val oldest = voiceRecordings.keys.first()
+            bytes -= voiceRecordings.remove(oldest)!!.clips.sumOf { it.size }
+        }
+    }
+
+    /** Replay retained audio, or synthesize a historical answer once and retain it. */
+    fun replayVoice(messageId: String) {
+        val current = state.value
+        val cfg = current.config ?: return
+        val message = current.messages.firstOrNull { it.id == messageId } ?: return
+        if (!_voiceOn.value || current.isStreaming || message.isStreaming ||
+            message.role != Role.Assistant || message.content.isBlank()
+        ) return
+        stopSpeaking()
+        val recording = voiceRecordings[messageId]?.takeIf { it.text == message.content }
+        speaker = VoiceSpeaker(
+            api, cfg, cfg.agentId, viewModelScope, levels.sessionId,
+            replayAudio = recording?.clips,
+            onRecording = { text, clips -> rememberVoice(messageId, text, clips) },
+        ) { st ->
+            _voiceState.value = st
+            if (st == VoiceSpeaker.State.IDLE) levels.stop()
+        }
+        levels.start()
+        _voiceState.value = if (recording == null) VoiceSpeaker.State.THINKING else VoiceSpeaker.State.SPEAKING
+        if (recording == null) {
+            speaker?.feed(message.content)
+            speaker?.finish()
+        }
+    }
 
     fun setVoice(on: Boolean) {
         if (_voiceOn.value == on) return
@@ -192,6 +230,9 @@ class ChatViewModel(
     /** Point the engine at an agent. Cancels any in-flight turn and reloads. */
     fun onConfig(config: AppConfig) {
         if (state.value.config == config) return
+        stopSpeaking()
+        val previous = state.value.config
+        if (previous?.apiBase != config.apiBase || previous?.apiKey != config.apiKey) voiceRecordings.clear()
         val rid = runId
         if (rid != null) attached.remove(rid)
         activeRunsWatcherJob?.cancel()
@@ -204,6 +245,7 @@ class ChatViewModel(
 
     /** [projectId] binds the new chat to a project; null starts a loose one. */
     fun newChat(projectId: Int? = null) {
+        stopSpeaking()
         activeRunsWatcherJob?.cancel()
         reattachJob?.cancel()
         if (sendJob?.isActive == true && turnInFlight) {
@@ -236,6 +278,7 @@ class ChatViewModel(
 
     fun selectSession(sessionId: Int, projectId: Int? = null) {
         val cfg = state.value.config ?: return
+        if (sessionId != state.value.activeSessionId) stopSpeaking()
         activeRunsWatcherJob?.cancel()
         reattachJob?.cancel()
         // Abort-on-switch: if a local send is streaming for ANOTHER session, drop
@@ -615,6 +658,7 @@ class ChatViewModel(
                     when (event.type) {
                         "start" -> {
                             gotStart = true
+                            stopSpeaking()
                             // A fresh speaker per turn: it carries the fence
                             // state of the reply it filters, so reusing one
                             // would have it judging turn N+1 against whether
@@ -632,6 +676,7 @@ class ChatViewModel(
                                     speaker = VoiceSpeaker(
                                         api, cfg, cfg.agentId, viewModelScope,
                                         levels.sessionId,
+                                        onRecording = { text, clips -> rememberVoice(assistantId, text, clips) },
                                     ) { st ->
                                         _voiceState.value = st
                                         // Speech ending on its own releases the
@@ -726,7 +771,6 @@ class ChatViewModel(
                             // not, and cutting it here would clip the last
                             // sentence of every reply.
                             speaker?.finish()
-                            speaker = null
                             dispatch(ChatAction.FinishMessage(assistantId, event.sessionId))
                             onDone(event.sessionId)
                         }

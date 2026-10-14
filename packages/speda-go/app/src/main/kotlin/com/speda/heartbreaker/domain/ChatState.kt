@@ -108,9 +108,9 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
 
     is ChatAction.TagMessageSession -> state.copy(
         activeSessionId = state.activeSessionId ?: action.sessionId,
-        messages = state.messages.map { m ->
+        messages = state.messages.updateMessage(action.id) { m ->
             if (m.id == action.id) m.copy(sessionId = action.sessionId) else m
-        }.toPersistentList(),
+        },
     )
 
     is ChatAction.NewChat -> state.copy(
@@ -120,52 +120,52 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
         isStreaming = false,
     )
 
-    is ChatAction.AddUserMessage -> state.copy(messages = (state.messages + action.message).toPersistentList())
+    is ChatAction.AddUserMessage -> state.copy(messages = state.messages.add(action.message))
 
     is ChatAction.AddAssistantMessage -> state.copy(
         isStreaming = true,
-        messages = (state.messages + action.message).toPersistentList(),
+        messages = state.messages.add(action.message),
     )
 
     is ChatAction.AppendChunk -> state.copy(
-        messages = state.messages.map { m ->
+        messages = state.messages.updateMessage(action.id) { m ->
             // First text clears any pending status line.
             if (m.id == action.id) m.copy(content = m.content + action.chunk, status = null) else m
-        }.toPersistentList(),
+        },
     )
 
     is ChatAction.AppendThinking -> state.copy(
-        messages = state.messages.map { m ->
+        messages = state.messages.updateMessage(action.id) { m ->
             if (m.id == action.id) m.copy(thinking = (m.thinking ?: "") + action.text) else m
-        }.toPersistentList(),
+        },
     )
 
     is ChatAction.ThinkingRedacted -> state.copy(
-        messages = state.messages.map { m ->
+        messages = state.messages.updateMessage(action.id) { m ->
             if (m.id == action.id) m.copy(thinkingRedacted = true) else m
-        }.toPersistentList(),
+        },
     )
 
     is ChatAction.ThinkingDone -> state.copy(
-        messages = state.messages.map { m ->
+        messages = state.messages.updateMessage(action.id) { m ->
             if (m.id == action.id && !m.thinkingDone) m.copy(thinkingDone = true, thinkingMs = action.ms) else m
-        }.toPersistentList(),
+        },
     )
 
     is ChatAction.SetStatus -> state.copy(
-        messages = state.messages.map { m ->
+        messages = state.messages.updateMessage(action.id) { m ->
             if (m.id == action.id) m.copy(status = action.status) else m
-        }.toPersistentList(),
+        },
     )
 
     is ChatAction.AddTool -> state.copy(
-        messages = state.messages.map { m ->
+        messages = state.messages.updateMessage(action.id) { m ->
             if (m.id == action.id) m.copy(tools = (m.tools + action.tool).toPersistentList()) else m
-        }.toPersistentList(),
+        },
     )
 
     is ChatAction.SetToolResult -> state.copy(
-        messages = state.messages.map { m ->
+        messages = state.messages.updateMessage(action.id) { m ->
             if (m.id == action.id) {
                 m.copy(
                     tools = m.tools.map { t ->
@@ -175,17 +175,17 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
             } else {
                 m
             }
-        }.toPersistentList(),
+        },
     )
 
     is ChatAction.AddFile -> state.copy(
-        messages = state.messages.map { m ->
+        messages = state.messages.updateMessage(action.id) { m ->
             if (m.id == action.id) {
                 m.copy(files = ((m.files ?: persistentListOf()) + action.file).toPersistentList())
             } else {
                 m
             }
-        }.toPersistentList(),
+        },
     )
 
     is ChatAction.Subagent -> {
@@ -195,8 +195,8 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
             state
         } else {
             state.copy(
-                messages = state.messages.map { m ->
-                    if (m.id != action.id) return@map m
+                messages = state.messages.updateMessage(action.id) { m ->
+                    if (m.id != action.id) return@updateMessage m
                     val runs = m.subagents ?: persistentListOf()
                     val idx = runs.indexOfFirst { it.id == runId }
                     var run = if (idx >= 0) {
@@ -271,7 +271,7 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
                     }
                     val nextRuns = if (idx >= 0) runs.set(idx, run) else (runs + run).toPersistentList()
                     m.copy(subagents = nextRuns)
-                }.toPersistentList(),
+                },
             )
         }
     }
@@ -286,9 +286,9 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
             state.copy(
                 isStreaming = false,
                 activeSessionId = if (action.sessionId != 0) action.sessionId else state.activeSessionId,
-                messages = state.messages.map { m ->
+                messages = state.messages.updateMessage(action.id) { m ->
                     if (m.id == action.id) m.copy(isStreaming = false, status = null) else m
-                }.toPersistentList(),
+                },
             )
         }
     }
@@ -299,7 +299,7 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
         } else {
             state.copy(
                 isStreaming = false,
-                messages = state.messages.map { m ->
+                messages = state.messages.updateMessage(action.id) { m ->
                     // Preserve everything already streamed; attach the error as a
                     // SEPARATE banner. A mid-turn drop must never vaporize the answer.
                     if (m.id == action.id) {
@@ -307,7 +307,7 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
                     } else {
                         m
                     }
-                }.toPersistentList(),
+                },
             )
         }
     }
@@ -335,4 +335,16 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
             messages = if (wasActive) persistentListOf() else state.messages,
         )
     }
+}
+
+/** Tail updates share the persistent list's untouched nodes instead of copying
+ * every historical row on every token. Search from the tail for live replies. */
+private inline fun PersistentList<ChatMessage>.updateMessage(
+    id: String,
+    transform: (ChatMessage) -> ChatMessage,
+): PersistentList<ChatMessage> {
+    val index = indexOfLast { it.id == id }
+    if (index < 0) return this
+    val next = transform(this[index])
+    return if (next == this[index]) this else set(index, next)
 }

@@ -35,4 +35,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         for key, value in _HEADERS.items():
             response.headers[key] = value
+        if request.url.path in {"/solus", "/solus/"} or request.url.path.startswith("/solus/assets/"):
+            response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        if request.url.path.startswith("/solus/api/"):
+            response.headers["Cache-Control"] = "no-store"
         return response

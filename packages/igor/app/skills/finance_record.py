@@ -16,7 +16,9 @@ class FinanceRecordSkill(Skill):
     read_only = False
     restricted_to = frozenset({"sentinel", "orion"})
     description = (
-        "The ONLY financial activity writer. summary(month=YYYY-MM) calculates exact "
+        "The legacy typed financial activity writer, retained for owner-managed migration. "
+        "Use Solus for an explicitly selected Solus book; never dual-write an occurrence or combine the two systems' totals. "
+        "summary(month=YYYY-MM) calculates exact "
         "reconciled totals by movement/currency, with exclusions and dated balances. "
         "Use it for reports; never add legacy tables to these totals. get/list before put. One stable id per "
         "actual transaction, dated account balance, source report, or recurring rule. "

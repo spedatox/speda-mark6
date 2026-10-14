@@ -93,6 +93,11 @@ fun MathProse(bodyHtml: String, spans: List<MathSpan>, modifier: Modifier = Modi
                 }
             }
         },
+        onRelease = { web ->
+            web.stopLoading()
+            web.removeJavascriptInterface("HbMath")
+            web.destroy()
+        },
         update = { web ->
             // AndroidView#update runs on every recomposition; reloading the page
             // each time would restart the render and flicker mid-stream.

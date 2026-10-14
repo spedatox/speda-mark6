@@ -7,6 +7,7 @@ package com.speda.heartbreaker.i18n
  *  desktop client's `lib/i18n/tr.ts` wherever the same concept appears, so the
  *  two clients read as one product. */
 val Tr = AppStrings(
+    voiceMode = AppStrings.VoiceMode(replay = "Tekrar oynat", stop = "Durdur"),
     common = AppStrings.Common(
         cancel = "İptal",
         save = "Kaydet",

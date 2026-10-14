@@ -17,7 +17,7 @@ import { Skeleton } from './Skeleton'
 import { useT } from '../lib/i18n'
 import { useLanguage } from '../lib/language'
 import { hasMark } from '../lib/agentMarks'
-import { VoiceSession, voiceStatus, CANVAS_FALLBACK, type CanvasSettings } from '../lib/voice'
+import { VoiceSession, voiceStatus, CANVAS_FALLBACK, type CanvasSettings, type VoiceRecording } from '../lib/voice'
 import type { MicState } from '../lib/mic'
 import type { OrbState } from './VoiceOrb'
 import type { AppConfig, ImageBlock, DocBlock, UploadedFile, PendingAsk } from '../lib/types'
@@ -383,6 +383,18 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   // or keystroke that starts one) and torn down when speech ends. Keeping one
   // alive across an idle mode would hold an audio device open for nothing.
   const voiceRef = useRef<VoiceSession | null>(null)
+  const voiceRecordings = useRef(new Map<string, VoiceRecording>())
+  const rememberVoice = useCallback((id: string, recording: VoiceRecording) => {
+    const cache = voiceRecordings.current
+    cache.delete(id)
+    cache.set(id, recording)
+    let bytes = Array.from(cache.values()).reduce((total, item) => total + item.bytes, 0)
+    while (bytes > 64 * 1024 * 1024 && cache.size > 0) {
+      const oldest = cache.keys().next().value!
+      bytes -= cache.get(oldest)!.bytes
+      cache.delete(oldest)
+    }
+  }, [])
   // Which assistant bubble the live VoiceSession is speaking for. Speech is
   // per-turn, so it has to end when that turn leaves the view — see the effect
   // below.
@@ -427,6 +439,10 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     spokenIdRef.current = null
     setOrbState('idle')
   }, [])
+  useEffect(() => {
+    stopSpeaking()
+    voiceRecordings.current.clear()
+  }, [config.apiBase, config.apiKey, stopSpeaking])
 
   // A turn's speech belongs to that turn's bubble. When the bubble leaves the
   // transcript — the owner selected another session, or switched agent (which
@@ -564,6 +580,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
         voice: voiceModelRef.current,
       })
       vs.onState = setOrbState
+      vs.onRecording = recording => rememberVoice(assistantId, recording)
       voiceRef.current = vs
       spokenIdRef.current = assistantId
       void vs.resume()
@@ -932,7 +949,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     }
   }, [state.activeSessionId, state.activeProjectId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd,
       settings.streamReconnectAttempts, settings.streamReconnectDelayMs, settings.streamStallSeconds, settings.streamDeadSeconds,
-      dispatch, t])
+      dispatch, t, rememberVoice])
 
   // Mirror the latest `send` into a ref so the stable row handlers below can call
   // it without listing it as a dependency (which would make them change identity
@@ -1256,6 +1273,33 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
 
   const voiceIndex = voicePin ?? Math.max(0, voiceAnswers.length - 1)
   const voiceReply = voiceAnswers[voiceIndex] ?? null
+  const replayVoice = () => {
+    if (!voiceReply || voiceReply.isStreaming || state.isStreaming || !voiceReady) return
+    stopSpeaking()
+    const saved = voiceRecordings.current.get(voiceReply.id)
+    const recording = saved?.text === voiceReply.content ? saved : undefined
+    const vs = new VoiceSession(config, {
+      agentId: config.agentId, locale: localeRef.current, voice: voiceModelRef.current,
+    }, recording)
+    voiceRef.current = vs
+    spokenIdRef.current = voiceReply.id
+    vs.onRecording = audio => rememberVoice(voiceReply.id, audio)
+    vs.onState = next => {
+      if (voiceRef.current !== vs) return
+      setOrbState(next)
+      if (next === 'idle') {
+        voiceRef.current = null
+        spokenIdRef.current = null
+        vs.stop()
+      }
+    }
+    void vs.resume()
+    setOrbState(recording ? 'speaking' : 'thinking')
+    if (!recording) {
+      vs.feed(voiceReply.content)
+      vs.finish()
+    }
+  }
   /** The question that produced the answer on screen — the user turn immediately
    *  before it, not simply the most recent one. Those are the same message while
    *  the board is following the conversation, and different the moment the owner
@@ -1293,16 +1337,21 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           tools={voiceReply?.tools ?? []}
           answerIndex={voiceIndex}
           answerCount={voiceAnswers.length}
-          onAnswer={i => setVoicePin(
-            // Landing on the newest re-pins, so the board resumes following the
-            // conversation instead of freezing on what is currently last.
-            i >= voiceAnswers.length - 1 ? null : Math.max(0, i),
-          )}
+          onAnswer={i => {
+            stopSpeaking()
+            setVoicePin(
+              // Landing on the newest re-pins, so the board resumes following the
+              // conversation instead of freezing on what is currently last.
+              i >= voiceAnswers.length - 1 ? null : Math.max(0, i),
+            )
+          }}
           prompt={voicePrompt}
           language={language}
           onLanguage={setLanguage}
           onClose={() => onCloseVoice?.()}
           onStopSpeaking={stopSpeaking}
+          onReplay={replayVoice}
+          canReplay={voiceReady && !!voiceReply?.content.trim() && !voiceReply?.isStreaming && !state.isStreaming}
           micState={micState}
           configured={voiceReady}
           canvas={canvas}

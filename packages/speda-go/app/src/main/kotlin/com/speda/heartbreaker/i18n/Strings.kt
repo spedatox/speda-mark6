@@ -24,6 +24,7 @@ data class AppStrings(
     val uplink: Uplink,
     val composer: Composer,
     val voiceActivity: VoiceActivity,
+    val voiceMode: VoiceMode,
     val fileCard: FileCard,
     val thinkingLevel: ThinkingLevel,
     val message: Message,
@@ -91,6 +92,8 @@ data class AppStrings(
         val working: String,
         val composing: String,
     )
+
+    data class VoiceMode(val replay: String, val stop: String)
 
     data class Composer(
         val placeholder: String,

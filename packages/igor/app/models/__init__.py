@@ -55,6 +55,13 @@ from app.models.library import (
     LibrarySource, LibraryDocument, LibraryRevision, LibraryIndexGeneration,
     LibraryPassage, LibraryEmbedding, LibraryCitation
 )
+from app.models.solus import SolusTransaction, SolusInstallment
+from app.models.solus_ledger import (
+    SolusBook, SolusAccount, SolusEvent, SolusPosting, SolusCommand,
+    SolusScheduleItem, SolusSettlement, SolusPlan, SolusImport, SolusReconciliation,
+    SolusLot, SolusDisposal, SolusValuation,
+    SolusBrowserSession, SolusCardCalendar, SolusCardStatement, SolusCredential, SolusAuthAttempt, SolusSetupToken,
+)
 
 __all__ = [
     "User", "Session", "ChannelSession", "Message", "Memory", "MemoryFile", "MemoryRevision", "MemoryReview",
@@ -71,4 +78,9 @@ __all__ = [
     "CountermeasurePattern", "CountermeasureRun",
     "LibrarySource", "LibraryDocument", "LibraryRevision", "LibraryIndexGeneration",
     "LibraryPassage", "LibraryEmbedding", "LibraryCitation",
+    "SolusTransaction", "SolusInstallment",
+    "SolusBook", "SolusAccount", "SolusEvent", "SolusPosting", "SolusCommand",
+    "SolusScheduleItem", "SolusSettlement", "SolusPlan", "SolusImport", "SolusReconciliation",
+    "SolusLot", "SolusDisposal", "SolusValuation", "SolusBrowserSession",
+    "SolusCardCalendar", "SolusCardStatement", "SolusCredential", "SolusAuthAttempt", "SolusSetupToken",
 ]

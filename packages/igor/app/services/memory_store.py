@@ -42,6 +42,8 @@ async def _mutate_in_txn(db, *, user_id: int, path: str, before: str | None,
     from app.services.memory_policy import protected_write
     from app.services.memory_schema import check_write, MemorySchemaViolation
     from app.services.memory_spec import owner_of
+    if "solus-projection-v1" in (before or ""):
+        raise MemorySchemaViolation("Solus projections are computed. Correct the source journal through solus_accounting.")
     problem = protected_write(path, author, managed=managed)
     if problem:
         raise MemorySchemaViolation("Write rejected — " + problem)
@@ -578,3 +580,129 @@ async def resolve_alias(db: AsyncSession, user_id: int, path: str) -> str | None
         MemoryRevision.user_id == user_id, MemoryRevision.record_id == record_id,
         MemoryRevision.path.in_(select(MemoryFile.path).where(MemoryFile.user_id == user_id)),
     ).order_by(MemoryRevision.id.desc()).limit(1))).scalar_one_or_none()
+
+
+async def run_financial_command(context, payload: dict) -> dict:
+    """Solus's atomic boundary: isolated session, journal, evidence, indexes and receipt.
+
+    Never commit a chat session's unrelated pending work. BEGIN IMMEDIATE fences
+    SQLite writers before checking idempotency/version and computing any effects.
+    Provider admission happens before the write transaction, never during math.
+    """
+    import hashlib
+    import json
+    from dataclasses import replace
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+    from app.models.solus_ledger import SolusCommand
+    from app.schemas.solus import parse_command
+    from app.services.solus.commands import apply, SolusError
+    from app.services.solus.projections import refresh
+    command = parse_command(payload)
+    canonical = command.model_dump(mode="json")
+    fingerprint = hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    bind = context.db.bind
+    if bind is None or bind.dialect.name != "sqlite":
+        raise SolusError("Solus requires the configured SQLite engine.", 409)
+
+    async def prior(db):
+        value = (await db.execute(select(SolusCommand).where(SolusCommand.user_id == context.user_id,
+            SolusCommand.command_key == command.command_key))).scalar_one_or_none()
+        if value and value.payload_hash != fingerprint:
+            try:
+                same = parse_command(value.payload).model_dump(mode="json") == canonical
+            except ValueError:
+                same = False
+            if not same:
+                raise SolusError("Idempotency key already belongs to a different command.", 409)
+        return dict(value.receipt) if value else None
+
+    async with AsyncSession(bind=bind, expire_on_commit=False) as reader:
+        previous = await prior(reader)
+        if previous:
+            return previous
+    evidence = []
+    rationale = "Explicit owner command; deterministic accounting."
+    supplied = [e.model_dump() for e in getattr(command, "evidence", [])]
+    if context.agent_id != "owner":
+        if not supplied:
+            raise SolusError("Agent financial assertions require original owner-scoped evidence.")
+        from app.services.memory_admission import resolve_evidence, admit
+        evidence = await resolve_evidence(context.db, context.user_id, supplied, session_id=context.session_id)
+        rationale = await admit(context.db, user_id=context.user_id,
+            changes=[{"path": "/memories/finance/records/solus-entry.md", "before": "", "after": json.dumps(canonical, ensure_ascii=False)}],
+            evidence=evidence, model=context.model)
+    else:
+        # Exact authorized form is source evidence, including setup commands.
+        evidence = [{"ref": f"solus-command:{command.command_key}", "quote": json.dumps(canonical, ensure_ascii=False),
+                     "source_sha256": fingerprint, "source_authority": "owner"}]
+    stored_evidence = [{k: v for k, v in e.items() if k not in {"_image", "source_body"}} for e in evidence]
+    async with AsyncSession(bind=bind, expire_on_commit=False) as writer:
+        try:
+            await writer.execute(text("BEGIN IMMEDIATE"))
+            previous = await prior(writer)
+            if previous:
+                await writer.rollback()
+                return previous
+            local = replace(context, db=writer)
+            if context.agent_id == "owner":
+                from uuid import uuid4
+                from app.models.memory_source import MemorySource
+                source_id = str(uuid4())
+                source_text = json.dumps(canonical, ensure_ascii=False)
+                writer.add(MemorySource(id=source_id, user_id=context.user_id,
+                    source_key=f"solus:{command.command_key}", original_path=f"solus-command:{command.command_key}",
+                    content=source_text, content_hash=hashlib.sha256(source_text.encode()).hexdigest(),
+                    classification="owner_financial_command", original_row=canonical, migration_id="solus-live"))
+                stored_evidence = [{"ref": f"source:{source_id}", "quote": source_text,
+                    "source_sha256": hashlib.sha256(source_text.encode()).hexdigest(), "source_authority": "owner"}]
+            # Re-resolve source identity/quotes inside the transaction without another model call.
+            if supplied and context.agent_id != "owner":
+                from app.services.memory_admission import resolve_evidence
+                rechecked = await resolve_evidence(writer, context.user_id, supplied, session_id=context.session_id)
+                if [(e["ref"], e.get("source_sha256")) for e in evidence] != [(e["ref"], e.get("source_sha256")) for e in rechecked]:
+                    raise SolusError("Source changed during admission; reread before posting.", 409)
+            result = await apply(writer, command, local, stored_evidence)
+            receipt = {"status": "success", "command_key": command.command_key, **result}
+            await refresh(writer, local, receipt, command, stored_evidence, rationale)
+            writer.add(SolusCommand(user_id=context.user_id, command_key=command.command_key, payload_hash=fingerprint,
+                payload=canonical, receipt=receipt, actor=context.agent_id, request_id=context.request_id))
+            await writer.commit()
+            return receipt
+        except IntegrityError as exc:
+            await writer.rollback()
+            raise SolusError("Accounting identity or journal constraint failed; nothing saved.", 409) from exc
+        except Exception:
+            await writer.rollback()
+            raise
+
+
+async def resolve_financial_command(context, command_key: str) -> dict:
+    """Resolve a browser's uncertain save without admitting a late duplicate.
+
+    The owner explicitly requests this action. The same writer fence either
+    returns the committed receipt or records a cancellation before any pending
+    request can post. No monetary effect or legacy mutation is created.
+    """
+    import hashlib
+    import json
+    from sqlalchemy import text
+    from app.models.solus_ledger import SolusCommand
+    from app.services.solus.commands import SolusError
+    if context.agent_id != "owner" or not 8 <= len(command_key) <= 200:
+        raise SolusError("Only the owner can resolve a valid uncertain command key.")
+    async with AsyncSession(bind=context.db.bind, expire_on_commit=False) as writer:
+        await writer.execute(text("BEGIN IMMEDIATE"))
+        existing = await writer.scalar(select(SolusCommand).where(SolusCommand.user_id == context.user_id,
+            SolusCommand.command_key == command_key))
+        if existing:
+            receipt = dict(existing.receipt)
+            await writer.rollback()
+            return receipt
+        payload = {"operation": "cancel_uncertain", "command_key": command_key}
+        receipt = {"status": "cancelled", "command_key": command_key}
+        writer.add(SolusCommand(user_id=context.user_id, command_key=command_key,
+            payload_hash=hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest(),
+            payload=payload, receipt=receipt, actor=context.agent_id, request_id=context.request_id))
+        await writer.commit()
+        return receipt

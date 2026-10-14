@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -42,9 +41,6 @@ import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.data.ModelInfo
 import com.speda.heartbreaker.data.Uplink
 import com.speda.heartbreaker.designsystem.brand.Brands
-import com.speda.heartbreaker.designsystem.glass.LocalAmbientHazeState
-import com.speda.heartbreaker.designsystem.glass.LocalHazeState
-import com.speda.heartbreaker.designsystem.glass.hbHazeSource
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HudStrip
@@ -88,7 +84,6 @@ fun ChatScreen(
     agentId: String,
     onAgentChange: (String) -> Unit,
     onResetUplink: () -> Unit,
-    haze: dev.chrisbanes.haze.HazeState,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -114,7 +109,6 @@ fun ChatScreen(
     // itself mid-turn, so the client reads it on entry and re-syncs after every
     // turn settles rather than trusting its own last write.
     var budgetMode by remember { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(config) { budgetMode = graph.api.getBudgetMode(config) }
     LaunchedEffect(config, state.isStreaming) {
         if (!state.isStreaming) budgetMode = graph.api.getBudgetMode(config)
     }
@@ -155,8 +149,6 @@ fun ChatScreen(
     }
 
     val voiceOn by vm.voiceOn.collectAsStateWithLifecycle()
-    val voiceState by vm.voiceState.collectAsStateWithLifecycle()
-    val voiceLevel by vm.voiceLevel.collectAsStateWithLifecycle()
     // The board's settings live on the backend so the agent's brief and the
     // surface that renders it cannot disagree about the window ceiling.
     var canvas by remember { mutableStateOf(CanvasSettings()) }
@@ -220,8 +212,8 @@ fun ChatScreen(
 
     // A NEW message (the owner's send, or the assistant's bubble appearing) is a
     // deliberate act — always bring the view down to it.
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty()) {
+    LaunchedEffect(voiceOn, state.activeSessionId, state.messages.size) {
+        if (!voiceOn && state.messages.isNotEmpty()) {
             listState.scrollToItem(state.messages.lastIndex, SCROLL_TO_END)
         }
     }
@@ -230,8 +222,8 @@ fun ChatScreen(
     // already at the bottom. Scrolling to the item index alone parks the
     // viewport on the message's FIRST line, so every chunk threw the reader back
     // to the top of the answer while the new text grew off-screen below.
-    LaunchedEffect(state.messages.lastOrNull()?.content?.length) {
-        if (atBottom && state.messages.isNotEmpty()) {
+    LaunchedEffect(voiceOn, state.messages.lastOrNull()?.content?.length, state.messages.lastOrNull()?.thinking?.length) {
+        if (!voiceOn && atBottom && state.messages.isNotEmpty() && !listState.isScrollInProgress) {
             listState.scrollToItem(state.messages.lastIndex, SCROLL_TO_END)
         }
     }
@@ -247,30 +239,21 @@ fun ChatScreen(
                 onAgentClick = { switcherOpen = true },
             )
             AppHeader(
-                haze = haze,
                 sessionTitle = activeTitle,
                 onToggleSidebar = { drawerOpen = true },
             )
 
-            // The transcript is ALSO a backdrop: the header, composer and drawer
-            // sit over it, so they must refract the text behind them — that's
-            // what makes them read as glass rather than tinted panels. (Blurring
-            // only the ambient shows nothing: a smooth gradient blurs to itself.)
-            Box(Modifier.weight(1f).fillMaxWidth().hbHazeSource(haze)) {
-                // Glass INSIDE this backdrop must not blur IT — it would sample
-                // the source it lives in, itself included. It refracts the
-                // ambient instead: strictly behind, never a feedback loop, and
-                // full of moving accent light, so bubbles are real frosted glass
-                // rather than the flat occluding-fill fallback.
-                CompositionLocalProvider(LocalHazeState provides LocalAmbientHazeState.current) {
+            // No transcript capture: every glass surface uses the inexpensive fill.
+            Box(Modifier.weight(1f).fillMaxWidth()) {
                     // Voice mode REPLACES the transcript rather than sitting
                     // beside it. The point of the mode is that the owner is
                     // listening, not reading a scrollback — so what shows is the
                     // current answer's evidence and the words as they are said.
                     if (voiceOn) {
-                        val answers = state.messages.filter {
-                            it.role == com.speda.heartbreaker.domain.Role.Assistant
+                        val answers = remember(state.messages) {
+                            state.messages.filter { it.role == com.speda.heartbreaker.domain.Role.Assistant }
                         }
+                        val voiceState by vm.voiceState.collectAsStateWithLifecycle()
                         // null pins to the NEWEST, and that is the default rather
                         // than a stored index: a live turn has to keep arriving on
                         // screen, and an index would have to be chased forward
@@ -286,17 +269,21 @@ fun ChatScreen(
                             // as live would spin its activity card for ever.
                             streaming = state.isStreaming && idx == answers.size - 1,
                             state = voiceState,
-                            level = voiceLevel,
+                            level = vm.voiceLevel,
                             captionLines = canvas.captionLines,
                             maxPanels = canvas.maxPanels,
                             activityAfterMs = canvas.activityAfterMs,
                             answerIndex = idx,
                             answerCount = answers.size,
                             onAnswer = { i ->
+                                vm.stopSpeaking()
                                 // Landing on the newest re-pins, so the board
                                 // resumes following the conversation.
                                 voicePin = if (i >= answers.size - 1) null else i.coerceAtLeast(0)
                             },
+                            canReplay = live != null && live.content.isNotBlank() && !state.isStreaming,
+                            onReplay = { live?.let { vm.replayVoice(it.id) } },
+                            onStopSpeaking = vm::stopSpeaking,
                         )
                     } else if (state.messages.isEmpty()) {
                         WelcomeView(
@@ -311,7 +298,7 @@ fun ChatScreen(
                             modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
                             contentPadding = PaddingValues(vertical = 12.dp),
                         ) {
-                            items(state.messages, key = { it.id }) { message ->
+                            items(state.messages, key = { it.id }, contentType = { it.role }) { message ->
                                 ReplySelection(onSelect = { quote -> if (quote !in replyQuotes) replyQuotes = replyQuotes + quote }, turkish = settings.locale == "tr") {
                                     MessageItem(
                                         message,
@@ -330,7 +317,6 @@ fun ChatScreen(
                             }
                         }
                     }
-                }
             }
 
             // A peer's safety gate is waiting on an irreversible operation.

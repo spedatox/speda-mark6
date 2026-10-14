@@ -13,10 +13,6 @@ import androidx.compose.ui.Modifier
 import com.speda.heartbreaker.AppGraph
 import com.speda.heartbreaker.data.Uplink
 import com.speda.heartbreaker.designsystem.background.AmbientBackground
-import com.speda.heartbreaker.designsystem.glass.LocalAmbientHazeState
-import com.speda.heartbreaker.designsystem.glass.LocalHazeState
-import com.speda.heartbreaker.designsystem.glass.hbHazeSource
-import com.speda.heartbreaker.designsystem.glass.rememberHbHazeState
 import com.speda.heartbreaker.ui.chat.ChatScreen
 import com.speda.heartbreaker.ui.prose.LocalAircraftResolver
 import com.speda.heartbreaker.ui.prose.LocalBoardImageResolver
@@ -28,8 +24,8 @@ import com.speda.heartbreaker.domain.MapPlace
 import com.speda.heartbreaker.domain.RouteGeometry
 
 /**
- * The configured shell root: the ambient void is the single Haze source that all
- * top-level glass blurs over; [ChatScreen] lays out the HUD strip, header,
+ * The configured shell root: a static void beneath cached glass fills.
+ * [ChatScreen] lays out the HUD strip, header,
  * transcript/welcome, composer and the sidebar drawer over it.
  */
 @Composable
@@ -40,22 +36,8 @@ fun MainScreen(
     onAgentChange: (String) -> Unit,
     onResetUplink: () -> Unit,
 ) {
-    val haze = rememberHbHazeState()
-    // A second state over the SAME ambient pixels, but one the transcript never
-    // joins as a source. Surfaces that live inside a content source (message
-    // bubbles) refract this one — see LocalAmbientHazeState.
-    val ambientHaze = rememberHbHazeState()
-
     Box(Modifier.fillMaxSize()) {
-        // ONLY the ambient is the haze source. Marking the whole tree would feed
-        // the UI back into its own blur (a surface sampling the text beneath it,
-        // and itself); glass refracting the void is both correct and cheap.
-        Box(Modifier.matchParentSize().hbHazeSource(haze)) {
-            AmbientBackground(Modifier.fillMaxSize().hbHazeSource(ambientHaze))
-        }
-
-        // Every hbGlass surface below picks this up and becomes real frosted
-        // glass, without any call site knowing about Haze.
+        AmbientBackground(Modifier.matchParentSize())
         // Map cards reference route geometry by id and resolve it here, against
         // the same Igor the chat streams from. Provided once at the root so no
         // prose block needs to know about AppGraph.
@@ -99,9 +81,7 @@ fun MainScreen(
         }
 
         CompositionLocalProvider(
-            LocalHazeState provides haze,
             LocalBoardImageResolver provides resolveBoardImage,
-            LocalAmbientHazeState provides ambientHaze,
             LocalRouteResolver provides resolveRoute,
             LocalPlaceResolver provides resolvePlaces,
             LocalAircraftResolver provides resolveAircraft,
@@ -112,7 +92,6 @@ fun MainScreen(
                 agentId = agentId,
                 onAgentChange = onAgentChange,
                 onResetUplink = onResetUplink,
-                haze = haze,
                 // statusBarsPadding resolves to 0 while the status bar is hidden
                 // (fullscreen), and re-applies if it's swiped back in.
                 modifier = Modifier.fillMaxSize().statusBarsPadding(),

@@ -136,3 +136,15 @@ Regression coverage includes state expiry, plans versus outcomes, invalid dates,
 source existence, concurrency conflicts, protected paths, semantic review
 invalidation, projection purity, dossier extension injection and legacy scheduler
 compatibility. Private production memory and migration plans must never enter git.
+# Solus accounting addendum — 11 October 2026
+
+For an explicitly selected Solus book, SQL events/postings are the financial
+authority. `memory_store.run_financial_command` atomically commits exact journal
+effects, original evidence, computed Solus memory view, catalog/passages/graph,
+revision and command receipt in an isolated writer. Raw or shaped document tools
+cannot modify marked Solus projections. Browser receipt resolution shares the
+writer fence and may cancel an uncommitted command, never a posted transaction.
+The owner controls historical migration and explicitly authorizes retirement of
+the retained `finance_record` authority. Until then, do not dual-write occurrences
+or combine legacy and Solus totals. This addendum does not authorize a dataset
+replacement or model-driven conversion of historical finance records.
