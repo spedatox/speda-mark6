@@ -30,10 +30,10 @@ Platform, though the endpoint is still aiplatform.googleapis.com) bills as
 Google Cloud usage, and only that second route can be paid for with Google
 Cloud credits. See the VERTEX_* block in config.py.
 
-GLM and DeepSeek-V4 both default to "thinking" mode on and both disable it
-via the same extra_body toggle; DeepSeek additionally forces non-thinking
-whenever tools are present, because V4 thinking mode is incompatible with the
-tool loop (see _to_openai_params).
+GLM and DeepSeek-V4 default to "thinking" mode on. GLM-5.3 requires thinking
+and exposes low/high/max effort; older GLM models can disable it through an
+extra_body toggle. DeepSeek forces non-thinking whenever tools are present,
+because V4 thinking mode is incompatible with the tool loop (see _to_openai_params).
 
 One exception to that shared path: OpenAI's gpt-5.6+ family cannot carry
 function tools on chat-completions at all, so those calls (and only those) are
@@ -1074,23 +1074,32 @@ def _to_openai_params(provider: str, model: str, kwargs: dict) -> dict:
             effort = "low"
         params.setdefault("extra_body", {})["reasoning_effort"] = effort
 
-    # z.ai GLM thinking control. GLM defaults thinking ON, so a short background
-    # task (title generation caps output at ~512 tokens) burns the whole budget
-    # on hidden reasoning and returns EMPTY visible content — the same failure
-    # mode the hint above fixes for GPT-5/Gemini. Every GLM generation (4.x and
-    # 5.2) accepts the explicit `thinking:{type}` toggle, so we route through it
-    # rather than `reasoning_effort`: GLM-4.x has no reasoning_effort param at
-    # all, and GLM-5.2's only accepts "high"/"max" (it would reject "minimal").
-    # Map a low/minimal effort hint to disabled thinking; leave it default
-    # otherwise so interactive chat keeps full reasoning quality. extra_body is
-    # how the OpenAI SDK forwards a non-OpenAI request field.
-    #
-    # GLM's control is BINARY — there is no partial setting to give "low" — so
-    # the per-model thinking level collapses onto that: none and low switch it
-    # off, medium and high leave it on. That is the honest mapping of a
-    # four-stop control onto a two-state provider.
-    if provider == "zai" and reasoning_effort in ("minimal", "low", "none"):
-        params["extra_body"] = {"thinking": {"type": "disabled"}}
+    # GLM-5.3 (including Flash/FlashX) requires thinking: disabling it errors.
+    # Its supported effort levels are low/high/max, and omitting effort means
+    # max. Express the owner's choice explicitly, including the minimum when
+    # "none" is requested. GLM-5.2 has high/max effort plus an off switch;
+    # retain the existing low→off mapping there and on older binary models.
+    # https://docs.z.ai/guides/capabilities/thinking
+    if provider == "zai":
+        model_id = model.lower().rsplit("/", 1)[-1].split("[", 1)[0]
+        forced_thinking = model_id == "glm-5.3" or model_id.startswith("glm-5.3-")
+        supports_effort = forced_thinking or model_id == "glm-5.2" or model_id.startswith("glm-5.2-")
+        if forced_thinking and reasoning_effort:
+            effort = {
+                "none": "low", "minimal": "low", "low": "low",
+                "medium": "high", "high": "high", "xhigh": "max", "max": "max",
+            }.get(reasoning_effort)
+            if effort:
+                params.setdefault("extra_body", {}).update({
+                    "thinking": {"type": "enabled"}, "reasoning_effort": effort,
+                })
+        elif reasoning_effort in ("minimal", "low", "none"):
+            params.setdefault("extra_body", {})["thinking"] = {"type": "disabled"}
+        elif supports_effort and reasoning_effort in ("medium", "high", "xhigh", "max"):
+            params.setdefault("extra_body", {}).update({
+                "thinking": {"type": "enabled"},
+                "reasoning_effort": "max" if reasoning_effort in ("xhigh", "max") else "high",
+            })
 
     # DeepSeek-V4 thinking control. V4 enables thinking BY DEFAULT (effort
     # "high", auto-escalating to "max" for agent requests), and thinking mode is
@@ -1816,8 +1825,6 @@ def thinking_request_kwargs(model_ref: str) -> dict:
     DeepSeek's, Vertex's three tiers, the Responses API's enum). Keys a given
     path doesn't know are dropped rather than sent.
     """
-    if not settings.thinking_visible_enabled:
-        return {}
     provider, model = parse_model_ref(model_ref)
     if not supports_thinking(model_ref):
         return {}
@@ -1834,7 +1841,7 @@ def thinking_request_kwargs(model_ref: str) -> dict:
     # Anthropic. The separate "ask Claude to think" switch still gates this —
     # it predates per-model levels and is the deployment-wide way to keep
     # Anthropic turns cheap regardless of what any model is pinned to.
-    if not settings.anthropic_thinking_enabled or level == "none":
+    if not settings.thinking_visible_enabled or not settings.anthropic_thinking_enabled or level == "none":
         return {}
     if any(fam in model.lower() for fam in _MANUAL_THINKING_ONLY):
         budget = _anthropic_manual_budget(level)

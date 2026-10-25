@@ -296,9 +296,12 @@ gets its native pair; everything else gets one `reasoning_effort` key that
 | openai | `minimal` | `reasoning_effort` — literal `none` must never be sent: it caused the every-other-message 401 post-GA, and the gpt-5 generation rejects it outright |
 | gemini | `none` on Flash/Lite, `low` on Pro | Pro *refuses* the value rather than ignoring it, so it would 400 every turn |
 | vertex | `low` | three tiers only |
-| zai | thinking disabled | GLM's control is binary, so `none`/`low` switch it off and `medium`/`high` leave it on |
+| zai | `low` on GLM-5.3/Flash/FlashX; thinking disabled on older models | GLM-5.3 requires thinking: `none`/`low` → `low`, `medium`/`high` → `high`. GLM-5.2 keeps `none`/`low` → off and sends explicit `high` for `medium`/`high`. Older models use a binary toggle. |
 | deepseek | thinking disabled | forced off whenever tools are present regardless — see the known limitation below |
 | ollama, nvidia | — | no reasoning knob this backend can reach; `supports_thinking()` is false and the clients grey the control out rather than hiding it |
+
+Hiding the thinking display never drops effort controls for non-Anthropic
+providers: otherwise GLM silently returns to its default `max` effort.
 
 `anthropic_thinking_enabled` remains as a second, Anthropic-only gate: it
 predates per-model levels and is the deployment-wide way to keep Anthropic

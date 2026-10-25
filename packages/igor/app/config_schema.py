@@ -742,14 +742,16 @@ CONFIG_GROUPS: list[ConfigGroup] = [
         "the model picker; the default below applies to models never given one. "
         "Every provider is covered, each translated into its own dialect: "
         "Anthropic's effort/budget, OpenAI's reasoning_effort, Gemini's (Pro "
-        "cannot be switched off and lands on low), GLM's on/off toggle, "
+        "cannot be switched off and lands on low), GLM's effort levels "
+        "(5.3/Flash/FlashX cannot switch off and land on low) or older on/off toggle, "
         "Vertex's three tiers. Ollama and NVIDIA expose no reasoning knob this "
         "backend can reach, and their models show the control disabled.",
         [
             ConfigField("thinking_visible_enabled", "Show Thinking", "bool",
                         requires_restart=_LIVE,
-                        help="Master switch. Off, reasoning is discarded exactly as before — "
-                             "never streamed to a client, never persisted."),
+                        help="Off, reasoning is never streamed to a client or persisted. "
+                             "Non-Anthropic effort settings still apply, so hiding thinking "
+                             "does not reset a model to its provider's default reasoning depth."),
             ConfigField("anthropic_thinking_enabled", "Ask Claude to Think", "bool",
                         requires_restart=_LIVE,
                         help="Additionally request Claude's own thinking on the main chat loop, "

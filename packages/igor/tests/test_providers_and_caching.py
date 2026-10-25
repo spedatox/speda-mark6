@@ -371,8 +371,7 @@ def test_zai_thinking_toggle_maps_from_reasoning_effort():
     # don't burn the budget on hidden reasoning and return empty content).
     p_low = _to_openai_params("zai", "glm-4.5-air", {**kwargs, "reasoning_effort": "minimal"})
     assert p_low["extra_body"] == {"thinking": {"type": "disabled"}}
-    # reasoning_effort must NEVER leak through as a raw param on the zai path:
-    # GLM-4.x has no such field and GLM-5.2's rejects "minimal" (only high/max).
+    # GLM-4.x has no effort field; the SDK carries provider fields in extra_body.
     assert "reasoning_effort" not in p_low
     # Flagship GLM-5.2 takes the same disabled-thinking route on a low hint.
     p_flagship = _to_openai_params("zai", "glm-5.2", {**kwargs, "reasoning_effort": "minimal"})
@@ -383,6 +382,65 @@ def test_zai_thinking_toggle_maps_from_reasoning_effort():
     assert "extra_body" not in p_default
     # GLM speaks OpenAI chat-completions max_tokens (not max_completion_tokens).
     assert p_default["max_tokens"] == 512
+
+
+@pytest.mark.parametrize("model", [
+    "glm-5.3", "glm-5.3-flash", "glm-5.3-flashx", "glm-5.3-flashx-legal",
+    "GLM-5.3", "zai/glm-5.3-flash", "glm-5.3[1m]",
+])
+@pytest.mark.parametrize("effort,expected", [
+    ("none", "low"), ("minimal", "low"), ("low", "low"),
+    ("medium", "high"), ("high", "high"), ("xhigh", "max"), ("max", "max"),
+])
+@pytest.mark.parametrize("with_tools", [False, True])
+def test_zai_forced_thinking_models_receive_supported_effort(model, effort, expected, with_tools):
+    kwargs = {"messages": [], "max_tokens": 512, "reasoning_effort": effort}
+    if with_tools:
+        kwargs["tools"] = [{"name": "x", "description": "x", "input_schema": {"type": "object"}}]
+    params = _to_openai_params("zai", model, kwargs)
+    assert params["extra_body"] == {
+        "thinking": {"type": "enabled"}, "reasoning_effort": expected,
+    }
+    assert "reasoning_effort" not in params
+
+
+@pytest.mark.parametrize("effort,expected", [("medium", "high"), ("high", "high"), ("max", "max")])
+def test_zai_52_effort_is_explicit_instead_of_defaulting_to_max(effort, expected):
+    params = _to_openai_params("zai", "glm-5.2", {"messages": [], "reasoning_effort": effort})
+    assert params["extra_body"] == {
+        "thinking": {"type": "enabled"}, "reasoning_effort": expected,
+    }
+
+
+@pytest.mark.parametrize("model", ["glm-4.5-air", "glm-4.6", "glm-4.7", "glm-5", "glm-5.1"])
+def test_zai_older_models_keep_binary_thinking_control(model):
+    for effort in ("none", "minimal", "low"):
+        params = _to_openai_params("zai", model, {"messages": [], "reasoning_effort": effort})
+        assert params["extra_body"] == {"thinking": {"type": "disabled"}}
+    for effort in ("medium", "high"):
+        params = _to_openai_params("zai", model, {"messages": [], "reasoning_effort": effort})
+        assert "extra_body" not in params
+
+
+@pytest.mark.parametrize("model", ["glm-5.3", "glm-5.3-flash", "glm-5.3-flashx"])
+@pytest.mark.parametrize("level", ["none", "low", "medium", "high"])
+def test_zai_effort_survives_hidden_thinking_display(monkeypatch, model, level):
+    from app.services.llm_client import thinking_request_kwargs
+
+    monkeypatch.setattr(settings, "thinking_visible_enabled", False)
+    monkeypatch.setattr("app.core.runtime_state.get_model_thinking", lambda: {f"zai:{model}": level})
+    kwargs = thinking_request_kwargs(f"zai:{model}")
+    assert kwargs == {"reasoning_effort": level}
+    params = _to_openai_params("zai", model, {"messages": [], **kwargs})
+    assert params["extra_body"]["reasoning_effort"] == ("low" if level in ("none", "low") else "high")
+
+
+def test_hidden_thinking_display_still_gates_anthropic_request(monkeypatch):
+    from app.services.llm_client import thinking_request_kwargs
+
+    monkeypatch.setattr(settings, "thinking_visible_enabled", False)
+    monkeypatch.setattr("app.core.runtime_state.get_model_thinking", lambda: {"claude-sonnet-4-6": "high"})
+    assert thinking_request_kwargs("claude-sonnet-4-6") == {}
 
 
 def test_deepseek_forces_non_thinking_when_tools_present():
